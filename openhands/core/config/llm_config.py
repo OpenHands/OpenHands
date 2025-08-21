@@ -46,6 +46,7 @@ class LLMConfig(BaseModel):
         reasoning_effort: The effort to put into reasoning. This is a string that can be one of 'low', 'medium', 'high', or 'none'. Can apply to all reasoning models.
         seed: The seed to use for the LLM.
         safety_settings: Safety settings for models that support them (like Mistral AI and Gemini).
+        system_prompt_extension_file: Optional path to a text file whose contents will be appended to the system prompt used by the agent.
     """
 
     model: str = Field(default='claude-sonnet-4-20250514')
@@ -91,6 +92,10 @@ class LLMConfig(BaseModel):
     safety_settings: list[dict[str, str]] | None = Field(
         default=None,
         description='Safety settings for models that support them (like Mistral AI and Gemini)',
+    )
+    system_prompt_extension_file: str | None = Field(
+        default=None,
+        description='Optional path to a text file whose contents will be appended to the system prompt when present.',
     )
 
     model_config = ConfigDict(extra='forbid')

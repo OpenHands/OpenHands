@@ -1,28 +1,5 @@
-import re
-import sys
+"""Deprecated: refine_prompt has been moved to openhands.utils.string_utils"""
 
+from openhands.utils.string_utils import refine_prompt
 
-def refine_prompt(prompt: str):
-    """Refines the prompt based on the platform.
-
-    On Windows systems, replaces 'bash' with 'powershell' and 'execute_bash' with 'execute_powershell'
-    to ensure commands work correctly on the Windows platform.
-
-    Args:
-        prompt: The prompt text to refine
-
-    Returns:
-        The refined prompt text
-    """
-    if sys.platform == 'win32':
-        # Replace 'bash' with 'powershell' including tool names like 'execute_bash'
-        # First replace 'execute_bash' with 'execute_powershell' to handle tool names
-        result = re.sub(
-            r'\bexecute_bash\b', 'execute_powershell', prompt, flags=re.IGNORECASE
-        )
-        # Then replace standalone 'bash' with 'powershell'
-        result = re.sub(
-            r'(?<!execute_)(?<!_)\bbash\b', 'powershell', result, flags=re.IGNORECASE
-        )
-        return result
-    return prompt
+__all__ = ['refine_prompt']

@@ -59,6 +59,9 @@ class ReadOnlyAgent(CodeActAgent):
         if self._prompt_manager is None:
             self._prompt_manager = PromptManager(
                 prompt_dir=os.path.join(os.path.dirname(__file__), 'prompts'),
+                system_prompt_extension_file=getattr(
+                    self.llm.config, 'system_prompt_extension_file', None
+                ),
             )
         return self._prompt_manager
 

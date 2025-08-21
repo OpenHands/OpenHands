@@ -98,6 +98,9 @@ class CodeActAgent(Agent):
             self._prompt_manager = PromptManager(
                 prompt_dir=os.path.join(os.path.dirname(__file__), 'prompts'),
                 system_prompt_filename=self.config.resolved_system_prompt_filename,
+                system_prompt_extension_file=getattr(
+                    self.llm.config, 'system_prompt_extension_file', None
+                ),
             )
 
         return self._prompt_manager
