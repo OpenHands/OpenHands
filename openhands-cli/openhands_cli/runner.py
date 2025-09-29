@@ -10,6 +10,7 @@ from openhands.sdk.event.utils import get_unmatched_actions
 from prompt_toolkit import HTML, print_formatted_text
 
 from openhands_cli.listeners.pause_listener import PauseListener, pause_listener
+from openhands_cli.threaded_agent import ThreadedAgentRunner
 from openhands_cli.user_actions import ask_user_confirmation
 from openhands_cli.user_actions.types import UserConfirmation
 
@@ -19,6 +20,7 @@ class ConversationRunner:
 
     def __init__(self, conversation: BaseConversation):
         self.conversation = conversation
+        self.threaded_agent = ThreadedAgentRunner(conversation)
 
     @property
     def is_confirmation_mode_enabled(self):
@@ -44,14 +46,14 @@ class ConversationRunner:
         if self.conversation.state.agent_status == AgentExecutionStatus.PAUSED:
             print_formatted_text(
                 HTML(
-                    "<yellow>Resuming paused conversation...</yellow><grey> (Press Ctrl-P to pause)</grey>"
+                    "<yellow>Resuming paused conversation...</yellow><grey> (Press Ctrl-P to pause, Ctrl-C twice to terminate)</grey>"
                 )
             )
 
         else:
             print_formatted_text(
                 HTML(
-                    "<yellow>Agent running...</yellow><grey> (Press Ctrl-P to pause)</grey>"
+                    "<yellow>Agent running...</yellow><grey> (Press Ctrl-P to pause, Ctrl-C twice to terminate)</grey>"
                 )
             )
         print_formatted_text("")
@@ -75,8 +77,21 @@ class ConversationRunner:
             self._run_without_confirmation()
 
     def _run_without_confirmation(self) -> None:
-        with pause_listener(self.conversation):
-            self.conversation.run()
+        # Start the agent in a separate thread
+        self.threaded_agent.run_agent()
+        
+        # Set up pause listener with termination callback
+        with pause_listener(
+            self.conversation, 
+            on_terminate=self.threaded_agent.terminate_immediately
+        ) as listener:
+            # Wait for agent to complete or be terminated
+            try:
+                self.threaded_agent.wait_for_completion()
+            except Exception as e:
+                if not listener.is_terminated():
+                    # Re-raise exception if it wasn't due to termination
+                    raise e
 
     def _run_with_confirmation(self) -> None:
         # If agent was paused, resume with confirmation request
@@ -89,10 +104,21 @@ class ConversationRunner:
                 return
 
         while True:
-            with pause_listener(self.conversation) as listener:
-                self.conversation.run()
+            # Start the agent in a separate thread
+            self.threaded_agent.run_agent()
+            
+            with pause_listener(
+                self.conversation,
+                on_terminate=self.threaded_agent.terminate_immediately
+            ) as listener:
+                try:
+                    self.threaded_agent.wait_for_completion()
+                except Exception as e:
+                    if not listener.is_terminated():
+                        # Re-raise exception if it wasn't due to termination
+                        raise e
 
-                if listener.is_paused():
+                if listener.is_paused() or listener.is_terminated():
                     break
 
             # In confirmation mode, agent either finishes or waits for user confirmation
