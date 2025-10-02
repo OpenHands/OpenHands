@@ -1,6 +1,7 @@
 """Test that the translation completeness check works correctly."""
 
 import os
+import shutil
 import subprocess
 import unittest
 
@@ -10,6 +11,10 @@ class TestTranslationCompleteness(unittest.TestCase):
 
     def test_translation_completeness_check_runs(self):
         """Test that the translation completeness check script can be executed."""
+        # Skip test if Node.js is not available
+        if not shutil.which('node'):
+            self.skipTest('Node.js is not available in the environment')
+
         frontend_dir = os.path.join(
             os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.dirname(__file__)))

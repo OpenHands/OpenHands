@@ -166,8 +166,12 @@ async def test_export_latest_git_provider_tokens_no_token_ref(temp_dir):
 
 
 @pytest.mark.asyncio
-async def test_export_latest_git_provider_tokens_success(runtime):
+@patch('openhands.integrations.provider.ProviderHandler.get_env_vars')
+async def test_export_latest_git_provider_tokens_success(mock_get_env_vars, runtime):
     """Test successful token export when command references tokens"""
+    # Mock the get_env_vars method to return expected tokens with ProviderType keys
+    mock_get_env_vars.return_value = {ProviderType.GITHUB: SecretStr('test_token')}
+
     # Create a command that references the GitHub token
     cmd = CmdRunAction(command='echo $GITHUB_TOKEN')
 
@@ -179,8 +183,17 @@ async def test_export_latest_git_provider_tokens_success(runtime):
 
 
 @pytest.mark.asyncio
-async def test_export_latest_git_provider_tokens_multiple_refs(temp_dir):
+@patch('openhands.integrations.provider.ProviderHandler.get_env_vars')
+async def test_export_latest_git_provider_tokens_multiple_refs(
+    mock_get_env_vars, temp_dir
+):
     """Test token export with multiple token references"""
+    # Mock the get_env_vars method to return expected tokens with ProviderType keys
+    mock_get_env_vars.return_value = {
+        ProviderType.GITHUB: SecretStr('github_token'),
+        ProviderType.GITLAB: SecretStr('gitlab_token'),
+    }
+
     config = OpenHandsConfig()
     # Initialize with both GitHub and GitLab tokens
     git_provider_tokens = MappingProxyType(

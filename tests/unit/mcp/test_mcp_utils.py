@@ -165,8 +165,12 @@ async def test_call_tool_mcp_success():
 
 @pytest.mark.asyncio
 @patch('openhands.mcp.utils.MCPClient')
-async def test_create_mcp_clients_stdio_success(mock_mcp_client):
+@patch('openhands.mcp.utils.shutil.which')
+async def test_create_mcp_clients_stdio_success(mock_which, mock_mcp_client):
     """Test successful creation of MCP clients with stdio servers."""
+    # Setup mock - make both commands appear available
+    mock_which.return_value = '/usr/bin/command'  # Mock that commands exist
+
     # Setup mock
     mock_client_instance = AsyncMock()
     mock_mcp_client.return_value = mock_client_instance
