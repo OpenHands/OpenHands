@@ -352,15 +352,35 @@ class SaasNestedConversationManager(ConversationManager):
         """Setup custom secrets for the nested conversation."""
         if custom_secrets:
             for key, secret in custom_secrets.items():
-                response = await client.post(
-                    f'{api_url}/api/secrets',
-                    json={
-                        'name': key,
-                        'description': secret.description,
-                        'value': secret.secret.get_secret_value(),
-                    },
-                )
-                response.raise_for_status()
+                try:
+                    response = await client.post(
+                        f'{api_url}/api/secrets',
+                        json={
+                            'name': key,
+                            'description': secret.description,
+                            'value': secret.secret.get_secret_value(),
+                        },
+                    )
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    # If secret already exists (400), log and continue
+                    # This can happen when resuming a conversation with an existing runtime
+                    if e.response.status_code == 400:
+                        logger.warning(
+                            f'Secret "{key}" setup failed with 400 (likely already exists): {e.response.text}',
+                            extra={'api_url': api_url},
+                        )
+                        continue
+                    # For other HTTP errors, re-raise
+                    raise
+                except Exception as e:
+                    # Log any other unexpected errors but continue
+                    # This provides resilience for older runtimes that may not have this endpoint
+                    logger.warning(
+                        f'Failed to setup custom secret "{key}": {e}',
+                        extra={'api_url': api_url},
+                    )
+                    continue
 
     def _get_mcp_config(self, user_id: str) -> MCPConfig | None:
         api_key_store = ApiKeyStore.get_instance()
