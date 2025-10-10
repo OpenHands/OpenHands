@@ -1,0 +1,48 @@
+[core]
+workspace_base="/workspaces"
+search_api_key="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"  # this is from Step 8
+save_trajectory_path="/workspaces/OpenHands/trajectories.json"
+run_as_openhands=false
+
+
+[llm.gptoss-120b]
+model="openai/gpt-oss-120b"  # openai/<model_name> . The <model_name> will be from litellm config settings.
+api_key="serving-on-vllm"
+base_url="http://0.0.0.0:14129/"  # Port 14129 is the Litellm port that we got from Step 5
+max_input_tokens = 65384
+max_output_tokens = 16384
+max_message_chars = 50000
+
+[llm.qwen_coder_30b_small]
+model="openai/qwen-coder-30b-small" ##model_name will be from litellm config settings.
+api_key="serving-on-vllm"
+base_url="http://0.0.0.0:4000/"
+max_input_tokens = 65384
+max_output_tokens = 16384
+max_message_chars = 50000
+native_tool_calling = true
+
+
+[agent]
+enable_history_truncation = true
+llm_config = "llm.qwen_coder_30b_small"
+
+[sandbox]
+timeout = 120
+
+[llm]
+model="openai/qwen-coder-30b-small" ##model_name will be from litellm config settings.
+api_key="serving-on-vllm"
+base_url="http://0.0.0.0:4000/"
+max_input_tokens = 65384
+max_output_tokens = 16384
+max_message_chars = 50000
+native_tool_calling = true
+
+[condenser.summarizer_for_eval_gptoss-120b]
+type = "llm"
+llm_config = "qwen_coder_30b_small"  # Reference to an LLM config to use for summarization
+keep_first = 2        # Number of initial events to always keep
+max_size = 100        # Maximum size of history before triggering summarization
+
+
