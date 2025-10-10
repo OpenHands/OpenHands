@@ -11,3 +11,4 @@ if [ -d ".git" ]; then
     pre-commit install
     make install-pre-commit-hooks
 fi
+sudo apt-get update && sudo apt-get install -y tmux

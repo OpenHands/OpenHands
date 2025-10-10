@@ -12,7 +12,7 @@
 		"ghcr.io/devcontainers/features/node:1": {},
 	},
 	"postCreateCommand": ".devcontainer/setup.sh",
-	"runArgs": ["--add-host=host.docker.internal:host-gateway"],
+	"runArgs": ["--add-host=host.docker.internal:host-gateway", "--network=host"],
 	"containerEnv": {
 		"DOCKER_HOST_ADDR": "host.docker.internal"
 	},
