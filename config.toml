@@ -16,7 +16,7 @@ max_message_chars = 50000
 [llm.qwen_coder_30b_small]
 model="openai/qwen-coder-30b-small" ##model_name will be from litellm config settings.
 api_key="serving-on-vllm"
-base_url="http://0.0.0.0:4000/"
+base_url="http://0.0.0.0:31824/"
 max_input_tokens = 65384
 max_output_tokens = 16384
 max_message_chars = 50000
@@ -33,7 +33,7 @@ timeout = 120
 [llm]
 model="openai/qwen-coder-30b-small" ##model_name will be from litellm config settings.
 api_key="serving-on-vllm"
-base_url="http://0.0.0.0:4000/"
+base_url="http://0.0.0.0:31824/"
 max_input_tokens = 65384
 max_output_tokens = 16384
 max_message_chars = 50000

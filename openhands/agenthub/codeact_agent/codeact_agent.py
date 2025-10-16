@@ -2,6 +2,9 @@ import os
 import sys
 from collections import deque
 from typing import TYPE_CHECKING
+import random
+import re
+from dataclasses import dataclass
 
 from openhands.llm.llm_registry import LLMRegistry
 
@@ -26,14 +29,14 @@ from openhands.agenthub.codeact_agent.tools.str_replace_editor import (
 from openhands.agenthub.codeact_agent.tools.task_tracker import (
     create_task_tracker_tool,
 )
-from openhands.agenthub.codeact_agent.tools.think import ThinkTool
+from openhands.agenthub.codeact_agent.tools.think import ThinkTool, ReflectionTool
 from openhands.controller.agent import Agent
 from openhands.controller.state.state import State
 from openhands.core.config import AgentConfig
 from openhands.core.logger import openhands_logger as logger
-from openhands.core.message import Message
+from openhands.core.message import Message, TextContent
 from openhands.events.action import AgentFinishAction, MessageAction
-from openhands.events.event import Event
+from openhands.events.event import Event, EventSource
 from openhands.llm.llm_utils import check_tools
 from openhands.memory.condenser import Condenser
 from openhands.memory.condenser.condenser import Condensation, View
@@ -44,6 +47,30 @@ from openhands.runtime.plugins import (
     PluginRequirement,
 )
 from openhands.utils.prompt import PromptManager
+from openhands.events.action.agent import AgentThinkAction
+from openhands.core.exceptions import (
+    FunctionCallNotExistsError,
+    FunctionCallValidationError,
+)
+
+
+
+# Optional: in the long run, move this into AgentConfig
+@dataclass
+class AutoReflectionConfig:
+    enabled: bool = True
+    # Probabilistic trigger: after each observation event, fire with probability `prob`
+    prob: float = 0.50
+    # Reactive trigger: check last turn for "no tool" or "error observation"
+    reactive_enabled: bool = True
+    # How many past events to consider for the “last N steps” wording
+    lookback_window: int = 3
+    # The seeded thought text; {n} is formatted with lookback_window
+    prompt: str = (
+        "Look back at the last {n} steps. Are you making good progress, or should you "
+        "step back and reconsider your approach? If you're off-track, propose "
+        "concrete adjustments and the single next best action/tool to try."
+    )
 
 
 class CodeActAgent(Agent):
@@ -64,6 +91,11 @@ class CodeActAgent(Agent):
     - Execute any valid `Python` code with [an interactive Python interpreter](https://ipython.org/). This is simulated through `bash` command, see plugin system below for more details.
 
     ![image](https://github.com/All-Hands-AI/OpenHands/assets/38853559/92b622e3-72ad-4a61-8f41-8c040b6d5fb3)
+
+    [Cerebras-Only] We want to trigger an autoreflection on 3 cases:
+        (1) there is a tool parsing problem | This is in the Action space
+        (2) the observation returned by tool call contains some errors | This is in the Observation space
+        (3) general check: Probabilistically (say 10% chance) add it after N steps to “Look back at last N steps to see if you are making good progress or should take a step back and reconsider your approach”
 
     """
 
@@ -94,6 +126,11 @@ class CodeActAgent(Agent):
 
         # Override with router if needed
         self.llm = self.llm_registry.get_router(self.config)
+
+        # NOTE: reflection
+        self._num_steps = 0
+        self._last_reflection_step = -1
+        self.auto_reflect = AutoReflectionConfig()
 
     @property
     def prompt_manager(self) -> PromptManager:
@@ -127,6 +164,7 @@ class CodeActAgent(Agent):
             tools.append(create_cmd_run_tool(use_short_description=use_short_tool_desc))
         if self.config.enable_think:
             tools.append(ThinkTool)
+            tools.append(ReflectionTool)
         if self.config.enable_finish:
             tools.append(FinishTool)
         if self.config.enable_condensation_request:
@@ -156,6 +194,9 @@ class CodeActAgent(Agent):
         super().reset()
         # Only clear pending actions, not LLM metrics
         self.pending_actions.clear()
+        # NOTE: reflection
+        self._num_steps = 0
+        self._last_reflection_step = -1
 
     def step(self, state: State) -> 'Action':
         """Performs one step using the CodeAct Agent.
@@ -179,15 +220,6 @@ class CodeActAgent(Agent):
         - BrowseInteractiveAction(browser_actions) - interact with browser using specified actions
         - MCPAction(name, arguments) - interact with MCP server tools
         """
-        # Continue with pending actions if any
-        if self.pending_actions:
-            return self.pending_actions.popleft()
-
-        # if we're done, go back
-        latest_user_message = state.get_last_user_message()
-        if latest_user_message and latest_user_message.content.strip() == '/exit':
-            return AgentFinishAction()
-
         # Condense the events from the state. If we get a view we'll pass those
         # to the conversation manager for processing, but if we get a condensation
         # event we'll just return that instead of an action. The controller will
@@ -204,23 +236,71 @@ class CodeActAgent(Agent):
             f'Processing {len(condensed_history)} events from a total of {len(state.history)} events'
         )
 
+        # NOTE: reflection case 1: Revisit last observation to catch if there is tool call failures
+        if self.auto_reflect.enabled:
+            if self.auto_reflect.reactive_enabled:
+                is_last_turn_tool_error, tool_call_error_message =self._last_turn_has_tool_error(condensed_history)
+                if is_last_turn_tool_error and not self._last_event_is_autoreflect(condensed_history):
+                    self.pending_actions.clear() # clear the queue
+                    self._last_reflection_step = self._num_steps
+                    tool_call_reflection_prompt = f"I encountered a tool call with the following error: {tool_call_error_message}. \nI need to think about it and propose concrete adjustments plus the single next best action/tool."
+                    return self._emit_reflection(tool_call_reflection_prompt)
+
+            # NOTE: reflection case 2: Probablistically do general last N step reflection
+            # Let's do not break any pending actions
+            # Also make sure the last action was not think
+            if random.random() < self.auto_reflect.prob and \
+                not self.pending_actions and \
+                self._last_reflection_step != self._num_steps and \
+                not self._last_event_is_autoreflect(condensed_history):
+
+                self._last_reflection_step = self._num_steps
+                return self._emit_reflection(
+                    self.auto_reflect.prompt.format(n=self.auto_reflect.lookback_window)
+                )
+
+        # Continue with pending actions if any
+        if self.pending_actions:
+            return self.pending_actions.popleft()
+
+        # if we're done, go back
+        latest_user_message = state.get_last_user_message()
+        if latest_user_message and latest_user_message.content.strip() == '/exit':
+            return AgentFinishAction()
+
         initial_user_message = self._get_initial_user_message(state.history)
         messages = self._get_messages(condensed_history, initial_user_message)
+
         params: dict = {
             'messages': messages,
         }
+
         params['tools'] = check_tools(self.tools, self.llm.config)
         params['extra_body'] = {
             'metadata': state.to_llm_metadata(
                 model_name=self.llm.config.model, agent_name=self.name
             )
         }
+        # if self._num_steps > 5:
+        #     breakpoint()
+        logger.debug(f'Last utterance input to LLM: {messages[-1]}')
         response = self.llm.completion(**params)
         logger.debug(f'Response from LLM: {response}')
+        # try:
         actions = self.response_to_actions(response)
+        # NOTE: reflection case 3: cope with tool parse failures
+        # except Exception as e:
+            # # Wrong tool parsing will be raised by response_to_actions in function_calling.py
+            # logger.warning(f"[AutoReflect] Tool-call parse error: {e}. Injecting reflection.")
+            # self._last_reflection_step = self._num_steps
+            # return self._emit_reflection(
+            #     f"Malformed tool call (invalid JSON/args):\n```\n{e}\n```\n"
+            #     "Reflect briefly and emit a valid tool call or a better-plan message."
+            # )
         logger.debug(f'Actions after response_to_actions: {actions}')
         for action in actions:
             self.pending_actions.append(action)
+        self._num_steps += 1
         return self.pending_actions.popleft()
 
     def _get_initial_user_message(self, history: list[Event]) -> MessageAction:
@@ -297,3 +377,51 @@ class CodeActAgent(Agent):
             response,
             mcp_tool_names=list(self.mcp_tools.keys()),
         )
+
+
+    def _last_turn_has_tool_error(self, events: list[Event])  -> tuple[bool, str | None]:
+        '''
+        We want to trigger a reflection on two cases related to tool calling:
+        (1) there is a tool call parsing problem | This is in the Action space
+        (2) the observation returned by tool call contains some errors | This is in the Observation space
+
+        In this function we solve (2)
+        '''
+        # Edge case: no events
+        if not events:
+            return False, None
+
+        # Make sure we only focus on Observations
+        if not events[-1].__class__.__name__.lower().endswith("observation"):
+            return False, None
+
+        # For direct code execution or cmd execution observations
+        if events[-1].__class__.__name__ in ["IPythonRunCellObservation", "CmdOutputObservation"]:
+            if events[-1].error:
+                return True, events[-1].__str__()
+
+        # For other observations
+        if events[-1].__class__.__name__ == "ErrorObservation":
+            return True, events[-1].__str__()
+
+        return False, None
+
+
+    def _emit_reflection(self, text: str) -> MessageAction:
+        msg = MessageAction(content=f"[AutoReflect]\n{text}\n Next step: Use `reflection` tool in next turn to do this reflection, no other tools are allowed!")
+        msg._source = EventSource.AGENT   # <-- set source after init
+        return msg
+
+    def _last_event_is_autoreflect(self, events) -> bool:
+        # Scan backwards, skip observations; stop on the last action/message.
+        for ev in reversed(events):
+            name = ev.__class__.__name__.lower()
+            if name.endswith("observation"):
+                continue
+            if isinstance(ev, MessageAction) and getattr(ev, "_source", None) == EventSource.AGENT:
+                text = (getattr(ev, "content", "") or "").strip().lower()
+                return text.startswith("[autoreflect]")
+            if name.endswith("action"):
+                # last action but not our autoreflect
+                return False
+        return False

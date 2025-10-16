@@ -16,6 +16,7 @@ from openhands.agenthub.codeact_agent.tools import (
     IPythonTool,
     LLMBasedFileEditTool,
     ThinkTool,
+    ReflectionTool,
     create_cmd_run_tool,
     create_str_replace_editor_tool,
 )
@@ -231,7 +232,24 @@ def response_to_actions(
             # AgentThinkAction
             # ================================================
             elif tool_call.function.name == ThinkTool['function']['name']:
-                action = AgentThinkAction(thought=arguments.get('thought', ''))
+                # action = AgentThinkAction(thought=arguments.get('thought', ''))
+                thought_arg = arguments.get('thought', '')
+                if thought_arg:
+                    logger.info(f"------ OLD CONTENT: {response.choices[0].message.content}")
+                    content = response.choices[0].message.content or ""
+                    response.choices[0].message.content = f"{content}\nHere's my detailed thought:\n{thought_arg}"
+                    logger.info(f"------ NEW CONTENT: {response.choices[0].message.content}")
+                action = AgentThinkAction(thought=thought_arg)
+
+            elif tool_call.function.name == ReflectionTool['function']['name']:
+                # action = AgentThinkAction(thought=arguments.get('thought', ''))
+                reflection_arg = arguments.get('reflection', '')
+                if reflection_arg:
+                    logger.info(f"------ OLD CONTENT: {response.choices[0].message.content}")
+                    content = response.choices[0].message.content or ""
+                    response.choices[0].message.content = f"{content}\nHere's my detailed thought:\n{reflection_arg}"
+                    logger.info(f"------ NEW CONTENT: {response.choices[0].message.content}")
+                action = AgentThinkAction(thought=reflection_arg)
 
             # ================================================
             # CondensationRequestAction

@@ -25,3 +25,28 @@ ThinkTool = ChatCompletionToolParam(
         },
     ),
 )
+
+
+_REFLECTION_DESCRIPTION = """Use the tool to reflect about one or a few previous steps. It will not obtain new information or make any changes to the repository, but just log the reflection.
+
+Common use cases:
+1. After a few rounds of executing commands or code, call this tool to reflect the progress, and assess which change(s) are needed.
+2. If you see any execution errors or tool parse issues, call this tool immediately to come up with a plan to fix it
+3. After receiving test results, use this tool to brainstorm ways to fix failing tests.
+
+The tool simply logs your reflection process for better transparency and does not execute any code or make changes."""
+
+ReflectionTool = ChatCompletionToolParam(
+    type='function',
+    function=ChatCompletionToolParamFunctionChunk(
+        name='reflection',
+        description=_REFLECTION_DESCRIPTION,
+        parameters={
+            'type': 'object',
+            'properties': {
+                'reflection': {'type': 'string', 'description': 'The reflection to log.'},
+            },
+            'required': ['reflection'],
+        },
+    ),
+)
