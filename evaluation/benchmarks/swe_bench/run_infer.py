@@ -238,6 +238,8 @@ def get_config(
         sandbox_config=sandbox_config,
     )
 
+    config.save_trajectory_path = os.path.join(metadata.eval_output_dir, 'llm_completions', instance['instance_id'], f"{instance['instance_id']}_trajectory.json")
+
     config.set_llm_config(
         update_llm_config_for_completions_logging(
             metadata.llm_config, metadata.eval_output_dir, instance['instance_id']

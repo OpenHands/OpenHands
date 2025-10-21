@@ -58,9 +58,9 @@ from openhands.core.exceptions import (
 # Optional: in the long run, move this into AgentConfig
 @dataclass
 class AutoReflectionConfig:
-    enabled: bool = True
+    enabled: bool = False
     # Probabilistic trigger: after each observation event, fire with probability `prob`
-    prob: float = 0.50
+    prob: float = 0.10
     # Reactive trigger: check last turn for "no tool" or "error observation"
     reactive_enabled: bool = True
     # How many past events to consider for the “last N steps” wording
@@ -236,24 +236,25 @@ class CodeActAgent(Agent):
             f'Processing {len(condensed_history)} events from a total of {len(state.history)} events'
         )
 
-        # NOTE: reflection case 1: Revisit last observation to catch if there is tool call failures
+        # NOTE: reflection case 2: Revisit last observation to catch if there is tool call failures
         if self.auto_reflect.enabled:
             if self.auto_reflect.reactive_enabled:
                 is_last_turn_tool_error, tool_call_error_message =self._last_turn_has_tool_error(condensed_history)
-                if is_last_turn_tool_error and not self._last_event_is_autoreflect(condensed_history):
+                if is_last_turn_tool_error and not self._last_action_is_autoreflect(condensed_history):
                     self.pending_actions.clear() # clear the queue
+                    self._num_steps += 1
                     self._last_reflection_step = self._num_steps
-                    tool_call_reflection_prompt = f"I encountered a tool call with the following error: {tool_call_error_message}. \nI need to think about it and propose concrete adjustments plus the single next best action/tool."
-                    return self._emit_reflection(tool_call_reflection_prompt)
+                    return self._emit_reflection(f"I encountered a tool call with the following error: {tool_call_error_message}. \nI need to think about it and propose concrete adjustments plus the single next best action/tool.")
 
-            # NOTE: reflection case 2: Probablistically do general last N step reflection
+            # NOTE: reflection case 1: Probablistically do general last N step reflection
             # Let's do not break any pending actions
             # Also make sure the last action was not think
             if random.random() < self.auto_reflect.prob and \
                 not self.pending_actions and \
                 self._last_reflection_step != self._num_steps and \
-                not self._last_event_is_autoreflect(condensed_history):
+                not self._last_action_is_autoreflect(condensed_history):
 
+                self._num_steps += 1
                 self._last_reflection_step = self._num_steps
                 return self._emit_reflection(
                     self.auto_reflect.prompt.format(n=self.auto_reflect.lookback_window)
@@ -281,27 +282,30 @@ class CodeActAgent(Agent):
                 model_name=self.llm.config.model, agent_name=self.name
             )
         }
-        # if self._num_steps > 5:
-        #     breakpoint()
+
         logger.debug(f'Last utterance input to LLM: {messages[-1]}')
         response = self.llm.completion(**params)
         logger.debug(f'Response from LLM: {response}')
-        # try:
-        actions = self.response_to_actions(response)
+        try:
+            actions = self.response_to_actions(response)
         # NOTE: reflection case 3: cope with tool parse failures
-        # except Exception as e:
-            # # Wrong tool parsing will be raised by response_to_actions in function_calling.py
-            # logger.warning(f"[AutoReflect] Tool-call parse error: {e}. Injecting reflection.")
-            # self._last_reflection_step = self._num_steps
-            # return self._emit_reflection(
-            #     f"Malformed tool call (invalid JSON/args):\n```\n{e}\n```\n"
-            #     "Reflect briefly and emit a valid tool call or a better-plan message."
-            # )
+        except Exception as e:
+            # Wrong tool parsing will be raised by response_to_actions in function_calling.py
+            if self.auto_reflect.enabled:
+                self._last_reflection_step = self._num_steps
+                self._num_steps += 1
+                return self._emit_reflection(
+                    f"Malformed tool call (invalid JSON/args):\n```\n{e}\n```\n"
+                    "Reflect briefly and emit a valid tool call or a better-plan message."
+                )
+            else:
+                pass
         logger.debug(f'Actions after response_to_actions: {actions}')
         for action in actions:
             self.pending_actions.append(action)
         self._num_steps += 1
         return self.pending_actions.popleft()
+
 
     def _get_initial_user_message(self, history: list[Event]) -> MessageAction:
         """Finds the initial user message action from the full history."""
@@ -378,7 +382,7 @@ class CodeActAgent(Agent):
             mcp_tool_names=list(self.mcp_tools.keys()),
         )
 
-
+    # NOTE: add for self-reflection
     def _last_turn_has_tool_error(self, events: list[Event])  -> tuple[bool, str | None]:
         '''
         We want to trigger a reflection on two cases related to tool calling:
@@ -408,11 +412,11 @@ class CodeActAgent(Agent):
 
 
     def _emit_reflection(self, text: str) -> MessageAction:
-        msg = MessageAction(content=f"[AutoReflect]\n{text}\n Next step: Use `reflection` tool in next turn to do this reflection, no other tools are allowed!")
+        msg = MessageAction(content=f"[AutoReflect]\n{text}\n Next step: You MUST use `reflection` tool/action in next turn to do this reflection, no others are allowed. Again,  You MUST use `reflection` tool/action in next turn to do this reflection, no others are allowed.")
         msg._source = EventSource.AGENT   # <-- set source after init
         return msg
 
-    def _last_event_is_autoreflect(self, events) -> bool:
+    def _last_action_is_autoreflect(self, events) -> bool:
         # Scan backwards, skip observations; stop on the last action/message.
         for ev in reversed(events):
             name = ev.__class__.__name__.lower()
