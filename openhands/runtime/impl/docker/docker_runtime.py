@@ -4,6 +4,8 @@ import typing
 from functools import lru_cache
 from typing import Callable
 from uuid import UUID
+import os, glob
+from pathlib import Path
 
 import docker
 import httpx
@@ -231,6 +233,23 @@ class DockerRuntime(ActionExecutionClient):
                 self.log('error', str(e))
 
     def maybe_build_runtime_container_image(self):
+        repo, index = self.get_info_from_base_image()
+
+        runtime_docker_image_folder = self.find_folder_by_prefix_suffix(repo, index, "/workspaces/OpenHands")
+        tar_files = glob.glob(os.path.join(runtime_docker_image_folder, "*.tar"))
+        if not tar_files:
+            raise FileNotFoundError("No .tar file found!")
+        elif len(tar_files) > 1:
+            raise RuntimeError("More than one .tar file found!")
+        else:
+            tar_path = tar_files[0]
+            logger.debug(f"[Michael] Found tar file: {tar_path}")
+
+        logger.debug(f"[Michael] Loading local runtime image from {tar_path} ...")
+        with open(tar_path, "rb") as f:
+            self.runtime_container_image = self.docker_client.images.load(f.read())[0]
+        logger.debug(f"[Michael] Successfuly loaded local runtime image from {tar_path} ...")
+
         if self.runtime_container_image is None:
             if self.base_container_image is None:
                 raise ValueError(
@@ -246,6 +265,37 @@ class DockerRuntime(ActionExecutionClient):
                 extra_build_args=self.config.sandbox.runtime_extra_build_args,
                 enable_browser=self.config.enable_browser,
             )
+
+
+    def find_folder_by_prefix_suffix(self, input_a, input_b, search_dir):
+        matches = []
+        for p in Path(search_dir).iterdir():
+            if p.is_dir() and p.name.startswith(input_a) and p.name.endswith(input_b):
+                matches.append(p)
+
+        if matches:
+            print("✅ Found matching folder(s):")
+            for m in matches:
+                print(" ", m)
+
+        assert len(matches) == 1, "No folder found..."
+        return matches[0]
+
+
+
+    def get_info_from_base_image(self):
+        if self.base_container_image.startswith("docker.io"):
+            repo = self.base_container_image.split(":")[0].split("/")[-1].split(".")[-1].split("__")[0]
+            index = self.base_container_image.split(":")[0].split("/")[-1].split(".")[-1].split("-")[-1]
+            return repo, index
+        elif self.base_container_image.startswith("openhands_local"):
+            repo = self.base_container_image.split(":")[0].split("-")[0].split("_")[-1]
+            index = self.base_container_image.split(":")[0].split("-")[-1]
+            return repo, index
+        else:
+            raise ValueError(
+                    'This base_container_image is not available either on the cloud or locally'
+                )
 
     @staticmethod
     @lru_cache(maxsize=1)

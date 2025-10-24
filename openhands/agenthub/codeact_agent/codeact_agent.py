@@ -58,13 +58,13 @@ from openhands.core.exceptions import (
 # Optional: in the long run, move this into AgentConfig
 @dataclass
 class AutoReflectionConfig:
-    enabled: bool = False
+    enabled: bool = True
     # Probabilistic trigger: after each observation event, fire with probability `prob`
     prob: float = 0.10
     # Reactive trigger: check last turn for "no tool" or "error observation"
     reactive_enabled: bool = True
     # How many past events to consider for the “last N steps” wording
-    lookback_window: int = 3
+    lookback_window: int = 5
     # The seeded thought text; {n} is formatted with lookback_window
     prompt: str = (
         "Look back at the last {n} steps. Are you making good progress, or should you "
@@ -240,7 +240,7 @@ class CodeActAgent(Agent):
         if self.auto_reflect.enabled:
             if self.auto_reflect.reactive_enabled:
                 is_last_turn_tool_error, tool_call_error_message =self._last_turn_has_tool_error(condensed_history)
-                if is_last_turn_tool_error and not self._last_action_is_autoreflect(condensed_history):
+                if is_last_turn_tool_error and not self._last_action_is_think(condensed_history):
                     self.pending_actions.clear() # clear the queue
                     self._num_steps += 1
                     self._last_reflection_step = self._num_steps
@@ -252,7 +252,7 @@ class CodeActAgent(Agent):
             if random.random() < self.auto_reflect.prob and \
                 not self.pending_actions and \
                 self._last_reflection_step != self._num_steps and \
-                not self._last_action_is_autoreflect(condensed_history):
+                not self._last_action_is_think(condensed_history):
 
                 self._num_steps += 1
                 self._last_reflection_step = self._num_steps
@@ -416,16 +416,17 @@ class CodeActAgent(Agent):
         msg._source = EventSource.AGENT   # <-- set source after init
         return msg
 
-    def _last_action_is_autoreflect(self, events) -> bool:
-        # Scan backwards, skip observations; stop on the last action/message.
+    def _last_action_is_think(self, events) -> bool:
+        """Return True if the last non-observation event is a Think/Reflection action."""
         for ev in reversed(events):
             name = ev.__class__.__name__.lower()
             if name.endswith("observation"):
-                continue
-            if isinstance(ev, MessageAction) and getattr(ev, "_source", None) == EventSource.AGENT:
-                text = (getattr(ev, "content", "") or "").strip().lower()
-                return text.startswith("[autoreflect]")
-            if name.endswith("action"):
-                # last action but not our autoreflect
-                return False
-        return False
+                continue  # skip
+            # we've reached the last non-observation event
+            if name.endswith("action") and "think" in name:
+                print("Do not do reflection given last action is already think/reflection...")
+                return True
+            else:
+                return False  # stop after first non-observation event
+        return False  # no actions found
+

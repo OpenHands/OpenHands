@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 from typing import Any, Literal
+import docker
 
 import pandas as pd
 import toml
@@ -69,7 +70,7 @@ from openhands.utils.shutdown_listener import sleep_if_should_continue
 USE_HINT_TEXT = os.environ.get('USE_HINT_TEXT', 'false').lower() == 'true'
 RUN_WITH_BROWSING = os.environ.get('RUN_WITH_BROWSING', 'false').lower() == 'true'
 ENABLE_LLM_EDITOR = os.environ.get('ENABLE_LLM_EDITOR', 'false').lower() == 'true'
-
+LOCAL_DOCKER_IMAGE_DIR = os.environ.get('LOCAL_DOCKER_IMAGE_DIR', '')
 CONFIG_ML = os.environ.get('CONFIG_ML', '')
 
 BenchMode = Literal['swe', 'swt', 'swt-ci']
@@ -178,6 +179,27 @@ DEFAULT_DOCKER_IMAGE_PREFIX = os.environ.get(
 logger.info(f'Default docker image prefix: {DEFAULT_DOCKER_IMAGE_PREFIX}')
 
 
+def load_local_image_if_needed(path: str, custom_tag: str = None) -> str:
+    """
+    Load a Docker image from a local .tar file and return its name.
+    """
+    client = docker.from_env()
+    logger.info(f"{os.path.exists(path)},  {path.endswith(".tar")}")
+    if os.path.exists(path) and path.endswith(".tar"):
+        logger.info(f"📦 Loading local image from {path} ...")
+        with open(path, "rb") as f:
+            image = client.images.load(f.read())[0]
+        # Return the repo:tag string to use as base image
+        if custom_tag is not None:
+            logger.info(f"🏷️ Retagging image to {custom_tag}")
+            image.tag(custom_tag)
+
+        # Return the custom tag for use elsewhere
+        return custom_tag if custom_tag else image.tags[0]
+    else:
+        return path
+
+
 def get_instance_docker_image(
     instance_id: str,
     swebench_official_image: bool = False,
@@ -189,12 +211,21 @@ def get_instance_docker_image(
         if DATASET_TYPE == 'SWE-bench-Live':
             docker_image_prefix = 'docker.io/starryzhang/'
         elif DATASET_TYPE == 'SWE-bench':
-            docker_image_prefix = 'docker.io/swebench/'
+            if not LOCAL_DOCKER_IMAGE_DIR:
+                docker_image_prefix = 'docker.io/swebench/'
+            else:
+                docker_image_prefix = f"{LOCAL_DOCKER_IMAGE_DIR}/"
+                logger.debug(f'Using LOCAL SWE-Bench image from: {docker_image_prefix}')
+
         elif DATASET_TYPE == 'SWE-rebench':
             docker_image_prefix = 'docker.io/swerebench/'
         repo, name = instance_id.split('__')
         image_name = f'{docker_image_prefix.rstrip("/")}/sweb.eval.x86_64.{repo}_1776_{name}:latest'.lower()
-        logger.debug(f'Using official SWE-Bench image: {image_name}')
+        if LOCAL_DOCKER_IMAGE_DIR:
+            image_name = f'{docker_image_prefix.rstrip("/")}/{instance_id}__latest.tar'
+            logger.debug(f'Using LOCAL SWE-Bench image: {image_name}')
+        else:
+            logger.debug(f'Using OFFICIAL SWE-Bench image: {image_name}')
         return image_name
     else:
         # OpenHands version of the image
@@ -204,6 +235,8 @@ def get_instance_docker_image(
             '__', '_s_'
         )  # to comply with docker image naming convention
         return (docker_image_prefix.rstrip('/') + '/' + image_name).lower()
+
+
 
 
 def get_config(
@@ -217,6 +250,14 @@ def get_config(
         instance['instance_id'],
         swebench_official_image=use_swebench_official_image,
     )
+
+    if LOCAL_DOCKER_IMAGE_DIR:
+        logger.info(f"Loading Local Docker")
+        base_container_image = load_local_image_if_needed(base_container_image, custom_tag= f"openhands_local_{instance['instance_id'].split('__')[1]}:latest")
+        logger.info(
+            f'Using LOCAL docker image for instance {instance["instance_id"]}: {base_container_image}'
+        )
+
     logger.info(
         f'Using instance container image: {base_container_image}. '
         f'Please make sure this image exists. '
@@ -716,10 +757,16 @@ def process_instance(
 
 
 def filter_dataset(dataset: pd.DataFrame, filter_column: str) -> pd.DataFrame:
-    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.toml')
+    if not CONFIG_ML:
+        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.toml')
+        logger.info(f"DEFAULT: Loading {file_path} for filtering dataset...")
+    else:
+        file_path = CONFIG_ML
+        logger.info(f"CONFIG ML: Loading {file_path} for filtering dataset...")
     if os.path.exists(file_path):
         with open(file_path, 'r') as file:
             data = toml.load(file)
+            # NOTE:empty file means normal random selection in the dataset
             if 'selected_ids' in data:
                 selected_ids = data['selected_ids']
                 logger.info(
@@ -836,7 +883,6 @@ if __name__ == '__main__':
     dataset_description = (
         args.dataset.replace('/', '__') + '-' + args.split.replace('/', '__')
     )
-
     eval_output_dir = os.environ.get('EVAL_OUTPUT_DIR', args.eval_output_dir)
     logger.debug(f"Eval output dir: {eval_output_dir}")
     metadata = make_metadata(
@@ -845,8 +891,8 @@ if __name__ == '__main__':
         args.agent_cls,
         args.max_iterations,
         args.eval_note,
-        # args.eval_output_dir,
         eval_output_dir,
+        # args.eval_output_dir,
         details=details,
         agent_config=agent_config,
         condenser_config=condenser_config,

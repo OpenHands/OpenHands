@@ -1,0 +1,6 @@
+model_list:
+  - model_name: qwen-coder-30b-small
+    litellm_params:
+      model: hosted_vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
+      api_base: http://localhost:10000/v1/
+      api_key: "serving-on-vllm"
