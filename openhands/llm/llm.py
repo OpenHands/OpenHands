@@ -122,6 +122,10 @@ class LLM(RetryMixin, DebugMixin):
             # openai doesn't expose top_p, but litellm does
             kwargs['top_p'] = self.config.top_p
 
+        if 'codex-mini-latest' in self.config.model.lower():
+            kwargs.pop('temperature', None)
+            kwargs.pop('top_p', None)
+
         # Handle OpenHands provider - rewrite to litellm_proxy
         if self.config.model.startswith('openhands/'):
             model_name = self.config.model.removeprefix('openhands/')
