@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Check if welcome comment already exists
         id: check_comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           result-encoding: string
           script: |
@@ -33,7 +33,7 @@ jobs:
 
       - name: Leave welcome comment
         if: steps.check_comment.outputs.result == 'false'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
