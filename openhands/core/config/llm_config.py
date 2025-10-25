@@ -94,6 +94,8 @@ class LLMConfig(BaseModel):
         description='Safety settings for models that support them (like Mistral AI and Gemini)',
     )
     for_routing: bool = Field(default=False)
+    # The number of correction attempts for the LLM draft editor
+    correct_num: int = Field(default=5)
 
     model_config = ConfigDict(extra='forbid')
 
