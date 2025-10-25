@@ -1583,3 +1583,61 @@ def test_process_ipython_observation_with_vision_disabled(
     assert isinstance(message.content[1], ImageContent)
     # Check that NO explanatory text about filtered images was added when vision is disabled
     assert 'invalid or empty image(s) were filtered' not in message.content[0].text
+
+
+def test_process_events_with_empty_agent_finish_action(conversation_memory):
+    """Test that AgentFinishAction with empty thought gets default content for assistant messages."""
+    # Create an AgentFinishAction with empty thought from assistant
+    empty_finish_action = AgentFinishAction(thought='')
+    empty_finish_action._source = EventSource.AGENT
+
+    initial_user_message = MessageAction(content='Initial user message')
+    initial_user_message._source = EventSource.USER
+
+    messages = conversation_memory.process_events(
+        condensed_history=[empty_finish_action],
+        initial_user_action=initial_user_message,
+        max_message_chars=None,
+        vision_is_active=False,
+    )
+
+    # Should have system message, initial user message, and assistant finish message
+    assert len(messages) == 3
+
+    # Check the assistant finish message
+    assistant_message = messages[2]
+    assert assistant_message.role == 'assistant'
+    assert len(assistant_message.content) == 1
+    assert isinstance(assistant_message.content[0], TextContent)
+    # Should have default content instead of empty string
+    assert assistant_message.content[0].text == 'Task completed.'
+
+
+def test_process_events_with_non_empty_agent_finish_action(conversation_memory):
+    """Test that AgentFinishAction with non-empty thought preserves original content."""
+    # Create an AgentFinishAction with non-empty thought from assistant
+    finish_action = AgentFinishAction(thought='I have completed the task successfully.')
+    finish_action._source = EventSource.AGENT
+
+    initial_user_message = MessageAction(content='Initial user message')
+    initial_user_message._source = EventSource.USER
+
+    messages = conversation_memory.process_events(
+        condensed_history=[finish_action],
+        initial_user_action=initial_user_message,
+        max_message_chars=None,
+        vision_is_active=False,
+    )
+
+    # Should have system message, initial user message, and assistant finish message
+    assert len(messages) == 3
+
+    # Check the assistant finish message
+    assistant_message = messages[2]
+    assert assistant_message.role == 'assistant'
+    assert len(assistant_message.content) == 1
+    assert isinstance(assistant_message.content[0], TextContent)
+    # Should preserve original content
+    assert (
+        assistant_message.content[0].text == 'I have completed the task successfully.'
+    )
