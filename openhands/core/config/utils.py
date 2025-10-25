@@ -148,7 +148,10 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
     try:
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        logger.openhands_logger.error(
+            f'{toml_file} not found: {e}. Toml values have not been applied.'
+        )
         return
     except toml.TomlDecodeError as e:
         logger.openhands_logger.warning(
@@ -601,7 +604,10 @@ def get_llms_for_routing_config(toml_file: str = 'config.toml') -> dict[str, LLM
     try:
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        logger.openhands_logger.error(
+            f'Config file not found: {e}. Toml values have not been applied.'
+        )
         return llms_for_routing
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
