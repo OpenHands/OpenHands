@@ -995,10 +995,14 @@ def cli_confirm(
         event.app.exit(result=selected[0])
 
     # Create layout with risk-based styling - full width but limited height
+    # Calculate dynamic height based on number of choices
+    # Allow 3 lines for question + 1 line per choice + 2 lines padding
+    # Cap at 20 to prevent screen takeover with many choices
+    dynamic_height = min(3 + len(choices) + 2, 20)
     content_window = Window(
         FormattedTextControl(get_choice_text),
         always_hide_cursor=True,
-        height=Dimension(max=8),  # Limit height to prevent screen takeover
+        height=Dimension(preferred=dynamic_height, max=dynamic_height),
     )
 
     # Add frame for HIGH risk commands
