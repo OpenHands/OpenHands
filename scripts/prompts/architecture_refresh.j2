@@ -1,0 +1,66 @@
+You are OpenHands, improving the repository's architecture documentation. Your task this week is to review the current repo state and regenerate or update the architecture documentation with high factual accuracy and comprehensive coverage.
+
+Important naming:
+- Use the term "OpenHands API" (never "Cloud API").
+
+Scope:
+- Cover the entire application: backend server, agent & controller, event stream, storage, runtime (client and action execution server), plugins (Jupyter, VSCode, Browser, Agent Skills), microagents & prompt manager, LLM integration, frontend, security, integrations (VSCode extension), and OpenHands API.
+
+Output location:
+- Write or update MDX pages under docs/usage/architecture/ as follows:
+  - overview.mdx (high-level index linking all component pages)
+  - components/agent.mdx
+  - components/event-stream.mdx
+  - components/server.mdx (renamed from backend-server)
+  - components/storage.mdx
+  - components/runtime.mdx
+  - components/plugins.mdx
+  - components/microagents.mdx
+  - components/llm-integration.mdx
+  - components/frontend.mdx
+  - components/security.mdx
+  - components/integrations.mdx
+  - components/openhands-api.mdx (renamed from cloud-api)
+
+Per-page structure:
+- Frontmatter: title, optional sidebar position
+- Purpose and responsibilities
+- Key modules, classes, entry points (with code references to file paths)
+- Interactions with other components (Mermaid flowchart)
+- Critical paths / sequences (Mermaid sequence diagram)
+- Important configuration and environment variables
+- Error handling and observability
+- Security considerations
+- Extension points
+- Known limitations / TODOs (link issues if applicable)
+- References: list code paths and docs pages used as sources
+- Footer: Last updated (ISO timestamp) and Source commit (git rev-parse HEAD)
+
+Diagrams:
+- Use Mermaid blocks: flowchart, classDiagram, and sequenceDiagram where appropriate.
+- Keep diagrams focused and scoped to the page.
+
+Factuality and citations:
+- Do not invent functionality. Base all assertions on code or existing docs in this repository.
+- For each non-obvious claim, include a parenthetical citation (e.g., source: openhands/server/app.py).
+
+Process:
+- Analyze the repository to determine current architecture and any changes since last week.
+- Update existing docs/usage/architecture/backend.mdx and runtime.mdx by migrating or linking content into components/server.mdx and components/runtime.mdx. Preserve useful diagrams and improve them as needed.
+- Create any missing component pages listed above with initial content and diagrams.
+- Ensure all references to the API use the term "OpenHands API" and respect the default server and secondary server addresses.
+
+Pull Request:
+- If you have changes compared to the prior week, open a PR yourself.
+- Read and follow .github/pull_request_template.md.
+- Title: "docs: weekly architecture docs refresh".
+- Body:
+  - Summary of changes
+  - List of updated/added pages
+  - Notable diagrams and their sources
+  - Citations of key code references
+- Run pre-commit hooks and ensure CI passes before finalizing.
+
+At the end of your updates, ensure all pages render on GitHub (MDX + Mermaid) and link together cleanly from overview.mdx.
+
+Include the following common guidance at the end of each generated/updated file:

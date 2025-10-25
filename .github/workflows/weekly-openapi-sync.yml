@@ -1,0 +1,56 @@
+name: Weekly OpenAPI Sync
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  openapi-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install project deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install --no-interaction --no-root
+          poetry install --only-root --no-interaction
+
+      - name: Generate openapi.json from FastAPI app
+        run: |
+          python scripts/update_openapi.py
+
+      - name: Run pre-commit (python only)
+        run: pre-commit run --config ./dev_config/python/.pre-commit-config.yaml --all-files || true
+
+      - name: Create Pull Request
+        if: ${{ github.ref_name == 'main' || github.ref == 'refs/heads/main' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore: weekly OpenAPI sync
+
+            Co-authored-by: OpenHands-GPT-5 openhands@all-hands.dev
+          committer: Engel Nyst <engel.nyst@gmail.com>
+          author: Engel Nyst <engel.nyst@gmail.com>
+          branch: ci/openapi-update-${{ github.run_id }}
+          title: 'chore: weekly OpenAPI sync'
+          body: |
+            This PR updates docs/openapi.json from the FastAPI app definition.
+
+            - Generated on: ${{ github.run_id }}
+            - Source: openhands.server.app.openapi()
+
+            Please review spec changes. CI should pass.
+          labels: documentation
+          add-paths: |
+            docs/openapi.json
