@@ -944,6 +944,23 @@ class AgentController:
                         return
                     else:
                         raise LLMContextWindowExceedError()
+                # Check if this is a tool call validation error that should be recoverable
+                elif (
+                    isinstance(e, BadRequestError)
+                    and 'tool call validation failed' in error_str
+                    and (
+                        'missing properties' in error_str
+                        or 'missing required' in error_str
+                    )
+                ):
+                    # Handle tool call validation errors from Groq as recoverable errors
+                    self.event_stream.add_event(
+                        ErrorObservation(
+                            content=f'Tool call validation failed: {str(e)}. Please check the tool parameters and try again.',
+                        ),
+                        EventSource.AGENT,
+                    )
+                    return
                 else:
                     raise e
 
