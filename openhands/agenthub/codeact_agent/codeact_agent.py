@@ -58,7 +58,7 @@ from openhands.core.exceptions import (
 # Optional: in the long run, move this into AgentConfig
 @dataclass
 class AutoReflectionConfig:
-    enabled: bool = True
+    enabled: bool = False
     # Probabilistic trigger: after each observation event, fire with probability `prob`
     prob: float = 0.10
     # Reactive trigger: check last turn for "no tool" or "error observation"

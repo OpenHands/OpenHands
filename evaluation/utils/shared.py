@@ -177,12 +177,13 @@ def make_metadata(
     model_path = model_name.replace(':', '_').replace('@', '-')
     eval_note = f'_N_{eval_note}' if eval_note else ''
 
-    eval_output_path = os.path.join(
-        eval_output_dir,
-        dataset_name,
-        agent_class,
-        f'{model_path}_maxiter_{max_iterations}{eval_note}',
-    )
+    # eval_output_path = os.path.join(
+    #     eval_output_dir,
+    #     dataset_name,
+    #     agent_class,
+    #     f'{model_path}_maxiter_{max_iterations}{eval_note}',
+    # )
+    eval_output_path = eval_output_dir
 
     pathlib.Path(eval_output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(os.path.join(eval_output_path, 'logs')).mkdir(

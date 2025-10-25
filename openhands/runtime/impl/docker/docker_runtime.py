@@ -12,6 +12,9 @@ import httpx
 import tenacity
 from docker.models.containers import Container
 from docker.types import DriverConfig, Mount
+from docker.errors import NotFound
+
+import json, tarfile, time
 
 from openhands.core.config import OpenHandsConfig
 from openhands.core.exceptions import (
@@ -54,6 +57,11 @@ if os.name == 'nt' or platform.release().endswith('microsoft-standard-WSL2'):
     VSCODE_PORT_RANGE = (35000, 39999)
     APP_PORT_RANGE_1 = (40000, 44999)
     APP_PORT_RANGE_2 = (45000, 49151)
+
+
+DOCKER_TIMEOUT_SECS = 600
+APPEAR_WAIT_SECS = 30
+APPEAR_POLL = 0.5
 
 
 def _is_retryablewait_until_alive_error(exception: Exception) -> bool:
@@ -232,29 +240,98 @@ class DockerRuntime(ActionExecutionClient):
                 )
                 self.log('error', str(e))
 
-    def maybe_build_runtime_container_image(self):
-        repo, index = self.get_info_from_base_image()
 
-        runtime_docker_image_folder = self.find_folder_by_prefix_suffix(repo, index, "/workspaces/OpenHands")
+    def _repotags_from_tar(self, tar_path: str):
+        try:
+            with tarfile.open(tar_path, "r:*") as tf:
+                f = tf.extractfile("manifest.json")
+                if not f: return []
+                manifest = json.load(f)
+                tags = []
+                for e in manifest:
+                    tags.extend(e.get("RepoTags") or [])
+                # de-dup
+                return list(dict.fromkeys(tags))
+        except Exception:
+            return []
+
+    def _wait_until_image_visible(self, client, ref: str, timeout=APPEAR_WAIT_SECS):
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                return client.images.get(ref)
+            except NotFound:
+                time.sleep(APPEAR_POLL)
+            except Exception:
+                time.sleep(APPEAR_POLL)
+        return None
+
+    def maybe_build_runtime_container_image(self):
+        # make sure you created the client with a large timeout somewhere:
+        # self.docker_client = docker.from_env(timeout=DOCKER_TIMEOUT_SECS)
+
+        repo, index = self.get_info_from_base_image()
+        runtime_docker_image_folder = self.find_folder_by_prefix_suffix(
+            repo, index, "/workspaces/Openhands/swebench_dockers_for_eval/runtime_dockers/swebench_dev/"
+        )
         tar_files = glob.glob(os.path.join(runtime_docker_image_folder, "*.tar"))
         if not tar_files:
             raise FileNotFoundError("No .tar file found!")
-        elif len(tar_files) > 1:
+        if len(tar_files) > 1:
             raise RuntimeError("More than one .tar file found!")
-        else:
-            tar_path = tar_files[0]
-            logger.debug(f"[Michael] Found tar file: {tar_path}")
+        tar_path = tar_files[0]
+        logger.debug(f"[Michael] Found tar file: {tar_path}")
 
-        logger.debug(f"[Michael] Loading local runtime image from {tar_path} ...")
-        with open(tar_path, "rb") as f:
-            self.runtime_container_image = self.docker_client.images.load(f.read())[0]
-        logger.debug(f"[Michael] Successfuly loaded local runtime image from {tar_path} ...")
+        expected_tags = self._repotags_from_tar(tar_path)
+        logger.debug(f"[Michael] RepoTags in tar: {expected_tags or '(none)'}")
 
+        # 1) If image already present, use it and skip load
+        for tag in expected_tags:
+            try:
+                img = self.docker_client.images.get(tag)
+                self.runtime_container_image = img
+                logger.debug(f"[Michael] Image already present: {tag} -> {img.id}")
+                break
+            except NotFound:
+                pass
+
+        # 2) Load if needed — STREAM, with higher timeout
+        if self.runtime_container_image is None:
+            logger.debug(f"[Michael] Loading local runtime image from {tar_path} ... (this can take minutes)")
+            with open(tar_path, "rb") as f:
+                # stream the tar to the daemon; consume the generator so the load fully completes
+                for _ in self.docker_client.api.load_image(data=f, quiet=False):
+                    pass
+            logger.debug("[Michael] docker load finished; resolving image tag...")
+
+            # Prefer resolving by tag present in manifest
+            for tag in expected_tags:
+                img = self._wait_until_image_visible(self.docker_client, tag)
+                if img:
+                    self.runtime_container_image = img
+                    logger.debug(f"[Michael] Resolved loaded image: {tag} -> {img.id}")
+                    break
+
+            # Fallback: list images and pick one whose tag/repo matches your expectation
+            if self.runtime_container_image is None:
+                images = self.docker_client.images.list()
+                for im in images:
+                    tags = im.tags or []
+                    if any("ghcr.io/all-hands-ai/runtime" in t for t in tags):
+                        self.runtime_container_image = im
+                        logger.debug(f"[Michael] Fallback resolved image: {im.id} ({tags})")
+                        break
+
+            if self.runtime_container_image is None:
+                raise RuntimeError("Loaded image, but could not resolve it. Check manifest.json RepoTags.")
+
+        logger.debug(f"[Michael] Using runtime image: {self.runtime_container_image.id} ({self.runtime_container_image.tags})")
+
+        # Your existing fallback stays:
         if self.runtime_container_image is None:
             if self.base_container_image is None:
-                raise ValueError(
-                    'Neither runtime container image nor base container image is set'
-                )
+                raise ValueError('Neither runtime container image nor base container image is set')
             self.set_runtime_status(RuntimeStatus.BUILDING_RUNTIME)
             self.runtime_container_image = build_runtime_image(
                 self.base_container_image,
@@ -301,7 +378,7 @@ class DockerRuntime(ActionExecutionClient):
     @lru_cache(maxsize=1)
     def _init_docker_client() -> docker.DockerClient:
         try:
-            return docker.from_env()
+            return docker.from_env(timeout=600)
         except Exception as ex:
             logger.error(
                 'Launch docker client failed. Please make sure you have installed docker and started docker desktop/daemon.',
