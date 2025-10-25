@@ -20,6 +20,9 @@ class AsyncLLM(LLM):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
+        # Apply extra headers from env if defined
+        _extra_headers = self._get_extra_headers()
+
         self._async_completion = partial(
             self._call_acompletion,
             model=self.config.model,
@@ -35,6 +38,7 @@ class AsyncLLM(LLM):
             top_p=self.config.top_p,
             drop_params=self.config.drop_params,
             seed=self.config.seed,
+            **({'extra_headers': _extra_headers} if _extra_headers is not None else {}),
         )
 
         async_completion_unwrapped = self._async_completion

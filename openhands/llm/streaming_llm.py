@@ -14,6 +14,9 @@ class StreamingLLM(AsyncLLM):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
+        # Apply extra headers from env if defined
+        _extra_headers = self._get_extra_headers()
+
         self._async_streaming_completion = partial(
             self._call_acompletion,
             model=self.config.model,
@@ -28,7 +31,8 @@ class StreamingLLM(AsyncLLM):
             temperature=self.config.temperature,
             top_p=self.config.top_p,
             drop_params=self.config.drop_params,
-            stream=True,  # Ensure streaming is enabled
+            stream=True,
+            **({'extra_headers': _extra_headers} if _extra_headers is not None else {}),
         )
 
         async_streaming_completion_unwrapped = self._async_streaming_completion
