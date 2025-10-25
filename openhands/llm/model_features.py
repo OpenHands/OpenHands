@@ -15,6 +15,11 @@ def normalize_model_name(model: str) -> str:
       and treat ':' inside that basename as an Ollama-style variant tag to be removed
     - There is no provider:model form; providers, when present, use 'provider/model'
     - Drop a trailing "-gguf" suffix if present
+    - Only handle Anthropic Bedrock-style dot prefixes and remove the vendor token
+      entirely so downstream checks use plain model basenames:
+      * 'anthropic.claude-*' -> 'claude-*'
+      * 'us.anthropic.claude-*' -> 'claude-*'
+      Other vendors are left untouched to avoid unintended side-effects.
     """
     raw = (model or '').strip().lower()
     if '/' in raw:
@@ -25,6 +30,16 @@ def normalize_model_name(model: str) -> str:
     else:
         # No '/', keep the whole raw name (we do not support provider:model)
         name = raw
+
+    # Collapse only Anthropic Bedrock-style dotted vendor and remove the vendor token entirely.
+    # Examples:
+    #   'anthropic.claude-*' -> 'claude-*'
+    #   'us.anthropic.claude-*' -> 'claude-*'
+    if name.startswith('anthropic.'):
+        name = name[len('anthropic.') :]
+    elif '.anthropic.' in name:
+        name = name.split('.anthropic.', 1)[1]
+
     if name.endswith('-gguf'):
         name = name[: -len('-gguf')]
     return name
@@ -103,7 +118,9 @@ REASONING_EFFORT_PATTERNS: list[str] = [
     'gpt-5*',
     # DeepSeek reasoning family
     'deepseek-r1-0528*',
+    # Anthropic Sonnet/Haiku 4.5 variants
     'claude-sonnet-4-5*',
+    'claude-sonnet-4.5*',
     'claude-haiku-4-5*',
 ]
 

@@ -21,9 +21,12 @@ from openhands.llm.model_features import (
         ('openrouter/gpt-4o-mini', 'gpt-4o-mini'),
         (
             'bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0',
-            'anthropic.claude-3-5-sonnet-20241022-v2',
+            'claude-3-5-sonnet-20241022-v2',
         ),
         ('', ''),
+        ('anthropic.claude-4-5-20250929-v1', 'claude-4-5-20250929-v1'),
+        ('us.anthropic.claude-4-5-20250929-v1', 'claude-4-5-20250929-v1'),
+        ('bedrock/us.anthropic.claude-4-5-20250929-v1:0', 'claude-4-5-20250929-v1'),
         (None, ''),  # type: ignore[arg-type]
     ],
 )
@@ -207,6 +210,10 @@ def test_function_calling_models(model):
         'o3-mini',
         'o4-mini',
         'gemini-2.5-flash',
+        'claude-sonnet-4-5',
+        'claude-sonnet-4.5',
+        'us.anthropic.claude-sonnet-4-5-20250929-v1',
+        'us.anthropic.claude-sonnet-4.5-20250929-v1',
         'gemini-2.5-pro',
         'gpt-5',
         'gpt-5-mini-2025-08-07',
