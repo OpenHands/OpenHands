@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'pull_request' && github.head_ref || (github.event_name == 'workflow_dispatch' && github.event.inputs.branch) || github.ref }}
 
