@@ -1,0 +1,71 @@
+name: OpenHands Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  openhands-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OpenHands API helper
+        run: |
+          curl -O https://raw.githubusercontent.com/All-Hands-AI/OpenHands/main/scripts/openhands_api.py
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run OpenHands Code Review
+        env:
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -c "
+          import sys
+          sys.path.append('.')
+          from openhands_api import OpenHandsAPI
+
+          # Create review prompt
+          prompt = '''Please review this pull request for:
+          - Code quality and best practices
+          - Security vulnerabilities
+          - Performance considerations
+          - Documentation completeness
+          - Test coverage
+
+          Repository: ${{ github.repository }}
+          PR: #${{ github.event.number }}
+          Title: ${{ github.event.pull_request.title }}
+
+          Please provide constructive feedback and suggestions for improvement.
+          If you find any issues, please create a detailed comment explaining the problem and suggesting solutions.
+          '''
+
+          # Start OpenHands conversation
+          client = OpenHandsAPI()
+          response = client.create_conversation(
+              initial_user_msg=prompt,
+              repository='${{ github.repository }}'
+          )
+
+          print(f'Started OpenHands review: {response.get(\"conversation_id\", \"Unknown\")}')
+
+          # Poll for completion (optional - remove if you want fire-and-forget)
+          try:
+              final_response = client.poll_until_stopped(response['conversation_id'], timeout=600)
+              print(f'Review completed with status: {final_response.get(\"status\", \"Unknown\")}')
+          except Exception as e:
+              print(f'Review may still be running: {e}')
+          "

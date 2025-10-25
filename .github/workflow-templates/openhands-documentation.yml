@@ -1,0 +1,81 @@
+name: OpenHands Documentation
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM UTC
+  workflow_dispatch:
+  push:
+    branches: [ $default-branch ]
+    paths:
+      - 'src/**'
+      - 'lib/**'
+      - '*.py'
+      - '*.js'
+      - '*.ts'
+
+jobs:
+  openhands-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OpenHands API helper
+        run: |
+          curl -O https://raw.githubusercontent.com/All-Hands-AI/OpenHands/main/scripts/openhands_api.py
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Generate Documentation with OpenHands
+        env:
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -c "
+          import sys
+          sys.path.append('.')
+          from openhands_api import OpenHandsAPI
+
+          # Create documentation prompt
+          prompt = '''Please review the current codebase and update the project documentation:
+
+          Repository: ${{ github.repository }}
+
+          Tasks:
+          1. Review the README.md and ensure it accurately reflects the current project state
+          2. Update API documentation if there are new endpoints or changes
+          3. Check that code examples in documentation are up-to-date
+          4. Add documentation for any new features or significant changes
+          5. Ensure installation and setup instructions are current
+          6. Update any outdated links or references
+          7. Add or improve code comments where needed
+
+          Please create a pull request with your documentation updates if changes are needed.
+          Focus on clarity, accuracy, and completeness.
+          '''
+
+          # Start OpenHands conversation
+          client = OpenHandsAPI()
+          response = client.create_conversation(
+              initial_user_msg=prompt,
+              repository='${{ github.repository }}'
+          )
+
+          print(f'Started OpenHands documentation update: {response.get(\"conversation_id\", \"Unknown\")}')
+
+          # Poll for completion (optional - remove if you want fire-and-forget)
+          try:
+              final_response = client.poll_until_stopped(response['conversation_id'], timeout=900)
+              print(f'Documentation update completed with status: {final_response.get(\"status\", \"Unknown\")}')
+          except Exception as e:
+              print(f'Documentation update may still be running: {e}')
+          "

@@ -1,0 +1,76 @@
+name: OpenHands Bug Fix
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  openhands-fix:
+    if: contains(github.event.label.name, 'bug')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OpenHands API helper
+        run: |
+          curl -O https://raw.githubusercontent.com/All-Hands-AI/OpenHands/main/scripts/openhands_api.py
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run OpenHands Bug Fix
+        env:
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -c "
+          import sys
+          sys.path.append('.')
+          from openhands_api import OpenHandsAPI
+
+          # Create bug fix prompt
+          prompt = '''Please investigate and fix the bug described in this GitHub issue:
+
+          Repository: ${{ github.repository }}
+          Issue: #${{ github.event.issue.number }}
+          Title: ${{ github.event.issue.title }}
+
+          Issue Description:
+          ${{ github.event.issue.body }}
+
+          Please:
+          1. Analyze the issue and identify the root cause
+          2. Implement a fix with proper error handling
+          3. Add or update tests to prevent regression
+          4. Create a pull request with your changes
+          5. Include a clear description of what was fixed and how
+
+          Make sure to follow the project'\''s coding standards and best practices.
+          '''
+
+          # Start OpenHands conversation
+          client = OpenHandsAPI()
+          response = client.create_conversation(
+              initial_user_msg=prompt,
+              repository='${{ github.repository }}'
+          )
+
+          print(f'Started OpenHands bug fix: {response.get(\"conversation_id\", \"Unknown\")}')
+
+          # Poll for completion (optional - remove if you want fire-and-forget)
+          try:
+              final_response = client.poll_until_stopped(response['conversation_id'], timeout=1200)
+              print(f'Bug fix completed with status: {final_response.get(\"status\", \"Unknown\")}')
+          except Exception as e:
+              print(f'Bug fix may still be running: {e}')
+          "

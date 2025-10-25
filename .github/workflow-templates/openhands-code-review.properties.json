@@ -1,0 +1,25 @@
+{
+  "name": "OpenHands Code Review",
+  "description": "Automated code review using OpenHands AI agent. Reviews PRs for code quality, security, and best practices.",
+  "iconName": "octicon code-review",
+  "categories": [
+    "Code Quality",
+    "AI",
+    "Automation",
+    "Python",
+    "JavaScript",
+    "TypeScript"
+  ],
+  "filePatterns": [
+    ".*\\.py$",
+    ".*\\.js$",
+    ".*\\.ts$",
+    ".*\\.jsx$",
+    ".*\\.tsx$",
+    ".*\\.java$",
+    ".*\\.go$",
+    ".*\\.rs$",
+    ".*\\.cpp$",
+    ".*\\.c$"
+  ]
+}

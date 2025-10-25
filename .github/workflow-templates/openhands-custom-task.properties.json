@@ -1,0 +1,14 @@
+{
+  "name": "OpenHands Custom Task",
+  "description": "Run any custom development task using OpenHands AI agent. Manually triggered with custom task description.",
+  "iconName": "octicon tools",
+  "categories": [
+    "AI",
+    "Automation",
+    "Custom",
+    "Development"
+  ],
+  "filePatterns": [
+    ".*"
+  ]
+}

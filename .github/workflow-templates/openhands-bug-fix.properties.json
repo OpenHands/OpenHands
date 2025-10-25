@@ -1,0 +1,23 @@
+{
+  "name": "OpenHands Bug Fix",
+  "description": "Automatically investigate and fix bugs using OpenHands AI agent. Triggered when issues are labeled with 'bug'.",
+  "iconName": "octicon bug",
+  "categories": [
+    "Bug Fix",
+    "AI",
+    "Automation",
+    "Debugging"
+  ],
+  "filePatterns": [
+    ".*\\.py$",
+    ".*\\.js$",
+    ".*\\.ts$",
+    ".*\\.jsx$",
+    ".*\\.tsx$",
+    ".*\\.java$",
+    ".*\\.go$",
+    ".*\\.rs$",
+    ".*\\.cpp$",
+    ".*\\.c$"
+  ]
+}

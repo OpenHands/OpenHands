@@ -1,0 +1,78 @@
+name: OpenHands Custom Task
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_description:
+        description: 'Describe the task you want OpenHands to perform'
+        required: true
+        type: string
+      timeout_minutes:
+        description: 'Timeout in minutes (default: 20)'
+        required: false
+        default: '20'
+        type: string
+
+jobs:
+  openhands-task:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OpenHands API helper
+        run: |
+          curl -O https://raw.githubusercontent.com/All-Hands-AI/OpenHands/main/scripts/openhands_api.py
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run OpenHands Custom Task
+        env:
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -c "
+          import sys
+          sys.path.append('.')
+          from openhands_api import OpenHandsAPI
+
+          # Create custom task prompt
+          prompt = '''${{ github.event.inputs.task_description }}
+
+          Repository: ${{ github.repository }}
+
+          Please complete this task following best practices:
+          - Write clean, well-documented code
+          - Add appropriate tests if needed
+          - Follow the project'\''s coding standards
+          - Create a pull request if changes are made
+          - Provide clear explanations of what was done
+          '''
+
+          # Start OpenHands conversation
+          client = OpenHandsAPI()
+          response = client.create_conversation(
+              initial_user_msg=prompt,
+              repository='${{ github.repository }}'
+          )
+
+          print(f'Started OpenHands custom task: {response.get(\"conversation_id\", \"Unknown\")}')
+
+          # Poll for completion
+          timeout_seconds = int('${{ github.event.inputs.timeout_minutes }}') * 60
+          try:
+              final_response = client.poll_until_stopped(response['conversation_id'], timeout=timeout_seconds)
+              print(f'Custom task completed with status: {final_response.get(\"status\", \"Unknown\")}')
+          except Exception as e:
+              print(f'Custom task may still be running or timed out: {e}')
+          "

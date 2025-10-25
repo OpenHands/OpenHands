@@ -1,0 +1,19 @@
+{
+  "name": "OpenHands Documentation",
+  "description": "Automatically update and maintain project documentation using OpenHands AI agent. Runs weekly and on code changes.",
+  "iconName": "octicon book",
+  "categories": [
+    "Documentation",
+    "AI",
+    "Automation",
+    "Maintenance"
+  ],
+  "filePatterns": [
+    "README.md$",
+    ".*\\.md$",
+    "docs/.*",
+    ".*\\.py$",
+    ".*\\.js$",
+    ".*\\.ts$"
+  ]
+}
