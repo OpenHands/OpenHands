@@ -7,10 +7,7 @@ Provides a conversation interface with an AI agent using OpenHands patterns.
 import sys
 from datetime import datetime
 
-from openhands.sdk import (
-    Message,
-    TextContent,
-)
+from openhands.sdk import Message, TextContent
 from openhands.sdk.conversation.state import AgentExecutionStatus
 from prompt_toolkit import print_formatted_text
 from prompt_toolkit.formatted_text import HTML
@@ -20,10 +17,7 @@ from openhands_cli.setup import MissingAgentSpec, setup_conversation, start_fres
 from openhands_cli.tui.settings.mcp_screen import MCPScreen
 from openhands_cli.tui.settings.settings_screen import SettingsScreen
 from openhands_cli.tui.status import display_status
-from openhands_cli.tui.tui import (
-    display_help,
-    display_welcome,
-)
+from openhands_cli.tui.tui import display_help, display_welcome
 from openhands_cli.user_actions import UserConfirmation, exit_session_confirmation
 from openhands_cli.user_actions.utils import get_session_prompter
 
@@ -43,6 +37,9 @@ def _restore_tty() -> None:
 
 def _print_exit_hint(conversation_id: str) -> None:
     """Print a resume hint with the current conversation ID."""
+    from prompt_toolkit import print_formatted_text
+    from prompt_toolkit.formatted_text import HTML
+
     print_formatted_text(
         HTML(f'<grey>Conversation ID:</grey> <yellow>{conversation_id}</yellow>')
     )
@@ -55,9 +52,11 @@ def _print_exit_hint(conversation_id: str) -> None:
 
 
 
-def run_cli_entry(resume_conversation_id: str | None = None) -> None:
+def run_cli_entry(resume_conversation_id: str | None = None, initial_user_message: str | None = None) -> None:
     """Run the agent chat session using the agent SDK.
 
+    If initial_user_message is provided, it will be sent once before
+    entering the interactive prompt loop.
 
     Raises:
         AgentSetupError: If agent setup fails
@@ -81,6 +80,13 @@ def run_cli_entry(resume_conversation_id: str | None = None) -> None:
     # Create conversation runner to handle state machine logic
     runner = ConversationRunner(conversation)
     session = get_session_prompter()
+
+    # If an initial message was provided and we're not resuming, send it once
+    if (not resume_conversation_id) and initial_user_message and initial_user_message.strip():
+        runner.process_message(
+            Message(role='user', content=[TextContent(text=initial_user_message)])
+        )
+        print()
 
     # Main chat loop
     while True:
