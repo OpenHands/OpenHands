@@ -262,7 +262,11 @@ def handle_new_command(
             ChangeAgentStateAction(AgentState.STOPPED),
             EventSource.ENVIRONMENT,
         )
-        display_shutdown_message(usage_metrics, sid)
+        # For /new command, we skip the shutdown message to provide a cleaner transition
+        # The user explicitly requested a new session, so showing old stats is not helpful
+        from prompt_toolkit.shortcuts import clear
+
+        clear()
 
     return close_repl, new_session_requested
 
