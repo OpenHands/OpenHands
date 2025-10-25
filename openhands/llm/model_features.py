@@ -58,6 +58,13 @@ class ModelFeatures:
     supports_stop_words: bool
 
 
+# Models that may return empty assistant messages while performing internal reasoning
+# Example: xai/grok-4 family sometimes streams only a reasoning token count with empty content
+# We match against the normalized basename, so 'grok-4*' covers variants like grok-4-0709, grok-4-latest
+REASONING_EMPTY_MESSAGE_PATTERNS: list[str] = [
+    'grok-4*',
+]
+
 # Pattern tables capturing current behavior. Keep patterns lowercase.
 FUNCTION_CALLING_PATTERNS: list[str] = [
     # Anthropic families

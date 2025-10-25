@@ -43,6 +43,7 @@ from openhands.events.action.agent import CondensationRequestAction
 from openhands.events.action.mcp import MCPAction
 from openhands.events.event import FileEditSource, FileReadSource
 from openhands.events.tool import ToolCallMetadata
+from openhands.llm.model_features import REASONING_EMPTY_MESSAGE_PATTERNS, model_matches
 from openhands.llm.tool_names import TASK_TRACKER_TOOL_NAME
 
 
@@ -320,10 +321,16 @@ def response_to_actions(
             )
             actions.append(action)
     else:
+        content = str(assistant_msg.content) if assistant_msg.content else ''
+        model_name = str(getattr(response, 'model', ''))
+        is_reasoning_empty_model = model_matches(
+            model_name, REASONING_EMPTY_MESSAGE_PATTERNS
+        )
+        wait_for_response = not (is_reasoning_empty_model and not content)
         actions.append(
             MessageAction(
-                content=str(assistant_msg.content) if assistant_msg.content else '',
-                wait_for_response=True,
+                content=content,
+                wait_for_response=wait_for_response,
             )
         )
 

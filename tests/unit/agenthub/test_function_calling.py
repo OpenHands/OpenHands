@@ -14,6 +14,7 @@ from openhands.events.action import (
     FileEditAction,
     FileReadAction,
     IPythonRunCellAction,
+    MessageAction,
 )
 from openhands.events.event import FileEditSource, FileReadSource
 
@@ -272,3 +273,129 @@ def test_unexpected_argument_handling():
     # Verify the error message mentions the unexpected argument
     assert 'old_str_prefix' in str(exc_info.value)
     assert 'Unexpected argument' in str(exc_info.value)
+
+
+def test_message_action_empty_response_non_grok():
+    response = ModelResponse(
+        id='mock-id',
+        model='gpt-4o',
+        choices=[
+            {
+                'message': {
+                    'content': '',
+                    'role': 'assistant',
+                },
+                'index': 0,
+                'finish_reason': 'stop',
+            }
+        ],
+    )
+    actions = response_to_actions(response)
+    assert len(actions) == 1
+    assert isinstance(actions[0], MessageAction)
+    assert actions[0].content == ''
+    assert actions[0].wait_for_response is True
+
+
+def test_message_action_empty_response_grok():
+    response = ModelResponse(
+        id='mock-id',
+        model='xai/grok-4-0709',
+        choices=[
+            {
+                'message': {
+                    'content': '',
+                    'role': 'assistant',
+                },
+                'index': 0,
+                'finish_reason': 'stop',
+            }
+        ],
+    )
+    actions = response_to_actions(response)
+    assert len(actions) == 1
+    assert isinstance(actions[0], MessageAction)
+    assert actions[0].content == ''
+    assert actions[0].wait_for_response is False
+
+
+def test_message_action_non_empty_response_grok():
+    response = ModelResponse(
+        id='mock-id',
+        model='xai/grok-4-0709',
+        choices=[
+            {
+                'message': {
+                    'content': 'Here is my response.',
+                    'role': 'assistant',
+                },
+                'index': 0,
+                'finish_reason': 'stop',
+            }
+        ],
+    )
+    actions = response_to_actions(response)
+    assert len(actions) == 1
+    assert isinstance(actions[0], MessageAction)
+    assert actions[0].content == 'Here is my response.'
+    assert actions[0].wait_for_response is True
+
+
+@pytest.mark.parametrize(
+    'model_name',
+    [
+        'xai/grok-4-0709',
+        'litellm_proxy/xai/grok-4-0709',
+        'openrouter/xai/grok-4-0709',
+    ],
+)
+def test_message_action_grok_model_variants(model_name):
+    response = ModelResponse(
+        id='mock-id',
+        model=model_name,
+        choices=[
+            {
+                'message': {
+                    'content': '',
+                    'role': 'assistant',
+                },
+                'index': 0,
+                'finish_reason': 'stop',
+            }
+        ],
+    )
+    actions = response_to_actions(response)
+    assert len(actions) == 1
+    assert isinstance(actions[0], MessageAction)
+    assert actions[0].content == ''
+    assert actions[0].wait_for_response is False
+
+
+@pytest.mark.parametrize(
+    'model_name',
+    [
+        'grok-lite',
+        'xai/other-model',
+        'gpt-4-grok-mode',
+    ],
+)
+def test_message_action_similar_model_names(model_name):
+    response = ModelResponse(
+        id='mock-id',
+        model=model_name,
+        choices=[
+            {
+                'message': {
+                    'content': '',
+                    'role': 'assistant',
+                },
+                'index': 0,
+                'finish_reason': 'stop',
+            }
+        ],
+    )
+    actions = response_to_actions(response)
+    assert len(actions) == 1
+    assert isinstance(actions[0], MessageAction)
+    assert actions[0].content == ''
+    assert actions[0].wait_for_response is True
