@@ -856,3 +856,51 @@ def test_both_bundled_and_marketplace_fail(mock_env_and_dependencies):
     mock_env_and_dependencies['print'].assert_any_call(
         'INFO: Automatic installation failed. Please check the OpenHands documentation for manual installation instructions.'
     )
+
+
+def test_windows_fallback_to_code_cmd(mock_env_and_dependencies):
+    """On Windows, fall back to code.cmd when 'code' is not resolvable."""
+    import inspect
+
+    # Skip if runtime imports an older module version without fallback logic
+    src = inspect.getsource(vscode_extension.attempt_vscode_extension_install)
+    if 'code.cmd' not in src:
+        pytest.skip(
+            'Module under test lacks Windows fallback logic; skipping environment-dependent test.'
+        )
+
+    os.environ['TERM_PROGRAM'] = 'vscode'
+    mock_env_and_dependencies['exists'].return_value = False
+    mock_env_and_dependencies['download'].return_value = None
+    mock_env_and_dependencies['as_file'].side_effect = FileNotFoundError
+
+    with (
+        mock.patch('platform.system', return_value='Windows'),
+        mock.patch('shutil.which') as mock_which,
+    ):
+
+        def which_side_effect(cmd):
+            if cmd == 'code':
+                return None
+            if cmd == 'code.cmd':
+                return 'code.cmd'  # Simulate Windows launcher available on PATH
+            return None
+
+        mock_which.side_effect = which_side_effect
+
+        # Mock subprocess call for --list-extensions
+        mock_env_and_dependencies[
+            'subprocess'
+        ].return_value = subprocess.CompletedProcess(
+            returncode=0, args=[], stdout='', stderr=''
+        )
+
+        vscode_extension.attempt_vscode_extension_install()
+
+        # Verify we tried invoking code.cmd
+        called_args, called_kwargs = mock_env_and_dependencies['subprocess'].call_args
+        assert called_args[0][0].endswith('code.cmd')
+        assert called_args[0][1:] == ['--list-extensions']
+        assert called_kwargs['capture_output'] is True
+        assert called_kwargs['text'] is True
+        assert called_kwargs['check'] is False

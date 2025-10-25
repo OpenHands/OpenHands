@@ -2,6 +2,7 @@ import importlib.resources
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import tempfile
 import urllib.request
@@ -78,6 +79,25 @@ def attempt_vscode_extension_install():
         editor_command, editor_name, flag_suffix = 'surf', 'Windsurf', 'windsurf'
     else:
         editor_command, editor_name, flag_suffix = 'code', 'VS Code', 'vscode'
+
+    # 2.1 Resolve the actual editor command across platforms. Try PATH first,
+    # then common Windows wrappers if needed.
+    resolved = shutil.which(editor_command)
+    if resolved:
+        editor_command = resolved
+    else:
+        if editor_command == 'code':
+            for candidate in ('code.cmd', 'code.exe'):
+                path = shutil.which(candidate)
+                if path:
+                    editor_command = path
+                    break
+        elif editor_command == 'surf':
+            for candidate in ('surf.cmd', 'surf.exe'):
+                path = shutil.which(candidate)
+                if path:
+                    editor_command = path
+                    break
 
     # 3. Check if we've already successfully installed the extension.
     flag_dir = pathlib.Path.home() / '.openhands'
