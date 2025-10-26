@@ -27,6 +27,8 @@ from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
+# Note: org_id column exists but foreign key constraint is not enforced in tests
+
 # Note: MetricsSnapshot from SDK is not available in test environment
 # We'll use None for metrics field in tests since it's optional
 

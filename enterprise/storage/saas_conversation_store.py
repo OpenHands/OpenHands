@@ -4,10 +4,12 @@ import dataclasses
 import logging
 from dataclasses import dataclass
 from datetime import UTC
+from uuid import UUID
 
 from sqlalchemy.orm import sessionmaker
 from storage.database import session_maker
 from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.user_store import UserStore
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.integrations.provider import ProviderType
@@ -29,11 +31,22 @@ logger = logging.getLogger(__name__)
 class SaasConversationStore(ConversationStore):
     user_id: str
     session_maker: sessionmaker
+    org_id: UUID | None = None  # will be fetched automatically
+
+    def __init__(self, user_id: str, session_maker: sessionmaker):
+        self.user_id = user_id
+        self.session_maker = session_maker
+        user = UserStore.get_user_by_id(user_id)
+        if not user:
+            logger.error(f'No user found by ID {user_id}')
+            raise ValueError(f'No user found by ID {user_id}')
+        self.org_id = user.current_org_id
 
     def _select_by_id(self, session, conversation_id: str):
         return (
             session.query(StoredConversationMetadata)
             .filter(StoredConversationMetadata.user_id == self.user_id)
+            .filter(StoredConversationMetadata.org_id == self.org_id)
             .filter(StoredConversationMetadata.conversation_id == conversation_id)
         )
 
@@ -41,7 +54,8 @@ class SaasConversationStore(ConversationStore):
         kwargs = {
             c.name: getattr(conversation_metadata, c.name)
             for c in StoredConversationMetadata.__table__.columns
-            if c.name != 'github_user_id'  # Skip github_user_id field
+            if c.name
+            not in ['github_user_id', 'org_id']  # Skip github_user_id and org_id fields
         }
         # TODO: I'm not sure why the timezone is not set on the dates coming back out of the db
         kwargs['created_at'] = kwargs['created_at'].replace(tzinfo=UTC)
@@ -65,6 +79,7 @@ class SaasConversationStore(ConversationStore):
     async def save_metadata(self, metadata: ConversationMetadata):
         kwargs = dataclasses.asdict(metadata)
         kwargs['user_id'] = self.user_id
+        kwargs['org_id'] = self.org_id
 
         # Convert ProviderType enum to string for storage
         if kwargs.get('git_provider') is not None:
@@ -123,6 +138,7 @@ class SaasConversationStore(ConversationStore):
                 conversations = (
                     session.query(StoredConversationMetadata)
                     .filter(StoredConversationMetadata.user_id == self.user_id)
+                    .filter(StoredConversationMetadata.org_id == self.org_id)
                     .order_by(StoredConversationMetadata.created_at.desc())
                     .offset(offset)
                     .limit(limit + 1)

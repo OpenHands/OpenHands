@@ -265,7 +265,9 @@ class TokenManager:
                 self._check_expiration_and_refresh
             )
             if not token_info:
-                logger.info(f'No tokens for user: {username}, identity provider: {idp}')
+                logger.error(
+                    f'No tokens for user: {username}, identity provider: {idp}'
+                )
                 raise ValueError(
                     f'No tokens for user: {username}, identity provider: {idp}'
                 )

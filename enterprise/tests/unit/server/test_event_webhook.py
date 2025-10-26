@@ -82,7 +82,7 @@ class TestGetUserId:
             session_maker_with_minimal_fixtures,
         ):
             user_id = _get_user_id('mock-conversation-id')
-            assert user_id == 'mock-user-id'
+            assert user_id == '5594c7b6-f959-4b81-92e9-b09c206f5081'
 
     def test_get_user_id_conversation_not_found(self, session_maker):
         """Test getting user ID when conversation doesn't exist."""
@@ -105,10 +105,12 @@ class TestGetSessionApiKey:
                 return_value=[mock_agent_loop_info]
             )
 
-            api_key = await _get_session_api_key('user-123', 'conv-456')
+            api_key = await _get_session_api_key(
+                '5594c7b6-f959-4b81-92e9-b09c206f5081', 'conv-456'
+            )
             assert api_key == 'test-api-key'
             mock_manager.get_agent_loop_info.assert_called_once_with(
-                'user-123', filter_to_sids={'conv-456'}
+                '5594c7b6-f959-4b81-92e9-b09c206f5081', filter_to_sids={'conv-456'}
             )
 
     @pytest.mark.asyncio
@@ -118,7 +120,9 @@ class TestGetSessionApiKey:
             mock_manager.get_agent_loop_info = AsyncMock(return_value=[])
 
             with pytest.raises(IndexError):
-                await _get_session_api_key('user-123', 'conv-456')
+                await _get_session_api_key(
+                    '5594c7b6-f959-4b81-92e9-b09c206f5081', 'conv-456'
+                )
 
 
 class TestProcessEvent:
@@ -142,10 +146,15 @@ class TestProcessEvent:
             mock_event = MagicMock()
             mock_event_from_dict.return_value = mock_event
 
-            await process_event('user-123', 'conv-456', 'events/event-1.json', content)
+            await process_event(
+                '5594c7b6-f959-4b81-92e9-b09c206f5081',
+                'conv-456',
+                'events/event-1.json',
+                content,
+            )
 
             mock_file_store.write.assert_called_once_with(
-                'users/user-123/conversations/conv-456/events/event-1.json',
+                'users/5594c7b6-f959-4b81-92e9-b09c206f5081/conversations/conv-456/events/event-1.json',
                 json.dumps(content),
             )
             mock_event_from_dict.assert_called_once_with(content)
@@ -177,14 +186,19 @@ class TestProcessEvent:
             )
             mock_event_from_dict.return_value = mock_event
 
-            await process_event('user-123', 'conv-456', 'events/event-1.json', content)
+            await process_event(
+                '5594c7b6-f959-4b81-92e9-b09c206f5081',
+                'conv-456',
+                'events/event-1.json',
+                content,
+            )
 
             mock_file_store.write.assert_called_once()
             mock_event_from_dict.assert_called_once_with(content)
             mock_invoke_callbacks.assert_called_once_with('conv-456', mock_event)
             mock_update_working_seconds.assert_called_once()
             mock_event_store_class.assert_called_once_with(
-                'conv-456', mock_file_store, 'user-123'
+                'conv-456', mock_file_store, '5594c7b6-f959-4b81-92e9-b09c206f5081'
             )
 
     @pytest.mark.asyncio
@@ -212,7 +226,12 @@ class TestProcessEvent:
             mock_event.agent_state = 'running'  # Set RUNNING state to skip the update
             mock_event_from_dict.return_value = mock_event
 
-            await process_event('user-123', 'conv-456', 'events/event-1.json', content)
+            await process_event(
+                '5594c7b6-f959-4b81-92e9-b09c206f5081',
+                'conv-456',
+                'events/event-1.json',
+                content,
+            )
 
             mock_file_store.write.assert_called_once()
             mock_event_from_dict.assert_called_once_with(content)

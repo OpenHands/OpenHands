@@ -167,6 +167,7 @@ class SlackNewConversationView(SlackViewInterface):
                     'channel_id': self.channel_id,
                     'conversation_id': self.conversation_id,
                     'keycloak_user_id': user_info.keycloak_user_id,
+                    'org_id': user_info.org_id,
                     'parent_id': self.thread_ts or self.message_ts,
                 },
             )
@@ -174,6 +175,7 @@ class SlackNewConversationView(SlackViewInterface):
                 conversation_id=self.conversation_id,
                 channel_id=self.channel_id,
                 keycloak_user_id=user_info.keycloak_user_id,
+                org_id=user_info.org_id,
                 parent_id=self.thread_ts
                 or self.message_ts,  # conversations can start in a thread reply as well; we should always references the parent's (root level msg's) message ID
             )
@@ -304,10 +306,10 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
         if not agent_state or agent_state == AgentState.LOADING:
             raise StartingConvoException('Conversation is still starting')
 
-        user_msg, _ = self._get_instructions(jinja)
-        user_msg_action = MessageAction(content=user_msg)
+        instructions, _ = self._get_instructions(jinja)
+        user_msg = MessageAction(content=instructions)
         await conversation_manager.send_event_to_conversation(
-            self.conversation_id, event_to_dict(user_msg_action)
+            self.conversation_id, event_to_dict(user_msg)
         )
 
         return self.conversation_id

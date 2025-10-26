@@ -44,11 +44,13 @@ class MyProcessor(MaintenanceTaskProcessor):
 ### UserVersionUpgradeProcessor
 
 Located in `user_version_upgrade_processor.py`, this processor:
+
 - Handles up to 100 user IDs per task
-- Upgrades users with `user_version < CURRENT_USER_SETTINGS_VERSION`
+- Upgrades users with `user_version < ORG_SETTINGS_VERSION`
 - Uses `SaasSettingsStore.create_default_settings()` for upgrades
 
 **Usage:**
+
 ```python
 from server.maintenance_task_processor.user_version_upgrade_processor import UserVersionUpgradeProcessor
 
@@ -144,22 +146,26 @@ task = create_maintenance_task(
 ## Best Practices
 
 ### Processor Design
+
 - Keep tasks short-running (under 1 minute)
 - Handle errors gracefully and return meaningful error information
 - Use batch processing for large datasets
 - Include progress information in the return dict
 
 ### Error Handling
+
 - Always wrap your processor logic in try-catch blocks
 - Return structured error information
 - Log important events for debugging
 
 ### Performance
+
 - Limit batch sizes to avoid long-running tasks
 - Use database sessions efficiently
 - Consider memory usage for large datasets
 
 ### Testing
+
 - Create unit tests for your processors
 - Test error conditions
 - Verify the processor serialization/deserialization works correctly
@@ -167,6 +173,7 @@ task = create_maintenance_task(
 ## Database Patterns
 
 The maintenance task system follows the repository's established patterns:
+
 - Uses `session_maker()` for database operations
 - Wraps sync database operations in `call_sync_from_async` for async routes
 - Follows proper SQLAlchemy query patterns
@@ -174,15 +181,18 @@ The maintenance task system follows the repository's established patterns:
 ## Integration with Existing Systems
 
 ### User Management
+
 - Integrates with the existing `UserSettings` model
-- Uses the current user versioning system (`CURRENT_USER_SETTINGS_VERSION`)
+- Uses the current user versioning system (`ORG_SETTINGS_VERSION`)
 - Maintains compatibility with existing user management workflows
 
 ### Authentication
+
 - Admin endpoints use the existing SaaS authentication system
 - Requires users to have `admin = True` in their UserSettings
 
 ### Monitoring
+
 - Tasks are logged with structured information
 - Status updates are tracked in the database
 - Error information is preserved for debugging
@@ -206,6 +216,7 @@ The maintenance task system follows the repository's established patterns:
 ## Future Enhancements
 
 Potential improvements that could be added:
+
 - Task dependencies and scheduling
 - Retry mechanisms for failed tasks
 - Real-time progress updates
