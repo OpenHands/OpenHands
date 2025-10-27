@@ -186,7 +186,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         id: download
         with:
           pattern: coverage-*
