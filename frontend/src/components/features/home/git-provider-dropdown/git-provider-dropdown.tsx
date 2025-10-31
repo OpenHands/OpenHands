@@ -51,6 +51,8 @@ export function GitProviderDropdown({
         return "GitLab";
       case "bitbucket":
         return "Bitbucket";
+      case "azure_devops":
+        return "Azure DevOps";
       case "enterprise_sso":
         return "Enterprise SSO";
       default:
