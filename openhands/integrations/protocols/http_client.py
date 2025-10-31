@@ -20,7 +20,7 @@ class HTTPClient(ABC):
     """Abstract base class defining the HTTP client interface for Git service integrations.
 
     This class abstracts the common HTTP client functionality needed by all
-    Git service providers (GitHub, GitLab, BitBucket) while keeping inheritance in place.
+    Git service providers (GitHub, GitLab, Bitbucket, Azure DevOps) while keeping inheritance in place.
     """
 
     # Default attributes (subclasses may override)

@@ -3,12 +3,13 @@ import { FaCodeBranch } from "react-icons/fa";
 import { IconType } from "react-icons/lib";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { Provider } from "#/types/settings";
+import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
 
 interface ConversationRepoLinkProps {
   selectedRepository: RepositorySelection;
 }
 
-const providerIcon: Record<Provider, IconType> = {
+const providerIcon: Partial<Record<Provider, IconType>> = {
   bitbucket: FaBitbucket,
   github: FaGithub,
   gitlab: FaGitlab,
@@ -26,6 +27,9 @@ export function ConversationRepoLink({
     <div className="flex items-center gap-3 flex-1">
       <div className="flex items-center gap-1">
         {Icon && <Icon size={14} className="text-[#A3A3A3]" />}
+        {selectedRepository.git_provider === "azure_devops" && (
+          <AzureDevOpsLogo className="text-[#A3A3A3] w-[14px] h-[14px]" />
+        )}
         <span
           data-testid="conversation-card-selected-repository"
           className="text-xs text-[#A3A3A3] whitespace-nowrap overflow-hidden text-ellipsis max-w-44"
