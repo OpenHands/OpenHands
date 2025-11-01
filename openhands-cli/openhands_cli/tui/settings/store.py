@@ -45,9 +45,7 @@ class AgentStore:
                 system_message_suffix=f'You current working directory is: {WORK_DIR}',
             )
 
-            additional_mcp_config = self.load_mcp_configuration()
-            mcp_config: dict = agent.mcp_config.copy().get('mcpServers', {})
-            mcp_config.update(additional_mcp_config)
+            mcp_config: dict = self.load_mcp_configuration()
 
             # Update LLM metadata with current information
             agent_llm_metadata = get_llm_metadata(
