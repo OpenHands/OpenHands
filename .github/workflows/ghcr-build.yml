@@ -268,7 +268,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Download runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
@@ -330,7 +330,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Download runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
