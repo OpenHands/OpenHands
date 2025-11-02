@@ -14,13 +14,13 @@ import {
   ErrorEventMessage,
   UserAssistantEventMessage,
   FinishEventMessage,
-  ObservationPairEventMessage,
   GenericEventMessageWrapper,
+  ThoughtEventMessage,
 } from "./event-message-components";
 
 interface EventMessageProps {
   event: OpenHandsEvent;
-  hasObservationPair: boolean;
+  messages: OpenHandsEvent[];
   isLastMessage: boolean;
   microagentStatus?: MicroagentStatus | null;
   microagentConversationId?: string;
@@ -36,7 +36,7 @@ interface EventMessageProps {
 /* eslint-disable react/jsx-props-no-spreading */
 export function EventMessage({
   event,
-  hasObservationPair,
+  messages,
   isLastMessage,
   microagentStatus,
   microagentConversationId,
@@ -69,19 +69,6 @@ export function EventMessage({
     return <ErrorEventMessage event={event} {...commonProps} />;
   }
 
-  // Observation pairs with actions
-  if (hasObservationPair && isActionEvent(event)) {
-    return (
-      <ObservationPairEventMessage
-        event={event}
-        microagentStatus={microagentStatus}
-        microagentConversationId={microagentConversationId}
-        microagentPRUrl={microagentPRUrl}
-        actions={actions}
-      />
-    );
-  }
-
   // Finish actions
   if (isActionEvent(event) && event.action.kind === "FinishAction") {
     return (
@@ -89,6 +76,39 @@ export function EventMessage({
         event={event as ActionEvent<FinishAction>}
         {...commonProps}
       />
+    );
+  }
+
+  // Action events - render thought + action (will be replaced by thought + observation)
+  if (isActionEvent(event)) {
+    return (
+      <>
+        <ThoughtEventMessage event={event} actions={actions} />
+        <GenericEventMessageWrapper
+          event={event}
+          isLastMessage={isLastMessage}
+        />
+      </>
+    );
+  }
+
+  // Observation events - find the corresponding action and render thought + observation
+  if (isObservationEvent(event)) {
+    // Find the action that this observation is responding to
+    const correspondingAction = messages.find(
+      (msg) => isActionEvent(msg) && msg.id === event.action_id,
+    );
+
+    return (
+      <>
+        {correspondingAction && isActionEvent(correspondingAction) && (
+          <ThoughtEventMessage event={correspondingAction} actions={actions} />
+        )}
+        <GenericEventMessageWrapper
+          event={event}
+          isLastMessage={isLastMessage}
+        />
+      </>
     );
   }
 
@@ -104,7 +124,7 @@ export function EventMessage({
     );
   }
 
-  // Generic fallback for all other events (including observation events)
+  // Generic fallback for all other events
   return (
     <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
   );

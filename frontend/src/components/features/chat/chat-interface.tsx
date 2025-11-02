@@ -68,6 +68,7 @@ export function ChatInterface() {
   const conversationWebSocket = useConversationWebSocket();
   const { send } = useSendMessage();
   const storeEvents = useEventStore((state) => state.events);
+  const uiEvents = useEventStore((state) => state.uiEvents);
   const { setOptimisticUserMessage, getOptimisticUserMessage } =
     useOptimisticUserMessageStore();
   const { t } = useTranslation();
@@ -121,11 +122,13 @@ export function ChatInterface() {
     .filter(isActionOrObservation)
     .filter(shouldRenderEvent);
 
-  // Filter V1 events
-  const v1Events = storeEvents.filter(isV1Event).filter(shouldRenderV1Event);
+  // Filter V1 events - use uiEvents for rendering (actions replaced by observations)
+  const v1UiEvents = uiEvents.filter(isV1Event).filter(shouldRenderV1Event);
+  // Keep full v1 events for lookups (includes both actions and observations)
+  const v1FullEvents = storeEvents.filter(isV1Event);
 
   // Combined events count for tracking
-  const totalEvents = v0Events.length || v1Events.length;
+  const totalEvents = v0Events.length || v1UiEvents.length;
 
   // Check if there are any substantive agent actions (not just system messages)
   const hasSubstantiveAgentActions = React.useMemo(
@@ -223,7 +226,7 @@ export function ChatInterface() {
   };
 
   const v0UserEventsExist = hasUserEvent(v0Events);
-  const v1UserEventsExist = hasV1UserEvent(v1Events);
+  const v1UserEventsExist = hasV1UserEvent(v1FullEvents);
   const userEventsExist = v0UserEventsExist || v1UserEventsExist;
 
   return (
@@ -267,7 +270,7 @@ export function ChatInterface() {
           )}
 
           {!conversationWebSocket?.isLoadingHistory && v1UserEventsExist && (
-            <V1Messages messages={v1Events} />
+            <V1Messages messages={v1UiEvents} allEvents={v1FullEvents} />
           )}
         </div>
 
