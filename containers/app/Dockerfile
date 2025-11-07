@@ -9,7 +9,7 @@ RUN npm ci
 COPY frontend ./
 RUN npm run build
 
-FROM python:3.13.7-slim-trixie AS base
+FROM python:3.14.0-slim-trixie AS base
 FROM base AS backend-builder
 
 WORKDIR /app
