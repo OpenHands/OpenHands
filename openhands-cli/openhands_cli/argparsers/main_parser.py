@@ -31,6 +31,17 @@ Examples:
         help='Conversation ID to resume'
     )
     
+    parser.add_argument(
+        '--task',
+        type=str,
+        help='Initial task prompt to send once at startup'
+    )
+    parser.add_argument(
+        '--file',
+        type=str,
+        help='Path to a file whose content will be sent as the initial message'
+    )
+
     # Only serve as subcommand
     subparsers = parser.add_subparsers(
         dest='command',
