@@ -15,6 +15,9 @@ from keycloak.exceptions import (
     KeycloakError,
 )
 from server.auth.constants import (
+    AZURE_DEVOPS_CLIENT_ID,
+    AZURE_DEVOPS_CLIENT_SECRET,
+    AZURE_DEVOPS_TENANT_ID,
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_APP_CLIENT_SECRET,
     GITHUB_APP_CLIENT_ID,
@@ -338,6 +341,8 @@ class TokenManager:
             return await self._refresh_gitlab_token(refresh_token)
         elif idp == ProviderType.BITBUCKET:
             return await self._refresh_bitbucket_token(refresh_token)
+        elif idp == ProviderType.AZURE_DEVOPS:
+            return await self._refresh_azure_devops_token(refresh_token)
         else:
             raise ValueError(f'Unsupported IDP: {idp}')
 
@@ -412,6 +417,88 @@ class TokenManager:
 
             data = response.json()
             return await self._parse_refresh_response(data)
+
+    async def _refresh_azure_devops_token(
+        self, refresh_token: str
+    ) -> dict[str, str | int]:
+        if not refresh_token:
+            raise ValueError('Azure DevOps refresh token is empty')
+
+        url = f'https://login.microsoftonline.com/{AZURE_DEVOPS_TENANT_ID}/oauth2/v2.0/token'
+        logger.info(f'Refreshing Azure DevOps token with URL: {url}')
+
+        data = {
+            'grant_type': 'refresh_token',
+            'client_id': AZURE_DEVOPS_CLIENT_ID,
+            'client_secret': AZURE_DEVOPS_CLIENT_SECRET,
+            'refresh_token': refresh_token,
+            'scope': 'openid email profile 499b84ac-1321-427f-aa17-267ca6975798/.default',
+        }
+
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            response = await client.post(url, data=data, headers=headers)
+            response.raise_for_status()
+            logger.info('Successfully refreshed Azure DevOps token')
+
+            data = response.json()
+            return await self._parse_refresh_response(data)
+
+    async def get_azure_devops_service_principal_token(self) -> str:
+        """Get an access token for Azure DevOps using service principal (client credentials flow).
+
+        This method authenticates the application itself (not a user) using client credentials.
+        Used for webhook processing where the app acts autonomously.
+
+        Returns:
+            Access token string for Azure DevOps API
+
+        Raises:
+            ValueError: If required credentials are not configured
+            httpx.HTTPStatusError: If token request fails
+
+        References:
+            - https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/service-principal-managed-identity
+        """
+        if (
+            not AZURE_DEVOPS_CLIENT_ID
+            or not AZURE_DEVOPS_CLIENT_SECRET
+            or not AZURE_DEVOPS_TENANT_ID
+        ):
+            raise ValueError(
+                'Azure DevOps service principal credentials not configured. '
+                'Set AZURE_DEVOPS_CLIENT_ID, AZURE_DEVOPS_CLIENT_SECRET, and AZURE_DEVOPS_TENANT_ID.'
+            )
+
+        url = f'https://login.microsoftonline.com/{AZURE_DEVOPS_TENANT_ID}/oauth2/v2.0/token'
+        logger.info('Requesting Azure DevOps service principal token')
+
+        data = {
+            'grant_type': 'client_credentials',
+            'client_id': AZURE_DEVOPS_CLIENT_ID,
+            'client_secret': AZURE_DEVOPS_CLIENT_SECRET,
+            'scope': 'https://app.vssps.visualstudio.com/.default',
+        }
+
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            response = await client.post(url, data=data, headers=headers)
+            response.raise_for_status()
+            logger.info('Successfully obtained Azure DevOps service principal token')
+
+            response_data = response.json()
+            access_token = response_data.get('access_token')
+
+            if not access_token:
+                raise ValueError('No access_token in service principal response')
+
+            return access_token
 
     async def _parse_refresh_response(self, data: dict) -> dict[str, str | int]:
         access_token = data.get('access_token')
@@ -498,6 +585,62 @@ class TokenManager:
         keycloak_user_id = users[0]['id']
         logger.info(f'Got user ID {keycloak_user_id} from IDP user ID: {idp_user_id}')
         return keycloak_user_id
+
+    async def get_user_id_from_azure_devops_id(
+        self, azure_devops_id: str, organization: str
+    ) -> str | None:
+        """Get Keycloak user ID from Azure DevOps ID and organization.
+
+        Since users can have different Azure DevOps IDs in different organizations,
+        we store them as a JSON map: {"org1": "id1", "org2": "id2"}.
+        This method retrieves all users and checks if their azure_devops_ids map
+        contains the given ID for the given organization.
+
+        Args:
+            azure_devops_id: The Azure DevOps User ID (VSID/Storage Key)
+            organization: The Azure DevOps organization name
+
+        Returns:
+            Keycloak user ID if found, None otherwise
+        """
+        import json
+
+        keycloak_admin = get_keycloak_admin(self.external)
+
+        # Query all users (we can't filter by JSON content directly in Keycloak)
+        # Note: This is not ideal for scale, but Azure DevOps users are typically < 10k
+        # and this lookup is cached at the webhook level
+        users = await keycloak_admin.a_get_users({})
+
+        for user in users:
+            attributes = user.get('attributes', {})
+
+            # Check new format: azure_devops_ids (JSON map)
+            if 'azure_devops_ids' in attributes:
+                ids_json_list = attributes['azure_devops_ids']
+                if ids_json_list and len(ids_json_list) > 0:
+                    try:
+                        ids_map = json.loads(ids_json_list[0])
+                        if (
+                            organization in ids_map
+                            and ids_map[organization] == azure_devops_id
+                        ):
+                            keycloak_user_id = user['id']
+                            logger.info(
+                                f'Found user {keycloak_user_id} for Azure DevOps ID {azure_devops_id} '
+                                f'in organization {organization}'
+                            )
+                            return keycloak_user_id
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            f"Failed to parse azure_devops_ids for user {user.get('id')}"
+                        )
+                        continue
+
+        logger.info(
+            f'Azure DevOps user with ID {azure_devops_id} in org {organization} not found'
+        )
+        return None
 
     async def get_user_id_from_user_email(self, email: str) -> str | None:
         keycloak_admin = get_keycloak_admin(self.external)

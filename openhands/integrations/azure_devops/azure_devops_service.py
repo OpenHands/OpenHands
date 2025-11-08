@@ -214,6 +214,9 @@ class AzureDevOpsServiceImpl(
                 headers = {}
                 if 'Link' in response.headers:
                     headers['Link'] = response.headers['Link']
+                # Include X-VSS-UserData header for Azure DevOps identity parsing
+                if 'X-VSS-UserData' in response.headers:
+                    headers['X-VSS-UserData'] = response.headers['X-VSS-UserData']
 
                 return response.json(), headers
 

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from server.auth.auth_error import ExpiredError, NoCredentialsError  # noqa: E402
 from server.auth.constants import (  # noqa: E402
+    AZURE_DEVOPS_CLIENT_ID,
     ENABLE_JIRA,
     ENABLE_JIRA_DC,
     ENABLE_LINEAR,
@@ -78,6 +79,14 @@ if GITLAB_APP_CLIENT_ID:
     from server.routes.integration.gitlab import gitlab_integration_router  # noqa: E402
 
     base_app.include_router(gitlab_integration_router)
+
+# Add Azure DevOps integration router only if AZURE_DEVOPS_CLIENT_ID is set
+if AZURE_DEVOPS_CLIENT_ID:
+    from server.routes.integration.azure_devops import (
+        azure_devops_integration_router,  # noqa: E402
+    )
+
+    base_app.include_router(azure_devops_integration_router)
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
 add_github_proxy_routes(base_app)

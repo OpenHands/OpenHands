@@ -1,10 +1,42 @@
-{% if issue_number %}
-You are requested to fix work item #{{ issue_number }}: "{{ issue_title }}" in an Azure DevOps repository.
+{% if selected_branch %}
+You are working on work item #{{ issue_number }}: "{{ issue_title }}" in an Azure DevOps repository.
+This work item has a linked development branch: {{ selected_branch }}.
 A comment on the work item has been addressed to you.
+{% elif issue_number %}
+You are requested to fix work item #{{ issue_number }}: "{{ issue_title }}" in an Azure DevOps repository.
+{% if is_comment_trigger %}
+A new comment with specific instructions has been addressed to you.
+{% else %}
+A comment on the work item has been addressed to you.
+{% endif %}
 {% else %}
 Your task is to fix the work item: "{{ issue_title }}".
 {% endif %}
 
+{% if is_comment_trigger and previous_comments %}
+# Current Task
+The latest comment contains your current task:
+
+{% set latest_comment = previous_comments[-1] %}
+- @{{ latest_comment.author }} said:
+{{ latest_comment.body }}
+
+# Background: Original Work Item Description
+For context, here is the original work item description:
+
+{{ issue_body }}
+
+{% if previous_comments|length > 1 %}
+# Previous Comments
+For reference, here are earlier comments on the work item:
+
+{% for comment in previous_comments[:-1] %}
+- @{{ comment.author }} said:
+{{ comment.body }}
+{% if not loop.last %}\n\n{% endif %}
+{% endfor %}
+{% endif %}
+{% else %}
 # Work Item Description
 {{ issue_body }}
 
@@ -18,6 +50,7 @@ For reference, here are the previous comments on the work item:
 {% if not loop.last %}\n\n{% endif %}
 {% endfor %}
 {% endif %}
+{% endif %}
 
 # Guidelines
 
@@ -27,11 +60,33 @@ For reference, here are the previous comments on the work item:
 4. You do NOT need to write new tests if there are only changes to documentation or configuration files.
 
 # Final Checklist
+{% if is_comment_trigger %}
+Re-read the latest comment and make sure you have successfully implemented the requested changes. The original work item description is provided for context only.
+{% else %}
 Re-read the work item title, description, and comments and make sure that you have successfully implemented all requirements.
+{% endif %}
 
+{% if selected_branch %}
 Use the Azure DevOps token and Azure DevOps REST APIs to:
 
-1. Create a new branch using `openhands/` as a prefix (e.g `openhands/update-readme`)
+1. Check out the branch {{ selected_branch }} (already exists for this work item)
+2. Make your changes to the code
+3. Commit your changes with a clear commit message
+4. Push the changes to Azure DevOps to update the existing PR
+5. DO NOT create a new PR - the branch already has an associated PR
+{% else %}
+{% if not repository_linked %}
+This work item does not have a linked repository. First, you need to identify which repository to work in:
+
+1. Use the Azure DevOps REST API to list all repositories in this project
+2. Analyze the work item description and title to determine which repository is most appropriate
+3. If there's only one repository in the project, use that one
+4. Once you've identified the target repository, proceed with the steps below
+
+{% endif %}
+Use the Azure DevOps token and Azure DevOps REST APIs to:
+
+1. Create a new branch using `openhands/` as a prefix (e.g `openhands/fix-workitem-{{ issue_number }}`)
 2. Commit your changes with a clear commit message
 3. Push the branch to Azure DevOps
 4. Use the `create_pr` tool to open a new pull request
@@ -39,3 +94,4 @@ Use the Azure DevOps token and Azure DevOps REST APIs to:
    - Mention that it "fixes" or "closes" the work item number
    - Include a clear summary of the changes
    - Reference any related work items
+{% endif %}

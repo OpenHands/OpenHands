@@ -8,6 +8,7 @@ import jwt
 import requests  # type: ignore
 from fastapi import HTTPException
 from server.auth.constants import (
+    AZURE_DEVOPS_CLIENT_ID,
     BITBUCKET_APP_CLIENT_ID,
     ENABLE_ENTERPRISE_SSO,
     ENABLE_JIRA,
@@ -91,6 +92,9 @@ class SaaSServerConfig(ServerConfig):
     app_slug: None | str = None
 
     def __init__(self) -> None:
+        # Set default app_slug for non-GitHub deployments (e.g., Azure DevOps)
+        # This will be overwritten if GitHub App credentials are configured
+        self.app_slug = 'openhands'
         self._get_app_slug()
 
     def _get_app_slug(self):
@@ -159,6 +163,9 @@ class SaaSServerConfig(ServerConfig):
 
         if BITBUCKET_APP_CLIENT_ID:
             providers_configured.append(ProviderType.BITBUCKET)
+
+        if AZURE_DEVOPS_CLIENT_ID:
+            providers_configured.append(ProviderType.AZURE_DEVOPS)
 
         if ENABLE_ENTERPRISE_SSO:
             providers_configured.append(ProviderType.ENTERPRISE_SSO)

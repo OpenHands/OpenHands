@@ -8,6 +8,9 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
 from server.auth.auth_utils import user_verifier
+from server.auth.azure_devops_enrichment import (
+    schedule_azure_devops_enrichment,
+)
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
@@ -245,6 +248,22 @@ async def keycloak_callback(
     # Use Keycloak access token (first-time users lack offline token at this stage)
     # Normally, offline token is used to fetch GitLab token via user_id
     schedule_gitlab_repo_sync(user_id, SecretStr(keycloak_access_token))
+
+    # Enrich user profile with Azure DevOps User ID for webhook mapping (Azure DevOps users only)
+    # This resolves the user's email to their Azure DevOps ID via Identities API
+    # Use the processed idp value (which has the :oidc/:saml suffix stripped)
+    if idp == ProviderType.AZURE_DEVOPS.value:
+        email = user_info.get('email')
+        if email:
+            schedule_azure_devops_enrichment(user_id, email)
+            # NOTE: Webhook authentication now uses API keys (Authorization: Bearer header)
+            # Users should generate an API key from Settings -> API Keys and configure
+            # it in their Azure DevOps Service Hook with Authorization header
+
+    # Note: Azure DevOps webhooks require manual setup by Project Administrators
+    # Unlike GitLab, Azure DevOps OAuth scopes for Service Hooks are "no longer public"
+    # and cannot be requested in OAuth apps. Webhooks must be created manually in Azure DevOps UI.
+
     return response
 
 
@@ -282,6 +301,16 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
     await token_manager.store_offline_token(
         user_id=user_info['sub'], offline_token=keycloak_refresh_token
     )
+
+    # Enrich user profile with Azure DevOps ID (async background task)
+    # This allows webhook user mapping when Azure DevOps ID != Azure AD Object ID
+    user_email = user_info.get('email')
+    if user_email:
+        from server.auth.azure_devops_enrichment import (
+            schedule_azure_devops_enrichment,
+        )
+
+        schedule_azure_devops_enrichment(user_id=user_info['sub'], email=user_email)
 
     return RedirectResponse(state if state else request.base_url, status_code=302)
 

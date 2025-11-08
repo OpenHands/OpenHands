@@ -18,18 +18,29 @@ class AzureDevOpsFeaturesMixin(AzureDevOpsMixinBase):
     async def get_user(self) -> User:
         """Get the authenticated user's information."""
         url = f'{self.base_url}/_apis/connectionData?api-version=7.1-preview.1'
-        response, _ = await self._make_request(url)
+        response, headers = await self._make_request(url)
 
         # Extract authenticated user details
         authenticated_user = response.get('authenticatedUser', {})
         user_id = authenticated_user.get('id', '')
         display_name = authenticated_user.get('providerDisplayName', '')
 
-        # Get descriptor for potential additional details
-        authenticated_user.get('descriptor', '')
+        # Azure DevOps work item assignments use the subject ID, not the user ID
+        # The subject ID is in the X-VSS-UserData header in the format: userId:subjectId
+        # We need to parse this header to get the correct ID for work item assignment matching
+        subject_id = user_id  # Fallback to user_id if header parsing fails
+        x_vss_user_data = headers.get('X-VSS-UserData', '')
+        if ':' in x_vss_user_data:
+            parts = x_vss_user_data.split(':')
+            if len(parts) >= 2:
+                # Subject ID is the second part after the colon
+                subject_id = parts[1].strip()
+                logger.debug(
+                    f'[get_user] Extracted subject ID from X-VSS-UserData: {subject_id}'
+                )
 
         return User(
-            id=str(user_id),
+            id=str(subject_id),  # Use subject ID for work item assignment matching
             login=display_name,
             avatar_url='',
             name=display_name,

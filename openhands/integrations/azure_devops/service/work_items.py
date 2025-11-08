@@ -1,5 +1,6 @@
 """Work item operations for Azure DevOps integration."""
 
+import re
 from datetime import datetime
 
 from openhands.core.logger import openhands_logger as logger
@@ -19,6 +20,78 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         if len(comment) <= max_length:
             return comment
         return comment[:max_length] + '...'
+
+    def _convert_markdown_links_to_html(self, text: str) -> str:
+        """Convert Markdown to HTML for Azure DevOps comments.
+
+        Azure DevOps work item comments support HTML but not Markdown.
+        This function converts common Markdown patterns to HTML.
+
+        Args:
+            text: Text containing Markdown formatting
+
+        Returns:
+            Text with Markdown converted to HTML
+        """
+        if not text:
+            return text
+
+        # Convert headers (### Header -> <h3>Header</h3>)
+        text = re.sub(r'^#### (.+)$', r'<h4>\1</h4>', text, flags=re.MULTILINE)
+        text = re.sub(r'^### (.+)$', r'<h3>\1</h3>', text, flags=re.MULTILINE)
+        text = re.sub(r'^## (.+)$', r'<h2>\1</h2>', text, flags=re.MULTILINE)
+        text = re.sub(r'^# (.+)$', r'<h1>\1</h1>', text, flags=re.MULTILINE)
+
+        # Convert bold (**text** or __text__ -> <strong>text</strong>)
+        text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+        text = re.sub(r'__(.+?)__', r'<strong>\1</strong>', text)
+
+        # Convert inline code (`code` -> <code>code</code>)
+        text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
+
+        # Convert Markdown links [text](url) -> <a href="url">text</a>
+        text = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', r'<a href="\2">\1</a>', text)
+
+        # Convert unordered lists (- item or * item -> <ul><li>item</li></ul>)
+        lines = text.split('\n')
+        result_lines = []
+        in_list = False
+
+        for line in lines:
+            # Check if this is a list item (handle leading whitespace)
+            list_match = re.match(r'^(\s*)[-*]\s+(.+)$', line)
+
+            if list_match:
+                if not in_list:
+                    result_lines.append('<ul>')
+                    in_list = True
+                # Add the list item content (without the bullet)
+                result_lines.append(f'<li>{list_match.group(2)}</li>')
+            else:
+                # Not a list item
+                if in_list:
+                    # Close the list
+                    result_lines.append('</ul>')
+                    in_list = False
+                # Add the line as-is
+                if line.strip():  # Only add non-empty lines
+                    result_lines.append(line)
+                else:
+                    # Preserve empty lines for paragraph breaks
+                    result_lines.append('')
+
+        # Close list if still open at end
+        if in_list:
+            result_lines.append('</ul>')
+
+        text = '\n'.join(result_lines)
+
+        # Convert paragraph breaks (double newlines) to <br><br>
+        text = re.sub(r'\n\s*\n', '<br><br>', text)
+        # Convert remaining single newlines to <br>
+        text = text.replace('\n', '<br>')
+
+        return text
 
     async def add_work_item_comment(
         self, repository: str, work_item_id: int, comment_text: str
@@ -44,10 +117,13 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         org_enc = self._encode_url_component(org)
         project_enc = self._encode_url_component(project)
 
+        # Convert Markdown links to HTML for better Azure DevOps compatibility
+        comment_text_html = self._convert_markdown_links_to_html(comment_text)
+
         url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/wit/workItems/{work_item_id}/comments?api-version=7.1-preview.4'
 
         payload = {
-            'text': comment_text,
+            'text': comment_text_html,
         }
 
         response, _ = await self._make_request(
@@ -55,6 +131,34 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         )
 
         logger.info(f'Added comment to work item {work_item_id} in project {project}')
+        return response
+
+    async def get_work_item(self, repository: str, work_item_id: int) -> dict:
+        """Get full work item details including all fields.
+
+        API Reference: https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item
+
+        Args:
+            repository: Repository name in format "organization/project/repo" (project extracted)
+            work_item_id: The work item ID
+
+        Returns:
+            API response with complete work item information including all fields
+
+        Raises:
+            HTTPException: If the API request fails
+        """
+        org, project, _ = self._parse_repository(repository)
+
+        # URL-encode components to handle spaces and special characters
+        org_enc = self._encode_url_component(org)
+        project_enc = self._encode_url_component(project)
+
+        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/wit/workItems/{work_item_id}?api-version=7.1'
+
+        response, _ = await self._make_request(url)
+
+        logger.info(f'Fetched work item {work_item_id} from project {project}')
         return response
 
     async def get_work_item_comments(
@@ -121,9 +225,3 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         # Sort by creation date and limit
         all_comments.sort(key=lambda c: c.created_at)
         return all_comments[:max_comments]
-
-    async def add_work_item_reaction(
-        self, repository: str, work_item_id: int, reaction_type: str = ':thumbsup:'
-    ) -> dict:
-        comment_text = f'{reaction_type} OpenHands is processing this work item...'
-        return await self.add_work_item_comment(repository, work_item_id, comment_text)

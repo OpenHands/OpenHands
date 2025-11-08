@@ -1,23 +1,43 @@
 You are checked out to branch {{ branch_name }}, which has an open PR #{{ pr_number }}: "{{ pr_title }}".
 A comment on the PR has been addressed to you.
 
-# PR Description
+{% if comments and comments|length > 0 %}
+# Current Task
+The latest comment contains your current task:
+
+{% set latest_comment = comments[-1] %}
+- @{{ latest_comment.author }} said at {{ latest_comment.created_at }}:
+{{ latest_comment.body }}
+
+{% if file_location %}
+# Comment Location
+This comment is in the file `{{ file_location }}` on line #{{ line_number }}
+{% endif %}
+
+# Background: PR Description
+For context, here is the original PR description:
+
 {{ pr_body }}
 
-{% if comments %}
+{% if comments|length > 1 %}
 # Previous Comments
-You may find these other comments relevant:
-{% for comment in comments %}
+For reference, here are earlier comments on this PR:
+
+{% for comment in comments[:-1] %}
 - @{{ comment.author }} said at {{ comment.created_at }}:
 {{ comment.body }}
 {% if not loop.last %}\n\n{% endif %}
 {% endfor %}
 {% endif %}
+{% else %}
+# PR Description
+{{ pr_body }}
 
 {% if file_location %}
-# Comment location
+# Comment Location
 The comment is in the file `{{ file_location }}` on line #{{ line_number }}
-{% endif %}.
+{% endif %}
+{% endif %}
 
 # Steps to Handle the Comment
 
@@ -36,3 +56,10 @@ If it requests a code update:
     2. Commit your changes with a clear commit message
     3. Push the changes to Azure DevOps to update the PR
     4. DO NOT leave any comments on the PR
+
+# Final Checklist
+{% if comments and comments|length > 0 %}
+Re-read the latest comment and make sure you have successfully addressed it. The PR description and earlier comments are provided for context only.
+{% else %}
+Review the comment carefully and ensure you have addressed all points raised.
+{% endif %}
