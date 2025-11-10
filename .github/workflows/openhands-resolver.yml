@@ -192,7 +192,7 @@ jobs:
           echo "TARGET_BRANCH=${{ inputs.target_branch || 'main' }}" >> $GITHUB_ENV
 
       - name: Comment on issue with start message
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.PAT_TOKEN || github.token }}
           script: |
@@ -206,7 +206,7 @@ jobs:
 
       - name: Install OpenHands
         id: install_openhands
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           COMMENT_BODY: ${{ github.event.comment.body || '' }}
           REVIEW_BODY: ${{ github.event.review.body || '' }}
@@ -305,7 +305,7 @@ jobs:
 
       # Step leaves comment for when agent is invoked on PR
       - name: Analyze Push Logs (Updated PR or No Changes) # Skip comment if PR update was successful OR leave comment if the agent made no code changes
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         if: always()
         env:
           AGENT_RESPONDED: ${{ env.AGENT_RESPONDED || 'false' }}
@@ -341,7 +341,7 @@ jobs:
 
       # Step leaves comment for when agent is invoked on issue
       - name: Comment on issue # Comment link to either PR or branch created by agent
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         if: always() # Comment on issue even if the previous steps fail
         env:
           AGENT_RESPONDED: ${{ env.AGENT_RESPONDED || 'false' }}
@@ -416,7 +416,7 @@ jobs:
 
       # Leave error comment when both PR/Issue comment handling fail
       - name: Fallback Error Comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         if: ${{ env.AGENT_RESPONDED == 'false' }} # Only run if no conditions were met in previous steps
         env:
           ISSUE_NUMBER: ${{ env.ISSUE_NUMBER }}
