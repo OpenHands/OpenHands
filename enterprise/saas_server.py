@@ -29,6 +29,9 @@ from server.routes.email import api_router as email_router  # noqa: E402
 from server.routes.event_webhook import event_webhook_router  # noqa: E402
 from server.routes.feedback import router as feedback_router  # noqa: E402
 from server.routes.github_proxy import add_github_proxy_routes  # noqa: E402
+from server.routes.integration.bitbucket import (  # noqa: E402
+    bitbucket_integration_router,
+)
 from server.routes.integration.jira import jira_integration_router  # noqa: E402
 from server.routes.integration.jira_dc import jira_dc_integration_router  # noqa: E402
 from server.routes.integration.linear import linear_integration_router  # noqa: E402
@@ -78,6 +81,8 @@ if GITLAB_APP_CLIENT_ID:
     from server.routes.integration.gitlab import gitlab_integration_router  # noqa: E402
 
     base_app.include_router(gitlab_integration_router)
+
+base_app.include_router(bitbucket_integration_router)
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
 add_github_proxy_routes(base_app)

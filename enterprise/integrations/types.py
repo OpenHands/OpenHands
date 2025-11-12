@@ -20,6 +20,7 @@ class UserData(BaseModel):
     user_id: int
     username: str
     keycloak_user_id: str | None
+    bitbucket_id: str | None = None  # Bitbucket's string account ID
 
 
 @dataclass

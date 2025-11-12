@@ -491,7 +491,8 @@ class TokenManager:
         self, idp_user_id: str, idp: ProviderType
     ) -> str | None:
         keycloak_admin = get_keycloak_admin(self.external)
-        users = await keycloak_admin.a_get_users({'q': f'{idp.value}_id:{idp_user_id}'})
+        query = f'{idp.value}_id:{idp_user_id}'
+        users = await keycloak_admin.a_get_users({'q': query})
         if not users:
             logger.info(f'{idp.value} user with IDP ID {idp_user_id} not found.')
             return None

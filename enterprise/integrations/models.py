@@ -8,6 +8,7 @@ from openhands.core.schema import AgentState
 class SourceType(str, Enum):
     GITHUB = 'github'
     GITLAB = 'gitlab'
+    BITBUCKET = 'bitbucket'
     OPENHANDS = 'openhands'
     SLACK = 'slack'
     JIRA = 'jira'
