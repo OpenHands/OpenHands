@@ -12,6 +12,7 @@ from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL_EXT,
+    ROLE_CHECK_ENABLED,
 )
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth
@@ -133,6 +134,12 @@ async def keycloak_callback(
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
     logger.debug(f'user_info: {user_info}')
+    if ROLE_CHECK_ENABLED and 'roles' not in user_info:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'Missing required role'},
+        )
+
     if 'sub' not in user_info or 'preferred_username' not in user_info:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
