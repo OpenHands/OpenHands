@@ -175,7 +175,20 @@ def config_from_env() -> AppServerConfig:
             config.sandbox_spec = DockerSandboxSpecServiceInjector()
 
     if config.app_conversation_info is None:
-        config.app_conversation_info = SQLAppConversationInfoServiceInjector()
+        # Use enterprise injector if running in SAAS mode
+        if 'saas' in (os.getenv('OPENHANDS_CONFIG_CLS') or '').lower():
+            try:
+                # Import enterprise injector dynamically
+                from enterprise.storage.saas_app_conversation_info_injector import (
+                    SaasAppConversationInfoServiceInjector,
+                )
+
+                config.app_conversation_info = SaasAppConversationInfoServiceInjector()
+            except ImportError:
+                # Fallback to OSS injector if enterprise module is not available
+                config.app_conversation_info = SQLAppConversationInfoServiceInjector()
+        else:
+            config.app_conversation_info = SQLAppConversationInfoServiceInjector()
 
     if config.app_conversation_start_task is None:
         config.app_conversation_start_task = (

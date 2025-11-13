@@ -3,6 +3,7 @@ Tests for ConversationCallbackProcessor and ConversationCallback models.
 """
 
 import json
+from uuid import UUID
 
 import pytest
 from storage.conversation_callback import (
@@ -11,6 +12,9 @@ from storage.conversation_callback import (
     ConversationCallbackProcessor,
 )
 from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.stored_conversation_metadata_saas import (
+    StoredConversationMetadataSaas,
+)
 
 from openhands.events.observation.agent import AgentStateChangedObservation
 
@@ -80,15 +84,22 @@ class TestConversationCallback:
         """Create a test conversation metadata record."""
         with session_maker() as session:
             metadata = StoredConversationMetadata(
-                conversation_id='test_conversation_123', user_id='test_user_456'
+                conversation_id='test_conversation_123'
+            )
+            metadata_saas = StoredConversationMetadataSaas(
+                conversation_id='test_conversation_123',
+                user_id=UUID('5594c7b6-f959-4b81-92e9-b09c206f5081'),
+                org_id=UUID('5594c7b6-f959-4b81-92e9-b09c206f5081'),
             )
             session.add(metadata)
+            session.add(metadata_saas)
             session.commit()
             session.refresh(metadata)
             yield metadata
 
             # Cleanup
             session.delete(metadata)
+            session.delete(metadata_saas)
             session.commit()
 
     def test_callback_creation(self, conversation_metadata, session_maker):

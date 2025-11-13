@@ -127,6 +127,7 @@ async def test_keycloak_callback_user_not_allowed(mock_request):
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
+        patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
             return_value=('test_access_token', 'test_refresh_token')
@@ -139,6 +140,15 @@ async def test_keycloak_callback_user_not_allowed(mock_request):
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
+
+        # Mock the user creation
+        mock_user = MagicMock()
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = None
+        mock_user_store.get_user_by_id.return_value = mock_user
+        mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.migrate_user = AsyncMock(return_value=mock_user)
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = False
@@ -161,20 +171,19 @@ async def test_keycloak_callback_success_with_valid_offline_token(mock_request):
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
         patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
-        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.UserStore') as mock_user_store,
         patch('server.routes.auth.posthog') as mock_posthog,
     ):
-        # Mock the session and query results
-        mock_session = MagicMock()
-        mock_session_maker.return_value.__enter__.return_value = mock_session
-        mock_query = MagicMock()
-        mock_session.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
+        # Mock user with accepted_tos
+        mock_user = MagicMock()
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
 
-        # Mock user settings with accepted_tos
-        mock_user_settings = MagicMock()
-        mock_user_settings.accepted_tos = '2025-01-01'
-        mock_query.first.return_value = mock_user_settings
+        # Setup UserStore mocks
+        mock_user_store.get_user_by_id.return_value = mock_user
+        mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.migrate_user = AsyncMock(return_value=mock_user)
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
             return_value=('test_access_token', 'test_refresh_token')
@@ -211,7 +220,7 @@ async def test_keycloak_callback_success_with_valid_offline_token(mock_request):
             secure=False,
             accepted_tos=True,
         )
-        mock_posthog.set.assert_called_once()
+        mock_posthog.identify.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -226,20 +235,20 @@ async def test_keycloak_callback_success_without_offline_token(mock_request):
         ),
         patch('server.routes.auth.KEYCLOAK_REALM_NAME', 'test-realm'),
         patch('server.routes.auth.KEYCLOAK_CLIENT_ID', 'test-client'),
-        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.UserStore') as mock_user_store,
         patch('server.routes.auth.posthog') as mock_posthog,
     ):
-        # Mock the session and query results
-        mock_session = MagicMock()
-        mock_session_maker.return_value.__enter__.return_value = mock_session
-        mock_query = MagicMock()
-        mock_session.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
+        # Mock user with accepted_tos
+        mock_user = MagicMock()
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
 
-        # Mock user settings with accepted_tos
-        mock_user_settings = MagicMock()
-        mock_user_settings.accepted_tos = '2025-01-01'
-        mock_query.first.return_value = mock_user_settings
+        # Setup UserStore mocks
+        mock_user_store.get_user_by_id.return_value = mock_user
+        mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.migrate_user = AsyncMock(return_value=mock_user)
+
         mock_token_manager.get_keycloak_tokens = AsyncMock(
             return_value=('test_access_token', 'test_refresh_token')
         )
@@ -278,7 +287,7 @@ async def test_keycloak_callback_success_without_offline_token(mock_request):
             secure=False,
             accepted_tos=True,
         )
-        mock_posthog.set.assert_called_once()
+        mock_posthog.identify.assert_called_once()
 
 
 @pytest.mark.asyncio
