@@ -13,6 +13,7 @@ from server.auth.constants import (
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL_EXT,
 )
+from server.auth.cookie_compression import compress_cookie_data, should_compress_cookie
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
@@ -57,12 +58,24 @@ def set_response_cookie(
     }
     signed_token = sign_token(cookie_data, config.jwt_secret.get_secret_value())  # type: ignore
 
-    # Set secure cookie with signed token
+    # Compress the signed token if it's large enough to benefit from compression
+    cookie_value = signed_token
+    if should_compress_cookie(signed_token):
+        try:
+            cookie_value = compress_cookie_data(signed_token)
+            logger.debug('Cookie data compressed successfully')
+        except Exception as e:
+            logger.warning(
+                f'Failed to compress cookie data, using uncompressed: {str(e)}'
+            )
+            cookie_value = signed_token
+
+    # Set secure cookie with (potentially compressed) signed token
     domain = get_cookie_domain(request)
     if domain:
         response.set_cookie(
             key='keycloak_auth',
-            value=signed_token,
+            value=cookie_value,
             domain=domain,
             httponly=True,
             secure=secure,
@@ -71,7 +84,7 @@ def set_response_cookie(
     else:
         response.set_cookie(
             key='keycloak_auth',
-            value=signed_token,
+            value=cookie_value,
             httponly=True,
             secure=secure,
             samesite=get_cookie_samesite(request),

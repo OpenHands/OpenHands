@@ -13,6 +13,7 @@ from server.auth.auth_error import (
     ExpiredError,
     NoCredentialsError,
 )
+from server.auth.cookie_compression import decompress_cookie_data
 from server.auth.token_manager import TokenManager
 from server.config import get_config
 from server.logger import logger
@@ -271,7 +272,18 @@ async def saas_user_auth_from_cookie(request: Request) -> SaasUserAuth | None:
         signed_token = request.cookies.get('keycloak_auth')
         if not signed_token:
             return None
-        return await saas_user_auth_from_signed_token(signed_token)
+
+        # Decompress the cookie data if it's compressed
+        try:
+            decompressed_token = decompress_cookie_data(signed_token)
+            logger.debug('Cookie data decompressed successfully')
+        except Exception as e:
+            logger.warning(
+                f'Failed to decompress cookie data, trying as uncompressed: {str(e)}'
+            )
+            decompressed_token = signed_token
+
+        return await saas_user_auth_from_signed_token(decompressed_token)
     except Exception as exc:
         raise CookieError from exc
 

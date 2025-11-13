@@ -1,4 +1,5 @@
 from server.auth.auth_error import AuthError, ExpiredError
+from server.auth.cookie_compression import decompress_cookie_data
 from server.auth.saas_user_auth import saas_user_auth_from_signed_token
 from server.auth.token_manager import TokenManager
 from socketio.exceptions import ConnectionRefusedError
@@ -129,8 +130,20 @@ class SaasConversationValidator(ConversationValidator):
         if not config.jwt_secret:
             raise RuntimeError('JWT secret not found')
 
+        # Decompress the cookie data if it's compressed
         try:
-            user_auth = await saas_user_auth_from_signed_token(signed_token)
+            decompressed_token = decompress_cookie_data(signed_token)
+            logger.debug(
+                'Conversation validator: Cookie data decompressed successfully'
+            )
+        except Exception as e:
+            logger.debug(
+                f'Conversation validator: Failed to decompress cookie data, trying as uncompressed: {str(e)}'
+            )
+            decompressed_token = signed_token
+
+        try:
+            user_auth = await saas_user_auth_from_signed_token(decompressed_token)
             access_token = await user_auth.get_access_token()
         except ExpiredError:
             raise ConnectionRefusedError('SESSION$TIMEOUT_MESSAGE')
