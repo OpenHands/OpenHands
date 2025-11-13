@@ -1,0 +1,103 @@
+name: 'S3 Publish Report'
+description: 'Create HTML release report from template for S3 published releases'
+inputs:
+  tag:
+    description: 'Release tag (e.g., 1.0.0)'
+    required: true
+  bucket:
+    description: 'S3 bucket name'
+    required: true
+  tag-folder:
+    description: 'S3 tag folder (e.g., releases/1.0.0)'
+    required: true
+  images:
+    description: 'Tab-delimited image data (format: name<TAB>displayName<TAB>filename<TAB>url<TAB>size<TAB>description, one per line)'
+    required: true
+  repository:
+    description: 'GitHub repository (e.g., owner/repo)'
+    required: true
+  run-id:
+    description: 'GitHub workflow run ID'
+    required: true
+  url-length:
+    description: 'Length of the download URL'
+    required: false
+    default: 'unknown'
+  expires-at:
+    description: 'When the URL expires in ISO 8601 format'
+    required: false
+    default: 'unknown'
+  template-path:
+    description: 'Path to the HTML template file'
+    required: false
+    default: '.github/templates/release-report.html'
+  output-path:
+    description: 'Path where the processed HTML will be written'
+    required: false
+    default: 'release-report.html'
+outputs:
+  report-path:
+    description: 'Path to the generated HTML report'
+    value: ${{ steps.create.outputs.report-path }}
+  report-size:
+    description: 'Size of the generated report in bytes'
+    value: ${{ steps.create.outputs.report-size }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+      
+    - name: Create S3 publish report
+      id: create
+      shell: bash
+      run: |
+        echo "📄 Creating S3 publish report from template..."
+        echo "  Template: ${{ inputs.template-path }}"
+        echo "  Output: ${{ inputs.output-path }}"
+        echo "  Tag: ${{ inputs.tag }}"
+        echo "  Bucket: ${{ inputs.bucket }}"
+        echo "  Repository: ${{ inputs.repository }}"
+        echo ""
+        
+        # DESIGN CHOICE: Tab-delimited data instead of JSON
+        # ================================================
+        # We use tab-delimited format instead of JSON because AWS presigned URLs
+        # contain special characters that cause shell escaping issues when passed
+        # as command line arguments. Tab-delimited is much simpler and more reliable.
+        #
+        # Write images tab-delimited data to temporary file
+        # Use here-document to preserve all characters exactly
+        cat > images_temp.tsv << 'TSV_EOF'
+        ${{ inputs.images }}
+        TSV_EOF
+        
+        # Run the Python template processing script with file reference
+        python .github/scripts/process-template.py \
+          "${{ inputs.template-path }}" \
+          "${{ inputs.output-path }}" \
+          "${{ inputs.tag }}" \
+          "${{ inputs.bucket }}" \
+          "${{ inputs.tag-folder }}" \
+          "@images_temp.tsv" \
+          "${{ inputs.repository }}" \
+          "${{ inputs.run-id }}" \
+          "${{ inputs.url-length }}" \
+          "${{ inputs.expires-at }}"
+        
+        # Clean up temporary file
+        rm -f images_temp.tsv
+        
+        # Get the output file size
+        REPORT_SIZE=$(wc -c < "${{ inputs.output-path }}")
+        echo "report-path=${{ inputs.output-path }}" >> $GITHUB_OUTPUT
+        echo "report-size=$REPORT_SIZE" >> $GITHUB_OUTPUT
+        
+        echo "✅ S3 publish report created successfully"
+        echo "  File: ${{ inputs.output-path }}"
+        echo "  Size: $REPORT_SIZE bytes"

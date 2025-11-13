@@ -1,0 +1,163 @@
+# Manual workflow for testing tagged and feature branch releases before merging
+# This workflow allows testing connectivity and keys for prerelease builds
+name: Publish to S3
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build from (e.g., 1.0.0)'
+        required: true
+        type: string
+        default: '1.0.0'
+
+concurrency:
+  group: s3-release-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag }}
+  TAG_FOLDER: releases/${{ inputs.tag }}
+  DOCKER_REGISTRY: all-hands-ai
+  IMAGE_URI: ghcr.io/all-hands-ai/enterprise-server
+
+jobs:
+  publish-enterprise-server:
+    name: Publish Enterprise Server
+    runs-on: ubuntu-latest
+    outputs:
+      image-json: ${{ steps.publish.outputs.image-json }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Publish enterprise-server to S3
+        id: publish
+        uses: ./.github/actions/publish-image-to-s3
+        with:
+          image-name: enterprise-server
+          image-uri: ${{ env.IMAGE_URI }}
+          tag: ${{ env.TAG }}
+          tag-folder: ${{ env.TAG_FOLDER }}
+          bucket: ${{ vars.AWS_RELEASE_BUCKET }}
+          display-name: Enterprise Server
+          description: Main OpenHands enterprise application server
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-runtime-nikolaik:
+    name: Publish Runtime Nikolaik
+    runs-on: ubuntu-latest
+    outputs:
+      image-json: ${{ steps.publish.outputs.image-json }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Publish runtime-nikolaik to S3
+        id: publish
+        uses: ./.github/actions/publish-image-to-s3
+        with:
+          image-name: runtime-nikolaik
+          image-uri: ghcr.io/all-hands-ai/runtime
+          tag: ${{ env.TAG }}-nikolaik
+          tag-folder: ${{ env.TAG_FOLDER }}
+          bucket: ${{ vars.AWS_RELEASE_BUCKET }}
+          display-name: Runtime (Nikolaik)
+          description: Runtime environment based on Debian (Nikolaik)
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-runtime-ubuntu:
+    name: Publish Runtime Ubuntu
+    runs-on: ubuntu-latest
+    outputs:
+      image-json: ${{ steps.publish.outputs.image-json }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Publish runtime-ubuntu to S3
+        id: publish
+        uses: ./.github/actions/publish-image-to-s3
+        with:
+          image-name: runtime-ubuntu
+          image-uri: ghcr.io/all-hands-ai/runtime
+          tag: ${{ env.TAG }}-ubuntu
+          tag-folder: ${{ env.TAG_FOLDER }}
+          bucket: ${{ vars.AWS_RELEASE_BUCKET }}
+          display-name: Runtime (Ubuntu)
+          description: Runtime environment based on Ubuntu
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  create-release-report:
+    name: Create Release Report
+    needs: [publish-enterprise-server, publish-runtime-nikolaik, publish-runtime-ubuntu]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Generate images tab-delimited data
+        id: generate-images
+        run: |
+          # DESIGN CHOICE: Tab-delimited data instead of JSON
+          # ================================================
+          # We combine multiple tab-delimited lines instead of creating a JSON array
+          # because AWS presigned URLs contain special characters that cause shell
+          # escaping issues when passed as JSON command line arguments or as files.
+          #
+          # Each line format: name<TAB>displayName<TAB>filename<TAB>url<TAB>size<TAB>description
+          # Multiple lines are concatenated (one per image)
+          
+          cat > images.tsv << 'EOF'
+          ${{ needs.publish-enterprise-server.outputs.image-json }}
+          ${{ needs.publish-runtime-nikolaik.outputs.image-json }}
+          ${{ needs.publish-runtime-ubuntu.outputs.image-json }}
+          EOF
+          
+          # Output the tab-delimited data for the next step
+          echo "images-json<<EOF" >> $GITHUB_OUTPUT
+          cat images.tsv >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Create comprehensive S3 publish report
+        id: create-report
+        uses: ./.github/actions/s3-publish-report
+        with:
+          tag: ${{ env.TAG }}
+          bucket: ${{ vars.AWS_RELEASE_BUCKET }}
+          tag-folder: ${{ env.TAG_FOLDER }}
+          images: ${{ steps.generate-images.outputs.images-json }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          url-length: 'unknown'
+          expires-at: '7 days'
+      
+      - name: Upload HTML report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-report-${{ env.TAG }}
+          path: ${{ steps.create-report.outputs.report-path }}
+      
+      - name: Output build information
+        run: |
+          echo ""
+          echo "## 🎉 Publish to S3 Complete!"
+          echo ""
+          echo "**Tag**: \`${{ env.TAG }}\`"
+          echo "**S3 Location**: \`s3://${{ vars.AWS_RELEASE_BUCKET }}/${{ env.TAG_FOLDER }}/\`"
+          echo ""
+          echo "### 📋 Download Information:"
+          echo "- View the release report in the \`release-report-${{ env.TAG }}\` artifact"
+          echo "- Report file: \`${{ steps.create-report.outputs.report-path }}\`"
+          echo "- Report size: \`${{ steps.create-report.outputs.report-size }} bytes\`"
+          echo "- The HTML report contains all download links and usage instructions"
+          echo ""

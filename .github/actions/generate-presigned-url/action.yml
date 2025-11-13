@@ -1,0 +1,135 @@
+name: 'Generate Presigned URL'
+description: 'Generate a presigned URL for S3 object using read-only role for security'
+inputs:
+  bucket:
+    description: 'S3 bucket name'
+    required: true
+  key:
+    description: 'S3 object key (path within bucket)'
+    required: true
+  region:
+    description: 'AWS region'
+    required: true
+    default: 'us-east-1'
+  expires-in:
+    description: 'URL expiration in seconds (default: 604800 = 7 days)'
+    required: false
+    default: '604800'
+  role-name:
+    description: 'IAM role name to assume for presigned URL generation'
+    required: false
+    default: 'S3PresignedURLRole'
+outputs:
+  presigned-url:
+    description: 'The generated presigned URL'
+    value: ${{ steps.generate.outputs.presigned-url }}
+  url-length:
+    description: 'Length of the generated URL'
+    value: ${{ steps.generate.outputs.url-length }}
+  expires-at:
+    description: 'When the URL expires (ISO 8601 format)'
+    value: ${{ steps.generate.outputs.expires-at }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate presigned URL
+      id: generate
+      shell: bash
+      run: |
+        echo "🔐 Generating presigned URL with read-only role..."
+        echo "  Bucket: ${{ inputs.bucket }}"
+        echo "  Key: ${{ inputs.key }}"
+        echo "  Region: ${{ inputs.region }}"
+        echo "  Expires in: ${{ inputs.expires-in }} seconds"
+        echo ""
+        
+        # Set region consistently
+        export AWS_DEFAULT_REGION=${{ inputs.region }}
+        
+        # Step 1: Get current account ID
+        echo "📋 Getting current AWS account ID..."
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        if [ $? -ne 0 ]; then
+          echo "❌ Failed to get AWS account ID"
+          exit 1
+        fi
+        echo "  Account ID: $ACCOUNT_ID"
+        
+        # Step 2: Assume read-only role
+        echo "🔄 Assuming read-only role: ${{ inputs.role-name }}..."
+        ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${{ inputs.role-name }}"
+        
+        ROLE_CREDS=$(aws sts assume-role \
+          --role-arn "$ROLE_ARN" \
+          --role-session-name "presigned-url-session-$(date +%s)" \
+          --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
+          --output text)
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ Failed to assume role: $ROLE_ARN"
+          echo "  Make sure the role exists and the current credentials have permission to assume it"
+          exit 1
+        fi
+        
+        echo "✅ Successfully assumed read-only role"
+        
+        # Step 3: Extract credentials for the read-only role
+        echo "🔑 Extracting temporary credentials..."
+        IFS=$'\t' read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN <<< "$ROLE_CREDS"
+        
+        # Set environment variables for the assumed role
+        export AWS_ACCESS_KEY_ID
+        export AWS_SECRET_ACCESS_KEY
+        export AWS_SESSION_TOKEN
+        export AWS_DEFAULT_REGION=${{ inputs.region }}
+        
+        echo "✅ Credentials extracted and exported"
+        
+        # Step 4: Verify the assumed role identity
+        echo "🔍 Verifying assumed role identity..."
+        ASSUMED_IDENTITY=$(aws sts get-caller-identity)
+        if [ $? -ne 0 ]; then
+          echo "❌ Failed to verify assumed role identity"
+          exit 1
+        fi
+        echo "✅ Assumed role verified"
+        
+        # Step 5: Generate presigned URL
+        echo "🔗 Generating presigned URL..."
+        S3_OBJECT="s3://${{ inputs.bucket }}/${{ inputs.key }}"
+        
+        if ! presigned_url=$(aws s3 presign \
+          "$S3_OBJECT" \
+          --expires-in ${{ inputs.expires-in }} \
+          --region ${{ inputs.region }}); then
+          echo "❌ Failed to generate presigned URL for: $S3_OBJECT"
+          echo "  Make sure the object exists and the role has read permissions"
+          exit 1
+        fi
+        
+        # Step 6: Validate the URL contains required parameters
+        echo "🔍 Validating presigned URL..."
+        if ! echo "$presigned_url" | grep -q "X-Amz-Algorithm=AWS4-HMAC-SHA256"; then
+          echo "❌ Generated URL appears to be missing required AWS Signature Version 4 parameters"
+          echo "URL: $presigned_url"
+          exit 1
+        fi
+        
+        # Check for double encoding issues
+        if echo "$presigned_url" | grep -q "%252F\|%252B"; then
+          echo "⚠️  Warning: Potential double encoding detected in URL"
+        fi
+        
+        # Calculate expiration time
+        expires_at=$(date -u -d "+${{ inputs.expires-in }} seconds" +%Y-%m-%dT%H:%M:%SZ)
+        
+        # Set outputs
+        echo "presigned-url=$presigned_url" >> $GITHUB_OUTPUT
+        echo "url-length=${#presigned_url}" >> $GITHUB_OUTPUT
+        echo "expires-at=$expires_at" >> $GITHUB_OUTPUT
+        
+        echo "✅ Presigned URL generated successfully"
+        echo "  URL length: ${#presigned_url} characters"
+        echo "  Expires at: $expires_at"
+        echo ""
+        echo "🔗 URL (first 100 chars): ${presigned_url:0:100}..."

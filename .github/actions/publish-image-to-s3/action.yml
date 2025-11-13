@@ -1,0 +1,151 @@
+name: 'Publish Image to S3'
+description: 'Publish a Docker image to S3 and generate presigned URL'
+
+inputs:
+  image-name:
+    description: 'Name of the image (e.g., enterprise-server, runtime-nikolaik)'
+    required: true
+  image-uri:
+    description: 'Full Docker image URI (e.g., ghcr.io/all-hands-ai/enterprise-server)'
+    required: true
+  tag:
+    description: 'Image tag to publish'
+    required: true
+  tag-folder:
+    description: 'S3 folder path (e.g., releases/1.0.0)'
+    required: true
+  bucket:
+    description: 'S3 bucket name'
+    required: true
+  display-name:
+    description: 'Human-readable display name for the image'
+    required: true
+  description:
+    description: 'Description of what the image is for'
+    required: true
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  expires-in:
+    description: 'Presigned URL expiration in seconds'
+    required: false
+    default: '604800'
+  aws-access-key-id:
+    description: 'AWS Access Key ID'
+    required: true
+  aws-secret-access-key:
+    description: 'AWS Secret Access Key'
+    required: true
+  github-token:
+    description: 'GitHub token for GHCR authentication'
+    required: true
+
+outputs:
+  image-json:
+    description: 'Complete image information as tab-delimited data for report generation (format: name<TAB>displayName<TAB>filename<TAB>url<TAB>size<TAB>description)'
+    value: ${{ steps.generate-json.outputs.image-json }}
+  presigned-url:
+    description: 'Presigned URL for downloading the image'
+    value: ${{ steps.presigned-url.outputs.presigned-url }}
+  file-size:
+    description: 'Size of the uploaded file in bytes'
+    value: ${{ steps.generate-json.outputs.size }}
+  filename:
+    description: 'Name of the uploaded file'
+    value: ${{ steps.generate-json.outputs.filename }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS CLI
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+    
+    - name: Login to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ inputs.github-token }}
+    
+    - name: Pull and export image
+      run: |
+        echo "Pulling ${{ inputs.image-name }} image for tag: ${{ inputs.tag }}"
+        
+        # Pull the image from GHCR
+        docker pull ${{ inputs.image-uri }}:${{ inputs.tag }}
+        
+        # Export to tarball
+        docker save ${{ inputs.image-uri }}:${{ inputs.tag }} | gzip > ${{ inputs.image-name }}-${{ inputs.tag }}.tar.gz
+        
+        echo "✅ ${{ inputs.image-name }} image exported"
+      shell: bash
+    
+    - name: Upload image to S3
+      run: |
+        echo "Uploading ${{ inputs.image-name }} image to S3..."
+        
+        # Upload the tarball
+        aws s3 cp ${{ inputs.image-name }}-${{ inputs.tag }}.tar.gz "s3://${{ inputs.bucket }}/${{ inputs.tag-folder }}/${{ inputs.image-name }}-${{ inputs.tag }}.tar.gz"
+        
+        echo "✅ Image uploaded to S3"
+      shell: bash
+    
+    - name: Generate presigned URL
+      id: presigned-url
+      uses: ./.github/actions/generate-presigned-url
+      with:
+        bucket: ${{ inputs.bucket }}
+        key: ${{ inputs.tag-folder }}/${{ inputs.image-name }}-${{ inputs.tag }}.tar.gz
+        region: ${{ inputs.aws-region }}
+        expires-in: ${{ inputs.expires-in }}
+    
+    - name: Get file size and generate tab-delimited data
+      id: generate-json
+      run: |
+        FILENAME="${{ inputs.image-name }}-${{ inputs.tag }}.tar.gz"
+        SIZE=$(stat -c%s "$FILENAME")
+        
+        # DESIGN CHOICE: Tab-delimited data instead of JSON
+        # ================================================
+        # We use tab-delimited format instead of JSON for the following reasons:
+        # 1. AWS presigned URLs contain many special characters (parentheses, ampersands, etc.)
+        #    that cause shell escaping issues when passed as JSON command line arguments
+        # 2. Presigned URLs NEVER contain actual tab character so there are no shell escaping issues
+        #
+        # Format: name<TAB>displayName<TAB>filename<TAB>url<TAB>size<TAB>description
+        # Example: enterprise-server<TAB>Enterprise Server<TAB>file.tar.gz<TAB>https://s3...<TAB>123456<TAB>Description
+        
+        # Write variables to temp files to avoid shell escaping issues
+        echo '${{ inputs.image-name }}' > name.tmp
+        echo '${{ inputs.display-name }}' > display_name.tmp
+        echo '${{ steps.presigned-url.outputs.presigned-url }}' > url.tmp
+        echo '${{ inputs.description }}' > description.tmp
+        
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "$(cat name.tmp)" \
+          "$(cat display_name.tmp)" \
+          "$FILENAME" \
+          "$(cat url.tmp)" \
+          "$SIZE" \
+          "$(cat description.tmp)" > image_data.tsv
+        
+        # Clean up temp files
+        rm -f name.tmp display_name.tmp url.tmp description.tmp
+        
+        # Output the tab-delimited data
+        echo "image-json<<EOF" >> $GITHUB_OUTPUT
+        cat image_data.tsv >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Also output individual values for backward compatibility
+        echo "size=$SIZE" >> $GITHUB_OUTPUT
+        echo "filename=$FILENAME" >> $GITHUB_OUTPUT
+      shell: bash
