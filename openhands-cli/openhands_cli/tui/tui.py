@@ -23,6 +23,7 @@ COMMANDS = {
     '/resume': 'Resume a paused conversation',
     '/settings': 'Display and modify current settings',
     '/mcp': 'View MCP (Model Context Protocol) server configuration',
+    '/alias': 'Set up convenient shell aliases with uv tool install support',
 }
 
 

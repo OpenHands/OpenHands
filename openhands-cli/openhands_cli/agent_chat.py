@@ -31,6 +31,7 @@ from openhands_cli.tui.tui import (
 )
 from openhands_cli.user_actions import UserConfirmation, exit_session_confirmation
 from openhands_cli.user_actions.utils import get_session_prompter
+from openhands_cli.user_actions.alias_setup import run_alias_setup
 
 
 def _restore_tty() -> None:
@@ -173,6 +174,26 @@ def run_cli_entry(resume_conversation_id: str | None = None) -> None:
                 print_formatted_text(
                     HTML(f'<yellow>Confirmation mode {new_status}</yellow>')
                 )
+                continue
+
+            elif command == '/alias':
+                try:
+                    print_formatted_text(HTML('<cyan><b>Alias Setup</b></cyan>'))
+                    print_formatted_text(
+                        HTML('<white>Setting up convenient shell aliases for OpenHands with uv tool install support.</white>')
+                    )
+                    print_formatted_text(HTML(''))
+                    
+                    success = run_alias_setup()
+                    if success:
+                        print_formatted_text(HTML('<green>✓ Alias setup completed successfully!</green>'))
+                    else:
+                        print_formatted_text(HTML('<yellow>Alias setup was cancelled or skipped.</yellow>'))
+                        
+                except KeyboardInterrupt:
+                    print_formatted_text(HTML('<yellow>\nAlias setup cancelled.</yellow>'))
+                except Exception as e:
+                    print_formatted_text(HTML(f'<red>Error during alias setup: {e}</red>'))
                 continue
 
             elif command == '/resume':
