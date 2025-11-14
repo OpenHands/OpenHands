@@ -238,16 +238,19 @@ def test_get_microagents_from_org_or_user_github(temp_workspace):
 
     # Mock the provider detection to return GitHub
     with patch.object(runtime, '_is_gitlab_repository', return_value=False):
-        # Mock the _get_authenticated_git_url to simulate failure (no org repo)
-        with patch('openhands.runtime.base.call_async_from_sync') as mock_async:
-            mock_async.side_effect = Exception('Repository not found')
+        with patch.object(runtime, '_is_azure_devops_repository', return_value=False):
+            # Mock the _get_authenticated_git_url to simulate failure (no org repo)
+            with patch('openhands.runtime.base.call_async_from_sync') as mock_async:
+                mock_async.side_effect = Exception('Repository not found')
 
-            result = runtime.get_microagents_from_org_or_user('github.com/owner/repo')
+                result = runtime.get_microagents_from_org_or_user(
+                    'github.com/owner/repo'
+                )
 
-            # Should only try .openhands, not openhands-config
-            assert len(result) == 0
-            # Check that only one attempt was made (for .openhands)
-            assert mock_async.call_count == 1
+                # Should only try .openhands, not openhands-config
+                assert len(result) == 0
+                # Check that only one attempt was made (for .openhands)
+                assert mock_async.call_count == 1
 
 
 def test_get_microagents_from_org_or_user_gitlab_success_with_config(temp_workspace):
@@ -260,16 +263,21 @@ def test_get_microagents_from_org_or_user_gitlab_success_with_config(temp_worksp
 
     # Mock the provider detection to return GitLab
     with patch.object(runtime, '_is_gitlab_repository', return_value=True):
-        # Mock successful cloning for openhands-config
-        with patch('openhands.runtime.base.call_async_from_sync') as mock_async:
-            mock_async.return_value = 'https://gitlab.com/owner/openhands-config.git'
+        with patch.object(runtime, '_is_azure_devops_repository', return_value=False):
+            # Mock successful cloning for openhands-config
+            with patch('openhands.runtime.base.call_async_from_sync') as mock_async:
+                mock_async.return_value = (
+                    'https://gitlab.com/owner/openhands-config.git'
+                )
 
-            result = runtime.get_microagents_from_org_or_user('gitlab.com/owner/repo')
+                result = runtime.get_microagents_from_org_or_user(
+                    'gitlab.com/owner/repo'
+                )
 
-            # Should succeed with openhands-config
-            assert len(result) >= 0  # May be empty if no microagents found
-            # Should only try once for openhands-config
-            assert mock_async.call_count == 1
+                # Should succeed with openhands-config
+                assert len(result) >= 0  # May be empty if no microagents found
+                # Should only try once for openhands-config
+                assert mock_async.call_count == 1
 
 
 def test_get_microagents_from_org_or_user_gitlab_failure(temp_workspace):
@@ -278,16 +286,19 @@ def test_get_microagents_from_org_or_user_gitlab_failure(temp_workspace):
 
     # Mock the provider detection to return GitLab
     with patch.object(runtime, '_is_gitlab_repository', return_value=True):
-        # Mock the _get_authenticated_git_url to fail for openhands-config
-        with patch('openhands.runtime.base.call_async_from_sync') as mock_async:
-            mock_async.side_effect = Exception('openhands-config not found')
+        with patch.object(runtime, '_is_azure_devops_repository', return_value=False):
+            # Mock the _get_authenticated_git_url to fail for openhands-config
+            with patch('openhands.runtime.base.call_async_from_sync') as mock_async:
+                mock_async.side_effect = Exception('openhands-config not found')
 
-            result = runtime.get_microagents_from_org_or_user('gitlab.com/owner/repo')
+                result = runtime.get_microagents_from_org_or_user(
+                    'gitlab.com/owner/repo'
+                )
 
-            # Should return empty list when repository doesn't exist
-            assert len(result) == 0
-            # Should only try once for openhands-config
-            assert mock_async.call_count == 1
+                # Should return empty list when repository doesn't exist
+                assert len(result) == 0
+                # Should only try once for openhands-config
+                assert mock_async.call_count == 1
 
 
 def test_get_microagents_from_selected_repo_gitlab_uses_openhands(temp_workspace):

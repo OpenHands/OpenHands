@@ -7,6 +7,7 @@ describe("convertRawProvidersToList", () => {
     const example1: Partial<Record<Provider, string | null>> | undefined = {
       github: "test-token",
       gitlab: "test-token",
+      azure_devops: "test-token",
     };
     const example2: Partial<Record<Provider, string | null>> | undefined = {
       github: "",
@@ -14,9 +15,13 @@ describe("convertRawProvidersToList", () => {
     const example3: Partial<Record<Provider, string | null>> | undefined = {
       gitlab: null,
     };
+    const example4: Partial<Record<Provider, string | null>> | undefined = {
+      azure_devops: "test-token",
+    };
 
-    expect(convertRawProvidersToList(example1)).toEqual(["github", "gitlab"]);
+    expect(convertRawProvidersToList(example1)).toEqual(["github", "gitlab", "azure_devops"]);
     expect(convertRawProvidersToList(example2)).toEqual(["github"]);
     expect(convertRawProvidersToList(example3)).toEqual(["gitlab"]);
+    expect(convertRawProvidersToList(example4)).toEqual(["azure_devops"]);
   });
 });

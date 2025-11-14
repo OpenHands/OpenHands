@@ -24,9 +24,9 @@ from openhands.server.utils import config
 
 
 class SetAuthCookieMiddleware:
-    """
-    Update the auth cookie with the current authentication state if it was refreshed before sending response to user.
-    Deleting invalid cookies is handled by CookieError using FastAPIs standard error handling mechanism
+    """Update the auth cookie with the current authentication state if it was refreshed before sending response to user.
+
+    Deleting invalid cookies is handled by CookieError using FastAPIs standard error handling mechanism.
     """
 
     async def __call__(self, request: Request, call_next: Callable):
@@ -56,6 +56,10 @@ class SetAuthCookieMiddleware:
                 schedule_gitlab_repo_sync(
                     await user_auth.get_user_id(),
                 )
+
+                # Note: Azure DevOps webhooks require manual setup by Project Administrators
+                # Unlike GitLab, Azure DevOps OAuth scopes for Service Hooks are "no longer public"
+                # and cannot be requested in OAuth apps. Webhooks must be created manually in Azure DevOps UI.
 
             if (
                 self._should_attach(request)

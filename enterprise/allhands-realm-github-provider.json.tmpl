@@ -1771,6 +1771,47 @@
         "sendIdTokenOnLogout": "true",
         "passMaxAge": "false"
       }
+    },
+    {
+      "alias": "azure_devops",
+      "displayName": "Azure DevOps",
+      "internalId": "7e42c8f1-9d3a-4f1e-b5c7-2a8f6e9d4c1b",
+      "providerId": "oidc",
+      "enabled": true,
+      "updateProfileFirstLoginMode": "on",
+      "trustEmail": true,
+      "storeToken": true,
+      "addReadTokenRoleOnCreate": true,
+      "authenticateByDefault": false,
+      "linkOnly": false,
+      "hideOnLogin": false,
+      "config": {
+        "acceptsPromptNoneForwardFromClient": "false",
+        "tokenUrl": "https://login.microsoftonline.com/$AZURE_DEVOPS_TENANT_ID/oauth2/v2.0/token",
+        "isAccessTokenJWT": "true",
+        "jwksUrl": "https://login.microsoftonline.com/$AZURE_DEVOPS_TENANT_ID/discovery/v2.0/keys",
+        "filteredByClaim": "false",
+        "backchannelSupported": "false",
+        "caseSensitiveOriginalUsername": "false",
+        "loginHint": "false",
+        "clientAuthMethod": "client_secret_post",
+        "syncMode": "IMPORT",
+        "clientSecret": "$AZURE_DEVOPS_CLIENT_SECRET",
+        "allowedClockSkew": "0",
+        "defaultScope": "openid email profile offline_access 499b84ac-1321-427f-aa17-267ca6975798/.default",
+        "userInfoUrl": "https://graph.microsoft.com/oidc/userinfo",
+        "validateSignature": "false",
+        "clientId": "$AZURE_DEVOPS_CLIENT_ID",
+        "uiLocales": "false",
+        "disableNonce": "false",
+        "useJwksUrl": "true",
+        "sendClientIdOnLogout": "false",
+        "pkceEnabled": "false",
+        "authorizationUrl": "https://login.microsoftonline.com/$AZURE_DEVOPS_TENANT_ID/oauth2/v2.0/authorize",
+        "disableUserInfo": "true",
+        "sendIdTokenOnLogout": "true",
+        "passMaxAge": "false"
+      }
     }
   ],
   "identityProviderMappers": [
@@ -1814,6 +1855,17 @@
       "identityProviderMapper": "hardcoded-attribute-idp-mapper",
       "config": {
         "attribute.value": "gitlab",
+        "syncMode": "FORCE",
+        "attribute": "identity_provider"
+      }
+    },
+    {
+      "id": "9e8d7c6b-5a4f-3e2d-1c0b-9a8e7d6c5b4a",
+      "name": "identity-provider",
+      "identityProviderAlias": "azure_devops",
+      "identityProviderMapper": "hardcoded-attribute-idp-mapper",
+      "config": {
+        "attribute.value": "azure_devops",
         "syncMode": "FORCE",
         "attribute": "identity_provider"
       }
@@ -1945,7 +1997,7 @@
         "subComponents": {},
         "config": {
           "kc.user.profile.config": [
-            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"github_id\",\"displayName\":\"GitHub ID\",\"validations\":{},\"annotations\":{},\"permissions\":{\"view\":[\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"identity_provider\",\"displayName\":\"Identity Provider\",\"validations\":{},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"gitlab_id\",\"displayName\":\"GitLab ID\",\"validations\":{},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User metadata\",\"displayDescription\":\"Attributes, which refer to user metadata\"}]}"
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"github_id\",\"displayName\":\"GitHub ID\",\"validations\":{},\"annotations\":{},\"permissions\":{\"view\":[\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"identity_provider\",\"displayName\":\"Identity Provider\",\"validations\":{},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"gitlab_id\",\"displayName\":\"GitLab ID\",\"validations\":{},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"azure_devops_id\",\"displayName\":\"Azure DevOps ID\",\"validations\":{},\"annotations\":{},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User metadata\",\"displayDescription\":\"Attributes, which refer to user metadata\"}]}"
           ]
         }
       }
