@@ -16,6 +16,7 @@ from openhands.core.exceptions import (
     AgentRuntimeNotReadyError,
     AgentRuntimeUnavailableError,
 )
+from openhands.core.logger import OpenHandsLoggerAdapter
 from openhands.core.logger import openhands_logger as logger
 from openhands.events import EventStream
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
@@ -76,7 +77,11 @@ class RemoteRuntime(ActionExecutionClient):
             user_id,
             git_provider_tokens,
         )
-        logger.debug(f'RemoteRuntime.init user_id {user_id}')
+        # Initialize logger adapter with session context
+        self.logger = OpenHandsLoggerAdapter(
+            extra={'session_id': self.sid, 'runtime_id': self.runtime_id}
+        )
+        self.logger.debug(f'RemoteRuntime.init user_id {user_id}')
         if self.config.sandbox.api_key is None:
             raise ValueError(
                 'API key is required to use the remote runtime. '
@@ -105,16 +110,24 @@ class RemoteRuntime(ActionExecutionClient):
         self.available_hosts: dict[str, int] = {}
         self._session_api_key: str | None = None
 
-    def log(self, level: str, message: str, exc_info: bool | None = None) -> None:
-        getattr(logger, level)(
-            message,
-            stacklevel=2,
-            exc_info=exc_info,
-            extra={
-                'session_id': self.sid,
-                'runtime_id': self.runtime_id,
-            },
-        )
+    def log(
+        self,
+        level: str,
+        message: str,
+        exc_info: bool | None = None,
+        extra: dict | None = None,
+    ) -> None:
+        """Logs a message to the runtime's logger.
+
+        Args:
+            level (str): The logging level to use (e.g., 'info', 'debug', 'error').
+            message (str): The message to log.
+            exc_info (bool | None, optional): Whether to include exception info.
+            extra (dict | None, optional): Additional fields to log. Includes session_id and runtime_id by default.
+        """
+        # Update the adapter's extra context with current runtime_id
+        self.logger.extra['runtime_id'] = self.runtime_id
+        getattr(self.logger, level)(message, exc_info=exc_info, extra=extra)
 
     @property
     def action_execution_server_url(self) -> str:
@@ -127,7 +140,12 @@ class RemoteRuntime(ActionExecutionClient):
             await call_sync_from_async(self._start_or_attach_to_runtime)
         except Exception:
             self.close()
-            self.log('error', 'Runtime failed to start', exc_info=True)
+            self.log(
+                'error',
+                'Runtime failed to start',
+                exc_info=True,
+                extra={'signal': 'remote_runtime_failed_to_start'},
+            )
             raise
         await call_sync_from_async(self.setup_initial_env)
         self._runtime_initialized = True
