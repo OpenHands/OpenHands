@@ -10,7 +10,6 @@ on:
         type: choice
         options:
           - app server
-          - cli
         default: app server
   push:
     tags:
@@ -39,36 +38,3 @@ jobs:
         run: ./build.sh
       - name: publish
         run: poetry publish -u __token__ -p ${{ secrets.PYPI_TOKEN }}
-
-  release-cli:
-    name: Publish CLI to PyPI
-    runs-on: ubuntu-latest
-    # Run when manually dispatched for "cli" OR for tag pushes that contain '-cli'
-    if: |
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.reason == 'cli')
-      || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && contains(github.ref, '-cli'))
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "latest"
-
-      - name: Build CLI package
-        working-directory: openhands-cli
-        run: |
-          # Clean dist directory to avoid conflicts with binary builds
-          rm -rf dist/
-          uv build
-
-      - name: Publish CLI to PyPI
-        working-directory: openhands-cli
-        run: |
-          uv publish --token ${{ secrets.PYPI_TOKEN_OPENHANDS }}

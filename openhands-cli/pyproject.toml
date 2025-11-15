@@ -24,8 +24,6 @@ dependencies = [
   "typer>=0.17.4",
 ]
 
-scripts = { openhands = "openhands_cli.simple_main:main" }
-
 [dependency-groups]
 # Hatchling wheel target: include the package directory
 dev = [
@@ -45,9 +43,6 @@ dev = [
 
 [tool.hatch.metadata]
 allow-direct-references = true
-
-[tool.hatch.build.targets.wheel]
-packages = [ "openhands_cli" ]
 
 # uv source pins for internal packages
 
@@ -85,12 +80,6 @@ line_length = 88
 [tool.coverage.run]
 relative_files = true
 omit = [ "tests/*", "**/test_*" ]
-
-[tool.coverage.paths]
-source = [
-  "openhands_cli/",
-  "openhands-cli/openhands_cli/",
-]
 
 [tool.mypy]
 python_version = "3.12"
