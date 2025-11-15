@@ -1,0 +1,66 @@
+name: Python coverage comment
+# This allows tests to post coverage comments when the PR is from a fork.
+# It uses the artifact `python-coverage-comment-action`.
+
+on:
+  workflow_run:
+    workflows: ["Run Python Tests"]
+    types:
+      - completed
+
+jobs:
+  test:
+    name: Run tests & display coverage
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    permissions:
+      # Permission to publish new comments in PRs.
+      pull-requests: write
+      # Permissions to edit existing comments.
+      contents: write
+      # Permission to download the artifact.
+      actions: read
+    steps:
+      # DO NOT run actions/checkout here, for security reasons
+      # For details, refer to https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+      - name: Post comment
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_PR_RUN_ID: ${{ github.event.workflow_run.id }}
+          ANNOTATE_MISSING_LINES: true
+
+      - name: Download low-coverage-python artifact if present
+        id: download
+        uses: actions/download-artifact@v5
+        with:
+          name: low-coverage-python
+          run-id: ${{ github.event.workflow_run.id }}
+          path: ./low-coverage-python
+          github-token: ${{ github.token }}
+        continue-on-error: true
+
+      - name: Check if low-coverage-python found
+        id: check_low_coverage_artifact
+        run: |
+          if [ -f low-coverage-python/coverage-stats.txt ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add label if uncovered code was modified
+        if: ${{ steps.check_low_coverage_artifact.outputs.found == 'true' && github.event.workflow_run.pull_requests[0] }}
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ github.token }}
+          labels: low-coverage-python
+          number: ${{ github.event.workflow_run.pull_requests[0].number }}
+
+      - name: Remove label if uncovered code was not modified
+        if: ${{ steps.check_low_coverage_artifact.outputs.found == 'false' && github.event.workflow_run.pull_requests[0] }}
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          github_token: ${{ github.token }}
+          labels: low-coverage-python
+          number: ${{ github.event.workflow_run.pull_requests[0].number }}
