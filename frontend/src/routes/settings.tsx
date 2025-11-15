@@ -7,14 +7,16 @@ import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
 import { GetConfigResponse } from "#/api/option-service/option.types";
 import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
+import { SettingsLayout } from "#/components/features/settings";
 import { Typography } from "#/ui/typography";
-import { SettingsLayout } from "#/components/features/settings/settings-layout";
 
 const SAAS_ONLY_PATHS = [
   "/settings/user",
   "/settings/billing",
   "/settings/credits",
   "/settings/api-keys",
+  "/settings/team",
+  "/settings/org",
 ];
 
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {

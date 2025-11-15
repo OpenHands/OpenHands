@@ -76,7 +76,7 @@ export function SettingsDropdownInput({
         isRequired={required}
         className="w-full"
         classNames={{
-          popoverContent: "bg-tertiary rounded-xl border border-[#717888]",
+          popoverContent: "bg-tertiary rounded-xl",
         }}
         inputProps={{
           classNames: {

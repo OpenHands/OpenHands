@@ -1,9 +1,9 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { MemoryRouter } from "react-router";
 import i18n from "../../src/i18n";
 import { AccountSettingsContextMenu } from "../../src/components/features/context-menu/account-settings-context-menu";
 import { renderWithProviders } from "../../test-utils";
-import { MemoryRouter } from "react-router";
 
 describe("Translations", () => {
   it("should render translated text", () => {
@@ -47,7 +47,6 @@ describe("Translations", () => {
 
       await i18n.changeLanguage("zh-CN");
       expect(i18n.language).toBe("zh-CN");
-
     } finally {
       // Restore the original language
       await i18n.changeLanguage(originalLanguage);
@@ -62,7 +61,7 @@ describe("Translations", () => {
     expect(i18n.options.nonExplicitSupportedLngs).toBe(false);
 
     // fallbackLng can be a string or array, check if it includes "en"
-    const fallbackLng = i18n.options.fallbackLng;
+    const { fallbackLng } = i18n.options;
     if (Array.isArray(fallbackLng)) {
       expect(fallbackLng).toContain("en");
     } else {

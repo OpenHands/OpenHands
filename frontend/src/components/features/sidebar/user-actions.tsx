@@ -1,17 +1,19 @@
 import React from "react";
 import { UserAvatar } from "./user-avatar";
-import { AccountSettingsContextMenu } from "../context-menu/account-settings-context-menu";
+import { useMe } from "#/hooks/query/use-me";
 import { useShouldShowUserFeatures } from "#/hooks/use-should-show-user-features";
-import { cn } from "#/utils/utils";
 import { useConfig } from "#/hooks/query/use-config";
+import { AccountSettingsContextMenu } from "../context-menu/account-settings-context-menu";
+import { UserContextMenu } from "../user/user-context-menu";
+import { cn } from "#/utils/utils";
 
 interface UserActionsProps {
-  onLogout: () => void;
   user?: { avatar_url: string };
   isLoading?: boolean;
 }
 
-export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
+export function UserActions({ user, isLoading }: UserActionsProps) {
+  const { data: me } = useMe();
   const [accountContextMenuIsVisible, setAccountContextMenuIsVisible] =
     React.useState(false);
 
@@ -32,7 +34,6 @@ export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
   };
 
   const handleLogout = () => {
-    onLogout();
     closeAccountMenu();
   };
 
@@ -62,6 +63,14 @@ export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
         >
           <AccountSettingsContextMenu
             onLogout={handleLogout}
+            onClose={closeAccountMenu}
+          />
+        </div>
+      )}
+      {accountContextMenuIsVisible && !!user && (
+        <div className="w-sm absolute left-[calc(100%+12px)] bottom-0 z-10">
+          <UserContextMenu
+            type={me?.role || "user"}
             onClose={closeAccountMenu}
           />
         </div>

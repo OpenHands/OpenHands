@@ -5,6 +5,10 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
+import { SettingsDropdownInput } from "./settings-dropdown-input";
+import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useOrganizations } from "#/hooks/query/use-organizations";
+import { useMe } from "#/hooks/query/use-me";
 
 interface NavigationItem {
   to: string;
@@ -23,7 +27,13 @@ export function SettingsNavigation({
   onCloseMobileMenu,
   navigationItems,
 }: SettingsNavigationProps) {
+  const { orgId, setOrgId } = useSelectedOrganizationId();
+  const { data: organizations } = useOrganizations();
+  const { data: me } = useMe();
+
   const { t } = useTranslation();
+
+  const isUser = me?.role === "user";
 
   return (
     <>
@@ -47,6 +57,28 @@ export function SettingsNavigation({
           "md:relative md:translate-x-0 md:w-64 md:p-0 md:bg-transparent",
         )}
       >
+        <div className="px-3 py-2">
+          <SettingsDropdownInput
+            testId="org-select"
+            name="organization"
+            placeholder="Please select an organization"
+            selectedKey={orgId || ""}
+            items={
+              organizations?.map((org) => ({
+                key: org.id,
+                label: org.name,
+              })) || []
+            }
+            onSelectionChange={(org) => {
+              if (org) {
+                setOrgId(org.toString());
+              } else {
+                setOrgId(null);
+              }
+            }}
+          />
+        </div>
+
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 ml-1 sm:ml-4.5">
             <SettingsIcon width={16} height={16} />
@@ -64,27 +96,40 @@ export function SettingsNavigation({
         </div>
 
         <div className="flex flex-col gap-2">
-          {navigationItems.map(({ to, icon, text }) => (
-            <NavLink
-              end
-              key={to}
-              to={to}
-              onClick={onCloseMobileMenu}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 p-1 sm:px-[14px] sm:py-2 rounded-md transition-colors",
-                  isActive ? "bg-[#454545]" : "hover:bg-[#454545]",
-                )
+          {navigationItems
+            .filter((navItem) => {
+              // if user is not an admin or no org is selected, do not show team/org settings
+              if (
+                (navItem.to === "/settings/team" ||
+                  navItem.to === "/settings/org") &&
+                (isUser || !orgId)
+              ) {
+                return false;
               }
-            >
-              {icon}
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
-                  {t(text as I18nKey)}
-                </Typography.Text>
-              </div>
-            </NavLink>
-          ))}
+
+              return true;
+            })
+            .map(({ to, icon, text }) => (
+              <NavLink
+                end
+                key={to}
+                to={to}
+                onClick={onCloseMobileMenu}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 p-1 sm:px-[14px] sm:py-2 rounded-md transition-colors",
+                    isActive ? "bg-[#454545]" : "hover:bg-[#454545]",
+                  )
+                }
+              >
+                {icon}
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
+                    {t(text as I18nKey)}
+                  </Typography.Text>
+                </div>
+              </NavLink>
+            ))}
         </div>
       </nav>
     </>
