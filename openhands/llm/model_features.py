@@ -80,6 +80,8 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'o4-mini*',
     # Google Gemini
     'gemini-2.5-pro*',
+    # Groq models (via groq/ provider prefix)
+    'groq/*',
     # Others
     'kimi-k2-0711-preview',
     'kimi-k2-instruct',
