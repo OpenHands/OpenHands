@@ -1,0 +1,188 @@
+---
+# To set this up:
+#  1. Change the name below to something relevant to your task
+#  2. Modify the "env" section below with your prompt
+#  3. Add your LLM_API_KEY to the repository secrets
+#  4. Commit this file to your repository
+#  5. Trigger the workflow manually or set up a schedule
+name: Assign Reviews
+
+on:
+    # Manual trigger
+    workflow_dispatch:
+    # Scheduled trigger (disabled by default, uncomment and customize as needed)
+    schedule:
+      # Run at 12 PM UTC every day
+        - cron: 0 12 * * *
+
+permissions:
+    contents: write
+    pull-requests: write
+    issues: write
+
+jobs:
+    run-task:
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        env:
+            # Configuration (modify these values as needed)
+            AGENT_SCRIPT_URL: https://raw.githubusercontent.com/OpenHands/agent-sdk/main/examples/03_github_workflows/01_basic_action/agent_script.py
+            # Provide either PROMPT_LOCATION (URL/file) OR PROMPT_STRING (direct text), not both
+            # Option 1: Use a URL or file path for the prompt
+            PROMPT_LOCATION: ''
+            # PROMPT_LOCATION: 'https://example.com/prompts/maintenance.txt'
+            # Option 2: Use direct text for the prompt
+            PROMPT_STRING: >
+                Use GITHUB_TOKEN and the github API to organize open pull requests in the repo.
+                Read the sections below in order, and perform each in order. Do NOT take action
+                on the same issue twice.
+
+                # Need Reviewer Action
+
+                Find all open PRs where:
+                1. The PR is waiting for review (there are no open review comments or change requests)
+                2. The PR is in a "clean" state (CI passing, no merge conflicts)
+                3. The PR is not marked as draft (draft: false)
+                4. The PR has had no activity (comments, commits, reviews) for more than 3 days.
+
+                In this case, send a message to the reviewers:
+                [Automatic Post]: This PR seems to be currently waiting for review.
+                {reviewer_names}, could you please take a look when you have a chance?
+
+                # Need Author Action
+
+                Find all open PRs where the most recent change or comment was made on the pull
+                request more than 5 days ago (use 14 days if the PR is marked as draft).
+
+                And send a message to the author:
+
+                [Automatic Post]: It has been a while since there was any activity on this PR.
+                {author}, are you still working on it? If so, please go ahead, if not then
+                please request review, close it, or request that someone else follow up.
+
+                # Need Reviewers
+
+                Find all open pull requests that TRULY have NO reviewers assigned. To do this correctly:
+
+                1. Use the GitHub API to fetch PR details: GET /repos/{owner}/{repo}/pulls/{pull_number}
+                2. Check the "requested_reviewers" and "requested_teams" arrays
+                3. ALSO check for submitted reviews: GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews
+                4. A PR needs reviewers ONLY if ALL of these are true:
+                   - The "requested_reviewers" array is empty (no pending review requests)
+                   - The "requested_teams" array is empty (no pending team review requests)
+                   - The reviews array is empty (no reviews have been submitted yet)
+                5. IMPORTANT: If ANY of these has entries, SKIP this PR - it already has or had reviewers!
+
+                Example API responses showing a PR that DOES NOT need reviewers (skip this):
+
+                Case 1 - Has requested reviewers:
+                GET /pulls/{number}: {"requested_reviewers": [{"login": "someuser"}], "requested_teams": []}
+
+                Case 2 - Has submitted reviews (even if requested_reviewers is empty):
+                GET /pulls/{number}: {"requested_reviewers": [], "requested_teams": []}
+                GET /pulls/{number}/reviews: [{"user": {"login": "someuser"}, "state": "COMMENTED"}]
+
+                Example API response showing a PR that DOES need reviewers (process this):
+                GET /pulls/{number}: {"requested_reviewers": [], "requested_teams": []}
+                GET /pulls/{number}/reviews: []
+
+                Additional criteria for PRs that need reviewers:
+                1. Are not marked as draft (draft: false)
+                2. Were created more than 1 day ago
+                3. CI is passing and there are no merge conflicts
+
+                For each PR that truly has NO reviewers, read the git blame information for the files,
+                and find the most recent and active contributors to the file/location of the changes.
+                Assign one of these people as a reviewer, but try not to assign too many reviews to
+                any single person. Add this message:
+
+                [Automatic Post]: I have assigned {reviewer} as a reviewer based on git blame information.
+                Thanks in advance for the help!
+
+            LLM_MODEL: litellm_proxy/claude-sonnet-4-5-20250929
+            LLM_BASE_URL: https://llm-proxy.app.all-hands.dev
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v5
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.12'
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  enable-cache: true
+
+            - name: Install OpenHands dependencies
+              run: |
+                  # Install OpenHands SDK and tools from git repository
+                  uv pip install --system "openhands-sdk @ git+https://github.com/OpenHands/agent-sdk.git@main#subdirectory=openhands-sdk"
+                  uv pip install --system "openhands-tools @ git+https://github.com/OpenHands/agent-sdk.git@main#subdirectory=openhands-tools"
+
+            - name: Check required configuration
+              env:
+                  LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+              run: |
+                  if [ -z "$LLM_API_KEY" ]; then
+                    echo "Error: LLM_API_KEY secret is not set."
+                    exit 1
+                  fi
+
+                  # Check that exactly one of PROMPT_LOCATION or PROMPT_STRING is set
+                  if [ -n "$PROMPT_LOCATION" ] && [ -n "$PROMPT_STRING" ]; then
+                    echo "Error: Both PROMPT_LOCATION and PROMPT_STRING are set."
+                    echo "Please provide only one in the env section of the workflow file."
+                    exit 1
+                  fi
+
+                  if [ -z "$PROMPT_LOCATION" ] && [ -z "$PROMPT_STRING" ]; then
+                    echo "Error: Neither PROMPT_LOCATION nor PROMPT_STRING is set."
+                    echo "Please set one in the env section of the workflow file."
+                    exit 1
+                  fi
+
+                  if [ -n "$PROMPT_LOCATION" ]; then
+                    echo "Prompt location: $PROMPT_LOCATION"
+                  else
+                    echo "Using inline PROMPT_STRING (${#PROMPT_STRING} characters)"
+                  fi
+                  echo "LLM model: $LLM_MODEL"
+                  if [ -n "$LLM_BASE_URL" ]; then
+                    echo "LLM base URL: $LLM_BASE_URL"
+                  fi
+
+            - name: Run task
+              env:
+                  LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+                  PYTHONPATH: ''
+              run: |
+                  echo "Running agent script: $AGENT_SCRIPT_URL"
+
+                  # Download script if it's a URL
+                  if [[ "$AGENT_SCRIPT_URL" =~ ^https?:// ]]; then
+                    echo "Downloading agent script from URL..."
+                    curl -sSL "$AGENT_SCRIPT_URL" -o /tmp/agent_script.py
+                    AGENT_SCRIPT_PATH="/tmp/agent_script.py"
+                  else
+                    AGENT_SCRIPT_PATH="$AGENT_SCRIPT_URL"
+                  fi
+
+                  # Run with appropriate prompt argument
+                  if [ -n "$PROMPT_LOCATION" ]; then
+                    echo "Using prompt from: $PROMPT_LOCATION"
+                    uv run python "$AGENT_SCRIPT_PATH" "$PROMPT_LOCATION"
+                  else
+                    echo "Using PROMPT_STRING (${#PROMPT_STRING} characters)"
+                    uv run python "$AGENT_SCRIPT_PATH"
+                  fi
+
+            - name: Upload logs as artifact
+              uses: actions/upload-artifact@v5
+              if: always()
+              with:
+                  name: openhands-task-logs
+                  path: |
+                      *.log
+                      output/
+                  retention-days: 7
