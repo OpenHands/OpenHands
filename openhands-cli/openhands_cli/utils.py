@@ -5,23 +5,23 @@ from typing import Any
 from openhands.tools.preset import get_default_agent
 from openhands.sdk import LLM
 
-def get_llm_metadata(
+def get_llm_extra_body(
     model_name: str,
     llm_type: str,
     session_id: str | None = None,
     user_id: str | None = None,
 ) -> dict[str, Any]:
     """
-    Generate LLM metadata for OpenHands CLI.
+    Build the extra_body payload for LLM calls in the OpenHands CLI.
 
     Args:
         model_name: Name of the LLM model
-        agent_name: Name of the agent (defaults to "openhands")
+        llm_type: Logical usage type (e.g., "agent", "condenser")
         session_id: Optional session identifier
         user_id: Optional user identifier
 
     Returns:
-        Dictionary containing metadata for LLM initialization
+        Dictionary to pass via litellm_extra_body (mapped to extra_body)
     """
     # Import here to avoid circular imports
     openhands_sdk_version: str = 'n/a'
@@ -55,6 +55,7 @@ def get_llm_metadata(
         metadata['session_id'] = session_id
     if user_id is not None:
         metadata['trace_user_id'] = user_id
+    metadata = {"metadata": metadata}
     return metadata
 
 

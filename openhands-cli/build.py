@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-from openhands_cli.utils import get_default_cli_agent, get_llm_metadata
+from openhands_cli.utils import get_default_cli_agent, get_llm_extra_body
 from openhands_cli.locations import AGENT_SETTINGS_PATH, PERSISTENCE_DIR
 
 from openhands.sdk import LLM
@@ -269,7 +269,7 @@ def main() -> int:
             llm=LLM(
                 model='dummy-model',
                 api_key='dummy-key',
-                litellm_extra_body={"metadata": get_llm_metadata(model_name='dummy-model', llm_type='openhands')},
+                litellm_extra_body=get_llm_extra_body(model_name='dummy-model', llm_type='openhands'),
             )
         )
         if not test_executable(dummy_agent):

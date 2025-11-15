@@ -5,7 +5,7 @@ from prompt_toolkit import HTML, print_formatted_text
 from prompt_toolkit.shortcuts import print_container
 from prompt_toolkit.widgets import Frame, TextArea
 
-from openhands_cli.utils import get_default_cli_agent, get_llm_metadata
+from openhands_cli.utils import get_default_cli_agent, get_llm_extra_body
 from openhands_cli.locations import AGENT_SETTINGS_PATH, PERSISTENCE_DIR
 from openhands_cli.pt_style import COLOR_GREY
 from openhands_cli.tui.settings.store import AgentStore
@@ -180,7 +180,7 @@ class SettingsScreen:
             api_key=api_key,
             base_url=base_url,
             usage_id='agent',
-            litellm_extra_body={"metadata": get_llm_metadata(model_name=model, llm_type='agent')},
+            litellm_extra_body=get_llm_extra_body(model_name=model, llm_type='agent'),
         )
 
         agent = self.agent_store.load()
