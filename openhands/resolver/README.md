@@ -1,9 +1,9 @@
-# OpenHands GitHub, GitLab & Bitbucket Issue Resolver 🙌
+# OpenHands GitHub, GitLab, Bitbucket & Azure DevOps Issue Resolver 🙌
 
-Need help resolving a GitHub, GitLab, or Bitbucket issue but don't have the time to do it yourself? Let an AI agent help you out!
+Need help resolving a GitHub, GitLab, Bitbucket, or Azure DevOps issue but don't have the time to do it yourself? Let an AI agent help you out!
 
 This tool allows you to use open-source AI agents based on [OpenHands](https://github.com/openhands/openhands)
-to attempt to resolve GitHub, GitLab, and Bitbucket issues automatically. While it can handle multiple issues, it's primarily designed
+to attempt to resolve GitHub, GitLab, Bitbucket, and Azure DevOps issues automatically. While it can handle multiple issues, it's primarily designed
 to help you resolve one issue at a time with high quality.
 
 Getting started is simple - just follow the instructions below.
@@ -74,7 +74,7 @@ If you prefer to run the resolver programmatically instead of using GitHub Actio
 pip install openhands-ai
 ```
 
-2. Create a GitHub, GitLab, or Bitbucket access token:
+2. Create a GitHub, GitLab, Bitbucket, or Azure DevOps access token:
    - Create a GitHub access token
       - Visit [GitHub's token settings](https://github.com/settings/personal-access-tokens/new)
       - Create a fine-grained token with these scopes:
@@ -103,6 +103,13 @@ pip install openhands-ai
       - 'Issues: Read'
       - 'Issues: Write'
 
+   - Create an Azure DevOps access token
+      - Visit [Azure DevOps token settings](https://dev.azure.com/{organization}/_usersSettings/tokens)
+      - Create a personal access token with these scopes:
+      - 'Code: Read & Write'
+      - 'Work Items: Read & Write'
+      - 'Pull Request: Read & Write'
+
 3. Set up environment variables:
 
 ```bash
@@ -121,6 +128,11 @@ export GIT_USERNAME="your-gitlab-username"  # Optional, defaults to token owner
 
 export BITBUCKET_TOKEN="your-bitbucket-token"
 export GIT_USERNAME="your-bitbucket-username"  # Optional, defaults to token owner
+
+# Azure DevOps credentials if you're using Azure DevOps repo
+
+export AZURE_DEVOPS_TOKEN="your-azure-devops-token"
+export GIT_USERNAME="your-azure-devops-username"  # Optional, defaults to token owner
 
 # LLM configuration
 
