@@ -224,24 +224,25 @@ def alias_user_identities(
 ) -> None:
     """Alias a user's Keycloak ID with their git provider login for unified tracking.
 
-    This allows PostHog to link events tracked from the frontend (using git provider login)
-    with events tracked from the backend (using Keycloak user ID).
+    This allows PostHog to link events tracked from the backend (using Keycloak user ID)
+    with events tracked from the frontend (using git provider login).
 
     PostHog Python alias syntax: alias(previous_id, distinct_id)
-    - previous_id: The old/previous distinct ID that will be merged
-    - distinct_id: The new/canonical distinct ID to merge into
+    - previous_id: The ID to merge FROM (no restrictions, only used in capture())
+    - distinct_id: The ID to merge INTO (already identified, has merge restrictions)
 
     For our use case:
-    - Git provider login is the previous_id (first used in frontend, before backend auth)
-    - Keycloak user ID is the distinct_id (canonical backend ID)
-    - Result: All events with git login will be merged into Keycloak user ID
+    - Keycloak user ID is the previous_id (backend, only used in capture(), no restrictions)
+    - Git provider login is the distinct_id (frontend, already identified, is canonical)
+    - Result: All backend events (keycloak_id) will be merged into frontend profile (git_login)
 
     Args:
-        keycloak_user_id: The Keycloak user ID (canonical distinct_id)
-        git_login: The git provider username (GitHub/GitLab/Bitbucket) to merge
+        keycloak_user_id: The Keycloak user ID (previous_id to merge from)
+        git_login: The git provider username (distinct_id to merge into, GitHub/GitLab/Bitbucket)
 
     Reference:
         https://github.com/PostHog/posthog-python/blob/master/posthog/client.py
+        https://posthog.com/docs/product-analytics/identify#alias-assigning-multiple-distinct-ids-to-the-same-user
     """
     _init_posthog()
 
@@ -249,14 +250,15 @@ def alias_user_identities(
         return
 
     try:
-        # Merge git provider login into Keycloak user ID
+        # Merge Keycloak user ID into git provider login
         # posthog.alias(previous_id, distinct_id) - official Python SDK signature
-        posthog.alias(git_login, keycloak_user_id)
+        # previous_id (keycloak) has NO restrictions, distinct_id (git_login) was identified
+        posthog.alias(keycloak_user_id, git_login)
         logger.debug(
             'posthog_alias',
             extra={
-                'previous_id': git_login,
-                'distinct_id': keycloak_user_id,
+                'previous_id': keycloak_user_id,
+                'distinct_id': git_login,
             },
         )
     except Exception as e:

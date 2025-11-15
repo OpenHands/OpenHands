@@ -312,7 +312,8 @@ def test_alias_user_identities(mock_posthog):
     """Test aliasing user identities.
 
     Verifies that posthog.alias(previous_id, distinct_id) is called correctly
-    where git_login is the previous_id and keycloak_user_id is the distinct_id.
+    where keycloak_user_id is the previous_id (no restrictions) and
+    git_login is the distinct_id (already identified).
     """
     import openhands.utils.posthog_tracker as tracker
 
@@ -324,8 +325,8 @@ def test_alias_user_identities(mock_posthog):
         git_login='git-user',
     )
 
-    # Verify: posthog.alias(previous_id='git-user', distinct_id='keycloak-123')
-    mock_posthog.alias.assert_called_once_with('git-user', 'keycloak-123')
+    # Verify: posthog.alias(previous_id='keycloak-123', distinct_id='git-user')
+    mock_posthog.alias.assert_called_once_with('keycloak-123', 'git-user')
 
 
 def test_alias_user_identities_handles_errors(mock_posthog):
