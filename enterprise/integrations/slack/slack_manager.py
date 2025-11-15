@@ -27,7 +27,7 @@ from storage.slack_user import SlackUser
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import Repository
+from openhands.integrations.service_types import AuthenticationError, Repository
 from openhands.server.shared import config, server_config
 from openhands.server.types import LLMAuthenticationError, MissingSettingsError
 from openhands.server.user_auth.user_auth import UserAuth
@@ -351,6 +351,13 @@ class SlackManager(Manager):
                 )
 
                 msg_info = f'@{user_info.slack_display_name} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
+
+            except AuthenticationError as e:
+                logger.warning(
+                    f'[Slack] Authentication error for user {user_info.slack_display_name}: {str(e)}'
+                )
+
+                msg_info = f'@{user_info.slack_display_name} Authentication failure: The OpenHands app is not authenticated to do work on this repo. Please travel to [{HOST_URL}]({HOST_URL}) and add the repo. If you still encounter issues, contact support.'
 
             except StartingConvoException as e:
                 msg_info = str(e)

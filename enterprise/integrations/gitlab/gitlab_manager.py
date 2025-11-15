@@ -24,6 +24,7 @@ from server.utils.conversation_callback_utils import register_callback_processor
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.integrations.provider import ProviderToken, ProviderType
+from openhands.integrations.service_types import AuthenticationError
 from openhands.server.types import LLMAuthenticationError, MissingSettingsError
 from openhands.storage.data_models.secrets import Secrets
 
@@ -248,6 +249,13 @@ class GitlabManager(Manager):
                 )
 
                 msg_info = f'@{user_info.username} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
+
+            except AuthenticationError as e:
+                logger.warning(
+                    f'[GitLab] Authentication error for user {user_info.username}: {str(e)}'
+                )
+
+                msg_info = f'@{user_info.username} Authentication failure: The OpenHands app is not authenticated to do work on this repo. Please travel to [{HOST_URL}]({HOST_URL}) and add the repo. If you still encounter issues, contact support.'
 
             # Send the acknowledgment message
             msg = self.create_outgoing_message(msg_info)
