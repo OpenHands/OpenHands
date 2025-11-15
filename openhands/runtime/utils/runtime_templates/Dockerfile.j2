@@ -275,6 +275,9 @@ RUN \
 RUN mkdir -p /openhands/micromamba/bin && \
     /bin/bash -c "PREFIX_LOCATION=/openhands/micromamba BIN_FOLDER=/openhands/micromamba/bin INIT_YES=no CONDA_FORGE_YES=yes $(curl -L https://micro.mamba.pm/install.sh)" && \
     /openhands/micromamba/bin/micromamba config remove channels defaults && \
+    {%- if channel_alias %}
+    /openhands/micromamba/bin/micromamba config set channel_alias '{{ channel_alias }}' && \
+    {%- endif %}
     /openhands/micromamba/bin/micromamba config list && \
     chown -R openhands:openhands /openhands/micromamba && \
     # Create read-only shared access to micromamba for all users
