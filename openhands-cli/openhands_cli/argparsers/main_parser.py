@@ -30,6 +30,20 @@ Examples:
         type=str,
         help='Conversation ID to resume'
     )
+    # Control loading of user skills from ~/.openhands
+    parser.add_argument(
+        '--user-skills',
+        dest='user_skills',
+        action='store_true',
+        help='Enable loading user skills from ~/.openhands (default)'
+    )
+    parser.add_argument(
+        '--no-user-skills',
+        dest='user_skills',
+        action='store_false',
+        help='Disable loading user skills from ~/.openhands'
+    )
+    parser.set_defaults(user_skills=True)
     
     # Only serve as subcommand
     subparsers = parser.add_subparsers(

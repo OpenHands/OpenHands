@@ -42,6 +42,7 @@ def main() -> None:
             from openhands_cli.agent_chat import run_cli_entry
 
             # Start agent chat
+            # Keep call signature backward-compatible for upstream tests
             run_cli_entry(resume_conversation_id=args.resume)
     except KeyboardInterrupt:
         print_formatted_text(HTML('\n<yellow>Goodbye! 👋</yellow>'))

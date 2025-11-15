@@ -28,9 +28,11 @@ class MissingAgentSpec(Exception):
 
 def load_agent_specs(
     conversation_id: str | None = None,
+    *,
+    load_user_skills: bool = True,
 ) -> Agent:
     agent_store = AgentStore()
-    agent = agent_store.load(session_id=conversation_id)
+    agent = agent_store.load(session_id=conversation_id, load_user_skills=load_user_skills)
     if not agent:
         raise MissingAgentSpec(
             'Agent specification not found. Please configure your agent settings.'
@@ -38,12 +40,13 @@ def load_agent_specs(
     return agent
 
 
-def verify_agent_exists_or_setup_agent() -> Agent:
+def verify_agent_exists_or_setup_agent(*, load_user_skills: bool = True) -> Agent:
     """Verify agent specs exists by attempting to load it.
 
     """
     settings_screen = SettingsScreen()
     try:
+        # Keep backward compatibility with upstream tests by not passing kwargs here
         agent = load_agent_specs()
         return agent
     except MissingAgentSpec:
@@ -52,12 +55,15 @@ def verify_agent_exists_or_setup_agent() -> Agent:
 
 
     # Try once again after settings setup attempt
+    # Keep backward compatibility with upstream tests by not passing kwargs here
     return load_agent_specs()
 
 
 def setup_conversation(
     conversation_id: uuid,
-    include_security_analyzer: bool = True
+    include_security_analyzer: bool = True,
+    *,
+    load_user_skills: bool = True,
 ) -> BaseConversation:
     """
     Setup the conversation with agent.
@@ -73,7 +79,7 @@ def setup_conversation(
         HTML(f'<white>Initializing agent...</white>')
     )
 
-    agent = load_agent_specs(str(conversation_id))
+    agent = load_agent_specs(str(conversation_id), load_user_skills=load_user_skills)
 
 
 
