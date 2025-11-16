@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import subprocess
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -1840,3 +1841,96 @@ def test_system_message_in_event_stream(mock_agent_with_stats, test_event_stream
     assert isinstance(events[0], SystemMessageAction)
     assert events[0].content == 'Test system message'
     assert events[0].tools == ['test_tool']
+
+
+def test_git_branch_added_to_event_stream(mock_agent_with_stats, test_event_stream):
+    """Test that git branch is added to event stream when git repo is available."""
+    mock_agent, conversation_stats, llm_registry = mock_agent_with_stats
+
+    # Mock subprocess.run to simulate git command
+    def subprocess_side_effect(cmd, *args, **kwargs):
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = 'main\n'
+        return result
+
+    with patch('subprocess.run', side_effect=subprocess_side_effect):
+        _ = AgentController(
+            agent=mock_agent,
+            event_stream=test_event_stream,
+            conversation_stats=conversation_stats,
+            iteration_delta=10,
+            sid='test',
+            confirmation_mode=False,
+            headless_mode=True,
+        )
+
+    # Get events from the event stream
+    events = list(test_event_stream.get_events())
+
+    # Should have 2 events: SystemMessageAction and MessageAction with git branch
+    assert len(events) == 2
+
+    # First event should be SystemMessageAction
+    assert isinstance(events[0], SystemMessageAction)
+
+    # Second event should be MessageAction with git branch
+    assert isinstance(events[1], MessageAction)
+    assert 'Working in git branch: main' in events[1].content
+    assert events[1].source == EventSource.AGENT
+
+
+def test_git_branch_not_added_when_not_git_repo(
+    mock_agent_with_stats, test_event_stream
+):
+    """Test that git branch is not added when not in a git repository."""
+    mock_agent, conversation_stats, llm_registry = mock_agent_with_stats
+
+    # Mock subprocess.run to simulate git command failing (not a git repo)
+    def subprocess_side_effect(cmd, *args, **kwargs):
+        result = MagicMock()
+        result.returncode = 128  # Git error code for not a repository
+        result.stdout = ''
+        return result
+
+    with patch('subprocess.run', side_effect=subprocess_side_effect):
+        _ = AgentController(
+            agent=mock_agent,
+            event_stream=test_event_stream,
+            conversation_stats=conversation_stats,
+            iteration_delta=10,
+            sid='test',
+            confirmation_mode=False,
+            headless_mode=True,
+        )
+
+    # Get events from the event stream
+    events = list(test_event_stream.get_events())
+
+    # Should only have SystemMessageAction, no git branch info
+    assert len(events) == 1
+    assert isinstance(events[0], SystemMessageAction)
+
+
+def test_git_branch_handles_exceptions(mock_agent_with_stats, test_event_stream):
+    """Test that git branch check handles exceptions gracefully."""
+    mock_agent, conversation_stats, llm_registry = mock_agent_with_stats
+
+    # Mock subprocess.run to raise an exception
+    with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('git', 5)):
+        _ = AgentController(
+            agent=mock_agent,
+            event_stream=test_event_stream,
+            conversation_stats=conversation_stats,
+            iteration_delta=10,
+            sid='test',
+            confirmation_mode=False,
+            headless_mode=True,
+        )
+
+    # Get events from the event stream
+    events = list(test_event_stream.get_events())
+
+    # Should only have SystemMessageAction, no git branch due to exception
+    assert len(events) == 1
+    assert isinstance(events[0], SystemMessageAction)
