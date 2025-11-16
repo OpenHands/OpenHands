@@ -21,7 +21,7 @@ from server.utils.conversation_callback_utils import (
     process_event,
     update_conversation_metadata,
 )
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.minimal_conversation_metadata import StoredConversationMetadata
 
 from openhands.events.observation.agent import AgentStateChangedObservation
 

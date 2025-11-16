@@ -21,7 +21,7 @@ from server.utils.conversation_callback_utils import (
     update_conversation_stats,
 )
 from storage.database import session_maker
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.minimal_conversation_metadata import StoredConversationMetadata
 
 from openhands.server.shared import conversation_manager
 

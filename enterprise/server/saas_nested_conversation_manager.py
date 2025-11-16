@@ -20,7 +20,7 @@ from server.utils.conversation_callback_utils import (
 from sqlalchemy import orm
 from storage.api_key_store import ApiKeyStore
 from storage.database import session_maker
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.minimal_conversation_metadata import StoredConversationMetadata
 
 from openhands.controller.agent import Agent
 from openhands.core.config import LLMConfig, OpenHandsConfig

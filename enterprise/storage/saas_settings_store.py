@@ -271,7 +271,7 @@ class SaasSettingsStore(SettingsStore):
 
                 # Create the new litellm user
                 response = await self._create_user_in_lite_llm(
-                    client, email, max_budget, spend
+                    client, email, int(max_budget), int(spend)
                 )
                 if not response.is_success:
                     logger.warning(
@@ -280,7 +280,7 @@ class SaasSettingsStore(SettingsStore):
                     )
                     # Litellm insists on unique email addresses - it is possible the email address was registered with a different user.
                     response = await self._create_user_in_lite_llm(
-                        client, None, max_budget, spend
+                        client, None, int(max_budget), int(spend)
                     )
 
                 # User failed to create in litellm - this is an unforseen error state...

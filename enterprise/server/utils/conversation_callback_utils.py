@@ -11,7 +11,7 @@ from storage.conversation_callback import (
 )
 from storage.conversation_work import ConversationWork
 from storage.database import session_maker
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.minimal_conversation_metadata import StoredConversationMetadata
 
 from openhands.core.config import load_openhands_config
 from openhands.core.schema.agent import AgentState

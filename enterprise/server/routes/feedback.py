@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.future import select
 from storage.database import session_maker
 from storage.feedback import ConversationFeedback
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.minimal_conversation_metadata import StoredConversationMetadata
 
 from openhands.events.event_store import EventStore
 from openhands.server.shared import file_store

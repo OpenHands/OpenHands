@@ -7,7 +7,7 @@ from datetime import UTC
 
 from sqlalchemy.orm import sessionmaker
 from storage.database import session_maker
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.minimal_conversation_metadata import StoredConversationMetadata
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.integrations.provider import ProviderType

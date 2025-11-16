@@ -10,7 +10,7 @@ from storage.conversation_callback import (
     ConversationCallback,
     ConversationCallbackProcessor,
 )
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.minimal_conversation_metadata import StoredConversationMetadata
 
 from openhands.events.observation.agent import AgentStateChangedObservation
 
