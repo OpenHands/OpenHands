@@ -188,11 +188,11 @@ class LLM(RetryMixin, DebugMixin):
         if 'claude-opus-4-1' in self.config.model.lower():
             kwargs['thinking'] = {'type': 'disabled'}
 
-        # Anthropic constraint: Opus models cannot accept both temperature and top_p
+        # Anthropic constraint: Opus 4.1 and Sonnet 4 models cannot accept both temperature and top_p
         # Prefer temperature (drop top_p) if both are specified.
         _model_lower = self.config.model.lower()
-        # Limit to Opus 4.1 specifically to avoid changing behavior of other Anthropic models
-        if ('claude-opus-4-1' in _model_lower) and (
+        # Apply to Opus 4.1 and Sonnet 4 models to avoid API errors
+        if (('claude-opus-4-1' in _model_lower) or ('claude-sonnet-4' in _model_lower)) and (
             'temperature' in kwargs and 'top_p' in kwargs
         ):
             kwargs.pop('top_p', None)
