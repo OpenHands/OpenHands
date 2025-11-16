@@ -17,7 +17,11 @@ from fastapi.responses import JSONResponse
 import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
 from openhands.app_server import v1_router
 from openhands.app_server.config import get_app_lifespan_service
-from openhands.integrations.service_types import AuthenticationError
+from openhands.integrations.service_types import (
+    AuthenticationError,
+    ForbiddenError,
+    RateLimitError,
+)
 from openhands.server.routes.conversation import app as conversation_api_router
 from openhands.server.routes.feedback import app as feedback_api_router
 from openhands.server.routes.files import app as files_api_router
@@ -76,6 +80,22 @@ app = FastAPI(
 async def authentication_error_handler(request: Request, exc: AuthenticationError):
     return JSONResponse(
         status_code=401,
+        content=str(exc),
+    )
+
+
+@app.exception_handler(RateLimitError)
+async def rate_limit_error_handler(request: Request, exc: RateLimitError):
+    return JSONResponse(
+        status_code=429,
+        content=str(exc),
+    )
+
+
+@app.exception_handler(ForbiddenError)
+async def forbidden_error_handler(request: Request, exc: ForbiddenError):
+    return JSONResponse(
+        status_code=403,
         content=str(exc),
     )
 
