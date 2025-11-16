@@ -15,6 +15,7 @@ from openhands_cli.user_actions.settings_action import (
     prompt_api_key,
     settings_type_confirmation,
 )
+from openhands_cli.tui.settings.settings_screen import _sanitize_model_identifier
 from prompt_toolkit.completion import FuzzyWordCompleter
 from prompt_toolkit.validation import ValidationError
 from pydantic import SecretStr
@@ -100,6 +101,21 @@ def test_model_selection_flows(
     step_counter2 = StepCounter(1)
     result2 = choose_llm_model(step_counter2, 'openai')
     assert result2 == 'custom-model'
+
+
+def test_sanitize_model_identifier_handles_ui_artifacts() -> None:
+    assert (
+        _sanitize_model_identifier('gemini/2.5 gemini-2.0-flash-lite')
+        == 'gemini/gemini-2.0-flash-lite'
+    )
+    assert (
+        _sanitize_model_identifier('(Step 2/3) gemini-2.0-flash-lite')
+        == 'gemini-2.0-flash-lite'
+    )
+    assert (
+        _sanitize_model_identifier('openrouter/gemini/gemini-2.5-pro')
+        == 'openrouter/gemini/gemini-2.5-pro'
+    )
 
 
 # -------------------------------

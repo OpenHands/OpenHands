@@ -2,12 +2,16 @@
 
 from unittest.mock import MagicMock, patch
 from uuid import UUID
+
 import pytest
 from prompt_toolkit.input.defaults import create_pipe_input
 from prompt_toolkit.output.defaults import DummyOutput
 
 from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands_cli.user_actions import UserConfirmation
+
+
+pytestmark = pytest.mark.usefixtures('skip_terminal_check_env')
 
 
 # ---------- Fixtures & helpers ----------

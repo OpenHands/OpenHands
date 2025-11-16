@@ -4,6 +4,7 @@ Agent chat functionality for OpenHands CLI.
 Provides a conversation interface with an AI agent using OpenHands patterns.
 """
 
+import os
 import sys
 from datetime import datetime
 import uuid
@@ -31,6 +32,58 @@ from openhands_cli.tui.tui import (
 )
 from openhands_cli.user_actions import UserConfirmation, exit_session_confirmation
 from openhands_cli.user_actions.utils import get_session_prompter
+
+
+def _should_skip_terminal_check() -> tuple[bool, str | None]:
+    """Determine if the terminal compatibility check should be bypassed."""
+
+    skip_env = os.environ.get('OPENHANDS_CLI_SKIP_TTY_CHECK')
+    if skip_env and skip_env.lower() not in ('0', 'false', 'no'):
+        return True, 'OPENHANDS_CLI_SKIP_TTY_CHECK'
+
+    if os.environ.get('CI', '').lower() in ('1', 'true', 'yes'):
+        return True, 'CI'
+
+    return False, None
+
+
+def check_terminal_compatibility() -> bool:
+    """Check if the terminal supports interactive prompts.
+    
+    Returns:
+        bool: True if terminal is compatible, False otherwise.
+    """
+    skip_check, reason = _should_skip_terminal_check()
+    if skip_check:
+        message = (
+            '<grey>Skipping terminal compatibility check '
+            f'(detected {reason} environment variable).</grey>'
+        )
+        try:
+            print_formatted_text(HTML(message))
+        except Exception:
+            print(message)
+        return True
+    
+    # Check if stdin/stdout are TTY
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return False
+    
+    # Check TERM environment variable
+    term = os.environ.get('TERM', '')
+    if term in ('dumb', '', 'unknown'):
+        return False
+    
+    # Try to create prompt_toolkit I/O
+    try:
+        from prompt_toolkit.input import create_input
+        from prompt_toolkit.output import create_output
+        
+        input_obj = create_input()
+        output_obj = create_output()
+        return True
+    except Exception:
+        return False
 
 
 def _restore_tty() -> None:
@@ -69,6 +122,26 @@ def run_cli_entry(resume_conversation_id: str | None = None) -> None:
         KeyboardInterrupt: If user interrupts the session
         EOFError: If EOF is encountered
     """
+
+    # Check terminal compatibility early to provide helpful error messages
+    if not check_terminal_compatibility():
+        print_formatted_text(HTML('<red>❌ Interactive terminal not detected</red>'))
+        print_formatted_text('')
+        print_formatted_text(HTML('<yellow>OpenHands CLI requires an interactive terminal.</yellow>'))
+        print_formatted_text('')
+        print_formatted_text(HTML('<grey>Requirements:</grey>'))
+        print_formatted_text('  • Run in an interactive shell (not piped)')
+        print_formatted_text('  • Ensure TERM is set (e.g., TERM=xterm-256color)')
+        print_formatted_text('  • Use TTY allocation with Docker: docker run -it ...')
+        print_formatted_text('  • Use PTY allocation with SSH: ssh -t user@host ...')
+        print_formatted_text('')
+        print_formatted_text(HTML('<grey>Current environment:</grey>'))
+        print_formatted_text(f'  • TERM: {os.environ.get("TERM", "not set")}')
+        print_formatted_text(f'  • stdin is TTY: {sys.stdin.isatty()}')
+        print_formatted_text(f'  • stdout is TTY: {sys.stdout.isatty()}')
+        print_formatted_text('')
+        print_formatted_text(HTML('<grey>For more help, visit: https://docs.all-hands.dev/usage/troubleshooting</grey>'))
+        sys.exit(1)
 
     conversation_id = uuid.uuid4()
     if resume_conversation_id:

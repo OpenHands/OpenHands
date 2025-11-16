@@ -54,3 +54,11 @@ def mock_cli_interactions():
         yield mocks
     finally:
         mocks.stop()
+
+
+# Fixture: skip CLI terminal compatibility guard for non-interactive tests
+@pytest.fixture
+def skip_terminal_check_env(monkeypatch):
+    monkeypatch.setenv('OPENHANDS_CLI_SKIP_TTY_CHECK', '1')
+    yield
+    monkeypatch.delenv('OPENHANDS_CLI_SKIP_TTY_CHECK', raising=False)

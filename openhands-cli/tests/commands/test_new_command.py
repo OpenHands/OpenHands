@@ -3,17 +3,17 @@
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
+import pytest
 from prompt_toolkit.input.defaults import create_pipe_input
 from prompt_toolkit.output.defaults import DummyOutput
 
-from openhands_cli.setup import (
-    MissingAgentSpec,
-    verify_agent_exists_or_setup_agent,
-)
+from openhands_cli.setup import MissingAgentSpec, verify_agent_exists_or_setup_agent
 from openhands_cli.user_actions import UserConfirmation
 
 
-@patch("openhands_cli.setup.load_agent_specs")
+pytestmark = pytest.mark.usefixtures('skip_terminal_check_env')
+
+@patch('openhands_cli.setup.load_agent_specs')
 def test_verify_agent_exists_or_setup_agent_success(mock_load_agent_specs):
     """Test that verify_agent_exists_or_setup_agent returns agent successfully."""
     # Mock the agent object

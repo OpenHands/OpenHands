@@ -1,6 +1,11 @@
 from unittest.mock import patch
-from openhands_cli.agent_chat import run_cli_entry
+
 import pytest
+
+from openhands_cli.agent_chat import run_cli_entry
+
+
+pytestmark = pytest.mark.usefixtures('skip_terminal_check_env')
 
 
 @patch("openhands_cli.agent_chat.print_formatted_text")

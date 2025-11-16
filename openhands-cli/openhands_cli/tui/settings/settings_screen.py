@@ -23,6 +23,54 @@ from openhands_cli.user_actions.settings_action import (
 )
 
 
+def _strip_step_prefix(value: str) -> str:
+    """Remove leading step annotations such as '(Step 2/3)'."""
+    cleaned = value.strip()
+    if cleaned.lower().startswith('(step'):
+        parts = cleaned.split(')', 1)
+        if len(parts) == 2:
+            cleaned = parts[1].strip()
+    return cleaned
+
+
+def _select_identifier_token(value: str) -> str:
+    """
+    Choose the most likely identifier token when extra text is present.
+
+    Prioritises tokens containing characters commonly found in model IDs.
+    """
+    tokens = value.split()
+    if len(tokens) <= 1:
+        return value
+
+    for token in reversed(tokens):
+        if any(symbol in token for symbol in ('-', '_', '.', '/', ':')):
+            return token
+    return tokens[-1]
+
+
+def _sanitize_model_identifier(raw_value: str) -> str:
+    """
+    Normalise provider/model strings captured from the interactive prompts.
+
+    This strips step counter prefixes and trims descriptive text that might be
+    present when copy/pasting from the UI (e.g. '2.5 gemini-2.0-flash-lite').
+    """
+    if not raw_value:
+        return raw_value
+
+    cleaned = _strip_step_prefix(raw_value)
+    cleaned = ' '.join(cleaned.split())
+
+    if '/' in cleaned:
+        provider, remainder = cleaned.split('/', 1)
+        provider = _select_identifier_token(_strip_step_prefix(provider))
+        remainder = _select_identifier_token(_strip_step_prefix(remainder))
+        return f'{provider}/{remainder}'
+
+    return _select_identifier_token(cleaned)
+
+
 class SettingsScreen:
     def __init__(self, conversation: BaseConversation | None = None):
         self.file_store = LocalFileStore(PERSISTENCE_DIR)
@@ -175,12 +223,18 @@ class SettingsScreen:
         )
 
     def _save_llm_settings(self, model, api_key, base_url: str | None = None) -> None:
+        normalized_model = _sanitize_model_identifier(model)
+
         llm = LLM(
-            model=model,
+            model=normalized_model,
             api_key=api_key,
             base_url=base_url,
             usage_id='agent',
-            litellm_extra_body={"metadata": get_llm_metadata(model_name=model, llm_type='agent')},
+            litellm_extra_body={
+                "metadata": get_llm_metadata(
+                    model_name=normalized_model, llm_type='agent'
+                )
+            },
         )
 
         agent = self.agent_store.load()

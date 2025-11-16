@@ -1,11 +1,16 @@
 """Test for the /settings command functionality."""
 
 from unittest.mock import MagicMock, patch
+
+import pytest
 from prompt_toolkit.input.defaults import create_pipe_input
 from prompt_toolkit.output.defaults import DummyOutput
 
 from openhands_cli.agent_chat import run_cli_entry
 from openhands_cli.user_actions import UserConfirmation
+
+
+pytestmark = pytest.mark.usefixtures('skip_terminal_check_env')
 
 
 @patch('openhands_cli.agent_chat.exit_session_confirmation')

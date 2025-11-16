@@ -172,22 +172,32 @@ def get_session_prompter(
     def _keyboard_interrupt(event: KeyPressEvent):
         event.app.exit(exception=KeyboardInterrupt())
 
-    session = PromptSession(
-        completer=CommandCompleter(),
-        key_bindings=bindings,
-        prompt_continuation=lambda width, line_number, is_soft_wrap: '...',
-        multiline=True,
-        input=input,
-        output=output,
-        style=DEFAULT_STYLE,
-        placeholder=HTML(
-            '<placeholder>'
-            'Type your message… (tip: press <b>\\</b> + <b>Enter</b> to insert a newline)'
-            '</placeholder>'
-        ),
-    )
-
-    return session
+    try:
+        session = PromptSession(
+            completer=CommandCompleter(),
+            key_bindings=bindings,
+            prompt_continuation=lambda width, line_number, is_soft_wrap: '...',
+            multiline=True,
+            input=input,
+            output=output,
+            style=DEFAULT_STYLE,
+            placeholder=HTML(
+                '<placeholder>'
+                'Type your message… (tip: press <b>\\</b> + <b>Enter</b> to insert a newline)'
+                '</placeholder>'
+            ),
+        )
+        return session
+    except Exception as e:
+        from prompt_toolkit import print_formatted_text
+        from prompt_toolkit.formatted_text import HTML
+        
+        print_formatted_text(HTML('<red>❌ Failed to create terminal session</red>'))
+        print_formatted_text(HTML(f'<grey>Error: {e}</grey>'))
+        print_formatted_text('')
+        print_formatted_text(HTML('<yellow>This usually means your terminal is not compatible.</yellow>'))
+        print_formatted_text('Try running in a standard terminal (xterm, gnome-terminal, etc.)')
+        raise
 
 
 class NonEmptyValueValidator(Validator):
