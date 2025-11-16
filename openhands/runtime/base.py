@@ -452,6 +452,121 @@ class Runtime(FileEditRuntimeMixin):
         quoted_repo_path = shlex.quote(str(repo_path))
         quoted_remote_repo_url = shlex.quote(remote_repo_url)
 
+        needs_clone = not repo_path.exists()
+        cleanup_before_clone = False
+
+        if repo_path.exists():
+            self.log(
+                'info',
+                f'Repository {selected_repository} already exists, attempting to refresh remote.',
+            )
+
+            # Ensure the existing path is a Git repository before trying to update the remote
+            is_git_action = CmdRunAction(
+                command=(
+                    f'cd {quoted_repo_path} && git rev-parse --is-inside-work-tree'
+                )
+            )
+            is_git_obs = await call_sync_from_async(self.run_action, is_git_action)
+            is_git_repo = (
+                isinstance(is_git_obs, CmdOutputObservation)
+                and is_git_obs.exit_code == 0
+                and is_git_obs.content.strip().lower() == 'true'
+            )
+
+            if not is_git_repo:
+                self.log(
+                    'warning',
+                    (
+                        f'Existing path {repo_path} is not a Git repository. '
+                        'Re-cloning repository.'
+                    ),
+                )
+                needs_clone = True
+                cleanup_before_clone = True
+            else:
+                set_remote_action = CmdRunAction(
+                    command=(
+                        f'cd {quoted_repo_path} && '
+                        f'git remote set-url origin {quoted_remote_repo_url}'
+                    )
+                )
+                set_remote_obs = await call_sync_from_async(
+                    self.run_action, set_remote_action
+                )
+                if (
+                    isinstance(set_remote_obs, CmdOutputObservation)
+                    and set_remote_obs.exit_code == 0
+                ):
+                    self.log(
+                        'info',
+                        f'Refreshed git remote origin for {selected_repository}',
+                    )
+                    return dir_name
+
+                remote_output = (
+                    set_remote_obs.content
+                    if isinstance(set_remote_obs, CmdOutputObservation)
+                    else ''
+                )
+                if 'No such remote' in remote_output:
+                    add_remote_action = CmdRunAction(
+                        command=(
+                            f'cd {quoted_repo_path} && '
+                            f'git remote add origin {quoted_remote_repo_url}'
+                        )
+                    )
+                    add_remote_obs = await call_sync_from_async(
+                        self.run_action, add_remote_action
+                    )
+                    if (
+                        isinstance(add_remote_obs, CmdOutputObservation)
+                        and add_remote_obs.exit_code == 0
+                    ):
+                        self.log(
+                            'info',
+                            f'Added git remote origin for {selected_repository}',
+                        )
+                        return dir_name
+                    self.log(
+                        'warning',
+                        (
+                            'Failed to add git remote origin while ensuring fresh token '
+                            f'for {selected_repository}: '
+                            f'{add_remote_obs.content if isinstance(add_remote_obs, CmdOutputObservation) else "unknown error"}'
+                        ),
+                    )
+                else:
+                    self.log(
+                        'warning',
+                        (
+                            'Failed to refresh git remote origin while ensuring fresh token '
+                            f'for {selected_repository}: '
+                            f'{remote_output or "unknown error"}'
+                        ),
+                    )
+
+                needs_clone = True
+                cleanup_before_clone = True
+
+        if cleanup_before_clone:
+            cleanup_action = CmdRunAction(command=f'rm -rf {quoted_repo_path}')
+            cleanup_obs = await call_sync_from_async(self.run_action, cleanup_action)
+            if (
+                isinstance(cleanup_obs, CmdOutputObservation)
+                and cleanup_obs.exit_code != 0
+            ):
+                self.log(
+                    'warning',
+                    (
+                        f'Failed to remove existing repository directory {repo_path}: '
+                        f'{cleanup_obs.content}'
+                    ),
+                )
+
+        if not needs_clone and repo_path.exists():
+            return dir_name
+
         # Clone repository command
         clone_command = f'git clone {quoted_remote_repo_url} {quoted_repo_path}'
 
@@ -472,28 +587,27 @@ class Runtime(FileEditRuntimeMixin):
         self.log('info', f'Cloning repo: {selected_repository}')
         await call_sync_from_async(self.run_action, action)
 
-        if remote_repo_url:
-            set_remote_action = CmdRunAction(
-                command=(
-                    f'cd {quoted_repo_path} && '
-                    f'git remote set-url origin {quoted_remote_repo_url}'
-                )
+        set_remote_action = CmdRunAction(
+            command=(
+                f'cd {quoted_repo_path} && '
+                f'git remote set-url origin {quoted_remote_repo_url}'
             )
-            obs = await call_sync_from_async(self.run_action, set_remote_action)
-            if isinstance(obs, CmdOutputObservation) and obs.exit_code == 0:
-                self.log(
-                    'info',
-                    f'Set git remote origin to authenticated URL for {selected_repository}',
-                )
-            else:
-                self.log(
-                    'warning',
-                    (
-                        'Failed to set git remote origin while ensuring fresh token '
-                        f'for {selected_repository}: '
-                        f'{obs.content if isinstance(obs, CmdOutputObservation) else "unknown error"}'
-                    ),
-                )
+        )
+        obs = await call_sync_from_async(self.run_action, set_remote_action)
+        if isinstance(obs, CmdOutputObservation) and obs.exit_code == 0:
+            self.log(
+                'info',
+                f'Set git remote origin to authenticated URL for {selected_repository}',
+            )
+        else:
+            self.log(
+                'warning',
+                (
+                    'Failed to set git remote origin while ensuring fresh token '
+                    f'for {selected_repository}: '
+                    f'{obs.content if isinstance(obs, CmdOutputObservation) else "unknown error"}'
+                ),
+            )
 
         return dir_name
 

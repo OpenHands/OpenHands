@@ -41,6 +41,9 @@ class MockRuntime(Runtime):
         self._execute_shell_fn_git_handler = MagicMock(
             return_value=MagicMock(exit_code=0, stdout='', stderr='')
         )
+        self.force_non_git_repo = False
+        self.force_set_remote_missing = False
+        self.force_remote_add_failure = False
 
     async def connect(self):
         pass
@@ -77,17 +80,18 @@ class MockRuntime(Runtime):
 
     def run_action(self, action: Action) -> Observation:
         self.run_action_calls.append(action)
-        # Return a mock git remote URL for git remote get-url commands
-        # Use an OLD token to simulate token refresh scenario
-        if (
-            isinstance(action, CmdRunAction)
-            and 'git remote get-url origin' in action.command
-        ):
-            # Extract provider from previous clone command
-            if len(self.run_action_calls) > 0:
-                clone_cmd = (
-                    self.run_action_calls[0].command if self.run_action_calls else ''
-                )
+        if isinstance(action, CmdRunAction):
+            command = action.command
+            # Return a mock git remote URL for git remote get-url commands
+            # Use an OLD token to simulate token refresh scenario
+            if 'git remote get-url origin' in command:
+                # Extract provider from previous clone command
+                if len(self.run_action_calls) > 0:
+                    clone_cmd = (
+                        self.run_action_calls[0].command
+                        if self.run_action_calls
+                        else ''
+                    )
                 if 'github.com' in clone_cmd:
                     mock_url = 'https://old_github_token@github.com/owner/repo.git'
                 elif 'gitlab.com' in clone_cmd:
@@ -99,14 +103,43 @@ class MockRuntime(Runtime):
                 return CmdOutputObservation(
                     content=mock_url, command_id=-1, command='', exit_code=0
                 )
-        # Return success for git remote set-url commands
-        if (
-            isinstance(action, CmdRunAction)
-            and 'git remote set-url origin' in action.command
-        ):
-            return CmdOutputObservation(
-                content='', command_id=-1, command='', exit_code=0
-            )
+            if 'git rev-parse --is-inside-work-tree' in command:
+                if self.force_non_git_repo:
+                    return CmdOutputObservation(
+                        content='fatal: not a git repository',
+                        command_id=-1,
+                        command='',
+                        exit_code=1,
+                    )
+                return CmdOutputObservation(
+                    content='true\n', command_id=-1, command='', exit_code=0
+                )
+            if command.startswith('rm -rf '):
+                return CmdOutputObservation(
+                    content='', command_id=-1, command='', exit_code=0
+                )
+            if 'git remote set-url origin' in command:
+                if self.force_set_remote_missing:
+                    return CmdOutputObservation(
+                        content="fatal: No such remote: 'origin'",
+                        command_id=-1,
+                        command='',
+                        exit_code=1,
+                    )
+                return CmdOutputObservation(
+                    content='', command_id=-1, command='', exit_code=0
+                )
+            if 'git remote add origin' in command:
+                if self.force_remote_add_failure:
+                    return CmdOutputObservation(
+                        content='fatal: remote origin already exists',
+                        command_id=-1,
+                        command='',
+                        exit_code=1,
+                    )
+                return CmdOutputObservation(
+                    content='', command_id=-1, command='', exit_code=0
+                )
         return NullObservation(content='')
 
     def call_tool_mcp(self, action):
@@ -232,6 +265,7 @@ async def test_export_latest_git_provider_tokens_multiple_refs(temp_dir):
         user_id='test_user',
         git_provider_tokens=git_provider_tokens,
     )
+    runtime.config.workspace_mount_path_in_sandbox = temp_dir
 
     # Create a command that references multiple tokens
     cmd = CmdRunAction(command='echo $GITHUB_TOKEN && echo $GITLAB_TOKEN')
@@ -513,3 +547,117 @@ async def test_clone_or_init_repo_with_branch(temp_dir, monkeypatch):
     assert 'git remote set-url origin' in set_url_cmd
     assert 'git checkout -b' not in checkout_cmd  # Should not create a new branch
     assert result == 'repo'
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_repo_existing_repo_refreshes_remote(temp_dir, monkeypatch):
+    """Existing checkout should only refresh remote with latest token."""
+    config = OpenHandsConfig()
+    file_store = get_file_store('local', temp_dir)
+    event_stream = EventStream('abc', file_store)
+
+    gitlab_token = 'gitlab_new_token'
+    git_provider_tokens = MappingProxyType(
+        {ProviderType.GITLAB: ProviderToken(token=SecretStr(gitlab_token))}
+    )
+
+    runtime = MockRuntime(
+        config=config,
+        event_stream=event_stream,
+        sid='test',
+        user_id='test_user',
+        git_provider_tokens=git_provider_tokens,
+    )
+    runtime.config.workspace_mount_path_in_sandbox = temp_dir
+
+    repo = mock_repo_and_patch(monkeypatch, provider=ProviderType.GITLAB)
+    repo_dir = runtime.workspace_root / repo.full_name.split('/')[-1]
+    repo_dir.mkdir(parents=True, exist_ok=True)
+
+    result = await runtime.clone_or_init_repo(git_provider_tokens, repo.full_name, None)
+
+    assert result == repo_dir.name
+    # Ensure git repository validation and remote refresh were executed
+    assert len(runtime.run_action_calls) == 2
+    rev_parse_cmd = runtime.run_action_calls[0].command
+    assert f'cd {repo_dir}' in rev_parse_cmd
+    assert 'git rev-parse --is-inside-work-tree' in rev_parse_cmd
+    set_url_cmd = runtime.run_action_calls[1].command
+    assert f'cd {repo_dir}' in set_url_cmd
+    assert 'git remote set-url origin' in set_url_cmd
+    assert gitlab_token in set_url_cmd
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_repo_existing_repo_adds_remote_when_missing(
+    temp_dir, monkeypatch
+):
+    config = OpenHandsConfig()
+    file_store = get_file_store('local', temp_dir)
+    event_stream = EventStream('abc', file_store)
+
+    gitlab_token = 'gitlab_new_token'
+    git_provider_tokens = MappingProxyType(
+        {ProviderType.GITLAB: ProviderToken(token=SecretStr(gitlab_token))}
+    )
+
+    runtime = MockRuntime(
+        config=config,
+        event_stream=event_stream,
+        sid='test',
+        user_id='test_user',
+        git_provider_tokens=git_provider_tokens,
+    )
+    runtime.force_set_remote_missing = True
+    runtime.config.workspace_mount_path_in_sandbox = temp_dir
+
+    repo = mock_repo_and_patch(monkeypatch, provider=ProviderType.GITLAB)
+    repo_dir = runtime.workspace_root / repo.full_name.split('/')[-1]
+    repo_dir.mkdir(parents=True, exist_ok=True)
+
+    result = await runtime.clone_or_init_repo(git_provider_tokens, repo.full_name, None)
+
+    assert result == repo_dir.name
+    assert len(runtime.run_action_calls) == 3
+    assert 'git rev-parse --is-inside-work-tree' in runtime.run_action_calls[0].command
+    assert 'git remote set-url origin' in runtime.run_action_calls[1].command
+    add_origin_cmd = runtime.run_action_calls[2].command
+    assert 'git remote add origin' in add_origin_cmd
+    assert gitlab_token in add_origin_cmd
+
+
+@pytest.mark.asyncio
+async def test_clone_or_init_repo_existing_path_not_git_reclones(temp_dir, monkeypatch):
+    config = OpenHandsConfig()
+    file_store = get_file_store('local', temp_dir)
+    event_stream = EventStream('abc', file_store)
+
+    gitlab_token = 'gitlab_new_token'
+    git_provider_tokens = MappingProxyType(
+        {ProviderType.GITLAB: ProviderToken(token=SecretStr(gitlab_token))}
+    )
+
+    runtime = MockRuntime(
+        config=config,
+        event_stream=event_stream,
+        sid='test',
+        user_id='test_user',
+        git_provider_tokens=git_provider_tokens,
+    )
+    runtime.force_non_git_repo = True
+    runtime.config.workspace_mount_path_in_sandbox = temp_dir
+
+    repo = mock_repo_and_patch(monkeypatch, provider=ProviderType.GITLAB)
+    repo_dir = runtime.workspace_root / repo.full_name.split('/')[-1]
+    repo_dir.mkdir(parents=True, exist_ok=True)
+
+    result = await runtime.clone_or_init_repo(git_provider_tokens, repo.full_name, None)
+
+    assert result == repo_dir.name
+    # rev-parse, rm -rf, clone, checkout, set-url
+    assert len(runtime.run_action_calls) == 5
+    assert 'git rev-parse --is-inside-work-tree' in runtime.run_action_calls[0].command
+    assert runtime.run_action_calls[1].command.startswith('rm -rf ')
+    assert 'git clone' in runtime.run_action_calls[2].command
+    assert 'git checkout' in runtime.run_action_calls[3].command
+    assert 'git remote set-url origin' in runtime.run_action_calls[4].command
