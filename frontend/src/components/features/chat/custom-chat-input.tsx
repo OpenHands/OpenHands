@@ -5,9 +5,11 @@ import { useFileHandling } from "#/hooks/chat/use-file-handling";
 import { useGripResize } from "#/hooks/chat/use-grip-resize";
 import { useChatInputEvents } from "#/hooks/chat/use-chat-input-events";
 import { useChatSubmission } from "#/hooks/chat/use-chat-submission";
+import { useFileAutocomplete } from "#/hooks/chat/use-file-autocomplete";
 import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
+import { FileAutocomplete } from "./file-autocomplete";
 import { useConversationStore } from "#/state/conversation-store";
 
 export interface CustomChatInputProps {
@@ -105,6 +107,34 @@ export function CustomChatInput({
       onBlur,
     );
 
+  const {
+    isAutocompleteOpen,
+    filteredFiles,
+    selectedIndex,
+    autocompletePosition,
+    showAbove,
+    handleAutocompleteSelect,
+    handleAutocompleteClose,
+    handleInputForAutocomplete,
+    handleKeyDownForAutocomplete,
+  } = useFileAutocomplete(
+    chatInputRef as React.RefObject<HTMLDivElement | null>,
+  );
+
+  // Combined input handler for both existing logic and autocomplete
+  const combinedHandleInput = () => {
+    handleInput();
+    handleInputForAutocomplete();
+  };
+
+  // Combined keydown handler - autocomplete takes priority
+  const combinedHandleKeyDown = (e: React.KeyboardEvent) => {
+    const handled = handleKeyDownForAutocomplete(e);
+    if (!handled) {
+      handleKeyDown(e, isDisabled, handleSubmit);
+    }
+  };
+
   // Cleanup: reset suggestions visibility when component unmounts
   useEffect(
     () => () => {
@@ -119,6 +149,17 @@ export function CustomChatInput({
       <HiddenFileInput
         fileInputRef={fileInputRef}
         onChange={handleFileInputChange}
+      />
+
+      {/* File autocomplete dropdown */}
+      <FileAutocomplete
+        isOpen={isAutocompleteOpen}
+        files={filteredFiles}
+        selectedIndex={selectedIndex}
+        position={autocompletePosition}
+        showAbove={showAbove}
+        onSelect={handleAutocompleteSelect}
+        onClose={handleAutocompleteClose}
       />
 
       {/* Container with grip */}
@@ -144,9 +185,9 @@ export function CustomChatInput({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onInput={handleInput}
+          onInput={combinedHandleInput}
           onPaste={handlePaste}
-          onKeyDown={(e) => handleKeyDown(e, isDisabled, handleSubmit)}
+          onKeyDown={combinedHandleKeyDown}
           onFocus={handleFocus}
           onBlur={handleBlur}
         />

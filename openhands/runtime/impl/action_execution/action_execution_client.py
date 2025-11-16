@@ -140,15 +140,19 @@ class ActionExecutionClient(Runtime):
         self.log('debug', f'Response text: {response.text}')
         assert response.is_closed
 
-    def list_files(self, path: str | None = None) -> list[str]:
+    def list_files(self, path: str | None = None, recursive: bool = False) -> list[str]:
         """List files in the sandbox.
 
         If path is None, list files in the sandbox's initial working directory (e.g., /workspace).
+        If recursive is True, recursively list all files in subdirectories.
         """
+        self.log('debug', f'list_files: path={path}, recursive={recursive}')
         try:
-            data = {}
+            data: dict[str, str | bool] = {}
             if path is not None:
                 data['path'] = path
+            # Always include recursive parameter in the request body
+            data['recursive'] = recursive
 
             response = self._send_action_server_request(
                 'POST',
@@ -159,8 +163,10 @@ class ActionExecutionClient(Runtime):
             assert response.is_closed
             response_json = response.json()
             assert isinstance(response_json, list)
+            self.log('debug', f'list_files: received {len(response_json)} items')
             return response_json
         except httpx.TimeoutException:
+            self.log('error', 'list_files: request timed out')
             raise TimeoutError('List files operation timed out')
 
     def copy_from(self, path: str) -> Path:

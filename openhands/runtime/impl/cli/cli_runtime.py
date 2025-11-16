@@ -828,8 +828,13 @@ class CLIRuntime(Runtime):
             logger.error(f'Unexpected error copying file: {str(e)}')
             raise RuntimeError(f'Unexpected error copying file: {str(e)}')
 
-    def list_files(self, path: str | None = None) -> list[str]:
-        """List files in the sandbox."""
+    def list_files(self, path: str | None = None, recursive: bool = False) -> list[str]:
+        """List files in the sandbox.
+
+        If recursive is True, recursively list all files in subdirectories.
+        """
+        logger.debug(f'list_files: path={path}, recursive={recursive}')
+
         if not self._runtime_initialized:
             raise RuntimeError('Runtime not initialized')
 
@@ -845,10 +850,35 @@ class CLIRuntime(Runtime):
             if not os.path.isdir(dir_path):
                 return [dir_path]
 
-            # List files in the directory
-            return [os.path.join(dir_path, f) for f in os.listdir(dir_path)]
+            if recursive:
+                # Recursively list all files
+                all_files = []
+                for root, dirs, filenames in os.walk(dir_path):
+                    # Calculate relative path from dir_path
+                    rel_root = os.path.relpath(root, dir_path)
+
+                    # Add directories with trailing slash
+                    for dirname in dirs:
+                        if rel_root == '.':
+                            all_files.append(dirname + '/')
+                        else:
+                            all_files.append(os.path.join(rel_root, dirname) + '/')
+
+                    # Add files
+                    for filename in filenames:
+                        if rel_root == '.':
+                            all_files.append(filename)
+                        else:
+                            all_files.append(os.path.join(rel_root, filename))
+
+                logger.debug(f'list_files: recursive walk found {len(all_files)} items')
+                return sorted(all_files, key=lambda s: s.lower())
+            else:
+                # List files in the directory
+                files = [os.path.join(dir_path, f) for f in os.listdir(dir_path)]
+                return files
         except Exception as e:
-            logger.error(f'Error listing files: {str(e)}')
+            logger.error(f'list_files error: {str(e)}')
             return []
 
     def copy_from(self, path: str) -> Path:

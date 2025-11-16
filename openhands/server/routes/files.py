@@ -43,6 +43,7 @@ app = APIRouter(
 async def list_files(
     conversation: ServerConversation = Depends(get_conversation),
     path: str | None = None,
+    recursive: bool = False,
 ) -> list[str] | JSONResponse:
     """List files in the specified path.
 
@@ -52,11 +53,13 @@ async def list_files(
     To list files:
     ```sh
     curl http://localhost:3000/api/conversations/{conversation_id}/list-files
+    curl http://localhost:3000/api/conversations/{conversation_id}/list-files?recursive=true
     ```
 
     Args:
         request (Request): The incoming request object.
         path (str, optional): The path to list files from. Defaults to None.
+        recursive (bool, optional): If True, recursively list all files. Defaults to False.
 
     Returns:
         list: A list of file names in the specified path.
@@ -65,6 +68,7 @@ async def list_files(
         HTTPException: If there's an error listing the files.
     """
     if not conversation.runtime:
+        logger.debug('list_files: Runtime not initialized')
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={'error': 'Runtime not yet initialized'},
@@ -72,7 +76,9 @@ async def list_files(
 
     runtime: Runtime = conversation.runtime
     try:
-        file_list = await call_sync_from_async(runtime.list_files, path)
+        logger.debug(f'list_files: path={path}, recursive={recursive}')
+        file_list = await call_sync_from_async(runtime.list_files, path, recursive)
+        logger.debug(f'list_files: returned {len(file_list)} items')
     except AgentRuntimeUnavailableError as e:
         logger.error(f'Error listing files: {e}')
         return JSONResponse(

@@ -1115,10 +1115,11 @@ fi
         raise NotImplementedError('This method is not implemented in the base class.')
 
     @abstractmethod
-    def list_files(self, path: str | None = None) -> list[str]:
+    def list_files(self, path: str | None = None, recursive: bool = False) -> list[str]:
         """List files in the sandbox.
 
         If path is None, list files in the sandbox's initial working directory (e.g., /workspace).
+        If recursive is True, recursively list all files in subdirectories.
         """
         raise NotImplementedError('This method is not implemented in the base class.')
 

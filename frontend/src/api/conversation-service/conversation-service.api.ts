@@ -350,15 +350,21 @@ class ConversationService {
    * Retrieve the list of files available in the workspace
    * @param conversationId ID of the conversation
    * @param path Path to list files from. If provided, it lists all the files in the given path
+   * @param recursive If true, recursively list all files in subdirectories
    * @returns List of files available in the given path. If path is not provided, it lists all the files in the workspace
    */
   static async getFiles(
     conversationId: string,
     path?: string,
+    recursive?: boolean,
   ): Promise<GetFilesResponse> {
     const url = `${this.getConversationUrl(conversationId)}/list-files`;
+    const params: { path?: string; recursive?: boolean } = {};
+    if (path !== undefined) params.path = path;
+    if (recursive !== undefined) params.recursive = recursive;
+
     const { data } = await openHands.get<GetFilesResponse>(url, {
-      params: { path },
+      params,
       headers: this.getConversationHeaders(),
     });
 
