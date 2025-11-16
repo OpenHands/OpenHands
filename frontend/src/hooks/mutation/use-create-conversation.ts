@@ -17,6 +17,8 @@ interface CreateConversationVariables {
   suggestedTask?: SuggestedTask;
   conversationInstructions?: string;
   createMicroagent?: CreateMicroagent;
+  parentConversationId?: string;
+  agentType?: "default" | "plan";
 }
 
 // Response type that combines both V1 and legacy responses
@@ -44,6 +46,8 @@ export const useCreateConversation = () => {
         suggestedTask,
         conversationInstructions,
         createMicroagent,
+        parentConversationId,
+        agentType,
       } = variables;
 
       const useV1 = USE_V1_CONVERSATION_API() && !createMicroagent;
@@ -57,6 +61,8 @@ export const useCreateConversation = () => {
           repository?.branch,
           conversationInstructions,
           undefined, // trigger - will be set by backend
+          parentConversationId,
+          agentType,
         );
 
         // Return a special task ID that the frontend will recognize

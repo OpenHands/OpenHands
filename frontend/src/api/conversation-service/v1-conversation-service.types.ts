@@ -30,6 +30,8 @@ export interface V1AppConversationStartRequest {
   title?: string | null;
   trigger?: ConversationTrigger | null;
   pr_number?: number[];
+  parent_conversation_id?: string | null;
+  agent_type?: "default" | "plan";
 }
 
 export type V1AppConversationStartTaskStatus =

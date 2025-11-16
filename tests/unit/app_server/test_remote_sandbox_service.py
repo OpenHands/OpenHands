@@ -435,7 +435,7 @@ class TestSandboxLifecycle:
             9
         )  # max_num_sandboxes - 1
         remote_sandbox_service.db_session.add.assert_called_once()
-        remote_sandbox_service.db_session.commit.assert_called_once()
+        remote_sandbox_service.db_session.commit.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_start_sandbox_with_specific_spec(
@@ -627,7 +627,7 @@ class TestSandboxLifecycle:
         # Verify
         assert result is True
         remote_sandbox_service.db_session.delete.assert_called_once_with(stored_sandbox)
-        remote_sandbox_service.db_session.commit.assert_called_once()
+        remote_sandbox_service.db_session.commit.assert_not_called()
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
             'https://api.example.com/stop',

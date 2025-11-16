@@ -26,11 +26,13 @@ from openhands.microagent.types import (
 )
 from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import server_config
+from openhands.server.types import AppMode
 from openhands.server.user_auth import (
     get_access_token,
     get_provider_tokens,
     get_user_id,
 )
+from openhands.utils.posthog_tracker import alias_user_identities
 
 app = APIRouter(prefix='/api/user', dependencies=get_dependencies())
 
@@ -115,6 +117,14 @@ async def get_user(
 
         try:
             user: User = await client.get_user()
+
+            # Alias git provider login with Keycloak user ID in PostHog (SaaS mode only)
+            if user_id and user.login and server_config.app_mode == AppMode.SAAS:
+                alias_user_identities(
+                    keycloak_user_id=user_id,
+                    git_login=user.login,
+                )
+
             return user
 
         except UnknownException as e:

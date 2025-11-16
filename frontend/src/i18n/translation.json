@@ -15102,5 +15102,53 @@
     "tr": "Bir plan üzerinde çalışalım",
     "de": "Lassen Sie uns an einem Plan arbeiten",
     "uk": "Давайте розробимо план"
+  },
+  "COMMON$CODE_AGENT_DESCRIPTION": {
+    "en": "Write, edit, and debug with AI assistance in real time.",
+    "ja": "AIの支援をリアルタイムで受けながら、コードの作成、編集、デバッグを行いましょう。",
+    "zh-CN": "实时在 AI 协助下编写、编辑和调试。",
+    "zh-TW": "即時在 AI 協助下編寫、編輯和除錯。",
+    "ko-KR": "AI의 지원을 받아 실시간으로 작성, 편집 및 디버깅하세요.",
+    "no": "Skriv, rediger og feilsøk med AI-assistanse i sanntid.",
+    "it": "Scrivi, modifica e esegui il debug con assistenza AI in tempo reale.",
+    "pt": "Escreva, edite e depure com assistência de IA em tempo real.",
+    "es": "Escribe, edita y depura con ayuda de IA en tiempo real.",
+    "ar": "اكتب وعدّل وصحّح الأخطاء بمساعدة الذكاء الاصطناعي في الوقت الفعلي.",
+    "fr": "Rédigez, modifiez et déboguez avec l’aide de l’IA en temps réel.",
+    "tr": "AI desteğiyle gerçek zamanlı olarak yazın, düzenleyin ve hata ayıklayın.",
+    "de": "Schreiben, bearbeiten und debuggen Sie mit KI-Unterstützung in Echtzeit.",
+    "uk": "Пишіть, редагуйте та налагоджуйте з підтримкою ШІ у реальному часі."
+  },
+  "COMMON$PLAN_AGENT_DESCRIPTION": {
+    "en": "Outline goals, structure tasks, and map your next steps.",
+    "ja": "目標を明確にし、タスクを構造化し、次のステップを計画しましょう。",
+    "zh-CN": "概述目标、结构化任务，并规划下一步。",
+    "zh-TW": "概述目標、結構化任務，並規劃下一步。",
+    "ko-KR": "목표를 개요하고, 작업을 구조화하며, 다음 단계를 구상하세요.",
+    "no": "Skisser mål, strukturer oppgaver og planlegg dine neste steg.",
+    "it": "Definisci gli obiettivi, struttura le attività e pianifica i prossimi passi.",
+    "pt": "Esboce objetivos, estruture tarefas e trace seus próximos passos.",
+    "es": "Define objetivos, estructura tareas y planifica tus próximos pasos.",
+    "ar": "حدد الأهداف، نظم المهام، وارسم خطواتك التالية.",
+    "fr": "Dressez des objectifs, structurez vos tâches et planifiez vos prochaines étapes.",
+    "tr": "Hedefleri belirtin, görevleri yapılandırın ve sonraki adımlarınızı belirleyin.",
+    "de": "Umreißen Sie Ziele, strukturieren Sie Aufgaben und planen Sie Ihre nächsten Schritte.",
+    "uk": "Окресліть цілі, структуруйте завдання та сплануйте наступні кроки."
+  },
+  "PLANNING_AGENTT$PLANNING_AGENT_INITIALIZED": {
+    "en": "Planning agent initialized",
+    "ja": "プランニングエージェントが初期化されました",
+    "zh-CN": "规划代理已初始化",
+    "zh-TW": "規劃代理已初始化",
+    "ko-KR": "계획 에이전트가 초기화되었습니다",
+    "no": "Planleggingsagent er initialisert",
+    "it": "Agente di pianificazione inizializzato",
+    "pt": "Agente de planejamento inicializado",
+    "es": "Agente de planificación inicializado",
+    "ar": "تم تهيئة وكيل التخطيط",
+    "fr": "Agent de planification initialisé",
+    "tr": "Planlama ajanı başlatıldı",
+    "de": "Planungsagent wurde initialisiert",
+    "uk": "Агент планування ініціалізовано"
   }
 }

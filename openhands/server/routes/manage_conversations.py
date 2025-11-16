@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import itertools
 import json
@@ -5,12 +6,14 @@ import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 import base62
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -24,9 +27,11 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_app_conversation_service,
+    depends_db_session,
     depends_sandbox_service,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
+from openhands.app_server.services.db_session_injector import set_db_session_keep_open
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.logger import openhands_logger as logger
@@ -99,6 +104,7 @@ app = APIRouter(prefix='/api', dependencies=get_dependencies())
 app_conversation_service_dependency = depends_app_conversation_service()
 app_conversation_info_service_dependency = depends_app_conversation_info_service()
 sandbox_service_dependency = depends_sandbox_service()
+db_session_dependency = depends_db_session()
 
 
 def _filter_conversations_by_age(
@@ -304,6 +310,12 @@ async def search_conversations(
     limit: int = 20,
     selected_repository: str | None = None,
     conversation_trigger: ConversationTrigger | None = None,
+    include_sub_conversations: Annotated[
+        bool,
+        Query(
+            title='If True, include sub-conversations in the results. If False (default), exclude all sub-conversations.'
+        ),
+    ] = False,
     conversation_store: ConversationStore = Depends(get_conversation_store),
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
 ) -> ConversationInfoResultSet:
@@ -338,6 +350,7 @@ async def search_conversations(
         limit=limit,
         # Apply age filter at the service level if possible
         created_at__gte=age_filter_date,
+        include_sub_conversations=include_sub_conversations,
     )
 
     # Convert V1 conversations to ConversationInfo format
@@ -467,16 +480,22 @@ async def get_conversation(
 
 @app.delete('/conversations/{conversation_id}')
 async def delete_conversation(
+    request: Request,
     conversation_id: str = Depends(validate_conversation_id),
     user_id: str | None = Depends(get_user_id),
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
+    app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
     sandbox_service: SandboxService = sandbox_service_dependency,
+    db_session: AsyncSession = db_session_dependency,
 ) -> bool:
+    set_db_session_keep_open(request.state, True)
     # Try V1 conversation first
     v1_result = await _try_delete_v1_conversation(
         conversation_id,
         app_conversation_service,
+        app_conversation_info_service,
         sandbox_service,
+        db_session,
     )
     if v1_result is not None:
         return v1_result
@@ -488,23 +507,32 @@ async def delete_conversation(
 async def _try_delete_v1_conversation(
     conversation_id: str,
     app_conversation_service: AppConversationService,
+    app_conversation_info_service: AppConversationInfoService,
     sandbox_service: SandboxService,
+    db_session: AsyncSession,
 ) -> bool | None:
     """Try to delete a V1 conversation. Returns None if not a V1 conversation."""
     result = None
     try:
         conversation_uuid = uuid.UUID(conversation_id)
         # Check if it's a V1 conversation by trying to get it
-        app_conversation = await app_conversation_service.get_app_conversation(
-            conversation_uuid
+        app_conversation_info = (
+            await app_conversation_info_service.get_app_conversation_info(
+                conversation_uuid
+            )
         )
-        if app_conversation:
+        if app_conversation_info:
             # This is a V1 conversation, delete it using the app conversation service
             # Pass the conversation ID for secure deletion
             result = await app_conversation_service.delete_app_conversation(
-                app_conversation.id
+                app_conversation_info.id
             )
-            await sandbox_service.delete_sandbox(app_conversation.sandbox_id)
+            # Delete the sandbox in the background
+            asyncio.create_task(
+                _delete_sandbox_and_close_connection(
+                    sandbox_service, app_conversation_info.sandbox_id, db_session
+                )
+            )
     except (ValueError, TypeError):
         # Not a valid UUID, continue with V0 logic
         pass
@@ -513,6 +541,16 @@ async def _try_delete_v1_conversation(
         pass
 
     return result
+
+
+async def _delete_sandbox_and_close_connection(
+    sandbox_service: SandboxService, sandbox_id: str, db_session: AsyncSession
+):
+    try:
+        await sandbox_service.delete_sandbox(sandbox_id)
+        await db_session.commit()
+    finally:
+        await db_session.aclose()
 
 
 async def _delete_v0_conversation(conversation_id: str, user_id: str | None) -> bool:
@@ -1157,6 +1195,7 @@ async def _fetch_v1_conversations_safe(
         app_conversation_service: App conversation service for V1
         v1_page_id: Page ID for V1 pagination
         limit: Maximum number of results
+        include_sub_conversations: If True, include sub-conversations in results
 
     Returns:
         Tuple of (v1_conversations, v1_next_page_id)
@@ -1432,4 +1471,7 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
         created_at=app_conversation.created_at,
         pr_number=app_conversation.pr_number,
         conversation_version='V1',
+        sub_conversation_ids=[
+            sub_id.hex for sub_id in app_conversation.sub_conversation_ids
+        ],
     )

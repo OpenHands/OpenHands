@@ -318,7 +318,6 @@ class RemoteSandboxService(SandboxService):
                 created_at=utc_now(),
             )
             self.db_session.add(stored_sandbox)
-            await self.db_session.commit()
 
             # Prepare environment variables
             environment = await self._init_environment(sandbox_spec, sandbox_id)
@@ -407,7 +406,6 @@ class RemoteSandboxService(SandboxService):
             if not stored_sandbox:
                 return False
             await self.db_session.delete(stored_sandbox)
-            await self.db_session.commit()
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
                 'POST',

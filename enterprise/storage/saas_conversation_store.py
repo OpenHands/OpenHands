@@ -60,6 +60,7 @@ class SaasConversationStore(ConversationStore):
         kwargs.pop('reasoning_tokens', None)
         kwargs.pop('context_window', None)
         kwargs.pop('per_turn_token', None)
+        kwargs.pop('parent_conversation_id', None)
 
         return ConversationMetadata(**kwargs)
 

@@ -21,6 +21,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    AgentType,
     AppConversation,
     AppConversationInfo,
     AppConversationPage,
@@ -70,6 +71,7 @@ from openhands.sdk.llm import LLM
 from openhands.sdk.security.confirmation_policy import AlwaysConfirm
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.tools.preset.default import get_default_agent
+from openhands.tools.preset.planning import get_planning_agent
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
@@ -103,6 +105,7 @@ class LiveStatusAppConversationService(GitAppConversationService):
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 20,
+        include_sub_conversations: bool = False,
     ) -> AppConversationPage:
         """Search for sandboxed conversations."""
         page = await self.app_conversation_info_service.search_app_conversation_info(
@@ -114,6 +117,7 @@ class LiveStatusAppConversationService(GitAppConversationService):
             sort_order=sort_order,
             page_id=page_id,
             limit=limit,
+            include_sub_conversations=include_sub_conversations,
         )
         conversations: list[AppConversation] = await self._build_app_conversations(
             page.items
@@ -168,6 +172,20 @@ class LiveStatusAppConversationService(GitAppConversationService):
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         # Create and yield the start task
         user_id = await self.user_context.get_user_id()
+
+        # Validate and inherit from parent conversation if provided
+        if request.parent_conversation_id:
+            parent_info = (
+                await self.app_conversation_info_service.get_app_conversation_info(
+                    request.parent_conversation_id
+                )
+            )
+            if parent_info is None:
+                raise ValueError(
+                    f'Parent conversation not found: {request.parent_conversation_id}'
+                )
+            self._inherit_configuration_from_parent(request, parent_info)
+
         task = AppConversationStartTask(
             created_by_user_id=user_id,
             request=request,
@@ -206,6 +224,8 @@ class LiveStatusAppConversationService(GitAppConversationService):
                     request.initial_message,
                     request.git_provider,
                     sandbox_spec.working_dir,
+                    request.agent_type,
+                    request.llm_model,
                 )
             )
 
@@ -224,6 +244,7 @@ class LiveStatusAppConversationService(GitAppConversationService):
                 headers={'X-Session-API-Key': sandbox.session_api_key},
                 timeout=self.sandbox_startup_timeout,
             )
+
             response.raise_for_status()
             info = ConversationInfo.model_validate(response.json())
 
@@ -241,6 +262,7 @@ class LiveStatusAppConversationService(GitAppConversationService):
                 git_provider=request.git_provider,
                 trigger=request.trigger,
                 pr_number=request.pr_number,
+                parent_conversation_id=request.parent_conversation_id,
             )
             await self.app_conversation_info_service.save_app_conversation_info(
                 app_conversation_info
@@ -452,11 +474,43 @@ class LiveStatusAppConversationService(GitAppConversationService):
         )
         return agent_server_url
 
+    def _inherit_configuration_from_parent(
+        self, request: AppConversationStartRequest, parent_info: AppConversationInfo
+    ) -> None:
+        """Inherit configuration from parent conversation if not explicitly provided.
+
+        This ensures sub-conversations automatically inherit:
+        - Sandbox ID (to share the same workspace/environment)
+        - Git parameters (repository, branch, provider)
+        - LLM model
+
+        Args:
+            request: The conversation start request to modify
+            parent_info: The parent conversation info to inherit from
+        """
+        # Inherit sandbox_id from parent to share the same workspace/environment
+        if not request.sandbox_id:
+            request.sandbox_id = parent_info.sandbox_id
+
+        # Inherit git parameters from parent if not provided
+        if not request.selected_repository:
+            request.selected_repository = parent_info.selected_repository
+        if not request.selected_branch:
+            request.selected_branch = parent_info.selected_branch
+        if not request.git_provider:
+            request.git_provider = parent_info.git_provider
+
+        # Inherit LLM model from parent if not provided
+        if not request.llm_model and parent_info.llm_model:
+            request.llm_model = parent_info.llm_model
+
     async def _build_start_conversation_request_for_user(
         self,
         initial_message: SendMessageRequest | None,
         git_provider: ProviderType | None,
         working_dir: str,
+        agent_type: AgentType = AgentType.DEFAULT,
+        llm_model: str | None = None,
     ) -> StartConversationRequest:
         user = await self.user_context.get_user_info()
 
@@ -488,13 +542,19 @@ class LiveStatusAppConversationService(GitAppConversationService):
 
         workspace = LocalWorkspace(working_dir=working_dir)
 
+        # Use provided llm_model if available, otherwise fall back to user's default
+        model = llm_model or user.llm_model
         llm = LLM(
-            model=user.llm_model,
+            model=model,
             base_url=user.llm_base_url,
             api_key=user.llm_api_key,
             usage_id='agent',
         )
-        agent = get_default_agent(llm=llm)
+        # Select agent based on agent_type
+        if agent_type == AgentType.PLAN:
+            agent = get_planning_agent(llm=llm)
+        else:
+            agent = get_default_agent(llm=llm)
 
         conversation_id = uuid4()
         agent = ExperimentManagerImpl.run_agent_variant_tests__v1(

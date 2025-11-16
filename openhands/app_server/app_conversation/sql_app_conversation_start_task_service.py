@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import AsyncGenerator
 from uuid import UUID
 
@@ -75,6 +76,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
     async def search_app_conversation_start_tasks(
         self,
         conversation_id__eq: UUID | None = None,
+        created_at__gte: datetime | None = None,
         sort_order: AppConversationStartTaskSortOrder = AppConversationStartTaskSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -93,6 +95,12 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
             query = query.where(
                 StoredAppConversationStartTask.app_conversation_id
                 == conversation_id__eq
+            )
+
+        # Apply created_at__gte filter
+        if created_at__gte is not None:
+            query = query.where(
+                StoredAppConversationStartTask.created_at >= created_at__gte
             )
 
         # Add sort order
@@ -139,6 +147,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
     async def count_app_conversation_start_tasks(
         self,
         conversation_id__eq: UUID | None = None,
+        created_at__gte: datetime | None = None,
     ) -> int:
         """Count conversation start tasks."""
         query = select(func.count(StoredAppConversationStartTask.id))
@@ -154,6 +163,12 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
             query = query.where(
                 StoredAppConversationStartTask.app_conversation_id
                 == conversation_id__eq
+            )
+
+        # Apply created_at__gte filter
+        if created_at__gte is not None:
+            query = query.where(
+                StoredAppConversationStartTask.created_at >= created_at__gte
             )
 
         result = await self.session.execute(query)

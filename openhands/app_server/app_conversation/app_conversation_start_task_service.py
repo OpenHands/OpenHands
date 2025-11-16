@@ -1,5 +1,6 @@
 import asyncio
 from abc import ABC, abstractmethod
+from datetime import datetime
 from uuid import UUID
 
 from openhands.app_server.app_conversation.app_conversation_models import (
@@ -18,6 +19,7 @@ class AppConversationStartTaskService(ABC):
     async def search_app_conversation_start_tasks(
         self,
         conversation_id__eq: UUID | None = None,
+        created_at__gte: datetime | None = None,
         sort_order: AppConversationStartTaskSortOrder = AppConversationStartTaskSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
@@ -28,6 +30,7 @@ class AppConversationStartTaskService(ABC):
     async def count_app_conversation_start_tasks(
         self,
         conversation_id__eq: UUID | None = None,
+        created_at__gte: datetime | None = None,
     ) -> int:
         """Count conversation start tasks."""
 

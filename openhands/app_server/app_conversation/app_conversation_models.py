@@ -16,6 +16,13 @@ from openhands.sdk.llm import MetricsSnapshot
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 
+class AgentType(Enum):
+    """Agent type for conversation."""
+
+    DEFAULT = 'default'
+    PLAN = 'plan'
+
+
 class AppConversationInfo(BaseModel):
     """Conversation info which does not contain status."""
 
@@ -33,6 +40,9 @@ class AppConversationInfo(BaseModel):
     llm_model: str | None = None
 
     metrics: MetricsSnapshot | None = None
+
+    parent_conversation_id: OpenHandsUUID | None = None
+    sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -98,6 +108,8 @@ class AppConversationStartRequest(BaseModel):
     title: str | None = None
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
+    parent_conversation_id: OpenHandsUUID | None = None
+    agent_type: AgentType = Field(default=AgentType.DEFAULT)
 
 
 class AppConversationStartTaskStatus(Enum):

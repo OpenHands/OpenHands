@@ -5,18 +5,13 @@ import CodeTagIcon from "#/icons/code-tag.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
-import { ContextMenuIconText } from "../context-menu/context-menu-icon-text";
+import { ContextMenuIconTextWithDescription } from "../context-menu/context-menu-icon-text-with-description";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { cn } from "#/utils/utils";
-import { CONTEXT_MENU_ICON_TEXT_CLASSNAME } from "#/utils/constants";
 
 const contextMenuListItemClassName = cn(
   "cursor-pointer p-0 h-auto hover:bg-transparent",
-  CONTEXT_MENU_ICON_TEXT_CLASSNAME,
 );
-
-const contextMenuIconTextClassName =
-  "gap-2 p-2 hover:bg-[#5C5D62] rounded h-[30px]";
 
 interface ChangeAgentContextMenuProps {
   onClose: () => void;
@@ -52,17 +47,17 @@ export function ChangeAgentContextMenu({
       testId="change-agent-context-menu"
       position="top"
       alignment="left"
-      className="min-h-fit min-w-[195px] mb-2"
+      className="min-h-fit mb-2 min-w-[195px] max-w-[195px] gap-0"
     >
       <ContextMenuListItem
         testId="code-option"
         onClick={handleCodeClick}
         className={contextMenuListItemClassName}
       >
-        <ContextMenuIconText
+        <ContextMenuIconTextWithDescription
           icon={CodeTagIcon}
-          text={t(I18nKey.COMMON$CODE)}
-          className={contextMenuIconTextClassName}
+          title={t(I18nKey.COMMON$CODE)}
+          description={t(I18nKey.COMMON$CODE_AGENT_DESCRIPTION)}
         />
       </ContextMenuListItem>
       <ContextMenuListItem
@@ -70,10 +65,10 @@ export function ChangeAgentContextMenu({
         onClick={handlePlanClick}
         className={contextMenuListItemClassName}
       >
-        <ContextMenuIconText
+        <ContextMenuIconTextWithDescription
           icon={LessonPlanIcon}
-          text={t(I18nKey.COMMON$PLAN)}
-          className={contextMenuIconTextClassName}
+          title={t(I18nKey.COMMON$PLAN)}
+          description={t(I18nKey.COMMON$PLAN_AGENT_DESCRIPTION)}
         />
       </ContextMenuListItem>
     </ContextMenu>

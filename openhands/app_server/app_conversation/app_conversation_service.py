@@ -30,6 +30,7 @@ class AppConversationService(ABC):
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
+        include_sub_conversations: bool = False,
     ) -> AppConversationPage:
         """Search for sandboxed conversations."""
 

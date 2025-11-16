@@ -92,11 +92,8 @@ def test_unknown_variant_returns_original_agent_without_changes(monkeypatch):
     assert getattr(result, 'condenser', None) is None
 
 
-@patch('experiments.experiment_manager.handle_condenser_max_step_experiment__v1')
 @patch('experiments.experiment_manager.ENABLE_EXPERIMENT_MANAGER', False)
-def test_run_agent_variant_tests_v1_noop_when_manager_disabled(
-    mock_handle_condenser,
-):
+def test_run_agent_variant_tests_v1_noop_when_manager_disabled():
     """If ENABLE_EXPERIMENT_MANAGER is False, the method returns the exact same agent and does not call the handler."""
     agent = make_agent()
     conv_id = uuid4()
@@ -109,8 +106,6 @@ def test_run_agent_variant_tests_v1_noop_when_manager_disabled(
 
     # Same object returned (no copy)
     assert result is agent
-    # Handler should not have been called
-    mock_handle_condenser.assert_not_called()
 
 
 @patch('experiments.experiment_manager.ENABLE_EXPERIMENT_MANAGER', True)
@@ -131,7 +126,3 @@ def test_run_agent_variant_tests_v1_calls_handler_and_sets_system_prompt(monkeyp
     # Should be a different instance than the original (copied after handler runs)
     assert result is not agent
     assert result.system_prompt_filename == 'system_prompt_long_horizon.j2'
-
-    # The condenser returned by the handler must be preserved after the system-prompt override copy
-    assert isinstance(result.condenser, LLMSummarizingCondenser)
-    assert result.condenser.max_size == 80

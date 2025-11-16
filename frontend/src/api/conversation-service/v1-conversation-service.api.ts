@@ -60,6 +60,8 @@ class V1ConversationService {
     selected_branch?: string,
     conversationInstructions?: string,
     trigger?: ConversationTrigger,
+    parent_conversation_id?: string,
+    agent_type?: "default" | "plan",
   ): Promise<V1AppConversationStartTask> {
     const body: V1AppConversationStartRequest = {
       selected_repository: selectedRepository,
@@ -67,6 +69,8 @@ class V1ConversationService {
       selected_branch,
       title: conversationInstructions,
       trigger,
+      parent_conversation_id: parent_conversation_id || null,
+      agent_type,
     };
 
     // Add initial message if provided
@@ -111,17 +115,21 @@ class V1ConversationService {
    * Search for start tasks (ongoing tasks that haven't completed yet)
    * Use this to find tasks that were started but the user navigated away
    *
-   * Note: Backend only supports filtering by limit. To filter by repository/trigger,
+   * Note: Backend supports filtering by limit and created_at__gte. To filter by repository/trigger,
    * filter the results client-side after fetching.
    *
    * @param limit Maximum number of tasks to return (max 100)
-   * @returns Array of start tasks
+   * @returns Array of start tasks from the last 20 minutes
    */
   static async searchStartTasks(
     limit: number = 100,
   ): Promise<V1AppConversationStartTask[]> {
     const params = new URLSearchParams();
     params.append("limit", limit.toString());
+
+    // Only get tasks from the last 20 minutes
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+    params.append("created_at__gte", twentyMinutesAgo.toISOString());
 
     const { data } = await openHands.get<V1AppConversationStartTaskPage>(
       `/api/v1/app-conversations/start-tasks/search?${params.toString()}`,
