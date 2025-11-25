@@ -517,6 +517,9 @@ class DockerRuntime(ActionExecutionClient):
 
             self.container = self.docker_client.containers.run(
                 self.runtime_container_image,
+                # Use Docker's tini init process to ensure proper signal handling and reaping of
+                # zombie child processes.
+                init=True,
                 command=command,
                 # Override the default 'bash' entrypoint because the command is a binary.
                 entrypoint=[],
