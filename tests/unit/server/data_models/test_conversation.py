@@ -41,11 +41,7 @@ from openhands.integrations.service_types import (
 )
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.sdk.conversation.state import ConversationExecutionStatus
-<<<<<<< HEAD
-from openhands.sdk.workspace.models import CommandResult
-=======
 from openhands.sdk.workspace.models import FileOperationResult
->>>>>>> main
 from openhands.sdk.workspace.remote.async_remote_workspace import (
     AsyncRemoteWorkspace,
 )
