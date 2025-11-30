@@ -15215,22 +15215,6 @@
     "de": "Lassen Sie uns an einem Plan arbeiten",
     "uk": "Давайте розробимо план"
   },
-  "PLANNING_AGENTT$PLANNING_AGENT_INITIALIZING": {
-    "en": "Initializing planning agent...",
-    "ja": "プランニングエージェントを初期化中…",
-    "zh-CN": "正在初始化规划代理...",
-    "zh-TW": "正在初始化規劃代理...",
-    "ko-KR": "계획 에이전트 초기화 중...",
-    "no": "Initialiserer planleggingsagent...",
-    "it": "Inizializzazione dell'agente di pianificazione...",
-    "pt": "Inicializando agente de planejamento...",
-    "es": "Inicializando agente de planificación...",
-    "ar": "جاري تهيئة وكيل التخطيط...",
-    "fr": "Initialisation de l'agent de planification...",
-    "tr": "Planlama ajanı başlatılıyor...",
-    "de": "Planungsagent wird initialisiert...",
-    "uk": "Ініціалізація агента планування..."
-  },
   "COMMON$CODE_AGENT_DESCRIPTION": {
     "en": "Write, edit, and debug with AI assistance in real time.",
     "ja": "AIの支援をリアルタイムで受けながら、コードの作成、編集、デバッグを行いましょう。",
