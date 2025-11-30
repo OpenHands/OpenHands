@@ -71,6 +71,7 @@ beforeEach(() => {
     provider_tokens_set: {
       github: "some-token",
       gitlab: null,
+      azure_devops: null,
     },
   });
 });

@@ -3,8 +3,10 @@ import {
   ObservationEvent,
   BaseEvent,
   ExecuteBashAction,
+  TerminalAction,
   ExecuteBashObservation,
   PlanningFileEditorObservation,
+  TerminalObservation,
 } from "./core";
 import { AgentErrorEvent } from "./core/events/observation-event";
 import { MessageEvent } from "./core/events/message-event";
@@ -13,6 +15,7 @@ import {
   ConversationStateUpdateEvent,
   ConversationStateUpdateEventAgentStatus,
   ConversationStateUpdateEventFullState,
+  ConversationStateUpdateEventStats,
   ConversationErrorEvent,
 } from "./core/events/conversation-state-event";
 import { SystemPromptEvent } from "./core/events/system-event";
@@ -99,17 +102,20 @@ export const isActionEvent = (event: OpenHandsEvent): event is ActionEvent =>
  */
 export const isExecuteBashActionEvent = (
   event: OpenHandsEvent,
-): event is ActionEvent<ExecuteBashAction> =>
-  isActionEvent(event) && event.action.kind === "ExecuteBashAction";
+): event is ActionEvent<ExecuteBashAction | TerminalAction> =>
+  isActionEvent(event) &&
+  (event.action.kind === "ExecuteBashAction" ||
+    event.action.kind === "TerminalAction");
 
 /**
- * Type guard function to check if an observation event is an ExecuteBashObservation
+ * Type guard function to check if an observation event contains terminal output
  */
 export const isExecuteBashObservationEvent = (
   event: OpenHandsEvent,
-): event is ObservationEvent<ExecuteBashObservation> =>
+): event is ObservationEvent<ExecuteBashObservation | TerminalObservation> =>
   isObservationEvent(event) &&
-  event.observation.kind === "ExecuteBashObservation";
+  (event.observation.kind === "ExecuteBashObservation" ||
+    event.observation.kind === "TerminalObservation");
 
 /**
  * Type guard function to check if an observation event is a PlanningFileEditorObservation
@@ -148,6 +154,10 @@ export const isAgentStatusConversationStateUpdateEvent = (
   event: ConversationStateUpdateEvent,
 ): event is ConversationStateUpdateEventAgentStatus =>
   event.key === "execution_status";
+
+export const isStatsConversationStateUpdateEvent = (
+  event: ConversationStateUpdateEvent,
+): event is ConversationStateUpdateEventStats => event.key === "stats";
 
 /**
  * Type guard function to check if an event is a conversation error event

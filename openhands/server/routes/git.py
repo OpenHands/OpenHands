@@ -55,6 +55,8 @@ async def get_user_installations(
             return await client.get_github_installations()
         elif provider == ProviderType.BITBUCKET:
             return await client.get_bitbucket_workspaces()
+        elif provider == ProviderType.AZURE_DEVOPS:
+            return await client.get_azure_devops_organizations()
         else:
             return JSONResponse(
                 content=f"Provider {provider} doesn't support installations",

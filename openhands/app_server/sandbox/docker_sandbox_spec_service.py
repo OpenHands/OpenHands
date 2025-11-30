@@ -42,6 +42,8 @@ def get_default_sandbox_specs():
                 'LOG_JSON': 'true',
                 'OH_CONVERSATIONS_PATH': '/workspace/conversations',
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
+                'PYTHONUNBUFFERED': '1',
+                'ENV_LOG_LEVEL': '20',
             },
             working_dir='/workspace/project',
         )

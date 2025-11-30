@@ -41,7 +41,11 @@ from openhands.integrations.service_types import (
 )
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.sdk.conversation.state import ConversationExecutionStatus
+<<<<<<< HEAD
 from openhands.sdk.workspace.models import CommandResult
+=======
+from openhands.sdk.workspace.models import FileOperationResult
+>>>>>>> main
 from openhands.sdk.workspace.remote.async_remote_workspace import (
     AsyncRemoteWorkspace,
 )
@@ -2523,55 +2527,76 @@ async def test_read_conversation_file_success():
         return_value=mock_sandbox_spec
     )
 
-    # Mock AsyncRemoteWorkspace
-    import shlex
-
-    escaped_path = shlex.quote(file_path)
-    mock_command_result = CommandResult(
-        command=f'cat {escaped_path}',
-        exit_code=0,
-        stdout=file_content,
-        stderr='',
-        timeout_occurred=False,
+    # Mock tempfile and file operations
+    temp_file_path = '/tmp/test_file_12345'
+    mock_file_result = FileOperationResult(
+        success=True,
+        source_path=file_path,
+        destination_path=temp_file_path,
+        file_size=len(file_content.encode('utf-8')),
     )
 
     with patch(
         'openhands.app_server.app_conversation.app_conversation_router.AsyncRemoteWorkspace'
     ) as mock_workspace_class:
         mock_workspace = MagicMock(spec=AsyncRemoteWorkspace)
-        mock_workspace.execute_command = AsyncMock(return_value=mock_command_result)
+        mock_workspace.file_download = AsyncMock(return_value=mock_file_result)
         mock_workspace_class.return_value = mock_workspace
 
-        # Call the endpoint
-        result = await read_conversation_file(
-            conversation_id=conversation_id,
-            file_path=file_path,
-            app_conversation_service=mock_app_conversation_service,
-            sandbox_service=mock_sandbox_service,
-            sandbox_spec_service=mock_sandbox_spec_service,
-        )
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.tempfile.NamedTemporaryFile'
+        ) as mock_tempfile:
+            mock_temp_file = MagicMock()
+            mock_temp_file.name = temp_file_path
+            mock_tempfile.return_value.__enter__ = MagicMock(
+                return_value=mock_temp_file
+            )
+            mock_tempfile.return_value.__exit__ = MagicMock(return_value=None)
 
-        # Verify result
-        assert result == file_content
+            with patch('builtins.open', create=True) as mock_open:
+                mock_file_handle = MagicMock()
+                mock_file_handle.read.return_value = file_content.encode('utf-8')
+                mock_open.return_value.__enter__ = MagicMock(
+                    return_value=mock_file_handle
+                )
+                mock_open.return_value.__exit__ = MagicMock(return_value=None)
 
-        # Verify services were called correctly
-        mock_app_conversation_service.get_app_conversation.assert_called_once_with(
-            conversation_id
-        )
-        mock_sandbox_service.get_sandbox.assert_called_once_with('test-sandbox-id')
-        mock_sandbox_spec_service.get_sandbox_spec.assert_called_once_with(
-            'test-spec-id'
-        )
+                with patch(
+                    'openhands.app_server.app_conversation.app_conversation_router.os.unlink'
+                ) as mock_unlink:
+                    # Call the endpoint
+                    result = await read_conversation_file(
+                        conversation_id=conversation_id,
+                        file_path=file_path,
+                        app_conversation_service=mock_app_conversation_service,
+                        sandbox_service=mock_sandbox_service,
+                        sandbox_spec_service=mock_sandbox_spec_service,
+                    )
 
-        # Verify workspace was created and command executed with escaped file path
-        mock_workspace_class.assert_called_once()
-        # The file path should be escaped using shlex.quote
-        # (escaped_path already computed above)
-        mock_workspace.execute_command.assert_called_once_with(
-            f'cat {escaped_path}',
-            cwd='/workspace',
-            timeout=10.0,
-        )
+                    # Verify result
+                    assert result == file_content
+
+                    # Verify services were called correctly
+                    mock_app_conversation_service.get_app_conversation.assert_called_once_with(
+                        conversation_id
+                    )
+                    mock_sandbox_service.get_sandbox.assert_called_once_with(
+                        'test-sandbox-id'
+                    )
+                    mock_sandbox_spec_service.get_sandbox_spec.assert_called_once_with(
+                        'test-spec-id'
+                    )
+
+                    # Verify workspace was created and file_download was called
+                    mock_workspace_class.assert_called_once()
+                    mock_workspace.file_download.assert_called_once_with(
+                        source_path=file_path,
+                        destination_path=temp_file_path,
+                    )
+
+                    # Verify file was read and cleaned up
+                    mock_open.assert_called_once_with(temp_file_path, 'rb')
+                    mock_unlink.assert_called_once_with(temp_file_path)
 
 
 @pytest.mark.asyncio
@@ -2632,45 +2657,65 @@ async def test_read_conversation_file_different_path():
         return_value=mock_sandbox_spec
     )
 
-    # Mock AsyncRemoteWorkspace
-    import shlex
-
-    escaped_path = shlex.quote(file_path)
-    mock_command_result = CommandResult(
-        command=f'cat {escaped_path}',
-        exit_code=0,
-        stdout=file_content,
-        stderr='',
-        timeout_occurred=False,
+    # Mock tempfile and file operations
+    temp_file_path = '/tmp/test_file_67890'
+    mock_file_result = FileOperationResult(
+        success=True,
+        source_path=file_path,
+        destination_path=temp_file_path,
+        file_size=len(file_content.encode('utf-8')),
     )
 
     with patch(
         'openhands.app_server.app_conversation.app_conversation_router.AsyncRemoteWorkspace'
     ) as mock_workspace_class:
         mock_workspace = MagicMock(spec=AsyncRemoteWorkspace)
-        mock_workspace.execute_command = AsyncMock(return_value=mock_command_result)
+        mock_workspace.file_download = AsyncMock(return_value=mock_file_result)
         mock_workspace_class.return_value = mock_workspace
 
-        # Call the endpoint
-        result = await read_conversation_file(
-            conversation_id=conversation_id,
-            file_path=file_path,
-            app_conversation_service=mock_app_conversation_service,
-            sandbox_service=mock_sandbox_service,
-            sandbox_spec_service=mock_sandbox_spec_service,
-        )
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.tempfile.NamedTemporaryFile'
+        ) as mock_tempfile:
+            mock_temp_file = MagicMock()
+            mock_temp_file.name = temp_file_path
+            mock_tempfile.return_value.__enter__ = MagicMock(
+                return_value=mock_temp_file
+            )
+            mock_tempfile.return_value.__exit__ = MagicMock(return_value=None)
 
-        # Verify result
-        assert result == file_content
+            with patch('builtins.open', create=True) as mock_open:
+                mock_file_handle = MagicMock()
+                mock_file_handle.read.return_value = file_content.encode('utf-8')
+                mock_open.return_value.__enter__ = MagicMock(
+                    return_value=mock_file_handle
+                )
+                mock_open.return_value.__exit__ = MagicMock(return_value=None)
 
-        # Verify workspace was created and command executed with escaped file path
-        mock_workspace_class.assert_called_once()
-        escaped_path = shlex.quote(file_path)
-        mock_workspace.execute_command.assert_called_once_with(
-            f'cat {escaped_path}',
-            cwd='/workspace',
-            timeout=10.0,
-        )
+                with patch(
+                    'openhands.app_server.app_conversation.app_conversation_router.os.unlink'
+                ) as mock_unlink:
+                    # Call the endpoint
+                    result = await read_conversation_file(
+                        conversation_id=conversation_id,
+                        file_path=file_path,
+                        app_conversation_service=mock_app_conversation_service,
+                        sandbox_service=mock_sandbox_service,
+                        sandbox_spec_service=mock_sandbox_spec_service,
+                    )
+
+                    # Verify result
+                    assert result == file_content
+
+                    # Verify workspace was created and file_download was called
+                    mock_workspace_class.assert_called_once()
+                    mock_workspace.file_download.assert_called_once_with(
+                        source_path=file_path,
+                        destination_path=temp_file_path,
+                    )
+
+                    # Verify file was read and cleaned up
+                    mock_open.assert_called_once_with(temp_file_path, 'rb')
+                    mock_unlink.assert_called_once_with(temp_file_path)
 
 
 @pytest.mark.asyncio
@@ -3086,36 +3131,49 @@ async def test_read_conversation_file_file_not_found():
         return_value=mock_sandbox_spec
     )
 
-    # Mock CommandResult for file not found (non-zero exit code)
-    import shlex
-
-    escaped_path = shlex.quote(file_path)
-    mock_command_result = CommandResult(
-        command=f'cat {escaped_path}',
-        exit_code=1,
-        stdout='',
-        stderr=f'cat: {file_path}: No such file or directory',
-        timeout_occurred=False,
+    # Mock tempfile and file operations for file not found
+    temp_file_path = '/tmp/test_file_not_found'
+    mock_file_result = FileOperationResult(
+        success=False,
+        source_path=file_path,
+        destination_path=temp_file_path,
+        error=f'File not found: {file_path}',
     )
 
     with patch(
         'openhands.app_server.app_conversation.app_conversation_router.AsyncRemoteWorkspace'
     ) as mock_workspace_class:
         mock_workspace = MagicMock(spec=AsyncRemoteWorkspace)
-        mock_workspace.execute_command = AsyncMock(return_value=mock_command_result)
+        mock_workspace.file_download = AsyncMock(return_value=mock_file_result)
         mock_workspace_class.return_value = mock_workspace
 
-        # Call the endpoint
-        result = await read_conversation_file(
-            conversation_id=conversation_id,
-            file_path=file_path,
-            app_conversation_service=mock_app_conversation_service,
-            sandbox_service=mock_sandbox_service,
-            sandbox_spec_service=mock_sandbox_spec_service,
-        )
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.tempfile.NamedTemporaryFile'
+        ) as mock_tempfile:
+            mock_temp_file = MagicMock()
+            mock_temp_file.name = temp_file_path
+            mock_tempfile.return_value.__enter__ = MagicMock(
+                return_value=mock_temp_file
+            )
+            mock_tempfile.return_value.__exit__ = MagicMock(return_value=None)
 
-        # Verify result
-        assert result == ''
+            with patch(
+                'openhands.app_server.app_conversation.app_conversation_router.os.unlink'
+            ) as mock_unlink:
+                # Call the endpoint
+                result = await read_conversation_file(
+                    conversation_id=conversation_id,
+                    file_path=file_path,
+                    app_conversation_service=mock_app_conversation_service,
+                    sandbox_service=mock_sandbox_service,
+                    sandbox_spec_service=mock_sandbox_spec_service,
+                )
+
+                # Verify result (empty string when file_download fails)
+                assert result == ''
+
+                # Verify cleanup still happens
+                mock_unlink.assert_called_once_with(temp_file_path)
 
 
 @pytest.mark.asyncio
@@ -3175,36 +3233,58 @@ async def test_read_conversation_file_empty_file():
         return_value=mock_sandbox_spec
     )
 
-    # Mock CommandResult for empty file
-    import shlex
-
-    escaped_path = shlex.quote(file_path)
-    mock_command_result = CommandResult(
-        command=f'cat {escaped_path}',
-        exit_code=0,
-        stdout='',  # Empty stdout
-        stderr='',
-        timeout_occurred=False,
+    # Mock tempfile and file operations for empty file
+    temp_file_path = '/tmp/test_file_empty'
+    empty_content = ''
+    mock_file_result = FileOperationResult(
+        success=True,
+        source_path=file_path,
+        destination_path=temp_file_path,
+        file_size=0,
     )
 
     with patch(
         'openhands.app_server.app_conversation.app_conversation_router.AsyncRemoteWorkspace'
     ) as mock_workspace_class:
         mock_workspace = MagicMock(spec=AsyncRemoteWorkspace)
-        mock_workspace.execute_command = AsyncMock(return_value=mock_command_result)
+        mock_workspace.file_download = AsyncMock(return_value=mock_file_result)
         mock_workspace_class.return_value = mock_workspace
 
-        # Call the endpoint
-        result = await read_conversation_file(
-            conversation_id=conversation_id,
-            file_path=file_path,
-            app_conversation_service=mock_app_conversation_service,
-            sandbox_service=mock_sandbox_service,
-            sandbox_spec_service=mock_sandbox_spec_service,
-        )
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.tempfile.NamedTemporaryFile'
+        ) as mock_tempfile:
+            mock_temp_file = MagicMock()
+            mock_temp_file.name = temp_file_path
+            mock_tempfile.return_value.__enter__ = MagicMock(
+                return_value=mock_temp_file
+            )
+            mock_tempfile.return_value.__exit__ = MagicMock(return_value=None)
 
-        # Verify result (empty string when stdout is empty)
-        assert result == ''
+            with patch('builtins.open', create=True) as mock_open:
+                mock_file_handle = MagicMock()
+                mock_file_handle.read.return_value = empty_content.encode('utf-8')
+                mock_open.return_value.__enter__ = MagicMock(
+                    return_value=mock_file_handle
+                )
+                mock_open.return_value.__exit__ = MagicMock(return_value=None)
+
+                with patch(
+                    'openhands.app_server.app_conversation.app_conversation_router.os.unlink'
+                ) as mock_unlink:
+                    # Call the endpoint
+                    result = await read_conversation_file(
+                        conversation_id=conversation_id,
+                        file_path=file_path,
+                        app_conversation_service=mock_app_conversation_service,
+                        sandbox_service=mock_sandbox_service,
+                        sandbox_spec_service=mock_sandbox_spec_service,
+                    )
+
+                    # Verify result (empty string when file is empty)
+                    assert result == ''
+
+                    # Verify cleanup happens
+                    mock_unlink.assert_called_once_with(temp_file_path)
 
 
 @pytest.mark.asyncio
@@ -3264,24 +3344,42 @@ async def test_read_conversation_file_command_exception():
         return_value=mock_sandbox_spec
     )
 
-    # Mock AsyncRemoteWorkspace to raise exception
+    # Mock tempfile and file operations for exception case
+    temp_file_path = '/tmp/test_file_exception'
+
     with patch(
         'openhands.app_server.app_conversation.app_conversation_router.AsyncRemoteWorkspace'
     ) as mock_workspace_class:
         mock_workspace = MagicMock(spec=AsyncRemoteWorkspace)
-        mock_workspace.execute_command = AsyncMock(
+        mock_workspace.file_download = AsyncMock(
             side_effect=Exception('Connection timeout')
         )
         mock_workspace_class.return_value = mock_workspace
 
-        # Call the endpoint
-        result = await read_conversation_file(
-            conversation_id=conversation_id,
-            file_path=file_path,
-            app_conversation_service=mock_app_conversation_service,
-            sandbox_service=mock_sandbox_service,
-            sandbox_spec_service=mock_sandbox_spec_service,
-        )
+        with patch(
+            'openhands.app_server.app_conversation.app_conversation_router.tempfile.NamedTemporaryFile'
+        ) as mock_tempfile:
+            mock_temp_file = MagicMock()
+            mock_temp_file.name = temp_file_path
+            mock_tempfile.return_value.__enter__ = MagicMock(
+                return_value=mock_temp_file
+            )
+            mock_tempfile.return_value.__exit__ = MagicMock(return_value=None)
 
-        # Verify result (empty string on exception)
-        assert result == ''
+            with patch(
+                'openhands.app_server.app_conversation.app_conversation_router.os.unlink'
+            ) as mock_unlink:
+                # Call the endpoint
+                result = await read_conversation_file(
+                    conversation_id=conversation_id,
+                    file_path=file_path,
+                    app_conversation_service=mock_app_conversation_service,
+                    sandbox_service=mock_sandbox_service,
+                    sandbox_spec_service=mock_sandbox_spec_service,
+                )
+
+                # Verify result (empty string on exception)
+                assert result == ''
+
+                # Verify cleanup still happens even on exception
+                mock_unlink.assert_called_once_with(temp_file_path)

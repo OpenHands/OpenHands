@@ -1,8 +1,9 @@
 """Sandboxed Conversation router for OpenHands Server."""
 
 import asyncio
-import shlex
+import os
 import sys
+import tempfile
 from datetime import datetime
 from typing import Annotated, AsyncGenerator
 from uuid import UUID
@@ -366,17 +367,35 @@ async def read_conversation_file(
     )
 
     # Read the file at the specified path
+    temp_file_path = None
     try:
-        # Escape the file path to prevent command injection
-        escaped_file_path = shlex.quote(file_path)
-        result = await remote_workspace.execute_command(
-            f'cat {escaped_file_path}', cwd=sandbox_spec.working_dir, timeout=10.0
+        # Create a temporary file path to download the remote file
+        with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as temp_file:
+            temp_file_path = temp_file.name
+
+        # Download the file from remote system
+        result = await remote_workspace.file_download(
+            source_path=file_path,
+            destination_path=temp_file_path,
         )
-        if result.exit_code == 0 and result.stdout:
-            return result.stdout
+
+        if result.success:
+            # Read the content from the temporary file
+            with open(temp_file_path, 'rb') as f:
+                content = f.read()
+            # Decode bytes to string
+            return content.decode('utf-8')
     except Exception:
         # If there's any error reading the file, return empty string
         pass
+    finally:
+        # Clean up the temporary file
+        if temp_file_path:
+            try:
+                os.unlink(temp_file_path)
+            except Exception:
+                # Ignore errors during cleanup
+                pass
 
     return ''
 

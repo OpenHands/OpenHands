@@ -68,17 +68,17 @@ from openhands.app_server.utils.docker_utils import (
 )
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
-from openhands.sdk import LocalWorkspace
+from openhands.sdk import AgentContext, LocalWorkspace
 from openhands.sdk.conversation.secret_source import LookupSecret, StaticSecret
 from openhands.sdk.llm import LLM
 from openhands.sdk.security.confirmation_policy import AlwaysConfirm
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.server.types import AppMode
 from openhands.tools.preset.default import get_default_agent
 from openhands.tools.preset.planning import get_planning_agent
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
-GIT_TOKEN = 'GIT_TOKEN'
 
 
 @dataclass
@@ -97,6 +97,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     httpx_client: httpx.AsyncClient
     web_url: str | None
     access_token_hard_timeout: timedelta | None
+    app_mode: str | None = None
+    keycloak_auth_cookie: str | None = None
 
     async def search_app_conversations(
         self,
@@ -228,10 +230,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 await self._build_start_conversation_request_for_user(
                     sandbox,
                     request.initial_message,
+                    request.system_message_suffix,
                     request.git_provider,
                     sandbox_spec.working_dir,
                     request.agent_type,
                     request.llm_model,
+                    request.conversation_id,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
                 )
@@ -277,22 +281,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
             # Setup default processors
-            processors = request.processors
-            if processors is None:
-                processors = [SetTitleCallbackProcessor()]
+            processors = request.processors or []
+
+            # Always ensure SetTitleCallbackProcessor is included
+            has_set_title_processor = any(
+                isinstance(processor, SetTitleCallbackProcessor)
+                for processor in processors
+            )
+            if not has_set_title_processor:
+                processors.append(SetTitleCallbackProcessor())
 
             # Save processors
-            await asyncio.gather(
-                *[
-                    self.event_callback_service.save_event_callback(
-                        EventCallback(
-                            conversation_id=info.id,
-                            processor=processor,
-                        )
+            for processor in processors:
+                await self.event_callback_service.save_event_callback(
+                    EventCallback(
+                        conversation_id=info.id,
+                        processor=processor,
                     )
-                    for processor in processors
-                ]
-            )
+                )
 
             # Update the start task
             task.status = AppConversationStartTaskStatus.READY
@@ -517,10 +523,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self,
         sandbox: SandboxInfo,
         initial_message: SendMessageRequest | None,
+        system_message_suffix: str | None,
         git_provider: ProviderType | None,
         working_dir: str,
         agent_type: AgentType = AgentType.DEFAULT,
         llm_model: str | None = None,
+        conversation_id: UUID | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
     ) -> StartConversationRequest:
@@ -529,6 +537,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Set up a secret for the git token
         secrets = await self.user_context.get_secrets()
         if git_provider:
+            secret_name = f'{git_provider.name}_TOKEN'
             if self.web_url:
                 # If there is a web url, then we create an access token to access it.
                 # For security reasons, we are explicit here - only this user, and
@@ -540,9 +549,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     },
                     expires_in=self.access_token_hard_timeout,
                 )
-                secrets[GIT_TOKEN] = LookupSecret(
+                headers = {'X-Access-Token': access_token}
+
+                # Include keycloak_auth cookie in headers if app_mode is SaaS
+                if self.app_mode == 'saas' and self.keycloak_auth_cookie:
+                    headers['Cookie'] = f'keycloak_auth={self.keycloak_auth_cookie}'
+
+                secrets[secret_name] = LookupSecret(
                     url=self.web_url + '/api/v1/webhooks/secrets',
-                    headers={'X-Access-Token': access_token},
+                    headers=headers,
                 )
             else:
                 # If there is no URL specified where the sandbox can access the app server
@@ -550,7 +565,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 # on the type, this may eventually expire.
                 static_token = await self.user_context.get_latest_token(git_provider)
                 if static_token:
-                    secrets[GIT_TOKEN] = StaticSecret(value=static_token)
+                    secrets[secret_name] = StaticSecret(value=static_token)
 
         workspace = LocalWorkspace(working_dir=working_dir)
 
@@ -569,7 +584,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         else:
             agent = get_default_agent(llm=llm)
 
-        conversation_id = uuid4()
+        agent_context = AgentContext(system_message_suffix=system_message_suffix)
+        agent = agent.model_copy(update={'agent_context': agent_context})
+
+        conversation_id = conversation_id or uuid4()
         agent = ExperimentManagerImpl.run_agent_variant_tests__v1(
             user.id, conversation_id, agent
         )
@@ -841,6 +859,21 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 if isinstance(sandbox_service, DockerSandboxService):
                     web_url = f'http://host.docker.internal:{sandbox_service.host_port}'
 
+            # Get app_mode and keycloak_auth cookie for SaaS mode
+            app_mode = None
+            keycloak_auth_cookie = None
+            try:
+                from openhands.server.shared import server_config
+
+                app_mode = (
+                    server_config.app_mode.value if server_config.app_mode else None
+                )
+                if request and server_config.app_mode == AppMode.SAAS:
+                    keycloak_auth_cookie = request.cookies.get('keycloak_auth')
+            except (ImportError, AttributeError):
+                # If server_config is not available (e.g., in tests), continue without it
+                pass
+
             yield LiveStatusAppConversationService(
                 init_git_in_empty_workspace=self.init_git_in_empty_workspace,
                 user_context=user_context,
@@ -855,4 +888,6 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 httpx_client=httpx_client,
                 web_url=web_url,
                 access_token_hard_timeout=access_token_hard_timeout,
+                app_mode=app_mode,
+                keycloak_auth_cookie=keycloak_auth_cookie,
             )
