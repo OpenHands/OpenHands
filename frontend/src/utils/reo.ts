@@ -4,6 +4,8 @@
  * Using CDN approach for better TypeScript compatibility
  */
 
+import EventLogger from "./event-logger";
+
 export interface ReoIdentity {
   username: string;
   type: "github" | "email";
@@ -41,7 +43,7 @@ class ReoService {
         this.initialized = true;
       }
     } catch (error) {
-      console.error("Failed to initialize Reo.dev tracking:", error);
+      EventLogger.error(`Failed to initialize Reo.dev tracking: ${error}`);
     }
   }
 
@@ -78,7 +80,7 @@ class ReoService {
    */
   identify(identity: ReoIdentity): void {
     if (!this.initialized) {
-      console.warn("Reo.dev not initialized. Call init() first.");
+      EventLogger.warning("Reo.dev not initialized. Call init() first.");
       return;
     }
 
@@ -87,7 +89,7 @@ class ReoService {
         window.Reo.identify(identity);
       }
     } catch (error) {
-      console.error("Failed to identify user in Reo.dev:", error);
+      EventLogger.error(`Failed to identify user in Reo.dev: ${error}`);
     }
   }
 

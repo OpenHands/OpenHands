@@ -15262,5 +15262,21 @@
     "tr": "Planlama ajanı başlatıldı",
     "de": "Planungsagent wurde initialisiert",
     "uk": "Агент планування ініціалізовано"
+  },
+  "OBSERVATION_MESSAGE$SKILL_READY": {
+    "en": "Skill Ready",
+    "ja": "スキル準備完了",
+    "zh-CN": "技能已就绪",
+    "zh-TW": "技能已就緒",
+    "ko-KR": "스킬 준비 완료",
+    "no": "Ferdighet klar",
+    "it": "Abilità pronta",
+    "pt": "Habilidade pronta",
+    "es": "Habilidad lista",
+    "ar": "المهارة جاهزة",
+    "fr": "Compétence prête",
+    "tr": "Yetenek hazır",
+    "de": "Fähigkeit bereit",
+    "uk": "Навичка готова"
   }
 }

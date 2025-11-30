@@ -17,6 +17,15 @@ export const getObservationResult = (
       if (exitCode === 0 || metadata.exit_code === 0) return "success"; // Command executed successfully
       return "error"; // Command failed
     }
+    case "TerminalObservation": {
+      const exitCode =
+        observation.exit_code ?? observation.metadata.exit_code ?? null;
+
+      if (observation.timeout || exitCode === -1) return "timeout";
+      if (exitCode === 0) return "success";
+      if (observation.is_error) return "error";
+      return "success";
+    }
     case "FileEditorObservation":
     case "StrReplaceEditorObservation":
       // Check if there's an error

@@ -41,6 +41,25 @@ export interface ExecuteBashAction extends ActionBase<"ExecuteBashAction"> {
   reset: boolean;
 }
 
+export interface TerminalAction extends ActionBase<"TerminalAction"> {
+  /**
+   * The terminal command to execute.
+   */
+  command: string;
+  /**
+   * If True, the command is an input to the running process. If False, the command is executed directly.
+   */
+  is_input: boolean;
+  /**
+   * Optional max time limit (seconds) for the command.
+   */
+  timeout: number | null;
+  /**
+   * If True, reset the terminal session before running the command.
+   */
+  reset: boolean;
+}
+
 export interface FileEditorAction extends ActionBase<"FileEditorAction"> {
   /**
    * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
@@ -206,6 +225,7 @@ export type Action =
   | FinishAction
   | ThinkAction
   | ExecuteBashAction
+  | TerminalAction
   | FileEditorAction
   | StrReplaceEditorAction
   | TaskTrackerAction
