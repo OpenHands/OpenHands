@@ -9,6 +9,8 @@ from fastapi import Depends, Request
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Import the event_callback module to ensure all processors are registered
+import openhands.app_server.event_callback  # noqa: F401
 from openhands.agent_server.env_parser import from_env
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,

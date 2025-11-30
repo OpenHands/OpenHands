@@ -22,10 +22,12 @@ import {
   isConversationStateUpdateEvent,
   isFullStateConversationStateUpdateEvent,
   isAgentStatusConversationStateUpdateEvent,
+  isStatsConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
   isConversationErrorEvent,
 } from "#/types/v1/type-guards";
+import { ConversationStateUpdateEventStats } from "#/types/v1/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
 import { buildWebSocketUrl } from "#/utils/websocket-url";
 import type {
@@ -36,6 +38,7 @@ import EventService from "#/api/event-service/event-service.api";
 import { useConversationStore } from "#/state/conversation-store";
 import { isBudgetOrCreditError } from "#/utils/error-handler";
 import { useTracking } from "#/hooks/use-tracking";
+import useMetricsStore from "#/stores/metrics-store";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type V1_WebSocketConnectionState =
@@ -104,6 +107,37 @@ export function ConversationWebSocketProvider({
   // Separate received event count tracking per connection
   const receivedEventCountRefMain = useRef(0);
   const receivedEventCountRefPlanning = useRef(0);
+
+  // Helper function to update metrics from stats event
+  const updateMetricsFromStats = useCallback(
+    (event: ConversationStateUpdateEventStats) => {
+      if (event.value.usage_to_metrics?.agent) {
+        const agentMetrics = event.value.usage_to_metrics.agent;
+        const metrics = {
+          cost: agentMetrics.accumulated_cost,
+          max_budget_per_task: agentMetrics.max_budget_per_task ?? null,
+          usage: agentMetrics.accumulated_token_usage
+            ? {
+                prompt_tokens:
+                  agentMetrics.accumulated_token_usage.prompt_tokens,
+                completion_tokens:
+                  agentMetrics.accumulated_token_usage.completion_tokens,
+                cache_read_tokens:
+                  agentMetrics.accumulated_token_usage.cache_read_tokens,
+                cache_write_tokens:
+                  agentMetrics.accumulated_token_usage.cache_write_tokens,
+                context_window:
+                  agentMetrics.accumulated_token_usage.context_window,
+                per_turn_token:
+                  agentMetrics.accumulated_token_usage.per_turn_token,
+              }
+            : null,
+        };
+        useMetricsStore.getState().setMetrics(metrics);
+      }
+    },
+    [],
+  );
 
   // Build WebSocket URL from props
   // Only build URL if we have both conversationId and conversationUrl
@@ -287,6 +321,9 @@ export function ConversationWebSocketProvider({
             if (isAgentStatusConversationStateUpdateEvent(event)) {
               setExecutionStatus(event.value);
             }
+            if (isStatsConversationStateUpdateEvent(event)) {
+              updateMetricsFromStats(event);
+            }
           }
 
           // Handle ExecuteBashAction events - add command as input to terminal
@@ -320,6 +357,7 @@ export function ConversationWebSocketProvider({
       setExecutionStatus,
       appendInput,
       appendOutput,
+      updateMetricsFromStats,
     ],
   );
 
@@ -381,6 +419,9 @@ export function ConversationWebSocketProvider({
             if (isAgentStatusConversationStateUpdateEvent(event)) {
               setExecutionStatus(event.value);
             }
+            if (isStatsConversationStateUpdateEvent(event)) {
+              updateMetricsFromStats(event);
+            }
           }
 
           // Handle ExecuteBashAction events - add command as input to terminal
@@ -414,6 +455,7 @@ export function ConversationWebSocketProvider({
       setExecutionStatus,
       appendInput,
       appendOutput,
+      updateMetricsFromStats,
     ],
   );
 

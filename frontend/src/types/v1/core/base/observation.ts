@@ -81,6 +81,34 @@ export interface ExecuteBashObservation
   metadata: CmdOutputMetadata;
 }
 
+export interface TerminalObservation
+  extends ObservationBase<"TerminalObservation"> {
+  /**
+   * Content returned from the terminal as a list of TextContent/ImageContent objects.
+   */
+  content: Array<TextContent | ImageContent>;
+  /**
+   * The bash command that was executed.
+   */
+  command: string | null;
+  /**
+   * The exit code of the command if it has finished.
+   */
+  exit_code: number | null;
+  /**
+   * Whether the command execution produced an error.
+   */
+  is_error: boolean;
+  /**
+   * Whether the command execution timed out.
+   */
+  timeout: boolean;
+  /**
+   * Additional metadata captured from the shell after command execution.
+   */
+  metadata: CmdOutputMetadata;
+}
+
 export interface FileEditorObservation
   extends ObservationBase<"FileEditorObservation"> {
   /**
@@ -168,6 +196,7 @@ export type Observation =
   | ThinkObservation
   | BrowserObservation
   | ExecuteBashObservation
+  | TerminalObservation
   | FileEditorObservation
   | StrReplaceEditorObservation
   | TaskTrackerObservation;

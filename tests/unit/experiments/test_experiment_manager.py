@@ -126,11 +126,8 @@ class TestExperimentManagerIntegration:
         self,
     ):
         """
-        Use the real LiveStatusAppConversationService to build a StartConversationRequest,
-        and verify ExperimentManagerImpl.run_agent_variant_tests__v1:
-        - is called exactly once with the (user_id, generated conversation_id, agent)
-        - returns the *same* agent instance (no copy/mutation)
-        - does not tweak agent fields (LLM, system prompt, etc.)
+        Test that ExperimentManagerImpl.run_agent_variant_tests__v1 is called with correct parameters
+        and returns the same agent instance (no copy/mutation) when building a StartConversationRequest.
         """
         # --- Arrange: fixed UUID to assert call parameters deterministically
         fixed_conversation_id = UUID('00000000-0000-0000-0000-000000000001')
@@ -143,6 +140,7 @@ class TestExperimentManagerIntegration:
         mock_agent = Mock(spec=Agent)
         mock_agent.llm = mock_llm
         mock_agent.system_prompt_filename = 'default_system_prompt.j2'
+        mock_agent.model_copy = Mock(return_value=mock_agent)
 
         # Minimal, real-ish user context used by the service
         class DummyUserContext:
@@ -210,16 +208,32 @@ class TestExperimentManagerIntegration:
                 'openhands.app_server.app_conversation.live_status_app_conversation_service.uuid4',
                 return_value=fixed_conversation_id,
             ),
+            patch(
+                'openhands.app_server.app_conversation.live_status_app_conversation_service.ExperimentManagerImpl'
+            ) as mock_experiment_manager,
         ):
+            # Configure the experiment manager mock to return the same agent
+            mock_experiment_manager.run_agent_variant_tests__v1.return_value = (
+                mock_agent
+            )
+
             # --- Act: build the start request
             start_req = await service._build_start_conversation_request_for_user(
                 sandbox=sandbox,
                 initial_message=None,
+                system_message_suffix=None,  # No additional system message suffix
                 git_provider=None,  # Keep secrets path simple
                 working_dir='/tmp/project',  # Arbitrary path
             )
 
-            # The agent in the StartConversationRequest is the *same* object we provided
+            # --- Assert: verify experiment manager was called with correct parameters
+            mock_experiment_manager.run_agent_variant_tests__v1.assert_called_once_with(
+                'test_user_123',  # user_id
+                fixed_conversation_id,  # conversation_id
+                mock_agent,  # agent (after model_copy with agent_context)
+            )
+
+            # The agent in the StartConversationRequest is the *same* object returned by experiment manager
             assert start_req.agent is mock_agent
 
             # No tweaks to agent fields by the experiment manager (noop)
