@@ -612,8 +612,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     'X-Session-API-Key': mcp_api_key,
                 }
 
-            # In OSS Mode, we add the tavily key based on an environment variable.
-            # We do not do this in SAAS as it will be added by the OpenHands server
             tavily_api_key = user.search_api_key or self.tavily_api_key
             if tavily_api_key:
                 _logger.info('Adding search engine to MCP config')
