@@ -40,7 +40,10 @@ export function ConversationTabs() {
     );
 
   const [persistedIsRightPanelShown, setPersistedIsRightPanelShown] =
-    useLocalStorage<boolean>(`conversation-right-panel-shown-${conversationId}`, true);
+    useLocalStorage<boolean>(
+      `conversation-right-panel-shown-${conversationId}`,
+      true,
+    );
 
   const [persistedUnpinnedTabs] = useLocalStorage<string[]>(
     `conversation-unpinned-tabs-${conversationId}`,
