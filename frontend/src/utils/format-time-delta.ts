@@ -1,16 +1,45 @@
 /**
+ * Parses a date string as UTC if it doesn't have a timezone indicator.
+ * This fixes the issue where ISO strings without timezone info are interpreted as local time.
+ * @param dateString ISO 8601 date string
+ * @returns Date object parsed as UTC
+ *
+ * @example
+ * parseDateAsUTC("2025-12-01T11:53:37.273886"); // Parsed as UTC
+ * parseDateAsUTC("2025-12-01T11:53:37.273886Z"); // Already has timezone, parsed correctly
+ * parseDateAsUTC("2025-12-01T11:53:37+00:00"); // Already has timezone, parsed correctly
+ */
+const parseDateAsUTC = (dateString: string): Date => {
+  // Check if the string already has a timezone indicator
+  // Look for 'Z' (UTC), '+' (positive offset), or '-' after the time part (negative offset)
+  const hasTimezone =
+    dateString.includes("Z") || dateString.match(/[+-]\d{2}:\d{2}$/) !== null;
+
+  if (hasTimezone) {
+    // Already has timezone info, parse normally
+    return new Date(dateString);
+  }
+
+  // No timezone indicator - append 'Z' to force UTC parsing
+  return new Date(`${dateString}Z`);
+};
+
+/**
  * Formats a date into a compact string representing the time delta between the given date and the current date.
- * @param date The date to format
+ * @param date The date to format (Date object or ISO 8601 string)
  * @returns A compact string representing the time delta between the given date and the current date
  *
  * @example
  * // now is 2024-01-01T00:00:00Z
  * formatTimeDelta(new Date("2023-12-31T23:59:59Z")); // "1s"
- * formatTimeDelta(new Date("2022-01-01T00:00:00Z")); // "2y"
+ * formatTimeDelta("2023-12-31T23:59:59Z"); // "1s"
+ * formatTimeDelta("2025-12-01T11:53:37.273886"); // Parsed as UTC automatically
  */
-export const formatTimeDelta = (date: Date) => {
+export const formatTimeDelta = (date: Date | string) => {
+  // Parse string dates as UTC if needed, or use Date object directly
+  const dateObj = typeof date === "string" ? parseDateAsUTC(date) : date;
   const now = new Date();
-  const delta = now.getTime() - date.getTime();
+  const delta = now.getTime() - dateObj.getTime();
 
   const seconds = Math.floor(delta / 1000);
   const minutes = Math.floor(seconds / 60);

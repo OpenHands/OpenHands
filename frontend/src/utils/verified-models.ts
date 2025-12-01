@@ -59,6 +59,7 @@ export const VERIFIED_ANTHROPIC_MODELS = [
   "claude-haiku-4-5-20251001",
   "claude-opus-4-20250514",
   "claude-opus-4-1-20250805",
+  "claude-opus-4-5-20251101",
 ];
 
 // LiteLLM does not return the compatible Mistral models with the provider, so we list them here to set them ourselves
