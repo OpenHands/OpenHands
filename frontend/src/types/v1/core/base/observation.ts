@@ -25,9 +25,13 @@ export interface MCPToolObservation
 export interface FinishObservation
   extends ObservationBase<"FinishObservation"> {
   /**
-   * Final message sent to the user
+   * Content returned from the finish action as a list of TextContent/ImageContent objects.
    */
-  message: string;
+  content: Array<TextContent | ImageContent>;
+  /**
+   * Whether the finish action resulted in an error
+   */
+  is_error: boolean;
 }
 
 export interface ThinkObservation extends ObservationBase<"ThinkObservation"> {

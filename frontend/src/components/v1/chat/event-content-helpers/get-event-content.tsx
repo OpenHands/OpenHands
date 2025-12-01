@@ -149,6 +149,9 @@ const getObservationEventTitle = (event: OpenHandsEvent): React.ReactNode => {
     case "BrowserObservation":
       observationKey = "OBSERVATION_MESSAGE$BROWSE";
       break;
+    case "FinishObservation":
+      observationKey = "OBSERVATION_MESSAGE$FINISH";
+      break;
     case "TaskTrackerObservation": {
       const { command } = event.observation;
       if (command === "plan") {
