@@ -15,6 +15,7 @@ from sqlalchemy import UUID as SQLUUID
 from sqlalchemy import Column, Enum, String, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     CreateEventCallbackRequest,
     EventCallback,
@@ -177,7 +178,7 @@ class SQLEventCallbackService(EventCallbackService):
         return EventCallbackPage(items=callbacks, next_page_id=next_page_id)
 
     async def save_event_callback(self, event_callback: EventCallback) -> EventCallback:
-        event_callback.updated_at = datetime.now()
+        event_callback.updated_at = utc_now()
         stored_callback = StoredEventCallback(**event_callback.model_dump())
         await self.db_session.merge(stored_callback)
         return event_callback
