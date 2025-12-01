@@ -30,3 +30,11 @@ JIRA_DC_CLIENT_SECRET = os.getenv('JIRA_DC_CLIENT_SECRET', '').strip()
 JIRA_DC_BASE_URL = os.getenv('JIRA_DC_BASE_URL', '').strip()
 JIRA_DC_ENABLE_OAUTH = os.getenv('JIRA_DC_ENABLE_OAUTH', '1') in ('1', 'true')
 AUTH_URL = os.getenv('AUTH_URL', '').rstrip('/')
+ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
+    '1',
+    'true',
+    't',
+    'yes',
+    'y',
+    'on',
+)

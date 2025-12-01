@@ -11,6 +11,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTask,
 )
+from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.services.injector import Injector
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
@@ -91,6 +92,7 @@ class AppConversationService(ABC):
     async def run_setup_scripts(
         self,
         task: AppConversationStartTask,
+        sandbox: SandboxInfo,
         workspace: AsyncRemoteWorkspace,
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Run the setup scripts for the project and yield status updates"""

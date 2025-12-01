@@ -11,6 +11,7 @@ from openhands.core.config import LLMConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.service_types import ProviderType
 from openhands.llm.llm import LLM
+from openhands.resolver.interfaces.azure_devops import AzureDevOpsIssueHandler
 from openhands.resolver.interfaces.bitbucket import BitbucketIssueHandler
 from openhands.resolver.interfaces.github import GithubIssueHandler
 from openhands.resolver.interfaces.gitlab import GitlabIssueHandler
@@ -247,7 +248,7 @@ def send_pull_request(
     git_user_name: str = 'openhands',
     git_user_email: str = 'openhands@all-hands.dev',
 ) -> str:
-    """Send a pull request to a GitHub, GitLab, or Bitbucket repository.
+    """Send a pull request to a GitHub, GitLab, Bitbucket, or Azure DevOps repository.
 
     Args:
         issue: The issue to send the pull request for
@@ -261,7 +262,7 @@ def send_pull_request(
         target_branch: The target branch to create the pull request against (defaults to repository default branch)
         reviewer: The username of the reviewer to assign
         pr_title: Custom title for the pull request (optional)
-        base_domain: The base domain for the git server (defaults to "github.com" for GitHub, "gitlab.com" for GitLab, and "bitbucket.org" for Bitbucket)
+        base_domain: The base domain for the git server (defaults to "github.com" for GitHub, "gitlab.com" for GitLab, "bitbucket.org" for Bitbucket, and "dev.azure.com" for Azure DevOps)
     """
     if pr_type not in ['branch', 'draft', 'ready']:
         raise ValueError(f'Invalid pr_type: {pr_type}')
@@ -272,6 +273,8 @@ def send_pull_request(
             base_domain = 'github.com'
         elif platform == ProviderType.GITLAB:
             base_domain = 'gitlab.com'
+        elif platform == ProviderType.AZURE_DEVOPS:
+            base_domain = 'dev.azure.com'
         else:  # platform == ProviderType.BITBUCKET
             base_domain = 'bitbucket.org'
 
@@ -292,6 +295,13 @@ def send_pull_request(
             BitbucketIssueHandler(
                 issue.owner, issue.repo, token, username, base_domain
             ),
+            None,
+        )
+    elif platform == ProviderType.AZURE_DEVOPS:
+        # For Azure DevOps, owner is "organization/project"
+        organization, project = issue.owner.split('/')
+        handler = ServiceContextIssue(
+            AzureDevOpsIssueHandler(token, organization, project, issue.repo),
             None,
         )
     else:
@@ -413,13 +423,19 @@ def update_existing_pull_request(
         llm_config: The LLM configuration to use for summarizing changes.
         comment_message: The main message to post as a comment on the PR.
         additional_message: The additional messages to post as a comment on the PR in json list format.
-        base_domain: The base domain for the git server (defaults to "github.com" for GitHub and "gitlab.com" for GitLab)
+        base_domain: The base domain for the git server (defaults to "github.com" for GitHub, "gitlab.com" for GitLab, and "dev.azure.com" for Azure DevOps)
     """
     # Set up headers and base URL for GitHub or GitLab API
 
     # Determine default base_domain based on platform
     if base_domain is None:
-        base_domain = 'github.com' if platform == ProviderType.GITHUB else 'gitlab.com'
+        base_domain = (
+            'github.com'
+            if platform == ProviderType.GITHUB
+            else 'gitlab.com'
+            if platform == ProviderType.GITLAB
+            else 'dev.azure.com'
+        )
 
     handler = None
     if platform == ProviderType.GITHUB:
@@ -427,7 +443,14 @@ def update_existing_pull_request(
             GithubIssueHandler(issue.owner, issue.repo, token, username, base_domain),
             llm_config,
         )
-    else:  # platform == Platform.GITLAB
+    elif platform == ProviderType.AZURE_DEVOPS:
+        # For Azure DevOps, owner is "organization/project"
+        organization, project = issue.owner.split('/')
+        handler = ServiceContextIssue(
+            AzureDevOpsIssueHandler(token, organization, project, issue.repo),
+            llm_config,
+        )
+    else:  # platform == ProviderType.GITLAB
         handler = ServiceContextIssue(
             GitlabIssueHandler(issue.owner, issue.repo, token, username, base_domain),
             llm_config,
@@ -519,7 +542,13 @@ def process_single_issue(
 ) -> None:
     # Determine default base_domain based on platform
     if base_domain is None:
-        base_domain = 'github.com' if platform == ProviderType.GITHUB else 'gitlab.com'
+        base_domain = (
+            'github.com'
+            if platform == ProviderType.GITHUB
+            else 'gitlab.com'
+            if platform == ProviderType.GITLAB
+            else 'dev.azure.com'
+        )
     if not resolver_output.success and not send_on_failure:
         logger.info(
             f'Issue {resolver_output.issue.number} was not successfully resolved. Skipping PR creation.'
@@ -587,7 +616,7 @@ def process_single_issue(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='Send a pull request to Github or Gitlab.'
+        description='Send a pull request to Github, Gitlab, or Azure DevOps.'
     )
     parser.add_argument(
         '--selected-repo',
@@ -664,7 +693,7 @@ def main() -> None:
     parser.add_argument(
         '--reviewer',
         type=str,
-        help='GitHub or GitLab username of the person to request review from',
+        help='GitHub, GitLab, or Azure DevOps username of the person to request review from',
         default=None,
     )
     parser.add_argument(
@@ -677,7 +706,7 @@ def main() -> None:
         '--base-domain',
         type=str,
         default=None,
-        help='Base domain for the git server (defaults to "github.com" for GitHub and "gitlab.com" for GitLab)',
+        help='Base domain for the git server (defaults to "github.com" for GitHub, "gitlab.com" for GitLab, and "dev.azure.com" for Azure DevOps)',
     )
     parser.add_argument(
         '--git-user-name',
@@ -693,10 +722,15 @@ def main() -> None:
     )
     my_args = parser.parse_args()
 
-    token = my_args.token or os.getenv('GITHUB_TOKEN') or os.getenv('GITLAB_TOKEN')
+    token = (
+        my_args.token
+        or os.getenv('GITHUB_TOKEN')
+        or os.getenv('GITLAB_TOKEN')
+        or os.getenv('AZURE_DEVOPS_TOKEN')
+    )
     if not token:
         raise ValueError(
-            'token is not set, set via --token or GITHUB_TOKEN or GITLAB_TOKEN environment variable.'
+            'token is not set, set via --token or GITHUB_TOKEN, GITLAB_TOKEN, or AZURE_DEVOPS_TOKEN environment variable.'
         )
     username = my_args.username if my_args.username else os.getenv('GIT_USERNAME')
 

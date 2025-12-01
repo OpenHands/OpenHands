@@ -97,6 +97,10 @@ class SaasSettingsStore(SettingsStore):
             return settings
 
     async def store(self, item: Settings):
+        # Check if provider is OpenHands and generate API key if needed
+        if item and self._is_openhands_provider(item):
+            await self._ensure_openhands_api_key(item)
+
         with self.session_maker() as session:
             existing = None
             kwargs = {}
@@ -368,6 +372,30 @@ class SaasSettingsStore(SettingsStore):
     def _should_encrypt(self, key: str) -> bool:
         return key in ('llm_api_key', 'llm_api_key_for_byor', 'search_api_key')
 
+    def _is_openhands_provider(self, item: Settings) -> bool:
+        """Check if the settings use the OpenHands provider."""
+        return bool(item.llm_model and item.llm_model.startswith('openhands/'))
+
+    async def _ensure_openhands_api_key(self, item: Settings) -> None:
+        """Generate and set the OpenHands API key for the given settings.
+
+        First checks if an existing key with the OpenHands alias exists,
+        and reuses it if found. Otherwise, generates a new key.
+        """
+        # Generate new key if none exists
+        generated_key = await self._generate_openhands_key()
+        if generated_key:
+            item.llm_api_key = SecretStr(generated_key)
+            logger.info(
+                'saas_settings_store:store:generated_openhands_key',
+                extra={'user_id': self.user_id},
+            )
+        else:
+            logger.warning(
+                'saas_settings_store:store:failed_to_generate_openhands_key',
+                extra={'user_id': self.user_id},
+            )
+
     async def _create_user_in_lite_llm(
         self, client: httpx.AsyncClient, email: str | None, max_budget: int, spend: int
     ):
@@ -390,3 +418,55 @@ class SaasSettingsStore(SettingsStore):
             },
         )
         return response
+
+    async def _generate_openhands_key(self) -> str | None:
+        """Generate a new OpenHands provider key for a user."""
+        if not (LITE_LLM_API_KEY and LITE_LLM_API_URL):
+            logger.warning(
+                'saas_settings_store:_generate_openhands_key:litellm_config_not_found',
+                extra={'user_id': self.user_id},
+            )
+            return None
+
+        try:
+            async with httpx.AsyncClient(
+                verify=httpx_verify_option(),
+                headers={
+                    'x-goog-api-key': LITE_LLM_API_KEY,
+                },
+            ) as client:
+                response = await client.post(
+                    f'{LITE_LLM_API_URL}/key/generate',
+                    json={
+                        'user_id': self.user_id,
+                        'metadata': {'type': 'openhands'},
+                    },
+                )
+                response.raise_for_status()
+                response_json = response.json()
+                key = response_json.get('key')
+
+                if key:
+                    logger.info(
+                        'saas_settings_store:_generate_openhands_key:success',
+                        extra={
+                            'user_id': self.user_id,
+                            'key_length': len(key) if key else 0,
+                            'key_prefix': (
+                                key[:10] + '...' if key and len(key) > 10 else key
+                            ),
+                        },
+                    )
+                    return key
+                else:
+                    logger.error(
+                        'saas_settings_store:_generate_openhands_key:no_key_in_response',
+                        extra={'user_id': self.user_id, 'response_json': response_json},
+                    )
+                    return None
+        except Exception as e:
+            logger.exception(
+                'saas_settings_store:_generate_openhands_key:error',
+                extra={'user_id': self.user_id, 'error': str(e)},
+            )
+            return None

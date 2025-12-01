@@ -30,6 +30,7 @@ interface ConversationState {
   hasRightPanelToggled: boolean;
   planContent: string | null;
   conversationMode: ConversationMode;
+  subConversationTaskId: string | null; // Task ID for sub-conversation creation
 }
 
 interface ConversationActions {
@@ -54,6 +55,7 @@ interface ConversationActions {
   resetConversationState: () => void;
   setHasRightPanelToggled: (hasRightPanelToggled: boolean) => void;
   setConversationMode: (conversationMode: ConversationMode) => void;
+  setSubConversationTaskId: (taskId: string | null) => void;
 }
 
 type ConversationStore = ConversationState & ConversationActions;
@@ -165,6 +167,7 @@ The model took too long to respond
 - Simplify the task
 - Check model server logs`,
       conversationMode: "code",
+      subConversationTaskId: null,
 
       // Actions
       setIsRightPanelShown: (isRightPanelShown) =>
@@ -296,13 +299,24 @@ The model took too long to respond
         set({ submittedMessage }, false, "setSubmittedMessage"),
 
       resetConversationState: () =>
-        set({ shouldHideSuggestions: false }, false, "resetConversationState"),
+        set(
+          {
+            shouldHideSuggestions: false,
+            conversationMode: "code",
+            subConversationTaskId: null,
+          },
+          false,
+          "resetConversationState",
+        ),
 
       setHasRightPanelToggled: (hasRightPanelToggled) =>
         set({ hasRightPanelToggled }, false, "setHasRightPanelToggled"),
 
       setConversationMode: (conversationMode) =>
         set({ conversationMode }, false, "setConversationMode"),
+
+      setSubConversationTaskId: (subConversationTaskId) =>
+        set({ subConversationTaskId }, false, "setSubConversationTaskId"),
     }),
     {
       name: "conversation-store",

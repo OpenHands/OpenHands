@@ -701,6 +701,8 @@ NON_FNCALL_RESPONSE_MESSAGE = {
 </function>""",
         ),
         # Test case with indented code block to verify indentation is preserved
+        # Note: multiline parameter values should NOT have extra newlines before/after
+        # to prevent newline accumulation across multiple LLM response cycles
         (
             [
                 {
@@ -716,16 +718,12 @@ NON_FNCALL_RESPONSE_MESSAGE = {
             """<function=str_replace_editor>
 <parameter=command>str_replace</parameter>
 <parameter=path>/test/file.py</parameter>
-<parameter=old_str>
-def example():
-    pass
-</parameter>
-<parameter=new_str>
-def example():
+<parameter=old_str>def example():
+    pass</parameter>
+<parameter=new_str>def example():
     # This is indented
     print("hello")
-    return True
-</parameter>
+    return True</parameter>
 </function>""",
         ),
         # Test case with list parameter value

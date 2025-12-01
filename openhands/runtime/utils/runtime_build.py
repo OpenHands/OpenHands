@@ -247,9 +247,9 @@ def build_runtime_image_in_folder(
             lock_tag=lock_tag,
             # Only tag the versioned image if we are building from scratch.
             # This avoids too much layers when you lay one image on top of another multiple times
-            versioned_tag=versioned_tag
-            if build_from == BuildFromImageType.SCRATCH
-            else None,
+            versioned_tag=(
+                versioned_tag if build_from == BuildFromImageType.SCRATCH else None
+            ),
             platform=platform,
             extra_build_args=extra_build_args,
         )
@@ -282,10 +282,8 @@ def prep_build_folder(
         ),
     )
 
-    # Copy the 'microagents' directory (Microagents)
-    shutil.copytree(
-        Path(project_root, 'microagents'), Path(build_folder, 'code', 'microagents')
-    )
+    # Copy the 'skills' directory (Skills)
+    shutil.copytree(Path(project_root, 'skills'), Path(build_folder, 'code', 'skills'))
 
     # Copy pyproject.toml and poetry.lock files
     for file in ['pyproject.toml', 'poetry.lock']:

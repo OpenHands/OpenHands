@@ -165,7 +165,7 @@ export const createMockExecuteBashActionEvent = (
  * Creates a mock ExecuteBashObservation event for testing terminal output handling
  */
 export const createMockExecuteBashObservationEvent = (
-  output: string = "total 24\ndrwxr-xr-x  5 user  staff  160 Jan 10 12:00 .",
+  content: string = "total 24\ndrwxr-xr-x  5 user  staff  160 Jan 10 12:00 .",
   command: string = "ls -la",
 ) => ({
   id: "bash-obs-123",
@@ -175,7 +175,7 @@ export const createMockExecuteBashObservationEvent = (
   tool_call_id: "bash-call-456",
   observation: {
     kind: "ExecuteBashObservation",
-    output,
+    content: [{ type: "text", text: content }],
     command,
     exit_code: 0,
     error: false,

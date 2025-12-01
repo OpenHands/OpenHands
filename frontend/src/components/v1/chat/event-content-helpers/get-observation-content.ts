@@ -8,6 +8,7 @@ import {
   ThinkObservation,
   BrowserObservation,
   ExecuteBashObservation,
+  TerminalObservation,
   FileEditorObservation,
   StrReplaceEditorObservation,
   TaskTrackerObservation,
@@ -23,6 +24,15 @@ const getFileEditorObservationContent = (
     return `**Error:**\n${observation.error}`;
   }
 
+  // Extract text content from the observation if it exists
+  const textContent =
+    "content" in observation && Array.isArray(observation.content)
+      ? observation.content
+          .filter((c) => c.type === "text")
+          .map((c) => c.text)
+          .join("\n")
+      : null;
+
   const successMessage = getObservationResult(event) === "success";
 
   // For view commands or successful edits with content changes, format as code block
@@ -34,30 +44,34 @@ const getFileEditorObservationContent = (
       observation.new_content) ||
     observation.command === "view"
   ) {
-    return `\`\`\`\n${observation.output}\n\`\`\``;
+    // Prefer content over output for view commands, fallback to output if content is not available
+    const displayContent = textContent || observation.output;
+    return `\`\`\`\n${displayContent}\n\`\`\``;
   }
 
-  // For other commands, return the output as-is
-  return observation.output;
+  // For other commands, prefer content if available, otherwise use output
+  return textContent || observation.output;
 };
 
 // Command Observations
-const getExecuteBashObservationContent = (
-  event: ObservationEvent<ExecuteBashObservation>,
+const getTerminalObservationContent = (
+  event: ObservationEvent<ExecuteBashObservation | TerminalObservation>,
 ): string => {
   const { observation } = event;
 
-  let { output } = observation;
+  // Extract text content from the observation
+  const textContent = observation.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
 
-  if (!output) {
-    output = "";
+  let content = textContent || "";
+
+  if (content.length > MAX_CONTENT_LENGTH) {
+    content = `${content.slice(0, MAX_CONTENT_LENGTH)}...`;
   }
 
-  if (output.length > MAX_CONTENT_LENGTH) {
-    output = `${output.slice(0, MAX_CONTENT_LENGTH)}...`;
-  }
-
-  return `Output:\n\`\`\`sh\n${output.trim() || i18n.t("OBSERVATION$COMMAND_NO_OUTPUT")}\n\`\`\``;
+  return `Output:\n\`\`\`sh\n${content.trim() || i18n.t("OBSERVATION$COMMAND_NO_OUTPUT")}\n\`\`\``;
 };
 
 // Tool Observations
@@ -66,13 +80,22 @@ const getBrowserObservationContent = (
 ): string => {
   const { observation } = event;
 
+  // Extract text content from the observation
+  const textContent =
+    "content" in observation && Array.isArray(observation.content)
+      ? observation.content
+          .filter((c) => c.type === "text")
+          .map((c) => c.text)
+          .join("\n")
+      : "";
+
   let contentDetails = "";
 
-  if ("error" in observation && observation.error) {
-    contentDetails += `**Error:**\n${observation.error}\n\n`;
+  if ("is_error" in observation && observation.is_error) {
+    contentDetails += `**Error:**\n${textContent}`;
+  } else {
+    contentDetails += `**Output:**\n${textContent}`;
   }
-
-  contentDetails += `**Output:**\n${observation.output}`;
 
   if (contentDetails.length > MAX_CONTENT_LENGTH) {
     contentDetails = `${contentDetails.slice(0, MAX_CONTENT_LENGTH)}...(truncated)`;
@@ -177,8 +200,9 @@ export const getObservationContent = (event: ObservationEvent): string => {
       );
 
     case "ExecuteBashObservation":
-      return getExecuteBashObservationContent(
-        event as ObservationEvent<ExecuteBashObservation>,
+    case "TerminalObservation":
+      return getTerminalObservationContent(
+        event as ObservationEvent<ExecuteBashObservation | TerminalObservation>,
       );
 
     case "BrowserObservation":

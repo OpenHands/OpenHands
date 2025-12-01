@@ -40,6 +40,7 @@ export type V1AppConversationStartTaskStatus =
   | "PREPARING_REPOSITORY"
   | "RUNNING_SETUP_SCRIPT"
   | "SETTING_UP_GIT_HOOKS"
+  | "SETTING_UP_SKILLS"
   | "STARTING_CONVERSATION"
   | "READY"
   | "ERROR";

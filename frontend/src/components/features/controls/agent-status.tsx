@@ -7,13 +7,14 @@ import { ChatStopButton } from "../chat/chat-stop-button";
 import { AgentState } from "#/types/agent-state";
 import ClockIcon from "#/icons/u-clock-three.svg?react";
 import { ChatResumeAgentButton } from "../chat/chat-play-button";
-import { cn } from "#/utils/utils";
+import { cn, isTaskPolling } from "#/utils/utils";
 import { AgentLoading } from "./agent-loading";
 import { useConversationStore } from "#/state/conversation-store";
 import CircleErrorIcon from "#/icons/circle-error.svg?react";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
+import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
 
 export interface AgentStatusProps {
   className?: string;
@@ -38,6 +39,15 @@ export function AgentStatus({
   const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
 
+  const { subConversationTaskId } = useConversationStore();
+
+  // Poll sub-conversation task to track its loading state
+  const { taskStatus: subConversationTaskStatus } =
+    useSubConversationTaskPolling(
+      subConversationTaskId,
+      conversation?.conversation_id || null,
+    );
+
   const statusCode = getStatusCode(
     curStatusMessage,
     webSocketStatus,
@@ -45,17 +55,16 @@ export function AgentStatus({
     conversation?.runtime_status || null,
     curAgentState,
     taskStatus,
+    subConversationTaskStatus,
   );
-
-  const isTaskLoading =
-    taskStatus && taskStatus !== "ERROR" && taskStatus !== "READY";
 
   const shouldShownAgentLoading =
     isPausing ||
     curAgentState === AgentState.INIT ||
     curAgentState === AgentState.LOADING ||
     (webSocketStatus === "CONNECTING" && taskStatus !== "ERROR") ||
-    isTaskLoading;
+    isTaskPolling(taskStatus) ||
+    isTaskPolling(subConversationTaskStatus);
 
   const shouldShownAgentError =
     curAgentState === AgentState.ERROR ||

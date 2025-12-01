@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import base62
+import httpx
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
@@ -28,10 +29,14 @@ from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_app_conversation_service,
     depends_db_session,
+    depends_httpx_client,
     depends_sandbox_service,
 )
 from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.services.db_session_injector import set_db_session_keep_open
+from openhands.app_server.services.httpx_client_injector import (
+    set_httpx_client_keep_open,
+)
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.logger import openhands_logger as logger
@@ -105,6 +110,7 @@ app_conversation_service_dependency = depends_app_conversation_service()
 app_conversation_info_service_dependency = depends_app_conversation_info_service()
 sandbox_service_dependency = depends_sandbox_service()
 db_session_dependency = depends_db_session()
+httpx_client_dependency = depends_httpx_client()
 
 
 def _filter_conversations_by_age(
@@ -487,8 +493,11 @@ async def delete_conversation(
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
     sandbox_service: SandboxService = sandbox_service_dependency,
     db_session: AsyncSession = db_session_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> bool:
     set_db_session_keep_open(request.state, True)
+    set_httpx_client_keep_open(request.state, True)
+
     # Try V1 conversation first
     v1_result = await _try_delete_v1_conversation(
         conversation_id,
@@ -496,6 +505,7 @@ async def delete_conversation(
         app_conversation_info_service,
         sandbox_service,
         db_session,
+        httpx_client,
     )
     if v1_result is not None:
         return v1_result
@@ -510,6 +520,7 @@ async def _try_delete_v1_conversation(
     app_conversation_info_service: AppConversationInfoService,
     sandbox_service: SandboxService,
     db_session: AsyncSession,
+    httpx_client: httpx.AsyncClient,
 ) -> bool | None:
     """Try to delete a V1 conversation. Returns None if not a V1 conversation."""
     result = None
@@ -527,10 +538,17 @@ async def _try_delete_v1_conversation(
             result = await app_conversation_service.delete_app_conversation(
                 app_conversation_info.id
             )
+
+            # Manually commit so that the conversation will vanish from the list
+            await db_session.commit()
+
             # Delete the sandbox in the background
             asyncio.create_task(
-                _delete_sandbox_and_close_connection(
-                    sandbox_service, app_conversation_info.sandbox_id, db_session
+                _delete_sandbox_and_close_connections(
+                    sandbox_service,
+                    app_conversation_info.sandbox_id,
+                    db_session,
+                    httpx_client,
                 )
             )
     except (ValueError, TypeError):
@@ -543,14 +561,22 @@ async def _try_delete_v1_conversation(
     return result
 
 
-async def _delete_sandbox_and_close_connection(
-    sandbox_service: SandboxService, sandbox_id: str, db_session: AsyncSession
+async def _delete_sandbox_and_close_connections(
+    sandbox_service: SandboxService,
+    sandbox_id: str,
+    db_session: AsyncSession,
+    httpx_client: httpx.AsyncClient,
 ):
     try:
         await sandbox_service.delete_sandbox(sandbox_id)
         await db_session.commit()
     finally:
-        await db_session.aclose()
+        await asyncio.gather(
+            *[
+                db_session.aclose(),
+                httpx_client.aclose(),
+            ]
+        )
 
 
 async def _delete_v0_conversation(conversation_id: str, user_id: str | None) -> bool:

@@ -2,13 +2,16 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
 from openhands.server.routes.secrets import (
-    app,
+    app as secrets_router,
+)
+from openhands.server.routes.secrets import (
     check_provider_tokens,
 )
 from openhands.server.routes.settings import store_llm_settings
@@ -27,7 +30,12 @@ async def get_settings_store(request):
 
 @pytest.fixture
 def test_client():
-    # Create a test client
+    # Create a test client with a FastAPI app that includes the secrets router
+    # This is necessary because TestClient with APIRouter directly doesn't set up
+    # the full middleware stack in newer FastAPI versions (0.118.0+)
+    test_app = FastAPI()
+    test_app.include_router(secrets_router)
+
     with (
         patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
         patch('openhands.server.dependencies._SESSION_API_KEY', None),
@@ -36,7 +44,7 @@ def test_client():
             AsyncMock(return_value=''),
         ),
     ):
-        client = TestClient(app)
+        client = TestClient(test_app)
         yield client
 
 

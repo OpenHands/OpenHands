@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Annotated, Any, Coroutine, Literal, cast, overload
+from typing import Any, Coroutine, Literal, cast, overload
+from urllib.parse import quote
 
 import httpx
 from pydantic import (
@@ -10,13 +12,15 @@ from pydantic import (
     ConfigDict,
     Field,
     SecretStr,
-    WithJsonSchema,
 )
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action.action import Action
 from openhands.events.action.commands import CmdRunAction
 from openhands.events.stream import EventStream
+from openhands.integrations.azure_devops.azure_devops_service import (
+    AzureDevOpsServiceImpl,
+)
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketServiceImpl
 from openhands.integrations.github.github_service import GithubServiceImpl
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
@@ -91,16 +95,8 @@ class CustomSecret(BaseModel):
             raise ValueError('Unsupport Provider token type')
 
 
-PROVIDER_TOKEN_TYPE = MappingProxyType[ProviderType, ProviderToken]
-CUSTOM_SECRETS_TYPE = MappingProxyType[str, CustomSecret]
-PROVIDER_TOKEN_TYPE_WITH_JSON_SCHEMA = Annotated[
-    PROVIDER_TOKEN_TYPE,
-    WithJsonSchema({'type': 'object', 'additionalProperties': {'type': 'string'}}),
-]
-CUSTOM_SECRETS_TYPE_WITH_JSON_SCHEMA = Annotated[
-    CUSTOM_SECRETS_TYPE,
-    WithJsonSchema({'type': 'object', 'additionalProperties': {'type': 'string'}}),
-]
+PROVIDER_TOKEN_TYPE = Mapping[ProviderType, ProviderToken]
+CUSTOM_SECRETS_TYPE = Mapping[str, CustomSecret]
 
 
 class ProviderHandler:
@@ -109,6 +105,7 @@ class ProviderHandler:
         ProviderType.GITHUB: 'github.com',
         ProviderType.GITLAB: 'gitlab.com',
         ProviderType.BITBUCKET: 'bitbucket.org',
+        ProviderType.AZURE_DEVOPS: 'dev.azure.com',
     }
 
     def __init__(
@@ -129,6 +126,7 @@ class ProviderHandler:
             ProviderType.GITHUB: GithubServiceImpl,
             ProviderType.GITLAB: GitLabServiceImpl,
             ProviderType.BITBUCKET: BitBucketServiceImpl,
+            ProviderType.AZURE_DEVOPS: AzureDevOpsServiceImpl,
         }
 
         self.external_auth_id = external_auth_id
@@ -211,6 +209,17 @@ class ProviderHandler:
             return await service.get_installations()
         except Exception as e:
             logger.warning(f'Failed to get bitbucket workspaces {e}')
+
+        return []
+
+    async def get_azure_devops_organizations(self) -> list[str]:
+        service = cast(
+            InstallationsService, self.get_service(ProviderType.AZURE_DEVOPS)
+        )
+        try:
+            return await service.get_installations()
+        except Exception as e:
+            logger.warning(f'Failed to get azure devops organizations {e}')
 
         return []
 
@@ -658,8 +667,10 @@ class ProviderHandler:
         domain = self.PROVIDER_DOMAINS[provider]
 
         # If provider tokens are provided, use the host from the token if available
+        # Note: For Azure DevOps, don't use the host field as it may contain org/project path
         if self.provider_tokens and provider in self.provider_tokens:
-            domain = self.provider_tokens[provider].host or domain
+            if provider != ProviderType.AZURE_DEVOPS:
+                domain = self.provider_tokens[provider].host or domain
 
         # Try to use token if available, otherwise use public URL
         if self.provider_tokens and provider in self.provider_tokens:
@@ -678,6 +689,63 @@ class ProviderHandler:
                     else:
                         # Access token format: use x-token-auth
                         remote_url = f'https://x-token-auth:{token_value}@{domain}/{repo_name}.git'
+                elif provider == ProviderType.AZURE_DEVOPS:
+                    # Azure DevOps uses PAT with Basic auth
+                    # Format: https://{anything}:{PAT}@dev.azure.com/{org}/{project}/_git/{repo}
+                    # The username can be anything (it's ignored), but cannot be empty
+                    # We use the org name as the username for clarity
+                    # repo_name is in format: org/project/repo
+                    logger.info(
+                        f'[Azure DevOps] Constructing authenticated git URL for repository: {repo_name}'
+                    )
+                    logger.debug(f'[Azure DevOps] Original domain: {domain}')
+                    logger.debug(
+                        f'[Azure DevOps] Token available: {bool(token_value)}, '
+                        f'Token length: {len(token_value) if token_value else 0}'
+                    )
+
+                    # Remove domain prefix if it exists in domain variable
+                    clean_domain = domain.replace('https://', '').replace('http://', '')
+                    logger.debug(f'[Azure DevOps] Cleaned domain: {clean_domain}')
+
+                    parts = repo_name.split('/')
+                    logger.debug(
+                        f'[Azure DevOps] Repository parts: {parts} (length: {len(parts)})'
+                    )
+
+                    if len(parts) >= 3:
+                        org, project, repo = parts[0], parts[1], parts[2]
+                        logger.info(
+                            f'[Azure DevOps] Parsed repository - org: {org}, project: {project}, repo: {repo}'
+                        )
+                        # URL-encode org, project, and repo to handle spaces and special characters
+                        org_encoded = quote(org, safe='')
+                        project_encoded = quote(project, safe='')
+                        repo_encoded = quote(repo, safe='')
+                        logger.debug(
+                            f'[Azure DevOps] URL-encoded parts - org: {org_encoded}, project: {project_encoded}, repo: {repo_encoded}'
+                        )
+                        # Use org name as username (it's ignored by Azure DevOps but required for git)
+                        remote_url = f'https://{org}:***@{clean_domain}/{org_encoded}/{project_encoded}/_git/{repo_encoded}'
+                        logger.info(
+                            f'[Azure DevOps] Constructed git URL (token masked): {remote_url}'
+                        )
+                        # Set the actual URL with token
+                        remote_url = f'https://{org}:{token_value}@{clean_domain}/{org_encoded}/{project_encoded}/_git/{repo_encoded}'
+                    else:
+                        # Fallback if format is unexpected
+                        logger.warning(
+                            f'[Azure DevOps] Unexpected repository format: {repo_name}. '
+                            f'Expected org/project/repo (3 parts), got {len(parts)} parts. '
+                            'Using fallback URL format.'
+                        )
+                        remote_url = (
+                            f'https://user:{token_value}@{clean_domain}/{repo_name}.git'
+                        )
+                        logger.warning(
+                            f'[Azure DevOps] Fallback URL constructed (token masked): '
+                            f'https://user:***@{clean_domain}/{repo_name}.git'
+                        )
                 else:
                     # GitHub
                     remote_url = f'https://{token_value}@{domain}/{repo_name}.git'

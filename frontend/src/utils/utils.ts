@@ -182,6 +182,8 @@ export const shouldUseInstallationRepos = (
       return true;
     case "gitlab":
       return false;
+    case "azure_devops":
+      return false;
     case "github":
       return app_mode === "saas";
     default:
@@ -197,6 +199,8 @@ export const getGitProviderBaseUrl = (gitProvider: Provider): string => {
       return "https://gitlab.com";
     case "bitbucket":
       return "https://bitbucket.org";
+    case "azure_devops":
+      return "https://dev.azure.com";
     default:
       return "";
   }
@@ -210,6 +214,7 @@ export const getGitProviderBaseUrl = (gitProvider: Provider): string => {
 export const getProviderName = (gitProvider: Provider) => {
   if (gitProvider === "gitlab") return "GitLab";
   if (gitProvider === "bitbucket") return "Bitbucket";
+  if (gitProvider === "azure_devops") return "Azure DevOps";
   return "GitHub";
 };
 
@@ -254,6 +259,15 @@ export const constructPullRequestUrl = (
       return `${baseUrl}/${repositoryName}/-/merge_requests/${prNumber}`;
     case "bitbucket":
       return `${baseUrl}/${repositoryName}/pull-requests/${prNumber}`;
+    case "azure_devops": {
+      // Azure DevOps format: org/project/repo
+      const parts = repositoryName.split("/");
+      if (parts.length === 3) {
+        const [org, project, repo] = parts;
+        return `${baseUrl}/${org}/${project}/_git/${repo}/pullrequest/${prNumber}`;
+      }
+      return "";
+    }
     default:
       return "";
   }
@@ -288,6 +302,15 @@ export const constructMicroagentUrl = (
       return `${baseUrl}/${repositoryName}/-/blob/main/${microagentPath}`;
     case "bitbucket":
       return `${baseUrl}/${repositoryName}/src/main/${microagentPath}`;
+    case "azure_devops": {
+      // Azure DevOps format: org/project/repo
+      const parts = repositoryName.split("/");
+      if (parts.length === 3) {
+        const [org, project, repo] = parts;
+        return `${baseUrl}/${org}/${project}/_git/${repo}?path=/${microagentPath}&version=GBmain`;
+      }
+      return "";
+    }
     default:
       return "";
   }
@@ -357,6 +380,15 @@ export const constructBranchUrl = (
       return `${baseUrl}/${repositoryName}/-/tree/${branchName}`;
     case "bitbucket":
       return `${baseUrl}/${repositoryName}/src/${branchName}`;
+    case "azure_devops": {
+      // Azure DevOps format: org/project/repo
+      const parts = repositoryName.split("/");
+      if (parts.length === 3) {
+        const [org, project, repo] = parts;
+        return `${baseUrl}/${org}/${project}/_git/${repo}?version=GB${branchName}`;
+      }
+      return "";
+    }
     default:
       return "";
   }
@@ -610,6 +642,22 @@ export const buildSessionHeaders = (
   }
   return headers;
 };
+
+/**
+ * Check if a task is currently being polled (loading state)
+ * @param taskStatus The task status string (e.g., "WORKING", "ERROR", "READY")
+ * @returns True if the task is in a loading state (not ERROR and not READY)
+ *
+ * @example
+ * isTaskPolling("WORKING") // Returns true
+ * isTaskPolling("PREPARING_REPOSITORY") // Returns true
+ * isTaskPolling("READY") // Returns false
+ * isTaskPolling("ERROR") // Returns false
+ * isTaskPolling(null) // Returns false
+ * isTaskPolling(undefined) // Returns false
+ */
+export const isTaskPolling = (taskStatus: string | null | undefined): boolean =>
+  !!taskStatus && taskStatus !== "ERROR" && taskStatus !== "READY";
 
 /**
  * Get the appropriate color based on agent status

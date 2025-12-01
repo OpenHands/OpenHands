@@ -697,10 +697,14 @@ class TestDockerSandboxService:
         assert result is not None
         assert isinstance(result.created_at, datetime)
 
+    @patch(
+        'openhands.app_server.utils.docker_utils.is_running_in_docker',
+        return_value=True,
+    )
     async def test_container_to_checked_sandbox_info_health_check_success(
-        self, service, mock_running_container
+        self, mock_is_docker, service, mock_running_container
     ):
-        """Test health check success."""
+        """Test health check success when running in Docker."""
         # Setup
         service.httpx_client.get.return_value.raise_for_status.return_value = None
 
@@ -715,7 +719,34 @@ class TestDockerSandboxService:
         assert result.exposed_urls is not None
         assert result.session_api_key == 'session_key_123'
 
-        # Verify health check was called
+        # Verify health check was called with Docker-internal URL
+        service.httpx_client.get.assert_called_once_with(
+            'http://host.docker.internal:12345/health'
+        )
+
+    @patch(
+        'openhands.app_server.utils.docker_utils.is_running_in_docker',
+        return_value=False,
+    )
+    async def test_container_to_checked_sandbox_info_health_check_success_not_in_docker(
+        self, mock_is_docker, service, mock_running_container
+    ):
+        """Test health check success when not running in Docker."""
+        # Setup
+        service.httpx_client.get.return_value.raise_for_status.return_value = None
+
+        # Execute
+        result = await service._container_to_checked_sandbox_info(
+            mock_running_container
+        )
+
+        # Verify
+        assert result is not None
+        assert result.status == SandboxStatus.RUNNING
+        assert result.exposed_urls is not None
+        assert result.session_api_key == 'session_key_123'
+
+        # Verify health check was called with original localhost URL
         service.httpx_client.get.assert_called_once_with(
             'http://localhost:12345/health'
         )

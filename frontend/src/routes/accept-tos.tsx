@@ -10,6 +10,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { handleCaptureConsent } from "#/utils/handle-capture-consent";
 import { openHands } from "#/api/open-hands-axios";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { useTracking } from "#/hooks/use-tracking";
 
 export default function AcceptTOS() {
   const posthog = usePostHog();
@@ -17,6 +18,7 @@ export default function AcceptTOS() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [isTosAccepted, setIsTosAccepted] = React.useState(false);
+  const { trackUserSignupCompleted } = useTracking();
 
   // Get the redirect URL from the query parameters
   const redirectUrl = searchParams.get("redirect_url") || "/";
@@ -33,6 +35,9 @@ export default function AcceptTOS() {
       });
     },
     onSuccess: (response) => {
+      // Track user signup completion
+      trackUserSignupCompleted();
+
       // Get the redirect URL from the response
       const finalRedirectUrl = response.data.redirect_url || redirectUrl;
 

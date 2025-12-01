@@ -22,6 +22,7 @@ interface UserAssistantEventMessageProps {
     tooltip?: string;
   }>;
   isLastMessage: boolean;
+  isFromPlanningAgent: boolean;
 }
 
 export function UserAssistantEventMessage({
@@ -31,6 +32,7 @@ export function UserAssistantEventMessage({
   microagentPRUrl,
   actions,
   isLastMessage,
+  isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const message = parseMessageFromEvent(event);
 
@@ -46,7 +48,12 @@ export function UserAssistantEventMessage({
 
   return (
     <>
-      <ChatMessage type={event.source} message={message} actions={actions}>
+      <ChatMessage
+        type={event.source}
+        message={message}
+        actions={actions}
+        isFromPlanningAgent={isFromPlanningAgent}
+      >
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
         )}

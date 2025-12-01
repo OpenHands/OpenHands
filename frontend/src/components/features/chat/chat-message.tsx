@@ -19,6 +19,7 @@ interface ChatMessageProps {
     onClick: () => void;
     tooltip?: string;
   }>;
+  isFromPlanningAgent?: boolean;
 }
 
 export function ChatMessage({
@@ -26,6 +27,7 @@ export function ChatMessage({
   message,
   children,
   actions,
+  isFromPlanningAgent = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const [isHovering, setIsHovering] = React.useState(false);
   const [isCopy, setIsCopy] = React.useState(false);
@@ -59,6 +61,7 @@ export function ChatMessage({
         "flex flex-col gap-2",
         type === "user" && " p-4 bg-tertiary self-end",
         type === "agent" && "mt-6 w-full max-w-full bg-transparent",
+        isFromPlanningAgent && "border border-[#597ff4] bg-tertiary p-4",
       )}
     >
       <div

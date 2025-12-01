@@ -877,7 +877,7 @@ class AgentController:
 
         # Synchronize spend across all llm services with the budget flag
         self.state_tracker.sync_budget_flag_with_metrics()
-        if self._is_stuck():
+        if self.agent.config.enable_stuck_detection and self._is_stuck():
             await self._react_to_exception(
                 AgentStuckInLoopError('Agent got stuck in a loop')
             )

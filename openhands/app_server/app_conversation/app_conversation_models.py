@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
@@ -97,7 +97,9 @@ class AppConversationStartRequest(BaseModel):
     """
 
     sandbox_id: str | None = Field(default=None)
+    conversation_id: UUID | None = Field(default=None)
     initial_message: SendMessageRequest | None = None
+    system_message_suffix: str | None = None
     processors: list[EventCallbackProcessor] | None = Field(default=None)
     llm_model: str | None = None
 
@@ -118,6 +120,7 @@ class AppConversationStartTaskStatus(Enum):
     PREPARING_REPOSITORY = 'PREPARING_REPOSITORY'
     RUNNING_SETUP_SCRIPT = 'RUNNING_SETUP_SCRIPT'
     SETTING_UP_GIT_HOOKS = 'SETTING_UP_GIT_HOOKS'
+    SETTING_UP_SKILLS = 'SETTING_UP_SKILLS'
     STARTING_CONVERSATION = 'STARTING_CONVERSATION'
     READY = 'READY'
     ERROR = 'ERROR'

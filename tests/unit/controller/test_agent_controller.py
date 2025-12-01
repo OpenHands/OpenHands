@@ -94,6 +94,7 @@ def mock_agent_with_stats():
     )
     agent_config.disabled_microagents = []
     agent_config.enable_mcp = True
+    agent_config.enable_stuck_detection = True
     llm_registry.service_to_llm.clear()
     mock_llm = llm_registry.get_llm('agent_llm', llm_config)
     agent.llm = mock_llm

@@ -32,6 +32,9 @@ from openhands.app_server.sandbox.sandbox_service import (
 )
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname_for_docker,
+)
 
 _logger = logging.getLogger(__name__)
 SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
@@ -159,6 +162,7 @@ class DockerSandboxService(SandboxService):
                                 ExposedUrl(
                                     name=exposed_port.name,
                                     url=url,
+                                    port=host_port,
                                 )
                             )
 
@@ -185,6 +189,9 @@ class DockerSandboxService(SandboxService):
                 if exposed_url.name == AGENT_SERVER
             )
             try:
+                # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
+                app_server_url = replace_localhost_hostname_for_docker(app_server_url)
+
                 response = await self.httpx_client.get(
                     f'{app_server_url}{self.health_check_path}'
                 )
@@ -192,7 +199,7 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                _logger.info(f'Sandbox server not running: {exc}')
+                _logger.info(f'Sandbox server not running: {app_server_url} : {exc}')
                 sandbox_info.status = SandboxStatus.ERROR
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None
@@ -210,7 +217,9 @@ class DockerSandboxService(SandboxService):
             sandboxes = []
 
             for container in all_containers:
-                if container.name.startswith(self.container_name_prefix):
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
                     sandbox_info = await self._container_to_checked_sandbox_info(
                         container
                     )

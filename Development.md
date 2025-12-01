@@ -91,14 +91,14 @@ make run
 #### Option B: Individual Server Startup
 
 - **Start the Backend Server:** If you prefer, you can start the backend server independently to focus on
-backend-related tasks or configurations.
+  backend-related tasks or configurations.
 
   ```bash
   make start-backend
   ```
 
 - **Start the Frontend Server:** Similarly, you can start the frontend server on its own to work on frontend-related
-components or interface enhancements.
+  components or interface enhancements.
   ```bash
   make start-frontend
   ```
@@ -110,6 +110,7 @@ You can use OpenHands to develop and improve OpenHands itself! This is a powerfu
 #### Quick Start
 
 1. **Build and run OpenHands:**
+
    ```bash
    export INSTALL_DOCKER=0
    export RUNTIME=local
@@ -117,6 +118,7 @@ You can use OpenHands to develop and improve OpenHands itself! This is a powerfu
    ```
 
 2. **Access the interface:**
+
    - Local development: http://localhost:3001
    - Remote/cloud environments: Use the appropriate external URL
 
@@ -199,6 +201,6 @@ Here's a guide to the important documentation files in the repository:
 - [/containers/README.md](./containers/README.md): Information about Docker containers and deployment
 - [/tests/unit/README.md](./tests/unit/README.md): Guide to writing and running unit tests
 - [/evaluation/README.md](./evaluation/README.md): Documentation for the evaluation framework and benchmarks
-- [/microagents/README.md](./microagents/README.md): Information about the microagents architecture and implementation
+- [/skills/README.md](./skills/README.md): Information about the skills architecture and implementation
 - [/openhands/server/README.md](./openhands/server/README.md): Server implementation details and API documentation
 - [/openhands/runtime/README.md](./openhands/runtime/README.md): Documentation for the runtime environment and execution model

@@ -50,3 +50,11 @@ export function showChatError({
     status_update: true,
   });
 }
+
+/**
+ * Checks if an error message indicates a budget or credit limit issue
+ */
+export function isBudgetOrCreditError(errorMessage: string): boolean {
+  const lowerCaseError = errorMessage.toLowerCase();
+  return lowerCaseError.includes("budget") || lowerCaseError.includes("credit");
+}
