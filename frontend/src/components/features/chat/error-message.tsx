@@ -1,13 +1,9 @@
 import React from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
 import { useTranslation } from "react-i18next";
-import { code } from "../markdown/code";
-import { ol, ul } from "../markdown/list";
 import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import i18n from "#/i18n";
+import { MarkdownRenderer } from "../markdown/markdown-renderer";
 
 interface ErrorMessageProps {
   errorId?: string;
@@ -40,18 +36,7 @@ export function ErrorMessage({ errorId, defaultMessage }: ErrorMessageProps) {
         </button>
       </div>
 
-      {showDetails && (
-        <Markdown
-          components={{
-            code,
-            ul,
-            ol,
-          }}
-          remarkPlugins={[remarkGfm, remarkBreaks]}
-        >
-          {defaultMessage}
-        </Markdown>
-      )}
+      {showDetails && <MarkdownRenderer>{defaultMessage}</MarkdownRenderer>}
     </div>
   );
 }

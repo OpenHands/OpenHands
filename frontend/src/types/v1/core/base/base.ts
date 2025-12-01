@@ -6,7 +6,8 @@ type EventType =
   | "Terminal"
   | "FileEditor"
   | "StrReplaceEditor"
-  | "TaskTracker";
+  | "TaskTracker"
+  | "PlanningFileEditor";
 
 type ActionOnlyType =
   | "BrowserNavigate"

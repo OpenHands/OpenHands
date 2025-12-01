@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import Markdown from "react-markdown";
 import { Link } from "react-router";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
 import { useConfig } from "#/hooks/query/use-config";
 import { I18nKey } from "#/i18n/declaration";
 import ArrowDown from "#/icons/angle-down-solid.svg?react";
@@ -13,9 +10,7 @@ import XCircle from "#/icons/x-circle-solid.svg?react";
 import { OpenHandsAction } from "#/types/core/actions";
 import { OpenHandsObservation } from "#/types/core/observations";
 import { cn } from "#/utils/utils";
-import { code } from "../markdown/code";
-import { ol, ul } from "../markdown/list";
-import { paragraph } from "../markdown/paragraph";
+import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { MonoComponent } from "./mono-component";
 import { PathComponent } from "./path-component";
 
@@ -192,17 +187,7 @@ export function ExpandableMessage({
         </div>
         {showDetails && (
           <div className="text-sm">
-            <Markdown
-              components={{
-                code,
-                ul,
-                ol,
-                p: paragraph,
-              }}
-              remarkPlugins={[remarkGfm, remarkBreaks]}
-            >
-              {details}
-            </Markdown>
+            <MarkdownRenderer includeStandard>{details}</MarkdownRenderer>
           </div>
         )}
       </div>

@@ -1,13 +1,9 @@
 import React from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
-import { code } from "../markdown/code";
-import { ol, ul } from "../markdown/list";
 import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import { SuccessIndicator } from "./success-indicator";
 import { ObservationResultStatus } from "./event-content-helpers/get-observation-result";
+import { MarkdownRenderer } from "../markdown/markdown-renderer";
 
 interface GenericEventMessageProps {
   title: React.ReactNode;
@@ -49,16 +45,7 @@ export function GenericEventMessage({
 
       {showDetails &&
         (typeof details === "string" ? (
-          <Markdown
-            components={{
-              code,
-              ul,
-              ol,
-            }}
-            remarkPlugins={[remarkGfm, remarkBreaks]}
-          >
-            {details}
-          </Markdown>
+          <MarkdownRenderer>{details}</MarkdownRenderer>
         ) : (
           details
         ))}

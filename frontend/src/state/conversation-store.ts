@@ -56,6 +56,7 @@ interface ConversationActions {
   setHasRightPanelToggled: (hasRightPanelToggled: boolean) => void;
   setConversationMode: (conversationMode: ConversationMode) => void;
   setSubConversationTaskId: (taskId: string | null) => void;
+  setPlanContent: (planContent: string | null) => void;
 }
 
 type ConversationStore = ConversationState & ConversationActions;
@@ -81,91 +82,7 @@ export const useConversationStore = create<ConversationStore>()(
       submittedMessage: null,
       shouldHideSuggestions: false,
       hasRightPanelToggled: true,
-      planContent: `
-# Improve Developer Onboarding and Examples
-
-## Overview
-
-Based on the analysis of Browser-Use's current documentation and examples, this plan addresses gaps in developer onboarding by creating a progressive learning path, troubleshooting resources, and practical examples that address real-world scenarios (like the LM Studio/local LLM integration issues encountered).
-
-## Current State Analysis
-
-**Strengths:**
-
-- Good quickstart documentation in \`docs/quickstart.mdx\`
-- Extensive examples across multiple categories (60+ example files)
-- Well-structured docs with multiple LLM provider examples
-- Active community support via Discord
-
-**Gaps Identified:**
-
-- No progressive tutorial series that builds complexity gradually
-- Limited troubleshooting documentation for common issues
-- Sparse comments in example files explaining what's happening
-- Local LLM setup (Ollama/LM Studio) not prominently featured
-- No "first 10 minutes" success path
-- Missing visual/conceptual architecture guides for beginners
-- Error messages don't always point to solutions
-
-## Proposed Improvements
-
-### 1. Create Interactive Tutorial Series (\`examples/tutorials/\`)
-
-**New folder structure:**
-
-\`\`\`
-examples/tutorials/
-├── README.md              # Tutorial overview and prerequisites
-├── 00_hello_world.py      # Absolute minimal example
-├── 01_your_first_search.py # Basic search with detailed comments
-├── 02_understanding_actions.py # How actions work
-├── 03_data_extraction_basics.py # Extract data step-by-step
-├── 04_error_handling.py   # Common errors and solutions
-├── 05_custom_tools_intro.py # First custom tool
-├── 06_local_llm_setup.py  # Ollama/LM Studio complete guide
-└── 07_debugging_tips.py   # Debugging strategies
-\`\`\`
-
-**Key Features:**
-
-- Each file 50–80 lines max
-- Extensive inline comments explaining every concept
-- Clear learning objectives at the top of each file
-- "What you'll learn" and "Prerequisites" sections
-- Common pitfalls highlighted
-- Expected output shown in comments
-
-### 2. Troubleshooting Guide (\`docs/troubleshooting.mdx\`)
-
-**Sections:**
-
-- Installation issues (Chromium, dependencies, virtual environments)
-- LLM provider connection errors (API keys, timeouts, rate limits)
-- Local LLM setup (Ollama vs LM Studio, model compatibility)
-- Browser automation issues (element not found, timeout errors)
-- Common error messages with solutions
-- Performance optimization tips
-- When to ask for help (Discord/GitHub)
-
-**Format:**
-
-**Error: "LLM call timed out after 60 seconds"**
-
-**What it means:**
-The model took too long to respond
-
-**Common causes:**
-
-1. Model is too slow for the task
-2. LM Studio/Ollama not responding properly
-3. Complex page overwhelming the model
-
-**Solutions:**
-
-- Use flash_mode for faster execution
-- Try a faster model (Gemini Flash, GPT-4 Turbo Mini)
-- Simplify the task
-- Check model server logs`,
+      planContent: null,
       conversationMode: "code",
       subConversationTaskId: null,
 
@@ -304,6 +221,7 @@ The model took too long to respond
             shouldHideSuggestions: false,
             conversationMode: "code",
             subConversationTaskId: null,
+            planContent: null,
           },
           false,
           "resetConversationState",
@@ -317,6 +235,9 @@ The model took too long to respond
 
       setSubConversationTaskId: (subConversationTaskId) =>
         set({ subConversationTaskId }, false, "setSubConversationTaskId"),
+
+      setPlanContent: (planContent) =>
+        set({ planContent }, false, "setPlanContent"),
     }),
     {
       name: "conversation-store",
