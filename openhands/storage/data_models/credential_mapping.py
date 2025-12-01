@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CredentialMapping(BaseModel):
@@ -50,7 +50,9 @@ class CredentialMapping(BaseModel):
         validate_assignment=True,
     )
 
-    def validate_auth_method(self) -> None:
+    @model_validator(mode='after')
+    def validate_auth_method(self) -> 'CredentialMapping':
         """Validate that auth_header is provided when auth_method is 'header'."""
         if self.auth_method == 'header' and not self.auth_header:
             raise ValueError('auth_header is required when auth_method is "header"')
+        return self
