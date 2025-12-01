@@ -8319,22 +8319,6 @@
     "de": "Gedanke",
     "uk": "Думка"
   },
-  "OBSERVATION_MESSAGE$FINISH": {
-    "en": "Finish",
-    "ja": "完了",
-    "zh-CN": "完成",
-    "zh-TW": "完成",
-    "ko-KR": "완료",
-    "no": "Fullført",
-    "it": "Fine",
-    "pt": "Concluído",
-    "es": "Finalizar",
-    "ar": "إنهاء",
-    "fr": "Terminer",
-    "tr": "Bitir",
-    "de": "Beenden",
-    "uk": "Завершити"
-  },
   "OBSERVATION_MESSAGE$TASK_TRACKING_PLAN": {
     "en": "Agent updated the plan",
     "zh-CN": "代理更新了计划",
