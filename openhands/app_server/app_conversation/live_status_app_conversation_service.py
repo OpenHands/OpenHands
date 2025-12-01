@@ -63,6 +63,7 @@ from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
@@ -528,7 +529,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             request.llm_model = parent_info.llm_model
 
     async def _setup_secrets_for_git_provider(
-        self, git_provider: ProviderType | None, user
+        self, git_provider: ProviderType | None, user: UserInfo
     ) -> dict:
         """Set up secrets for git provider authentication.
 
@@ -574,7 +575,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         return secrets
 
     async def _configure_llm_and_mcp(
-        self, user, llm_model: str | None
+        self, user: UserInfo, llm_model: str | None
     ) -> tuple[LLM, dict]:
         """Configure LLM and MCP (Model Context Protocol) settings.
 
@@ -613,12 +614,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # In OSS Mode, we add the tavily key based on an environment variable.
             # We do not do this in SAAS as it will be added by the OpenHands server
-            if self.tavily_api_key:
+            tavily_api_key = user.search_api_key or self.tavily_api_key
+            if tavily_api_key:
                 _logger.info('Adding search engine to MCP config')
                 mcp_config['tavily'] = {
                     'command': 'npx',
                     'args': ['-y', 'tavily-mcp@0.2.1'],
-                    'env': {'TAVILY_API_KEY': self.tavily_api_key},
+                    'env': {'TAVILY_API_KEY': tavily_api_key},
                 }
             else:
                 _logger.info('No search engine API key found, skipping search engine')
@@ -677,7 +679,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self,
         agent: Agent,
         conversation_id: UUID | None,
-        user,
+        user: UserInfo,
         workspace: LocalWorkspace,
         initial_message: SendMessageRequest | None,
         secrets: dict,

@@ -186,7 +186,7 @@ def config_from_env() -> AppServerConfig:
 
     if config.app_conversation is None:
         tavily_api_key = None
-        tavily_api_key_str = os.getenv('TAVILY_API_KEY')
+        tavily_api_key_str = os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY')
         if tavily_api_key_str:
             tavily_api_key = SecretStr(tavily_api_key_str)
         config.app_conversation = LiveStatusAppConversationServiceInjector(
