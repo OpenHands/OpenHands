@@ -184,7 +184,22 @@ const getFinishObservationContent = (
   event: ObservationEvent<FinishObservation>,
 ): string => {
   const { observation } = event;
-  return observation.message || "";
+
+  // Extract text content from the observation
+  const textContent = observation.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+
+  let content = "";
+
+  if (observation.is_error) {
+    content += `**Error:**\n${textContent}`;
+  } else {
+    content += textContent;
+  }
+
+  return content;
 };
 
 export const getObservationContent = (event: ObservationEvent): string => {

@@ -31,7 +31,6 @@ interface ConversationState {
   planContent: string | null;
   conversationMode: ConversationMode;
   subConversationTaskId: string | null; // Task ID for sub-conversation creation
-  isCreateAPlanClicked: boolean;
 }
 
 interface ConversationActions {
@@ -57,7 +56,7 @@ interface ConversationActions {
   setHasRightPanelToggled: (hasRightPanelToggled: boolean) => void;
   setConversationMode: (conversationMode: ConversationMode) => void;
   setSubConversationTaskId: (taskId: string | null) => void;
-  setIsCreateAPlanClicked: (isCreateAPlanClicked: boolean) => void;
+  setPlanContent: (planContent: string | null) => void;
 }
 
 type ConversationStore = ConversationState & ConversationActions;
@@ -86,7 +85,6 @@ export const useConversationStore = create<ConversationStore>()(
       planContent: null,
       conversationMode: "code",
       subConversationTaskId: null,
-      isCreateAPlanClicked: false,
 
       // Actions
       setIsRightPanelShown: (isRightPanelShown) =>
@@ -223,7 +221,6 @@ export const useConversationStore = create<ConversationStore>()(
             shouldHideSuggestions: false,
             conversationMode: "code",
             subConversationTaskId: null,
-            isCreateAPlanClicked: false,
             planContent: null,
           },
           false,
@@ -239,8 +236,8 @@ export const useConversationStore = create<ConversationStore>()(
       setSubConversationTaskId: (subConversationTaskId) =>
         set({ subConversationTaskId }, false, "setSubConversationTaskId"),
 
-      setIsCreateAPlanClicked: (isCreateAPlanClicked) =>
-        set({ isCreateAPlanClicked }, false, "setIsCreateAPlanClicked"),
+      setPlanContent: (planContent) =>
+        set({ planContent }, false, "setPlanContent"),
     }),
     {
       name: "conversation-store",
