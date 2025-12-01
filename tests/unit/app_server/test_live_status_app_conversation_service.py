@@ -251,9 +251,7 @@ class TestLiveStatusAppConversationService:
         assert isinstance(llm, LLM)
         assert 'default' in mcp_config
         assert 'tavily' in mcp_config
-        assert mcp_config['tavily']['command'] == 'npx'
-        assert mcp_config['tavily']['args'] == ['-y', 'tavily-mcp@0.2.1']
-        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'user_search_key'
+        assert mcp_config['tavily']['url'] == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_tavily_with_env_tavily_key(self):
@@ -271,7 +269,7 @@ class TestLiveStatusAppConversationService:
         assert isinstance(llm, LLM)
         assert 'default' in mcp_config
         assert 'tavily' in mcp_config
-        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'env_tavily_key'
+        assert mcp_config['tavily']['url'] == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_tavily_user_key_takes_precedence(self):
@@ -291,7 +289,7 @@ class TestLiveStatusAppConversationService:
         # Assert
         assert isinstance(llm, LLM)
         assert 'tavily' in mcp_config
-        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'user_search_key'
+        assert mcp_config['tavily']['url'] == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_no_tavily_without_keys(self):
@@ -357,7 +355,7 @@ class TestLiveStatusAppConversationService:
         assert isinstance(llm, LLM)
         assert 'default' in mcp_config
         assert 'tavily' in mcp_config
-        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'user_search_key'
+        assert mcp_config['tavily']['url'] == 'https://mcp.tavily.com/mcp/?tavilyApiKey=user_search_key'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_tavily_with_empty_user_search_key(self):
@@ -378,7 +376,7 @@ class TestLiveStatusAppConversationService:
         assert isinstance(llm, LLM)
         assert 'tavily' in mcp_config
         # Should fall back to env key since user key is empty
-        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'env_tavily_key'
+        assert mcp_config['tavily']['url'] == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_tavily_with_whitespace_user_search_key(self):
@@ -399,7 +397,7 @@ class TestLiveStatusAppConversationService:
         assert isinstance(llm, LLM)
         assert 'tavily' in mcp_config
         # Should fall back to env key since user key is whitespace only
-        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'env_tavily_key'
+        assert mcp_config['tavily']['url'] == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
