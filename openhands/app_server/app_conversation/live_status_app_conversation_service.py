@@ -1046,7 +1046,10 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
 
-            if self.tavily_api_key:
+            # We supply the global tavily key only if the app mode is not SAAS, where
+            # currently the search endpoints are patched into the app server instead
+            # so the tavily key does not need to be shared
+            if self.tavily_api_key and app_mode != AppMode.SAAS:
                 tavily_api_key = self.tavily_api_key.get_secret_value()
             else:
                 tavily_api_key = None
