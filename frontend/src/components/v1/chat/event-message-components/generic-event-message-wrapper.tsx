@@ -1,6 +1,3 @@
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
 import { OpenHandsEvent } from "#/types/v1/core";
 import { GenericEventMessage } from "../../../features/chat/generic-event-message";
 import { getEventContent } from "../event-content-helpers/get-event-content";
@@ -12,18 +9,7 @@ import {
 } from "../event-content-helpers/create-skill-ready-event";
 import { V1ConfirmationButtons } from "#/components/shared/buttons/v1-confirmation-buttons";
 import { ObservationResultStatus } from "../../../features/chat/event-content-helpers/get-observation-result";
-import { code } from "#/components/features/markdown/code";
-import { ul, ol } from "#/components/features/markdown/list";
-import { paragraph } from "#/components/features/markdown/paragraph";
-import { anchor } from "#/components/features/markdown/anchor";
-import {
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6,
-} from "#/components/features/markdown/headings";
+import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
@@ -44,24 +30,9 @@ export function GenericEventMessageWrapper({
       }
       if (event.observation.kind === "FinishObservation") {
         return (
-          <Markdown
-            components={{
-              code,
-              ul,
-              ol,
-              a: anchor,
-              p: paragraph,
-              h1,
-              h2,
-              h3,
-              h4,
-              h5,
-              h6,
-            }}
-            remarkPlugins={[remarkGfm, remarkBreaks]}
-          >
+          <MarkdownRenderer includeStandard includeHeadings>
             {details as string}
-          </Markdown>
+          </MarkdownRenderer>
         );
       }
     }
