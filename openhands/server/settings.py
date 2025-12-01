@@ -9,6 +9,7 @@ from pydantic import (
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.integrations.provider import CustomSecret, ProviderToken
 from openhands.integrations.service_types import ProviderType
+from openhands.storage.data_models.credential_mapping import CredentialMapping
 from openhands.storage.data_models.settings import Settings
 
 
@@ -54,3 +55,20 @@ class GETCustomSecrets(BaseModel):
     """Custom secrets names"""
 
     custom_secrets: list[CustomSecretWithoutValueModel] | None = None
+
+
+class CredentialMappingModel(BaseModel):
+    """Credential mapping model for API requests"""
+
+    resource_pattern: str
+    credential_name: str
+    auth_method: str
+    auth_header: str | None = None
+    resource_type: str | None = None
+    description: str | None = None
+
+
+class GETCredentialMappings(BaseModel):
+    """Credential mappings list"""
+
+    credential_mappings: list[dict[str, str | None]]

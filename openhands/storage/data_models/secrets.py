@@ -21,6 +21,11 @@ from openhands.integrations.provider import (
     ProviderToken,
 )
 from openhands.integrations.service_types import ProviderType
+from openhands.storage.data_models.credential_mapping import CredentialMapping
+
+
+# Type alias for credential mappings
+CREDENTIAL_MAPPINGS_TYPE = Mapping[str, CredentialMapping]
 
 
 class Secrets(BaseModel):
@@ -32,13 +37,18 @@ class Secrets(BaseModel):
         default_factory=lambda: MappingProxyType({})
     )
 
+    credential_mappings: CREDENTIAL_MAPPINGS_TYPE = Field(
+        default_factory=lambda: MappingProxyType({}),
+        description='Mappings from resource patterns to credentials for automatic authentication',
+    )
+
     model_config = ConfigDict(
         frozen=True,
         validate_assignment=True,
         arbitrary_types_allowed=True,
     )
 
-    @field_validator('provider_tokens', 'custom_secrets')
+    @field_validator('provider_tokens', 'custom_secrets', 'credential_mappings')
     @classmethod
     def immutable_validator(cls, value: Mapping) -> MappingProxyType:
         return MappingProxyType(value)
@@ -94,6 +104,26 @@ class Secrets(BaseModel):
 
         return secrets
 
+    @field_serializer('credential_mappings')
+    def credential_mappings_serializer(
+        self,
+        credential_mappings: CREDENTIAL_MAPPINGS_TYPE,
+        info: SerializationInfo,
+    ) -> dict[str, dict[str, Any]]:
+        """Serialize credential mappings to dictionary."""
+        mappings = {}
+        if credential_mappings:
+            for mapping_id, mapping in credential_mappings.items():
+                mappings[mapping_id] = {
+                    'resource_pattern': mapping.resource_pattern,
+                    'credential_name': mapping.credential_name,
+                    'auth_method': mapping.auth_method,
+                    'auth_header': mapping.auth_header,
+                    'resource_type': mapping.resource_type,
+                    'description': mapping.description,
+                }
+        return mappings
+
     @model_validator(mode='before')
     @classmethod
     def convert_dict_to_mappingproxy(
@@ -141,6 +171,24 @@ class Secrets(BaseModel):
                 new_data['custom_secrets'] = MappingProxyType(converted_secrets)
             elif isinstance(secrets, MappingProxyType):
                 new_data['custom_secrets'] = secrets
+
+        if 'credential_mappings' in data:
+            mappings = data['credential_mappings']
+            if isinstance(mappings, dict):
+                converted_mappings = {}
+                for key, value in mappings.items():
+                    try:
+                        converted_mappings[key] = CredentialMapping(**value)
+                    except (ValueError, TypeError, KeyError):
+                        # Skip invalid credential mappings
+                        continue
+
+                new_data['credential_mappings'] = MappingProxyType(converted_mappings)
+            elif isinstance(mappings, MappingProxyType):
+                new_data['credential_mappings'] = mappings
+        else:
+            # Initialize empty credential_mappings if not present (for backward compatibility)
+            new_data['credential_mappings'] = MappingProxyType({})
 
         return new_data
 

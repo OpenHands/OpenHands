@@ -7,8 +7,10 @@ from openhands.integrations.service_types import ProviderType
 from openhands.integrations.utils import validate_provider_token
 from openhands.server.dependencies import get_dependencies
 from openhands.server.settings import (
+    CredentialMappingModel,
     CustomSecretModel,
     CustomSecretWithoutValueModel,
+    GETCredentialMappings,
     GETCustomSecrets,
     POSTProviderModel,
 )
@@ -17,6 +19,7 @@ from openhands.server.user_auth import (
     get_secrets,
     get_secrets_store,
 )
+from openhands.storage.data_models.credential_mapping import CredentialMapping
 from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
@@ -233,10 +236,13 @@ async def create_custom_secret(
             description=secret_description or '',
         )
 
-        # Create a new Secrets that preserves provider tokens
+        # Create a new Secrets that preserves provider tokens and credential mappings
         updated_user_secrets = Secrets(
             custom_secrets=custom_secrets,  # type: ignore[arg-type]
             provider_tokens=existing_secrets.provider_tokens
+            if existing_secrets
+            else {},  # type: ignore[arg-type]
+            credential_mappings=existing_secrets.credential_mappings
             if existing_secrets
             else {},  # type: ignore[arg-type]
         )
@@ -291,6 +297,7 @@ async def update_custom_secret(
             updated_secrets = Secrets(
                 custom_secrets=custom_secrets,  # type: ignore[arg-type]
                 provider_tokens=existing_secrets.provider_tokens,
+                credential_mappings=existing_secrets.credential_mappings,
             )
 
             await secrets_store.store(updated_secrets)
@@ -332,6 +339,7 @@ async def delete_custom_secret(
             updated_secrets = Secrets(
                 custom_secrets=custom_secrets,  # type: ignore[arg-type]
                 provider_tokens=existing_secrets.provider_tokens,
+                credential_mappings=existing_secrets.credential_mappings,
             )
 
             await secrets_store.store(updated_secrets)
@@ -345,4 +353,326 @@ async def delete_custom_secret(
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': 'Something went wrong deleting secret'},
+        )
+
+
+# =================================================
+# SECTION: Handle credential mappings
+# =================================================
+
+
+@app.get('/credentials/mappings', response_model=GETCredentialMappings)
+async def get_credential_mappings(
+    user_secrets: Secrets | None = Depends(get_secrets),
+) -> GETCredentialMappings | JSONResponse:
+    """Get all credential mappings."""
+    try:
+        if not user_secrets or not user_secrets.credential_mappings:
+            return GETCredentialMappings(credential_mappings=[])
+
+        mappings_list = []
+        for mapping_id, mapping in user_secrets.credential_mappings.items():
+            mappings_list.append(
+                {
+                    'id': mapping_id,
+                    'resource_pattern': mapping.resource_pattern,
+                    'credential_name': mapping.credential_name,
+                    'auth_method': mapping.auth_method,
+                    'auth_header': mapping.auth_header,
+                    'resource_type': mapping.resource_type,
+                    'description': mapping.description,
+                }
+            )
+
+        return GETCredentialMappings(credential_mappings=mappings_list)
+
+    except Exception as e:
+        logger.warning(f'Failed to load credential mappings: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': 'Failed to load credential mappings'},
+        )
+
+
+@app.post('/credentials/mappings', response_model=dict[str, str])
+async def create_credential_mapping(
+    incoming_mapping: CredentialMappingModel,
+    secrets_store: SecretsStore = Depends(get_secrets_store),
+    user_secrets: Secrets | None = Depends(get_secrets),
+) -> JSONResponse:
+    """Create a new credential mapping."""
+    try:
+        # Validate that the referenced credential exists
+        if user_secrets:
+            if (
+                incoming_mapping.credential_name
+                not in user_secrets.custom_secrets
+            ):
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        'error': f'Credential {incoming_mapping.credential_name} does not exist'
+                    },
+                )
+        else:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    'error': f'Credential {incoming_mapping.credential_name} does not exist'
+                },
+            )
+
+        # Validate auth_method
+        if incoming_mapping.auth_method not in [
+            'api_key',
+            'bearer_token',
+            'basic_auth',
+            'header',
+        ]:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={'error': 'Invalid auth_method'},
+            )
+
+        # Validate that auth_header is provided when auth_method is 'header'
+        if (
+            incoming_mapping.auth_method == 'header'
+            and not incoming_mapping.auth_header
+        ):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    'error': 'auth_header is required when auth_method is "header"'
+                },
+            )
+
+        existing_secrets = await secrets_store.load()
+        credential_mappings = (
+            dict(existing_secrets.credential_mappings)
+            if existing_secrets
+            else {}
+        )
+
+        # Create mapping ID from resource_pattern (use hash or simple identifier)
+        mapping_id = f"{incoming_mapping.resource_pattern}_{incoming_mapping.credential_name}"
+        # Replace special characters to make it a valid identifier
+        mapping_id = mapping_id.replace('/', '_').replace(':', '_').replace(
+            '*', 'star'
+        ).replace('?', 'q').replace(' ', '_')
+
+        if mapping_id in credential_mappings:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    'error': 'Credential mapping with this pattern and credential already exists'
+                },
+            )
+
+        credential_mappings[mapping_id] = CredentialMapping(
+            resource_pattern=incoming_mapping.resource_pattern,
+            credential_name=incoming_mapping.credential_name,
+            auth_method=incoming_mapping.auth_method,  # type: ignore[arg-type]
+            auth_header=incoming_mapping.auth_header,
+            resource_type=incoming_mapping.resource_type,
+            description=incoming_mapping.description,
+        )
+
+        # Create a new Secrets that preserves provider tokens and custom secrets
+        updated_user_secrets = Secrets(
+            custom_secrets=existing_secrets.custom_secrets
+            if existing_secrets
+            else {},  # type: ignore[arg-type]
+            provider_tokens=existing_secrets.provider_tokens
+            if existing_secrets
+            else {},  # type: ignore[arg-type]
+            credential_mappings=credential_mappings,  # type: ignore[arg-type]
+        )
+
+        await secrets_store.store(updated_user_secrets)
+
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={
+                'message': 'Credential mapping created successfully',
+                'mapping_id': mapping_id,
+            },
+        )
+    except Exception as e:
+        logger.warning(f'Something went wrong creating credential mapping: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': 'Something went wrong creating credential mapping'},
+        )
+
+
+@app.put('/credentials/mappings/{mapping_id}', response_model=dict[str, str])
+async def update_credential_mapping(
+    mapping_id: str,
+    incoming_mapping: CredentialMappingModel,
+    secrets_store: SecretsStore = Depends(get_secrets_store),
+    user_secrets: Secrets | None = Depends(get_secrets),
+) -> JSONResponse:
+    """Update an existing credential mapping."""
+    try:
+        existing_secrets = await secrets_store.load()
+        if not existing_secrets:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': 'Credential mapping not found'},
+            )
+
+        credential_mappings = dict(existing_secrets.credential_mappings)
+
+        if mapping_id not in credential_mappings:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': 'Credential mapping not found'},
+            )
+
+        # Validate that the referenced credential exists
+        if user_secrets:
+            if (
+                incoming_mapping.credential_name
+                not in user_secrets.custom_secrets
+            ):
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        'error': f'Credential {incoming_mapping.credential_name} does not exist'
+                    },
+                )
+
+        # Validate auth_method
+        if incoming_mapping.auth_method not in [
+            'api_key',
+            'bearer_token',
+            'basic_auth',
+            'header',
+        ]:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={'error': 'Invalid auth_method'},
+            )
+
+        # Validate that auth_header is provided when auth_method is 'header'
+        if (
+            incoming_mapping.auth_method == 'header'
+            and not incoming_mapping.auth_header
+        ):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    'error': 'auth_header is required when auth_method is "header"'
+                },
+            )
+
+        credential_mappings[mapping_id] = CredentialMapping(
+            resource_pattern=incoming_mapping.resource_pattern,
+            credential_name=incoming_mapping.credential_name,
+            auth_method=incoming_mapping.auth_method,  # type: ignore[arg-type]
+            auth_header=incoming_mapping.auth_header,
+            resource_type=incoming_mapping.resource_type,
+            description=incoming_mapping.description,
+        )
+
+        updated_user_secrets = Secrets(
+            custom_secrets=existing_secrets.custom_secrets,
+            provider_tokens=existing_secrets.provider_tokens,
+            credential_mappings=credential_mappings,  # type: ignore[arg-type]
+        )
+
+        await secrets_store.store(updated_user_secrets)
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={'message': 'Credential mapping updated successfully'},
+        )
+    except Exception as e:
+        logger.warning(f'Something went wrong updating credential mapping: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': 'Something went wrong updating credential mapping'},
+        )
+
+
+@app.delete('/credentials/mappings/{mapping_id}')
+async def delete_credential_mapping(
+    mapping_id: str,
+    secrets_store: SecretsStore = Depends(get_secrets_store),
+) -> JSONResponse:
+    """Delete a credential mapping."""
+    try:
+        existing_secrets = await secrets_store.load()
+        if not existing_secrets:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': 'Credential mapping not found'},
+            )
+
+        credential_mappings = dict(existing_secrets.credential_mappings)
+
+        if mapping_id not in credential_mappings:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': 'Credential mapping not found'},
+            )
+
+        credential_mappings.pop(mapping_id)
+
+        updated_user_secrets = Secrets(
+            custom_secrets=existing_secrets.custom_secrets,
+            provider_tokens=existing_secrets.provider_tokens,
+            credential_mappings=credential_mappings,  # type: ignore[arg-type]
+        )
+
+        await secrets_store.store(updated_user_secrets)
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={'message': 'Credential mapping deleted successfully'},
+        )
+    except Exception as e:
+        logger.warning(f'Something went wrong deleting credential mapping: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': 'Something went wrong deleting credential mapping'},
+        )
+
+
+@app.get('/credentials/resolve')
+async def resolve_credential(
+    url: str,
+    user_secrets: Secrets | None = Depends(get_secrets),
+) -> JSONResponse:
+    """Test credential resolution for a given URL (without exposing secrets)."""
+    try:
+        from openhands.storage.credentials.resolver import CredentialResolver
+
+        resolver = CredentialResolver(user_secrets)
+        result = resolver.resolve_credential(url)
+
+        if result:
+            credential_value, auth_headers = result
+            # Don't expose the actual credential value
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    'matched': True,
+                    'auth_headers': {
+                        k: '***' if 'authorization' in k.lower() or 'key' in k.lower() else v
+                        for k, v in auth_headers.items()
+                    },
+                    'header_count': len(auth_headers),
+                },
+            )
+        else:
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={'matched': False},
+            )
+    except Exception as e:
+        logger.warning(f'Failed to resolve credential: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': 'Failed to resolve credential'},
         )
