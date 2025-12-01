@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
-from pydantic import Field, TypeAdapter
+from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
     ConversationInfo,
@@ -106,6 +106,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
     keycloak_auth_cookie: str | None = None
+    tavily_api_key: str | None = None
 
     async def search_app_conversations(
         self,
@@ -610,6 +611,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     'X-Session-API-Key': mcp_api_key,
                 }
 
+            # In OSS Mode, we add the tavily key based on an environment variable.
+            # We do not do this in SAAS as it will be added by the OpenHands server
+            if self.tavily_api_key:
+                _logger.info('Adding search engine to MCP config')
+                mcp_config['tavily'] = {
+                    'command': 'npx',
+                    'args': ['-y', 'tavily-mcp@0.2.1'],
+                    'env': {'TAVILY_API_KEY': self.tavily_api_key},
+                }
+            else:
+                _logger.info('No search engine API key found, skipping search engine')
+
         return llm, mcp_config
 
     def _create_agent_with_context(
@@ -972,6 +985,10 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             'be retrieved by a sandboxed conversation.'
         ),
     )
+    tavily_api_key: SecretStr | None = Field(
+        default=None,
+        description='The Tavily Search API key to add to MCP integration',
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -1029,6 +1046,11 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
 
+            if self.tavily_api_key:
+                tavily_api_key = self.tavily_api_key.get_secret_value()
+            else:
+                tavily_api_key = None
+
             yield LiveStatusAppConversationService(
                 init_git_in_empty_workspace=self.init_git_in_empty_workspace,
                 user_context=user_context,
@@ -1045,4 +1067,5 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
                 keycloak_auth_cookie=keycloak_auth_cookie,
+                tavily_api_key=tavily_api_key,
             )
