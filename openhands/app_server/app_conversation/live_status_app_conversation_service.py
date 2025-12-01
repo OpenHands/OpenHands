@@ -612,7 +612,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     'X-Session-API-Key': mcp_api_key,
                 }
 
-            tavily_api_key = user.search_api_key or self.tavily_api_key
+            # Get the actual API key values, prioritizing user's key over service key
+            user_search_key = None
+            if user.search_api_key:
+                key_value = user.search_api_key.get_secret_value()
+                if key_value and key_value.strip():
+                    user_search_key = key_value
+
+            service_tavily_key = None
+            if self.tavily_api_key:
+                # tavily_api_key is already a string (extracted in the factory method)
+                if self.tavily_api_key.strip():
+                    service_tavily_key = self.tavily_api_key
+
+            tavily_api_key = user_search_key or service_tavily_key
+
             if tavily_api_key:
                 _logger.info('Adding search engine to MCP config')
                 mcp_config['tavily'] = {
