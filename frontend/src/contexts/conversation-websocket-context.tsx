@@ -505,7 +505,6 @@ export function ConversationWebSocketProvider({
                   },
                   {
                     onSuccess: (fileContent) => {
-                      console.log("File content:", fileContent);
                       setPlanContent(fileContent);
                     },
                     onError: (error) => {

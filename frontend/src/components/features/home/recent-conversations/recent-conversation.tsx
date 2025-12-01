@@ -67,12 +67,14 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
               </div>
             ) : null}
           </div>
-          <span>
-            {formatTimeDelta(
-              new Date(conversation.created_at || conversation.last_updated_at),
-            )}{" "}
-            {t(I18nKey.CONVERSATION$AGO)}
-          </span>
+          {(conversation.created_at || conversation.last_updated_at) && (
+            <span>
+              {formatTimeDelta(
+                conversation.created_at || conversation.last_updated_at,
+              )}{" "}
+              {t(I18nKey.CONVERSATION$AGO)}
+            </span>
+          )}
         </div>
       </button>
     </Link>

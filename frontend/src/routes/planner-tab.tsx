@@ -1,24 +1,10 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
 import { I18nKey } from "#/i18n/declaration";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { useConversationStore } from "#/state/conversation-store";
-import { code } from "#/components/features/markdown/code";
-import { ul, ol } from "#/components/features/markdown/list";
-import { paragraph } from "#/components/features/markdown/paragraph";
-import { anchor } from "#/components/features/markdown/anchor";
-import {
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6,
-} from "#/components/features/markdown/headings";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
+import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 
 function PlannerTab() {
   const { t } = useTranslation();
@@ -35,24 +21,9 @@ function PlannerTab() {
         onScroll={(e) => onChatBodyScroll(e.currentTarget)}
         className="flex flex-col w-full h-full p-4 overflow-auto"
       >
-        <Markdown
-          components={{
-            code,
-            ul,
-            ol,
-            a: anchor,
-            p: paragraph,
-            h1,
-            h2,
-            h3,
-            h4,
-            h5,
-            h6,
-          }}
-          remarkPlugins={[remarkGfm, remarkBreaks]}
-        >
+        <MarkdownRenderer includeStandard includeHeadings>
           {planContent}
-        </Markdown>
+        </MarkdownRenderer>
       </div>
     );
   }
