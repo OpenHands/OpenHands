@@ -203,4 +203,3 @@ def test_resolver_pattern_matching_edge_cases(sample_secrets):
     # Test with path
     result3 = resolver.resolve_credential('npm.example.com/packages')
     assert result3 is not None
-

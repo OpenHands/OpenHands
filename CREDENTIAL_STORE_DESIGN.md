@@ -164,4 +164,3 @@ POST /api/credentials/mappings
 3. **Multi-credential Support**: Try multiple credentials if first fails
 4. **Credential Rotation**: Automatic credential rotation
 5. **Context-aware Matching**: Use different credentials based on task context
-

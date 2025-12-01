@@ -23,7 +23,6 @@ from openhands.integrations.provider import (
 from openhands.integrations.service_types import ProviderType
 from openhands.storage.data_models.credential_mapping import CredentialMapping
 
-
 # Type alias for credential mappings
 CREDENTIAL_MAPPINGS_TYPE = Mapping[str, CredentialMapping]
 

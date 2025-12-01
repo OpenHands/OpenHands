@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fnmatch
-import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -40,9 +39,7 @@ class CredentialResolver:
                 self._mappings_cache = {}
         return self._mappings_cache
 
-    def resolve_credential(
-        self, url: str
-    ) -> tuple[str, dict[str, str]] | None:
+    def resolve_credential(self, url: str) -> tuple[str, dict[str, str]] | None:
         """Resolve credentials for a given URL.
 
         This method matches the URL against stored credential mappings and
@@ -106,9 +103,7 @@ class CredentialResolver:
         # Try exact match first
         for mapping_id, mapping in mappings.items():
             if mapping.resource_pattern == url or mapping.resource_pattern == full_url:
-                logger.debug(
-                    f'Exact match found for URL {url}: mapping {mapping_id}'
-                )
+                logger.debug(f'Exact match found for URL {url}: mapping {mapping_id}')
                 return mapping
 
         # Try domain match
@@ -117,14 +112,14 @@ class CredentialResolver:
             # Remove protocol if present in pattern
             if pattern.startswith(('http://', 'https://')):
                 pattern_parsed = urlparse(pattern)
-                pattern_domain = pattern_parsed.netloc or pattern_parsed.path.split('/')[0]
+                pattern_domain = (
+                    pattern_parsed.netloc or pattern_parsed.path.split('/')[0]
+                )
             else:
                 pattern_domain = pattern.split('/')[0]
 
             if domain and domain == pattern_domain:
-                logger.debug(
-                    f'Domain match found for URL {url}: mapping {mapping_id}'
-                )
+                logger.debug(f'Domain match found for URL {url}: mapping {mapping_id}')
                 return mapping
 
         # Try wildcard/fnmatch pattern
@@ -134,9 +129,7 @@ class CredentialResolver:
             if self._pattern_matches(pattern, url) or self._pattern_matches(
                 pattern, domain
             ):
-                logger.debug(
-                    f'Pattern match found for URL {url}: mapping {mapping_id}'
-                )
+                logger.debug(f'Pattern match found for URL {url}: mapping {mapping_id}')
                 return mapping
 
         return None
@@ -232,7 +225,8 @@ class CredentialResolver:
                 )
             headers[mapping.auth_header] = credential_value
         else:
-            logger.warning(
+            # This else is kept for defensive programming in case auth_method enum is extended
+            logger.warning(  # type: ignore[unreachable]
                 f'Unknown auth_method: {mapping.auth_method} for mapping {mapping.resource_pattern}'
             )
 
@@ -258,4 +252,3 @@ class CredentialResolver:
         """
         mappings = self._get_mappings()
         return mappings.get(mapping_id)
-

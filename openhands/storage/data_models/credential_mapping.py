@@ -53,7 +53,4 @@ class CredentialMapping(BaseModel):
     def validate_auth_method(self) -> None:
         """Validate that auth_header is provided when auth_method is 'header'."""
         if self.auth_method == 'header' and not self.auth_header:
-            raise ValueError(
-                'auth_header is required when auth_method is "header"'
-            )
-
+            raise ValueError('auth_header is required when auth_method is "header"')

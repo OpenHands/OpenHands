@@ -1,6 +1,7 @@
 """Tests for CredentialMapping model."""
 
 import pytest
+from pydantic import ValidationError
 
 from openhands.storage.data_models.credential_mapping import CredentialMapping
 
@@ -45,8 +46,8 @@ def test_credential_mapping_immutability():
         auth_method='api_key',
     )
 
-    # Attempting to modify should raise an error
-    with pytest.raises(Exception):  # pydantic will raise ValidationError
+    # Attempting to modify should raise an error (pydantic raises ValidationError for frozen models)
+    with pytest.raises(ValidationError):
         mapping.resource_pattern = 'other.com'
 
 
@@ -91,6 +92,5 @@ def test_credential_mapping_validation(
         mapping = CredentialMapping(**kwargs)
         assert mapping.resource_pattern == resource_pattern
     else:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CredentialMapping(**kwargs)
-

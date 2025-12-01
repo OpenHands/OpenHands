@@ -404,10 +404,7 @@ async def create_credential_mapping(
     try:
         # Validate that the referenced credential exists
         if user_secrets:
-            if (
-                incoming_mapping.credential_name
-                not in user_secrets.custom_secrets
-            ):
+            if incoming_mapping.credential_name not in user_secrets.custom_secrets:
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={
@@ -448,17 +445,21 @@ async def create_credential_mapping(
 
         existing_secrets = await secrets_store.load()
         credential_mappings = (
-            dict(existing_secrets.credential_mappings)
-            if existing_secrets
-            else {}
+            dict(existing_secrets.credential_mappings) if existing_secrets else {}
         )
 
         # Create mapping ID from resource_pattern (use hash or simple identifier)
-        mapping_id = f"{incoming_mapping.resource_pattern}_{incoming_mapping.credential_name}"
+        mapping_id = (
+            f'{incoming_mapping.resource_pattern}_{incoming_mapping.credential_name}'
+        )
         # Replace special characters to make it a valid identifier
-        mapping_id = mapping_id.replace('/', '_').replace(':', '_').replace(
-            '*', 'star'
-        ).replace('?', 'q').replace(' ', '_')
+        mapping_id = (
+            mapping_id.replace('/', '_')
+            .replace(':', '_')
+            .replace('*', 'star')
+            .replace('?', 'q')
+            .replace(' ', '_')
+        )
 
         if mapping_id in credential_mappings:
             return JSONResponse(
@@ -479,9 +480,7 @@ async def create_credential_mapping(
 
         # Create a new Secrets that preserves provider tokens and custom secrets
         updated_user_secrets = Secrets(
-            custom_secrets=existing_secrets.custom_secrets
-            if existing_secrets
-            else {},  # type: ignore[arg-type]
+            custom_secrets=existing_secrets.custom_secrets if existing_secrets else {},  # type: ignore[arg-type]
             provider_tokens=existing_secrets.provider_tokens
             if existing_secrets
             else {},  # type: ignore[arg-type]
@@ -531,10 +530,7 @@ async def update_credential_mapping(
 
         # Validate that the referenced credential exists
         if user_secrets:
-            if (
-                incoming_mapping.credential_name
-                not in user_secrets.custom_secrets
-            ):
+            if incoming_mapping.credential_name not in user_secrets.custom_secrets:
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={
@@ -659,7 +655,9 @@ async def resolve_credential(
                 content={
                     'matched': True,
                     'auth_headers': {
-                        k: '***' if 'authorization' in k.lower() or 'key' in k.lower() else v
+                        k: '***'
+                        if 'authorization' in k.lower() or 'key' in k.lower()
+                        else v
                         for k, v in auth_headers.items()
                     },
                     'header_count': len(auth_headers),

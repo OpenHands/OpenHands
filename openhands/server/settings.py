@@ -9,7 +9,6 @@ from pydantic import (
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.integrations.provider import CustomSecret, ProviderToken
 from openhands.integrations.service_types import ProviderType
-from openhands.storage.data_models.credential_mapping import CredentialMapping
 from openhands.storage.data_models.settings import Settings
 
 

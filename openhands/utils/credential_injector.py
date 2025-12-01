@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import httpx
-from typing import TYPE_CHECKING
 
 from openhands.core.logger import openhands_logger as logger
 
@@ -16,7 +17,7 @@ async def send_request_with_credential_retry(
     session: httpx.AsyncClient | httpx.Client,
     method: str,
     url: str,
-    **kwargs: any,
+    **kwargs: Any,
 ) -> httpx.Response:
     """Send an HTTP request with automatic credential injection on 401/403 errors.
 
@@ -58,7 +59,7 @@ async def send_request_with_credential_retry(
                 )
 
                 # Update headers with credential headers
-                existing_headers = kwargs.get('headers', {}) or {}
+                existing_headers: dict[str, str] = kwargs.get('headers', {}) or {}
                 existing_headers.update(auth_headers)
                 kwargs['headers'] = existing_headers
 
@@ -89,4 +90,3 @@ async def send_request_with_credential_retry(
             )
 
     return response
-

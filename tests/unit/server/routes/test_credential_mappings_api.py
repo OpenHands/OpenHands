@@ -5,13 +5,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import SecretStr
 
-from openhands.integrations.provider import CustomSecret, ProviderToken, ProviderType
 from openhands.server.routes.secrets import app as secrets_app
 from openhands.storage import get_file_store
-from openhands.storage.data_models.credential_mapping import CredentialMapping
-from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.secrets.file_secrets_store import FileSecretsStore
 
 
@@ -257,4 +253,3 @@ async def test_resolve_credential_no_match(test_client, file_secrets_store):
     assert response.status_code == 200
     data = response.json()
     assert data['matched'] is False
-

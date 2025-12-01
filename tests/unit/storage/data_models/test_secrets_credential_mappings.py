@@ -2,10 +2,9 @@
 
 from types import MappingProxyType
 
-import pytest
 from pydantic import SecretStr
 
-from openhands.integrations.provider import CustomSecret, ProviderToken, ProviderType
+from openhands.integrations.provider import CustomSecret
 from openhands.storage.data_models.credential_mapping import CredentialMapping
 from openhands.storage.data_models.secrets import Secrets
 
@@ -34,18 +33,13 @@ def test_secrets_with_credential_mappings():
 
     assert len(secrets.credential_mappings) == 1
     assert 'mapping1' in secrets.credential_mappings
-    assert (
-        secrets.credential_mappings['mapping1'].resource_pattern
-        == 'npm.example.com'
-    )
+    assert secrets.credential_mappings['mapping1'].resource_pattern == 'npm.example.com'
 
 
 def test_secrets_serialization_with_credential_mappings():
     """Test serializing Secrets with credential mappings."""
     custom_secrets = {
-        'TOKEN': CustomSecret(
-            secret=SecretStr('secret_value'), description='Token'
-        )
+        'TOKEN': CustomSecret(secret=SecretStr('secret_value'), description='Token')
     }
 
     credential_mappings = {
@@ -131,9 +125,7 @@ def test_secrets_backward_compatibility_no_mappings():
 def test_secrets_json_serialization():
     """Test JSON serialization of Secrets with credential mappings."""
     custom_secrets = {
-        'TOKEN': CustomSecret(
-            secret=SecretStr('secret_value'), description='Token'
-        )
+        'TOKEN': CustomSecret(secret=SecretStr('secret_value'), description='Token')
     }
 
     credential_mappings = {
@@ -155,4 +147,3 @@ def test_secrets_json_serialization():
     assert 'credential_mappings' in json_str
     assert 'map1' in json_str
     assert 'test.com' in json_str
-
