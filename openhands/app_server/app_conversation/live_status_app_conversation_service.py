@@ -630,9 +630,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             if tavily_api_key:
                 _logger.info('Adding search engine to MCP config')
                 mcp_config['tavily'] = {
-                    'command': 'npx',
-                    'args': ['-y', 'tavily-mcp@0.2.1'],
-                    'env': {'TAVILY_API_KEY': tavily_api_key},
+                    "url": f"https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}"
                 }
             else:
                 _logger.info('No search engine API key found, skipping search engine')
