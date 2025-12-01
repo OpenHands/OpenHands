@@ -1,4 +1,4 @@
-"""Unit tests for the refactored methods in LiveStatusAppConversationService."""
+"""Unit tests for the methods in LiveStatusAppConversationService."""
 
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
@@ -20,8 +20,8 @@ from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 
-class TestLiveStatusAppConversationServiceRefactored:
-    """Test cases for the refactored methods in LiveStatusAppConversationService."""
+class TestLiveStatusAppConversationService:
+    """Test cases for the methods in LiveStatusAppConversationService."""
 
     def setup_method(self):
         """Set up test fixtures."""
