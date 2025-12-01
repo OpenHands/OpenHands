@@ -38,4 +38,4 @@ class UserSettings(Base):  # type: ignore
     email_verified = Column(Boolean, nullable=True)
     git_user_name = Column(String, nullable=True)
     git_user_email = Column(String, nullable=True)
-    v1_enabled = Column(Boolean, nullable=False, default=False)
+    v1_enabled = Column(Boolean, nullable=True)

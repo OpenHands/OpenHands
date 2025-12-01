@@ -48,7 +48,7 @@ class Settings(BaseModel):
     email_verified: bool | None = None
     git_user_name: str | None = None
     git_user_email: str | None = None
-    v1_enabled: bool = False
+    v1_enabled: bool | None = None
 
     model_config = ConfigDict(
         validate_assignment=True,

@@ -217,7 +217,9 @@ class DockerSandboxService(SandboxService):
             sandboxes = []
 
             for container in all_containers:
-                if container.name.startswith(self.container_name_prefix):
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
                     sandbox_info = await self._container_to_checked_sandbox_info(
                         container
                     )

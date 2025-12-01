@@ -22,7 +22,11 @@ def upgrade() -> None:
     """Add v1_enabled column to user_settings table."""
     op.add_column(
         'user_settings',
-        sa.Column('v1_enabled', sa.Boolean(), nullable=False, default=False),
+        sa.Column(
+            'v1_enabled',
+            sa.Boolean(),
+            nullable=True,
+        ),
     )
 
 

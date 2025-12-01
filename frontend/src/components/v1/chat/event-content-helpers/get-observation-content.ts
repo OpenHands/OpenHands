@@ -80,13 +80,22 @@ const getBrowserObservationContent = (
 ): string => {
   const { observation } = event;
 
+  // Extract text content from the observation
+  const textContent =
+    "content" in observation && Array.isArray(observation.content)
+      ? observation.content
+          .filter((c) => c.type === "text")
+          .map((c) => c.text)
+          .join("\n")
+      : "";
+
   let contentDetails = "";
 
-  if ("error" in observation && observation.error) {
-    contentDetails += `**Error:**\n${observation.error}\n\n`;
+  if ("is_error" in observation && observation.is_error) {
+    contentDetails += `**Error:**\n${textContent}`;
+  } else {
+    contentDetails += `**Output:**\n${textContent}`;
   }
-
-  contentDetails += `**Output:**\n${observation.output}`;
 
   if (contentDetails.length > MAX_CONTENT_LENGTH) {
     contentDetails = `${contentDetails.slice(0, MAX_CONTENT_LENGTH)}...(truncated)`;

@@ -85,11 +85,20 @@ const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
       actionKey = "ACTION_MESSAGE$TASK_TRACKING";
       break;
     case "BrowserNavigateAction":
+    case "BrowserClickAction":
+    case "BrowserTypeAction":
+    case "BrowserGetStateAction":
+    case "BrowserGetContentAction":
+    case "BrowserScrollAction":
+    case "BrowserGoBackAction":
+    case "BrowserListTabsAction":
+    case "BrowserSwitchTabAction":
+    case "BrowserCloseTabAction":
       actionKey = "ACTION_MESSAGE$BROWSE";
       break;
     default:
       // For unknown actions, use the type name
-      return actionType.replace("Action", "").toUpperCase();
+      return String(actionType).replace("Action", "").toUpperCase();
   }
 
   if (actionKey) {
