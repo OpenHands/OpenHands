@@ -363,15 +363,16 @@ async def delete_custom_secret(
 
 @app.get('/credentials/mappings', response_model=GETCredentialMappings)
 async def get_credential_mappings(
-    user_secrets: Secrets | None = Depends(get_secrets),
+    secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> GETCredentialMappings | JSONResponse:
     """Get all credential mappings."""
     try:
-        if not user_secrets or not user_secrets.credential_mappings:
+        existing_secrets = await secrets_store.load()
+        if not existing_secrets or not existing_secrets.credential_mappings:
             return GETCredentialMappings(credential_mappings=[])
 
         mappings_list = []
-        for mapping_id, mapping in user_secrets.credential_mappings.items():
+        for mapping_id, mapping in existing_secrets.credential_mappings.items():
             mappings_list.append(
                 {
                     'id': mapping_id,
@@ -638,12 +639,13 @@ async def delete_credential_mapping(
 @app.get('/credentials/resolve')
 async def resolve_credential(
     url: str,
-    user_secrets: Secrets | None = Depends(get_secrets),
+    secrets_store: SecretsStore = Depends(get_secrets_store),
 ) -> JSONResponse:
     """Test credential resolution for a given URL (without exposing secrets)."""
     try:
         from openhands.storage.credentials.resolver import CredentialResolver
 
+        user_secrets = await secrets_store.load()
         resolver = CredentialResolver(user_secrets)
         result = resolver.resolve_credential(url)
 
