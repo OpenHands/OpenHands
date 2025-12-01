@@ -43,7 +43,6 @@ from openhands.app_server.user.specifiy_user_context import (
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Event
-from openhands.sdk.conversation.conversation_stats import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
@@ -126,50 +125,6 @@ async def on_conversation_update(
     return Success()
 
 
-async def _process_stats_event(
-    event: ConversationStateUpdateEvent,
-    conversation_id: UUID,
-    app_conversation_info_service: AppConversationInfoService,
-) -> None:
-    """Process a stats event and update conversation statistics.
-
-    Args:
-        event: The ConversationStateUpdateEvent with key='stats'
-        conversation_id: The ID of the conversation to update
-        app_conversation_info_service: Service for updating conversation info
-    """
-    try:
-        # Parse event value into ConversationStats model for type safety
-        # event.value can be a dict (from JSON deserialization) or a ConversationStats object
-        event_value = event.value
-        conversation_stats: ConversationStats | None = None
-
-        if isinstance(event_value, ConversationStats):
-            # Already a ConversationStats object
-            conversation_stats = event_value
-        elif isinstance(event_value, dict):
-            # Parse dict into ConversationStats model
-            # This validates the structure and ensures type safety
-            conversation_stats = ConversationStats.model_validate(event_value)
-        elif hasattr(event_value, 'usage_to_metrics'):
-            # Handle objects with usage_to_metrics attribute (e.g., from tests)
-            # Convert to dict first, then validate
-            stats_dict = {'usage_to_metrics': event_value.usage_to_metrics}
-            conversation_stats = ConversationStats.model_validate(stats_dict)
-
-        if conversation_stats and conversation_stats.usage_to_metrics:
-            # Pass ConversationStats object directly for type safety
-            await app_conversation_info_service.update_conversation_statistics(
-                conversation_id, conversation_stats
-            )
-    except Exception:
-        _logger.exception(
-            'Error updating conversation statistics for conversation %s',
-            conversation_id,
-            stack_info=True,
-        )
-
-
 @router.post('/{sandbox_id}/events/{conversation_id}')
 async def on_event(
     events: list[Event],
@@ -193,8 +148,8 @@ async def on_event(
         # Process stats events for V1 conversations
         for event in events:
             if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
-                await _process_stats_event(
-                    event, conversation_id, app_conversation_info_service
+                await app_conversation_info_service.process_stats_event(
+                    event, conversation_id
                 )
 
         asyncio.create_task(

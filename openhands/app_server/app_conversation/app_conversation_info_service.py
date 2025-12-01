@@ -10,6 +10,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.services.injector import Injector
 from openhands.sdk.conversation.conversation_stats import ConversationStats
+from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
@@ -102,6 +103,19 @@ class AppConversationInfoService(ABC):
         Args:
             conversation_id: The ID of the conversation to update
             stats: ConversationStats object containing usage_to_metrics data from stats event
+        """
+
+    @abstractmethod
+    async def process_stats_event(
+        self,
+        event: ConversationStateUpdateEvent,
+        conversation_id: UUID,
+    ) -> None:
+        """Process a stats event and update conversation statistics.
+
+        Args:
+            event: The ConversationStateUpdateEvent with key='stats'
+            conversation_id: The ID of the conversation to update
         """
 
 

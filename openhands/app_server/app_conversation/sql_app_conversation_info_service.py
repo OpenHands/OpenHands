@@ -46,6 +46,7 @@ from openhands.app_server.utils.sql_utils import (
 )
 from openhands.integrations.provider import ProviderType
 from openhands.sdk.conversation.conversation_stats import ConversationStats
+from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
@@ -436,6 +437,48 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         stored.last_updated_at = utc_now()
 
         await self.db_session.commit()
+
+    async def process_stats_event(
+        self,
+        event: ConversationStateUpdateEvent,
+        conversation_id: UUID,
+    ) -> None:
+        """Process a stats event and update conversation statistics.
+
+        Args:
+            event: The ConversationStateUpdateEvent with key='stats'
+            conversation_id: The ID of the conversation to update
+        """
+        try:
+            # Parse event value into ConversationStats model for type safety
+            # event.value can be a dict (from JSON deserialization) or a ConversationStats object
+            event_value = event.value
+            conversation_stats: ConversationStats | None = None
+
+            if isinstance(event_value, ConversationStats):
+                # Already a ConversationStats object
+                conversation_stats = event_value
+            elif isinstance(event_value, dict):
+                # Parse dict into ConversationStats model
+                # This validates the structure and ensures type safety
+                conversation_stats = ConversationStats.model_validate(event_value)
+            elif hasattr(event_value, 'usage_to_metrics'):
+                # Handle objects with usage_to_metrics attribute (e.g., from tests)
+                # Convert to dict first, then validate
+                stats_dict = {'usage_to_metrics': event_value.usage_to_metrics}
+                conversation_stats = ConversationStats.model_validate(stats_dict)
+
+            if conversation_stats and conversation_stats.usage_to_metrics:
+                # Pass ConversationStats object directly for type safety
+                await self.update_conversation_statistics(
+                    conversation_id, conversation_stats
+                )
+        except Exception:
+            logger.exception(
+                'Error updating conversation statistics for conversation %s',
+                conversation_id,
+                stack_info=True,
+            )
 
     async def _secure_select(self):
         query = select(StoredConversationMetadata).where(

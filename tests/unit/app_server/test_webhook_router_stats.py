@@ -20,7 +20,6 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
     SQLAppConversationInfoService,
     StoredConversationMetadata,
 )
-from openhands.app_server.event_callback.webhook_router import _process_stats_event
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
 from openhands.sdk.conversation.conversation_stats import ConversationStats
@@ -331,102 +330,116 @@ class TestUpdateConversationStatistics:
 
 
 # ---------------------------------------------------------------------------
-# Tests for _process_stats_event
+# Tests for process_stats_event
 # ---------------------------------------------------------------------------
 
 
 class TestProcessStatsEvent:
-    """Test the _process_stats_event function."""
+    """Test the process_stats_event method."""
 
     @pytest.mark.asyncio
     async def test_process_stats_event_with_dict_value(
-        self, stats_event_with_dict_value
+        self,
+        service,
+        async_session,
+        stats_event_with_dict_value,
+        v1_conversation_metadata,
     ):
         """Test processing stats event with dict value."""
-        conversation_id = uuid4()
-        mock_service = AsyncMock()
+        conversation_id, stored = v1_conversation_metadata
 
-        await _process_stats_event(
-            stats_event_with_dict_value, conversation_id, mock_service
-        )
+        await service.process_stats_event(stats_event_with_dict_value, conversation_id)
 
-        # Verify update_conversation_statistics was called
-        mock_service.update_conversation_statistics.assert_called_once()
-        call_args = mock_service.update_conversation_statistics.call_args
-        assert call_args[0][0] == conversation_id
-        assert isinstance(call_args[0][1], ConversationStats)
-        assert 'agent' in call_args[0][1].usage_to_metrics
+        # Verify the update occurred
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == 0.03411525
+        assert stored.prompt_tokens == 8770
+        assert stored.completion_tokens == 82
 
     @pytest.mark.asyncio
     async def test_process_stats_event_with_object_value(
-        self, stats_event_with_object_value
+        self,
+        service,
+        async_session,
+        stats_event_with_object_value,
+        v1_conversation_metadata,
     ):
         """Test processing stats event with object value."""
-        conversation_id = uuid4()
-        mock_service = AsyncMock()
+        conversation_id, stored = v1_conversation_metadata
 
-        await _process_stats_event(
-            stats_event_with_object_value, conversation_id, mock_service
+        await service.process_stats_event(
+            stats_event_with_object_value, conversation_id
         )
 
-        # Verify update_conversation_statistics was called
-        mock_service.update_conversation_statistics.assert_called_once()
-        call_args = mock_service.update_conversation_statistics.call_args
-        assert call_args[0][0] == conversation_id
-        assert isinstance(call_args[0][1], ConversationStats)
+        # Verify the update occurred
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == 0.05
+        assert stored.prompt_tokens == 1000
+        assert stored.completion_tokens == 100
 
     @pytest.mark.asyncio
     async def test_process_stats_event_no_usage_to_metrics(
-        self, stats_event_no_usage_to_metrics
+        self,
+        service,
+        async_session,
+        stats_event_no_usage_to_metrics,
+        v1_conversation_metadata,
     ):
         """Test processing stats event without usage_to_metrics."""
-        conversation_id = uuid4()
-        mock_service = AsyncMock()
+        conversation_id, stored = v1_conversation_metadata
+        original_cost = stored.accumulated_cost
 
-        await _process_stats_event(
-            stats_event_no_usage_to_metrics, conversation_id, mock_service
+        await service.process_stats_event(
+            stats_event_no_usage_to_metrics, conversation_id
         )
 
         # Verify update_conversation_statistics was NOT called
-        mock_service.update_conversation_statistics.assert_not_called()
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == original_cost
 
     @pytest.mark.asyncio
     async def test_process_stats_event_service_error_handled(
-        self, stats_event_with_dict_value
+        self, service, stats_event_with_dict_value
     ):
         """Test that errors from service are caught and logged."""
         conversation_id = uuid4()
-        mock_service = AsyncMock()
-        mock_service.update_conversation_statistics.side_effect = Exception(
-            'Database error'
-        )
 
         # Should not raise an exception
-        with patch(
-            'openhands.app_server.event_callback.webhook_router._logger'
-        ) as mock_logger:
-            await _process_stats_event(
-                stats_event_with_dict_value, conversation_id, mock_service
+        with (
+            patch.object(
+                service,
+                'update_conversation_statistics',
+                side_effect=Exception('Database error'),
+            ),
+            patch(
+                'openhands.app_server.app_conversation.sql_app_conversation_info_service.logger'
+            ) as mock_logger,
+        ):
+            await service.process_stats_event(
+                stats_event_with_dict_value, conversation_id
             )
 
             # Verify error was logged
             mock_logger.exception.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_process_stats_event_empty_usage_to_metrics(self):
+    async def test_process_stats_event_empty_usage_to_metrics(
+        self, service, async_session, v1_conversation_metadata
+    ):
         """Test processing stats event with empty usage_to_metrics."""
-        conversation_id = uuid4()
-        mock_service = AsyncMock()
+        conversation_id, stored = v1_conversation_metadata
+        original_cost = stored.accumulated_cost
 
         # Create event with empty usage_to_metrics
         event = ConversationStateUpdateEvent(
             key='stats', value={'usage_to_metrics': {}}
         )
 
-        await _process_stats_event(event, conversation_id, mock_service)
+        await service.process_stats_event(event, conversation_id)
 
         # Empty dict is falsy, so update_conversation_statistics should NOT be called
-        mock_service.update_conversation_statistics.assert_not_called()
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == original_cost
 
 
 # ---------------------------------------------------------------------------
@@ -490,6 +503,22 @@ class TestOnEventStatsProcessing:
         mock_app_conversation_info_service = AsyncMock()
         mock_app_conversation_info_service.get_app_conversation_info.return_value = (
             mock_app_conversation_info
+        )
+
+        # Set up process_stats_event to call update_conversation_statistics
+        async def process_stats_event_side_effect(event, conversation_id):
+            # Simulate what process_stats_event does - call update_conversation_statistics
+            from openhands.sdk.conversation.conversation_stats import ConversationStats
+
+            if isinstance(event.value, dict):
+                stats = ConversationStats.model_validate(event.value)
+                if stats and stats.usage_to_metrics:
+                    await mock_app_conversation_info_service.update_conversation_statistics(
+                        conversation_id, stats
+                    )
+
+        mock_app_conversation_info_service.process_stats_event.side_effect = (
+            process_stats_event_side_effect
         )
 
         with (
