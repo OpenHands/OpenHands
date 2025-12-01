@@ -399,24 +399,18 @@ async def get_credential_mappings(
 async def create_credential_mapping(
     incoming_mapping: CredentialMappingModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
-    user_secrets: Secrets | None = Depends(get_secrets),
 ) -> JSONResponse:
     """Create a new credential mapping."""
     try:
+        # Load secrets from store to validate credential exists
+        existing_secrets = await secrets_store.load()
+        
         # Validate that the referenced credential exists
-        if user_secrets:
-            if incoming_mapping.credential_name not in user_secrets.custom_secrets:
-                return JSONResponse(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    content={
-                        'error': f'Credential {incoming_mapping.credential_name} does not exist'
-                    },
-                )
-        else:
+        if not existing_secrets or incoming_mapping.credential_name not in existing_secrets.custom_secrets:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
-                    'error': f'Credential {incoming_mapping.credential_name} does not exist'
+                    'error': f'Credential "{incoming_mapping.credential_name}" not found in custom secrets.'
                 },
             )
 
@@ -444,7 +438,6 @@ async def create_credential_mapping(
                 },
             )
 
-        existing_secrets = await secrets_store.load()
         credential_mappings = (
             dict(existing_secrets.credential_mappings) if existing_secrets else {}
         )
@@ -510,7 +503,6 @@ async def update_credential_mapping(
     mapping_id: str,
     incoming_mapping: CredentialMappingModel,
     secrets_store: SecretsStore = Depends(get_secrets_store),
-    user_secrets: Secrets | None = Depends(get_secrets),
 ) -> JSONResponse:
     """Update an existing credential mapping."""
     try:
@@ -530,14 +522,13 @@ async def update_credential_mapping(
             )
 
         # Validate that the referenced credential exists
-        if user_secrets:
-            if incoming_mapping.credential_name not in user_secrets.custom_secrets:
-                return JSONResponse(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    content={
-                        'error': f'Credential {incoming_mapping.credential_name} does not exist'
-                    },
-                )
+        if incoming_mapping.credential_name not in existing_secrets.custom_secrets:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    'error': f'Credential "{incoming_mapping.credential_name}" not found in custom secrets.'
+                },
+            )
 
         # Validate auth_method
         if incoming_mapping.auth_method not in [
