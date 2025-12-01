@@ -18,6 +18,7 @@ from openhands.sdk.conversation.secret_source import LookupSecret, StaticSecret
 from openhands.sdk.llm import LLM
 from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.server.types import AppMode
 
 
 class TestLiveStatusAppConversationService:
@@ -61,6 +62,7 @@ class TestLiveStatusAppConversationService:
         self.mock_user.llm_base_url = 'https://api.openai.com/v1'
         self.mock_user.llm_api_key = 'test_api_key'
         self.mock_user.confirmation_mode = False
+        self.mock_user.search_api_key = None  # Default to None
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -230,6 +232,174 @@ class TestLiveStatusAppConversationService:
         # Assert
         assert isinstance(llm, LLM)
         assert mcp_config == {}
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_tavily_with_user_search_api_key(self):
+        """Test _configure_llm_and_mcp adds tavily when user has search_api_key."""
+        # Arrange
+        from pydantic import SecretStr
+
+        self.mock_user.search_api_key = SecretStr('user_search_key')
+        self.mock_user_context.get_mcp_api_key.return_value = 'mcp_api_key'
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        assert 'default' in mcp_config
+        assert 'tavily' in mcp_config
+        assert mcp_config['tavily']['command'] == 'npx'
+        assert mcp_config['tavily']['args'] == ['-y', 'tavily-mcp@0.2.1']
+        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'user_search_key'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_tavily_with_env_tavily_key(self):
+        """Test _configure_llm_and_mcp adds tavily when service has tavily_api_key."""
+        # Arrange
+        self.service.tavily_api_key = 'env_tavily_key'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        assert 'default' in mcp_config
+        assert 'tavily' in mcp_config
+        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'env_tavily_key'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_tavily_user_key_takes_precedence(self):
+        """Test _configure_llm_and_mcp user search_api_key takes precedence over env key."""
+        # Arrange
+        from pydantic import SecretStr
+
+        self.mock_user.search_api_key = SecretStr('user_search_key')
+        self.service.tavily_api_key = 'env_tavily_key'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        assert 'tavily' in mcp_config
+        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'user_search_key'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_no_tavily_without_keys(self):
+        """Test _configure_llm_and_mcp does not add tavily when no keys are available."""
+        # Arrange
+        self.mock_user.search_api_key = None
+        self.service.tavily_api_key = None
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        assert 'default' in mcp_config
+        assert 'tavily' not in mcp_config
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_saas_mode_no_tavily_without_user_key(self):
+        """Test _configure_llm_and_mcp does not add tavily in SAAS mode without user search_api_key.
+
+        In SAAS mode, the global tavily_api_key should not be passed to the service instance,
+        so tavily should only be added if the user has their own search_api_key.
+        """
+        # Arrange - simulate SAAS mode where no global tavily key is available
+        self.service.app_mode = AppMode.SAAS.value
+        self.service.tavily_api_key = None  # In SAAS mode, this should be None
+        self.mock_user.search_api_key = None
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        assert 'default' in mcp_config
+        assert 'tavily' not in mcp_config
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_saas_mode_with_user_search_key(self):
+        """Test _configure_llm_and_mcp adds tavily in SAAS mode when user has search_api_key.
+
+        Even in SAAS mode, if the user has their own search_api_key, tavily should be added.
+        """
+        # Arrange - simulate SAAS mode with user having their own search key
+        from pydantic import SecretStr
+
+        self.service.app_mode = AppMode.SAAS.value
+        self.service.tavily_api_key = None  # In SAAS mode, this should be None
+        self.mock_user.search_api_key = SecretStr('user_search_key')
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        assert 'default' in mcp_config
+        assert 'tavily' in mcp_config
+        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'user_search_key'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_tavily_with_empty_user_search_key(self):
+        """Test _configure_llm_and_mcp handles empty user search_api_key correctly."""
+        # Arrange
+        from pydantic import SecretStr
+
+        self.mock_user.search_api_key = SecretStr('')  # Empty string
+        self.service.tavily_api_key = 'env_tavily_key'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        assert 'tavily' in mcp_config
+        # Should fall back to env key since user key is empty
+        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'env_tavily_key'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_tavily_with_whitespace_user_search_key(self):
+        """Test _configure_llm_and_mcp handles whitespace-only user search_api_key correctly."""
+        # Arrange
+        from pydantic import SecretStr
+
+        self.mock_user.search_api_key = SecretStr('   ')  # Whitespace only
+        self.service.tavily_api_key = 'env_tavily_key'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        assert 'tavily' in mcp_config
+        # Should fall back to env key since user key is whitespace only
+        assert mcp_config['tavily']['env']['TAVILY_API_KEY'] == 'env_tavily_key'
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
