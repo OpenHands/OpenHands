@@ -13,8 +13,8 @@ from openhands.app_server.app_conversation.app_conversation_models import AgentT
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
 )
-
 from openhands.app_server.user.user_context import UserContext
+
 
 class MockUserInfo:
     """Mock class for UserInfo to simulate user settings."""
@@ -433,9 +433,11 @@ def test_create_condenser_plan_agent_with_custom_max_size(mock_condenser_class):
         assert call_kwargs['llm'].usage_id == 'planning_condenser'
         mock_llm.model_copy.assert_called_once()
 
+
 # =============================================================================
 # Tests for _configure_git_user_settings
 # =============================================================================
+
 
 def _create_service_with_mock_user_context(user_info: MockUserInfo) -> tuple:
     """Create a mock service with the actual _configure_git_user_settings method.
