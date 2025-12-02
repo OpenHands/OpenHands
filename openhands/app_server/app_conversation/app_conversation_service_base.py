@@ -182,6 +182,43 @@ class AppConversationServiceBase(AppConversationService, ABC):
             workspace.working_dir,
         )
 
+    async def _configure_git_user_settings(
+        self,
+        workspace: AsyncRemoteWorkspace,
+    ) -> None:
+        """Configure git global user settings from user preferences.
+
+        Reads git_user_name and git_user_email from user settings and
+        configures them as git global settings in the workspace.
+
+        Args:
+            workspace: The remote workspace to configure git settings in.
+        """
+        try:
+            user_info = await self.user_context.get_user_info()
+
+            if user_info.git_user_name:
+                cmd = f'git config --global user.name "{user_info.git_user_name}"'
+                result = await workspace.execute_command(cmd, workspace.working_dir)
+                if result.exit_code:
+                    _logger.warning(f'Git config user.name failed: {result.stderr}')
+                else:
+                    _logger.info(
+                        f'Git configured with user.name={user_info.git_user_name}'
+                    )
+
+            if user_info.git_user_email:
+                cmd = f'git config --global user.email "{user_info.git_user_email}"'
+                result = await workspace.execute_command(cmd, workspace.working_dir)
+                if result.exit_code:
+                    _logger.warning(f'Git config user.email failed: {result.stderr}')
+                else:
+                    _logger.info(
+                        f'Git configured with user.email={user_info.git_user_email}'
+                    )
+        except Exception as e:
+            _logger.warning(f'Failed to configure git user settings: {e}')
+
     async def clone_or_init_git_repo(
         self,
         task: AppConversationStartTask,
@@ -196,6 +233,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
         )
         if result.exit_code:
             _logger.warning(f'mkdir failed: {result.stderr}')
+
+        # Configure git user settings from user preferences
+        await self._configure_git_user_settings(workspace)
 
         if not request.selected_repository:
             if self.init_git_in_empty_workspace:

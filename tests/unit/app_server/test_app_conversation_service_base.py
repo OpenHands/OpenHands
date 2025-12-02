@@ -5,9 +5,39 @@ and the recent bug fixes for git checkout operations.
 """
 
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from openhands.app_server.app_conversation.app_conversation_service_base import (
+    AppConversationServiceBase,
+)
+
+
+class MockUserInfo:
+    """Mock class for UserInfo to simulate user settings."""
+
+    def __init__(
+        self, git_user_name: str | None = None, git_user_email: str | None = None
+    ):
+        self.git_user_name = git_user_name
+        self.git_user_email = git_user_email
+
+
+class MockCommandResult:
+    """Mock class for command execution result."""
+
+    def __init__(self, exit_code: int = 0, stderr: str = ''):
+        self.exit_code = exit_code
+        self.stderr = stderr
+
+
+class MockWorkspace:
+    """Mock class for AsyncRemoteWorkspace."""
+
+    def __init__(self, working_dir: str = '/workspace'):
+        self.working_dir = working_dir
+        self.execute_command = AsyncMock(return_value=MockCommandResult())
 
 
 class MockAppConversationServiceBase:
@@ -254,3 +284,197 @@ async def test_clone_or_init_git_repo_custom_timeout(service):
             text=True,
             timeout=600,  # Verify custom timeout is used
         )
+
+
+# =============================================================================
+# Tests for _configure_git_user_settings
+# =============================================================================
+
+
+def _create_service_with_mock_user_context(user_info: MockUserInfo) -> tuple:
+    """Create a mock service with the actual _configure_git_user_settings method.
+
+    Uses MagicMock for the service but binds the real method for testing.
+
+    Returns a tuple of (service, mock_user_context) for testing.
+    """
+    mock_user_context = MagicMock()
+    mock_user_context.get_user_info = AsyncMock(return_value=user_info)
+
+    # Create a simple mock service and set required attribute
+    service = MagicMock()
+    service.user_context = mock_user_context
+
+    # Bind the actual method from the real class to test real implementation
+    service._configure_git_user_settings = (
+        lambda workspace: AppConversationServiceBase._configure_git_user_settings(
+            service, workspace
+        )
+    )
+
+    return service, mock_user_context
+
+
+@pytest.fixture
+def mock_workspace():
+    """Create a mock workspace instance for testing."""
+    return MockWorkspace(working_dir='/workspace/project')
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_both_name_and_email(mock_workspace):
+    """Test configuring both git user name and email."""
+    user_info = MockUserInfo(
+        git_user_name='Test User', git_user_email='test@example.com'
+    )
+    service, mock_user_context = _create_service_with_mock_user_context(user_info)
+
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Verify get_user_info was called
+    mock_user_context.get_user_info.assert_called_once()
+
+    # Verify both git config commands were executed
+    assert mock_workspace.execute_command.call_count == 2
+
+    # Check git config user.name call
+    mock_workspace.execute_command.assert_any_call(
+        'git config --global user.name "Test User"', '/workspace/project'
+    )
+
+    # Check git config user.email call
+    mock_workspace.execute_command.assert_any_call(
+        'git config --global user.email "test@example.com"', '/workspace/project'
+    )
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_only_name(mock_workspace):
+    """Test configuring only git user name."""
+    user_info = MockUserInfo(git_user_name='Test User', git_user_email=None)
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Verify only user.name was configured
+    assert mock_workspace.execute_command.call_count == 1
+    mock_workspace.execute_command.assert_called_once_with(
+        'git config --global user.name "Test User"', '/workspace/project'
+    )
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_only_email(mock_workspace):
+    """Test configuring only git user email."""
+    user_info = MockUserInfo(git_user_name=None, git_user_email='test@example.com')
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Verify only user.email was configured
+    assert mock_workspace.execute_command.call_count == 1
+    mock_workspace.execute_command.assert_called_once_with(
+        'git config --global user.email "test@example.com"', '/workspace/project'
+    )
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_neither_set(mock_workspace):
+    """Test when neither git user name nor email is set."""
+    user_info = MockUserInfo(git_user_name=None, git_user_email=None)
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Verify no git config commands were executed
+    mock_workspace.execute_command.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_empty_strings(mock_workspace):
+    """Test when git user name and email are empty strings."""
+    user_info = MockUserInfo(git_user_name='', git_user_email='')
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Empty strings are falsy, so no commands should be executed
+    mock_workspace.execute_command.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_get_user_info_fails(mock_workspace):
+    """Test handling of exception when get_user_info fails."""
+    user_info = MockUserInfo()
+    service, mock_user_context = _create_service_with_mock_user_context(user_info)
+    mock_user_context.get_user_info = AsyncMock(
+        side_effect=Exception('User info error')
+    )
+
+    # Should not raise exception, just log warning
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Verify no git config commands were executed
+    mock_workspace.execute_command.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_name_command_fails(mock_workspace):
+    """Test handling when git config user.name command fails."""
+    user_info = MockUserInfo(
+        git_user_name='Test User', git_user_email='test@example.com'
+    )
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    # Make the first command fail (user.name), second succeed (user.email)
+    mock_workspace.execute_command = AsyncMock(
+        side_effect=[
+            MockCommandResult(exit_code=1, stderr='Permission denied'),
+            MockCommandResult(exit_code=0),
+        ]
+    )
+
+    # Should not raise exception
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Verify both commands were still attempted
+    assert mock_workspace.execute_command.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_email_command_fails(mock_workspace):
+    """Test handling when git config user.email command fails."""
+    user_info = MockUserInfo(
+        git_user_name='Test User', git_user_email='test@example.com'
+    )
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    # Make the first command succeed (user.name), second fail (user.email)
+    mock_workspace.execute_command = AsyncMock(
+        side_effect=[
+            MockCommandResult(exit_code=0),
+            MockCommandResult(exit_code=1, stderr='Permission denied'),
+        ]
+    )
+
+    # Should not raise exception
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Verify both commands were still attempted
+    assert mock_workspace.execute_command.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_configure_git_user_settings_special_characters_in_name(mock_workspace):
+    """Test git user name with special characters."""
+    user_info = MockUserInfo(
+        git_user_name="Test O'Brien", git_user_email='test@example.com'
+    )
+    service, _ = _create_service_with_mock_user_context(user_info)
+
+    await service._configure_git_user_settings(mock_workspace)
+
+    # Verify the name is passed with special characters
+    mock_workspace.execute_command.assert_any_call(
+        'git config --global user.name "Test O\'Brien"', '/workspace/project'
+    )
