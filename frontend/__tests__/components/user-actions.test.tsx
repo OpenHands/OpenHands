@@ -293,11 +293,13 @@ describe("UserActions", () => {
     const userAvatar = screen.getByTestId("user-avatar");
     await userEvent.click(userAvatar);
 
-    expect(screen.getByTestId("user-context-menu")).toHaveTextContent("Logout");
     expect(screen.getByTestId("user-context-menu")).toHaveTextContent(
-      "Settings",
+      "ACCOUNT_SETTINGS$LOGOUT",
     );
-    expect(screen.queryByText("Manage Team")).not.toBeInTheDocument();
-    expect(screen.queryByText("Manage Account")).not.toBeInTheDocument();
+    expect(screen.getByTestId("user-context-menu")).toHaveTextContent(
+      "ACCOUNT_SETTINGS$SETTINGS",
+    );
+    expect(screen.queryByText("ORG$MANAGE_TEAM")).not.toBeInTheDocument();
+    expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
   });
 });

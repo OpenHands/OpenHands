@@ -10,7 +10,9 @@ window.scrollTo = vi.fn();
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
   observe = vi.fn();
+
   unobserve = vi.fn();
+
   disconnect = vi.fn();
 }
 

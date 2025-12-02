@@ -256,7 +256,7 @@ describe("Manage Org Route", () => {
       await selectOrganization({ orgIndex: 2 }); // user is admin in org 3
 
       const deleteOrgButton = screen.queryByRole("button", {
-        name: /delete organization/i,
+        name: /ORG\$DELETE_ORGANIZATION/i,
       });
       expect(deleteOrgButton).not.toBeInTheDocument();
     });
@@ -274,13 +274,13 @@ describe("Manage Org Route", () => {
       ).not.toBeInTheDocument();
 
       const deleteOrgButton = screen.getByRole("button", {
-        name: /delete organization/i,
+        name: /ORG\$DELETE_ORGANIZATION/i,
       });
       await userEvent.click(deleteOrgButton);
 
       const deleteConfirmation = screen.getByTestId("delete-org-confirmation");
       const confirmButton = within(deleteConfirmation).getByRole("button", {
-        name: /confirm/i,
+        name: /BUTTON\$CONFIRM/i,
       });
 
       await userEvent.click(confirmButton);

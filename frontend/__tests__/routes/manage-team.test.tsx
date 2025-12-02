@@ -178,7 +178,7 @@ describe("Manage Team Route", () => {
     await screen.findByTestId("manage-team-settings");
 
     const inviteButton = screen.queryByRole("button", {
-      name: /invite team/i,
+      name: /ORG\$INVITE_TEAM/i,
     });
     expect(inviteButton).not.toBeInTheDocument();
   });
@@ -302,7 +302,7 @@ describe("Manage Team Route", () => {
       await selectOrganization({ orgIndex: 0 });
 
       const inviteButton = await screen.findByRole("button", {
-        name: /invite team/i,
+        name: /ORG\$INVITE_TEAM/i,
       });
       expect(inviteButton).toBeInTheDocument();
     });
@@ -313,7 +313,7 @@ describe("Manage Team Route", () => {
 
       expect(screen.queryByTestId("invite-modal")).not.toBeInTheDocument();
       const inviteButton = await screen.findByRole("button", {
-        name: /invite team/i,
+        name: /ORG\$INVITE_TEAM/i,
       });
       await userEvent.click(inviteButton);
 
@@ -329,14 +329,12 @@ describe("Manage Team Route", () => {
       await selectOrganization({ orgIndex: 0 });
 
       const inviteButton = await screen.findByRole("button", {
-        name: /invite team/i,
+        name: /ORG\$INVITE_TEAM/i,
       });
       await userEvent.click(inviteButton);
 
       const modal = screen.getByTestId("invite-modal");
-      const closeButton = within(modal).getByRole("button", {
-        name: /skip/i,
-      });
+      const closeButton = within(modal).getByText("ORG$SKIP");
       await userEvent.click(closeButton);
 
       expect(screen.queryByTestId("invite-modal")).not.toBeInTheDocument();

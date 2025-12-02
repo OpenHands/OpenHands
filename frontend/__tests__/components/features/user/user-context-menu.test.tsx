@@ -52,14 +52,14 @@ describe("UserContextMenu", () => {
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
-    screen.getByText("Logout");
-    screen.getByText("Settings");
+    screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
+    screen.getByText("ACCOUNT_SETTINGS$SETTINGS");
 
-    expect(screen.queryByText("Invite Team")).not.toBeInTheDocument();
-    expect(screen.queryByText("Manage Team")).not.toBeInTheDocument();
-    expect(screen.queryByText("Manage Account")).not.toBeInTheDocument();
+    expect(screen.queryByText("ORG$INVITE_TEAM")).not.toBeInTheDocument();
+    expect(screen.queryByText("ORG$MANAGE_TEAM")).not.toBeInTheDocument();
+    expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Create New Organization"),
+      screen.queryByText("ORG$CREATE_NEW_ORGANIZATION"),
     ).not.toBeInTheDocument();
   });
 
@@ -67,12 +67,12 @@ describe("UserContextMenu", () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
-    screen.getByText("Invite Team");
-    screen.getByText("Manage Team");
-    screen.getByText("Manage Account");
+    screen.getByText("ORG$INVITE_TEAM");
+    screen.getByText("ORG$MANAGE_TEAM");
+    screen.getByText("ORG$MANAGE_ACCOUNT");
 
     expect(
-      screen.queryByText("Create New Organization"),
+      screen.queryByText("ORG$CREATE_NEW_ORGANIZATION"),
     ).not.toBeInTheDocument();
   });
 
@@ -80,17 +80,17 @@ describe("UserContextMenu", () => {
     renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
-    screen.getByText("Invite Team");
-    screen.getByText("Manage Team");
-    screen.getByText("Manage Account");
-    screen.getByText("Create New Organization");
+    screen.getByText("ORG$INVITE_TEAM");
+    screen.getByText("ORG$MANAGE_TEAM");
+    screen.getByText("ORG$MANAGE_ACCOUNT");
+    screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
   });
 
   it("should call the logout handler when Logout is clicked", async () => {
     const logoutSpy = vi.spyOn(AuthService, "logout");
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    const logoutButton = screen.getByText("Logout");
+    const logoutButton = screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
     await userEvent.click(logoutButton);
 
     expect(logoutSpy).toHaveBeenCalledOnce();
@@ -99,7 +99,7 @@ describe("UserContextMenu", () => {
   it("should navigate to /settings when Settings is clicked", async () => {
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    const settingsButton = screen.getByText("Settings");
+    const settingsButton = screen.getByText("ACCOUNT_SETTINGS$SETTINGS");
     await userEvent.click(settingsButton);
 
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings");
@@ -108,7 +108,7 @@ describe("UserContextMenu", () => {
   it("should navigate to /settings/team when Manage Team is clicked", async () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
-    const manageTeamButton = screen.getByText("Manage Team");
+    const manageTeamButton = screen.getByText("ORG$MANAGE_TEAM");
     await userEvent.click(manageTeamButton);
 
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings/team");
@@ -117,7 +117,7 @@ describe("UserContextMenu", () => {
   it("should navigate to /settings/org when Manage Account is clicked", async () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
-    const manageTeamButton = screen.getByText("Manage Account");
+    const manageTeamButton = screen.getByText("ORG$MANAGE_ACCOUNT");
     await userEvent.click(manageTeamButton);
 
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings/org");
@@ -129,7 +129,7 @@ describe("UserContextMenu", () => {
 
       expect(screen.queryByTestId("create-org-modal")).not.toBeInTheDocument();
 
-      const createOrgButton = screen.getByText("Create New Organization");
+      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
       await userEvent.click(createOrgButton);
 
       const rootOutlet = screen.getByTestId("portal-root");
@@ -141,13 +141,13 @@ describe("UserContextMenu", () => {
     it("should close the modal when the close button is clicked", async () => {
       renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
 
-      const createOrgButton = screen.getByText("Create New Organization");
+      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
       await userEvent.click(createOrgButton);
 
       expect(screen.getByTestId("create-org-modal")).toBeInTheDocument();
 
       // Simulate closing the modal
-      const skipButton = screen.getByRole("button", { name: /skip/i });
+      const skipButton = screen.getByText("ORG$SKIP");
       await userEvent.click(skipButton);
 
       expect(screen.queryByTestId("create-org-modal")).not.toBeInTheDocument();
@@ -157,7 +157,7 @@ describe("UserContextMenu", () => {
       const createOrgSpy = vi.spyOn(organizationService, "createOrganization");
       renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
 
-      const createOrgButton = screen.getByText("Create New Organization");
+      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
       await userEvent.click(createOrgButton);
 
       expect(screen.getByTestId("create-org-modal")).toBeInTheDocument();
@@ -165,7 +165,7 @@ describe("UserContextMenu", () => {
       const orgNameInput = screen.getByTestId("org-name-input");
       await userEvent.type(orgNameInput, "New Organization");
 
-      const nextButton = screen.getByRole("button", { name: /next/i });
+      const nextButton = screen.getByText("ORG$NEXT");
       await userEvent.click(nextButton);
 
       expect(createOrgSpy).toHaveBeenCalledExactlyOnceWith({
@@ -178,13 +178,13 @@ describe("UserContextMenu", () => {
       const createOrgSpy = vi.spyOn(organizationService, "createOrganization");
       renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
 
-      const createOrgButton = screen.getByText("Create New Organization");
+      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
       await userEvent.click(createOrgButton);
 
       const orgNameInput = screen.getByTestId("org-name-input");
       await userEvent.type(orgNameInput, "New Organization");
 
-      const nextButton = screen.getByRole("button", { name: /next/i });
+      const nextButton = screen.getByText("ORG$NEXT");
       await userEvent.click(nextButton);
 
       expect(createOrgSpy).toHaveBeenCalledExactlyOnceWith({
@@ -203,13 +203,13 @@ describe("UserContextMenu", () => {
       // Verify invite modal is not visible initially
       expect(screen.queryByTestId("invite-modal")).not.toBeInTheDocument();
 
-      const createOrgButton = screen.getByText("Create New Organization");
+      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
       await userEvent.click(createOrgButton);
 
       const orgNameInput = screen.getByTestId("org-name-input");
       await userEvent.type(orgNameInput, "New Organization");
 
-      const nextButton = screen.getByRole("button", { name: /next/i });
+      const nextButton = screen.getByText("ORG$NEXT");
       await userEvent.click(nextButton);
 
       expect(createOrgSpy).toHaveBeenCalledExactlyOnceWith({
@@ -246,19 +246,19 @@ describe("UserContextMenu", () => {
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "superadmin", onClose: onCloseMock });
 
-    const logoutButton = screen.getByText("Logout");
+    const logoutButton = screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
     await userEvent.click(logoutButton);
     expect(onCloseMock).toHaveBeenCalledTimes(1);
 
-    const settingsButton = screen.getByText("Settings");
+    const settingsButton = screen.getByText("ACCOUNT_SETTINGS$SETTINGS");
     await userEvent.click(settingsButton);
     expect(onCloseMock).toHaveBeenCalledTimes(2);
 
-    const manageTeamButton = screen.getByText("Manage Team");
+    const manageTeamButton = screen.getByText("ORG$MANAGE_TEAM");
     await userEvent.click(manageTeamButton);
     expect(onCloseMock).toHaveBeenCalledTimes(3);
 
-    const manageAccountButton = screen.getByText("Manage Account");
+    const manageAccountButton = screen.getByText("ORG$MANAGE_ACCOUNT");
     await userEvent.click(manageAccountButton);
     expect(onCloseMock).toHaveBeenCalledTimes(4);
   });
@@ -271,15 +271,13 @@ describe("UserContextMenu", () => {
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "admin", onClose: onCloseMock });
 
-    const inviteButton = screen.getByText("Invite Team");
+    const inviteButton = screen.getByText("ORG$INVITE_TEAM");
     await userEvent.click(inviteButton);
 
     const portalRoot = screen.getByTestId("portal-root");
     expect(within(portalRoot).getByTestId("invite-modal")).toBeInTheDocument();
 
-    await userEvent.click(
-      within(portalRoot).getByRole("button", { name: /skip/i }),
-    );
+    await userEvent.click(within(portalRoot).getByText("ORG$SKIP"));
     expect(inviteMembersBatchSpy).not.toHaveBeenCalled();
   });
 
