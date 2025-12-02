@@ -517,6 +517,192 @@ class TestLiveStatusAppConversationService:
                 mock_llm, AgentType.DEFAULT, self.mock_user
             )
 
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+    )
+    def test_create_condenser_default_agent_with_none_max_size(
+        self, mock_condenser_class, mock_agent_class, mock_get_tools
+    ):
+        """Test _create_condenser for DEFAULT agent with condenser_max_size = None uses default."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm_copy = Mock(spec=LLM)
+        mock_llm_copy.usage_id = 'condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_get_tools.return_value = []
+        mock_condenser_instance = Mock()
+        mock_condenser_class.return_value = mock_condenser_instance
+        mock_agent_instance = Mock()
+        mock_agent_instance.model_copy.return_value = mock_agent_instance
+        mock_agent_class.return_value = mock_agent_instance
+        mcp_config = {'default': {'url': 'test'}}
+        self.mock_user.condenser_max_size = None  # Not set, should use default
+
+        # Act
+        self.service._create_agent_with_context(
+            mock_llm, AgentType.DEFAULT, None, mcp_config, self.mock_user
+        )
+
+        # Assert
+        # Verify LLMSummarizingCondenser was called with default max_size=80 for DEFAULT agent
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        assert call_kwargs['max_size'] == 80  # Default for DEFAULT agent
+        assert call_kwargs['keep_first'] == 4  # Default keep_first for DEFAULT agent
+        assert call_kwargs['llm'].usage_id == 'condenser'
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+    )
+    def test_create_condenser_default_agent_with_custom_max_size(
+        self, mock_condenser_class, mock_agent_class, mock_get_tools
+    ):
+        """Test _create_condenser for DEFAULT agent with custom condenser_max_size."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm_copy = Mock(spec=LLM)
+        mock_llm_copy.usage_id = 'condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_get_tools.return_value = []
+        mock_condenser_instance = Mock()
+        mock_condenser_class.return_value = mock_condenser_instance
+        mock_agent_instance = Mock()
+        mock_agent_instance.model_copy.return_value = mock_agent_instance
+        mock_agent_class.return_value = mock_agent_instance
+        mcp_config = {'default': {'url': 'test'}}
+        self.mock_user.condenser_max_size = 150  # Custom value
+
+        # Act
+        self.service._create_agent_with_context(
+            mock_llm, AgentType.DEFAULT, None, mcp_config, self.mock_user
+        )
+
+        # Assert
+        # Verify LLMSummarizingCondenser was called with custom max_size=150
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        assert call_kwargs['max_size'] == 150  # Custom value should be used
+        assert call_kwargs['keep_first'] == 4  # keep_first should remain default
+        assert call_kwargs['llm'].usage_id == 'condenser'
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.format_plan_structure'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+    )
+    def test_create_condenser_plan_agent_with_none_max_size(
+        self,
+        mock_condenser_class,
+        mock_format_plan,
+        mock_agent_class,
+        mock_get_tools,
+    ):
+        """Test _create_condenser for PLAN agent with condenser_max_size = None uses default."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm_copy = Mock(spec=LLM)
+        mock_llm_copy.usage_id = 'planning_condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_get_tools.return_value = []
+        mock_condenser_instance = Mock()
+        mock_condenser_class.return_value = mock_condenser_instance
+        mock_format_plan.return_value = 'test_plan_structure'
+        mock_agent_instance = Mock()
+        mock_agent_instance.model_copy.return_value = mock_agent_instance
+        mock_agent_class.return_value = mock_agent_instance
+        mcp_config = {'default': {'url': 'test'}}
+        system_message_suffix = 'Test suffix'
+        self.mock_user.condenser_max_size = None  # Not set, should use default
+
+        # Act
+        self.service._create_agent_with_context(
+            mock_llm,
+            AgentType.PLAN,
+            system_message_suffix,
+            mcp_config,
+            self.mock_user,
+        )
+
+        # Assert
+        # Verify LLMSummarizingCondenser was called with default max_size=100 for PLAN agent
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        assert call_kwargs['max_size'] == 100  # Default for PLAN agent
+        assert call_kwargs['keep_first'] == 6  # Default keep_first for PLAN agent
+        assert call_kwargs['llm'].usage_id == 'planning_condenser'
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.format_plan_structure'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+    )
+    def test_create_condenser_plan_agent_with_custom_max_size(
+        self,
+        mock_condenser_class,
+        mock_format_plan,
+        mock_agent_class,
+        mock_get_tools,
+    ):
+        """Test _create_condenser for PLAN agent with custom condenser_max_size."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm_copy = Mock(spec=LLM)
+        mock_llm_copy.usage_id = 'planning_condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_get_tools.return_value = []
+        mock_condenser_instance = Mock()
+        mock_condenser_class.return_value = mock_condenser_instance
+        mock_format_plan.return_value = 'test_plan_structure'
+        mock_agent_instance = Mock()
+        mock_agent_instance.model_copy.return_value = mock_agent_instance
+        mock_agent_class.return_value = mock_agent_instance
+        mcp_config = {'default': {'url': 'test'}}
+        system_message_suffix = 'Test suffix'
+        self.mock_user.condenser_max_size = 200  # Custom value
+
+        # Act
+        self.service._create_agent_with_context(
+            mock_llm,
+            AgentType.PLAN,
+            system_message_suffix,
+            mcp_config,
+            self.mock_user,
+        )
+
+        # Assert
+        # Verify LLMSummarizingCondenser was called with custom max_size=200
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        assert call_kwargs['max_size'] == 200  # Custom value should be used
+        assert call_kwargs['keep_first'] == 6  # keep_first should remain default
+        assert call_kwargs['llm'].usage_id == 'planning_condenser'
+
     @pytest.mark.asyncio
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.ExperimentManagerImpl'
