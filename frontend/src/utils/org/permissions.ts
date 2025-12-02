@@ -8,17 +8,20 @@ type ChangeUserRolePermission =
 
 type ChangeOrganizationNamePermission = "change_organization_name";
 type DeleteOrganizationPermission = "delete_organization";
+type AddCreditsPermission = "add_credits";
 
 type UserPermission =
   | InviteUserToOrganizationKey
   | ChangeUserRolePermission
   | ChangeOrganizationNamePermission
-  | DeleteOrganizationPermission;
+  | DeleteOrganizationPermission
+  | AddCreditsPermission;
 
 const superadminPerms: UserPermission[] = [
   "invite_user_to_organization",
   "change_organization_name",
   "delete_organization",
+  "add_credits",
   "change_user_role:superadmin",
   "change_user_role:admin",
   "change_user_role:user",

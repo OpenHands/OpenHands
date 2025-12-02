@@ -246,6 +246,8 @@ function ManageOrg() {
     !!me && rolePermissions[me.role].includes("change_organization_name");
   const canDeleteOrg =
     !!me && rolePermissions[me.role].includes("delete_organization");
+  const canAddCredits =
+    !!me && rolePermissions[me.role].includes("add_credits");
 
   return (
     <div
@@ -269,9 +271,11 @@ function ManageOrg() {
           <TempChip data-testid="available-credits">
             {organization?.balance}
           </TempChip>
-          <TempInteractiveChip onClick={() => setAddCreditsFormVisible(true)}>
-            + Add
-          </TempInteractiveChip>
+          {canAddCredits && (
+            <TempInteractiveChip onClick={() => setAddCreditsFormVisible(true)}>
+              + Add
+            </TempInteractiveChip>
+          )}
         </div>
       </div>
 

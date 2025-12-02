@@ -67,7 +67,7 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
           />
         </div>
       )}
-      {accountContextMenuIsVisible && !!user && (
+      {accountContextMenuIsVisible && !!user && shouldShowUserActions && (
         <div className="w-sm absolute left-[calc(100%+12px)] bottom-0 z-10">
           <UserContextMenu
             type={me?.role || "user"}

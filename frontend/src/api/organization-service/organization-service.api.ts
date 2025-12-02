@@ -66,7 +66,6 @@ export const organizationService = {
     return data;
   },
 
-
   updateMemberRole: async ({
     orgId,
     userId,

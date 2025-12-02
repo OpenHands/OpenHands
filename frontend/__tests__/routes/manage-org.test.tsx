@@ -26,6 +26,7 @@ const RouteStub = createRoutesStub([
     path: "/",
   },
   {
+    // @ts-expect-error - type mismatch
     loader: clientLoader,
     Component: SettingsScreen,
     path: "/settings",
@@ -106,6 +107,8 @@ describe("Manage Org Route", () => {
     renderManageOrg();
     await screen.findByTestId("manage-org-screen");
 
+    await selectOrganization({ orgIndex: 0 }); // user is superadmin in org 1
+
     expect(screen.queryByTestId("add-credits-form")).not.toBeInTheDocument();
     // Simulate adding credits
     const addCreditsButton = screen.getByText(/add/i);
@@ -137,6 +140,8 @@ describe("Manage Org Route", () => {
     );
     renderManageOrg();
     await screen.findByTestId("manage-org-screen");
+
+    await selectOrganization({ orgIndex: 0 }); // user is superadmin in org 1
 
     expect(screen.queryByTestId("add-credits-form")).not.toBeInTheDocument();
     // Simulate adding credits
