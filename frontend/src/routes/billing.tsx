@@ -30,11 +30,12 @@ function BillingSettingsScreen() {
       }
 
       displaySuccessToast(t(I18nKey.PAYMENT$SUCCESS));
+
+      setSearchParams({});
     } else if (checkoutStatus === "cancel") {
       displayErrorToast(t(I18nKey.PAYMENT$CANCELLED));
+      setSearchParams({});
     }
-
-    setSearchParams({});
   }, [checkoutStatus, searchParams, setSearchParams, t, trackCreditsPurchased]);
 
   return <PaymentForm />;
