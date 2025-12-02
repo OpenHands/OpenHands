@@ -12,20 +12,15 @@ import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
+import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
 
 export function ChangeAgentButton() {
   const [contextMenuOpen, setContextMenuOpen] = useState<boolean>(false);
 
-  const {
-    conversationMode,
-    setConversationMode,
-    setSubConversationTaskId,
-    subConversationTaskId,
-  } = useConversationStore();
+  const { conversationMode, setConversationMode, subConversationTaskId } =
+    useConversationStore();
 
   const webSocketStatus = useUnifiedWebSocketStatus();
 
@@ -40,8 +35,6 @@ export function ChangeAgentButton() {
   const isAgentRunning = curAgentState === AgentState.RUNNING;
 
   const { data: conversation } = useActiveConversation();
-  const { mutate: createConversation, isPending: isCreatingConversation } =
-    useCreateConversation();
 
   // Poll sub-conversation task and invalidate parent conversation when ready
   useSubConversationTaskPolling(
@@ -49,51 +42,15 @@ export function ChangeAgentButton() {
     conversation?.conversation_id || null,
   );
 
+  // Get handlePlanClick and isCreatingConversation from custom hook
+  const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
+
   // Close context menu when agent starts running
   useEffect(() => {
     if ((isAgentRunning || !isWebSocketConnected) && contextMenuOpen) {
       setContextMenuOpen(false);
     }
   }, [isAgentRunning, contextMenuOpen, isWebSocketConnected]);
-
-  const handlePlanClick = (
-    event: React.MouseEvent<HTMLButtonElement> | KeyboardEvent,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    // Set conversation mode to "plan" immediately
-    setConversationMode("plan");
-
-    // Check if sub_conversation_ids is not empty
-    if (
-      (conversation?.sub_conversation_ids &&
-        conversation.sub_conversation_ids.length > 0) ||
-      !conversation?.conversation_id
-    ) {
-      // Do nothing if both conditions are true
-      return;
-    }
-
-    // Create a new sub-conversation if we have a current conversation ID
-    createConversation(
-      {
-        parentConversationId: conversation.conversation_id,
-        agentType: "plan",
-      },
-      {
-        onSuccess: (data) => {
-          displaySuccessToast(
-            t(I18nKey.PLANNING_AGENTT$PLANNING_AGENT_INITIALIZED),
-          );
-          // Track the task ID to poll for sub-conversation creation
-          if (data.v1_task_id) {
-            setSubConversationTaskId(data.v1_task_id);
-          }
-        },
-      },
-    );
-  };
 
   const isButtonDisabled =
     isAgentRunning ||

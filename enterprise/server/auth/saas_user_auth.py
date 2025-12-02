@@ -203,6 +203,15 @@ class SaasUserAuth(UserAuth):
         self.settings_store = settings_store
         return settings_store
 
+    async def get_mcp_api_key(self) -> str:
+        api_key_store = ApiKeyStore.get_instance()
+        mcp_api_key = api_key_store.retrieve_mcp_api_key(self.user_id)
+        if not mcp_api_key:
+            mcp_api_key = api_key_store.create_api_key(
+                self.user_id, 'MCP_API_KEY', None
+            )
+        return mcp_api_key
+
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         logger.debug('saas_user_auth_get_instance')
