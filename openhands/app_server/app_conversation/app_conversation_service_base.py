@@ -9,6 +9,7 @@ from typing import AsyncGenerator
 import base62
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    AgentType,
     AppConversationStartTask,
     AppConversationStartTaskStatus,
 )
@@ -25,7 +26,9 @@ from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk import Agent
 from openhands.sdk.context.agent_context import AgentContext
+from openhands.sdk.context.condenser import LLMSummarizingCondenser
 from openhands.sdk.context.skills import load_user_skills
+from openhands.sdk.llm import LLM
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)
@@ -340,3 +343,39 @@ class AppConversationServiceBase(AppConversationService, ABC):
             return
 
         _logger.info('Git pre-commit hook installed successfully')
+
+    def _create_condenser(
+        self,
+        llm: LLM,
+        agent_type: AgentType,
+        condenser_max_size: int | None,
+    ) -> LLMSummarizingCondenser:
+        """Create a condenser based on user settings and agent type.
+
+        Args:
+            llm: The LLM instance to use for condensation
+            agent_type: Type of agent (PLAN or DEFAULT)
+            condenser_max_size: condenser_max_size setting
+
+        Returns:
+            Configured LLMSummarizingCondenser instance
+        """
+        # LLMSummarizingCondenser has defaults: max_size=120, keep_first=4
+        condenser_kwargs = {
+            'llm': llm.model_copy(
+                update={
+                    'usage_id': (
+                        'condenser'
+                        if agent_type == AgentType.DEFAULT
+                        else 'planning_condenser'
+                    )
+                }
+            ),
+        }
+        # Only override max_size if user has a custom value
+        if condenser_max_size is not None:
+            condenser_kwargs['max_size'] = condenser_max_size
+
+        condenser = LLMSummarizingCondenser(**condenser_kwargs)
+
+        return condenser

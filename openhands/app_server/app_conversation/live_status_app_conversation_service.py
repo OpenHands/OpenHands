@@ -76,12 +76,10 @@ from openhands.sdk.security.confirmation_policy import AlwaysConfirm
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 from openhands.tools.preset.default import (
-    get_default_condenser,
     get_default_tools,
 )
 from openhands.tools.preset.planning import (
     format_plan_structure,
-    get_planning_condenser,
     get_planning_tools,
 )
 
@@ -643,6 +641,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         agent_type: AgentType,
         system_message_suffix: str | None,
         mcp_config: dict,
+        condenser_max_size: int | None,
     ) -> Agent:
         """Create an agent with appropriate tools and context based on agent type.
 
@@ -651,10 +650,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             agent_type: Type of agent to create (PLAN or DEFAULT)
             system_message_suffix: Optional suffix for system messages
             mcp_config: MCP configuration dictionary
+            condenser_max_size: condenser_max_size setting
 
         Returns:
             Configured Agent instance with context
         """
+        # Create condenser with user's settings
+        condenser = self._create_condenser(llm, agent_type, condenser_max_size)
+
         # Create agent based on type
         if agent_type == AgentType.PLAN:
             agent = Agent(
@@ -662,9 +665,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 tools=get_planning_tools(),
                 system_prompt_filename='system_prompt_planning.j2',
                 system_prompt_kwargs={'plan_structure': format_plan_structure()},
-                condenser=get_planning_condenser(
-                    llm=llm.model_copy(update={'usage_id': 'planning_condenser'})
-                ),
+                condenser=condenser,
                 security_analyzer=None,
                 mcp_config=mcp_config,
             )
@@ -673,9 +674,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 llm=llm,
                 tools=get_default_tools(enable_browser=True),
                 system_prompt_kwargs={'cli_mode': False},
-                condenser=get_default_condenser(
-                    llm=llm.model_copy(update={'usage_id': 'condenser'})
-                ),
+                condenser=condenser,
                 mcp_config=mcp_config,
             )
 
@@ -777,7 +776,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Create agent with context
         agent = self._create_agent_with_context(
-            llm, agent_type, system_message_suffix, mcp_config
+            llm, agent_type, system_message_suffix, mcp_config, user.condenser_max_size
         )
 
         # Finalize and return the conversation request

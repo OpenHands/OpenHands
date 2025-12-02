@@ -152,6 +152,7 @@ class TestExperimentManagerIntegration:
                     llm_base_url=None,
                     llm_api_key=None,
                     confirmation_mode=False,
+                    condenser_max_size=None,
                 )
 
             async def get_secrets(self):

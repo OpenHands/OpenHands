@@ -5,13 +5,15 @@ and the recent bug fixes for git checkout operations.
 """
 
 import subprocess
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from openhands.app_server.app_conversation.app_conversation_models import AgentType
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
 )
+from openhands.app_server.user.user_context import UserContext
 
 
 class MockUserInfo:
@@ -284,6 +286,152 @@ async def test_clone_or_init_git_repo_custom_timeout(service):
             text=True,
             timeout=600,  # Verify custom timeout is used
         )
+
+
+@patch(
+    'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+)
+def test_create_condenser_default_agent_with_none_max_size(mock_condenser_class):
+    """Test _create_condenser for DEFAULT agent with condenser_max_size = None uses default."""
+    # Arrange
+    mock_user_context = Mock(spec=UserContext)
+    with patch.object(
+        AppConversationServiceBase,
+        '__abstractmethods__',
+        set(),
+    ):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+        mock_llm = MagicMock()
+        mock_llm_copy = MagicMock()
+        mock_llm_copy.usage_id = 'condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_condenser_instance = MagicMock()
+        mock_condenser_class.return_value = mock_condenser_instance
+
+        # Act
+        service._create_condenser(mock_llm, AgentType.DEFAULT, None)
+
+        # Assert
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        # When condenser_max_size is None, max_size should not be passed (uses SDK default of 120)
+        assert 'max_size' not in call_kwargs
+        # keep_first is never passed (uses SDK default of 4)
+        assert 'keep_first' not in call_kwargs
+        assert call_kwargs['llm'].usage_id == 'condenser'
+        mock_llm.model_copy.assert_called_once()
+
+
+@patch(
+    'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+)
+def test_create_condenser_default_agent_with_custom_max_size(mock_condenser_class):
+    """Test _create_condenser for DEFAULT agent with custom condenser_max_size."""
+    # Arrange
+    mock_user_context = Mock(spec=UserContext)
+    with patch.object(
+        AppConversationServiceBase,
+        '__abstractmethods__',
+        set(),
+    ):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+        mock_llm = MagicMock()
+        mock_llm_copy = MagicMock()
+        mock_llm_copy.usage_id = 'condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_condenser_instance = MagicMock()
+        mock_condenser_class.return_value = mock_condenser_instance
+
+        # Act
+        service._create_condenser(mock_llm, AgentType.DEFAULT, 150)
+
+        # Assert
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        assert call_kwargs['max_size'] == 150  # Custom value should be used
+        # keep_first is never passed (uses SDK default of 4)
+        assert 'keep_first' not in call_kwargs
+        assert call_kwargs['llm'].usage_id == 'condenser'
+        mock_llm.model_copy.assert_called_once()
+
+
+@patch(
+    'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+)
+def test_create_condenser_plan_agent_with_none_max_size(mock_condenser_class):
+    """Test _create_condenser for PLAN agent with condenser_max_size = None uses default."""
+    # Arrange
+    mock_user_context = Mock(spec=UserContext)
+    with patch.object(
+        AppConversationServiceBase,
+        '__abstractmethods__',
+        set(),
+    ):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+        mock_llm = MagicMock()
+        mock_llm_copy = MagicMock()
+        mock_llm_copy.usage_id = 'planning_condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_condenser_instance = MagicMock()
+        mock_condenser_class.return_value = mock_condenser_instance
+
+        # Act
+        service._create_condenser(mock_llm, AgentType.PLAN, None)
+
+        # Assert
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        # When condenser_max_size is None, max_size should not be passed (uses SDK default of 120)
+        assert 'max_size' not in call_kwargs
+        # keep_first is never passed (uses SDK default of 4)
+        assert 'keep_first' not in call_kwargs
+        assert call_kwargs['llm'].usage_id == 'planning_condenser'
+        mock_llm.model_copy.assert_called_once()
+
+
+@patch(
+    'openhands.app_server.app_conversation.app_conversation_service_base.LLMSummarizingCondenser'
+)
+def test_create_condenser_plan_agent_with_custom_max_size(mock_condenser_class):
+    """Test _create_condenser for PLAN agent with custom condenser_max_size."""
+    # Arrange
+    mock_user_context = Mock(spec=UserContext)
+    with patch.object(
+        AppConversationServiceBase,
+        '__abstractmethods__',
+        set(),
+    ):
+        service = AppConversationServiceBase(
+            init_git_in_empty_workspace=True,
+            user_context=mock_user_context,
+        )
+        mock_llm = MagicMock()
+        mock_llm_copy = MagicMock()
+        mock_llm_copy.usage_id = 'planning_condenser'
+        mock_llm.model_copy.return_value = mock_llm_copy
+        mock_condenser_instance = MagicMock()
+        mock_condenser_class.return_value = mock_condenser_instance
+
+        # Act
+        service._create_condenser(mock_llm, AgentType.PLAN, 200)
+
+        # Assert
+        mock_condenser_class.assert_called_once()
+        call_kwargs = mock_condenser_class.call_args[1]
+        assert call_kwargs['max_size'] == 200  # Custom value should be used
+        # keep_first is never passed (uses SDK default of 4)
+        assert 'keep_first' not in call_kwargs
+        assert call_kwargs['llm'].usage_id == 'planning_condenser'
+        mock_llm.model_copy.assert_called_once()
 
 
 # =============================================================================
