@@ -258,7 +258,6 @@ export const ORG_HANDLERS = [
     );
   }),
 
-
   http.patch(
     "/api/organizations/:orgId/members",
     async ({ request, params }) => {
@@ -315,31 +314,37 @@ export const ORG_HANDLERS = [
     return HttpResponse.json({ message: "Member removed" }, { status: 200 });
   }),
 
-  http.post("/api/organizations/:orgId/invite/batch", async ({ request, params }) => {
-    const { emails } = (await request.json()) as { emails: string[] };
-    const orgId = params.orgId?.toString();
+  http.post(
+    "/api/organizations/:orgId/invite/batch",
+    async ({ request, params }) => {
+      const { emails } = (await request.json()) as { emails: string[] };
+      const orgId = params.orgId?.toString();
 
-    if (!emails || emails.length === 0) {
-      return HttpResponse.json({ error: "Emails are required" }, { status: 400 });
-    }
+      if (!emails || emails.length === 0) {
+        return HttpResponse.json(
+          { error: "Emails are required" },
+          { status: 400 },
+        );
+      }
 
-    if (!orgId || !ORGS_AND_MEMBERS[orgId]) {
-      return HttpResponse.json(
-        { error: "Organization not found" },
-        { status: 404 },
-      );
-    }
+      if (!orgId || !ORGS_AND_MEMBERS[orgId]) {
+        return HttpResponse.json(
+          { error: "Organization not found" },
+          { status: 404 },
+        );
+      }
 
-    const members = Array.from(ORGS_AND_MEMBERS[orgId]);
-    const newMembers = emails.map((email, index) => ({
-      id: String(members.length + index + 1),
-      email,
-      role: "user" as const,
-      status: "invited" as const,
-    }));
+      const members = Array.from(ORGS_AND_MEMBERS[orgId]);
+      const newMembers = emails.map((email, index) => ({
+        id: String(members.length + index + 1),
+        email,
+        role: "user" as const,
+        status: "invited" as const,
+      }));
 
-    ORGS_AND_MEMBERS[orgId] = [...members, ...newMembers];
+      ORGS_AND_MEMBERS[orgId] = [...members, ...newMembers];
 
-    return HttpResponse.json(newMembers, { status: 201 });
-  }),
+      return HttpResponse.json(newMembers, { status: 201 });
+    },
+  ),
 ];

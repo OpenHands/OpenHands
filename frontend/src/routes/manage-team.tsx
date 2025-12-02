@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom";
+import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { redirect } from "react-router";
 import { InviteOrganizationMemberModal } from "#/components/features/org/invite-organization-member-modal";
@@ -17,6 +18,7 @@ import {
   getSelectedOrgFromQueryClient,
   getMeFromQueryClient,
 } from "#/utils/query-client-getters";
+import { I18nKey } from "#/i18n/declaration";
 
 export const clientLoader = async () => {
   const selectedOrgId = getSelectedOrgFromQueryClient();
@@ -36,6 +38,7 @@ export const clientLoader = async () => {
 };
 
 function ManageTeam() {
+  const { t } = useTranslation();
   const { data: organizationMembers } = useOrganizationMembers();
   const { data: user } = useMe();
   const { mutate: updateMemberRole } = useUpdateMemberRole();
@@ -82,7 +85,7 @@ function ManageTeam() {
           className="flex items-center gap-1"
         >
           <Plus size={14} />
-          Invite Team
+          {t(I18nKey.ORG$INVITE_TEAM)}
         </BrandButton>
       )}
 

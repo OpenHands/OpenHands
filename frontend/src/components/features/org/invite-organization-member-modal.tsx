@@ -1,8 +1,10 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { useInviteMembersBatch } from "#/hooks/mutation/use-invite-members-batch";
 import { BrandButton } from "../settings/brand-button";
 import { BadgeInput } from "#/components/shared/inputs/badge-input";
+import { I18nKey } from "#/i18n/declaration";
 
 interface InviteOrganizationMemberModalProps {
   onClose: (event?: React.MouseEvent<HTMLButtonElement>) => void;
@@ -11,6 +13,7 @@ interface InviteOrganizationMemberModalProps {
 export function InviteOrganizationMemberModal({
   onClose,
 }: InviteOrganizationMemberModalProps) {
+  const { t } = useTranslation();
   const { mutate: inviteMembers } = useInviteMembersBatch();
   const [emails, setEmails] = React.useState<string[]>([]);
 
@@ -29,12 +32,14 @@ export function InviteOrganizationMemberModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-full flex flex-col gap-2">
-          <h3 className="text-lg font-semibold">Invite Users</h3>
+          <h3 className="text-lg font-semibold">
+            {t(I18nKey.ORG$INVITE_USERS)}
+          </h3>
           <p className="text-xs text-gray-400">
-            Invite colleaguess using their email address
+            {t(I18nKey.ORG$INVITE_USERS_DESCRIPTION)}
           </p>
           <div className="flex flex-col gap-2">
-            <span className="text-sm">Emails</span>
+            <span className="text-sm">{t(I18nKey.ORG$EMAILS)}</span>
             <BadgeInput
               name="emails-badge-input"
               value={emails}
@@ -50,7 +55,7 @@ export function InviteOrganizationMemberModal({
               className="flex-1"
               onClick={formAction}
             >
-              Next
+              {t(I18nKey.ORG$NEXT)}
             </BrandButton>
             <BrandButton
               type="button"
@@ -58,7 +63,7 @@ export function InviteOrganizationMemberModal({
               onClick={onClose}
               className="flex-1"
             >
-              Skip
+              {t(I18nKey.ORG$SKIP)}
             </BrandButton>
           </div>
         </div>

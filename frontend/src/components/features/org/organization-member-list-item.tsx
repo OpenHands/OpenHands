@@ -1,7 +1,9 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
 import { cn } from "#/utils/utils";
+import { I18nKey } from "#/i18n/declaration";
 
 interface OrganizationMemberListItemProps {
   email: OrganizationMember["email"];
@@ -21,6 +23,7 @@ export function OrganizationMemberListItem({
   onRoleChange,
   onRemove,
 }: OrganizationMemberListItemProps) {
+  const { t } = useTranslation();
   const [roleSelectionOpen, setRoleSelectionOpen] = React.useState(false);
 
   const handleRoleSelectionClick = (newRole: OrganizationUserRole) => {
@@ -44,7 +47,7 @@ export function OrganizationMemberListItem({
         </span>
         {status === "invited" && (
           <span className="text-xs text-tertiary-light border border-tertiary px-2 py-1 rounded-lg">
-            invited
+            {t(I18nKey.ORG$STATUS_INVITED)}
           </span>
         )}
       </div>
@@ -62,20 +65,24 @@ export function OrganizationMemberListItem({
       {roleSelectionIsPermitted && roleSelectionOpen && (
         <ul data-testid="role-dropdown">
           <li>
-            <span onClick={() => handleRoleSelectionClick("admin")}>admin</span>
+            <span onClick={() => handleRoleSelectionClick("admin")}>
+              {t(I18nKey.ORG$ROLE_ADMIN)}
+            </span>
           </li>
           <li>
-            <span onClick={() => handleRoleSelectionClick("user")}>user</span>
+            <span onClick={() => handleRoleSelectionClick("user")}>
+              {t(I18nKey.ORG$ROLE_USER)}
+            </span>
           </li>
           <li>
-            <span 
-              className="text-red-500 cursor-pointer" 
+            <span
+              className="text-red-500 cursor-pointer"
               onClick={() => {
                 onRemove?.();
                 setRoleSelectionOpen(false);
               }}
             >
-              remove
+              {t(I18nKey.ORG$REMOVE)}
             </span>
           </li>
         </ul>

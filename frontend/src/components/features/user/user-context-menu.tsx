@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import {
   IoCardOutline,
   IoLogOutOutline,
@@ -18,6 +19,7 @@ import { InviteOrganizationMemberModal } from "../org/invite-organization-member
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { SettingsDropdownInput } from "../settings/settings-dropdown-input";
+import { I18nKey } from "#/i18n/declaration";
 
 interface TempButtonProps {
   start: React.ReactNode;
@@ -51,6 +53,7 @@ interface UserContextMenuProps {
 }
 
 export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { orgId, setOrgId } = useSelectedOrganizationId();
   const { data: organizations } = useOrganizations();
@@ -117,7 +120,9 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
           document.getElementById("portal-root") || document.body,
         )}
 
-      <h3 className="text-lg font-semibold text-white">Account</h3>
+      <h3 className="text-lg font-semibold text-white">
+        {t(I18nKey.ORG$ACCOUNT)}
+      </h3>
 
       <div className="flex flex-col items-start gap-2">
         <SettingsDropdownInput
@@ -130,7 +135,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
             ...(organizations?.map((org) => ({
               key: org.id,
               label: org.name,
-            })) || [])
+            })) || []),
           ]}
           onSelectionChange={(org) => {
             if (org === "personal") {
@@ -149,7 +154,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               onClick={handleInviteMemberClick}
               start={<IoPersonAddOutline className="text-white" size={14} />}
             >
-              Invite Team
+              {t(I18nKey.ORG$INVITE_TEAM)}
             </TempButton>
 
             <TempDivider />
@@ -158,13 +163,13 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               onClick={handleManageAccountClick}
               start={<IoCardOutline className="text-white" size={14} />}
             >
-              Manage Account
+              {t(I18nKey.ORG$MANAGE_ACCOUNT)}
             </TempButton>
             <TempButton
               onClick={handleManageTeamClick}
               start={<IoPersonOutline className="text-white" size={14} />}
             >
-              Manage Team
+              {t(I18nKey.ORG$MANAGE_TEAM)}
             </TempButton>
           </>
         )}
@@ -175,7 +180,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
           onClick={handleSettingsClick}
           start={<FaCog className="text-white" size={14} />}
         >
-          Settings
+          {t(I18nKey.ACCOUNT_SETTINGS$SETTINGS)}
         </TempButton>
 
         {isSuperAdmin && (
@@ -183,7 +188,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
             onClick={handleCreateNewOrgClick}
             start={<FaPlus className="text-white" size={14} />}
           >
-            Create New Organization
+            {t(I18nKey.ORG$CREATE_NEW_ORGANIZATION)}
           </TempButton>
         )}
 
@@ -191,7 +196,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
           onClick={handleLogout}
           start={<IoLogOutOutline className="text-white" size={14} />}
         >
-          Logout
+          {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
         </TempButton>
       </div>
     </div>

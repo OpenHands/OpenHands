@@ -118,7 +118,6 @@ const renderUserMessageWithSkillReady = (
     );
   } catch (error) {
     // If skill ready event creation fails, just render the user message
-    console.error("Failed to create skill ready event:", error);
     return (
       <UserAssistantEventMessage
         event={messageEvent}

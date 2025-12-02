@@ -1,6 +1,8 @@
+import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { useCreateOrganization } from "#/hooks/mutation/use-create-organization";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { I18nKey } from "#/i18n/declaration";
 
 interface CreateNewOrganizationModalProps {
   onClose: () => void;
@@ -11,6 +13,7 @@ export function CreateNewOrganizationModal({
   onClose,
   onSuccess,
 }: CreateNewOrganizationModalProps) {
+  const { t } = useTranslation();
   const { mutate: createOrganization } = useCreateOrganization();
   const { setOrgId } = useSelectedOrganizationId();
 
@@ -25,7 +28,7 @@ export function CreateNewOrganizationModal({
             onClose();
             onSuccess?.();
           },
-        }
+        },
       );
     }
   };
@@ -39,13 +42,13 @@ export function CreateNewOrganizationModal({
       >
         <form action={formAction}>
           <label>
-            Organization Name
+            {t(I18nKey.ORG$ORGANIZATION_NAME)}
             <input data-testid="org-name-input" name="org-name" type="text" />
           </label>
 
-          <button type="submit">Next</button>
+          <button type="submit">{t(I18nKey.ORG$NEXT)}</button>
           <button type="button" onClick={onClose}>
-            Skip
+            {t(I18nKey.ORG$SKIP)}
           </button>
         </form>
       </div>

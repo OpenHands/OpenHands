@@ -1,6 +1,7 @@
 import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { redirect, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useCreateStripeCheckoutSession } from "#/hooks/mutation/stripe/use-create-stripe-checkout-session";
 import { useOrganization } from "#/hooks/query/use-organization";
 import { useOrganizationPaymentInfo } from "#/hooks/query/use-organization-payment-info";
@@ -17,6 +18,7 @@ import {
   getMeFromQueryClient,
 } from "#/utils/query-client-getters";
 import { queryClient } from "#/query-client-config";
+import { I18nKey } from "#/i18n/declaration";
 
 function TempChip({
   children,
@@ -83,6 +85,7 @@ interface ChangeOrgNameModalProps {
 }
 
 function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
+  const { t } = useTranslation();
   const { orgId } = useSelectedOrganizationId();
   const qClient = useQueryClient();
 
@@ -117,8 +120,12 @@ function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
         )}
       >
         <div className="flex flex-col gap-2 w-full">
-          <h3 className="text-lg font-semibold">Change Org Name</h3>
-          <p className="text-xs text-gray-400">Modify your Org Name and Save</p>
+          <h3 className="text-lg font-semibold">
+            {t(I18nKey.ORG$CHANGE_ORG_NAME)}
+          </h3>
+          <p className="text-xs text-gray-400">
+            {t(I18nKey.ORG$MODIFY_ORG_NAME_DESCRIPTION)}
+          </p>
           <SettingsInput
             name="org-name"
             type="text"
@@ -130,7 +137,7 @@ function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
         </div>
 
         <BrandButton variant="primary" type="submit" className="w-full">
-          Save
+          {t(I18nKey.BUTTON$SAVE)}
         </BrandButton>
       </form>
     </ModalBackdrop>
@@ -144,6 +151,7 @@ interface DeleteOrgConfirmationModalProps {
 function DeleteOrgConfirmationModal({
   onClose,
 }: DeleteOrgConfirmationModalProps) {
+  const { t } = useTranslation();
   const qClient = useQueryClient();
   const navigate = useNavigate();
   const { orgId, setOrgId } = useSelectedOrganizationId();
@@ -169,7 +177,7 @@ function DeleteOrgConfirmationModal({
           })
         }
       >
-        Confirm
+        {t(I18nKey.BUTTON$CONFIRM)}
       </button>
     </div>
   );
@@ -180,6 +188,7 @@ interface AddCreditsModalProps {
 }
 
 function AddCreditsModal({ onClose }: AddCreditsModalProps) {
+  const { t } = useTranslation();
   const { mutate: addBalance } = useCreateStripeCheckoutSession();
 
   const formAction = (formData: FormData) => {
@@ -199,7 +208,9 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
         className="w-sm rounded-xl bg-[#171717] flex flex-col p-6 gap-6"
       >
         <div className="flex flex-col gap-2">
-          <h3 className="text-xl font-semibold">Add Credits</h3>
+          <h3 className="text-xl font-semibold">
+            {t(I18nKey.ORG$ADD_CREDITS)}
+          </h3>
           <input
             data-testid="amount-input"
             name="amount"
@@ -209,9 +220,9 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
         </div>
 
         <div className="flex gap-2">
-          <TempButton type="submit">Next</TempButton>
+          <TempButton type="submit">{t(I18nKey.ORG$NEXT)}</TempButton>
           <TempButton type="button" onClick={onClose} variant="secondary">
-            Cancel
+            {t(I18nKey.BUTTON$CANCEL)}
           </TempButton>
         </div>
       </form>
@@ -237,6 +248,7 @@ export const clientLoader = async () => {
 };
 
 function ManageOrg() {
+  const { t } = useTranslation();
   const { data: me } = useMe();
   const { data: organization } = useOrganization();
   const { data: organizationPaymentInfo } = useOrganizationPaymentInfo();
@@ -272,14 +284,16 @@ function ManageOrg() {
       )}
 
       <div className="flex flex-col gap-2">
-        <span className="text-white text-xs font-semibold ml-1">Credits</span>
+        <span className="text-white text-xs font-semibold ml-1">
+          {t(I18nKey.ORG$CREDITS)}
+        </span>
         <div className="flex items-center gap-2">
           <TempChip data-testid="available-credits">
             {organization?.balance}
           </TempChip>
           {canAddCredits && (
             <TempInteractiveChip onClick={() => setAddCreditsFormVisible(true)}>
-              + Add
+              {t(I18nKey.ORG$ADD)}
             </TempInteractiveChip>
           )}
         </div>
@@ -291,7 +305,7 @@ function ManageOrg() {
 
       <div data-testid="org-name" className="flex flex-col gap-2 w-sm">
         <span className="text-white text-xs font-semibold ml-1">
-          Organization Name
+          {t(I18nKey.ORG$ORGANIZATION_NAME)}
         </span>
 
         <div
@@ -307,7 +321,7 @@ function ManageOrg() {
               onClick={() => setChangeOrgNameFormVisible(true)}
               className="text-[#A3A3A3] hover:text-white transition-colors cursor-pointer"
             >
-              Change
+              {t(I18nKey.ORG$CHANGE)}
             </button>
           )}
         </div>
@@ -315,7 +329,7 @@ function ManageOrg() {
 
       <div className="flex flex-col gap-2 w-sm">
         <span className="text-white text-xs font-semibold ml-1">
-          Billing Information
+          {t(I18nKey.ORG$BILLING_INFORMATION)}
         </span>
 
         <span
@@ -335,7 +349,7 @@ function ManageOrg() {
           onClick={() => setDeleteOrgConfirmationVisible(true)}
           className="text-xs text-[#FF3B30] cursor-pointer font-semibold hover:underline"
         >
-          Delete Organization
+          {t(I18nKey.ORG$DELETE_ORGANIZATION)}
         </button>
       )}
     </div>
