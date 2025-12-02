@@ -9,6 +9,7 @@ from typing import AsyncGenerator
 import base62
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    AgentType,
     AppConversationStartTask,
     AppConversationStartTaskStatus,
 )
@@ -23,9 +24,12 @@ from openhands.app_server.app_conversation.skill_loader import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.user.user_models import UserInfo
 from openhands.sdk import Agent
 from openhands.sdk.context.agent_context import AgentContext
+from openhands.sdk.context.condenser import LLMSummarizingCondenser
 from openhands.sdk.context.skills import load_user_skills
+from openhands.sdk.llm import LLM
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)
@@ -300,3 +304,52 @@ class AppConversationServiceBase(AppConversationService, ABC):
             return
 
         _logger.info('Git pre-commit hook installed successfully')
+
+    def _create_condenser(
+        self,
+        llm: LLM,
+        agent_type: AgentType,
+        user: UserInfo,
+    ) -> LLMSummarizingCondenser:
+        """Create a condenser based on user settings and agent type.
+
+        Args:
+            llm: The LLM instance to use for condensation
+            agent_type: Type of agent (PLAN or DEFAULT)
+            user: User information containing settings like condenser_max_size
+
+        Returns:
+            Configured LLMSummarizingCondenser instance
+        """
+        # Get condenser_max_size from user settings, with type-specific defaults
+        condenser_max_size = user.condenser_max_size
+        if agent_type == AgentType.PLAN:
+            # Planning agents use larger default context window
+            default_max_size = 100
+            default_keep_first = 6
+        else:
+            # Default agents use standard context window
+            default_max_size = 80
+            default_keep_first = 4
+
+        # Use user's condenser_max_size if set, otherwise use type-specific default
+        max_size = (
+            condenser_max_size if condenser_max_size is not None else default_max_size
+        )
+
+        # Create condenser with user's settings
+        condenser = LLMSummarizingCondenser(
+            llm=llm.model_copy(
+                update={
+                    'usage_id': (
+                        'condenser'
+                        if agent_type == AgentType.DEFAULT
+                        else 'planning_condenser'
+                    )
+                }
+            ),
+            max_size=max_size,
+            keep_first=default_keep_first,
+        )
+
+        return condenser
