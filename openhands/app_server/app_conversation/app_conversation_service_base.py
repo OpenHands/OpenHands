@@ -321,20 +321,13 @@ class AppConversationServiceBase(AppConversationService, ABC):
         Returns:
             Configured LLMSummarizingCondenser instance
         """
-        # Get condenser_max_size from user settings, with type-specific defaults
+        # Get condenser_max_size from user settings
         condenser_max_size = user.condenser_max_size
 
-        default_max_size = 120
-        default_keep_first = 4
-
-        # Use user's condenser_max_size if set, otherwise use type-specific default
-        max_size = (
-            condenser_max_size if condenser_max_size is not None else default_max_size
-        )
-
         # Create condenser with user's settings
-        condenser = LLMSummarizingCondenser(
-            llm=llm.model_copy(
+        # LLMSummarizingCondenser has defaults: max_size=120, keep_first=4
+        condenser_kwargs = {
+            'llm': llm.model_copy(
                 update={
                     'usage_id': (
                         'condenser'
@@ -343,8 +336,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
                     )
                 }
             ),
-            max_size=max_size,
-            keep_first=default_keep_first,
-        )
+        }
+        # Only override max_size if user has a custom value
+        if condenser_max_size is not None:
+            condenser_kwargs['max_size'] = condenser_max_size
+
+        condenser = LLMSummarizingCondenser(**condenser_kwargs)
 
         return condenser
