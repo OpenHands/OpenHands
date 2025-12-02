@@ -63,6 +63,7 @@ class TestLiveStatusAppConversationService:
         self.mock_user.llm_api_key = 'test_api_key'
         self.mock_user.confirmation_mode = False
         self.mock_user.search_api_key = None  # Default to None
+        self.mock_user.condenser_max_size = None  # Default to None
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -453,7 +454,7 @@ class TestLiveStatusAppConversationService:
                 AgentType.PLAN,
                 system_message_suffix,
                 mcp_config,
-                self.mock_user,
+                self.mock_user.condenser_max_size,
             )
 
             # Assert
@@ -469,7 +470,7 @@ class TestLiveStatusAppConversationService:
             assert call_kwargs['security_analyzer'] is None
             assert call_kwargs['condenser'] == mock_condenser
             mock_create_condenser.assert_called_once_with(
-                mock_llm, AgentType.PLAN, self.mock_user
+                mock_llm, AgentType.PLAN, self.mock_user.condenser_max_size
             )
 
     @patch(
@@ -499,7 +500,11 @@ class TestLiveStatusAppConversationService:
             mock_agent_class.return_value = mock_agent_instance
 
             self.service._create_agent_with_context(
-                mock_llm, AgentType.DEFAULT, None, mcp_config, self.mock_user
+                mock_llm,
+                AgentType.DEFAULT,
+                None,
+                mcp_config,
+                self.mock_user.condenser_max_size,
             )
 
             # Assert
@@ -511,7 +516,7 @@ class TestLiveStatusAppConversationService:
             assert call_kwargs['condenser'] == mock_condenser
             mock_get_tools.assert_called_once_with(enable_browser=True)
             mock_create_condenser.assert_called_once_with(
-                mock_llm, AgentType.DEFAULT, self.mock_user
+                mock_llm, AgentType.DEFAULT, self.mock_user.condenser_max_size
             )
 
     @pytest.mark.asyncio
@@ -707,6 +712,10 @@ class TestLiveStatusAppConversationService:
             self.mock_user, 'gpt-4'
         )
         self.service._create_agent_with_context.assert_called_once_with(
-            mock_llm, AgentType.DEFAULT, 'Test suffix', mock_mcp_config, self.mock_user
+            mock_llm,
+            AgentType.DEFAULT,
+            'Test suffix',
+            mock_mcp_config,
+            self.mock_user.condenser_max_size,
         )
         self.service._finalize_conversation_request.assert_called_once()

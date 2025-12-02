@@ -24,7 +24,6 @@ from openhands.app_server.app_conversation.skill_loader import (
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.app_server.user.user_models import UserInfo
 from openhands.sdk import Agent
 from openhands.sdk.context.agent_context import AgentContext
 from openhands.sdk.context.condenser import LLMSummarizingCondenser
@@ -309,22 +308,18 @@ class AppConversationServiceBase(AppConversationService, ABC):
         self,
         llm: LLM,
         agent_type: AgentType,
-        user: UserInfo,
+        condenser_max_size: int | None,
     ) -> LLMSummarizingCondenser:
         """Create a condenser based on user settings and agent type.
 
         Args:
             llm: The LLM instance to use for condensation
             agent_type: Type of agent (PLAN or DEFAULT)
-            user: User information containing settings like condenser_max_size
+            condenser_max_size: condenser_max_size setting
 
         Returns:
             Configured LLMSummarizingCondenser instance
         """
-        # Get condenser_max_size from user settings
-        condenser_max_size = user.condenser_max_size
-
-        # Create condenser with user's settings
         # LLMSummarizingCondenser has defaults: max_size=120, keep_first=4
         condenser_kwargs = {
             'llm': llm.model_copy(

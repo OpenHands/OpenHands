@@ -14,7 +14,6 @@ from openhands.app_server.app_conversation.app_conversation_service_base import 
     AppConversationServiceBase,
 )
 from openhands.app_server.user.user_context import UserContext
-from openhands.app_server.user.user_models import UserInfo
 
 
 class MockAppConversationServiceBase:
@@ -285,10 +284,9 @@ def test_create_condenser_default_agent_with_none_max_size(mock_condenser_class)
         mock_llm.model_copy.return_value = mock_llm_copy
         mock_condenser_instance = MagicMock()
         mock_condenser_class.return_value = mock_condenser_instance
-        user = UserInfo(condenser_max_size=None)
 
         # Act
-        service._create_condenser(mock_llm, AgentType.DEFAULT, user)
+        service._create_condenser(mock_llm, AgentType.DEFAULT, None)
 
         # Assert
         mock_condenser_class.assert_called_once()
@@ -323,10 +321,9 @@ def test_create_condenser_default_agent_with_custom_max_size(mock_condenser_clas
         mock_llm.model_copy.return_value = mock_llm_copy
         mock_condenser_instance = MagicMock()
         mock_condenser_class.return_value = mock_condenser_instance
-        user = UserInfo(condenser_max_size=150)
 
         # Act
-        service._create_condenser(mock_llm, AgentType.DEFAULT, user)
+        service._create_condenser(mock_llm, AgentType.DEFAULT, 150)
 
         # Assert
         mock_condenser_class.assert_called_once()
@@ -360,10 +357,9 @@ def test_create_condenser_plan_agent_with_none_max_size(mock_condenser_class):
         mock_llm.model_copy.return_value = mock_llm_copy
         mock_condenser_instance = MagicMock()
         mock_condenser_class.return_value = mock_condenser_instance
-        user = UserInfo(condenser_max_size=None)
 
         # Act
-        service._create_condenser(mock_llm, AgentType.PLAN, user)
+        service._create_condenser(mock_llm, AgentType.PLAN, None)
 
         # Assert
         mock_condenser_class.assert_called_once()
@@ -398,10 +394,9 @@ def test_create_condenser_plan_agent_with_custom_max_size(mock_condenser_class):
         mock_llm.model_copy.return_value = mock_llm_copy
         mock_condenser_instance = MagicMock()
         mock_condenser_class.return_value = mock_condenser_instance
-        user = UserInfo(condenser_max_size=200)
 
         # Act
-        service._create_condenser(mock_llm, AgentType.PLAN, user)
+        service._create_condenser(mock_llm, AgentType.PLAN, 200)
 
         # Assert
         mock_condenser_class.assert_called_once()
