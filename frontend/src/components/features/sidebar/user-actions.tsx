@@ -54,7 +54,8 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
         isLoading={isLoading}
       />
 
-      {(shouldShowUserActions || isOSS) && (
+      {/* TODO: Remove this old menu once UserContextMenu is fully implemented */}
+      {false && (
         <div
           className={cn(
             "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
@@ -67,13 +68,14 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
           />
         </div>
       )}
+      {/* TODO:
+        1. Update user actions tests
+        2. New menu should open on hover
+        3. Fix icon sizes
+        4. Appropriately render team/org items when necessary in the context menu
+      */}
       {accountContextMenuIsVisible && !!user && shouldShowUserActions && (
-        <div className="w-sm absolute left-[calc(100%+12px)] bottom-0 z-10">
-          <UserContextMenu
-            type={me?.role || "user"}
-            onClose={closeAccountMenu}
-          />
-        </div>
+        <UserContextMenu type={me?.role || "user"} onClose={closeAccountMenu} />
       )}
     </div>
   );

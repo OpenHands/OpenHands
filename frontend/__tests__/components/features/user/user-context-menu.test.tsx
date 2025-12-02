@@ -1,12 +1,15 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
 import { UserContextMenu } from "#/components/features/user/user-context-menu";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { GetComponentPropTypes } from "#/utils/get-component-prop-types";
 import { INITIAL_MOCK_ORGS } from "#/mocks/org-handlers";
 import AuthService from "#/api/auth-service/auth-service.api";
+import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
+import OptionService from "#/api/option-service/option-service.api";
 
 type UserContextMenuProps = GetComponentPropTypes<typeof UserContextMenu>;
 
@@ -25,9 +28,11 @@ function UserContextMenuWithRootOutlet({
 const renderUserContextMenu = ({ type, onClose }: UserContextMenuProps) =>
   render(<UserContextMenuWithRootOutlet type={type} onClose={onClose} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={new QueryClient()}>
-        {children}
-      </QueryClientProvider>
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      </MemoryRouter>
     ),
   });
 
@@ -53,7 +58,6 @@ describe("UserContextMenu", () => {
 
     screen.getByTestId("org-selector");
     screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
-    screen.getByText("ACCOUNT_SETTINGS$SETTINGS");
 
     expect(screen.queryByText("ORG$INVITE_TEAM")).not.toBeInTheDocument();
     expect(screen.queryByText("ORG$MANAGE_TEAM")).not.toBeInTheDocument();
@@ -61,6 +65,56 @@ describe("UserContextMenu", () => {
     expect(
       screen.queryByText("ORG$CREATE_NEW_ORGANIZATION"),
     ).not.toBeInTheDocument();
+  });
+
+  it("should render navigation items from SAAS_NAV_ITEMS", () => {
+    renderUserContextMenu({ type: "user", onClose: vi.fn });
+
+    // Verify that navigation items are rendered
+    SAAS_NAV_ITEMS.forEach((item) => {
+      expect(screen.getByText(item.text)).toBeInTheDocument();
+    });
+  });
+
+  it("should render a documentation link", () => {
+    renderUserContextMenu({ type: "user", onClose: vi.fn });
+
+    const docsLink = screen.getByText("SIDEBAR$DOCS").closest("a");
+    expect(docsLink).toHaveAttribute("href", "https://docs.openhands.dev");
+    expect(docsLink).toHaveAttribute("target", "_blank");
+  });
+
+  describe("OSS mode", () => {
+    beforeEach(() => {
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+        APP_MODE: "oss",
+        GITHUB_CLIENT_ID: "test",
+        POSTHOG_CLIENT_KEY: "test",
+        FEATURE_FLAGS: {
+          ENABLE_BILLING: false,
+          HIDE_LLM_SETTINGS: false,
+          ENABLE_JIRA: false,
+          ENABLE_JIRA_DC: false,
+          ENABLE_LINEAR: false,
+        },
+      });
+    });
+
+    it("should render OSS_NAV_ITEMS when in OSS mode", async () => {
+      renderUserContextMenu({ type: "user", onClose: vi.fn });
+
+      // Wait for the config to load and OSS nav items to appear
+      await waitFor(() => {
+        OSS_NAV_ITEMS.forEach((item) => {
+          expect(screen.getByText(item.text)).toBeInTheDocument();
+        });
+      });
+
+      // Verify SAAS-only items are NOT rendered (e.g., Billing)
+      expect(
+        screen.queryByText("SETTINGS$NAV_BILLING"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("should render additional context items when user is an admin", () => {
@@ -96,13 +150,20 @@ describe("UserContextMenu", () => {
     expect(logoutSpy).toHaveBeenCalledOnce();
   });
 
-  it("should navigate to /settings when Settings is clicked", async () => {
+  it("should have correct navigation links for nav items", () => {
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    const settingsButton = screen.getByText("ACCOUNT_SETTINGS$SETTINGS");
-    await userEvent.click(settingsButton);
+    // Test a few representative nav items have the correct href
+    const userLink = screen.getByText("SETTINGS$NAV_USER").closest("a");
+    expect(userLink).toHaveAttribute("href", "/settings/user");
 
-    expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings");
+    const billingLink = screen.getByText("SETTINGS$NAV_BILLING").closest("a");
+    expect(billingLink).toHaveAttribute("href", "/settings/billing");
+
+    const integrationsLink = screen
+      .getByText("SETTINGS$NAV_INTEGRATIONS")
+      .closest("a");
+    expect(integrationsLink).toHaveAttribute("href", "/settings/integrations");
   });
 
   it("should navigate to /settings/team when Manage Team is clicked", async () => {
@@ -250,17 +311,13 @@ describe("UserContextMenu", () => {
     await userEvent.click(logoutButton);
     expect(onCloseMock).toHaveBeenCalledTimes(1);
 
-    const settingsButton = screen.getByText("ACCOUNT_SETTINGS$SETTINGS");
-    await userEvent.click(settingsButton);
-    expect(onCloseMock).toHaveBeenCalledTimes(2);
-
     const manageTeamButton = screen.getByText("ORG$MANAGE_TEAM");
     await userEvent.click(manageTeamButton);
-    expect(onCloseMock).toHaveBeenCalledTimes(3);
+    expect(onCloseMock).toHaveBeenCalledTimes(2);
 
     const manageAccountButton = screen.getByText("ORG$MANAGE_ACCOUNT");
     await userEvent.click(manageAccountButton);
-    expect(onCloseMock).toHaveBeenCalledTimes(4);
+    expect(onCloseMock).toHaveBeenCalledTimes(3);
   });
 
   it("should render the invite user modal when Invite Team is clicked", async () => {
