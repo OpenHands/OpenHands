@@ -252,7 +252,12 @@ def get_api_key_from_header(request: Request):
     # This is a temp hack
     # Streamable HTTP MCP Client works via redirect requests, but drops the Authorization header for reason
     # We include `X-Session-API-Key` header by default due to nested runtimes, so it used as a drop in replacement here
-    return request.headers.get('X-Session-API-Key')
+    session_api_key = request.headers.get('X-Session-API-Key')
+    if session_api_key:
+        return session_api_key
+
+    # Fallback to X-Access-Token header as an additional option
+    return request.headers.get('X-Access-Token')
 
 
 async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
