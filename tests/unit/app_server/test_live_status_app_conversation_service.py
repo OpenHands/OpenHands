@@ -63,7 +63,6 @@ class TestLiveStatusAppConversationService:
         self.mock_user.llm_api_key = 'test_api_key'
         self.mock_user.confirmation_mode = False
         self.mock_user.search_api_key = None  # Default to None
-        self.mock_user.condenser_max_size = None  # Default to None
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -417,6 +416,103 @@ class TestLiveStatusAppConversationService:
             mcp_config['tavily']['url']
             == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
         )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.format_plan_structure'
+    )
+    def test_create_agent_with_context_planning_agent(
+        self, mock_format_plan, mock_create_condenser, mock_get_tools
+    ):
+        """Test _create_agent_with_context for planning agent type."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model_copy.return_value = mock_llm
+        mock_get_tools.return_value = []
+        mock_condenser = Mock()
+        mock_create_condenser.return_value = mock_condenser
+        mock_format_plan.return_value = 'test_plan_structure'
+        mcp_config = {'default': {'url': 'test'}}
+        system_message_suffix = 'Test suffix'
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+        ) as mock_agent_class:
+            mock_agent_instance = Mock()
+            mock_agent_instance.model_copy.return_value = mock_agent_instance
+            mock_agent_class.return_value = mock_agent_instance
+
+            self.service._create_agent_with_context(
+                mock_llm,
+                AgentType.PLAN,
+                system_message_suffix,
+                mcp_config,
+                self.mock_user,
+            )
+
+            # Assert
+            mock_agent_class.assert_called_once()
+            call_kwargs = mock_agent_class.call_args[1]
+            assert call_kwargs['llm'] == mock_llm
+            assert call_kwargs['system_prompt_filename'] == 'system_prompt_planning.j2'
+            assert (
+                call_kwargs['system_prompt_kwargs']['plan_structure']
+                == 'test_plan_structure'
+            )
+            assert call_kwargs['mcp_config'] == mcp_config
+            assert call_kwargs['security_analyzer'] is None
+            assert call_kwargs['condenser'] == mock_condenser
+            mock_create_condenser.assert_called_once_with(
+                mock_llm, AgentType.PLAN, self.mock_user
+            )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
+    )
+    def test_create_agent_with_context_default_agent(
+        self, mock_create_condenser, mock_get_tools
+    ):
+        """Test _create_agent_with_context for default agent type."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model_copy.return_value = mock_llm
+        mock_get_tools.return_value = []
+        mock_condenser = Mock()
+        mock_create_condenser.return_value = mock_condenser
+        mcp_config = {'default': {'url': 'test'}}
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+        ) as mock_agent_class:
+            mock_agent_instance = Mock()
+            mock_agent_instance.model_copy.return_value = mock_agent_instance
+            mock_agent_class.return_value = mock_agent_instance
+
+            self.service._create_agent_with_context(
+                mock_llm, AgentType.DEFAULT, None, mcp_config, self.mock_user
+            )
+
+            # Assert
+            mock_agent_class.assert_called_once()
+            call_kwargs = mock_agent_class.call_args[1]
+            assert call_kwargs['llm'] == mock_llm
+            assert call_kwargs['system_prompt_kwargs']['cli_mode'] is False
+            assert call_kwargs['mcp_config'] == mcp_config
+            assert call_kwargs['condenser'] == mock_condenser
+            mock_get_tools.assert_called_once_with(enable_browser=True)
+            mock_create_condenser.assert_called_once_with(
+                mock_llm, AgentType.DEFAULT, self.mock_user
+            )
 
     @pytest.mark.asyncio
     @patch(
