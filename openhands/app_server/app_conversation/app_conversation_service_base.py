@@ -323,14 +323,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
         """
         # Get condenser_max_size from user settings, with type-specific defaults
         condenser_max_size = user.condenser_max_size
-        if agent_type == AgentType.PLAN:
-            # Planning agents use larger default context window
-            default_max_size = 100
-            default_keep_first = 6
-        else:
-            # Default agents use standard context window
-            default_max_size = 80
-            default_keep_first = 4
+
+        default_max_size = 120
+        default_keep_first = 4
 
         # Use user's condenser_max_size if set, otherwise use type-specific default
         max_size = (
