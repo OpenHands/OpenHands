@@ -41,7 +41,7 @@ export function SetupPaymentModal() {
           variant="primary"
           className="w-full"
           isDisabled={isPending}
-          onClick={mutate}
+          onClick={() => mutate()}
         >
           {t(I18nKey.BILLING$PROCEED_TO_STRIPE)}
         </BrandButton>

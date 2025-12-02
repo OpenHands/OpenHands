@@ -70,7 +70,7 @@ function TempButton({
         variant === "primary" && "bg-[#F3CE49] text-black",
         variant === "secondary" && "bg-[#737373] text-white",
       )}
-      type={type}
+      type={type === "submit" ? "submit" : "button"}
       onClick={onClick}
     >
       {children}
@@ -84,11 +84,13 @@ interface ChangeOrgNameModalProps {
 
 function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
   const { orgId } = useSelectedOrganizationId();
-  const queryClient = useQueryClient();
+  const qClient = useQueryClient();
 
   const { mutate: updateOrganization } = useMutation({
-    mutationFn: (name: string) =>
-      organizationService.updateOrganization({ orgId, name }),
+    mutationFn: (name: string) => {
+      if (!orgId) throw new Error("Organization ID is required");
+      return organizationService.updateOrganization({ orgId, name });
+    },
   });
 
   const formAction = (formData: FormData) => {
@@ -97,7 +99,7 @@ function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
     if (orgName?.trim()) {
       updateOrganization(orgName, {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ["organizations", orgId] });
+          qClient.invalidateQueries({ queryKey: ["organizations", orgId] });
           onClose();
         },
       });
@@ -122,6 +124,7 @@ function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
             type="text"
             required
             className="w-full"
+            label="Organization Name"
             placeholder="Enter new organization name"
           />
         </div>
@@ -141,13 +144,16 @@ interface DeleteOrgConfirmationModalProps {
 function DeleteOrgConfirmationModal({
   onClose,
 }: DeleteOrgConfirmationModalProps) {
-  const queryClient = useQueryClient();
+  const qClient = useQueryClient();
   const navigate = useNavigate();
   const { orgId, setOrgId } = useSelectedOrganizationId();
   const { mutate: deleteOrganization } = useMutation({
-    mutationFn: () => organizationService.deleteOrganization({ orgId }),
+    mutationFn: () => {
+      if (!orgId) throw new Error("Organization ID is required");
+      return organizationService.deleteOrganization({ orgId });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      qClient.invalidateQueries({ queryKey: ["organizations"] });
       setOrgId(null);
       navigate("/");
     },
