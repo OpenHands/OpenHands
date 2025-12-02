@@ -28,6 +28,7 @@ import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
+import { USE_V1_CONVERSATION_API } from "#/utils/feature-flags";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -117,6 +118,9 @@ function LlmSettingsScreen() {
     (view === "advanced" && currentModel?.startsWith("openhands/"));
   const isSaasMode = config?.APP_MODE === "saas";
   const shouldUseOpenHandsKey = isOpenHandsProvider && isSaasMode;
+
+  // Determine if we should hide the agent dropdown when V1 conversation API feature flag is enabled
+  const isV1Enabled = USE_V1_CONVERSATION_API();
 
   React.useEffect(() => {
     const determineWhetherToToggleAdvancedSettings = () => {
@@ -612,21 +616,23 @@ function LlmSettingsScreen() {
                     href="https://tavily.com/"
                   />
 
-                  <SettingsDropdownInput
-                    testId="agent-input"
-                    name="agent-input"
-                    label={t(I18nKey.SETTINGS$AGENT)}
-                    items={
-                      resources?.agents.map((agent) => ({
-                        key: agent,
-                        label: agent, // TODO: Add i18n support for agent names
-                      })) || []
-                    }
-                    defaultSelectedKey={settings.AGENT}
-                    isClearable={false}
-                    onInputChange={handleAgentIsDirty}
-                    wrapperClassName="w-full max-w-[680px]"
-                  />
+                  {!isV1Enabled && (
+                    <SettingsDropdownInput
+                      testId="agent-input"
+                      name="agent-input"
+                      label={t(I18nKey.SETTINGS$AGENT)}
+                      items={
+                        resources?.agents.map((agent) => ({
+                          key: agent,
+                          label: agent, // TODO: Add i18n support for agent names
+                        })) || []
+                      }
+                      defaultSelectedKey={settings.AGENT}
+                      isClearable={false}
+                      onInputChange={handleAgentIsDirty}
+                      wrapperClassName="w-full max-w-[680px]"
+                    />
+                  )}
                 </>
               )}
 
