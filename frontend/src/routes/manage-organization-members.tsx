@@ -37,7 +37,7 @@ export const clientLoader = async () => {
   return null;
 };
 
-function ManageTeam() {
+function ManageOrganizationMembers() {
   const { t } = useTranslation();
   const { data: organizationMembers } = useOrganizationMembers();
   const { data: user } = useMe();
@@ -74,7 +74,7 @@ function ManageTeam() {
 
   return (
     <div
-      data-testid="manage-team-settings"
+      data-testid="manage-organization-members-settings"
       className="px-11 py-6 flex flex-col gap-2"
     >
       {hasPermissionToInvite && (
@@ -85,7 +85,7 @@ function ManageTeam() {
           className="flex items-center gap-1"
         >
           <Plus size={14} />
-          {t(I18nKey.ORG$INVITE_TEAM)}
+          {t(I18nKey.ORG$INVITE_ORGANIZATION_MEMBER)}
         </BrandButton>
       )}
 
@@ -126,4 +126,4 @@ function ManageTeam() {
   );
 }
 
-export default ManageTeam;
+export default ManageOrganizationMembers;

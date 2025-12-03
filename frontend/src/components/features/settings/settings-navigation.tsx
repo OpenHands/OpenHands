@@ -98,9 +98,9 @@ export function SettingsNavigation({
         <div className="flex flex-col gap-2">
           {navigationItems
             .filter((navItem) => {
-              // if user is not an admin or no org is selected, do not show team/org settings
+              // if user is not an admin or no org is selected, do not show organization members/org settings
               if (
-                (navItem.to === "/settings/team" ||
+                (navItem.to === "/settings/organization-members" ||
                   navItem.to === "/settings/org") &&
                 (isUser || !orgId)
               ) {

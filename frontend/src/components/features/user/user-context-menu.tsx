@@ -35,7 +35,7 @@ function TempButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1 cursor-pointer hover:text-white w-full"
+      className="flex items-center gap-1 cursor-pointer hover:text-white w-full text-left"
     >
       {start}
       {children}
@@ -62,9 +62,11 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
 
   const isOss = config?.APP_MODE === "oss";
-  // Filter out team/org nav items since they're already handled separately in the menu
+  // Filter out organization members/org nav items since they're already handled separately in the menu
   const navItems = (isOss ? OSS_NAV_ITEMS : SAAS_NAV_ITEMS).filter(
-    (item) => item.to !== "/settings/team" && item.to !== "/settings/org",
+    (item) =>
+      item.to !== "/settings/organization-members" &&
+      item.to !== "/settings/org",
   );
 
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
@@ -81,8 +83,8 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
     setInviteMemberModalIsOpen(true);
   };
 
-  const handleManageTeamClick = () => {
-    navigate("/settings/team");
+  const handleManageOrganizationMembersClick = () => {
+    navigate("/settings/organization-members");
     onClose();
   };
 
@@ -144,7 +146,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               onClick={handleInviteMemberClick}
               start={<IoPersonAddOutline className="text-white" size={14} />}
             >
-              {t(I18nKey.ORG$INVITE_TEAM)}
+              {t(I18nKey.ORG$INVITE_ORGANIZATION_MEMBER)}
             </TempButton>
 
             <TempDivider />
@@ -156,10 +158,10 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               {t(I18nKey.ORG$MANAGE_ACCOUNT)}
             </TempButton>
             <TempButton
-              onClick={handleManageTeamClick}
+              onClick={handleManageOrganizationMembersClick}
               start={<IoPersonOutline className="text-white" size={14} />}
             >
-              {t(I18nKey.ORG$MANAGE_TEAM)}
+              {t(I18nKey.ORG$MANAGE_ORGANIZATION_MEMBERS)}
             </TempButton>
           </>
         )}

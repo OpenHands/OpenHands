@@ -15662,5 +15662,37 @@
     "tr": "Ayarlar",
     "de": "Einstellungen",
     "uk": "Налаштування"
+  },
+  "ORG$INVITE_ORGANIZATION_MEMBER": {
+    "en": "Invite Organization Member",
+    "ja": "組織メンバーを招待",
+    "zh-CN": "邀请组织成员",
+    "zh-TW": "邀請組織成員",
+    "ko-KR": "조직 구성원 초대",
+    "no": "Inviter organisasjonsmedlem",
+    "it": "Invita membro dell'organizzazione",
+    "pt": "Convidar membro da organização",
+    "es": "Invitar miembro de la organización",
+    "ar": "دعوة عضو في المنظمة",
+    "fr": "Inviter un membre de l'organisation",
+    "tr": "Organizasyon Üyesi Davet Et",
+    "de": "Organisationsmitglied einladen",
+    "uk": "Запросити учасника організації"
+  },
+  "ORG$MANAGE_ORGANIZATION_MEMBERS": {
+    "en": "Manage Organization Members",
+    "ja": "組織メンバーの管理",
+    "zh-CN": "管理组织成员",
+    "zh-TW": "管理組織成員",
+    "ko-KR": "조직 구성원 관리",
+    "no": "Administrer organisasjonsmedlemmer",
+    "it": "Gestisci membri dell'organizzazione",
+    "pt": "Gerenciar membros da organização",
+    "es": "Gestionar miembros de la organización",
+    "ar": "إدارة أعضاء المنظمة",
+    "fr": "Gérer les membres de l'organisation",
+    "tr": "Organizasyon Üyelerini Yönet",
+    "de": "Organisationsmitglieder verwalten",
+    "uk": "Керувати учасниками організації"
   }
 }

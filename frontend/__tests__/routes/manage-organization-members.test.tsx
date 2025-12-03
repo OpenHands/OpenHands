@@ -5,17 +5,17 @@ import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
 import { selectOrganization } from "test-utils";
 import { organizationService } from "#/api/organization-service/organization-service.api";
-import ManageTeam from "#/routes/manage-team";
+import ManageOrganizationMembers from "#/routes/manage-organization-members";
 import SettingsScreen, {
   clientLoader as settingsClientLoader,
 } from "#/routes/settings";
 import { ORGS_AND_MEMBERS } from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 
-function ManageTeamWithPortalRoot() {
+function ManageOrganizationMembersWithPortalRoot() {
   return (
     <div>
-      <ManageTeam />
+      <ManageOrganizationMembers />
       <div data-testid="portal-root" id="portal-root" />
     </div>
   );
@@ -30,8 +30,8 @@ const RouteStub = createRoutesStub([
     HydrateFallback: () => <div>Loading...</div>,
     children: [
       {
-        Component: ManageTeamWithPortalRoot,
-        path: "/settings/team",
+        Component: ManageOrganizationMembersWithPortalRoot,
+        path: "/settings/organization-members",
       },
       {
         Component: () => <div data-testid="user-settings" />,
@@ -58,8 +58,8 @@ describe("Manage Team Route", () => {
     vi.restoreAllMocks();
   });
 
-  const renderManageTeam = () =>
-    render(<RouteStub initialEntries={["/settings/team"]} />, {
+  const renderManageOrganizationMembers = () =>
+    render(<RouteStub initialEntries={["/settings/organization-members"]} />, {
       wrapper: ({ children }) => (
         <QueryClientProvider client={queryClient}>
           {children}
@@ -68,8 +68,8 @@ describe("Manage Team Route", () => {
     });
 
   it("should render", async () => {
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
   });
 
   it("should navigate away from the page if not saas", async () => {
@@ -79,9 +79,9 @@ describe("Manage Team Route", () => {
       APP_MODE: "oss",
     });
 
-    renderManageTeam();
+    renderManageOrganizationMembers();
     expect(
-      screen.queryByTestId("manage-team-settings"),
+      screen.queryByTestId("manage-organization-members-settings"),
     ).not.toBeInTheDocument();
   });
 
@@ -91,8 +91,8 @@ describe("Manage Team Route", () => {
       "getOrganizationMembers",
     );
 
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
 
     expect(getOrganizationMembersSpy).not.toHaveBeenCalled();
 
@@ -102,9 +102,9 @@ describe("Manage Team Route", () => {
     });
   });
 
-  it("should render the list of team members", async () => {
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+  it("should render the list of organization members", async () => {
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
 
     await selectOrganization({ orgIndex: 0 });
     const members = ORGS_AND_MEMBERS["1"];
@@ -118,14 +118,14 @@ describe("Manage Team Route", () => {
     });
   });
 
-  test("an admin should be able to change the role of a team member", async () => {
+  test("an admin should be able to change the role of a organization member", async () => {
     const updateMemberRoleSpy = vi.spyOn(
       organizationService,
       "updateMemberRole",
     );
 
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
 
     await selectOrganization({ orgIndex: 0 });
 
@@ -173,19 +173,19 @@ describe("Manage Team Route", () => {
     expect(userCombobox).toBeInTheDocument();
   });
 
-  it("should not allow a user to invite a new team member", async () => {
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+  it("should not allow a user to invite a new organization member", async () => {
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
 
     const inviteButton = screen.queryByRole("button", {
-      name: /ORG\$INVITE_TEAM/i,
+      name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
     });
     expect(inviteButton).not.toBeInTheDocument();
   });
 
   it("should not allow an admin to change the superadmin's role", async () => {
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
 
     await selectOrganization({ orgIndex: 2 }); // user is admin in org 3
 
@@ -202,8 +202,8 @@ describe("Manage Team Route", () => {
   });
 
   it("should not allow an admin to change another admin's role", async () => {
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
 
     await selectOrganization({ orgIndex: 2 }); // user is admin in org 3
 
@@ -230,8 +230,8 @@ describe("Manage Team Route", () => {
       status: "active",
     });
 
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
 
     await selectOrganization({ orgIndex: 0 });
 
@@ -250,8 +250,8 @@ describe("Manage Team Route", () => {
   it("should show a remove option in the role dropdown and remove the user from the list", async () => {
     const removeMemberSpy = vi.spyOn(organizationService, "removeMember");
 
-    renderManageTeam();
-    await screen.findByTestId("manage-team-settings");
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
 
     await selectOrganization({ orgIndex: 0 });
 
@@ -297,23 +297,23 @@ describe("Manage Team Route", () => {
   );
 
   describe("Inviting Team Members", () => {
-    it("should render an invite team member button", async () => {
-      renderManageTeam();
+    it("should render an invite organization member button", async () => {
+      renderManageOrganizationMembers();
       await selectOrganization({ orgIndex: 0 });
 
       const inviteButton = await screen.findByRole("button", {
-        name: /ORG\$INVITE_TEAM/i,
+        name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
       });
       expect(inviteButton).toBeInTheDocument();
     });
 
     it("should render a modal when the invite button is clicked", async () => {
-      renderManageTeam();
+      renderManageOrganizationMembers();
       await selectOrganization({ orgIndex: 0 });
 
       expect(screen.queryByTestId("invite-modal")).not.toBeInTheDocument();
       const inviteButton = await screen.findByRole("button", {
-        name: /ORG\$INVITE_TEAM/i,
+        name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
       });
       await userEvent.click(inviteButton);
 
@@ -324,12 +324,12 @@ describe("Manage Team Route", () => {
     });
 
     it("should close the modal when the close button is clicked", async () => {
-      renderManageTeam();
+      renderManageOrganizationMembers();
 
       await selectOrganization({ orgIndex: 0 });
 
       const inviteButton = await screen.findByRole("button", {
-        name: /ORG\$INVITE_TEAM/i,
+        name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
       });
       await userEvent.click(inviteButton);
 
@@ -355,7 +355,7 @@ describe("Manage Team Route", () => {
         },
       ]);
 
-      renderManageTeam();
+      renderManageOrganizationMembers();
 
       await selectOrganization({ orgIndex: 0 });
 

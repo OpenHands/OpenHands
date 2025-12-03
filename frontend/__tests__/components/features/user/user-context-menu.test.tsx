@@ -59,20 +59,33 @@ describe("UserContextMenu", () => {
     screen.getByTestId("org-selector");
     screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
 
-    expect(screen.queryByText("ORG$INVITE_TEAM")).not.toBeInTheDocument();
-    expect(screen.queryByText("ORG$MANAGE_TEAM")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("ORG$INVITE_ORGANIZATION_MEMBER"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("ORG$MANAGE_ORGANIZATION_MEMBERS"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
   });
 
-  it("should render navigation items from SAAS_NAV_ITEMS (except team/org)", () => {
+  it("should render navigation items from SAAS_NAV_ITEMS (except organization-members/org)", () => {
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    // Verify that navigation items are rendered (except team/org which are filtered out)
+    // Verify that navigation items are rendered (except organization-members/org which are filtered out)
     SAAS_NAV_ITEMS.filter(
-      (item) => item.to !== "/settings/team" && item.to !== "/settings/org",
+      (item) =>
+        item.to !== "/settings/organization-members" &&
+        item.to !== "/settings/org",
     ).forEach((item) => {
       expect(screen.getByText(item.text)).toBeInTheDocument();
     });
+  });
+
+  it("should not display Organization Members menu item for regular users (filtered out)", () => {
+    renderUserContextMenu({ type: "user", onClose: vi.fn });
+
+    // Organization Members is filtered out from nav items for all users
+    expect(screen.queryByText("Organization Members")).not.toBeInTheDocument();
   });
 
   it("should render a documentation link", () => {
@@ -114,14 +127,28 @@ describe("UserContextMenu", () => {
         screen.queryByText("SETTINGS$NAV_BILLING"),
       ).not.toBeInTheDocument();
     });
+
+    it("should not display Organization Members menu item in OSS mode", async () => {
+      renderUserContextMenu({ type: "user", onClose: vi.fn });
+
+      // Wait for the config to load
+      await waitFor(() => {
+        expect(screen.getByText("SETTINGS$NAV_LLM")).toBeInTheDocument();
+      });
+
+      // Verify Organization Members is NOT rendered in OSS mode
+      expect(
+        screen.queryByText("Organization Members"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("should render additional context items when user is an admin", () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
-    screen.getByText("ORG$INVITE_TEAM");
-    screen.getByText("ORG$MANAGE_TEAM");
+    screen.getByText("ORG$INVITE_ORGANIZATION_MEMBER");
+    screen.getByText("ORG$MANAGE_ORGANIZATION_MEMBERS");
     screen.getByText("ORG$MANAGE_ACCOUNT");
   });
 
@@ -129,8 +156,8 @@ describe("UserContextMenu", () => {
     renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
-    screen.getByText("ORG$INVITE_TEAM");
-    screen.getByText("ORG$MANAGE_TEAM");
+    screen.getByText("ORG$INVITE_ORGANIZATION_MEMBER");
+    screen.getByText("ORG$MANAGE_ORGANIZATION_MEMBERS");
     screen.getByText("ORG$MANAGE_ACCOUNT");
   });
 
@@ -160,20 +187,24 @@ describe("UserContextMenu", () => {
     expect(integrationsLink).toHaveAttribute("href", "/settings/integrations");
   });
 
-  it("should navigate to /settings/team when Manage Team is clicked", async () => {
+  it("should navigate to /settings/organization-members when Manage Organization Members is clicked", async () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
-    const manageTeamButton = screen.getByText("ORG$MANAGE_TEAM");
-    await userEvent.click(manageTeamButton);
+    const manageOrganizationMembersButton = screen.getByText(
+      "ORG$MANAGE_ORGANIZATION_MEMBERS",
+    );
+    await userEvent.click(manageOrganizationMembersButton);
 
-    expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings/team");
+    expect(navigateMock).toHaveBeenCalledExactlyOnceWith(
+      "/settings/organization-members",
+    );
   });
 
   it("should navigate to /settings/org when Manage Account is clicked", async () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
-    const manageTeamButton = screen.getByText("ORG$MANAGE_ACCOUNT");
-    await userEvent.click(manageTeamButton);
+    const manageAccountButton = screen.getByText("ORG$MANAGE_ACCOUNT");
+    await userEvent.click(manageAccountButton);
 
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings/org");
   });
@@ -201,8 +232,10 @@ describe("UserContextMenu", () => {
     await userEvent.click(logoutButton);
     expect(onCloseMock).toHaveBeenCalledTimes(1);
 
-    const manageTeamButton = screen.getByText("ORG$MANAGE_TEAM");
-    await userEvent.click(manageTeamButton);
+    const manageOrganizationMembersButton = screen.getByText(
+      "ORG$MANAGE_ORGANIZATION_MEMBERS",
+    );
+    await userEvent.click(manageOrganizationMembersButton);
     expect(onCloseMock).toHaveBeenCalledTimes(2);
 
     const manageAccountButton = screen.getByText("ORG$MANAGE_ACCOUNT");
@@ -210,7 +243,7 @@ describe("UserContextMenu", () => {
     expect(onCloseMock).toHaveBeenCalledTimes(3);
   });
 
-  it("should render the invite user modal when Invite Team is clicked", async () => {
+  it("should render the invite user modal when Invite Organization Member is clicked", async () => {
     const inviteMembersBatchSpy = vi.spyOn(
       organizationService,
       "inviteMembers",
@@ -218,7 +251,7 @@ describe("UserContextMenu", () => {
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "admin", onClose: onCloseMock });
 
-    const inviteButton = screen.getByText("ORG$INVITE_TEAM");
+    const inviteButton = screen.getByText("ORG$INVITE_ORGANIZATION_MEMBER");
     await userEvent.click(inviteButton);
 
     const portalRoot = screen.getByTestId("portal-root");
