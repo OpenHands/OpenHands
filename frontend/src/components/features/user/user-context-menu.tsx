@@ -64,9 +64,11 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
 
   const isOss = config?.APP_MODE === "oss";
-  // Filter out team/org nav items since they're already handled separately in the menu
+  // Filter out organization members/org nav items since they're already handled separately in the menu
   const navItems = (isOss ? OSS_NAV_ITEMS : SAAS_NAV_ITEMS).filter(
-    (item) => item.to !== "/settings/team" && item.to !== "/settings/org",
+    (item) =>
+      item.to !== "/settings/organization-members" &&
+      item.to !== "/settings/org",
   );
 
   const [orgModalIsOpen, setOrgModalIsOpen] = React.useState(false);
