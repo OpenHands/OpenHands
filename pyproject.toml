@@ -26,8 +26,8 @@ build = "build_vscode.py" # Build VSCode extension during Poetry build
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
-litellm = ">=1.74.3, <=1.80.7, !=1.64.4, !=1.67.*"  # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
-openai = "2.8.0"                                  # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
+litellm = ">=1.74.3, <=1.80.7, !=1.64.4, !=1.67.*" # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
+openai = "2.8.0"                                   # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
 aiohttp = ">=3.9.0,!=3.11.13"                      # Pin to avoid yanked version 3.11.13
 google-genai = "*"                                 # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"              # For Google Sheets API
