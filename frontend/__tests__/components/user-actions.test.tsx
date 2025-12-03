@@ -279,7 +279,9 @@ describe("UserActions", () => {
       "SETTINGS$NAV_USER",
     );
     // Verify admin-only items are NOT present for user role
-    expect(screen.queryByText("ORG$MANAGE_TEAM")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("ORG$MANAGE_ORGANIZATION_MEMBERS"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
   });
 

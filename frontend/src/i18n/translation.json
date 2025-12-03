@@ -15678,5 +15678,21 @@
     "tr": "Organizasyon Üyesi Davet Et",
     "de": "Organisationsmitglied einladen",
     "uk": "Запросити учасника організації"
+  },
+  "ORG$MANAGE_ORGANIZATION_MEMBERS": {
+    "en": "Manage Organization Members",
+    "ja": "組織メンバーの管理",
+    "zh-CN": "管理组织成员",
+    "zh-TW": "管理組織成員",
+    "ko-KR": "조직 구성원 관리",
+    "no": "Administrer organisasjonsmedlemmer",
+    "it": "Gestisci membri dell'organizzazione",
+    "pt": "Gerenciar membros da organização",
+    "es": "Gestionar miembros de la organización",
+    "ar": "إدارة أعضاء المنظمة",
+    "fr": "Gérer les membres de l'organisation",
+    "tr": "Organizasyon Üyelerini Yönet",
+    "de": "Organisationsmitglieder verwalten",
+    "uk": "Керувати учасниками організації"
   }
 }

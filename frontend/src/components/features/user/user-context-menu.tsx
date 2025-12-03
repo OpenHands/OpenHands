@@ -37,7 +37,7 @@ function TempButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1 cursor-pointer hover:text-white w-full"
+      className="flex items-center gap-1 cursor-pointer hover:text-white w-full text-left"
     >
       {start}
       {children}
@@ -154,13 +154,13 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
           />
         </div>
 
-        {!isUser && (
+        {isUser && (
           <>
             <TempButton
               onClick={handleInviteMemberClick}
               start={<IoPersonAddOutline className="text-white" size={14} />}
             >
-              {t(I18nKey.ORG$INVITE_TEAM)}
+              {t(I18nKey.ORG$INVITE_ORGANIZATION_MEMBER)}
             </TempButton>
 
             <TempDivider />
@@ -175,7 +175,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               onClick={handleManageOrganizationMembersClick}
               start={<IoPersonOutline className="text-white" size={14} />}
             >
-              {t(I18nKey.ORG$MANAGE_TEAM)}
+              {t(I18nKey.ORG$MANAGE_ORGANIZATION_MEMBERS)}
             </TempButton>
           </>
         )}
