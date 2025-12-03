@@ -224,7 +224,7 @@ describe("UserContextMenu", () => {
     const portalRoot = screen.getByTestId("portal-root");
     expect(within(portalRoot).getByTestId("invite-modal")).toBeInTheDocument();
 
-    await userEvent.click(within(portalRoot).getByText("ORG$SKIP"));
+    await userEvent.click(within(portalRoot).getByText("BUTTON$CANCEL"));
     expect(inviteMembersBatchSpy).not.toHaveBeenCalled();
   });
 

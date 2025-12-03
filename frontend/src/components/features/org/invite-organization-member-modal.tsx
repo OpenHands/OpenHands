@@ -55,7 +55,7 @@ export function InviteOrganizationMemberModal({
               className="flex-1"
               onClick={formAction}
             >
-              {t(I18nKey.ORG$NEXT)}
+              {t(I18nKey.BUTTON$ADD)}
             </BrandButton>
             <BrandButton
               type="button"
@@ -63,7 +63,7 @@ export function InviteOrganizationMemberModal({
               onClick={onClose}
               className="flex-1"
             >
-              {t(I18nKey.ORG$SKIP)}
+              {t(I18nKey.BUTTON$CANCEL)}
             </BrandButton>
           </div>
         </div>

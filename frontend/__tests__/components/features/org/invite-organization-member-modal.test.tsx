@@ -33,7 +33,7 @@ describe("InviteOrganizationMemberModal", () => {
 
     const modal = screen.getByTestId("invite-modal");
     const closeButton = within(modal).getByRole("button", {
-      name: /skip/i,
+      name: /cancel/i,
     });
     await userEvent.click(closeButton);
 
@@ -58,7 +58,7 @@ describe("InviteOrganizationMemberModal", () => {
     expect(screen.getByText("someone@acme.org")).toBeInTheDocument();
 
     const submitButton = within(modal).getByRole("button", {
-      name: /next/i,
+      name: /add/i,
     });
     await userEvent.click(submitButton);
 
@@ -100,7 +100,7 @@ describe("InviteOrganizationMemberModal", () => {
     expect(screen.getByText("user3@acme.org")).toBeInTheDocument();
 
     const submitButton = within(modal).getByRole("button", {
-      name: /next/i,
+      name: /add/i,
     });
     await userEvent.click(submitButton);
 

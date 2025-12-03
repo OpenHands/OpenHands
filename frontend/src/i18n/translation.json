@@ -3263,6 +3263,22 @@
     "de": "Abbrechen",
     "uk": "Скасувати"
   },
+  "BUTTON$ADD": {
+    "en": "Add",
+    "ja": "追加",
+    "zh-CN": "添加",
+    "zh-TW": "新增",
+    "ko-KR": "추가",
+    "no": "Legg til",
+    "it": "Aggiungi",
+    "pt": "Adicionar",
+    "es": "Añadir",
+    "ar": "إضافة",
+    "fr": "Ajouter",
+    "tr": "Ekle",
+    "de": "Hinzufügen",
+    "uk": "Додати"
+  },
   "EXIT_PROJECT$CONFIRM": {
     "en": "Exit Project",
     "ja": "プロジェクトを終了",
