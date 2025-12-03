@@ -15662,5 +15662,21 @@
     "tr": "Ayarlar",
     "de": "Einstellungen",
     "uk": "Налаштування"
+  },
+  "ORG$INVITE_ORGANIZATION_MEMBER": {
+    "en": "Invite Organization Member",
+    "ja": "組織メンバーを招待",
+    "zh-CN": "邀请组织成员",
+    "zh-TW": "邀請組織成員",
+    "ko-KR": "조직 구성원 초대",
+    "no": "Inviter organisasjonsmedlem",
+    "it": "Invita membro dell'organizzazione",
+    "pt": "Convidar membro da organização",
+    "es": "Invitar miembro de la organización",
+    "ar": "دعوة عضو في المنظمة",
+    "fr": "Inviter un membre de l'organisation",
+    "tr": "Organizasyon Üyesi Davet Et",
+    "de": "Organisationsmitglied einladen",
+    "uk": "Запросити учасника організації"
   }
 }
