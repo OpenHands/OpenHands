@@ -8,9 +8,7 @@ import {
   IoPersonAddOutline,
   IoPersonOutline,
 } from "react-icons/io5";
-import { FaPlus } from "react-icons/fa6";
 import { useLogout } from "#/hooks/mutation/use-logout";
-import { CreateNewOrganizationModal } from "../org/create-new-organization-modal";
 import { OrganizationUserRole } from "#/types/org";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { cn } from "#/utils/utils";
@@ -69,12 +67,10 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
     (item) => item.to !== "/settings/team" && item.to !== "/settings/org",
   );
 
-  const [orgModalIsOpen, setOrgModalIsOpen] = React.useState(false);
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
     React.useState(false);
 
   const isUser = type === "user";
-  const isSuperAdmin = type === "superadmin";
 
   const handleLogout = () => {
     logout();
@@ -95,10 +91,6 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
     onClose();
   };
 
-  const handleCreateNewOrgClick = () => {
-    setOrgModalIsOpen(true);
-  };
-
   return (
     <div
       data-testid="user-context-menu"
@@ -108,14 +100,6 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
         "text-sm absolute left-full bottom-0 z-60",
       )}
     >
-      {orgModalIsOpen &&
-        ReactDOM.createPortal(
-          <CreateNewOrganizationModal
-            onClose={() => setOrgModalIsOpen(false)}
-            onSuccess={() => setInviteMemberModalIsOpen(true)}
-          />,
-          document.getElementById("portal-root") || document.body,
-        )}
       {inviteMemberModalIsOpen &&
         ReactDOM.createPortal(
           <InviteOrganizationMemberModal
@@ -210,15 +194,6 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
           <DocumentIcon className="text-white" width={14} height={14} />
           {t(I18nKey.SIDEBAR$DOCS)}
         </a>
-
-        {isSuperAdmin && (
-          <TempButton
-            onClick={handleCreateNewOrgClick}
-            start={<FaPlus className="text-white" size={14} />}
-          >
-            {t(I18nKey.ORG$CREATE_NEW_ORGANIZATION)}
-          </TempButton>
-        )}
 
         <TempButton
           onClick={handleLogout}

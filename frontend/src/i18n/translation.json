@@ -15503,22 +15503,6 @@
     "de": "Team verwalten",
     "uk": "Керувати командою"
   },
-  "ORG$CREATE_NEW_ORGANIZATION": {
-    "en": "Create New Organization",
-    "ja": "新しい組織を作成",
-    "zh-CN": "创建新组织",
-    "zh-TW": "建立新組織",
-    "ko-KR": "새 조직 만들기",
-    "no": "Opprett ny organisasjon",
-    "it": "Crea nuova organizzazione",
-    "pt": "Criar nova organização",
-    "es": "Crear nueva organización",
-    "ar": "إنشاء منظمة جديدة",
-    "fr": "Créer une nouvelle organisation",
-    "tr": "Yeni Organizasyon Oluştur",
-    "de": "Neue Organisation erstellen",
-    "uk": "Створити нову організацію"
-  },
   "ORG$CHANGE_ORG_NAME": {
     "en": "Change Org Name",
     "ja": "組織名を変更",

@@ -62,9 +62,6 @@ describe("UserContextMenu", () => {
     expect(screen.queryByText("ORG$INVITE_TEAM")).not.toBeInTheDocument();
     expect(screen.queryByText("ORG$MANAGE_TEAM")).not.toBeInTheDocument();
     expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("ORG$CREATE_NEW_ORGANIZATION"),
-    ).not.toBeInTheDocument();
   });
 
   it("should render navigation items from SAAS_NAV_ITEMS (except team/org)", () => {
@@ -126,10 +123,6 @@ describe("UserContextMenu", () => {
     screen.getByText("ORG$INVITE_TEAM");
     screen.getByText("ORG$MANAGE_TEAM");
     screen.getByText("ORG$MANAGE_ACCOUNT");
-
-    expect(
-      screen.queryByText("ORG$CREATE_NEW_ORGANIZATION"),
-    ).not.toBeInTheDocument();
   });
 
   it("should render additional context items when user is a super admin", () => {
@@ -139,7 +132,6 @@ describe("UserContextMenu", () => {
     screen.getByText("ORG$INVITE_TEAM");
     screen.getByText("ORG$MANAGE_TEAM");
     screen.getByText("ORG$MANAGE_ACCOUNT");
-    screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
   });
 
   it("should call the logout handler when Logout is clicked", async () => {
@@ -184,110 +176,6 @@ describe("UserContextMenu", () => {
     await userEvent.click(manageTeamButton);
 
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings/org");
-  });
-
-  describe("Create New Organization", () => {
-    it("should render a modal when Create New Organization is clicked", async () => {
-      renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
-
-      expect(screen.queryByTestId("create-org-modal")).not.toBeInTheDocument();
-
-      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
-      await userEvent.click(createOrgButton);
-
-      const rootOutlet = screen.getByTestId("portal-root");
-      expect(
-        within(rootOutlet).getByTestId("create-org-modal"),
-      ).toBeInTheDocument();
-    });
-
-    it("should close the modal when the close button is clicked", async () => {
-      renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
-
-      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
-      await userEvent.click(createOrgButton);
-
-      expect(screen.getByTestId("create-org-modal")).toBeInTheDocument();
-
-      // Simulate closing the modal
-      const skipButton = screen.getByText("ORG$SKIP");
-      await userEvent.click(skipButton);
-
-      expect(screen.queryByTestId("create-org-modal")).not.toBeInTheDocument();
-    });
-
-    it("should call the API to create a new organization when the form is submitted", async () => {
-      const createOrgSpy = vi.spyOn(organizationService, "createOrganization");
-      renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
-
-      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
-      await userEvent.click(createOrgButton);
-
-      expect(screen.getByTestId("create-org-modal")).toBeInTheDocument();
-
-      const orgNameInput = screen.getByTestId("org-name-input");
-      await userEvent.type(orgNameInput, "New Organization");
-
-      const nextButton = screen.getByText("ORG$NEXT");
-      await userEvent.click(nextButton);
-
-      expect(createOrgSpy).toHaveBeenCalledExactlyOnceWith({
-        name: "New Organization",
-      });
-      expect(screen.queryByTestId("create-org-modal")).not.toBeInTheDocument();
-    });
-
-    it("should automatically select the newly created organization", async () => {
-      const createOrgSpy = vi.spyOn(organizationService, "createOrganization");
-      renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
-
-      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
-      await userEvent.click(createOrgButton);
-
-      const orgNameInput = screen.getByTestId("org-name-input");
-      await userEvent.type(orgNameInput, "New Organization");
-
-      const nextButton = screen.getByText("ORG$NEXT");
-      await userEvent.click(nextButton);
-
-      expect(createOrgSpy).toHaveBeenCalledExactlyOnceWith({
-        name: "New Organization",
-      });
-
-      // Verify the organization selector now shows the newly created organization
-      const orgSelector = screen.getByTestId("org-selector");
-      expect(orgSelector.getAttribute("value")).toBe("New Organization");
-    });
-
-    it("should show invite modal immediately after creating an organization", async () => {
-      const createOrgSpy = vi.spyOn(organizationService, "createOrganization");
-      renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
-
-      // Verify invite modal is not visible initially
-      expect(screen.queryByTestId("invite-modal")).not.toBeInTheDocument();
-
-      const createOrgButton = screen.getByText("ORG$CREATE_NEW_ORGANIZATION");
-      await userEvent.click(createOrgButton);
-
-      const orgNameInput = screen.getByTestId("org-name-input");
-      await userEvent.type(orgNameInput, "New Organization");
-
-      const nextButton = screen.getByText("ORG$NEXT");
-      await userEvent.click(nextButton);
-
-      expect(createOrgSpy).toHaveBeenCalledExactlyOnceWith({
-        name: "New Organization",
-      });
-
-      // Verify the create org modal is closed
-      expect(screen.queryByTestId("create-org-modal")).not.toBeInTheDocument();
-
-      // Verify the invite modal appears immediately
-      const portalRoot = screen.getByTestId("portal-root");
-      expect(
-        within(portalRoot).getByTestId("invite-modal"),
-      ).toBeInTheDocument();
-    });
   });
 
   it("should call the onClose handler when clicking outside the context menu", async () => {

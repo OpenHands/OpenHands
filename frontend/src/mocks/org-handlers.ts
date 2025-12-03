@@ -157,23 +157,6 @@ export const ORG_HANDLERS = [
     return HttpResponse.json(organizations);
   }),
 
-  http.post("/api/organizations", async ({ request }) => {
-    const { name } = (await request.json()) as { name: string };
-    if (!name) {
-      return HttpResponse.json({ error: "Name is required" }, { status: 400 });
-    }
-
-    const newOrg: Organization = {
-      id: String(Object.keys(ORGS_AND_MEMBERS).length + 1),
-      name,
-      balance: 0,
-    };
-    orgs.set(newOrg.id, newOrg);
-    ORGS_AND_MEMBERS[newOrg.id] = [];
-
-    return HttpResponse.json(newOrg, { status: 201 });
-  }),
-
   http.patch("/api/organizations/:orgId", async ({ request, params }) => {
     const { name } = (await request.json()) as {
       name: string;
