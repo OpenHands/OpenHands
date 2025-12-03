@@ -81,8 +81,8 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
     setInviteMemberModalIsOpen(true);
   };
 
-  const handleManageTeamClick = () => {
-    navigate("/settings/team");
+  const handleManageOrganizationMembersClick = () => {
+    navigate("/settings/organization-members");
     onClose();
   };
 
@@ -166,7 +166,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               {t(I18nKey.ORG$MANAGE_ACCOUNT)}
             </TempButton>
             <TempButton
-              onClick={handleManageTeamClick}
+              onClick={handleManageOrganizationMembersClick}
               start={<IoPersonOutline className="text-white" size={14} />}
             >
               {t(I18nKey.ORG$MANAGE_TEAM)}

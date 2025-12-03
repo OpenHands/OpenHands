@@ -1,9 +1,16 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { AccountSettingsContextMenu } from "#/components/features/context-menu/account-settings-context-menu";
 import { renderWithProviders } from "../../../test-utils";
+
+// Mock useConfig hook
+const useConfigMock = vi.fn();
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => useConfigMock(),
+}));
 
 describe("AccountSettingsContextMenu", () => {
   const user = userEvent.setup();
@@ -15,10 +22,19 @@ describe("AccountSettingsContextMenu", () => {
   const renderWithRouter = (ui: React.ReactElement) =>
     renderWithProviders(<MemoryRouter>{ui}</MemoryRouter>);
 
+  beforeEach(() => {
+    // Default to SaaS mode for tests
+    useConfigMock.mockReturnValue({
+      data: { APP_MODE: "saas" },
+      isLoading: false,
+    });
+  });
+
   afterEach(() => {
     onClickAccountSettingsMock.mockClear();
     onLogoutMock.mockClear();
     onCloseMock.mockClear();
+    vi.clearAllMocks();
   });
 
   it("should always render the right options", () => {
@@ -45,7 +61,10 @@ describe("AccountSettingsContextMenu", () => {
     );
 
     const documentationLink = screen.getByText("SIDEBAR$DOCS").closest("a");
-    expect(documentationLink).toHaveAttribute("href", "https://docs.openhands.dev");
+    expect(documentationLink).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev",
+    );
     expect(documentationLink).toHaveAttribute("target", "_blank");
     expect(documentationLink).toHaveAttribute("rel", "noopener noreferrer");
   });
@@ -91,5 +110,54 @@ describe("AccountSettingsContextMenu", () => {
     await user.click(document.body);
 
     expect(onCloseMock).toHaveBeenCalledOnce();
+  });
+
+  describe("Team menu item", () => {
+    it("should display 'Organization Members' text for the team menu item in SaaS mode", () => {
+      renderWithRouter(
+        <AccountSettingsContextMenu
+          onLogout={onLogoutMock}
+          onClose={onCloseMock}
+        />,
+      );
+
+      const organizationMembersText = screen.getByText("Organization Members");
+      expect(organizationMembersText).toBeInTheDocument();
+    });
+
+    it("should link to '/settings/organization-members' for the Organization Members menu item", () => {
+      renderWithRouter(
+        <AccountSettingsContextMenu
+          onLogout={onLogoutMock}
+          onClose={onCloseMock}
+        />,
+      );
+
+      const organizationMembersText = screen.getByText("Organization Members");
+      const teamLink = organizationMembersText.closest("a");
+      expect(teamLink).toHaveAttribute(
+        "href",
+        "/settings/organization-members",
+      );
+    });
+
+    it("should not display Organization Members menu item in OSS mode", () => {
+      useConfigMock.mockReturnValue({
+        data: { APP_MODE: "oss" },
+        isLoading: false,
+      });
+
+      renderWithRouter(
+        <AccountSettingsContextMenu
+          onLogout={onLogoutMock}
+          onClose={onCloseMock}
+        />,
+      );
+
+      const organizationMembersText = screen.queryByText(
+        "Organization Members",
+      );
+      expect(organizationMembersText).not.toBeInTheDocument();
+    });
   });
 });
