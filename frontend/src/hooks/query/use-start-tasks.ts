@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { useSettings } from "#/hooks/query/use-settings";
-import { DEFAULT_SETTINGS } from "#/services/settings";
 
 /**
  * Hook to fetch in-progress V1 conversation start tasks
@@ -16,7 +15,7 @@ import { DEFAULT_SETTINGS } from "#/services/settings";
  */
 export const useStartTasks = (limit = 10) => {
   const { data: settings } = useSettings();
-  const isV1Enabled = settings?.V1_ENABLED ?? DEFAULT_SETTINGS.V1_ENABLED;
+  const isV1Enabled = settings?.V1_ENABLED;
 
   return useQuery({
     queryKey: ["start-tasks", "search", limit],

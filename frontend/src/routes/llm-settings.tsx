@@ -119,7 +119,7 @@ function LlmSettingsScreen() {
   const shouldUseOpenHandsKey = isOpenHandsProvider && isSaasMode;
 
   // Determine if we should hide the agent dropdown when V1 conversation API is enabled
-  const isV1Enabled = settings?.V1_ENABLED ?? DEFAULT_SETTINGS.V1_ENABLED;
+  const isV1Enabled = settings?.V1_ENABLED;
 
   React.useEffect(() => {
     const determineWhetherToToggleAdvancedSettings = () => {

@@ -6,7 +6,6 @@ import { Provider } from "#/types/settings";
 import { CreateMicroagent, Conversation } from "#/api/open-hands.types";
 import { useTracking } from "#/hooks/use-tracking";
 import { useSettings } from "#/hooks/query/use-settings";
-import { DEFAULT_SETTINGS } from "#/services/settings";
 
 interface CreateConversationVariables {
   query?: string;
@@ -52,9 +51,7 @@ export const useCreateConversation = () => {
         agentType,
       } = variables;
 
-      const useV1 =
-        (settings?.V1_ENABLED ?? DEFAULT_SETTINGS.V1_ENABLED) &&
-        !createMicroagent;
+      const useV1 = !!settings?.V1_ENABLED && !createMicroagent;
 
       if (useV1) {
         // Use V1 API - creates a conversation start task
