@@ -105,13 +105,15 @@ describe("UserContextMenu", () => {
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings");
   });
 
-  it("should navigate to /settings/team when Manage Team is clicked", async () => {
+  it("should navigate to /settings/organization-members when Manage Team is clicked", async () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
     const manageTeamButton = screen.getByText("ORG$MANAGE_TEAM");
     await userEvent.click(manageTeamButton);
 
-    expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings/team");
+    expect(navigateMock).toHaveBeenCalledExactlyOnceWith(
+      "/settings/organization-members",
+    );
   });
 
   it("should navigate to /settings/org when Manage Account is clicked", async () => {
