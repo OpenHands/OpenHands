@@ -660,7 +660,11 @@ class LLM(RetryMixin, DebugMixin):
 
             # Get context window from model info
             context_window = 0
-            if self.model_info and 'max_input_tokens' in self.model_info and self.model_info['max_input_tokens'] is not None:
+            if (
+                self.model_info
+                and 'max_input_tokens' in self.model_info
+                and self.model_info['max_input_tokens'] is not None
+            ):
                 context_window = self.model_info['max_input_tokens']
                 logger.debug(f'Using context window: {context_window}')
 
