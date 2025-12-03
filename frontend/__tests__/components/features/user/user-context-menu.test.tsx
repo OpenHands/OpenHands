@@ -152,8 +152,8 @@ describe("UserContextMenu", () => {
     screen.getByText("ORG$MANAGE_ACCOUNT");
   });
 
-  it("should render additional context items when user is a super admin", () => {
-    renderUserContextMenu({ type: "superadmin", onClose: vi.fn });
+  it("should render additional context items when user is an owner", () => {
+    renderUserContextMenu({ type: "owner", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
     screen.getByText("ORG$INVITE_ORGANIZATION_MEMBER");
@@ -226,7 +226,7 @@ describe("UserContextMenu", () => {
 
   it("should call the onClose handler after each action", async () => {
     const onCloseMock = vi.fn();
-    renderUserContextMenu({ type: "superadmin", onClose: onCloseMock });
+    renderUserContextMenu({ type: "owner", onClose: onCloseMock });
 
     const logoutButton = screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
     await userEvent.click(logoutButton);

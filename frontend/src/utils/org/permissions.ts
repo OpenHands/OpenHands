@@ -17,12 +17,12 @@ type UserPermission =
   | DeleteOrganizationPermission
   | AddCreditsPermission;
 
-const superadminPerms: UserPermission[] = [
+const ownerPerms: UserPermission[] = [
   "invite_user_to_organization",
   "change_organization_name",
   "delete_organization",
   "add_credits",
-  "change_user_role:superadmin",
+  "change_user_role:owner",
   "change_user_role:admin",
   "change_user_role:user",
 ];
@@ -33,7 +33,7 @@ const adminPerms: UserPermission[] = [
 const userPerms: UserPermission[] = [];
 
 export const rolePermissions: Record<OrganizationUserRole, UserPermission[]> = {
-  superadmin: superadminPerms,
+  owner: ownerPerms,
   admin: adminPerms,
   user: userPerms,
 };

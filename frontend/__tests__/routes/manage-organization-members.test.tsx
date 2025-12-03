@@ -183,21 +183,21 @@ describe("Manage Team Route", () => {
     expect(inviteButton).not.toBeInTheDocument();
   });
 
-  it("should not allow an admin to change the superadmin's role", async () => {
+  it("should not allow an admin to change the owner's role", async () => {
     renderManageOrganizationMembers();
     await screen.findByTestId("manage-organization-members-settings");
 
     await selectOrganization({ orgIndex: 2 }); // user is admin in org 3
 
     const memberListItems = await screen.findAllByTestId("member-item");
-    const superAdminMember = memberListItems[0]; // first member is "superadmin
-    const userCombobox = within(superAdminMember).getByText(/superadmin/i);
+    const ownerMember = memberListItems[0]; // first member is "owner
+    const userCombobox = within(ownerMember).getByText(/owner/i);
     expect(userCombobox).toBeInTheDocument();
     await userEvent.click(userCombobox);
 
-    // Verify that the dropdown does not open for superadmin
+    // Verify that the dropdown does not open for owner
     expect(
-      within(superAdminMember).queryByTestId("role-dropdown"),
+      within(ownerMember).queryByTestId("role-dropdown"),
     ).not.toBeInTheDocument();
   });
 
@@ -226,7 +226,7 @@ describe("Manage Team Route", () => {
     getMeSpy.mockResolvedValue({
       id: "1", // Same as Alice from org 1
       email: "alice@acme.org",
-      role: "superadmin",
+      role: "owner",
       status: "active",
     });
 
@@ -238,7 +238,7 @@ describe("Manage Team Route", () => {
     const memberListItems = await screen.findAllByTestId("member-item");
     const currentUserMember = memberListItems[0]; // First member is Alice (id: "1")
 
-    const roleText = within(currentUserMember).getByText(/superadmin/i);
+    const roleText = within(currentUserMember).getByText(/owner/i);
     await userEvent.click(roleText);
 
     // Verify that the dropdown does not open for the current user's own role

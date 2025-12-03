@@ -107,7 +107,7 @@ describe("Manage Org Route", () => {
     renderManageOrg();
     await screen.findByTestId("manage-org-screen");
 
-    await selectOrganization({ orgIndex: 0 }); // user is superadmin in org 1
+    await selectOrganization({ orgIndex: 0 }); // user is owner in org 1
 
     expect(screen.queryByTestId("add-credits-form")).not.toBeInTheDocument();
     // Simulate adding credits
@@ -141,7 +141,7 @@ describe("Manage Org Route", () => {
     renderManageOrg();
     await screen.findByTestId("manage-org-screen");
 
-    await selectOrganization({ orgIndex: 0 }); // user is superadmin in org 1
+    await selectOrganization({ orgIndex: 0 }); // user is owner in org 1
 
     expect(screen.queryByTestId("add-credits-form")).not.toBeInTheDocument();
     // Simulate adding credits
@@ -230,7 +230,7 @@ describe("Manage Org Route", () => {
       });
     });
 
-    it("should NOT allow roles other than superadmins to change org name", async () => {
+    it("should NOT allow roles other than owners to change org name", async () => {
       renderManageOrg();
       await screen.findByTestId("manage-org-screen");
 
@@ -243,7 +243,7 @@ describe("Manage Org Route", () => {
       expect(changeOrgNameButton).not.toBeInTheDocument();
     });
 
-    it("should NOT allow roles other than superadmins to delete an organization", async () => {
+    it("should NOT allow roles other than owners to delete an organization", async () => {
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
       // @ts-expect-error - only return the properties we need for this test
       getConfigSpy.mockResolvedValue({
