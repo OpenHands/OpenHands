@@ -15327,22 +15327,6 @@
     "de": "Weiter",
     "uk": "Далі"
   },
-  "ORG$SKIP": {
-    "en": "Skip",
-    "ja": "スキップ",
-    "zh-CN": "跳过",
-    "zh-TW": "跳過",
-    "ko-KR": "건너뛰기",
-    "no": "Hopp over",
-    "it": "Salta",
-    "pt": "Pular",
-    "es": "Omitir",
-    "ar": "تخطي",
-    "fr": "Passer",
-    "tr": "Atla",
-    "de": "Überspringen",
-    "uk": "Пропустити"
-  },
   "ORG$INVITE_USERS": {
     "en": "Invite Users",
     "ja": "ユーザーを招待",
