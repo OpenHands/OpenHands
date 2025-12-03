@@ -156,7 +156,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
           />
         </div>
 
-        {isUser && (
+        {!isUser && (
           <>
             <TempButton
               onClick={handleInviteMemberClick}
