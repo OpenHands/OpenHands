@@ -71,33 +71,24 @@ describe("UserContextMenu", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should render navigation items from SAAS_NAV_ITEMS (except team/org)", () => {
+  it("should render navigation items from SAAS_NAV_ITEMS (except organization-members/org)", () => {
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    // Verify that navigation items are rendered (except team/org which are filtered out)
+    // Verify that navigation items are rendered (except organization-members/org which are filtered out)
     SAAS_NAV_ITEMS.filter(
-      (item) => item.to !== "/settings/team" && item.to !== "/settings/org",
+      (item) =>
+        item.to !== "/settings/organization-members" &&
+        item.to !== "/settings/org",
     ).forEach((item) => {
       expect(screen.getByText(item.text)).toBeInTheDocument();
     });
   });
 
-  it("should display 'Organization Members' text for the Organization Members menu item in SaaS mode", () => {
+  it("should not display Organization Members menu item for regular users (filtered out)", () => {
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    expect(screen.getByText("Organization Members")).toBeInTheDocument();
-  });
-
-  it("should link to '/settings/organization-members' for the Organization Members menu item", () => {
-    renderUserContextMenu({ type: "user", onClose: vi.fn });
-
-    const orgMembersLink = screen
-      .getByText("Organization Members")
-      .closest("a");
-    expect(orgMembersLink).toHaveAttribute(
-      "href",
-      "/settings/organization-members",
-    );
+    // Organization Members is filtered out from nav items for all users
+    expect(screen.queryByText("Organization Members")).not.toBeInTheDocument();
   });
 
   it("should render a documentation link", () => {
