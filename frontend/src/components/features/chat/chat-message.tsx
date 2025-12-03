@@ -1,15 +1,9 @@
 import React from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
-import { code } from "../markdown/code";
 import { cn } from "#/utils/utils";
-import { ul, ol } from "../markdown/list";
 import { CopyToClipboardButton } from "#/components/shared/buttons/copy-to-clipboard-button";
-import { anchor } from "../markdown/anchor";
 import { OpenHandsSourceType } from "#/types/core/base";
-import { paragraph } from "../markdown/paragraph";
 import { TooltipButton } from "#/components/shared/buttons/tooltip-button";
+import { MarkdownRenderer } from "../markdown/markdown-renderer";
 
 interface ChatMessageProps {
   type: OpenHandsSourceType;
@@ -116,18 +110,7 @@ export function ChatMessage({
           wordBreak: "break-word",
         }}
       >
-        <Markdown
-          components={{
-            code,
-            ul,
-            ol,
-            a: anchor,
-            p: paragraph,
-          }}
-          remarkPlugins={[remarkGfm, remarkBreaks]}
-        >
-          {message}
-        </Markdown>
+        <MarkdownRenderer includeStandard>{message}</MarkdownRenderer>
       </div>
       {children}
     </article>

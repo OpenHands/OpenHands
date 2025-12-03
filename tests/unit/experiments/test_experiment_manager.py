@@ -152,6 +152,7 @@ class TestExperimentManagerIntegration:
                     llm_base_url=None,
                     llm_api_key=None,
                     confirmation_mode=False,
+                    condenser_max_size=None,
                 )
 
             async def get_secrets(self):
@@ -200,8 +201,24 @@ class TestExperimentManagerIntegration:
 
         # Patch the pieces invoked by the service
         with (
-            patch(
-                'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_agent',
+            patch.object(
+                service,
+                '_setup_secrets_for_git_provider',
+                return_value={},
+            ),
+            patch.object(
+                service,
+                '_configure_llm_and_mcp',
+                return_value=(mock_llm, {}),
+            ),
+            patch.object(
+                service,
+                '_create_agent_with_context',
+                return_value=mock_agent,
+            ),
+            patch.object(
+                service,
+                '_load_skills_and_update_agent',
                 return_value=mock_agent,
             ),
             patch(

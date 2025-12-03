@@ -5,6 +5,7 @@ import {
   ExecuteBashAction,
   TerminalAction,
   ExecuteBashObservation,
+  PlanningFileEditorObservation,
   TerminalObservation,
 } from "./core";
 import { AgentErrorEvent } from "./core/events/observation-event";
@@ -115,6 +116,15 @@ export const isExecuteBashObservationEvent = (
   isObservationEvent(event) &&
   (event.observation.kind === "ExecuteBashObservation" ||
     event.observation.kind === "TerminalObservation");
+
+/**
+ * Type guard function to check if an observation event is a PlanningFileEditorObservation
+ */
+export const isPlanningFileEditorObservationEvent = (
+  event: OpenHandsEvent,
+): event is ObservationEvent<PlanningFileEditorObservation> =>
+  isObservationEvent(event) &&
+  event.observation.kind === "PlanningFileEditorObservation";
 
 /**
  * Type guard function to check if an event is a system prompt event

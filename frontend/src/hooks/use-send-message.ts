@@ -41,13 +41,11 @@ export function useSendMessage() {
             },
           ];
 
-          // Add images if present
+          // Add images if present - using SDK's ImageContent format
           if (args.image_urls && args.image_urls.length > 0) {
-            args.image_urls.forEach((url) => {
-              content.push({
-                type: "image_url",
-                image_url: { url },
-              });
+            content.push({
+              type: "image",
+              image_urls: args.image_urls,
             });
           }
 

@@ -78,6 +78,10 @@ class AuthUserContext(UserContext):
 
         return results
 
+    async def get_mcp_api_key(self) -> str | None:
+        mcp_api_key = await self.user_auth.get_mcp_api_key()
+        return mcp_api_key
+
 
 USER_ID_ATTR = 'user_id'
 

@@ -97,6 +97,9 @@ class GithubUserContext(UserContext):
         user_secrets = await self.secrets_store.load()
         return dict(user_secrets.custom_secrets) if user_secrets else {}
 
+    async def get_mcp_api_key(self) -> str | None:
+        raise NotImplementedError()
+
 
 async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     """Get the user's proactive conversation setting.
