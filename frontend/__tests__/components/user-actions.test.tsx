@@ -116,23 +116,10 @@ describe("UserActions", () => {
     expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
   });
 
-  it("should toggle the user menu when the user avatar is clicked", async () => {
-    renderUserActions();
-
-    const userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
-
-    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
-
-    await user.click(userAvatar);
-
-    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
-  });
-
-  it("should NOT show context menu when user is undefined and avatar is clicked", async () => {
+  it("should NOT show context menu when user is undefined and avatar is hovered", async () => {
     renderUserActions({ hasAvatar: false });
-    const userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
 
     // Context menu should NOT appear because user is undefined
     expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
@@ -140,8 +127,8 @@ describe("UserActions", () => {
 
   it("should show context menu even when user has no avatar_url", async () => {
     renderUserActions();
-    const userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
 
     // Context menu SHOULD appear because user object exists (even with empty avatar_url)
     expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
@@ -165,9 +152,7 @@ describe("UserActions", () => {
     await user.click(userAvatar);
 
     // Context menu should NOT appear because user is not authenticated
-    expect(
-      screen.queryByTestId("account-settings-context-menu"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
 
     // Logout option should NOT be accessible when user is not authenticated
     expect(
@@ -190,11 +175,9 @@ describe("UserActions", () => {
     const { unmount } = renderWithRouter(<UserActions />);
 
     // Initially no user and not authenticated - menu should not appear
-    let userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
-    expect(
-      screen.queryByTestId("account-settings-context-menu"),
-    ).not.toBeInTheDocument();
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
+    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
 
     // Unmount the first component
     unmount();
@@ -220,12 +203,10 @@ describe("UserActions", () => {
     expect(screen.getByTestId("user-avatar")).toBeInTheDocument();
 
     // Menu should now work with user defined and authenticated
-    userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
+    const userActionsEl = screen.getByTestId("user-actions");
+    await user.hover(userActionsEl);
 
-    expect(
-      screen.getByTestId("account-settings-context-menu"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
   });
 
   it("should handle user prop changing from defined to undefined", async () => {
@@ -243,12 +224,10 @@ describe("UserActions", () => {
       <UserActions user={{ avatar_url: "https://example.com/avatar.png" }} />,
     );
 
-    // Click to open menu
-    const userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
-    expect(
-      screen.getByTestId("account-settings-context-menu"),
-    ).toBeInTheDocument();
+    // Hover to open menu
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
+    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
 
     // Set authentication to false for the rerender
     useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
@@ -269,9 +248,7 @@ describe("UserActions", () => {
     );
 
     // Context menu should NOT be visible when user becomes unauthenticated
-    expect(
-      screen.queryByTestId("account-settings-context-menu"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
 
     // Logout option should not be accessible
     expect(
@@ -281,25 +258,59 @@ describe("UserActions", () => {
 
   it("should work with loading state and user provided", async () => {
     renderUserActions();
-    const userAvatar = screen.getByTestId("user-avatar");
-    await user.click(userAvatar);
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
 
     // Context menu should still appear even when loading
     expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
   });
 
-  test("context menu should default to user role if oss", async () => {
+  test("context menu should default to user role", async () => {
     renderUserActions();
-    const userAvatar = screen.getByTestId("user-avatar");
-    await userEvent.click(userAvatar);
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
 
+    // Verify logout is present
     expect(screen.getByTestId("user-context-menu")).toHaveTextContent(
       "ACCOUNT_SETTINGS$LOGOUT",
     );
+    // Verify nav items are present (e.g., settings nav items)
     expect(screen.getByTestId("user-context-menu")).toHaveTextContent(
-      "ACCOUNT_SETTINGS$SETTINGS",
+      "SETTINGS$NAV_USER",
     );
+    // Verify admin-only items are NOT present for user role
     expect(screen.queryByText("ORG$MANAGE_TEAM")).not.toBeInTheDocument();
     expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
+  });
+
+  test("should NOT show Team and Organization nav items when personal workspace is selected", async () => {
+    renderUserActions();
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
+
+    // Team and Organization nav links should NOT be visible when no org is selected (personal workspace)
+    expect(screen.queryByText("Team")).not.toBeInTheDocument();
+    expect(screen.queryByText("Organization")).not.toBeInTheDocument();
+  });
+
+  it("should show context menu on hover", async () => {
+    renderUserActions();
+
+    const userActions = screen.getByTestId("user-actions");
+
+    // Menu should not be visible initially
+    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
+
+    // Hover over the user actions area
+    await user.hover(userActions);
+
+    // Menu should appear on hover
+    expect(screen.getByTestId("user-context-menu")).toBeInTheDocument();
+
+    // Move mouse away
+    await user.unhover(userActions);
+
+    // Menu should disappear when not hovering
+    expect(screen.queryByTestId("user-context-menu")).not.toBeInTheDocument();
   });
 });

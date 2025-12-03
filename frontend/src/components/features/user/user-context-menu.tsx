@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
   IoCardOutline,
@@ -8,7 +8,6 @@ import {
   IoPersonAddOutline,
   IoPersonOutline,
 } from "react-icons/io5";
-import { FaCog } from "react-icons/fa";
 import { FaPlus } from "react-icons/fa6";
 import { useLogout } from "#/hooks/mutation/use-logout";
 import { CreateNewOrganizationModal } from "../org/create-new-organization-modal";
@@ -20,6 +19,9 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { SettingsDropdownInput } from "../settings/settings-dropdown-input";
 import { I18nKey } from "#/i18n/declaration";
+import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
+import { useConfig } from "#/hooks/query/use-config";
+import DocumentIcon from "#/icons/document.svg?react";
 
 interface TempButtonProps {
   start: React.ReactNode;
@@ -44,7 +46,7 @@ function TempButton({
 }
 
 function TempDivider() {
-  return <div className="h-[1px] w-full bg-tertiary my-1.5" />;
+  return <div className="h-[1px] w-full bg-[#5C5D62] my-1.5" />;
 }
 
 interface UserContextMenuProps {
@@ -58,7 +60,14 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const { orgId, setOrgId } = useSelectedOrganizationId();
   const { data: organizations } = useOrganizations();
   const { mutate: logout } = useLogout();
+  const { data: config } = useConfig();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
+
+  const isOss = config?.APP_MODE === "oss";
+  // Filter out team/org nav items since they're already handled separately in the menu
+  const navItems = (isOss ? OSS_NAV_ITEMS : SAAS_NAV_ITEMS).filter(
+    (item) => item.to !== "/settings/team" && item.to !== "/settings/org",
+  );
 
   const [orgModalIsOpen, setOrgModalIsOpen] = React.useState(false);
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
@@ -69,11 +78,6 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
 
   const handleLogout = () => {
     logout();
-    onClose();
-  };
-
-  const handleSettingsClick = () => {
-    navigate("/settings");
     onClose();
   };
 
@@ -100,8 +104,8 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
       data-testid="user-context-menu"
       ref={ref}
       className={cn(
-        "w-full flex flex-col gap-3 bg-base border border-tertiary rounded-xl p-6",
-        "text-sm text-basic w-fit",
+        "w-64 flex flex-col gap-3 bg-tertiary border border-tertiary rounded-xl p-6",
+        "text-sm absolute left-full bottom-0 z-60",
       )}
     >
       {orgModalIsOpen &&
@@ -125,28 +129,30 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
       </h3>
 
       <div className="flex flex-col items-start gap-2">
-        <SettingsDropdownInput
-          testId="org-selector"
-          name="organization"
-          placeholder="Please select an organization"
-          selectedKey={orgId || "personal"}
-          items={[
-            { key: "personal", label: "Personal Account" },
-            ...(organizations?.map((org) => ({
-              key: org.id,
-              label: org.name,
-            })) || []),
-          ]}
-          onSelectionChange={(org) => {
-            if (org === "personal") {
-              setOrgId(null);
-            } else if (org) {
-              setOrgId(org.toString());
-            } else {
-              setOrgId(null);
-            }
-          }}
-        />
+        <div className="w-full relative">
+          <SettingsDropdownInput
+            testId="org-selector"
+            name="organization"
+            placeholder="Please select an organization"
+            selectedKey={orgId || "personal"}
+            items={[
+              { key: "personal", label: "Personal Account" },
+              ...(organizations?.map((org) => ({
+                key: org.id,
+                label: org.name,
+              })) || []),
+            ]}
+            onSelectionChange={(org) => {
+              if (org === "personal") {
+                setOrgId(null);
+              } else if (org) {
+                setOrgId(org.toString());
+              } else {
+                setOrgId(null);
+              }
+            }}
+          />
+        </div>
 
         {!isUser && (
           <>
@@ -176,12 +182,34 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
 
         <TempDivider />
 
-        <TempButton
-          onClick={handleSettingsClick}
-          start={<FaCog className="text-white" size={14} />}
+        {navItems.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            onClick={onClose}
+            className="flex items-center gap-1 cursor-pointer hover:text-white w-full"
+          >
+            {React.cloneElement(item.icon, {
+              className: "text-white",
+              width: 14,
+              height: 14,
+            } as React.SVGProps<SVGSVGElement>)}
+            {t(item.text)}
+          </Link>
+        ))}
+
+        <TempDivider />
+
+        <a
+          href="https://docs.openhands.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onClose}
+          className="flex items-center gap-1 cursor-pointer hover:text-white w-full"
         >
-          {t(I18nKey.ACCOUNT_SETTINGS$SETTINGS)}
-        </TempButton>
+          <DocumentIcon className="text-white" width={14} height={14} />
+          {t(I18nKey.SIDEBAR$DOCS)}
+        </a>
 
         {isSuperAdmin && (
           <TempButton
