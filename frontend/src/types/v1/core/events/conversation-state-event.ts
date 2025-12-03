@@ -80,22 +80,19 @@ interface ConversationStateUpdateEventBase extends BaseEvent {
 }
 
 // Narrowed interfaces for full state update event
-export interface ConversationStateUpdateEventFullState
-  extends ConversationStateUpdateEventBase {
+export interface ConversationStateUpdateEventFullState extends ConversationStateUpdateEventBase {
   key: "full_state";
   value: ConversationState;
 }
 
 // Narrowed interface for agent status update event
-export interface ConversationStateUpdateEventAgentStatus
-  extends ConversationStateUpdateEventBase {
+export interface ConversationStateUpdateEventAgentStatus extends ConversationStateUpdateEventBase {
   key: "execution_status";
   value: V1ExecutionStatus;
 }
 
 // Narrowed interface for stats update event
-export interface ConversationStateUpdateEventStats
-  extends ConversationStateUpdateEventBase {
+export interface ConversationStateUpdateEventStats extends ConversationStateUpdateEventBase {
   key: "stats";
   value: ConversationStats;
 }
