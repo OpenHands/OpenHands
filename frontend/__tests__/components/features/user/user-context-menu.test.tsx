@@ -67,11 +67,13 @@ describe("UserContextMenu", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should render navigation items from SAAS_NAV_ITEMS", () => {
+  it("should render navigation items from SAAS_NAV_ITEMS (except team/org)", () => {
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    // Verify that navigation items are rendered
-    SAAS_NAV_ITEMS.forEach((item) => {
+    // Verify that navigation items are rendered (except team/org which are filtered out)
+    SAAS_NAV_ITEMS.filter(
+      (item) => item.to !== "/settings/team" && item.to !== "/settings/org",
+    ).forEach((item) => {
       expect(screen.getByText(item.text)).toBeInTheDocument();
     });
   });
