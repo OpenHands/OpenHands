@@ -1,0 +1,94 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import { ContextMenu } from "#/ui/context-menu";
+import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
+import { ContextMenuIconText } from "#/ui/context-menu-icon-text";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { OrganizationUserRole } from "#/types/org";
+import { cn, uppercaseFirstLetter } from "#/utils/utils";
+import UserIcon from "#/icons/user.svg?react";
+import SettingsIcon from "#/icons/settings.svg?react";
+import DeleteIcon from "#/icons/u-delete.svg?react";
+
+const contextMenuListItemClassName = cn(
+  "cursor-pointer p-0 h-auto hover:bg-transparent",
+);
+
+interface OrganizationMemberRoleContextMenuProps {
+  onClose: () => void;
+  onRoleChange: (role: OrganizationUserRole) => void;
+  onRemove?: () => void;
+}
+
+export function OrganizationMemberRoleContextMenu({
+  onClose,
+  onRoleChange,
+  onRemove,
+}: OrganizationMemberRoleContextMenuProps) {
+  const { t } = useTranslation();
+  const menuRef = useClickOutsideElement<HTMLUListElement>(onClose);
+
+  const handleAdminClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onRoleChange("admin");
+    onClose();
+  };
+
+  const handleUserClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onRoleChange("user");
+    onClose();
+  };
+
+  const handleRemoveClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onRemove?.();
+    onClose();
+  };
+
+  return (
+    <ContextMenu
+      ref={menuRef}
+      testId="organization-member-role-context-menu"
+      position="bottom"
+      alignment="right"
+      className="min-h-fit mb-2 min-w-[195px] max-w-[195px] gap-0"
+    >
+      <ContextMenuListItem
+        testId="admin-option"
+        onClick={handleAdminClick}
+        className={contextMenuListItemClassName}
+      >
+        <ContextMenuIconText
+          icon={<SettingsIcon width={16} height={16} className="text-white" />}
+          text={uppercaseFirstLetter(t(I18nKey.ORG$ROLE_ADMIN))}
+        />
+      </ContextMenuListItem>
+      <ContextMenuListItem
+        testId="user-option"
+        onClick={handleUserClick}
+        className={contextMenuListItemClassName}
+      >
+        <ContextMenuIconText
+          icon={<UserIcon width={16} height={16} className="text-white" />}
+          text={uppercaseFirstLetter(t(I18nKey.ORG$ROLE_USER))}
+        />
+      </ContextMenuListItem>
+      <ContextMenuListItem
+        testId="remove-option"
+        onClick={handleRemoveClick}
+        className={contextMenuListItemClassName}
+      >
+        <ContextMenuIconText
+          icon={<DeleteIcon width={16} height={16} className="text-red-500" />}
+          text={uppercaseFirstLetter(t(I18nKey.ORG$REMOVE))}
+          className="text-red-500"
+        />
+      </ContextMenuListItem>
+    </ContextMenu>
+  );
+}

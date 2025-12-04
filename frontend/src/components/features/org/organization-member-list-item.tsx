@@ -2,8 +2,9 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
-import { cn } from "#/utils/utils";
+import { cn, uppercaseFirstLetter } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
+import { OrganizationMemberRoleContextMenu } from "./organization-member-role-context-menu";
 
 interface OrganizationMemberListItemProps {
   email: OrganizationMember["email"];
@@ -24,15 +25,18 @@ export function OrganizationMemberListItem({
   onRemove,
 }: OrganizationMemberListItemProps) {
   const { t } = useTranslation();
-  const [roleSelectionOpen, setRoleSelectionOpen] = React.useState(false);
-
-  const handleRoleSelectionClick = (newRole: OrganizationUserRole) => {
-    onRoleChange(newRole);
-    setRoleSelectionOpen(false);
-  };
+  const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
 
   const roleSelectionIsPermitted =
     status !== "invited" && hasPermissionToChangeRole;
+
+  const handleRoleClick = (event: React.MouseEvent<HTMLSpanElement>) => {
+    if (roleSelectionIsPermitted) {
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenuOpen(true);
+    }
+  };
 
   return (
     <div className="flex items-center justify-between py-4">
@@ -51,42 +55,25 @@ export function OrganizationMemberListItem({
           </span>
         )}
       </div>
-      <span
-        onClick={() => setRoleSelectionOpen(true)}
-        className={cn(
-          "text-xs text-gray-400 uppercase flex items-center gap-1",
-          roleSelectionIsPermitted ? "cursor-pointer" : "cursor-not-allowed",
+      <div className="relative">
+        <span
+          onClick={handleRoleClick}
+          className={cn(
+            "text-xs text-gray-400 flex items-center gap-1",
+            roleSelectionIsPermitted ? "cursor-pointer" : "cursor-not-allowed",
+          )}
+        >
+          {uppercaseFirstLetter(role)}
+          {hasPermissionToChangeRole && <ChevronDown size={14} />}
+        </span>
+        {roleSelectionIsPermitted && contextMenuOpen && (
+          <OrganizationMemberRoleContextMenu
+            onClose={() => setContextMenuOpen(false)}
+            onRoleChange={onRoleChange}
+            onRemove={onRemove}
+          />
         )}
-      >
-        {role}
-        {hasPermissionToChangeRole && <ChevronDown size={14} />}
-      </span>
-
-      {roleSelectionIsPermitted && roleSelectionOpen && (
-        <ul data-testid="role-dropdown">
-          <li>
-            <span onClick={() => handleRoleSelectionClick("admin")}>
-              {t(I18nKey.ORG$ROLE_ADMIN)}
-            </span>
-          </li>
-          <li>
-            <span onClick={() => handleRoleSelectionClick("user")}>
-              {t(I18nKey.ORG$ROLE_USER)}
-            </span>
-          </li>
-          <li>
-            <span
-              className="text-red-500 cursor-pointer"
-              onClick={() => {
-                onRemove?.();
-                setRoleSelectionOpen(false);
-              }}
-            >
-              {t(I18nKey.ORG$REMOVE)}
-            </span>
-          </li>
-        </ul>
-      )}
+      </div>
     </div>
   );
 }
