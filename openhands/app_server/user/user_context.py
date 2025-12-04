@@ -28,7 +28,7 @@ class UserContext(ABC):
 
     @abstractmethod
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
-        """ Get the latest tokens for all provider types """
+        """Get the latest tokens for all provider types"""
 
     @abstractmethod
     async def get_latest_token(self, provider_type: ProviderType) -> str | None:

@@ -9,7 +9,11 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
 from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler, ProviderType
+from openhands.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+    ProviderType,
+)
 from openhands.sdk.conversation.secret_source import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
