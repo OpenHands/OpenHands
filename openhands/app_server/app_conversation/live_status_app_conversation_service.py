@@ -526,9 +526,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
 
-    async def _setup_secrets_for_git_providers(
-        self, user: UserInfo
-    ) -> dict:
+    async def _setup_secrets_for_git_providers(self, user: UserInfo) -> dict:
         """Set up secrets for all git provider authentication.
 
         Args:
@@ -540,7 +538,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         secrets = await self.user_context.get_secrets()
 
         # Get all provider tokens from user authentication
-        provider_tokens = await self.user_context.user_auth.get_provider_tokens()
+        provider_tokens = await self.user_context.get_provider_tokens()
         if not provider_tokens:
             return secrets
 

@@ -86,6 +86,9 @@ class GithubUserContext(UserContext):
         # For now, return a basic HTTPS URL
         return f'https://github.com/{repository}.git'
 
+    async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
+        return self.git_provider_tokens
+
     async def get_latest_token(self, provider_type: ProviderType) -> str | None:
         # Return the appropriate token from git_provider_tokens
         if provider_type == ProviderType.GITHUB and self.git_provider_tokens:

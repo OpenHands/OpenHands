@@ -92,19 +92,22 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_with_web_url(self):
         """Test _setup_secrets_for_git_providers with web URL (creates access token)."""
         # Arrange
-        from openhands.integrations.provider import ProviderToken
         from pydantic import SecretStr
-        
+
+        from openhands.integrations.provider import ProviderToken
+
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
-        
+
         # Mock provider tokens
         provider_tokens = {
             ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
             ProviderType.GITLAB: ProviderToken(token=SecretStr('gitlab_token')),
         }
-        self.mock_user_auth.get_provider_tokens = AsyncMock(return_value=provider_tokens)
+        self.mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
@@ -127,20 +130,23 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_with_saas_mode(self):
         """Test _setup_secrets_for_git_providers with SaaS mode (includes keycloak cookie)."""
         # Arrange
-        from openhands.integrations.provider import ProviderToken
         from pydantic import SecretStr
-        
+
+        from openhands.integrations.provider import ProviderToken
+
         self.service.app_mode = 'saas'
         self.service.keycloak_auth_cookie = 'test_cookie'
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
-        
+
         # Mock provider tokens
         provider_tokens = {
             ProviderType.GITLAB: ProviderToken(token=SecretStr('gitlab_token')),
         }
-        self.mock_user_auth.get_provider_tokens = AsyncMock(return_value=provider_tokens)
+        self.mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
@@ -156,19 +162,22 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_without_web_url(self):
         """Test _setup_secrets_for_git_providers without web URL (uses static token)."""
         # Arrange
-        from openhands.integrations.provider import ProviderToken
         from pydantic import SecretStr
-        
+
+        from openhands.integrations.provider import ProviderToken
+
         self.service.web_url = None
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_latest_token.return_value = 'static_token_value'
-        
+
         # Mock provider tokens
         provider_tokens = {
             ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
         }
-        self.mock_user_auth.get_provider_tokens = AsyncMock(return_value=provider_tokens)
+        self.mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
@@ -177,25 +186,30 @@ class TestLiveStatusAppConversationService:
         assert 'GITHUB_TOKEN' in result
         assert isinstance(result['GITHUB_TOKEN'], StaticSecret)
         assert result['GITHUB_TOKEN'].value.get_secret_value() == 'static_token_value'
-        self.mock_user_context.get_latest_token.assert_called_once_with(ProviderType.GITHUB)
+        self.mock_user_context.get_latest_token.assert_called_once_with(
+            ProviderType.GITHUB
+        )
 
     @pytest.mark.asyncio
     async def test_setup_secrets_for_git_providers_no_static_token(self):
         """Test _setup_secrets_for_git_providers when no static token is available."""
         # Arrange
-        from openhands.integrations.provider import ProviderToken
         from pydantic import SecretStr
-        
+
+        from openhands.integrations.provider import ProviderToken
+
         self.service.web_url = None
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_latest_token.return_value = None
-        
+
         # Mock provider tokens
         provider_tokens = {
             ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
         }
-        self.mock_user_auth.get_provider_tokens = AsyncMock(return_value=provider_tokens)
+        self.mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
