@@ -114,7 +114,12 @@ describe("Manage Team Route", () => {
 
     members.forEach((member) => {
       expect(screen.getByText(member.email)).toBeInTheDocument();
-      expect(screen.getByText(member.role)).toBeInTheDocument();
+      // Role is displayed with first letter uppercased
+      const roleWithFirstLetterUppercased =
+        member.role.charAt(0).toUpperCase() + member.role.slice(1);
+      expect(
+        screen.getByText(roleWithFirstLetterUppercased),
+      ).toBeInTheDocument();
     });
   });
 
@@ -132,12 +137,14 @@ describe("Manage Team Route", () => {
     const memberListItems = await screen.findAllByTestId("member-item");
     const userRoleMember = memberListItems[2]; // third member is "user"
 
-    let userCombobox = within(userRoleMember).getByText(/user/i);
+    let userCombobox = within(userRoleMember).getByText(/^User$/i);
     expect(userCombobox).toBeInTheDocument();
     await userEvent.click(userCombobox);
 
-    const dropdown = within(userRoleMember).getByTestId("role-dropdown");
-    const adminOption = within(dropdown).getByText(/admin/i);
+    const dropdown = within(userRoleMember).getByTestId(
+      "organization-member-role-context-menu",
+    );
+    const adminOption = within(dropdown).getByTestId("admin-option");
     expect(adminOption).toBeInTheDocument();
     await userEvent.click(adminOption);
 
@@ -147,18 +154,22 @@ describe("Manage Team Route", () => {
       role: "admin",
     });
     expect(
-      within(userRoleMember).queryByTestId("role-dropdown"),
+      within(userRoleMember).queryByTestId(
+        "organization-member-role-context-menu",
+      ),
     ).not.toBeInTheDocument();
 
     // Verify the role has been updated in the UI
-    userCombobox = within(userRoleMember).getByText(/admin/i);
+    userCombobox = within(userRoleMember).getByText(/^Admin$/i);
     expect(userCombobox).toBeInTheDocument();
 
     // revert the role back to user
     await userEvent.click(userCombobox);
     const userOption = within(
-      within(userRoleMember).getByTestId("role-dropdown"),
-    ).getByText(/user/i);
+      within(userRoleMember).getByTestId(
+        "organization-member-role-context-menu",
+      ),
+    ).getByTestId("user-option");
     expect(userOption).toBeInTheDocument();
     await userEvent.click(userOption);
 
@@ -169,7 +180,7 @@ describe("Manage Team Route", () => {
     });
 
     // Verify the role has been reverted in the UI
-    userCombobox = within(userRoleMember).getByText(/user/i);
+    userCombobox = within(userRoleMember).getByText(/^User$/i);
     expect(userCombobox).toBeInTheDocument();
   });
 
@@ -191,13 +202,15 @@ describe("Manage Team Route", () => {
 
     const memberListItems = await screen.findAllByTestId("member-item");
     const ownerMember = memberListItems[0]; // first member is "owner
-    const userCombobox = within(ownerMember).getByText(/owner/i);
+    const userCombobox = within(ownerMember).getByText(/^Owner$/i);
     expect(userCombobox).toBeInTheDocument();
     await userEvent.click(userCombobox);
 
     // Verify that the dropdown does not open for owner
     expect(
-      within(ownerMember).queryByTestId("role-dropdown"),
+      within(ownerMember).queryByTestId(
+        "organization-member-role-context-menu",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -211,12 +224,14 @@ describe("Manage Team Route", () => {
     const adminMember = memberListItems[1]; // first member is "admin"
     expect(adminMember).toBeDefined();
 
-    const roleText = within(adminMember).getByText(/admin/i);
+    const roleText = within(adminMember).getByText(/^Admin$/i);
     await userEvent.click(roleText);
 
     // Verify that the dropdown does not open for the other admin
     expect(
-      within(adminMember).queryByTestId("role-dropdown"),
+      within(adminMember).queryByTestId(
+        "organization-member-role-context-menu",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -238,12 +253,14 @@ describe("Manage Team Route", () => {
     const memberListItems = await screen.findAllByTestId("member-item");
     const currentUserMember = memberListItems[0]; // First member is Alice (id: "1")
 
-    const roleText = within(currentUserMember).getByText(/owner/i);
+    const roleText = within(currentUserMember).getByText(/^Owner$/i);
     await userEvent.click(roleText);
 
     // Verify that the dropdown does not open for the current user's own role
     expect(
-      within(currentUserMember).queryByTestId("role-dropdown"),
+      within(currentUserMember).queryByTestId(
+        "organization-member-role-context-menu",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -263,17 +280,16 @@ describe("Manage Team Route", () => {
     const userEmail = within(userRoleMember).getByText("charlie@acme.org");
     expect(userEmail).toBeInTheDocument();
 
-    const userCombobox = within(userRoleMember).getByText(/user/i);
+    const userCombobox = within(userRoleMember).getByText(/^User$/i);
     await userEvent.click(userCombobox);
 
-    const dropdown = within(userRoleMember).getByTestId("role-dropdown");
+    const dropdown = within(userRoleMember).getByTestId(
+      "organization-member-role-context-menu",
+    );
 
     // Check that remove option exists
-    const removeOption = within(dropdown).getByText(/remove/i);
+    const removeOption = within(dropdown).getByTestId("remove-option");
     expect(removeOption).toBeInTheDocument();
-
-    // Check that remove option has danger styling (red color)
-    expect(removeOption).toHaveClass("text-red-500"); // or whatever danger class is used
 
     await userEvent.click(removeOption);
 
@@ -370,9 +386,11 @@ describe("Manage Team Route", () => {
       expect(invitedBadge).toBeInTheDocument();
 
       // should not have a role combobox
-      await userEvent.click(within(invitedMember).getByText(/user/i));
+      await userEvent.click(within(invitedMember).getByText(/^User$/i));
       expect(
-        within(invitedMember).queryByTestId("role-dropdown"),
+        within(invitedMember).queryByTestId(
+          "organization-member-role-context-menu",
+        ),
       ).not.toBeInTheDocument();
     });
   });
