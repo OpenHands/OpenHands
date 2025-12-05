@@ -134,7 +134,7 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     return settings.enable_proactive_conversation_starters
 
 
-async def get_user_v1_enabled_setting(user_id: str | None) -> bool:
+async def get_user_v1_enabled_setting(user_id: str) -> bool:
     """Get the user's V1 conversation API setting.
 
     Args:
@@ -247,7 +247,9 @@ class GithubIssue(ResolverViewInterface):
         conversation_metadata: ConversationMetadata,
     ):
         v1_enabled = await get_user_v1_enabled_setting(self.user_info.keycloak_user_id)
-
+        logger.info(
+            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {v1_enabled}'
+        )
         if v1_enabled:
             try:
                 # Use V1 app conversation service
@@ -271,6 +273,7 @@ class GithubIssue(ResolverViewInterface):
         conversation_metadata: ConversationMetadata,
     ):
         """Create conversation using the legacy V0 system."""
+        logger.info('[GitHub V1]: Creating V0 conversation')
         custom_secrets = await self._get_user_secrets()
 
         user_instructions, conversation_instructions = await self._get_instructions(
@@ -296,6 +299,8 @@ class GithubIssue(ResolverViewInterface):
         conversation_metadata: ConversationMetadata,
     ):
         """Create conversation using the new V1 app conversation system."""
+        logger.info('[GitHub V1]: Creating V1 conversation')
+
         user_instructions, conversation_instructions = await self._get_instructions(
             jinja_env
         )
