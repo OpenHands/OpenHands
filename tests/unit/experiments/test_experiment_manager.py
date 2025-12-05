@@ -203,7 +203,7 @@ class TestExperimentManagerIntegration:
         with (
             patch.object(
                 service,
-                '_setup_secrets_for_git_provider',
+                '_setup_secrets_for_git_providers',
                 return_value={},
             ),
             patch.object(
