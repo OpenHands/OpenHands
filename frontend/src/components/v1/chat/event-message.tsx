@@ -96,6 +96,7 @@ const renderUserMessageWithSkillReady = (
   messageEvent: MessageEvent,
   commonProps: CommonProps,
   isLastMessage: boolean,
+  messages: OpenHandsEvent[],
 ): React.ReactElement => {
   try {
     const skillReadyEvent = createSkillReadyEvent(messageEvent);
@@ -229,6 +230,7 @@ export function EventMessage({
         messageEvent,
         commonProps,
         isLastMessage,
+        messages,
       );
     }
 

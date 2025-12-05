@@ -3,6 +3,7 @@ import { getObservationContent } from "../get-observation-content";
 import { ObservationEvent, OpenHandsEvent, ActionEvent } from "#/types/v1/core";
 import { BrowserObservation } from "#/types/v1/core/base/observation";
 import { BrowserNavigateAction } from "#/types/v1/core/base/action";
+import { SecurityRisk } from "#/types/v1/core/base/common";
 import { useBrowserStore } from "#/stores/browser-store";
 
 // Mock the browser store
@@ -23,13 +24,12 @@ describe("getObservationContent - BrowserObservation", () => {
     vi.clearAllMocks();
     mockSetScreenshotSrc.mockClear();
     mockSetUrl.mockClear();
-    (
-      useBrowserStore.getState as vi.MockedFunction<
-        typeof useBrowserStore.getState
-      >
-    ).mockReturnValue({
+    vi.mocked(useBrowserStore.getState).mockReturnValue({
+      url: "https://example.com",
+      screenshotSrc: "",
       setScreenshotSrc: mockSetScreenshotSrc,
       setUrl: mockSetUrl,
+      reset: vi.fn(),
     });
   });
 
@@ -37,6 +37,10 @@ describe("getObservationContent - BrowserObservation", () => {
     const mockEvent: ObservationEvent<BrowserObservation> = {
       id: "test-id",
       timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      action_id: "action-id",
       observation: {
         kind: "BrowserObservation",
         output: "Browser action completed",
@@ -62,6 +66,10 @@ describe("getObservationContent - BrowserObservation", () => {
     const mockEvent: ObservationEvent<BrowserObservation> = {
       id: "test-id",
       timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      action_id: "action-id",
       observation: {
         kind: "BrowserObservation",
         output: "Browser action completed",
@@ -83,6 +91,10 @@ describe("getObservationContent - BrowserObservation", () => {
     const mockEvent: ObservationEvent<BrowserObservation> = {
       id: "test-id",
       timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      action_id: "action-id",
       observation: {
         kind: "BrowserObservation",
         output: "Browser action completed",
@@ -101,6 +113,10 @@ describe("getObservationContent - BrowserObservation", () => {
     const mockEvent: ObservationEvent<BrowserObservation> = {
       id: "test-id",
       timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      action_id: "action-id",
       observation: {
         kind: "BrowserObservation",
         output: "",
@@ -120,6 +136,10 @@ describe("getObservationContent - BrowserObservation", () => {
     const mockEvent: ObservationEvent<BrowserObservation> = {
       id: "test-id",
       timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      action_id: "action-id",
       observation: {
         kind: "BrowserObservation",
         output: "",
@@ -141,12 +161,12 @@ describe("getObservationContent - BrowserObservation", () => {
       source: "environment",
       tool_name: "browser_navigate",
       tool_call_id: "call-id",
+      action_id: "action-id",
       observation: {
         kind: "BrowserObservation",
         output: "Page loaded successfully",
         error: null,
         screenshot_data: "base64data",
-        is_error: false,
       },
     };
 
@@ -155,6 +175,7 @@ describe("getObservationContent - BrowserObservation", () => {
       timestamp: "2024-01-01T00:00:00Z",
       source: "agent",
       thought: [],
+      thinking_blocks: [],
       action: {
         kind: "BrowserNavigateAction",
         url: "https://example.com",
@@ -162,9 +183,16 @@ describe("getObservationContent - BrowserObservation", () => {
       },
       tool_name: "browser_navigate",
       tool_call_id: "call-id",
-      tool_call: {} as Record<string, unknown>,
+      tool_call: {
+        id: "call-id",
+        type: "function",
+        function: {
+          name: "browser_navigate",
+          arguments: '{"url": "https://example.com", "new_tab": false}',
+        },
+      },
       llm_response_id: "response-id",
-      security_risk: "LOW",
+      security_risk: SecurityRisk.LOW,
     };
 
     const allEvents: OpenHandsEvent[] = [
@@ -192,12 +220,12 @@ describe("getObservationContent - BrowserObservation", () => {
       source: "environment",
       tool_name: "browser_navigate",
       tool_call_id: "call-id",
+      action_id: "action-id",
       observation: {
         kind: "BrowserObservation",
         output: "Page loaded successfully",
         error: null,
         screenshot_data: null,
-        is_error: false,
       },
     };
 
@@ -206,6 +234,7 @@ describe("getObservationContent - BrowserObservation", () => {
       timestamp: "2024-01-01T00:00:00Z",
       source: "agent",
       thought: [],
+      thinking_blocks: [],
       action: {
         kind: "BrowserNavigateAction",
         url: "https://example.com",
@@ -213,9 +242,16 @@ describe("getObservationContent - BrowserObservation", () => {
       },
       tool_name: "browser_navigate",
       tool_call_id: "call-id",
-      tool_call: {} as Record<string, unknown>,
+      tool_call: {
+        id: "call-id",
+        type: "function",
+        function: {
+          name: "browser_navigate",
+          arguments: '{"url": "https://example.com", "new_tab": false}',
+        },
+      },
       llm_response_id: "response-id",
-      security_risk: "LOW",
+      security_risk: SecurityRisk.LOW,
     };
 
     const allEvents: OpenHandsEvent[] = [
@@ -241,12 +277,12 @@ describe("getObservationContent - BrowserObservation", () => {
       source: "environment",
       tool_name: "browser_navigate",
       tool_call_id: "call-id",
+      action_id: "action-id",
       observation: {
         kind: "BrowserObservation",
         output: "Page loaded successfully",
         error: null,
         screenshot_data: "base64data",
-        is_error: false,
       },
     };
 
