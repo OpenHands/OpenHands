@@ -606,10 +606,15 @@ export const shouldIncludeRepository = (
  * @returns The query string for searching OpenHands repositories
  */
 export const getOpenHandsQuery = (provider: Provider | null): string => {
-  if (provider === "gitlab") {
-    return "openhands-config";
-  }
-  return ".openhands";
+  const providerRepositorySuffix: Record<string, string> = {
+    gitlab: "openhands-config",
+    azure_devops: "openhands-config",
+    default: ".openhands",
+  } as const;
+
+  return provider && provider in providerRepositorySuffix
+    ? providerRepositorySuffix[provider]
+    : providerRepositorySuffix.default;
 };
 
 /**
@@ -621,12 +626,7 @@ export const getOpenHandsQuery = (provider: Provider | null): string => {
 export const hasOpenHandsSuffix = (
   repo: GitRepository,
   provider: Provider | null,
-): boolean => {
-  if (provider === "gitlab") {
-    return repo.full_name.endsWith("/openhands-config");
-  }
-  return repo.full_name.endsWith("/.openhands");
-};
+): boolean => repo.full_name.endsWith(`/${getOpenHandsQuery(provider)}`);
 
 /**
  * Build headers for V1 API requests that require session authentication

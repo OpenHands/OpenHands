@@ -71,7 +71,18 @@ const getTerminalObservationContent = (
     content = `${content.slice(0, MAX_CONTENT_LENGTH)}...`;
   }
 
-  return `Output:\n\`\`\`sh\n${content.trim() || i18n.t("OBSERVATION$COMMAND_NO_OUTPUT")}\n\`\`\``;
+  // Build the output string
+  let output = "";
+
+  // Display the command if available
+  if (observation.command) {
+    output += `Command: \`${observation.command}\`\n\n`;
+  }
+
+  // Display the output
+  output += `Output:\n\`\`\`sh\n${content.trim() || i18n.t("OBSERVATION$COMMAND_NO_OUTPUT")}\n\`\`\``;
+
+  return output;
 };
 
 // Tool Observations

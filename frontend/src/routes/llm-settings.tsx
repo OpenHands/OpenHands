@@ -28,7 +28,6 @@ import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
-import { USE_V1_CONVERSATION_API } from "#/utils/feature-flags";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -119,8 +118,8 @@ function LlmSettingsScreen() {
   const isSaasMode = config?.APP_MODE === "saas";
   const shouldUseOpenHandsKey = isOpenHandsProvider && isSaasMode;
 
-  // Determine if we should hide the agent dropdown when V1 conversation API feature flag is enabled
-  const isV1Enabled = USE_V1_CONVERSATION_API();
+  // Determine if we should hide the agent dropdown when V1 conversation API is enabled
+  const isV1Enabled = settings?.V1_ENABLED;
 
   React.useEffect(() => {
     const determineWhetherToToggleAdvancedSettings = () => {

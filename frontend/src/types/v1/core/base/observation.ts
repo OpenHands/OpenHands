@@ -6,8 +6,7 @@ import {
   ImageContent,
 } from "./common";
 
-export interface MCPToolObservation
-  extends ObservationBase<"MCPToolObservation"> {
+export interface MCPToolObservation extends ObservationBase<"MCPToolObservation"> {
   /**
    * Content returned from the MCP tool converted to LLM Ready TextContent or ImageContent
    */
@@ -22,8 +21,7 @@ export interface MCPToolObservation
   tool_name: string;
 }
 
-export interface FinishObservation
-  extends ObservationBase<"FinishObservation"> {
+export interface FinishObservation extends ObservationBase<"FinishObservation"> {
   /**
    * Content returned from the finish action as a list of TextContent/ImageContent objects.
    */
@@ -41,8 +39,7 @@ export interface ThinkObservation extends ObservationBase<"ThinkObservation"> {
   content: string;
 }
 
-export interface BrowserObservation
-  extends ObservationBase<"BrowserObservation"> {
+export interface BrowserObservation extends ObservationBase<"BrowserObservation"> {
   /**
    * The output message from the browser operation
    */
@@ -57,8 +54,7 @@ export interface BrowserObservation
   screenshot_data: string | null;
 }
 
-export interface ExecuteBashObservation
-  extends ObservationBase<"ExecuteBashObservation"> {
+export interface ExecuteBashObservation extends ObservationBase<"ExecuteBashObservation"> {
   /**
    * Content returned from the tool as a list of TextContent/ImageContent objects.
    */
@@ -85,8 +81,7 @@ export interface ExecuteBashObservation
   metadata: CmdOutputMetadata;
 }
 
-export interface TerminalObservation
-  extends ObservationBase<"TerminalObservation"> {
+export interface TerminalObservation extends ObservationBase<"TerminalObservation"> {
   /**
    * Content returned from the terminal as a list of TextContent/ImageContent objects.
    */
@@ -113,8 +108,7 @@ export interface TerminalObservation
   metadata: CmdOutputMetadata;
 }
 
-export interface FileEditorObservation
-  extends ObservationBase<"FileEditorObservation"> {
+export interface FileEditorObservation extends ObservationBase<"FileEditorObservation"> {
   /**
    * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
    */
@@ -146,8 +140,7 @@ export interface FileEditorObservation
 }
 
 // Keep StrReplaceEditorObservation as a separate interface for backward compatibility
-export interface StrReplaceEditorObservation
-  extends ObservationBase<"StrReplaceEditorObservation"> {
+export interface StrReplaceEditorObservation extends ObservationBase<"StrReplaceEditorObservation"> {
   /**
    * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
    */
@@ -178,8 +171,7 @@ export interface StrReplaceEditorObservation
   error: string | null;
 }
 
-export interface TaskTrackerObservation
-  extends ObservationBase<"TaskTrackerObservation"> {
+export interface TaskTrackerObservation extends ObservationBase<"TaskTrackerObservation"> {
   /**
    * The formatted task list or status message.
    */
@@ -194,8 +186,7 @@ export interface TaskTrackerObservation
   task_list: TaskItem[];
 }
 
-export interface PlanningFileEditorObservation
-  extends ObservationBase<"PlanningFileEditorObservation"> {
+export interface PlanningFileEditorObservation extends ObservationBase<"PlanningFileEditorObservation"> {
   /**
    * Content returned from the tool as a list of TextContent/ImageContent objects.
    */
