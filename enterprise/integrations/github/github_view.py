@@ -131,7 +131,7 @@ class GithubIssue(ResolverViewInterface):
     title: str
     description: str
     previous_comments: list[Comment]
-    saas_user_auth: UserAuth
+    v1: bool
 
     async def _load_resolver_context(self):
         github_service = GithubServiceImpl(
@@ -194,6 +194,7 @@ class GithubIssue(ResolverViewInterface):
         jinja_env: Environment,
         git_provider_tokens: PROVIDER_TOKEN_TYPE,
         conversation_metadata: ConversationMetadata,
+        saas_user_auth: UserAuth,
     ):
         v1_enabled = await get_user_v1_enabled_setting(self.user_info.keycloak_user_id)
         logger.info(
@@ -203,7 +204,7 @@ class GithubIssue(ResolverViewInterface):
             try:
                 # Use V1 app conversation service
                 await self._create_v1_conversation(
-                    jinja_env, git_provider_tokens, conversation_metadata
+                    jinja_env, saas_user_auth, conversation_metadata
                 )
                 return
 
@@ -244,7 +245,7 @@ class GithubIssue(ResolverViewInterface):
     async def _create_v1_conversation(
         self,
         jinja_env: Environment,
-        git_provider_tokens: PROVIDER_TOKEN_TYPE,
+        saas_user_auth: UserAuth,
         conversation_metadata: ConversationMetadata,
     ):
         """Create conversation using the new V1 app conversation system."""
@@ -280,7 +281,7 @@ class GithubIssue(ResolverViewInterface):
         )
 
         # Set up the GitHub user context for the V1 system
-        github_user_context = ResolverUserContext(saas_user_auth=self.saas_user_auth)
+        github_user_context = ResolverUserContext(saas_user_auth=saas_user_auth)
         setattr(injector_state, USER_CONTEXT_ATTR, github_user_context)
 
         async with get_app_conversation_service(
@@ -294,6 +295,8 @@ class GithubIssue(ResolverViewInterface):
                     raise RuntimeError(
                         f'Failed to start V1 conversation: {task.detail}'
                     )
+
+        self.v1 = True
 
     def _create_github_v1_callback_processor(self):
         """Create a V1 callback processor for GitHub integration."""
@@ -757,7 +760,7 @@ class GithubFactory:
 
     @staticmethod
     async def create_github_view_from_payload(
-        message: Message, keycloak_user_id: str, saas_user_auth: UserAuth
+        message: Message, keycloak_user_id: str
     ) -> ResolverViewInterface:
         """Create the appropriate class (GithubIssue or GithubPRComment) based on the payload.
         Also return metadata about the event (e.g., action type).
@@ -794,7 +797,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                saas_user_auth=saas_user_auth,
+                v1=False,
             )
 
         elif GithubFactory.is_issue_comment(message):
@@ -820,7 +823,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                saas_user_auth=saas_user_auth,
+                v1=False,
             )
 
         elif GithubFactory.is_pr_comment(message):
@@ -862,7 +865,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                saas_user_auth=saas_user_auth,
+                v1=False,
             )
 
         elif GithubFactory.is_inline_pr_comment(message):
@@ -896,7 +899,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                saas_user_auth=saas_user_auth,
+                v1=False,
             )
 
         else:
