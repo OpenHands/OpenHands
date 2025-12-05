@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { getObservationContent } from "../get-observation-content";
-import { ObservationEvent } from "#/types/v1/core";
+import { ObservationEvent, OpenHandsEvent, ActionEvent } from "#/types/v1/core";
 import { BrowserObservation } from "#/types/v1/core/base/observation";
+import { BrowserNavigateAction } from "#/types/v1/core/base/action";
 import { useBrowserStore } from "#/stores/browser-store";
 
 // Mock the browser store
@@ -9,17 +10,26 @@ vi.mock("#/stores/browser-store", () => ({
   useBrowserStore: {
     getState: vi.fn(() => ({
       setScreenshotSrc: vi.fn(),
+      setUrl: vi.fn(),
     })),
   },
 }));
 
 describe("getObservationContent - BrowserObservation", () => {
   const mockSetScreenshotSrc = vi.fn();
+  const mockSetUrl = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (useBrowserStore.getState as any).mockReturnValue({
+    mockSetScreenshotSrc.mockClear();
+    mockSetUrl.mockClear();
+    (
+      useBrowserStore.getState as vi.MockedFunction<
+        typeof useBrowserStore.getState
+      >
+    ).mockReturnValue({
       setScreenshotSrc: mockSetScreenshotSrc,
+      setUrl: mockSetUrl,
     });
   });
 
@@ -31,7 +41,8 @@ describe("getObservationContent - BrowserObservation", () => {
         kind: "BrowserObservation",
         output: "Browser action completed",
         error: null,
-        screenshot_data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        screenshot_data:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
       },
     };
 
@@ -39,7 +50,7 @@ describe("getObservationContent - BrowserObservation", () => {
 
     // Should call setScreenshotSrc with properly formatted data URL
     expect(mockSetScreenshotSrc).toHaveBeenCalledWith(
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
     );
 
     // Should return the output content
@@ -55,7 +66,8 @@ describe("getObservationContent - BrowserObservation", () => {
         kind: "BrowserObservation",
         output: "Browser action completed",
         error: null,
-        screenshot_data: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        screenshot_data:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
       },
     };
 
@@ -63,7 +75,7 @@ describe("getObservationContent - BrowserObservation", () => {
 
     // Should use the screenshot data as-is since it already has the data: prefix
     expect(mockSetScreenshotSrc).toHaveBeenCalledWith(
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
     );
   });
 
@@ -120,5 +132,136 @@ describe("getObservationContent - BrowserObservation", () => {
 
     // Should provide default success message
     expect(result).toBe("Browser action completed successfully.");
+  });
+
+  it("should extract URL from most recent browser navigate action when screenshot is available", () => {
+    const mockBrowserObservationEvent: ObservationEvent<BrowserObservation> = {
+      id: "obs-id",
+      timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      observation: {
+        kind: "BrowserObservation",
+        output: "Page loaded successfully",
+        error: null,
+        screenshot_data: "base64data",
+        is_error: false,
+      },
+    };
+
+    const mockBrowserNavigateEvent: ActionEvent<BrowserNavigateAction> = {
+      id: "action-id",
+      timestamp: "2024-01-01T00:00:00Z",
+      source: "agent",
+      thought: [],
+      action: {
+        kind: "BrowserNavigateAction",
+        url: "https://example.com",
+        new_tab: false,
+      },
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      tool_call: {} as Record<string, unknown>,
+      llm_response_id: "response-id",
+      security_risk: "LOW",
+    };
+
+    const allEvents: OpenHandsEvent[] = [
+      mockBrowserNavigateEvent,
+      mockBrowserObservationEvent,
+    ];
+
+    const result = getObservationContent(
+      mockBrowserObservationEvent,
+      allEvents,
+    );
+
+    // Should update browser store with screenshot and URL
+    expect(mockSetScreenshotSrc).toHaveBeenCalledWith(
+      "data:image/png;base64,base64data",
+    );
+    expect(mockSetUrl).toHaveBeenCalledWith("https://example.com");
+    expect(result).toBe("**Output:**\nPage loaded successfully");
+  });
+
+  it("should not extract URL when no screenshot data is available", () => {
+    const mockBrowserObservationEvent: ObservationEvent<BrowserObservation> = {
+      id: "obs-id",
+      timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      observation: {
+        kind: "BrowserObservation",
+        output: "Page loaded successfully",
+        error: null,
+        screenshot_data: null,
+        is_error: false,
+      },
+    };
+
+    const mockBrowserNavigateEvent: ActionEvent<BrowserNavigateAction> = {
+      id: "action-id",
+      timestamp: "2024-01-01T00:00:00Z",
+      source: "agent",
+      thought: [],
+      action: {
+        kind: "BrowserNavigateAction",
+        url: "https://example.com",
+        new_tab: false,
+      },
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      tool_call: {} as Record<string, unknown>,
+      llm_response_id: "response-id",
+      security_risk: "LOW",
+    };
+
+    const allEvents: OpenHandsEvent[] = [
+      mockBrowserNavigateEvent,
+      mockBrowserObservationEvent,
+    ];
+
+    const result = getObservationContent(
+      mockBrowserObservationEvent,
+      allEvents,
+    );
+
+    // Should not update browser store when no screenshot
+    expect(mockSetScreenshotSrc).not.toHaveBeenCalled();
+    expect(mockSetUrl).not.toHaveBeenCalled();
+    expect(result).toBe("**Output:**\nPage loaded successfully");
+  });
+
+  it("should handle case when no browser navigate action is found", () => {
+    const mockBrowserObservationEvent: ObservationEvent<BrowserObservation> = {
+      id: "obs-id",
+      timestamp: "2024-01-01T00:00:00Z",
+      source: "environment",
+      tool_name: "browser_navigate",
+      tool_call_id: "call-id",
+      observation: {
+        kind: "BrowserObservation",
+        output: "Page loaded successfully",
+        error: null,
+        screenshot_data: "base64data",
+        is_error: false,
+      },
+    };
+
+    const allEvents: OpenHandsEvent[] = [mockBrowserObservationEvent];
+
+    const result = getObservationContent(
+      mockBrowserObservationEvent,
+      allEvents,
+    );
+
+    // Should update screenshot but not URL
+    expect(mockSetScreenshotSrc).toHaveBeenCalledWith(
+      "data:image/png;base64,base64data",
+    );
+    expect(mockSetUrl).not.toHaveBeenCalled();
+    expect(result).toBe("**Output:**\nPage loaded successfully");
   });
 });

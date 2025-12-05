@@ -1,4 +1,4 @@
-import { ObservationEvent } from "#/types/v1/core";
+import { ObservationEvent, OpenHandsEvent } from "#/types/v1/core";
 import { getObservationResult } from "./get-observation-result";
 import { getDefaultEventContent, MAX_CONTENT_LENGTH } from "./shared";
 import i18n from "#/i18n";
@@ -13,6 +13,8 @@ import {
   StrReplaceEditorObservation,
   TaskTrackerObservation,
 } from "#/types/v1/core/base/observation";
+import { isActionEvent } from "#/types/v1/type-guards";
+import { BrowserNavigateAction } from "#/types/v1/core/base/action";
 import { useBrowserStore } from "#/stores/browser-store";
 
 // File Editor Observations
@@ -89,6 +91,7 @@ const getTerminalObservationContent = (
 // Tool Observations
 const getBrowserObservationContent = (
   event: ObservationEvent<BrowserObservation>,
+  allEvents?: OpenHandsEvent[],
 ): string => {
   const { observation } = event;
 
@@ -101,6 +104,25 @@ const getBrowserObservationContent = (
       : `data:image/png;base64,${observation.screenshot_data}`;
 
     useBrowserStore.getState().setScreenshotSrc(screenshotSrc);
+
+    // Try to find the URL from the most recent browser navigate action
+    if (allEvents) {
+      const currentEventIndex = allEvents.findIndex((e) => e.id === event.id);
+      if (currentEventIndex !== -1) {
+        // Look backwards from current event to find the most recent browser navigate action
+        for (let i = currentEventIndex - 1; i >= 0; i -= 1) {
+          const prevEvent = allEvents[i];
+          if (
+            isActionEvent(prevEvent) &&
+            prevEvent.action.kind === "BrowserNavigateAction"
+          ) {
+            const navigateAction = prevEvent.action as BrowserNavigateAction;
+            useBrowserStore.getState().setUrl(navigateAction.url);
+            break;
+          }
+        }
+      }
+    }
   }
 
   // Extract text content from the observation
@@ -227,7 +249,10 @@ const getFinishObservationContent = (
   return content;
 };
 
-export const getObservationContent = (event: ObservationEvent): string => {
+export const getObservationContent = (
+  event: ObservationEvent,
+  allEvents?: OpenHandsEvent[],
+): string => {
   const observationType = event.observation.kind;
 
   switch (observationType) {
@@ -248,6 +273,7 @@ export const getObservationContent = (event: ObservationEvent): string => {
     case "BrowserObservation":
       return getBrowserObservationContent(
         event as ObservationEvent<BrowserObservation>,
+        allEvents,
       );
 
     case "MCPToolObservation":

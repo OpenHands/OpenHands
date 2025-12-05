@@ -113,12 +113,13 @@ const renderUserMessageWithSkillReady = (
         <GenericEventMessageWrapper
           event={skillReadyEvent}
           isLastMessage={isLastMessage}
+          allEvents={messages}
         />
       </>
     );
   } catch (error) {
     // If skill ready event creation fails, just render the user message
-    console.error("Failed to create skill ready event:", error);
+    // Failed to create skill ready event, fallback to user message
     return (
       <UserAssistantEventMessage
         event={messageEvent}
@@ -191,6 +192,7 @@ export function EventMessage({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          allEvents={messages}
         />
       </>
     );
@@ -211,6 +213,7 @@ export function EventMessage({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          allEvents={messages}
         />
       </>
     );
@@ -241,6 +244,10 @@ export function EventMessage({
 
   // Generic fallback for all other events
   return (
-    <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
+    <GenericEventMessageWrapper
+      event={event}
+      isLastMessage={isLastMessage}
+      allEvents={messages}
+    />
   );
 }

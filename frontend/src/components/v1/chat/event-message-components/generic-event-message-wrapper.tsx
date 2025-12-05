@@ -14,13 +14,15 @@ import { MarkdownRenderer } from "#/components/features/markdown/markdown-render
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
   isLastMessage: boolean;
+  allEvents?: OpenHandsEvent[];
 }
 
 export function GenericEventMessageWrapper({
   event,
   isLastMessage,
+  allEvents,
 }: GenericEventMessageWrapperProps) {
-  const { title, details } = getEventContent(event);
+  const { title, details } = getEventContent(event, allEvents);
 
   // SkillReadyEvent is not an observation event, so skip the observation checks
   if (!isSkillReadyEvent(event)) {
