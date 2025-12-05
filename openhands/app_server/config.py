@@ -74,6 +74,11 @@ def get_default_web_url() -> str | None:
     return f'https://{web_host}'
 
 
+def get_openhands_provider_base_url() -> str | None:
+    """Return the base URL for the OpenHands provider, if configured."""
+    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or None
+
+
 def _get_default_lifespan():
     # Check legacy parameters for saas mode. If we are in SAAS mode do not apply
     # OSS alembic migrations
@@ -87,6 +92,10 @@ class AppServerConfig(OpenHandsModel):
     web_url: str | None = Field(
         default_factory=get_default_web_url,
         description='The URL where OpenHands is running (e.g., http://localhost:3000)',
+    )
+    openhands_provider_base_url: str | None = Field(
+        default_factory=get_openhands_provider_base_url,
+        description='Base URL for the OpenHands provider',
     )
     # Dependency Injection Injectors
     event: EventServiceInjector | None = None

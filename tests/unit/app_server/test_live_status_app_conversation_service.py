@@ -50,6 +50,7 @@ class TestLiveStatusAppConversationService:
             sandbox_startup_poll_frequency=1,
             httpx_client=self.mock_httpx_client,
             web_url='https://test.example.com',
+            openhands_provider_base_url='https://provider.example.com',
             access_token_hard_timeout=None,
             app_mode='test',
             keycloak_auth_cookie=None,
@@ -64,6 +65,7 @@ class TestLiveStatusAppConversationService:
         self.mock_user.confirmation_mode = False
         self.mock_user.search_api_key = None  # Default to None
         self.mock_user.condenser_max_size = None  # Default to None
+        self.mock_user.llm_base_url = 'https://api.openai.com/v1'
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -202,6 +204,70 @@ class TestLiveStatusAppConversationService:
         assert 'default' in mcp_config
         assert mcp_config['default']['url'] == 'https://test.example.com/mcp/mcp'
         assert mcp_config['default']['headers']['X-Session-API-Key'] == 'mcp_api_key'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_openhands_model_prefers_user_base_url(self):
+        """openhands/* model uses user.llm_base_url when provided."""
+        # Arrange
+        self.mock_user.llm_model = 'openhands/special'
+        self.mock_user.llm_base_url = 'https://user-llm.example.com'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model
+        )
+
+        # Assert
+        assert llm.base_url == 'https://user-llm.example.com'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_openhands_model_uses_provider_default(self):
+        """openhands/* model falls back to configured provider base URL."""
+        # Arrange
+        self.mock_user.llm_model = 'openhands/default'
+        self.mock_user.llm_base_url = None
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model
+        )
+
+        # Assert
+        assert llm.base_url == 'https://provider.example.com'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_openhands_model_no_base_urls(self):
+        """openhands/* model sets base_url to None when no sources available."""
+        # Arrange
+        self.mock_user.llm_model = 'openhands/default'
+        self.mock_user.llm_base_url = None
+        self.service.openhands_provider_base_url = None
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model
+        )
+
+        # Assert
+        assert llm.base_url is None
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_non_openhands_model_ignores_provider(self):
+        """Non-openhands model ignores provider base URL and uses user base URL."""
+        # Arrange
+        self.mock_user.llm_model = 'gpt-4'
+        self.mock_user.llm_base_url = 'https://user-llm.example.com'
+        self.service.openhands_provider_base_url = 'https://provider.example.com'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(self.mock_user, None)
+
+        # Assert
+        assert llm.base_url == 'https://user-llm.example.com'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_user_default_model(self):

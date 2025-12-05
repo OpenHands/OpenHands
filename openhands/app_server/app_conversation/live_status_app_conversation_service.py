@@ -102,6 +102,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     sandbox_startup_poll_frequency: int
     httpx_client: httpx.AsyncClient
     web_url: str | None
+    openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
     keycloak_auth_cookie: str | None = None
@@ -586,9 +587,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """
         # Configure LLM
         model = llm_model or user.llm_model
+        base_url = user.llm_base_url
+        if model and model.startswith('openhands/'):
+            base_url = user.llm_base_url or self.openhands_provider_base_url
         llm = LLM(
             model=model,
-            base_url=user.llm_base_url,
+            base_url=base_url,
             api_key=user.llm_api_key,
             usage_id='agent',
         )
@@ -1078,6 +1082,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 sandbox_startup_poll_frequency=self.sandbox_startup_poll_frequency,
                 httpx_client=httpx_client,
                 web_url=web_url,
+                openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
                 keycloak_auth_cookie=keycloak_auth_cookie,
