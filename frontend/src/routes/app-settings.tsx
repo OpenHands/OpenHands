@@ -239,18 +239,20 @@ function AppSettingsScreen() {
             </SettingsSwitch>
           )}
 
-          <SettingsInput
-            testId="max-budget-per-task-input"
-            name="max-budget-per-task-input"
-            type="number"
-            label={t(I18nKey.SETTINGS$MAX_BUDGET_PER_CONVERSATION)}
-            defaultValue={settings.MAX_BUDGET_PER_TASK?.toString() || ""}
-            onChange={checkIfMaxBudgetPerTaskHasChanged}
-            placeholder={t(I18nKey.SETTINGS$MAXIMUM_BUDGET_USD)}
-            min={1}
-            step={1}
-            className="w-full max-w-[680px]" // Match the width of the language field
-          />
+          {!settings?.V1_ENABLED && (
+            <SettingsInput
+              testId="max-budget-per-task-input"
+              name="max-budget-per-task-input"
+              type="number"
+              label={t(I18nKey.SETTINGS$MAX_BUDGET_PER_CONVERSATION)}
+              defaultValue={settings.MAX_BUDGET_PER_TASK?.toString() || ""}
+              onChange={checkIfMaxBudgetPerTaskHasChanged}
+              placeholder={t(I18nKey.SETTINGS$MAXIMUM_BUDGET_USD)}
+              min={1}
+              step={1}
+              className="w-full max-w-[680px]" // Match the width of the language field
+            />
+          )}
 
           <div className="border-t border-t-tertiary pt-6 mt-2">
             <h3 className="text-lg font-medium mb-2">
