@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -70,4 +72,4 @@ class CredentialMappingModel(BaseModel):
 class GETCredentialMappings(BaseModel):
     """Credential mappings list"""
 
-    credential_mappings: list[dict[str, str | None]]
+    credential_mappings: list[dict[str, Any]]
