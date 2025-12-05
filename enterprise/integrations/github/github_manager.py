@@ -28,6 +28,7 @@ from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from server.utils.conversation_callback_utils import register_callback_processor
 
+from enterprise.integrations.v1_utils import get_saas_user_auth
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.server.types import LLMAuthenticationError, MissingSettingsError
@@ -164,8 +165,18 @@ class GithubManager(Manager):
             )
 
         if await self.is_job_requested(message):
+            payload = message.message.get('payload', {})
+            user_id = payload['sender']['id']
+            keycloak_user_id = await self.token_manager.get_user_id_from_idp_user_id(
+                user_id, ProviderType.GITHUB
+            )
+
+            saas_user_auth = await get_saas_user_auth(
+                keycloak_user_id, self.token_manager
+            )
+
             github_view = await GithubFactory.create_github_view_from_payload(
-                message, self.token_manager
+                message, keycloak_user_id, saas_user_auth
             )
             logger.info(
                 f'[GitHub] Creating job for {github_view.user_info.username} in {github_view.full_repo_name}#{github_view.issue_number}'

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from github import Github, GithubIntegration
@@ -8,6 +9,7 @@ from integrations.github.github_types import (
     WorkflowRunStatus,
 )
 from integrations.models import Message
+from integrations.resolver_context import ResolverUserContext
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
     ENABLE_PROACTIVE_CONVERSATION_STARTERS,
@@ -17,7 +19,6 @@ from integrations.utils import (
     has_exact_mention,
 )
 from jinja2 import Environment
-from pydantic.dataclasses import dataclass
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from server.config import get_config
@@ -34,18 +35,16 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.config import get_app_conversation_service
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
-from openhands.app_server.user.user_context import UserContext
-from openhands.app_server.user.user_models import UserInfo
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.github.github_service import GithubServiceImpl
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import Comment
 from openhands.sdk import TextContent
-from openhands.sdk.conversation.secret_source import SecretSource
 from openhands.server.services.conversation_service import (
     initialize_conversation,
     start_conversation,
 )
+from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationMetadata,
     ConversationTrigger,
@@ -53,52 +52,6 @@ from openhands.storage.data_models.conversation_metadata import (
 from openhands.utils.async_utils import call_sync_from_async
 
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
-
-
-class GithubUserContext(UserContext):
-    """User context for GitHub integration that provides user info without web request."""
-
-    def __init__(self, keycloak_user_id: str, git_provider_tokens: PROVIDER_TOKEN_TYPE):
-        self.keycloak_user_id = keycloak_user_id
-        self.git_provider_tokens = git_provider_tokens
-        self.settings_store = SaasSettingsStore(
-            user_id=self.keycloak_user_id,
-            session_maker=session_maker,
-            config=get_config(),
-        )
-
-        self.secrets_store = SaasSecretsStore(
-            self.keycloak_user_id, session_maker, get_config()
-        )
-
-    async def get_user_id(self) -> str | None:
-        return self.keycloak_user_id
-
-    async def get_user_info(self) -> UserInfo:
-        user_settings = await self.settings_store.load()
-        return UserInfo(
-            id=self.keycloak_user_id,
-            **user_settings.model_dump(context={'expose_secrets': True}),
-        )
-
-    async def get_authenticated_git_url(self, repository: str) -> str:
-        # This would need to be implemented based on the git provider tokens
-        # For now, return a basic HTTPS URL
-        return f'https://github.com/{repository}.git'
-
-    async def get_latest_token(self, provider_type: ProviderType) -> str | None:
-        # Return the appropriate token from git_provider_tokens
-        if provider_type == ProviderType.GITHUB and self.git_provider_tokens:
-            return self.git_provider_tokens.get(ProviderType.GITHUB)
-        return None
-
-    async def get_secrets(self) -> dict[str, SecretSource]:
-        # Return empty dict for now - GitHub integration handles secrets separately
-        user_secrets = await self.secrets_store.load()
-        return dict(user_secrets.custom_secrets) if user_secrets else {}
-
-    async def get_mcp_api_key(self) -> str | None:
-        raise NotImplementedError()
 
 
 async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
@@ -178,6 +131,7 @@ class GithubIssue(ResolverViewInterface):
     title: str
     description: str
     previous_comments: list[Comment]
+    saas_user_auth: UserAuth
 
     async def _load_resolver_context(self):
         github_service = GithubServiceImpl(
@@ -326,7 +280,7 @@ class GithubIssue(ResolverViewInterface):
         )
 
         # Set up the GitHub user context for the V1 system
-        github_user_context = GithubUserContext(
+        github_user_context = ResolverUserContext(
             keycloak_user_id=self.user_info.keycloak_user_id,
             git_provider_tokens=git_provider_tokens,
         )
@@ -806,7 +760,7 @@ class GithubFactory:
 
     @staticmethod
     async def create_github_view_from_payload(
-        message: Message, token_manager: TokenManager
+        message: Message, keycloak_user_id: str, saas_user_auth: UserAuth
     ) -> ResolverViewInterface:
         """Create the appropriate class (GithubIssue or GithubPRComment) based on the payload.
         Also return metadata about the event (e.g., action type).
@@ -816,17 +770,10 @@ class GithubFactory:
         user_id = payload['sender']['id']
         username = payload['sender']['login']
 
-        keyloak_user_id = await token_manager.get_user_id_from_idp_user_id(
-            user_id, ProviderType.GITHUB
-        )
-
-        if keyloak_user_id is None:
-            logger.warning(f'Got invalid keyloak user id for GitHub User {user_id} ')
-
         selected_repo = GithubFactory.get_full_repo_name(repo_obj)
         is_public_repo = not repo_obj.get('private', True)
         user_info = UserData(
-            user_id=user_id, username=username, keycloak_user_id=keyloak_user_id
+            user_id=user_id, username=username, keycloak_user_id=keycloak_user_id
         )
 
         installation_id = message.message['installation']
@@ -850,6 +797,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
+                saas_user_auth=saas_user_auth,
             )
 
         elif GithubFactory.is_issue_comment(message):
@@ -875,6 +823,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
+                saas_user_auth=saas_user_auth,
             )
 
         elif GithubFactory.is_pr_comment(message):
@@ -916,6 +865,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
+                saas_user_auth=saas_user_auth,
             )
 
         elif GithubFactory.is_inline_pr_comment(message):
@@ -949,6 +899,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
+                saas_user_auth=saas_user_auth,
             )
 
         else:
