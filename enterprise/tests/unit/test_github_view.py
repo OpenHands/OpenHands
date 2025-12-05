@@ -100,6 +100,9 @@ class TestGithubV1ConversationRouting(TestCase):
             },
         )
 
+        # Create a mock saas_user_auth
+        mock_saas_user_auth = MagicMock()
+
         self.github_issue = GithubIssue(
             user_info=user_data,
             full_repo_name='test/repo',
@@ -114,6 +117,7 @@ class TestGithubV1ConversationRouting(TestCase):
             title='Test Issue',
             description='Test issue description',
             previous_comments=[],
+            saas_user_auth=mock_saas_user_auth,
         )
 
     @patch('integrations.github.github_view.get_user_v1_enabled_setting')
