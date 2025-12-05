@@ -26,24 +26,26 @@ from openhands.events.stream import EventSource, EventStream
 from openhands.storage import get_file_store
 
 # Reusable action/observation mocks for stuck-pattern tests
-Ap = CmdRunAction(command='ls')
-Op = CmdOutputObservation(command='ls', content='file1.txt')
+cmd_ls_action = CmdRunAction(command='ls')
+cmd_ls_observation = CmdOutputObservation(command='ls', content='file1.txt')
 
-Ai = FileReadAction(path='file1.txt')
-Oi = FileReadObservation(content='File content', path='file1.txt')
+read_file1_action = FileReadAction(path='file1.txt')
+read_file1_observation = FileReadObservation(content='File content', path='file1.txt')
 
-Adp = CmdRunAction(command='pwd')
-Adi = FileReadAction(path='file2.txt')
+pwd_action = CmdRunAction(command='pwd')
+read_file2_action = FileReadAction(path='file2.txt')
 
-Odp = CmdOutputObservation(command='ls_DIFFERENT', content='file1.txt')
-Odi = FileReadObservation(content='File content', path='file2.txt')
+cmd_ls_different_observation = CmdOutputObservation(
+    command='ls_DIFFERENT', content='file1.txt'
+)
+read_file2_observation = FileReadObservation(content='File content', path='file2.txt')
 
 
 class MockOtherEvent(Event):
     """Event type used to verify non-action/observation events are ignored."""
 
 
-E_outro = MockOtherEvent()
+other_event = MockOtherEvent()
 
 
 def collect_events(stream):
@@ -822,38 +824,20 @@ class TestStuckDetector:
     def stuck_detector_mcdc(self):
         return StuckDetector(state=None)
 
-    def test_success_pattern_detected(self, stuck_detector_mcdc: StuckDetector):
-        history: list[Event] = [
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1, O1, A2, O2
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3, O3, A4, O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5, O5, A6, O6
-        ]
-        assert (
-            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0) is True
-        )
 
     def test_fail_guard_five_actions(self, stuck_detector_mcdc: StuckDetector):
         history: list[Event] = [
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1, O1, A2, O2
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3, O3, A4, O4
-            Ai,
-            Oi,  # A5, O5
-        ]  # Total 5 Ações, 5 Obs
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1, obs_1, action_2, obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3, obs_3, action_4, obs_4
+            read_file1_action,
+            read_file1_observation,  # action_5, obs_5
+        ]  # Total 5 actions, 5 observations
         assert (
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
             is False
@@ -861,210 +845,130 @@ class TestStuckDetector:
 
     def test_fail_guard_five_obs(self, stuck_detector_mcdc: StuckDetector):
         history: list[Event] = [
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1, O1, A2, O2
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3, O3, A4, O4
-            Ai,
-            Oi,
-            Ap,  # A5, O5, A6 (Falta O6)
-        ]  # Total 6 Ações, 5 Obs
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1, obs_1, action_2, obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3, obs_3, action_4, obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,  # action_5, obs_5, action_6 (missing obs_6)
+        ]  # Total 6 actions, 5 observations
         assert (
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
             is False
         )
 
     def test_fail_actions_break_A6_A4(self, stuck_detector_mcdc: StuckDetector):
-        # A6(Ap) != A4(Adp)
+        # action_6(cmd_ls_action) != action_4(pwd_action)
         history: list[Event] = [
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1,O1, A2,O2
-            Ai,
-            Oi,
-            Adp,
-            Op,  # A3,O3, A4(Adp),O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5,O5, A6(Ap),O6
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1,obs_1, action_2,obs_2
+            read_file1_action,
+            read_file1_observation,
+            pwd_action,
+            cmd_ls_observation,  # action_3,obs_3, action_4(pwd_action),obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5,obs_5, action_6(cmd_ls_action),obs_6
         ]
         assert (
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
             is False
         )
 
-    def test_fail_actions_break_A6_A2(self, stuck_detector_mcdc: StuckDetector):
-        # A6(Ap) != A2(Adp)
-        history: list[Event] = [
-            Ai,
-            Oi,
-            Adp,
-            Op,  # A1,O1, A2(Adp),O2
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3,O3, A4(Ap),O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5,O5, A6(Ap),O6
-        ]
-        assert (
-            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
-            is False
-        )
 
     def test_fail_actions_break_A5_A3(self, stuck_detector_mcdc: StuckDetector):
-        # A5(Ai) != A3(Adi)
+        # action_5(read_file1_action) != action_3(read_file2_action)
         history: list[Event] = [
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1,O1, A2,O2
-            Adi,
-            Oi,
-            Ap,
-            Op,  # A3(Adi),O3, A4,O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5(Ai),O5, A6,O6
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1,obs_1, action_2,obs_2
+            read_file2_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3(read_file2_action),obs_3, action_4,obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5(read_file1_action),obs_5, action_6,obs_6
         ]
         assert (
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
             is False
         )
 
-    def test_fail_actions_break_A5_A1(self, stuck_detector_mcdc: StuckDetector):
-        # A5(Ai) != A1(Adi)
-        history: list[Event] = [
-            Adi,
-            Oi,
-            Ap,
-            Op,  # A1(Adi),O1, A2,O2
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3(Ai),O3, A4,O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5(Ai),O5, A6,O6
-        ]
-        assert (
-            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
-            is False
-        )
 
     def test_fail_obs_break_O6_O4(self, stuck_detector_mcdc: StuckDetector):
-        # O6(Op) != O4(Odp)
+        # obs_6(cmd_ls_observation) != obs_4(cmd_ls_different_observation)
         history: list[Event] = [
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1,O1, A2,O2
-            Ai,
-            Oi,
-            Ap,
-            Odp,  # A3,O3, A4,O4(Odp)
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5,O5, A6,O6(Op)
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1,obs_1, action_2,obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_different_observation,  # action_3,obs_3, action_4,obs_4(cmd_ls_different_observation)
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5,obs_5, action_6,obs_6(cmd_ls_observation)
         ]
         assert (
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
             is False
         )
 
-    def test_fail_obs_break_O6_O2(self, stuck_detector_mcdc: StuckDetector):
-        # O6(Op) != O2(Odp)
-        history: list[Event] = [
-            Ai,
-            Oi,
-            Ap,
-            Odp,  # A1,O1, A2,O2(Odp)
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3,O3, A4,O4(Op)
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5,O5, A6,O6(Op)
-        ]
-        assert (
-            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
-            is False
-        )
 
     def test_fail_obs_break_O5_O3(self, stuck_detector_mcdc: StuckDetector):
-        # O5(Oi) != O3(Odi)
+        # obs_5(read_file1_observation) != obs_3(read_file2_observation)
         history: list[Event] = [
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1,O1, A2,O2
-            Ai,
-            Odi,
-            Ap,
-            Op,  # A3,O3(Odi), A4,O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5(Oi),O5, A6,O6
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1,obs_1, action_2,obs_2
+            read_file1_action,
+            read_file2_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3,obs_3(read_file2_observation), action_4,obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5(read_file1_observation),obs_5, action_6,obs_6
         ]
         assert (
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
             is False
         )
 
-    def test_fail_obs_break_O5_O1(self, stuck_detector_mcdc: StuckDetector):
-        # O5(Oi) != O1(Odi)
-        history: list[Event] = [
-            Ai,
-            Odi,
-            Ap,
-            Op,  # A1,O1(Odi), A2,O2
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3,O3(Oi), A4,O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5(Oi),O5, A6,O6
-        ]
-        assert (
-            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
-            is False
-        )
 
     def test_loop_ignores_other_events(self, stuck_detector_mcdc: StuckDetector):
         history: list[Event] = [
-            E_outro,
-            Ai,
-            Oi,
-            E_outro,  # A1, O1
-            Ap,
-            Op,
-            E_outro,
-            Ai,
-            Oi,  # A2, O2, A3, O3
-            Ap,
-            Op,
-            E_outro,
-            Ai,
-            Oi,  # A4, O4, A5, O5
-            Ap,
-            Op,
-            E_outro,  # A6, O6
+            other_event,
+            read_file1_action,
+            read_file1_observation,
+            other_event,  # action_1, obs_1
+            cmd_ls_action,
+            cmd_ls_observation,
+            other_event,
+            read_file1_action,
+            read_file1_observation,  # action_2, obs_2, action_3, obs_3
+            cmd_ls_action,
+            cmd_ls_observation,
+            other_event,
+            read_file1_action,
+            read_file1_observation,  # action_4, obs_4, action_5, obs_5
+            cmd_ls_action,
+            cmd_ls_observation,
+            other_event,  # action_6, obs_6
         ]
 
         assert (
@@ -1073,19 +977,19 @@ class TestStuckDetector:
 
     def test_loop_ignores_extra_actions(self, stuck_detector_mcdc: StuckDetector):
         history: list[Event] = [
-            Ap,  # Ação extra (A0), será ignorada
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1, O1, A2, O2
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3, O3, A4, O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5, O5, A6, O6
+            cmd_ls_action,  # Extra action (action_0), will be ignored
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1, obs_1, action_2, obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3, obs_3, action_4, obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5, obs_5, action_6, obs_6
         ]
         assert (
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0) is True
@@ -1093,19 +997,19 @@ class TestStuckDetector:
 
     def test_loop_ignores_extra_observations(self, stuck_detector_mcdc: StuckDetector):
         history: list[Event] = [
-            Oi,  # Observação extra (O0), será ignorada
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A1, O1, A2, O2
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A3, O3, A4, O4
-            Ai,
-            Oi,
-            Ap,
-            Op,  # A5, O5, A6, O6
+            read_file1_observation,  # Extra observation (obs_0), will be ignored
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1, obs_1, action_2, obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3, obs_3, action_4, obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5, obs_5, action_6, obs_6
         ]
         assert (
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0) is True
