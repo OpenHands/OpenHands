@@ -280,10 +280,7 @@ class GithubIssue(ResolverViewInterface):
         )
 
         # Set up the GitHub user context for the V1 system
-        github_user_context = ResolverUserContext(
-            keycloak_user_id=self.user_info.keycloak_user_id,
-            git_provider_tokens=git_provider_tokens,
-        )
+        github_user_context = ResolverUserContext(saas_user_auth=self.saas_user_auth)
         setattr(injector_state, USER_CONTEXT_ATTR, github_user_context)
 
         async with get_app_conversation_service(
