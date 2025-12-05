@@ -7,7 +7,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.events.action.message import MessageAction
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import (
-    CUSTOM_SECRETS_TYPE_WITH_JSON_SCHEMA,
+    CUSTOM_SECRETS_TYPE,
     PROVIDER_TOKEN_TYPE,
     ProviderToken,
 )
@@ -73,7 +73,7 @@ async def initialize_conversation(
 async def start_conversation(
     user_id: str | None,
     git_provider_tokens: PROVIDER_TOKEN_TYPE | None,
-    custom_secrets: CUSTOM_SECRETS_TYPE_WITH_JSON_SCHEMA | None,
+    custom_secrets: CUSTOM_SECRETS_TYPE | None,
     initial_user_msg: str | None,
     image_urls: list[str] | None,
     replay_json: str | None,
@@ -164,7 +164,7 @@ async def start_conversation(
 async def create_new_conversation(
     user_id: str | None,
     git_provider_tokens: PROVIDER_TOKEN_TYPE | None,
-    custom_secrets: CUSTOM_SECRETS_TYPE_WITH_JSON_SCHEMA | None,
+    custom_secrets: CUSTOM_SECRETS_TYPE | None,
     selected_repository: str | None,
     selected_branch: str | None,
     initial_user_msg: str | None,

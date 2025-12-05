@@ -9,7 +9,6 @@ import { GitLabTokenInput } from "#/components/features/settings/git-settings/gi
 import { BitbucketTokenInput } from "#/components/features/settings/git-settings/bitbucket-token-input";
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
-import { ConfigureAzureDevOpsAnchor } from "#/components/features/settings/git-settings/configure-azure-devops-anchor";
 import { InstallSlackAppAnchor } from "#/components/features/settings/git-settings/install-slack-app-anchor";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -148,18 +147,6 @@ function GitSettingsScreen() {
                   {t(I18nKey.SETTINGS$GITHUB)}
                 </h3>
                 <ConfigureGitHubRepositoriesAnchor slug={config.APP_SLUG!} />
-              </div>
-              <div className="w-1/2 border-b border-gray-200" />
-            </>
-          )}
-
-          {shouldRenderExternalConfigureButtons && !isLoading && (
-            <>
-              <div className="pb-1 mt-6 flex flex-col">
-                <h3 className="text-xl font-medium text-white">
-                  {t(I18nKey.SETTINGS$AZURE_DEVOPS)}
-                </h3>
-                <ConfigureAzureDevOpsAnchor />
               </div>
               <div className="w-1/2 border-b border-gray-200" />
             </>

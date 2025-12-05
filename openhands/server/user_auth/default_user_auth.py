@@ -88,6 +88,9 @@ class DefaultUserAuth(UserAuth):
             return None
         return user_secrets.provider_tokens
 
+    async def get_mcp_api_key(self) -> str | None:
+        return None
+
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         user_auth = DefaultUserAuth()

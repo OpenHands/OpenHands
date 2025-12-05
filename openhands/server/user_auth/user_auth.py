@@ -75,6 +75,10 @@ class UserAuth(ABC):
     def get_auth_type(self) -> AuthType | None:
         return None
 
+    @abstractmethod
+    async def get_mcp_api_key(self) -> str | None:
+        """Get an mcp api key for the user"""
+
     @classmethod
     @abstractmethod
     async def get_instance(cls, request: Request) -> UserAuth:

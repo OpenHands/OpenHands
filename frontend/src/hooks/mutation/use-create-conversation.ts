@@ -4,8 +4,8 @@ import V1ConversationService from "#/api/conversation-service/v1-conversation-se
 import { SuggestedTask } from "#/utils/types";
 import { Provider } from "#/types/settings";
 import { CreateMicroagent, Conversation } from "#/api/open-hands.types";
-import { USE_V1_CONVERSATION_API } from "#/utils/feature-flags";
 import { useTracking } from "#/hooks/use-tracking";
+import { useSettings } from "#/hooks/query/use-settings";
 
 interface CreateConversationVariables {
   query?: string;
@@ -34,6 +34,7 @@ interface CreateConversationResponse extends Partial<Conversation> {
 export const useCreateConversation = () => {
   const queryClient = useQueryClient();
   const { trackConversationCreated } = useTracking();
+  const { data: settings } = useSettings();
 
   return useMutation({
     mutationKey: ["create-conversation"],
@@ -50,7 +51,7 @@ export const useCreateConversation = () => {
         agentType,
       } = variables;
 
-      const useV1 = USE_V1_CONVERSATION_API() && !createMicroagent;
+      const useV1 = !!settings?.V1_ENABLED && !createMicroagent;
 
       if (useV1) {
         // Use V1 API - creates a conversation start task

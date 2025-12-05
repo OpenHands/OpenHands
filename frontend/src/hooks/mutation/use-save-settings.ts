@@ -35,6 +35,7 @@ const saveSettingsMutationFn = async (settings: Partial<PostSettings>) => {
       settings.GIT_USER_NAME?.trim() || DEFAULT_SETTINGS.GIT_USER_NAME,
     git_user_email:
       settings.GIT_USER_EMAIL?.trim() || DEFAULT_SETTINGS.GIT_USER_EMAIL,
+    v1_enabled: settings.V1_ENABLED,
   };
 
   await SettingsService.saveSettings(apiSettings);

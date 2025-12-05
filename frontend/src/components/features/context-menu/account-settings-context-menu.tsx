@@ -25,7 +25,14 @@ export function AccountSettingsContextMenu({
   const { data: config } = useConfig();
 
   const isSaas = config?.APP_MODE === "saas";
-  const navItems = (isSaas ? SAAS_NAV_ITEMS : OSS_NAV_ITEMS).map((item) => ({
+
+  // Get navigation items and filter out LLM settings if the feature flag is enabled
+  let items = isSaas ? SAAS_NAV_ITEMS : OSS_NAV_ITEMS;
+  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
+    items = items.filter((item) => item.to !== "/settings");
+  }
+
+  const navItems = items.map((item) => ({
     ...item,
     icon: React.cloneElement(item.icon, {
       width: 16,
