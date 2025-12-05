@@ -32,13 +32,7 @@ export function Sidebar() {
 
   const { pathname } = useLocation();
 
-  // TODO: Remove HIDE_LLM_SETTINGS check once released
-  const shouldHideLlmSettings =
-    config?.FEATURE_FLAGS.HIDE_LLM_SETTINGS && config?.APP_MODE === "saas";
-
   React.useEffect(() => {
-    if (shouldHideLlmSettings) return;
-
     if (location.pathname === "/settings") {
       setSettingsModalIsOpen(false);
     } else if (

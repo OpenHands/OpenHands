@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   GIT_USER_NAME: "openhands",
   GIT_USER_EMAIL: "openhands@all-hands.dev",
+  V1_ENABLED: false,
 };
 
 /**

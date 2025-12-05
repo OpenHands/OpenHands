@@ -68,6 +68,7 @@ describe("Manage Org Route", () => {
   });
 
   afterEach(() => {
+    vi.clearAllMocks();
     // Reset organization mock data to ensure clean state between tests
     resetOrgMockData();
   });

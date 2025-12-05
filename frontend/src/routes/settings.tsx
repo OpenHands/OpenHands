@@ -36,6 +36,15 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     return redirect("/settings");
   }
 
+  // If LLM settings are hidden and user tries to access the LLM settings page
+  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS && pathname === "/settings") {
+    // Redirect to the first available settings page
+    if (isSaas) {
+      return redirect("/settings/user");
+    }
+    return redirect("/settings/mcp");
+  }
+
   return null;
 };
 
@@ -54,13 +63,24 @@ function SettingsScreen() {
     } else {
       items.push(...OSS_NAV_ITEMS);
     }
+
+    // Filter out LLM settings if the feature flag is enabled
+    if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
+      return items.filter((item) => item.to !== "/settings");
+    }
+
     return items;
-  }, [isSaas]);
+  }, [isSaas, config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS]);
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {
     const currentItem = navItems.find((item) => item.to === location.pathname);
-    return currentItem ? currentItem.text : "SETTINGS$NAV_LLM";
+    if (currentItem) {
+      return currentItem.text;
+    }
+
+    // Default to the first available navigation item if current page is not found
+    return navItems.length > 0 ? navItems[0].text : "SETTINGS$TITLE";
   }, [navItems, location.pathname]);
 
   return (

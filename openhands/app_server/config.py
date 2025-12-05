@@ -6,7 +6,7 @@ from typing import AsyncContextManager
 
 import httpx
 from fastapi import Depends, Request
-from pydantic import Field
+from pydantic import Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import the event_callback module to ensure all processors are registered
@@ -185,7 +185,13 @@ def config_from_env() -> AppServerConfig:
         )
 
     if config.app_conversation is None:
-        config.app_conversation = LiveStatusAppConversationServiceInjector()
+        tavily_api_key = None
+        tavily_api_key_str = os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY')
+        if tavily_api_key_str:
+            tavily_api_key = SecretStr(tavily_api_key_str)
+        config.app_conversation = LiveStatusAppConversationServiceInjector(
+            tavily_api_key=tavily_api_key
+        )
 
     if config.user is None:
         config.user = AuthUserContextInjector()

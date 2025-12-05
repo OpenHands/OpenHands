@@ -143,6 +143,57 @@ describe("UserContextMenu", () => {
     });
   });
 
+  describe("HIDE_LLM_SETTINGS feature flag", () => {
+    it("should hide LLM settings link when HIDE_LLM_SETTINGS is true", async () => {
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+        APP_MODE: "saas",
+        GITHUB_CLIENT_ID: "test",
+        POSTHOG_CLIENT_KEY: "test",
+        FEATURE_FLAGS: {
+          ENABLE_BILLING: false,
+          HIDE_LLM_SETTINGS: true,
+          ENABLE_JIRA: false,
+          ENABLE_JIRA_DC: false,
+          ENABLE_LINEAR: false,
+        },
+      });
+
+      renderUserContextMenu({ type: "user", onClose: vi.fn });
+
+      await waitFor(() => {
+        // Other nav items should still be visible
+        expect(screen.getByText("SETTINGS$NAV_USER")).toBeInTheDocument();
+        // LLM settings (to: "/settings") should NOT be visible
+        expect(
+          screen.queryByText("COMMON$LANGUAGE_MODEL_LLM"),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("should show LLM settings link when HIDE_LLM_SETTINGS is false", async () => {
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+        APP_MODE: "saas",
+        GITHUB_CLIENT_ID: "test",
+        POSTHOG_CLIENT_KEY: "test",
+        FEATURE_FLAGS: {
+          ENABLE_BILLING: false,
+          HIDE_LLM_SETTINGS: false,
+          ENABLE_JIRA: false,
+          ENABLE_JIRA_DC: false,
+          ENABLE_LINEAR: false,
+        },
+      });
+
+      renderUserContextMenu({ type: "user", onClose: vi.fn });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("COMMON$LANGUAGE_MODEL_LLM"),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
   it("should render additional context items when user is an admin", () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 

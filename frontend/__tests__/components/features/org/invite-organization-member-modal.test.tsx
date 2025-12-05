@@ -1,6 +1,6 @@
 import { within, screen, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { InviteOrganizationMemberModal } from "#/components/features/org/invite-organization-member-modal";
@@ -27,6 +27,10 @@ vi.mock("#/context/use-selected-organization", () => ({
 }));
 
 describe("InviteOrganizationMemberModal", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("should call onClose the modal when the close button is clicked", async () => {
     const onCloseMock = vi.fn();
     renderInviteOrganizationMemberModal({ onClose: onCloseMock });
