@@ -143,11 +143,6 @@ async def get_user_v1_enabled_setting(user_id: str) -> bool:
     Returns:
         True if V1 conversations are enabled for this user, False otherwise
     """
-
-    # If no user ID is provided, we can't check user settings
-    if not user_id:
-        return False
-
     config = get_config()
     settings_store = SaasSettingsStore(
         user_id=user_id, session_maker=session_maker, config=config
