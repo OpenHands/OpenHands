@@ -78,7 +78,7 @@ class TestLiveStatusAppConversationService:
         # Arrange
         base_secrets = {'existing': 'secret'}
         self.mock_user_context.get_secrets.return_value = base_secrets
-        self.mock_user_auth.get_provider_tokens = AsyncMock(return_value=None)
+        self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
 
         # Act
         result = await self.service._setup_secrets_for_git_providers(self.mock_user)
@@ -86,7 +86,7 @@ class TestLiveStatusAppConversationService:
         # Assert
         assert result == base_secrets
         self.mock_user_context.get_secrets.assert_called_once()
-        self.mock_user_context.user_auth.get_provider_tokens.assert_called_once()
+        self.mock_user_context.get_provider_tokens.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_setup_secrets_for_git_providers_with_web_url(self):
@@ -105,7 +105,7 @@ class TestLiveStatusAppConversationService:
             ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
             ProviderType.GITLAB: ProviderToken(token=SecretStr('gitlab_token')),
         }
-        self.mock_user_auth.get_provider_tokens = AsyncMock(
+        self.mock_user_context.get_provider_tokens = AsyncMock(
             return_value=provider_tokens
         )
 
@@ -144,7 +144,7 @@ class TestLiveStatusAppConversationService:
         provider_tokens = {
             ProviderType.GITLAB: ProviderToken(token=SecretStr('gitlab_token')),
         }
-        self.mock_user_auth.get_provider_tokens = AsyncMock(
+        self.mock_user_context.get_provider_tokens = AsyncMock(
             return_value=provider_tokens
         )
 
@@ -175,7 +175,7 @@ class TestLiveStatusAppConversationService:
         provider_tokens = {
             ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
         }
-        self.mock_user_auth.get_provider_tokens = AsyncMock(
+        self.mock_user_context.get_provider_tokens = AsyncMock(
             return_value=provider_tokens
         )
 
@@ -207,7 +207,7 @@ class TestLiveStatusAppConversationService:
         provider_tokens = {
             ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
         }
-        self.mock_user_auth.get_provider_tokens = AsyncMock(
+        self.mock_user_context.get_provider_tokens = AsyncMock(
             return_value=provider_tokens
         )
 
