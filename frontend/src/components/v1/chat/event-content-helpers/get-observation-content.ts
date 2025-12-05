@@ -13,6 +13,7 @@ import {
   StrReplaceEditorObservation,
   TaskTrackerObservation,
 } from "#/types/v1/core/base/observation";
+import { useBrowserStore } from "#/stores/browser-store";
 
 // File Editor Observations
 const getFileEditorObservationContent = (
@@ -91,6 +92,17 @@ const getBrowserObservationContent = (
 ): string => {
   const { observation } = event;
 
+  // Handle screenshot data if available
+  if (observation.screenshot_data) {
+    // Update the browser store with the screenshot data
+    // Add data: prefix if not already present
+    const screenshotSrc = observation.screenshot_data.startsWith("data:")
+      ? observation.screenshot_data
+      : `data:image/png;base64,${observation.screenshot_data}`;
+
+    useBrowserStore.getState().setScreenshotSrc(screenshotSrc);
+  }
+
   // Extract text content from the observation
   const textContent =
     "content" in observation && Array.isArray(observation.content)
@@ -98,14 +110,16 @@ const getBrowserObservationContent = (
           .filter((c) => c.type === "text")
           .map((c) => c.text)
           .join("\n")
-      : "";
+      : observation.output || "";
 
   let contentDetails = "";
 
-  if ("is_error" in observation && observation.is_error) {
-    contentDetails += `**Error:**\n${textContent}`;
-  } else {
+  if (observation.error) {
+    contentDetails += `**Error:**\n${observation.error}`;
+  } else if (textContent) {
     contentDetails += `**Output:**\n${textContent}`;
+  } else {
+    contentDetails += "Browser action completed successfully.";
   }
 
   if (contentDetails.length > MAX_CONTENT_LENGTH) {
