@@ -22,6 +22,13 @@ const getCommandObservationContent = (
   if (content.length > MAX_CONTENT_LENGTH) {
     content = `${content.slice(0, MAX_CONTENT_LENGTH)}...`;
   }
+
+  const command = event.observation === "run" ? event.extras.command : null;
+
+  if (command) {
+    return `Command:\n\`\`\`sh\n${command}\n\`\`\`\n\nOutput:\n\`\`\`sh\n${content.trim() || i18n.t("OBSERVATION$COMMAND_NO_OUTPUT")}\n\`\`\``;
+  }
+
   return `Output:\n\`\`\`sh\n${content.trim() || i18n.t("OBSERVATION$COMMAND_NO_OUTPUT")}\n\`\`\``;
 };
 

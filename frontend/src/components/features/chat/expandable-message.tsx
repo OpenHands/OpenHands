@@ -95,7 +95,7 @@ export function ExpandableMessage({
   const statusIconClasses = "h-4 w-4 ml-2 inline";
 
   if (
-    config?.FEATURE_FLAGS.ENABLE_BILLING &&
+    config?.FEATURE_FLAGS?.ENABLE_BILLING &&
     config?.APP_MODE === "saas" &&
     id === I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS
   ) {
