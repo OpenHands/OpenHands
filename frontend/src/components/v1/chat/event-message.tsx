@@ -96,7 +96,6 @@ const renderUserMessageWithSkillReady = (
   messageEvent: MessageEvent,
   commonProps: CommonProps,
   isLastMessage: boolean,
-  messages: OpenHandsEvent[],
 ): React.ReactElement => {
   try {
     const skillReadyEvent = createSkillReadyEvent(messageEvent);
@@ -114,7 +113,6 @@ const renderUserMessageWithSkillReady = (
         <GenericEventMessageWrapper
           event={skillReadyEvent}
           isLastMessage={isLastMessage}
-          allEvents={messages}
         />
       </>
     );
@@ -193,7 +191,6 @@ export function EventMessage({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
-          allEvents={messages}
         />
       </>
     );
@@ -214,7 +211,6 @@ export function EventMessage({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
-          allEvents={messages}
         />
       </>
     );
@@ -230,7 +226,6 @@ export function EventMessage({
         messageEvent,
         commonProps,
         isLastMessage,
-        messages,
       );
     }
 
@@ -246,10 +241,6 @@ export function EventMessage({
 
   // Generic fallback for all other events
   return (
-    <GenericEventMessageWrapper
-      event={event}
-      isLastMessage={isLastMessage}
-      allEvents={messages}
-    />
+    <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
   );
 }
