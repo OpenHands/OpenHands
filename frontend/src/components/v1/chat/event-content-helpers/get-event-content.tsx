@@ -171,10 +171,7 @@ const getObservationEventTitle = (event: OpenHandsEvent): React.ReactNode => {
   return observationType;
 };
 
-export const getEventContent = (
-  event: OpenHandsEvent | SkillReadyEvent,
-  allEvents?: OpenHandsEvent[],
-) => {
+export const getEventContent = (event: OpenHandsEvent | SkillReadyEvent) => {
   let title: React.ReactNode = "";
   let details: string | React.ReactNode = "";
 
@@ -202,7 +199,7 @@ export const getEventContent = (
         />
       );
     } else {
-      details = getObservationContent(event, allEvents);
+      details = getObservationContent(event);
     }
   }
 
