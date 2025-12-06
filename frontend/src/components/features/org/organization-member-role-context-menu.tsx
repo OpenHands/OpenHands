@@ -8,8 +8,8 @@ import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { OrganizationUserRole } from "#/types/org";
 import { cn, uppercaseFirstLetter } from "#/utils/utils";
 import UserIcon from "#/icons/user.svg?react";
-import SettingsIcon from "#/icons/settings.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
+import AdminIcon from "#/icons/admin.svg?react";
 
 const contextMenuListItemClassName = cn(
   "cursor-pointer p-0 h-auto hover:bg-transparent",
@@ -64,7 +64,9 @@ export function OrganizationMemberRoleContextMenu({
         className={contextMenuListItemClassName}
       >
         <ContextMenuIconText
-          icon={<SettingsIcon width={16} height={16} className="text-white" />}
+          icon={
+            <AdminIcon width={16} height={16} className="text-white pl-[2px]" />
+          }
           text={uppercaseFirstLetter(t(I18nKey.ORG$ROLE_ADMIN))}
         />
       </ContextMenuListItem>
