@@ -114,12 +114,7 @@ describe("Manage Team Route", () => {
 
     members.forEach((member) => {
       expect(screen.getByText(member.email)).toBeInTheDocument();
-      // Role is displayed with first letter uppercased
-      const roleWithFirstLetterUppercased =
-        member.role.charAt(0).toUpperCase() + member.role.slice(1);
-      expect(
-        screen.getByText(roleWithFirstLetterUppercased),
-      ).toBeInTheDocument();
+      expect(screen.getByText(member.role)).toBeInTheDocument();
     });
   });
 
