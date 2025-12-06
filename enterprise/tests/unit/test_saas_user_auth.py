@@ -535,3 +535,115 @@ def test_get_api_key_from_header_with_invalid_authorization_format():
 
     # Assert that None was returned
     assert api_key is None
+
+
+def test_get_api_key_from_header_with_x_access_token():
+    """Test that get_api_key_from_header extracts API key from X-Access-Token header."""
+    # Create a mock request with X-Access-Token header
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {'X-Access-Token': 'access_token_key'}
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key was correctly extracted
+    assert api_key == 'access_token_key'
+
+
+def test_get_api_key_from_header_priority_authorization_over_x_access_token():
+    """Test that Authorization header takes priority over X-Access-Token header."""
+    # Create a mock request with both headers
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': 'Bearer auth_api_key',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from Authorization header was used
+    assert api_key == 'auth_api_key'
+
+
+def test_get_api_key_from_header_priority_x_session_over_x_access_token():
+    """Test that X-Session-API-Key header takes priority over X-Access-Token header."""
+    # Create a mock request with both headers
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'X-Session-API-Key': 'session_api_key',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from X-Session-API-Key header was used
+    assert api_key == 'session_api_key'
+
+
+def test_get_api_key_from_header_all_three_headers():
+    """Test header priority when all three headers are present."""
+    # Create a mock request with all three headers
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': 'Bearer auth_api_key',
+        'X-Session-API-Key': 'session_api_key',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from Authorization header was used (highest priority)
+    assert api_key == 'auth_api_key'
+
+
+def test_get_api_key_from_header_invalid_authorization_fallback_to_x_access_token():
+    """Test that invalid Authorization header falls back to X-Access-Token."""
+    # Create a mock request with invalid Authorization header and X-Access-Token
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': 'InvalidFormat api_key',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from X-Access-Token header was used
+    assert api_key == 'access_token_key'
+
+
+def test_get_api_key_from_header_empty_headers():
+    """Test that empty header values are handled correctly."""
+    # Create a mock request with empty header values
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': '',
+        'X-Session-API-Key': '',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from X-Access-Token header was used
+    assert api_key == 'access_token_key'
+
+
+def test_get_api_key_from_header_bearer_with_empty_token():
+    """Test that Bearer header with empty token falls back to other headers."""
+    # Create a mock request with Bearer header with empty token
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': 'Bearer ',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that empty string from Bearer is returned (current behavior)
+    # This tests the current implementation behavior
+    assert api_key == ''

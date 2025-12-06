@@ -35,6 +35,7 @@ export type ApiSettings = {
   email_verified?: boolean;
   git_user_name?: string;
   git_user_email?: string;
+  v1_enabled?: boolean;
 };
 
 export type PostApiSettings = ApiSettings & {

@@ -3,14 +3,18 @@ import { Provider } from "#/types/settings";
 import { V1SandboxStatus } from "../sandbox-service/sandbox-service.types";
 
 // V1 API Types for requests
-// Note: This represents the serialized API format, not the internal TextContent/ImageContent types
-export interface V1MessageContent {
-  type: "text" | "image_url";
-  text?: string;
-  image_url?: {
-    url: string;
-  };
+// These types match the SDK's TextContent and ImageContent formats
+export interface V1TextContent {
+  type: "text";
+  text: string;
 }
+
+export interface V1ImageContent {
+  type: "image";
+  image_urls: string[];
+}
+
+export type V1MessageContent = V1TextContent | V1ImageContent;
 
 type V1Role = "user" | "system" | "assistant" | "tool";
 

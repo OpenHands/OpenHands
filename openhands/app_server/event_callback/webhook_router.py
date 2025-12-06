@@ -43,6 +43,7 @@ from openhands.app_server.user.specifiy_user_context import (
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Event
+from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
@@ -143,6 +144,13 @@ async def on_event(
         await asyncio.gather(
             *[event_service.save_event(conversation_id, event) for event in events]
         )
+
+        # Process stats events for V1 conversations
+        for event in events:
+            if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
+                await app_conversation_info_service.process_stats_event(
+                    event, conversation_id
+                )
 
         asyncio.create_task(
             _run_callbacks_in_bg_and_close(

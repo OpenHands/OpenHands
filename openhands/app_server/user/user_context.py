@@ -34,6 +34,10 @@ class UserContext(ABC):
     async def get_secrets(self) -> dict[str, SecretSource]:
         """Get custom secrets and github provider secrets for the conversation."""
 
+    @abstractmethod
+    async def get_mcp_api_key(self) -> str | None:
+        """Get an MCP API Key."""
+
 
 class UserContextInjector(DiscriminatedUnionMixin, Injector[UserContext], ABC):
     """Injector for user contexts."""

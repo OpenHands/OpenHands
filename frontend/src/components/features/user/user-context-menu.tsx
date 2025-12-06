@@ -63,11 +63,15 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
 
   const isOss = config?.APP_MODE === "oss";
   // Filter out organization members/org nav items since they're already handled separately in the menu
-  const navItems = (isOss ? OSS_NAV_ITEMS : SAAS_NAV_ITEMS).filter(
+  let navItems = (isOss ? OSS_NAV_ITEMS : SAAS_NAV_ITEMS).filter(
     (item) =>
       item.to !== "/settings/organization-members" &&
       item.to !== "/settings/org",
   );
+  // Hide LLM settings when the feature flag is enabled
+  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
+    navItems = navItems.filter((item) => item.to !== "/settings");
+  }
 
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
     React.useState(false);

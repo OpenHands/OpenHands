@@ -30,6 +30,9 @@ class SpecifyUserContext(UserContext):
     async def get_secrets(self) -> dict[str, SecretSource]:
         raise NotImplementedError()
 
+    async def get_mcp_api_key(self) -> str | None:
+        raise NotImplementedError()
+
 
 USER_CONTEXT_ATTR = 'user_context'
 ADMIN = SpecifyUserContext(user_id=None)

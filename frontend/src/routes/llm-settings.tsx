@@ -118,6 +118,9 @@ function LlmSettingsScreen() {
   const isSaasMode = config?.APP_MODE === "saas";
   const shouldUseOpenHandsKey = isOpenHandsProvider && isSaasMode;
 
+  // Determine if we should hide the agent dropdown when V1 conversation API is enabled
+  const isV1Enabled = settings?.V1_ENABLED;
+
   React.useEffect(() => {
     const determineWhetherToToggleAdvancedSettings = () => {
       if (resources && settings) {
@@ -612,21 +615,23 @@ function LlmSettingsScreen() {
                     href="https://tavily.com/"
                   />
 
-                  <SettingsDropdownInput
-                    testId="agent-input"
-                    name="agent-input"
-                    label={t(I18nKey.SETTINGS$AGENT)}
-                    items={
-                      resources?.agents.map((agent) => ({
-                        key: agent,
-                        label: agent, // TODO: Add i18n support for agent names
-                      })) || []
-                    }
-                    defaultSelectedKey={settings.AGENT}
-                    isClearable={false}
-                    onInputChange={handleAgentIsDirty}
-                    wrapperClassName="w-full max-w-[680px]"
-                  />
+                  {!isV1Enabled && (
+                    <SettingsDropdownInput
+                      testId="agent-input"
+                      name="agent-input"
+                      label={t(I18nKey.SETTINGS$AGENT)}
+                      items={
+                        resources?.agents.map((agent) => ({
+                          key: agent,
+                          label: agent, // TODO: Add i18n support for agent names
+                        })) || []
+                      }
+                      defaultSelectedKey={settings.AGENT}
+                      isClearable={false}
+                      onInputChange={handleAgentIsDirty}
+                      wrapperClassName="w-full max-w-[680px]"
+                    />
+                  )}
                 </>
               )}
 
