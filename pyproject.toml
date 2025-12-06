@@ -61,7 +61,7 @@ protobuf = "^5.0.0,<6.0.0"                         # Updated to support newer op
 opentelemetry-api = "^1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 
-libtmux = ">=0.46.2"
+libtmux = ">=0.51.0"
 pygithub = "^2.5.0"
 joblib = "*"
 openhands-aci = "0.3.2"
