@@ -6,7 +6,7 @@ import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
 import { ContextMenuIconText } from "#/ui/context-menu-icon-text";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { OrganizationUserRole } from "#/types/org";
-import { cn, uppercaseFirstLetter } from "#/utils/utils";
+import { cn } from "#/utils/utils";
 import UserIcon from "#/icons/user.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import AdminIcon from "#/icons/admin.svg?react";
@@ -67,7 +67,8 @@ export function OrganizationMemberRoleContextMenu({
           icon={
             <AdminIcon width={16} height={16} className="text-white pl-[2px]" />
           }
-          text={uppercaseFirstLetter(t(I18nKey.ORG$ROLE_ADMIN))}
+          text={t(I18nKey.ORG$ROLE_ADMIN)}
+          className="capitalize"
         />
       </ContextMenuListItem>
       <ContextMenuListItem
@@ -77,7 +78,8 @@ export function OrganizationMemberRoleContextMenu({
       >
         <ContextMenuIconText
           icon={<UserIcon width={16} height={16} className="text-white" />}
-          text={uppercaseFirstLetter(t(I18nKey.ORG$ROLE_USER))}
+          text={t(I18nKey.ORG$ROLE_USER)}
+          className="capitalize"
         />
       </ContextMenuListItem>
       <ContextMenuListItem
@@ -87,8 +89,8 @@ export function OrganizationMemberRoleContextMenu({
       >
         <ContextMenuIconText
           icon={<DeleteIcon width={16} height={16} className="text-red-500" />}
-          text={uppercaseFirstLetter(t(I18nKey.ORG$REMOVE))}
-          className="text-red-500"
+          text={t(I18nKey.ORG$REMOVE)}
+          className="text-red-500 capitalize"
         />
       </ContextMenuListItem>
     </ContextMenu>

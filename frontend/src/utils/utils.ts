@@ -13,21 +13,6 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Uppercase the first letter of a string
- * @param str The string to transform
- * @returns The string with the first letter uppercased
- *
- * @example
- * uppercaseFirstLetter("hello") // "Hello"
- * uppercaseFirstLetter("world") // "World"
- * uppercaseFirstLetter("") // ""
- */
-export const uppercaseFirstLetter = (str: string): string => {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
-};
-
-/**
  * Get the numeric height value from an element's style property
  * @param el The HTML element to get the height from
  * @param fallback The fallback value to return if style height is invalid

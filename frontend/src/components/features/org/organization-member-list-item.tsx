@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
-import { cn, uppercaseFirstLetter } from "#/utils/utils";
+import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { OrganizationMemberRoleContextMenu } from "./organization-member-role-context-menu";
 
@@ -59,11 +59,11 @@ export function OrganizationMemberListItem({
         <span
           onClick={handleRoleClick}
           className={cn(
-            "text-xs text-gray-400 flex items-center gap-1",
+            "text-xs text-gray-400 flex items-center gap-1 capitalize",
             roleSelectionIsPermitted ? "cursor-pointer" : "cursor-not-allowed",
           )}
         >
-          {uppercaseFirstLetter(role)}
+          {role}
           {hasPermissionToChangeRole && <ChevronDown size={14} />}
         </span>
         {roleSelectionIsPermitted && contextMenuOpen && (
