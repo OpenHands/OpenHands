@@ -48,6 +48,18 @@ export function RecentConversations() {
     setIsExpanded(!isExpanded);
   };
 
+  const shouldShowEmptyState =
+    !error &&
+    !isInitialLoading &&
+    !!conversationsList &&
+    displayedConversations?.length === 0;
+
+  const shouldShowConversations =
+    !error &&
+    !isInitialLoading &&
+    displayedConversations &&
+    displayedConversations.length > 0;
+
   return (
     <section
       data-testid="recent-conversations"
@@ -78,30 +90,28 @@ export function RecentConversations() {
         )}
       </div>
 
-      {!isInitialLoading && displayedConversations?.length === 0 && (
+      {shouldShowEmptyState && (
         <span className="text-xs leading-4 text-white font-medium pl-4">
           {t(I18nKey.HOME$NO_RECENT_CONVERSATIONS)}
         </span>
       )}
 
-      {!isInitialLoading &&
-        displayedConversations &&
-        displayedConversations.length > 0 && (
-          <div className="flex flex-col">
-            <div className="transition-all duration-300 ease-in-out overflow-y-auto custom-scrollbar">
-              <div ref={scrollContainerRef} className="flex flex-col">
-                {displayedConversations.map((conversation) => (
-                  <RecentConversation
-                    key={conversation.conversation_id}
-                    conversation={conversation}
-                  />
-                ))}
-              </div>
+      {shouldShowConversations && (
+        <div className="flex flex-col">
+          <div className="transition-all duration-300 ease-in-out overflow-y-auto custom-scrollbar">
+            <div ref={scrollContainerRef} className="flex flex-col">
+              {displayedConversations.map((conversation) => (
+                <RecentConversation
+                  key={conversation.conversation_id}
+                  conversation={conversation}
+                />
+              ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-      {!isInitialLoading && (hasMoreConversations || isExpanded) && (
+      {shouldShowConversations && (hasMoreConversations || isExpanded) && (
         <div className="flex justify-start mt-6 mb-8 ml-4">
           <button
             type="button"
