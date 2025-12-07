@@ -289,7 +289,7 @@ class GithubManager(Manager):
                     )
 
                 saas_user_auth = await get_saas_user_auth(
-                    github_view.keycloak_user_id, self.token_manager
+                    github_view.user_info.keycloak_user_id, self.token_manager
                 )
 
                 await github_view.create_new_conversation(
