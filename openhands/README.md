@@ -2,7 +2,7 @@
 
 This directory contains the core components of OpenHands.
 
-For an overview of the system architecture, see the [architecture documentation](https://docs.all-hands.dev/usage/architecture/backend) (v0 backend architecture).
+For an overview of the system architecture, see the [architecture documentation](https://docs.openhands.dev/usage/architecture/backend) (v0 backend architecture).
 
 ## Classes
 
