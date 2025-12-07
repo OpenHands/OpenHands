@@ -15,25 +15,87 @@
   --color-logo: #cfb755;
   --color-base: #0d0f11;
   --color-base-secondary: #24272e;
-  --color-danger: #e76a5e;
-  --color-success: #a5e75e;
-  --color-basic: #9099ac;
+
+  /* Neutral surfaces */
+  --color-surface-alt: #25272d;
+  --color-surface-strong: #2d2f36;
+  --color-surface-muted: #363636;
+  --color-surface-hover: #5c5d62;
   --color-tertiary: #454545;
+  --color-neutral-dark: #3c3c49;
+  --color-neutral: #737373;
+  --color-neutral-soft: #a3a3a3;
+  --color-neutral-muted: #afb8c133;
+
+  /* Borders and outlines */
+  --color-border: #525252;
+  --color-border-strong: #717888;
+  --color-border-subtle: #e4e7eb;
+
+  /* Text tokens */
+  --color-basic: #9099ac;
+  --color-muted: #a3a3a3;
+  --color-muted-strong: #717888;
+  --color-muted-soft: #d1d5db;
   --color-tertiary-light: #b7bdc2;
   --color-content: #ecedee;
   --color-content-2: #f9fbfe;
+  --color-placeholder: #a1a1a1;
+  --color-highlight: #d0d9fa;
+  --color-white: #ffffff;
+  --color-base-transparent: #00000000;
+  --color-base-faded: #00000077;
+
+  /* Status colors */
+  --color-danger: #e76a5e;
+  --color-danger-soft: #f87171;
+  --color-danger-strong: #ef4444;
+  --color-danger-intense: #dc2626;
+  --color-danger-deep: #b91c1c;
+  --color-danger-border: #ff0006;
+  --color-danger-surface: #4a0709;
+  --color-danger-accent: #ff684e;
+
+  --color-warning: #facc15;
+  --color-warning-strong: #f59e0b;
+  --color-warning-deep: #854d0e;
+  --color-warning-soft: #fef08a;
+  --color-warning-bright: #ffd600;
+
+  --color-success: #a5e75e;
+  --color-success-strong: #22c55e;
+  --color-success-deep: #166534;
+  --color-success-soft: #bcff8c;
+
+  --color-info: #597ff4;
+  --color-info-strong: #3b82f6;
+  --color-info-deep: #1d4ed8;
+  --color-info-soft: #60a5fa;
+  --color-link: #4a67bd;
+
+  /* Accent colors (code and highlights) */
+  --color-accent-purple: #8480ff;
+  --color-accent-purple-2: #c792ea;
+  --color-accent-cyan: #89ddff;
+  --color-accent-blue: #82aaff;
+  --color-accent-green: #c3e88d;
+  --color-accent-orange: #f78c6c;
+  --color-accent-pink: #ff5370;
+  --color-accent-yellow: #ffcb6b;
+  --color-code-surface: #2a3038;
+  --color-code-border: #30363d;
 }
 
 .button-base {
-  @apply bg-tertiary border border-neutral-600 rounded-xs;
+  @apply bg-tertiary border border-border rounded-xs;
 }
 
 .skeleton {
-  @apply bg-gray-400 rounded-md animate-pulse;
+  @apply bg-neutral-soft rounded-md animate-pulse;
 }
 
 .skeleton-round {
-  @apply bg-gray-400 rounded-full animate-pulse;
+  @apply bg-neutral-soft rounded-full animate-pulse;
 }
 
 .heading {
