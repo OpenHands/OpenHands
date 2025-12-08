@@ -21,7 +21,7 @@ export function AccountSettingsContextMenu({
 }: AccountSettingsContextMenuProps) {
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { t } = useTranslation();
-
+  // Get navigation items and filter out LLM settings if the feature flag is enabled
   const items = useSettingsNavItems();
 
   const navItems = items.map((item) => ({
@@ -31,7 +31,7 @@ export function AccountSettingsContextMenu({
       height: 16,
     } as React.SVGProps<SVGSVGElement>),
   }));
-
+  // The Link component will handle the actual navigation
   const handleNavigationClick = () => onClose();
 
   return (

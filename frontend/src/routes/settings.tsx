@@ -29,10 +29,12 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const isSaas = config?.APP_MODE === "saas";
 
   if (!isSaas && SAAS_ONLY_PATHS.includes(pathname)) {
+    // if in OSS mode, do not allow access to saas-only paths
     return redirect("/settings");
   }
-
+  // If LLM settings are hidden and user tries to access the LLM settings page
   if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS && pathname === "/settings") {
+    // Redirect to the first available settings page
     return isSaas ? redirect("/settings/user") : redirect("/settings/mcp");
   }
 
@@ -42,10 +44,12 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
 function SettingsScreen() {
   const { t } = useTranslation();
   const location = useLocation();
+  // Get navigation items based on SaaS/OSS mode and feature flags (e.g., hiding LLM settings)
   const navItems = useSettingsNavItems();
-
+  // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {
     const currentItem = navItems.find((item) => item.to === location.pathname);
+    // Default to the first available navigation item if current page is not found
     return currentItem
       ? currentItem.text
       : (navItems[0]?.text ?? "SETTINGS$TITLE");
