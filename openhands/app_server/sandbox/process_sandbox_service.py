@@ -275,6 +275,17 @@ class ProcessSandboxService(SandboxService):
 
         return await self._process_to_sandbox_info(sandbox_id, process_info)
 
+    async def get_sandbox_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxInfo | None:
+        """Get a single sandbox by session API key."""
+        # Search through all processes to find one with matching session_api_key
+        for sandbox_id, process_info in _processes.items():
+            if process_info.session_api_key == session_api_key:
+                return await self._process_to_sandbox_info(sandbox_id, process_info)
+
+        return None
+
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
         """Start a new sandbox."""
         # Get sandbox spec
