@@ -109,6 +109,12 @@ export function ConversationWebSocketProvider({
 
   const { conversationMode, setPlanContent } = useConversationStore();
 
+  const logJsonParseWarning = useCallback((error: unknown) => {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn("Failed to parse WebSocket message as JSON:", error);
+    }
+  }, []);
+
   // Hook for reading conversation file
   const { mutate: readConversationFile } = useReadConversationFile();
 
@@ -404,8 +410,7 @@ export function ConversationWebSocketProvider({
           }
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn("Failed to parse WebSocket message as JSON:", error);
+        logJsonParseWarning(error);
       }
     },
     [
@@ -420,6 +425,7 @@ export function ConversationWebSocketProvider({
       appendInput,
       appendOutput,
       updateMetricsFromStats,
+      logJsonParseWarning,
     ],
   );
 
@@ -537,8 +543,7 @@ export function ConversationWebSocketProvider({
           }
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn("Failed to parse WebSocket message as JSON:", error);
+        logJsonParseWarning(error);
       }
     },
     [
@@ -555,6 +560,7 @@ export function ConversationWebSocketProvider({
       readConversationFile,
       setPlanContent,
       updateMetricsFromStats,
+      logJsonParseWarning,
     ],
   );
 
@@ -595,9 +601,9 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setMainConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
-        if (event.code !== 1000 && hasConnectedRefMain.current) {
+        // Show error message for abnormal closes (not normal closure code 1000)
+        // This includes both initial connection failures and disconnections after successful connection
+        if (event.code !== 1000) {
           setErrorMessage(
             `Connection lost: ${event.reason || "Unexpected disconnect"}`,
           );
