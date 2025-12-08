@@ -5,25 +5,23 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
+import { SettingsNavItem } from "#/constants/settings-nav";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
   onCloseMobileMenu: () => void;
+  navigationItems: SettingsNavItem[]; // <-- FIXED
 }
 
 export function SettingsNavigation({
   isMobileMenuOpen,
   onCloseMobileMenu,
+  navigationItems,
 }: SettingsNavigationProps) {
   const { t } = useTranslation();
 
-  // Use the hook instead of receiving navigationItems via props
-  const navigationItems = useSettingsNavItems();
-
   return (
     <>
-      {/* Mobile backdrop */}
       {isMobileMenuOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
@@ -31,15 +29,12 @@ export function SettingsNavigation({
         />
       )}
 
-      {/* Navigation sidebar */}
       <nav
         data-testid="settings-navbar"
         className={cn(
           "flex flex-col gap-6 transition-transform duration-300 ease-in-out",
-          // Mobile: full screen overlay
           "fixed inset-0 z-50 w-full bg-base-secondary p-4 transform md:transform-none",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
-          // Desktop: static sidebar
           "md:relative md:translate-x-0 md:w-64 md:p-0 md:bg-transparent",
         )}
       >
@@ -49,7 +44,6 @@ export function SettingsNavigation({
             <Typography.H2>{t(I18nKey.SETTINGS$TITLE)}</Typography.H2>
           </div>
 
-          {/* Close button - only visible on mobile */}
           <button
             type="button"
             onClick={onCloseMobileMenu}
@@ -75,9 +69,11 @@ export function SettingsNavigation({
               }
             >
               {icon}
-              <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
-                {t(text as I18nKey)}
-              </Typography.Text>
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
+                  {t(text as I18nKey)}
+                </Typography.Text>
+              </div>
             </NavLink>
           ))}
         </div>
