@@ -21,19 +21,16 @@ export function ConfirmDeleteModal({
 }: ConfirmDeleteModalProps) {
   const { t } = useTranslation();
 
+  const confirmationMessage = conversationTitle
+    ? `Are you sure you want to delete the "${conversationTitle}" conversation? This action cannot be undone.`
+    : t(I18nKey.CONVERSATION$DELETE_WARNING);
+
   return (
     <ModalBackdrop>
       <ModalBody className="items-start border border-tertiary">
         <div className="flex flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.CONVERSATION$CONFIRM_DELETE)} />
-          <BaseModalDescription
-            description={t(I18nKey.CONVERSATION$DELETE_WARNING)}
-          />
-          {conversationTitle && (
-            <div className="text-sm text-white font-medium">
-              {conversationTitle}
-            </div>
-          )}
+          <BaseModalDescription>{confirmationMessage}</BaseModalDescription>
         </div>
         <div
           className="flex flex-col gap-2 w-full"
