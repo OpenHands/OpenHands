@@ -57,6 +57,7 @@ export function useAddMcpServer() {
 
       const apiSettings = {
         mcp_config: newConfig,
+        v1_enabled: settings.V1_ENABLED,
       };
 
       await SettingsService.saveSettings(apiSettings);
