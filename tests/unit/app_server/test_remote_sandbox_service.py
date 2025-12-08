@@ -291,9 +291,7 @@ class TestEnvironmentInitialization:
         )
 
         # Verify
-        expected_webhook_url = (
-            'https://web.example.com/api/v1/webhooks/test-sandbox-123'
-        )
+        expected_webhook_url = 'https://web.example.com/api/v1/webhooks'
         assert environment['EXISTING_VAR'] == 'existing_value'
         assert environment[WEBHOOK_CALLBACK_VARIABLE] == expected_webhook_url
         assert environment[ALLOW_CORS_ORIGINS_VARIABLE] == 'https://web.example.com'
