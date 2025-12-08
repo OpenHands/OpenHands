@@ -5,25 +5,21 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-
-interface NavigationItem {
-  to: string;
-  icon: React.ReactNode;
-  text: string;
-}
+import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
   onCloseMobileMenu: () => void;
-  navigationItems: NavigationItem[];
 }
 
 export function SettingsNavigation({
   isMobileMenuOpen,
   onCloseMobileMenu,
-  navigationItems,
 }: SettingsNavigationProps) {
   const { t } = useTranslation();
+
+  // Use the hook instead of receiving navigationItems via props
+  const navigationItems = useSettingsNavItems();
 
   return (
     <>
@@ -52,6 +48,7 @@ export function SettingsNavigation({
             <SettingsIcon width={16} height={16} />
             <Typography.H2>{t(I18nKey.SETTINGS$TITLE)}</Typography.H2>
           </div>
+
           {/* Close button - only visible on mobile */}
           <button
             type="button"
@@ -78,11 +75,9 @@ export function SettingsNavigation({
               }
             >
               {icon}
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
-                  {t(text as I18nKey)}
-                </Typography.Text>
-              </div>
+              <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
+                {t(text as I18nKey)}
+              </Typography.Text>
             </NavLink>
           ))}
         </div>
