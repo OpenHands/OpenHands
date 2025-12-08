@@ -10,6 +10,7 @@ import {
 } from "#/mocks/handlers";
 import * as AdvancedSettingsUtlls from "#/utils/has-advanced-settings-set";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
+import OptionService from "#/api/option-service/option-service.api";
 
 // Mock react-router hooks
 const mockUseSearchParams = vi.fn();
@@ -255,6 +256,210 @@ describe("Content", () => {
   });
 
   it.todo("should render an indicator if the llm api key is set");
+
+  describe("API key visibility in Basic Settings", () => {
+    it("should hide API key input when SaaS mode is enabled and OpenHands provider is selected", async () => {
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - only return APP_MODE for these tests
+      getConfigSpy.mockResolvedValue({
+        APP_MODE: "saas",
+      });
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const basicForm = screen.getByTestId("llm-settings-form-basic");
+      const provider = within(basicForm).getByTestId("llm-provider-input");
+
+      // Verify OpenHands is selected by default
+      await waitFor(() => {
+        expect(provider).toHaveValue("OpenHands");
+      });
+
+      // API key input should not be visible when OpenHands provider is selected in SaaS mode
+      expect(
+        within(basicForm).queryByTestId("llm-api-key-input"),
+      ).not.toBeInTheDocument();
+      expect(
+        within(basicForm).queryByTestId("llm-api-key-help-anchor"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should show API key input when SaaS mode is enabled and non-OpenHands provider is selected", async () => {
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - only return APP_MODE for these tests
+      getConfigSpy.mockResolvedValue({
+        APP_MODE: "saas",
+      });
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const basicForm = screen.getByTestId("llm-settings-form-basic");
+      const provider = within(basicForm).getByTestId("llm-provider-input");
+
+      // Select OpenAI provider
+      await userEvent.click(provider);
+      const providerOption = screen.getByText("OpenAI");
+      await userEvent.click(providerOption);
+
+      await waitFor(() => {
+        expect(provider).toHaveValue("OpenAI");
+      });
+
+      // API key input should be visible when non-OpenHands provider is selected in SaaS mode
+      expect(
+        within(basicForm).getByTestId("llm-api-key-input"),
+      ).toBeInTheDocument();
+      expect(
+        within(basicForm).getByTestId("llm-api-key-help-anchor"),
+      ).toBeInTheDocument();
+    });
+
+    it("should show API key input when OSS mode is enabled and OpenHands provider is selected", async () => {
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - only return APP_MODE for these tests
+      getConfigSpy.mockResolvedValue({
+        APP_MODE: "oss",
+      });
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const basicForm = screen.getByTestId("llm-settings-form-basic");
+      const provider = within(basicForm).getByTestId("llm-provider-input");
+
+      // Verify OpenHands is selected by default
+      await waitFor(() => {
+        expect(provider).toHaveValue("OpenHands");
+      });
+
+      // API key input should be visible when OSS mode is enabled (even with OpenHands provider)
+      expect(
+        within(basicForm).getByTestId("llm-api-key-input"),
+      ).toBeInTheDocument();
+      expect(
+        within(basicForm).getByTestId("llm-api-key-help-anchor"),
+      ).toBeInTheDocument();
+    });
+
+    it("should show API key input when OSS mode is enabled and non-OpenHands provider is selected", async () => {
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - only return APP_MODE for these tests
+      getConfigSpy.mockResolvedValue({
+        APP_MODE: "oss",
+      });
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const basicForm = screen.getByTestId("llm-settings-form-basic");
+      const provider = within(basicForm).getByTestId("llm-provider-input");
+
+      // Select OpenAI provider
+      await userEvent.click(provider);
+      const providerOption = screen.getByText("OpenAI");
+      await userEvent.click(providerOption);
+
+      await waitFor(() => {
+        expect(provider).toHaveValue("OpenAI");
+      });
+
+      // API key input should be visible when OSS mode is enabled
+      expect(
+        within(basicForm).getByTestId("llm-api-key-input"),
+      ).toBeInTheDocument();
+      expect(
+        within(basicForm).getByTestId("llm-api-key-help-anchor"),
+      ).toBeInTheDocument();
+    });
+
+    it("should hide API key input when switching from non-OpenHands to OpenHands provider in SaaS mode", async () => {
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - only return APP_MODE for these tests
+      getConfigSpy.mockResolvedValue({
+        APP_MODE: "saas",
+      });
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const basicForm = screen.getByTestId("llm-settings-form-basic");
+      const provider = within(basicForm).getByTestId("llm-provider-input");
+
+      // Start with OpenAI provider
+      await userEvent.click(provider);
+      const openAIOption = screen.getByText("OpenAI");
+      await userEvent.click(openAIOption);
+
+      await waitFor(() => {
+        expect(provider).toHaveValue("OpenAI");
+      });
+
+      // API key input should be visible with OpenAI
+      expect(
+        within(basicForm).getByTestId("llm-api-key-input"),
+      ).toBeInTheDocument();
+
+      // Switch to OpenHands provider
+      await userEvent.click(provider);
+      const openHandsOption = screen.getByText("OpenHands");
+      await userEvent.click(openHandsOption);
+
+      await waitFor(() => {
+        expect(provider).toHaveValue("OpenHands");
+      });
+
+      // API key input should now be hidden
+      expect(
+        within(basicForm).queryByTestId("llm-api-key-input"),
+      ).not.toBeInTheDocument();
+      expect(
+        within(basicForm).queryByTestId("llm-api-key-help-anchor"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should show API key input when switching from OpenHands to non-OpenHands provider in SaaS mode", async () => {
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - only return APP_MODE for these tests
+      getConfigSpy.mockResolvedValue({
+        APP_MODE: "saas",
+      });
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const basicForm = screen.getByTestId("llm-settings-form-basic");
+      const provider = within(basicForm).getByTestId("llm-provider-input");
+
+      // Verify OpenHands is selected by default
+      await waitFor(() => {
+        expect(provider).toHaveValue("OpenHands");
+      });
+
+      // API key input should be hidden with OpenHands
+      expect(
+        within(basicForm).queryByTestId("llm-api-key-input"),
+      ).not.toBeInTheDocument();
+
+      // Switch to OpenAI provider
+      await userEvent.click(provider);
+      const openAIOption = screen.getByText("OpenAI");
+      await userEvent.click(openAIOption);
+
+      await waitFor(() => {
+        expect(provider).toHaveValue("OpenAI");
+      });
+
+      // API key input should now be visible
+      expect(
+        within(basicForm).getByTestId("llm-api-key-input"),
+      ).toBeInTheDocument();
+      expect(
+        within(basicForm).getByTestId("llm-api-key-help-anchor"),
+      ).toBeInTheDocument();
+    });
+  });
 });
 
 describe("Form submission", () => {
