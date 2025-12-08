@@ -22,7 +22,9 @@ export function ConfirmDeleteModal({
   const { t } = useTranslation();
 
   const confirmationMessage = conversationTitle
-    ? `Are you sure you want to delete the "${conversationTitle}" conversation? This action cannot be undone.`
+    ? t(I18nKey.CONVERSATION$DELETE_WARNING_WITH_TITLE, {
+        title: conversationTitle,
+      })
     : t(I18nKey.CONVERSATION$DELETE_WARNING);
 
   return (
