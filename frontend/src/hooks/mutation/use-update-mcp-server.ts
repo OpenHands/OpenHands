@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "#/hooks/query/use-settings";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { MCPSSEServer, MCPStdioServer, MCPSHTTPServer } from "#/types/settings";
 
 type MCPServerType = "sse" | "stdio" | "shttp";

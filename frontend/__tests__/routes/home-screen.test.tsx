@@ -6,7 +6,7 @@ import { createRoutesStub } from "react-router";
 import { createAxiosNotFoundErrorObject } from "test-utils";
 import HomeScreen from "#/routes/home";
 import { GitRepository } from "#/types/git";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import GitService from "#/api/git-service/git-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import MainApp from "#/routes/root-layout";

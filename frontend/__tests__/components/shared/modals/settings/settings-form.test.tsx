@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { createRoutesStub } from "react-router";
 import { screen } from "@testing-library/react";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { SettingsForm } from "#/components/shared/modals/settings/settings-form";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 

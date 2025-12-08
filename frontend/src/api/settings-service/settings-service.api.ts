@@ -1,4 +1,4 @@
-import { openHands } from "../api/open-hands-axios";
+import { openHands } from "../open-hands-axios";
 import { ApiSettings, PostApiSettings } from "./settings.types";
 
 /**
