@@ -186,7 +186,7 @@ class SlackNewConversationView(SlackViewInterface):
         self._verify_necessary_values_are_set()
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        user_secrets = await self.saas_user_auth.get_user_secrets()
+        user_secrets = await self.saas_user_auth.get_secrets()
         user_instructions, conversation_instructions = self._get_instructions(jinja)
 
         # Determine git provider from repository

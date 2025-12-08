@@ -4,10 +4,12 @@ import { devtools } from "zustand/middleware";
 export type ConversationTab =
   | "editor"
   | "browser"
-  | "jupyter"
   | "served"
   | "vscode"
-  | "terminal";
+  | "terminal"
+  | "planner";
+
+export type ConversationMode = "code" | "plan";
 
 export interface IMessageToSend {
   text: string;
@@ -26,6 +28,9 @@ interface ConversationState {
   submittedMessage: string | null;
   shouldHideSuggestions: boolean; // New state to hide suggestions when input expands
   hasRightPanelToggled: boolean;
+  planContent: string | null;
+  conversationMode: ConversationMode;
+  subConversationTaskId: string | null; // Task ID for sub-conversation creation
 }
 
 interface ConversationActions {
@@ -49,14 +54,55 @@ interface ConversationActions {
   setSubmittedMessage: (message: string | null) => void;
   resetConversationState: () => void;
   setHasRightPanelToggled: (hasRightPanelToggled: boolean) => void;
+  setConversationMode: (conversationMode: ConversationMode) => void;
+  setSubConversationTaskId: (taskId: string | null) => void;
+  setPlanContent: (planContent: string | null) => void;
 }
 
 type ConversationStore = ConversationState & ConversationActions;
 
-// Helper function to get initial right panel state from localStorage
+const getConversationIdFromLocation = (): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const match = window.location.pathname.match(/\/conversations\/([^/]+)/);
+  return match ? match[1] : null;
+};
+
+const parseStoredBoolean = (value: string | null): boolean | null => {
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
 const getInitialRightPanelState = (): boolean => {
-  const stored = localStorage.getItem("conversation-right-panel-shown");
-  return stored !== null ? JSON.parse(stored) : true;
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const conversationId = getConversationIdFromLocation();
+  const keysToCheck = conversationId
+    ? [`conversation-right-panel-shown-${conversationId}`]
+    : [];
+
+  // Fallback to legacy global key for users who haven't switched tabs yet
+  keysToCheck.push("conversation-right-panel-shown");
+
+  for (const key of keysToCheck) {
+    const parsed = parseStoredBoolean(localStorage.getItem(key));
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return true;
 };
 
 export const useConversationStore = create<ConversationStore>()(
@@ -74,6 +120,9 @@ export const useConversationStore = create<ConversationStore>()(
       submittedMessage: null,
       shouldHideSuggestions: false,
       hasRightPanelToggled: true,
+      planContent: null,
+      conversationMode: "code",
+      subConversationTaskId: null,
 
       // Actions
       setIsRightPanelShown: (isRightPanelShown) =>
@@ -205,10 +254,28 @@ export const useConversationStore = create<ConversationStore>()(
         set({ submittedMessage }, false, "setSubmittedMessage"),
 
       resetConversationState: () =>
-        set({ shouldHideSuggestions: false }, false, "resetConversationState"),
+        set(
+          {
+            shouldHideSuggestions: false,
+            conversationMode: "code",
+            subConversationTaskId: null,
+            planContent: null,
+          },
+          false,
+          "resetConversationState",
+        ),
 
       setHasRightPanelToggled: (hasRightPanelToggled) =>
         set({ hasRightPanelToggled }, false, "setHasRightPanelToggled"),
+
+      setConversationMode: (conversationMode) =>
+        set({ conversationMode }, false, "setConversationMode"),
+
+      setSubConversationTaskId: (subConversationTaskId) =>
+        set({ subConversationTaskId }, false, "setSubConversationTaskId"),
+
+      setPlanContent: (planContent) =>
+        set({ planContent }, false, "setPlanContent"),
     }),
     {
       name: "conversation-store",

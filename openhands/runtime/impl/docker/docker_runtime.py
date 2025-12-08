@@ -466,6 +466,7 @@ class DockerRuntime(ActionExecutionClient):
                 'VSCODE_PORT': str(self._vscode_port),
                 'APP_PORT_1': str(self._app_ports[0]),
                 'APP_PORT_2': str(self._app_ports[1]),
+                'OPENHANDS_SESSION_ID': str(self.sid),
                 'PIP_BREAK_SYSTEM_PACKAGES': '1',
             }
         )

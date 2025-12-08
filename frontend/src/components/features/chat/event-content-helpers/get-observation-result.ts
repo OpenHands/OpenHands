@@ -17,9 +17,19 @@ export const getObservationResult = (event: OpenHandsObservation) => {
     case "run_ipython":
     case "read":
     case "edit":
-    case "mcp":
       if (!hasContent || contentIncludesError) return "error";
-      return "success"; // Content is valid
+      return "success";
+
+    case "mcp":
+      try {
+        const parsed = JSON.parse(event.content);
+        if (typeof parsed?.isError === "boolean") {
+          return parsed.isError ? "error" : "success";
+        }
+      } catch {
+        return hasContent ? "success" : "error";
+      }
+      return hasContent ? "success" : "error";
     default:
       return "success";
   }

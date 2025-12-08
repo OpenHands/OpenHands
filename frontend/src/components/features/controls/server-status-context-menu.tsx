@@ -6,6 +6,9 @@ import { ConversationStatus } from "#/types/conversation-status";
 import StopCircleIcon from "#/icons/stop-circle.svg?react";
 import PlayCircleIcon from "#/icons/play-circle.svg?react";
 import { ServerStatusContextMenuIconText } from "./server-status-context-menu-icon-text";
+import { ServerStatus } from "./server-status";
+import { Divider } from "#/ui/divider";
+import { cn } from "#/utils/utils";
 
 interface ServerStatusContextMenuProps {
   onClose: () => void;
@@ -13,6 +16,8 @@ interface ServerStatusContextMenuProps {
   onStartServer?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   conversationStatus: ConversationStatus | null;
   position?: "top" | "bottom";
+  className?: string;
+  isPausing?: boolean;
 }
 
 export function ServerStatusContextMenu({
@@ -21,9 +26,14 @@ export function ServerStatusContextMenu({
   onStartServer,
   conversationStatus,
   position = "top",
+  className = "",
+  isPausing = false,
 }: ServerStatusContextMenuProps) {
   const { t } = useTranslation();
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
+
+  const shouldActionShown =
+    conversationStatus === "RUNNING" || conversationStatus === "STOPPED";
 
   return (
     <ContextMenu
@@ -32,24 +42,36 @@ export function ServerStatusContextMenu({
       position={position}
       alignment="left"
       size="default"
-      className="left-2 w-fit min-w-max"
+      className={cn("left-2 w-fit min-w-42", className)}
     >
-      {conversationStatus === "RUNNING" && onStopServer && (
-        <ServerStatusContextMenuIconText
-          icon={<StopCircleIcon width={18} height={18} />}
-          text={t(I18nKey.COMMON$STOP_RUNTIME)}
-          onClick={onStopServer}
-          testId="stop-server-button"
-        />
-      )}
+      <ServerStatus
+        conversationStatus={conversationStatus}
+        isPausing={isPausing}
+        className="py-1"
+      />
 
-      {conversationStatus === "STOPPED" && onStartServer && (
-        <ServerStatusContextMenuIconText
-          icon={<PlayCircleIcon width={18} height={18} />}
-          text={t(I18nKey.COMMON$START_RUNTIME)}
-          onClick={onStartServer}
-          testId="start-server-button"
-        />
+      {shouldActionShown && (
+        <>
+          <Divider />
+
+          {conversationStatus === "RUNNING" && onStopServer && (
+            <ServerStatusContextMenuIconText
+              icon={<StopCircleIcon width={18} height={18} />}
+              text={t(I18nKey.COMMON$STOP_RUNTIME)}
+              onClick={onStopServer}
+              testId="stop-server-button"
+            />
+          )}
+
+          {conversationStatus === "STOPPED" && onStartServer && (
+            <ServerStatusContextMenuIconText
+              icon={<PlayCircleIcon width={18} height={18} />}
+              text={t(I18nKey.COMMON$START_RUNTIME)}
+              onClick={onStartServer}
+              testId="start-server-button"
+            />
+          )}
+        </>
       )}
     </ContextMenu>
   );

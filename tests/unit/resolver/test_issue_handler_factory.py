@@ -3,6 +3,7 @@ from pydantic import SecretStr
 
 from openhands.core.config import LLMConfig
 from openhands.integrations.provider import ProviderType
+from openhands.resolver.interfaces.azure_devops import AzureDevOpsIssueHandler
 from openhands.resolver.interfaces.forgejo import (
     ForgejoIssueHandler,
     ForgejoPRHandler,
@@ -35,53 +36,107 @@ def factory_params(llm_config):
     }
 
 
+@pytest.fixture
+def azure_factory_params(llm_config):
+    return {
+        'owner': 'test-org/test-project',
+        'repo': 'test-repo',
+        'token': 'test-token',
+        'username': 'test-user',
+        'base_domain': 'dev.azure.com',
+        'llm_config': llm_config,
+    }
+
+
 test_cases = [
-    # platform, issue_type, base_domain, expected_context_type, expected_handler_type
+    # platform, issue_type, base_domain, expected_context_type, expected_handler_type, use_azure_params
     (
         ProviderType.GITHUB,
         'issue',
         'github.com',
         ServiceContextIssue,
         GithubIssueHandler,
+        False,
     ),
-    (ProviderType.GITHUB, 'pr', 'github.com', ServiceContextPR, GithubPRHandler),
+    (
+        ProviderType.GITHUB,
+        'pr',
+        'github.com',
+        ServiceContextPR,
+        GithubPRHandler,
+        False,
+    ),
     (
         ProviderType.GITLAB,
         'issue',
         'gitlab.com',
         ServiceContextIssue,
         GitlabIssueHandler,
+        False,
     ),
-    (ProviderType.GITLAB, 'pr', 'gitlab.com', ServiceContextPR, GitlabPRHandler),
+    (
+        ProviderType.GITLAB,
+        'pr',
+        'gitlab.com',
+        ServiceContextPR,
+        GitlabPRHandler,
+        False,
+    ),
     (
         ProviderType.FORGEJO,
         'issue',
         'codeberg.org',
         ServiceContextIssue,
         ForgejoIssueHandler,
+        False,
     ),
-    (ProviderType.FORGEJO, 'pr', 'codeberg.org', ServiceContextPR, ForgejoPRHandler),
+    (
+        ProviderType.FORGEJO,
+        'pr',
+        'codeberg.org',
+        ServiceContextPR,
+        ForgejoPRHandler,
+        False,
+    ),
+    (
+        ProviderType.AZURE_DEVOPS,
+        'issue',
+        'dev.azure.com',
+        ServiceContextIssue,
+        AzureDevOpsIssueHandler,
+        True,
+    ),
+    (
+        ProviderType.AZURE_DEVOPS,
+        'pr',
+        'dev.azure.com',
+        ServiceContextPR,
+        AzureDevOpsIssueHandler,
+        True,
+    ),
 ]
 
 
 @pytest.mark.parametrize(
-    'platform,issue_type,base_domain,expected_context_type,expected_handler_type',
+    'platform,issue_type,base_domain,expected_context_type,expected_handler_type,use_azure_params',
     test_cases,
 )
 def test_handler_creation(
     factory_params,
+    azure_factory_params,
     platform: ProviderType,
     issue_type: str,
     base_domain: str,
     expected_context_type: type,
     expected_handler_type: type,
+    use_azure_params: bool,
 ):
-    factory = IssueHandlerFactory(
-        **factory_params,
-        platform=platform,
-        issue_type=issue_type,
-        base_domain=base_domain,
+    params = (
+        azure_factory_params
+        if use_azure_params
+        else {**factory_params, 'base_domain': base_domain}
     )
+    factory = IssueHandlerFactory(**params, platform=platform, issue_type=issue_type)
 
     handler = factory.create()
 

@@ -37,7 +37,6 @@ jobs:
         shell: bash
         id: define-base-images
         run: |
-          # Only build nikolaik on PRs, otherwise build both nikolaik and ubuntu.
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             json=$(jq -n -c '[
                 { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
@@ -46,7 +45,6 @@ jobs:
           else
             json=$(jq -n -c '[
                 { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
-                { image: "ghcr.io/all-hands-ai/python-nodejs:python3.13-nodejs22-trixie", tag: "trixie" },
                 { image: "ubuntu:24.04", tag: "ubuntu" }
               ]')
           fi
@@ -88,7 +86,7 @@ jobs:
 
   # Builds the runtime Docker images
   ghcr_build_runtime:
-    name: Build Image
+    name: Build Runtime Image
     runs-on: blacksmith-8vcpu-ubuntu-2204
     if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ext-v'))"
     permissions:
@@ -200,7 +198,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/all-hands-ai/enterprise-server
+          images: ghcr.io/openhands/enterprise-server
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -252,13 +250,13 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{\"ref\": \"main\", \"inputs\": {\"openhandsPrNumber\": \"${{ github.event.pull_request.number }}\", \"deployEnvironment\": \"feature\", \"enterpriseImageTag\": \"pr-${{ github.event.pull_request.number }}\" }}" \
-            https://api.github.com/repos/All-Hands-AI/deploy/actions/workflows/deploy.yaml/dispatches
+            https://api.github.com/repos/OpenHands/deploy/actions/workflows/deploy.yaml/dispatches
 
   # Run unit tests with the Docker runtime Docker images as root
   test_runtime_root:
     name: RT Unit Tests (Root)
     needs: [ghcr_build_runtime, define-matrix]
-    runs-on: blacksmith-8vcpu-ubuntu-2204
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -300,7 +298,7 @@ jobs:
           # We install pytest-xdist in order to run tests across CPUs
           poetry run pip install pytest-xdist
 
-          # Install to be able to retry on failures for flaky tests
+          # Install to be able to retry on failures for flakey tests
           poetry run pip install pytest-rerunfailures
 
           image_name=ghcr.io/${{ env.REPO_OWNER }}/runtime:${{ env.RELEVANT_SHA }}-${{ matrix.base_image.tag }}
@@ -313,14 +311,14 @@ jobs:
           SANDBOX_RUNTIME_CONTAINER_IMAGE=$image_name \
           TEST_IN_CI=true \
           RUN_AS_OPENHANDS=false \
-          poetry run pytest -n 0 -raRs --reruns 2 --reruns-delay 5 -s ./tests/runtime --ignore=tests/runtime/test_browsergym_envs.py --durations=10
+          poetry run pytest -n 5 -raRs --reruns 2 --reruns-delay 3 -s ./tests/runtime --ignore=tests/runtime/test_browsergym_envs.py --durations=10
         env:
           DEBUG: "1"
 
   # Run unit tests with the Docker runtime Docker images as openhands user
   test_runtime_oh:
     name: RT Unit Tests (openhands)
-    runs-on: blacksmith-8vcpu-ubuntu-2204
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [ghcr_build_runtime, define-matrix]
     strategy:
       matrix:
@@ -372,7 +370,7 @@ jobs:
           SANDBOX_RUNTIME_CONTAINER_IMAGE=$image_name \
           TEST_IN_CI=true \
           RUN_AS_OPENHANDS=true \
-          poetry run pytest -n 0 -raRs --reruns 2 --reruns-delay 5 -s ./tests/runtime --ignore=tests/runtime/test_browsergym_envs.py --durations=10
+          poetry run pytest -n 5 -raRs --reruns 2 --reruns-delay 3 -s ./tests/runtime --ignore=tests/runtime/test_browsergym_envs.py --durations=10
         env:
           DEBUG: "1"
 

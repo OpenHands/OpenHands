@@ -243,7 +243,7 @@ async def test_update_settings_with_litellm_default(
     # Check that the URL and most of the JSON payload match what we expect
     assert call_args['json']['user_email'] == 'testy@tester.com'
     assert call_args['json']['models'] == []
-    assert call_args['json']['max_budget'] == 20.0
+    assert call_args['json']['max_budget'] == 10.0
     assert call_args['json']['user_id'] == 'user-id'
     assert call_args['json']['teams'] == ['test_team']
     assert call_args['json']['auto_create_key'] is True

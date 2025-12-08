@@ -1,12 +1,12 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub, Outlet } from "react-router";
 import SecretsSettingsScreen from "#/routes/secrets-settings";
 import { SecretsService } from "#/api/secrets-service";
 import { GetSecretsResponse } from "#/api/secrets-service.types";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 
@@ -21,25 +21,25 @@ const MOCK_GET_SECRETS_RESPONSE: GetSecretsResponse["custom_secrets"] = [
   },
 ];
 
-const RouterStub = createRoutesStub([
-  {
-    Component: () => <Outlet />,
-    path: "/settings",
-    children: [
-      {
-        Component: SecretsSettingsScreen,
-        path: "/settings/secrets",
-      },
-      {
-        Component: () => <div data-testid="git-settings-screen" />,
-        path: "/settings/integrations",
-      },
-    ],
-  },
-]);
+const renderSecretsSettings = () => {
+  const RouterStub = createRoutesStub([
+    {
+      Component: () => <Outlet />,
+      path: "/settings",
+      children: [
+        {
+          Component: SecretsSettingsScreen,
+          path: "/settings/secrets",
+        },
+        {
+          Component: () => <div data-testid="git-settings-screen" />,
+          path: "/settings/integrations",
+        },
+      ],
+    },
+  ]);
 
-const renderSecretsSettings = () =>
-  render(<RouterStub initialEntries={["/settings/secrets"]} />, {
+  return render(<RouterStub initialEntries={["/settings/secrets"]} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider
         client={
@@ -52,6 +52,7 @@ const renderSecretsSettings = () =>
       </QueryClientProvider>
     ),
   });
+};
 
 beforeEach(() => {
   const getConfigSpy = vi.spyOn(OptionService, "getConfig");
@@ -59,6 +60,10 @@ beforeEach(() => {
   getConfigSpy.mockResolvedValue({
     APP_MODE: "oss",
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("Content", () => {
@@ -501,6 +506,8 @@ describe("Secret actions", () => {
 
   it("should not submit whitespace secret names or values", async () => {
     const createSecretSpy = vi.spyOn(SecretsService, "createSecret");
+    const getSecretsSpy = vi.spyOn(SecretsService, "getSecrets");
+    getSecretsSpy.mockResolvedValue([]);
     renderSecretsSettings();
 
     // render form & hide items
@@ -532,9 +539,11 @@ describe("Secret actions", () => {
     await userEvent.click(submitButton);
 
     expect(createSecretSpy).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText("SECRETS$SECRET_VALUE_REQUIRED"),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByText("SECRETS$SECRET_VALUE_REQUIRED"),
+      ).toBeInTheDocument();
+    });
   });
 
   it("should not reset ipout values on an invalid submit", async () => {

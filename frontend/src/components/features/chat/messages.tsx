@@ -24,6 +24,7 @@ import {
 import { AgentState } from "#/types/agent-state";
 import { getFirstPRUrl } from "#/utils/parse-pr-url";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 const isErrorEvent = (evt: unknown): evt is { error: true; message: string } =>
   typeof evt === "object" &&
@@ -51,6 +52,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const { getOptimisticUserMessage } = useOptimisticUserMessageStore();
     const { conversationId } = useConversationId();
     const { data: conversation } = useUserConversation(conversationId);
+    const { data: activeConversation } = useActiveConversation();
+
+    // TODO: Hide microagent actions for V1 conversations
+    // This is a temporary measure and may be re-enabled in the future
+    const isV1Conversation = activeConversation?.conversation_version === "V1";
 
     const optimisticUserMessage = getOptimisticUserMessage();
 
@@ -236,7 +242,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             )}
             microagentPRUrl={getMicroagentPRUrlForEvent(message.id)}
             actions={
-              conversation?.selected_repository
+              conversation?.selected_repository && !isV1Conversation
                 ? [
                     {
                       icon: (
@@ -259,6 +265,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           <ChatMessage type="user" message={optimisticUserMessage} />
         )}
         {conversation?.selected_repository &&
+          !isV1Conversation &&
           showLaunchMicroagentModal &&
           selectedEventId &&
           createPortal(

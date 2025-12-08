@@ -74,8 +74,8 @@ def test_infer_repo_from_message():
         # Single GitHub URLs
         ('Clone https://github.com/demo123/demo1.git', ['demo123/demo1']),
         (
-            'Check out https://github.com/All-Hands-AI/OpenHands.git for details',
-            ['All-Hands-AI/OpenHands'],
+            'Check out https://github.com/OpenHands/OpenHands.git for details',
+            ['OpenHands/OpenHands'],
         ),
         ('Visit https://github.com/microsoft/vscode', ['microsoft/vscode']),
         # Single GitLab URLs
@@ -92,7 +92,7 @@ def test_infer_repo_from_message():
             ['atlassian/atlassian-connect-express'],
         ),
         # Single direct owner/repo mentions
-        ('Please deploy the All-Hands-AI/OpenHands repo', ['All-Hands-AI/OpenHands']),
+        ('Please deploy the OpenHands/OpenHands repo', ['OpenHands/OpenHands']),
         ('I need help with the microsoft/vscode repository', ['microsoft/vscode']),
         ('Check facebook/react for examples', ['facebook/react']),
         ('The torvalds/linux kernel', ['torvalds/linux']),

@@ -6,7 +6,6 @@ import { Route } from "./+types/settings";
 import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
 import { GetConfigResponse } from "#/api/option-service/option.types";
-import { useSubscriptionAccess } from "#/hooks/query/use-subscription-access";
 import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import { Typography } from "#/ui/typography";
 import { SettingsLayout } from "#/components/features/settings/settings-layout";
@@ -35,13 +34,21 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     return redirect("/settings");
   }
 
+  // If LLM settings are hidden and user tries to access the LLM settings page
+  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS && pathname === "/settings") {
+    // Redirect to the first available settings page
+    if (isSaas) {
+      return redirect("/settings/user");
+    }
+    return redirect("/settings/mcp");
+  }
+
   return null;
 };
 
 function SettingsScreen() {
   const { t } = useTranslation();
   const { data: config } = useConfig();
-  const { data: subscriptionAccess } = useSubscriptionAccess();
   const location = useLocation();
 
   const isSaas = config?.APP_MODE === "saas";
@@ -54,18 +61,29 @@ function SettingsScreen() {
     } else {
       items.push(...OSS_NAV_ITEMS);
     }
+
+    // Filter out LLM settings if the feature flag is enabled
+    if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
+      return items.filter((item) => item.to !== "/settings");
+    }
+
     return items;
-  }, [isSaas, !!subscriptionAccess]);
+  }, [isSaas, config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS]);
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {
     const currentItem = navItems.find((item) => item.to === location.pathname);
-    return currentItem ? currentItem.text : "SETTINGS$NAV_LLM";
+    if (currentItem) {
+      return currentItem.text;
+    }
+
+    // Default to the first available navigation item if current page is not found
+    return navItems.length > 0 ? navItems[0].text : "SETTINGS$TITLE";
   }, [navItems, location.pathname]);
 
   return (
     <main data-testid="settings-screen" className="h-full">
-      <SettingsLayout navigationItems={navItems} isSaas={isSaas}>
+      <SettingsLayout navigationItems={navItems}>
         <div className="flex flex-col gap-6 h-full">
           <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
           <div className="flex-1 overflow-auto custom-scrollbar-always">

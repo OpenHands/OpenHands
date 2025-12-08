@@ -83,6 +83,116 @@ VSCode Extension:
   - Use `vscode.window.createOutputChannel()` for debug logging instead of `showErrorMessage()` popups
   - Pre-commit process runs both frontend and backend checks when committing extension changes
 
+## Enterprise Directory
+
+The `enterprise/` directory contains additional functionality that extends the open-source OpenHands codebase. This includes:
+- Authentication and user management (Keycloak integration)
+- Database migrations (Alembic)
+- Integration services (GitHub, GitLab, Jira, Linear, Slack)
+- Billing and subscription management (Stripe)
+- Telemetry and analytics (PostHog, custom metrics framework)
+
+### Enterprise Development Setup
+
+**Prerequisites:**
+- Python 3.12
+- Poetry (for dependency management)
+- Node.js 22.x (for frontend)
+- Docker (optional)
+
+**Setup Steps:**
+1. First, build the main OpenHands project: `make build`
+2. Then install enterprise dependencies: `cd enterprise && poetry install --with dev,test` (This can take a very long time. Be patient.)
+3. Set up enterprise pre-commit hooks: `poetry run pre-commit install --config ./dev_config/python/.pre-commit-config.yaml`
+
+**Running Enterprise Tests:**
+```bash
+# Enterprise unit tests (full suite)
+PYTHONPATH=".:$PYTHONPATH" poetry run --project=enterprise pytest --forked -n auto -s -p no:ddtrace -p no:ddtrace.pytest_bdd -p no:ddtrace.pytest_benchmark ./enterprise/tests/unit --cov=enterprise --cov-branch
+
+# Test specific modules (faster for development)
+cd enterprise
+PYTHONPATH=".:$PYTHONPATH" poetry run pytest tests/unit/telemetry/ --confcutdir=tests/unit/telemetry
+
+# Enterprise linting (IMPORTANT: use --show-diff-on-failure to match GitHub CI)
+poetry run pre-commit run --all-files --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
+```
+
+**Running Enterprise Server:**
+```bash
+cd enterprise
+make start-backend  # Development mode with hot reload
+# or
+make run  # Full application (backend + frontend)
+```
+
+**Key Configuration Files:**
+- `enterprise/pyproject.toml` - Enterprise-specific dependencies
+- `enterprise/Makefile` - Enterprise build and run commands
+- `enterprise/dev_config/python/` - Linting and type checking configuration
+- `enterprise/migrations/` - Database migration files
+
+**Database Migrations:**
+Enterprise uses Alembic for database migrations. When making schema changes:
+1. Create migration files in `enterprise/migrations/versions/`
+2. Test migrations thoroughly
+3. The CI will check for migration conflicts on PRs
+
+**Integration Development:**
+The enterprise codebase includes integrations for:
+- **GitHub** - PR management, webhooks, app installations
+- **GitLab** - Similar to GitHub but for GitLab instances
+- **Jira** - Issue tracking and project management
+- **Linear** - Modern issue tracking
+- **Slack** - Team communication and notifications
+
+Each integration follows a consistent pattern with service classes, storage models, and API endpoints.
+
+**Important Notes:**
+- Enterprise code is licensed under Polyform Free Trial License (30-day limit)
+- The enterprise server extends the OSS server through dynamic imports
+- Database changes require careful migration planning in `enterprise/migrations/`
+- Always test changes in both OSS and enterprise contexts
+- Use the enterprise-specific Makefile commands for development
+
+**Enterprise Testing Best Practices:**
+
+**Database Testing:**
+- Use SQLite in-memory databases (`sqlite:///:memory:`) for unit tests instead of real PostgreSQL
+- Create module-specific `conftest.py` files with database fixtures
+- Mock external database connections in unit tests to avoid dependency on running services
+- Use real database connections only for integration tests
+
+**Import Patterns:**
+- Use relative imports without `enterprise.` prefix in enterprise code
+- Example: `from storage.database import session_maker` not `from enterprise.storage.database import session_maker`
+- This ensures code works in both OSS and enterprise contexts
+
+**Test Structure:**
+- Place tests in `enterprise/tests/unit/` following the same structure as the source code
+- Use `--confcutdir=tests/unit/[module]` when testing specific modules
+- Create comprehensive fixtures for complex objects (databases, external services)
+- Write platform-agnostic tests (avoid hardcoded OS-specific assertions)
+
+**Mocking Strategy:**
+- Use `AsyncMock` for async operations and `MagicMock` for complex objects
+- Mock all external dependencies (databases, APIs, file systems) in unit tests
+- Use `patch` with correct import paths (e.g., `telemetry.registry.logger` not `enterprise.telemetry.registry.logger`)
+- Test both success and failure scenarios with proper error handling
+
+**Coverage Goals:**
+- Aim for 90%+ test coverage on new enterprise modules
+- Focus on critical business logic and error handling paths
+- Use `--cov-report=term-missing` to identify uncovered lines
+
+**Troubleshooting:**
+- If tests fail, ensure all dependencies are installed: `poetry install --with dev,test`
+- For database issues, check migration status and run migrations if needed
+- For frontend issues, ensure the main OpenHands frontend is built: `make build`
+- Check logs in the `logs/` directory for runtime issues
+- If tests fail with import errors, verify `PYTHONPATH=".:$PYTHONPATH"` is set
+- **If GitHub CI fails but local linting passes**: Always use `--show-diff-on-failure` flag to match CI behavior exactly
+
 ## Template for Github Pull Request
 
 If you are starting a pull request (PR), please follow the template in `.github/pull_request_template.md`.

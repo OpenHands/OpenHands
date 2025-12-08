@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { usePostHog } from "posthog-js/react";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useSettings } from "#/hooks/query/use-settings";
 import { AvailableLanguages } from "#/i18n";
@@ -20,6 +21,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { parseMaxBudgetPerTask } from "#/utils/settings-utils";
 
 function AppSettingsScreen() {
+  const posthog = usePostHog();
   const { t } = useTranslation();
 
   const { mutate: saveSettings, isPending } = useSaveSettings();
@@ -93,7 +95,7 @@ function AppSettingsScreen() {
       },
       {
         onSuccess: () => {
-          handleCaptureConsent(enableAnalytics);
+          handleCaptureConsent(posthog, enableAnalytics);
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
         },
         onError: (error) => {
@@ -125,7 +127,8 @@ function AppSettingsScreen() {
   };
 
   const checkIfAnalyticsSwitchHasChanged = (checked: boolean) => {
-    const currentAnalytics = !!settings?.USER_CONSENTS_TO_ANALYTICS;
+    // Treat null as true since analytics is opt-in by default
+    const currentAnalytics = settings?.USER_CONSENTS_TO_ANALYTICS ?? true;
     setAnalyticsSwitchHasChanged(checked !== currentAnalytics);
   };
 
@@ -197,7 +200,7 @@ function AppSettingsScreen() {
           <SettingsSwitch
             testId="enable-analytics-switch"
             name="enable-analytics-switch"
-            defaultIsToggled={!!settings.USER_CONSENTS_TO_ANALYTICS}
+            defaultIsToggled={settings.USER_CONSENTS_TO_ANALYTICS ?? true}
             onToggle={checkIfAnalyticsSwitchHasChanged}
           >
             {t(I18nKey.ANALYTICS$SEND_ANONYMOUS_DATA)}
@@ -236,18 +239,20 @@ function AppSettingsScreen() {
             </SettingsSwitch>
           )}
 
-          <SettingsInput
-            testId="max-budget-per-task-input"
-            name="max-budget-per-task-input"
-            type="number"
-            label={t(I18nKey.SETTINGS$MAX_BUDGET_PER_CONVERSATION)}
-            defaultValue={settings.MAX_BUDGET_PER_TASK?.toString() || ""}
-            onChange={checkIfMaxBudgetPerTaskHasChanged}
-            placeholder={t(I18nKey.SETTINGS$MAXIMUM_BUDGET_USD)}
-            min={1}
-            step={1}
-            className="w-full max-w-[680px]" // Match the width of the language field
-          />
+          {!settings?.V1_ENABLED && (
+            <SettingsInput
+              testId="max-budget-per-task-input"
+              name="max-budget-per-task-input"
+              type="number"
+              label={t(I18nKey.SETTINGS$MAX_BUDGET_PER_CONVERSATION)}
+              defaultValue={settings.MAX_BUDGET_PER_TASK?.toString() || ""}
+              onChange={checkIfMaxBudgetPerTaskHasChanged}
+              placeholder={t(I18nKey.SETTINGS$MAXIMUM_BUDGET_USD)}
+              min={1}
+              step={1}
+              className="w-full max-w-[680px]" // Match the width of the language field
+            />
+          )}
 
           <div className="border-t border-t-tertiary pt-6 mt-2">
             <h3 className="text-lg font-medium mb-2">

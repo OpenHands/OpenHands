@@ -137,7 +137,6 @@ export function CustomChatInput({
           disabled={isDisabled}
           showButton={showButton}
           buttonClassName={buttonClassName}
-          conversationStatus={conversationStatus}
           chatInputRef={chatInputRef}
           handleFileIconClick={handleFileIconClick}
           handleSubmit={handleSubmit}

@@ -9,7 +9,7 @@ from pydantic import SecretStr
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.server.app import app
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.memory import InMemoryFileStore
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.file_settings_store import FileSettingsStore
@@ -43,7 +43,10 @@ class MockUserAuth(UserAuth):
     async def get_secrets_store(self) -> SecretsStore | None:
         return None
 
-    async def get_user_secrets(self) -> UserSecrets | None:
+    async def get_secrets(self) -> Secrets | None:
+        return None
+
+    async def get_mcp_api_key(self) -> str | None:
         return None
 
     @classmethod

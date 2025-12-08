@@ -1,7 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import React from "react";
-import posthog from "posthog-js";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
 import { Settings } from "#/types/settings";
@@ -38,6 +36,7 @@ const getSettingsQueryFn = async (): Promise<Settings> => {
     GIT_USER_EMAIL:
       apiSettings.git_user_email || DEFAULT_SETTINGS.GIT_USER_EMAIL,
     IS_NEW_USER: false,
+    V1_ENABLED: apiSettings.v1_enabled ?? DEFAULT_SETTINGS.V1_ENABLED,
   };
 };
 
@@ -60,12 +59,6 @@ export const useSettings = () => {
       disableToast: true,
     },
   });
-
-  React.useEffect(() => {
-    if (query.isFetched && query.data?.LLM_API_KEY_SET) {
-      posthog.capture("user_activated");
-    }
-  }, [query.data?.LLM_API_KEY_SET, query.isFetched]);
 
   // We want to return the defaults if the settings aren't found so the user can still see the
   // options to make their initial save. We don't set the defaults in `initialData` above because

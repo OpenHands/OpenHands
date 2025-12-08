@@ -131,7 +131,7 @@ export function RepositorySelectionForm({
         onBranchSelect={handleBranchSelection}
         defaultBranch={defaultBranch}
         placeholder="Select branch..."
-        className="max-w-[500px]"
+        className="max-w-full"
         disabled={!selectedRepository || isLoadingSettings}
       />
     );

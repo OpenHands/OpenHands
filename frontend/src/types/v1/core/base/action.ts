@@ -41,6 +41,25 @@ export interface ExecuteBashAction extends ActionBase<"ExecuteBashAction"> {
   reset: boolean;
 }
 
+export interface TerminalAction extends ActionBase<"TerminalAction"> {
+  /**
+   * The terminal command to execute.
+   */
+  command: string;
+  /**
+   * If True, the command is an input to the running process. If False, the command is executed directly.
+   */
+  is_input: boolean;
+  /**
+   * Optional max time limit (seconds) for the command.
+   */
+  timeout: number | null;
+  /**
+   * If True, reset the terminal session before running the command.
+   */
+  reset: boolean;
+}
+
 export interface FileEditorAction extends ActionBase<"FileEditorAction"> {
   /**
    * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
@@ -72,8 +91,7 @@ export interface FileEditorAction extends ActionBase<"FileEditorAction"> {
   view_range: [number, number] | null;
 }
 
-export interface StrReplaceEditorAction
-  extends ActionBase<"StrReplaceEditorAction"> {
+export interface StrReplaceEditorAction extends ActionBase<"StrReplaceEditorAction"> {
   /**
    * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
    */
@@ -115,8 +133,7 @@ export interface TaskTrackerAction extends ActionBase<"TaskTrackerAction"> {
   task_list: TaskItem[];
 }
 
-export interface BrowserNavigateAction
-  extends ActionBase<"BrowserNavigateAction"> {
+export interface BrowserNavigateAction extends ActionBase<"BrowserNavigateAction"> {
   /**
    * The URL to navigate to
    */
@@ -149,16 +166,14 @@ export interface BrowserTypeAction extends ActionBase<"BrowserTypeAction"> {
   text: string;
 }
 
-export interface BrowserGetStateAction
-  extends ActionBase<"BrowserGetStateAction"> {
+export interface BrowserGetStateAction extends ActionBase<"BrowserGetStateAction"> {
   /**
    * Whether to include a screenshot of the current page. Default: False
    */
   include_screenshot: boolean;
 }
 
-export interface BrowserGetContentAction
-  extends ActionBase<"BrowserGetContentAction"> {
+export interface BrowserGetContentAction extends ActionBase<"BrowserGetContentAction"> {
   /**
    * Whether to include links in the content (default: False)
    */
@@ -180,21 +195,18 @@ export interface BrowserGoBackAction extends ActionBase<"BrowserGoBackAction"> {
   // No additional properties - this action has no parameters
 }
 
-export interface BrowserListTabsAction
-  extends ActionBase<"BrowserListTabsAction"> {
+export interface BrowserListTabsAction extends ActionBase<"BrowserListTabsAction"> {
   // No additional properties - this action has no parameters
 }
 
-export interface BrowserSwitchTabAction
-  extends ActionBase<"BrowserSwitchTabAction"> {
+export interface BrowserSwitchTabAction extends ActionBase<"BrowserSwitchTabAction"> {
   /**
    * 4 Character Tab ID of the tab to switch to (from browser_list_tabs)
    */
   tab_id: string;
 }
 
-export interface BrowserCloseTabAction
-  extends ActionBase<"BrowserCloseTabAction"> {
+export interface BrowserCloseTabAction extends ActionBase<"BrowserCloseTabAction"> {
   /**
    * 4 Character Tab ID of the tab to close (from browser_list_tabs)
    */
@@ -206,6 +218,7 @@ export type Action =
   | FinishAction
   | ThinkAction
   | ExecuteBashAction
+  | TerminalAction
   | FileEditorAction
   | StrReplaceEditorAction
   | TaskTrackerAction

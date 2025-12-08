@@ -9,7 +9,7 @@ import time
 import traceback
 from contextlib import contextmanager
 from inspect import signature
-from typing import Any, Awaitable, Callable, TextIO
+from typing import Any, Awaitable, Callable, Optional, TextIO
 
 import pandas as pd
 from pydantic import BaseModel
@@ -222,6 +222,7 @@ def prepare_dataset(
     eval_n_limit: int,
     eval_ids: list[str] | None = None,
     skip_num: int | None = None,
+    filter_func: Optional[Callable[[pd.DataFrame], pd.DataFrame]] = None,
 ):
     assert 'instance_id' in dataset.columns, (
         "Expected 'instance_id' column in the dataset. You should define your own unique identifier for each instance and use it as the 'instance_id' column."
@@ -263,6 +264,12 @@ def prepare_dataset(
         )
         logger.info(
             f'Randomly sampling {eval_n_limit} unique instances with random seed 42.'
+        )
+
+    if filter_func is not None:
+        dataset = filter_func(dataset)
+        logger.info(
+            f'Applied filter after sampling: {len(dataset)} instances remaining'
         )
 
     def make_serializable(instance_dict: dict) -> dict:

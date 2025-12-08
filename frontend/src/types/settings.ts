@@ -2,6 +2,7 @@ export const ProviderOptions = {
   github: "github",
   gitlab: "gitlab",
   bitbucket: "bitbucket",
+  azure_devops: "azure_devops",
   enterprise_sso: "enterprise_sso",
 } as const;
 
@@ -62,6 +63,7 @@ export type Settings = {
   EMAIL_VERIFIED?: boolean;
   GIT_USER_NAME?: string;
   GIT_USER_EMAIL?: string;
+  V1_ENABLED?: boolean;
 };
 
 export type PostSettings = Settings & {

@@ -1,3 +1,4 @@
+import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +22,7 @@ class EncryptionKey(BaseModel):
     @field_serializer('key')
     def serialize_key(self, key: SecretStr, info: Any):
         """Conditionally serialize the key based on context."""
-        if info.context and info.context.get('reveal_secrets'):
+        if info.context and info.context.get('expose_secrets'):
             return key.get_secret_value()
         return str(key)  # Returns '**********' by default
 
@@ -30,8 +31,14 @@ def get_default_encryption_keys(workspace_dir: Path) -> list[EncryptionKey]:
     """Generate default encryption keys."""
     master_key = os.getenv('JWT_SECRET')
     if master_key:
+        # Derive a deterministic key ID from the secret itself.
+        # This ensures all pods using the same JWT_SECRET get the same key ID,
+        # which is critical for multi-pod deployments where tokens may be
+        # created by one pod and verified by another.
+        key_id = base62.encodebytes(hashlib.sha256(master_key.encode()).digest())
         return [
             EncryptionKey(
+                id=key_id,
                 key=SecretStr(master_key),
                 active=True,
                 notes='jwt secret master key',

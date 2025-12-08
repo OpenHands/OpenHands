@@ -1,7 +1,9 @@
 """Sandboxed Conversation router for OpenHands Server."""
 
 import asyncio
+import os
 import sys
+import tempfile
 from datetime import datetime
 from typing import Annotated, AsyncGenerator
 from uuid import UUID
@@ -49,9 +51,21 @@ from openhands.app_server.config import (
     depends_app_conversation_start_task_service,
     depends_db_session,
     depends_httpx_client,
+    depends_sandbox_service,
+    depends_sandbox_spec_service,
     depends_user_context,
     get_app_conversation_service,
 )
+from openhands.app_server.sandbox.sandbox_models import (
+    AGENT_SERVER,
+    SandboxStatus,
+)
+from openhands.app_server.sandbox.sandbox_service import SandboxService
+from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
+from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname_for_docker,
+)
+from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 router = APIRouter(prefix='/app-conversations', tags=['Conversations'])
 app_conversation_service_dependency = depends_app_conversation_service()
@@ -61,6 +75,8 @@ app_conversation_start_task_service_dependency = (
 user_context_dependency = depends_user_context()
 db_session_dependency = depends_db_session()
 httpx_client_dependency = depends_httpx_client()
+sandbox_service_dependency = depends_sandbox_service()
+sandbox_spec_service_dependency = depends_sandbox_spec_service()
 
 # Read methods
 
@@ -99,6 +115,12 @@ async def search_app_conversations(
             lte=100,
         ),
     ] = 100,
+    include_sub_conversations: Annotated[
+        bool,
+        Query(
+            title='If True, include sub-conversations in the results. If False (default), exclude all sub-conversations.'
+        ),
+    ] = False,
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
@@ -114,6 +136,7 @@ async def search_app_conversations(
         updated_at__lt=updated_at__lt,
         page_id=page_id,
         limit=limit,
+        include_sub_conversations=include_sub_conversations,
     )
 
 
@@ -193,7 +216,8 @@ async def stream_app_conversation_start(
     user_context: UserContext = user_context_dependency,
 ) -> list[AppConversationStartTask]:
     """Start an app conversation start task and stream updates from it.
-    Leaves the connection open until either the conversation starts or there was an error"""
+    Leaves the connection open until either the conversation starts or there was an error
+    """
     response = StreamingResponse(
         _stream_app_conversation_start(request, user_context),
         media_type='application/json',
@@ -206,6 +230,10 @@ async def search_app_conversation_start_tasks(
     conversation_id__eq: Annotated[
         UUID | None,
         Query(title='Filter by conversation ID equal to this value'),
+    ] = None,
+    created_at__gte: Annotated[
+        datetime | None,
+        Query(title='Filter by created_at greater than or equal to this datetime'),
     ] = None,
     sort_order: Annotated[
         AppConversationStartTaskSortOrder,
@@ -233,6 +261,7 @@ async def search_app_conversation_start_tasks(
     return (
         await app_conversation_start_task_service.search_app_conversation_start_tasks(
             conversation_id__eq=conversation_id__eq,
+            created_at__gte=created_at__gte,
             sort_order=sort_order,
             page_id=page_id,
             limit=limit,
@@ -246,6 +275,10 @@ async def count_app_conversation_start_tasks(
         UUID | None,
         Query(title='Filter by conversation ID equal to this value'),
     ] = None,
+    created_at__gte: Annotated[
+        datetime | None,
+        Query(title='Filter by created_at greater than or equal to this datetime'),
+    ] = None,
     app_conversation_start_task_service: AppConversationStartTaskService = (
         app_conversation_start_task_service_dependency
     ),
@@ -253,6 +286,7 @@ async def count_app_conversation_start_tasks(
     """Count conversation start tasks matching the given filters."""
     return await app_conversation_start_task_service.count_app_conversation_start_tasks(
         conversation_id__eq=conversation_id__eq,
+        created_at__gte=created_at__gte,
     )
 
 
@@ -269,6 +303,101 @@ async def batch_get_app_conversation_start_tasks(
         ids
     )
     return start_tasks
+
+
+@router.get('/{conversation_id}/file')
+async def read_conversation_file(
+    conversation_id: UUID,
+    file_path: Annotated[
+        str,
+        Query(title='Path to the file to read within the sandbox workspace'),
+    ] = '/workspace/project/PLAN.md',
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+) -> str:
+    """Read a file from a specific conversation's sandbox workspace.
+
+    Returns the content of the file at the specified path if it exists, otherwise returns an empty string.
+
+    Args:
+        conversation_id: The UUID of the conversation
+        file_path: Path to the file to read within the sandbox workspace
+
+    Returns:
+        The content of the file or an empty string if the file doesn't exist
+    """
+    # Get the conversation info
+    conversation = await app_conversation_service.get_app_conversation(conversation_id)
+    if not conversation:
+        return ''
+
+    # Get the sandbox info
+    sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
+    if not sandbox or sandbox.status != SandboxStatus.RUNNING:
+        return ''
+
+    # Get the sandbox spec to find the working directory
+    sandbox_spec = await sandbox_spec_service.get_sandbox_spec(sandbox.sandbox_spec_id)
+    if not sandbox_spec:
+        return ''
+
+    # Get the agent server URL
+    if not sandbox.exposed_urls:
+        return ''
+
+    agent_server_url = None
+    for exposed_url in sandbox.exposed_urls:
+        if exposed_url.name == AGENT_SERVER:
+            agent_server_url = exposed_url.url
+            break
+
+    if not agent_server_url:
+        return ''
+
+    agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+
+    # Create remote workspace
+    remote_workspace = AsyncRemoteWorkspace(
+        host=agent_server_url,
+        api_key=sandbox.session_api_key,
+        working_dir=sandbox_spec.working_dir,
+    )
+
+    # Read the file at the specified path
+    temp_file_path = None
+    try:
+        # Create a temporary file path to download the remote file
+        with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as temp_file:
+            temp_file_path = temp_file.name
+
+        # Download the file from remote system
+        result = await remote_workspace.file_download(
+            source_path=file_path,
+            destination_path=temp_file_path,
+        )
+
+        if result.success:
+            # Read the content from the temporary file
+            with open(temp_file_path, 'rb') as f:
+                content = f.read()
+            # Decode bytes to string
+            return content.decode('utf-8')
+    except Exception:
+        # If there's any error reading the file, return empty string
+        pass
+    finally:
+        # Clean up the temporary file
+        if temp_file_path:
+            try:
+                os.unlink(temp_file_path)
+            except Exception:
+                # Ignore errors during cleanup
+                pass
+
+    return ''
 
 
 async def _consume_remaining(

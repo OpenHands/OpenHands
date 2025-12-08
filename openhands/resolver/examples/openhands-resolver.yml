@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   call-openhands-resolver:
-    uses: All-Hands-AI/OpenHands/.github/workflows/openhands-resolver.yml@main
+    uses: OpenHands/OpenHands/.github/workflows/openhands-resolver.yml@main
     with:
       macro: ${{ vars.OPENHANDS_MACRO || '@openhands-agent' }}
       max_iterations: ${{ fromJson(vars.OPENHANDS_MAX_ITER || 50) }}

@@ -38,8 +38,7 @@ export const createWebSocketTestSetup = (
 /**
  * Standard WebSocket test setup for conversation WebSocket handler tests
  * Updated to use the V1 WebSocket URL pattern: /sockets/events/{conversationId}
+ * Uses a wildcard pattern to match any conversation ID
  */
 export const conversationWebSocketTestSetup = () =>
-  createWebSocketTestSetup(
-    "ws://localhost:3000/sockets/events/test-conversation-default",
-  );
+  createWebSocketTestSetup("ws://localhost:3000/sockets/events/*");

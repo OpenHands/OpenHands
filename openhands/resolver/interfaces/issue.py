@@ -121,5 +121,5 @@ class IssueHandlerInterface(ABC):
     def get_converted_issues(
         self, issue_numbers: list[int] | None = None, comment_id: int | None = None
     ) -> list[Issue]:
-        """Download issues from the git provider (GitHub, GitLab, or Bitbucket)."""
+        """Download issues from the git provider (GitHub, GitLab, Bitbucket, or Azure DevOps)."""
         pass

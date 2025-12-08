@@ -2,6 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { Provider } from "#/types/settings";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import { SandboxService } from "#/api/sandbox-service/sandbox-service.api";
 
 /**
  * Gets the conversation version from the cache
@@ -18,11 +19,15 @@ export const getConversationVersionFromQueryCache = (
 };
 
 /**
- * Fetches a V1 conversation's sandbox_id
+ * Fetches a V1 conversation's sandbox_id and conversation_url
  */
-const fetchV1ConversationSandboxId = async (
+const fetchV1ConversationData = async (
   conversationId: string,
-): Promise<string> => {
+): Promise<{
+  sandboxId: string;
+  conversationUrl: string | null;
+  sessionApiKey: string | null;
+}> => {
   const conversations = await V1ConversationService.batchGetAppConversations([
     conversationId,
   ]);
@@ -32,15 +37,32 @@ const fetchV1ConversationSandboxId = async (
     throw new Error(`V1 conversation not found: ${conversationId}`);
   }
 
-  return appConversation.sandbox_id;
+  return {
+    sandboxId: appConversation.sandbox_id,
+    conversationUrl: appConversation.conversation_url,
+    sessionApiKey: appConversation.session_api_key,
+  };
 };
 
 /**
  * Pause a V1 conversation sandbox by fetching the sandbox_id and pausing it
  */
 export const pauseV1ConversationSandbox = async (conversationId: string) => {
-  const sandboxId = await fetchV1ConversationSandboxId(conversationId);
-  return V1ConversationService.pauseSandbox(sandboxId);
+  const { sandboxId } = await fetchV1ConversationData(conversationId);
+  return SandboxService.pauseSandbox(sandboxId);
+};
+
+/**
+ * Pause a V1 conversation by fetching the conversation data and pausing it
+ */
+export const pauseV1Conversation = async (conversationId: string) => {
+  const { conversationUrl, sessionApiKey } =
+    await fetchV1ConversationData(conversationId);
+  return V1ConversationService.pauseConversation(
+    conversationId,
+    conversationUrl,
+    sessionApiKey,
+  );
 };
 
 /**
@@ -53,8 +75,21 @@ export const stopV0Conversation = async (conversationId: string) =>
  * Resumes a V1 conversation sandbox by fetching the sandbox_id and resuming it
  */
 export const resumeV1ConversationSandbox = async (conversationId: string) => {
-  const sandboxId = await fetchV1ConversationSandboxId(conversationId);
-  return V1ConversationService.resumeSandbox(sandboxId);
+  const { sandboxId } = await fetchV1ConversationData(conversationId);
+  return SandboxService.resumeSandbox(sandboxId);
+};
+
+/**
+ * Resume a V1 conversation by fetching the conversation data and resuming it
+ */
+export const resumeV1Conversation = async (conversationId: string) => {
+  const { conversationUrl, sessionApiKey } =
+    await fetchV1ConversationData(conversationId);
+  return V1ConversationService.resumeConversation(
+    conversationId,
+    conversationUrl,
+    sessionApiKey,
+  );
 };
 
 /**

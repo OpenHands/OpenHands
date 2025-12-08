@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from cryptography.fernet import Fernet
 from sqlalchemy.orm import sessionmaker
 from storage.database import session_maker
-from storage.stored_user_secrets import StoredUserSecrets
+from storage.stored_custom_secrets import StoredCustomSecrets
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.secrets.secrets_store import SecretsStore
 
 
@@ -21,20 +21,20 @@ class SaasSecretsStore(SecretsStore):
     session_maker: sessionmaker
     config: OpenHandsConfig
 
-    async def load(self) -> UserSecrets | None:
+    async def load(self) -> Secrets | None:
         if not self.user_id:
             return None
 
         with self.session_maker() as session:
             # Fetch all secrets for the given user ID
             settings = (
-                session.query(StoredUserSecrets)
-                .filter(StoredUserSecrets.keycloak_user_id == self.user_id)
+                session.query(StoredCustomSecrets)
+                .filter(StoredCustomSecrets.keycloak_user_id == self.user_id)
                 .all()
             )
 
             if not settings:
-                return UserSecrets()
+                return Secrets()
 
             kwargs = {}
             for secret in settings:
@@ -45,14 +45,14 @@ class SaasSecretsStore(SecretsStore):
 
             self._decrypt_kwargs(kwargs)
 
-            return UserSecrets(custom_secrets=kwargs)  # type: ignore[arg-type]
+            return Secrets(custom_secrets=kwargs)  # type: ignore[arg-type]
 
-    async def store(self, item: UserSecrets):
+    async def store(self, item: Secrets):
         with self.session_maker() as session:
             # Incoming secrets are always the most updated ones
             # Delete all existing records and override with incoming ones
-            session.query(StoredUserSecrets).filter(
-                StoredUserSecrets.keycloak_user_id == self.user_id
+            session.query(StoredCustomSecrets).filter(
+                StoredCustomSecrets.keycloak_user_id == self.user_id
             ).delete()
 
             # Prepare the new secrets data
@@ -74,7 +74,7 @@ class SaasSecretsStore(SecretsStore):
 
             # Add the new secrets
             for secret_name, secret_value, description in secret_tuples:
-                new_secret = StoredUserSecrets(
+                new_secret = StoredCustomSecrets(
                     keycloak_user_id=self.user_id,
                     secret_name=secret_name,
                     secret_value=secret_value,

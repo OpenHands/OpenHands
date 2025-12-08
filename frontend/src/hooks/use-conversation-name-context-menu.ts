@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import React from "react";
-import posthog from "posthog-js";
+import { usePostHog } from "posthog-js/react";
 import { useParams, useNavigate } from "react-router";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import useMetricsStore from "#/stores/metrics-store";
@@ -29,6 +29,7 @@ export function useConversationNameContextMenu({
   showOptions = false,
   onContextMenuToggle,
 }: UseConversationNameContextMenuProps) {
+  const posthog = usePostHog();
   const { t } = useTranslation();
   const { conversationId: currentConversationId } = useParams();
   const navigate = useNavigate();

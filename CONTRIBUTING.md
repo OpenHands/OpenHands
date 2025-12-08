@@ -13,15 +13,15 @@ To understand the codebase, please refer to the README in each module:
 
 ## Setting up Your Development Environment
 
-We have a separate doc [Development.md](https://github.com/All-Hands-AI/OpenHands/blob/main/Development.md) that tells you how to set up a development workflow.
+We have a separate doc [Development.md](https://github.com/OpenHands/OpenHands/blob/main/Development.md) that tells you how to set up a development workflow.
 
 ## How Can I Contribute?
 
 There are many ways that you can contribute:
 
-1. **Download and use** OpenHands, and send [issues](https://github.com/All-Hands-AI/OpenHands/issues) when you encounter something that isn't working or a feature that you'd like to see.
+1. **Download and use** OpenHands, and send [issues](https://github.com/OpenHands/OpenHands/issues) when you encounter something that isn't working or a feature that you'd like to see.
 2. **Send feedback** after each session by [clicking the thumbs-up thumbs-down buttons](https://docs.all-hands.dev/usage/feedback), so we can see where things are working and failing, and also build an open dataset for training code agents.
-3. **Improve the Codebase** by sending [PRs](#sending-pull-requests-to-openhands) (see details below). In particular, we have some [good first issues](https://github.com/All-Hands-AI/OpenHands/labels/good%20first%20issue) that may be ones to start on.
+3. **Improve the Codebase** by sending [PRs](#sending-pull-requests-to-openhands) (see details below). In particular, we have some [good first issues](https://github.com/OpenHands/OpenHands/labels/good%20first%20issue) that may be ones to start on.
 
 ## What Can I Build?
 Here are a few ways you can help improve the codebase.
@@ -35,7 +35,7 @@ of the application, please open an issue first, or better, join the #eng-ui-ux c
 to gather consensus from our design team first.
 
 #### Improving the agent
-Our main agent is the CodeAct agent. You can [see its prompts here](https://github.com/All-Hands-AI/OpenHands/tree/main/openhands/agenthub/codeact_agent).
+Our main agent is the CodeAct agent. You can [see its prompts here](https://github.com/OpenHands/OpenHands/tree/main/openhands/agenthub/codeact_agent).
 
 Changes to these prompts, and to the underlying behavior in Python, can have a huge impact on user experience.
 You can try modifying the prompts to see how they change the behavior of the agent as you use the app
@@ -54,11 +54,11 @@ The agent needs a place to run code and commands. When you run OpenHands on your
 to do this by default. But there are other ways of creating a sandbox for the agent.
 
 If you work for a company that provides a cloud-based runtime, you could help us add support for that runtime
-by implementing the [interface specified here](https://github.com/All-Hands-AI/OpenHands/blob/main/openhands/runtime/base.py).
+by implementing the [interface specified here](https://github.com/OpenHands/OpenHands/blob/main/openhands/runtime/base.py).
 
 #### Testing
 When you write code, it is also good to write tests. Please navigate to the [`./tests`](./tests) folder to see existing test suites.
-At the moment, we have two kinds of tests: [`unit`](./tests/unit) and [`integration`](./evaluation/integration_tests). Please refer to the README for each test suite. These tests also run on GitHub's continuous integration to ensure quality of the project.
+At the moment, we have these kinds of tests: [`unit`](./tests/unit), [`runtime`](./tests/runtime), and [`end-to-end (e2e)`](./tests/e2e). Please refer to the README for each test suite. These tests also run on GitHub's continuous integration to ensure quality of the project.
 
 ## Sending Pull Requests to OpenHands
 
@@ -84,7 +84,7 @@ For example, a PR title could be:
 - `refactor: modify package path`
 - `feat(frontend): xxxx`, where `(frontend)` means that this PR mainly focuses on the frontend component.
 
-You may also check out previous PRs in the [PR list](https://github.com/All-Hands-AI/OpenHands/pulls).
+You may also check out previous PRs in the [PR list](https://github.com/OpenHands/OpenHands/pulls).
 
 ### Pull Request description
 - If your PR is small (such as a typo fix), you can go brief.
@@ -97,7 +97,7 @@ please include a short message that we can add to our changelog.
 
 ### Opening Issues
 
-If you notice any bugs or have any feature requests please open them via the [issues page](https://github.com/All-Hands-AI/OpenHands/issues). We will triage based on how critical the bug is or how potentially useful the improvement is, discuss, and implement the ones that the community has interest/effort for.
+If you notice any bugs or have any feature requests please open them via the [issues page](https://github.com/OpenHands/OpenHands/issues). We will triage based on how critical the bug is or how potentially useful the improvement is, discuss, and implement the ones that the community has interest/effort for.
 
 Further, if you see an issue you like, please leave a "thumbs-up" or a comment, which will help us prioritize.
 

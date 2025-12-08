@@ -2,7 +2,7 @@
 
 This guide is for people working on OpenHands and editing the source code.
 If you wish to contribute your changes, check out the
-[CONTRIBUTING.md](https://github.com/All-Hands-AI/OpenHands/blob/main/CONTRIBUTING.md)
+[CONTRIBUTING.md](https://github.com/OpenHands/OpenHands/blob/main/CONTRIBUTING.md)
 on how to clone and setup the project initially before moving on. Otherwise,
 you can clone the OpenHands project directly.
 
@@ -91,14 +91,14 @@ make run
 #### Option B: Individual Server Startup
 
 - **Start the Backend Server:** If you prefer, you can start the backend server independently to focus on
-backend-related tasks or configurations.
+  backend-related tasks or configurations.
 
   ```bash
   make start-backend
   ```
 
 - **Start the Frontend Server:** Similarly, you can start the frontend server on its own to work on frontend-related
-components or interface enhancements.
+  components or interface enhancements.
   ```bash
   make start-frontend
   ```
@@ -110,6 +110,7 @@ You can use OpenHands to develop and improve OpenHands itself! This is a powerfu
 #### Quick Start
 
 1. **Build and run OpenHands:**
+
    ```bash
    export INSTALL_DOCKER=0
    export RUNTIME=local
@@ -117,6 +118,7 @@ You can use OpenHands to develop and improve OpenHands itself! This is a powerfu
    ```
 
 2. **Access the interface:**
+
    - Local development: http://localhost:3001
    - Remote/cloud environments: Use the appropriate external URL
 
@@ -159,7 +161,7 @@ poetry run pytest ./tests/unit/test_*.py
 To reduce build time (e.g., if no changes were made to the client-runtime component), you can use an existing Docker
 container image by setting the SANDBOX_RUNTIME_CONTAINER_IMAGE environment variable to the desired Docker image.
 
-Example: `export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:0.59-nikolaik`
+Example: `export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/openhands/runtime:0.62-nikolaik`
 
 ## Develop inside Docker container
 
@@ -193,12 +195,12 @@ Here's a guide to the important documentation files in the repository:
 - [/README.md](./README.md): Main project overview, features, and basic setup instructions
 - [/Development.md](./Development.md) (this file): Comprehensive guide for developers working on OpenHands
 - [/CONTRIBUTING.md](./CONTRIBUTING.md): Guidelines for contributing to the project, including code style and PR process
-- [/docs/DOC_STYLE_GUIDE.md](./docs/DOC_STYLE_GUIDE.md): Standards for writing and maintaining project documentation
+- [DOC_STYLE_GUIDE.md](https://github.com/All-Hands-AI/docs/blob/main/openhands/DOC_STYLE_GUIDE.md): Standards for writing and maintaining project documentation
 - [/openhands/README.md](./openhands/README.md): Details about the backend Python implementation
 - [/frontend/README.md](./frontend/README.md): Frontend React application setup and development guide
 - [/containers/README.md](./containers/README.md): Information about Docker containers and deployment
 - [/tests/unit/README.md](./tests/unit/README.md): Guide to writing and running unit tests
 - [/evaluation/README.md](./evaluation/README.md): Documentation for the evaluation framework and benchmarks
-- [/microagents/README.md](./microagents/README.md): Information about the microagents architecture and implementation
+- [/skills/README.md](./skills/README.md): Information about the skills architecture and implementation
 - [/openhands/server/README.md](./openhands/server/README.md): Server implementation details and API documentation
 - [/openhands/runtime/README.md](./openhands/runtime/README.md): Documentation for the runtime environment and execution model

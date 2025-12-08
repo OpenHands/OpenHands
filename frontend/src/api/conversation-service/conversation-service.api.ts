@@ -187,7 +187,7 @@ class ConversationService {
   static async getRuntimeId(
     conversationId: string,
   ): Promise<{ runtime_id: string }> {
-    const url = `/api/conversations/${conversationId}/config`;
+    const url = `${this.getConversationUrl(conversationId)}/config`;
     const { data } = await openHands.get<{ runtime_id: string }>(url, {
       headers: this.getConversationHeaders(),
     });

@@ -14,6 +14,7 @@ from openhands.integrations.service_types import (
     ResourceNotFoundError,
     User,
 )
+from openhands.utils.http_session import httpx_verify_option
 
 
 class BitBucketMixinBase(BaseGitService, HTTPClient):
@@ -83,7 +84,7 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
 
         """
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
                 bitbucket_headers = await self._get_headers()
                 response = await self.execute_request(
                     client, url, bitbucket_headers, params, method

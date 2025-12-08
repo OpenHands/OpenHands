@@ -7,17 +7,6 @@ import {
   isConversationStateUpdateEvent,
 } from "#/types/v1/type-guards";
 
-// V1 events that should not be rendered
-const NO_RENDER_ACTION_TYPES = [
-  "ThinkAction",
-  // Add more action types that should not be rendered
-];
-
-const NO_RENDER_OBSERVATION_TYPES = [
-  "ThinkObservation",
-  // Add more observation types that should not be rendered
-];
-
 export const shouldRenderEvent = (event: OpenHandsEvent) => {
   // Explicitly exclude system events that should not be rendered in chat
   if (isConversationStateUpdateEvent(event)) {
@@ -34,18 +23,12 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
       return false;
     }
 
-    return !NO_RENDER_ACTION_TYPES.includes(actionType);
+    return true;
   }
 
-  // Render observation events (with filtering)
+  // Render observation events
   if (isObservationEvent(event)) {
-    // For V1, observation is an object with kind property
-    const observationType = event.observation.kind;
-
-    // Note: ObservationEvent source is always "environment", not "user"
-    // So no need to check for user source here
-
-    return !NO_RENDER_OBSERVATION_TYPES.includes(observationType);
+    return true;
   }
 
   // Render message events (user and assistant messages)

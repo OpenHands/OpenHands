@@ -25,6 +25,12 @@ class SandboxService(ABC):
     async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
         """Get a single sandbox. Return None if the sandbox was not found."""
 
+    @abstractmethod
+    async def get_sandbox_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxInfo | None:
+        """Get a single sandbox by session API key. Return None if the sandbox was not found."""
+
     async def batch_get_sandboxes(
         self, sandbox_ids: list[str]
     ) -> list[SandboxInfo | None]:
@@ -66,6 +72,7 @@ class SandboxService(ABC):
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
         """Stop the oldest sandboxes if there are more than max_num_sandboxes running.
+        In a multi user environment, this will pause sandboxes only for the current user.
 
         Args:
             max_num_sandboxes: Maximum number of sandboxes to keep running

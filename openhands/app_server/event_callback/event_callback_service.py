@@ -54,6 +54,10 @@ class EventCallbackService(ABC):
         return results
 
     @abstractmethod
+    async def save_event_callback(self, event_callback: EventCallback) -> EventCallback:
+        """Update the event callback given."""
+
+    @abstractmethod
     async def execute_callbacks(self, conversation_id: UUID, event: Event) -> None:
         """Execute any applicable callbacks for the event and store the results."""
 

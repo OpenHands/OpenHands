@@ -148,7 +148,10 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
     try:
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        logger.openhands_logger.info(
+            f'{toml_file} not found: {e}. Toml values have not been applied.'
+        )
         return
     except toml.TomlDecodeError as e:
         logger.openhands_logger.warning(
@@ -502,7 +505,7 @@ def get_agent_config_arg(
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
     except FileNotFoundError as e:
-        logger.openhands_logger.error(f'Config file not found: {e}')
+        logger.openhands_logger.info(f'Config file not found: {e}')
         return None
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -566,7 +569,7 @@ def get_llm_config_arg(
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
     except FileNotFoundError as e:
-        logger.openhands_logger.error(f'Config file not found: {e}')
+        logger.openhands_logger.info(f'Config file not found: {e}')
         return None
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -601,7 +604,10 @@ def get_llms_for_routing_config(toml_file: str = 'config.toml') -> dict[str, LLM
     try:
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        logger.openhands_logger.info(
+            f'Config file not found: {e}. Toml values have not been applied.'
+        )
         return llms_for_routing
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -664,7 +670,7 @@ def get_condenser_config_arg(
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
     except FileNotFoundError as e:
-        logger.openhands_logger.error(f'Config file not found: {toml_file}. Error: {e}')
+        logger.openhands_logger.info(f'Config file not found: {toml_file}. Error: {e}')
         return None
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -750,7 +756,7 @@ def get_model_routing_config_arg(toml_file: str = 'config.toml') -> ModelRouting
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
     except FileNotFoundError as e:
-        logger.openhands_logger.error(f'Config file not found: {toml_file}. Error: {e}')
+        logger.openhands_logger.info(f'Config file not found: {toml_file}. Error: {e}')
         return default_cfg
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(

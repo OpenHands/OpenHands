@@ -27,7 +27,7 @@ This is the frontend of the OpenHands project. It is a React application that pr
 
 ```sh
 # Clone the repository
-git clone https://github.com/All-Hands-AI/OpenHands.git
+git clone https://github.com/OpenHands/OpenHands.git
 
 # Change the directory to the frontend
 cd OpenHands/frontend
@@ -163,7 +163,7 @@ npm run test:coverage
 
 1. **Component Testing**
    - Test components in isolation
-   - Use our custom [`renderWithProviders()`](https://github.com/All-Hands-AI/OpenHands/blob/ce26f1c6d3feec3eedf36f823dee732b5a61e517/frontend/test-utils.tsx#L56-L85) that wraps the components we want to test in our providers. It is especially useful for components that use Redux
+   - Use our custom [`renderWithProviders()`](https://github.com/OpenHands/OpenHands/blob/ce26f1c6d3feec3eedf36f823dee732b5a61e517/frontend/test-utils.tsx#L56-L85) that wraps the components we want to test in our providers. It is especially useful for components that use Redux
    - Use `render()` from React Testing Library to render components
    - Prefer querying elements by role, label, or test ID over CSS selectors
    - Test both rendering and interaction scenarios
@@ -223,12 +223,12 @@ describe("ComponentName", () => {
 For real-world examples of testing, check out these test files:
 
 1. **Chat Input Component Test**:
-   [`__tests__/components/chat/chat-input.test.tsx`](https://github.com/All-Hands-AI/OpenHands/blob/main/frontend/__tests__/components/chat/chat-input.test.tsx)
+   [`__tests__/components/chat/chat-input.test.tsx`](https://github.com/OpenHands/OpenHands/blob/main/frontend/__tests__/components/chat/chat-input.test.tsx)
    - Demonstrates comprehensive testing of a complex input component
    - Covers various scenarios like submission, disabled states, and user interactions
 
 2. **File Explorer Component Test**:
-   [`__tests__/components/file-explorer/file-explorer.test.tsx`](https://github.com/All-Hands-AI/OpenHands/blob/main/frontend/__tests__/components/file-explorer/file-explorer.test.tsx)
+   [`__tests__/components/file-explorer/file-explorer.test.tsx`](https://github.com/OpenHands/OpenHands/blob/main/frontend/__tests__/components/file-explorer/file-explorer.test.tsx)
    - Shows testing of a more complex component with multiple interactions
    - Illustrates testing of nested components and state management
 

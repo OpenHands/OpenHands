@@ -31,6 +31,7 @@ from openhands.integrations.service_types import Repository
 from openhands.server.shared import server_config
 from openhands.server.types import LLMAuthenticationError, MissingSettingsError
 from openhands.server.user_auth.user_auth import UserAuth
+from openhands.utils.http_session import httpx_verify_option
 
 
 class LinearManager(Manager):
@@ -408,7 +409,7 @@ class LinearManager(Manager):
     async def _query_api(self, query: str, variables: Dict, api_key: str) -> Dict:
         """Query Linear GraphQL API."""
         headers = {'Authorization': api_key}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(
                 self.api_url,
                 headers=headers,

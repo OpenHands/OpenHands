@@ -9,7 +9,11 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
 from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import ProviderHandler, ProviderType
+from openhands.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+    ProviderType,
+)
 from openhands.sdk.conversation.secret_source import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
@@ -44,6 +48,9 @@ class AuthUserContext(UserContext):
             self._user_info = user_info
         return user_info
 
+    async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
+        return await self.user_auth.get_provider_tokens()
+
     async def get_provider_handler(self):
         provider_handler = self._provider_handler
         if not provider_handler:
@@ -71,12 +78,16 @@ class AuthUserContext(UserContext):
         results = {}
 
         # Include custom secrets...
-        secrets = await self.user_auth.get_user_secrets()
+        secrets = await self.user_auth.get_secrets()
         if secrets:
             for name, custom_secret in secrets.custom_secrets.items():
                 results[name] = StaticSecret(value=custom_secret.secret)
 
         return results
+
+    async def get_mcp_api_key(self) -> str | None:
+        mcp_api_key = await self.user_auth.get_mcp_api_key()
+        return mcp_api_key
 
 
 USER_ID_ATTR = 'user_id'

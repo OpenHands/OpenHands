@@ -47,6 +47,7 @@ from openhands.app_server.utils.sql_utils import Base, UtcDateTime
 
 _logger = logging.getLogger(__name__)
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
+ALLOW_CORS_ORIGINS_VARIABLE = 'OH_ALLOW_CORS_ORIGINS_0'
 polling_task: asyncio.Task | None = None
 POD_STATUS_MAPPING = {
     'ready': SandboxStatus.RUNNING,
@@ -63,6 +64,10 @@ STATUS_MAPPING = {
     'starting': SandboxStatus.STARTING,
     'error': SandboxStatus.ERROR,
 }
+AGENT_SERVER_PORT = 60000
+VSCODE_PORT = 60001
+WORKER_1_PORT = 12000
+WORKER_2_PORT = 12001
 
 
 class StoredRemoteSandbox(Base):  # type: ignore
@@ -124,46 +129,47 @@ class RemoteSandboxService(SandboxService):
             try:
                 runtime = await self._get_runtime(stored.id)
             except Exception:
-                _logger.exception('Error getting runtime: {stored.id}', stack_info=True)
+                _logger.exception(
+                    f'Error getting runtime: {stored.id}', stack_info=True
+                )
 
+        status = self._get_sandbox_status_from_runtime(runtime)
+
+        # Get session_api_key and exposed urls
         if runtime:
-            # Translate status
-            status = None
-            pod_status = runtime['pod_status'].lower()
-            if pod_status:
-                status = POD_STATUS_MAPPING.get(pod_status, None)
-
-            # If we failed to get the status from the pod status, fall back to status
-            if status is None:
-                runtime_status = runtime.get('status')
-                if runtime_status:
-                    status = STATUS_MAPPING.get(runtime_status.lower(), None)
-
-            if status is None:
-                status = SandboxStatus.MISSING
-
             session_api_key = runtime['session_api_key']
             if status == SandboxStatus.RUNNING:
                 exposed_urls = []
                 url = runtime.get('url', None)
                 if url:
-                    exposed_urls.append(ExposedUrl(name=AGENT_SERVER, url=url))
+                    exposed_urls.append(
+                        ExposedUrl(name=AGENT_SERVER, url=url, port=AGENT_SERVER_PORT)
+                    )
                     vscode_url = (
                         _build_service_url(url, 'vscode')
-                        + f'/?tkn={session_api_key}&folder={runtime["working_dir"]}'
-                    )
-                    exposed_urls.append(ExposedUrl(name=VSCODE, url=vscode_url))
-                    exposed_urls.append(
-                        ExposedUrl(name=WORKER_1, url=_build_service_url(url, 'work-1'))
+                        + f'/?tkn={session_api_key}&folder=%2Fworkspace%2Fproject'
                     )
                     exposed_urls.append(
-                        ExposedUrl(name=WORKER_2, url=_build_service_url(url, 'work-2'))
+                        ExposedUrl(name=VSCODE, url=vscode_url, port=VSCODE_PORT)
+                    )
+                    exposed_urls.append(
+                        ExposedUrl(
+                            name=WORKER_1,
+                            url=_build_service_url(url, 'work-1'),
+                            port=WORKER_1_PORT,
+                        )
+                    )
+                    exposed_urls.append(
+                        ExposedUrl(
+                            name=WORKER_2,
+                            url=_build_service_url(url, 'work-2'),
+                            port=WORKER_2_PORT,
+                        )
                     )
             else:
                 exposed_urls = None
         else:
             session_api_key = None
-            status = SandboxStatus.MISSING
             exposed_urls = None
 
         sandbox_spec_id = stored.sandbox_spec_id
@@ -176,6 +182,32 @@ class RemoteSandboxService(SandboxService):
             exposed_urls=exposed_urls,
             created_at=stored.created_at,
         )
+
+    def _get_sandbox_status_from_runtime(
+        self, runtime: dict[str, Any] | None
+    ) -> SandboxStatus:
+        """Derive a SandboxStatus from the runtime info. The legacy logic for getting
+        the status of a runtime is inconsistent. It is divided between a "status" which
+        cannot be trusted (It sometimes returns  "running" for cases when the pod is
+        still starting) and a "pod_status" which is not returned for list
+        operations."""
+        if not runtime:
+            return SandboxStatus.MISSING
+
+        status = None
+        pod_status = runtime['pod_status'].lower()
+        if pod_status:
+            status = POD_STATUS_MAPPING.get(pod_status, None)
+
+        # If we failed to get the status from the pod status, fall back to status
+        if status is None:
+            runtime_status = runtime.get('status')
+            if runtime_status:
+                status = STATUS_MAPPING.get(runtime_status.lower(), None)
+
+        if status is None:
+            return SandboxStatus.MISSING
+        return status
 
     async def _secure_select(self):
         query = select(StoredRemoteSandbox)
@@ -208,9 +240,10 @@ class RemoteSandboxService(SandboxService):
 
         # If a public facing url is defined, add a callback to the agent server environment.
         if self.web_url:
-            environment[WEBHOOK_CALLBACK_VARIABLE] = (
-                f'{self.web_url}/api/v1/webhooks/{sandbox_id}'
-            )
+            environment[WEBHOOK_CALLBACK_VARIABLE] = f'{self.web_url}/api/v1/webhooks'
+            # We specify CORS settings only if there is a public facing url - otherwise
+            # we are probably in local development and the only url in use is localhost
+            environment[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
 
         return environment
 
@@ -266,6 +299,27 @@ class RemoteSandboxService(SandboxService):
             return None
         return await self._to_sandbox_info(stored_sandbox)
 
+    async def get_sandbox_by_session_api_key(
+        self, session_api_key: str
+    ) -> Union[SandboxInfo, None]:
+        """Get a single sandbox by session API key."""
+        # Get all stored sandboxes for the current user
+        stmt = await self._secure_select()
+        result = await self.db_session.execute(stmt)
+        stored_sandboxes = result.scalars().all()
+
+        # Check each sandbox's runtime data for matching session_api_key
+        for stored_sandbox in stored_sandboxes:
+            try:
+                runtime = await self._get_runtime(stored_sandbox.id)
+                if runtime and runtime.get('session_api_key') == session_api_key:
+                    return await self._to_sandbox_info(stored_sandbox, runtime)
+            except Exception:
+                # Continue checking other sandboxes if one fails
+                continue
+
+        return None
+
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
@@ -299,7 +353,6 @@ class RemoteSandboxService(SandboxService):
                 created_at=utc_now(),
             )
             self.db_session.add(stored_sandbox)
-            await self.db_session.commit()
 
             # Prepare environment variables
             environment = await self._init_environment(sandbox_spec, sandbox_id)
@@ -308,14 +361,13 @@ class RemoteSandboxService(SandboxService):
             start_request: dict[str, Any] = {
                 'image': sandbox_spec.id,  # Use sandbox_spec.id as the container image
                 'command': sandbox_spec.command,
-                #'command': ['python', '-c', 'import time; time.sleep(300)'],
-                'working_dir': sandbox_spec.working_dir,
+                'working_dir': '/workspace',
                 'environment': environment,
                 'session_id': sandbox_id,  # Use sandbox_id as session_id
                 'resource_factor': self.resource_factor,
-                'run_as_user': 1000,
-                'run_as_group': 1000,
-                'fs_group': 1000,
+                'run_as_user': 10001,
+                'run_as_group': 10001,
+                'fs_group': 10001,
             }
 
             # Add runtime class if specified
@@ -389,7 +441,6 @@ class RemoteSandboxService(SandboxService):
             if not stored_sandbox:
                 return False
             await self.db_session.delete(stored_sandbox)
-            await self.db_session.commit()
             runtime_data = await self._get_runtime(sandbox_id)
             response = await self._send_runtime_api_request(
                 'POST',
@@ -530,7 +581,7 @@ async def refresh_conversation(
         # TODO: It would be nice to have an updated_at__gte filter parameter in the
         # agent server so that we don't pull the full event list each time
         event_url = (
-            f'{url}/ap/conversations/{app_conversation_info.id.hex}/events/search'
+            f'{url}/api/conversations/{app_conversation_info.id.hex}/events/search'
         )
         page_id = None
         while True:
@@ -613,6 +664,7 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
         )
 
         # If no public facing web url is defined, poll for changes as callbacks will be unavailable.
+        # This is primarily used for local development rather than production
         config = get_global_config()
         web_url = config.web_url
         if web_url is None:

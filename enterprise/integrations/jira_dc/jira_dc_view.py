@@ -60,7 +60,7 @@ class JiraDcNewConversationView(JiraDcViewInterface):
             raise StartingConvoException('No repository selected for this conversation')
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        user_secrets = await self.saas_user_auth.get_user_secrets()
+        user_secrets = await self.saas_user_auth.get_secrets()
         instructions, user_msg = self._get_instructions(jinja_env)
 
         try:

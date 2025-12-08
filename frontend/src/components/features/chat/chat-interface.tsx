@@ -1,5 +1,5 @@
 import React from "react";
-import posthog from "posthog-js";
+import { usePostHog } from "posthog-js/react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
@@ -47,6 +47,8 @@ import {
   isConversationStateUpdateEvent,
 } from "#/types/v1/type-guards";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useTaskPolling } from "#/hooks/query/use-task-polling";
+import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -58,12 +60,16 @@ function getEntryPoint(
 }
 
 export function ChatInterface() {
+  const posthog = usePostHog();
   const { setMessageToSend } = useConversationStore();
   const { data: conversation } = useActiveConversation();
   const { errorMessage } = useErrorMessageStore();
   const { isLoadingMessages } = useWsClient();
+  const { isTask } = useTaskPolling();
+  const conversationWebSocket = useConversationWebSocket();
   const { send } = useSendMessage();
   const storeEvents = useEventStore((state) => state.events);
+  const uiEvents = useEventStore((state) => state.uiEvents);
   const { setOptimisticUserMessage, getOptimisticUserMessage } =
     useOptimisticUserMessageStore();
   const { t } = useTranslation();
@@ -92,17 +98,43 @@ export function ChatInterface() {
 
   const isV1Conversation = conversation?.conversation_version === "V1";
 
+  // Track when we should show V1 messages (after DOM has rendered)
+  const [showV1Messages, setShowV1Messages] = React.useState(false);
+  const prevV1LoadingRef = React.useRef(
+    conversationWebSocket?.isLoadingHistory,
+  );
+
+  // Wait for DOM to render before showing V1 messages
+  React.useEffect(() => {
+    const wasLoading = prevV1LoadingRef.current;
+    const isLoading = conversationWebSocket?.isLoadingHistory;
+
+    if (wasLoading && !isLoading) {
+      // Loading just finished - wait for next frame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        setShowV1Messages(true);
+      });
+    } else if (isLoading) {
+      // Reset when loading starts
+      setShowV1Messages(false);
+    }
+
+    prevV1LoadingRef.current = isLoading;
+  }, [conversationWebSocket?.isLoadingHistory]);
+
   // Filter V0 events
   const v0Events = storeEvents
     .filter(isV0Event)
     .filter(isActionOrObservation)
     .filter(shouldRenderEvent);
 
-  // Filter V1 events
-  const v1Events = storeEvents.filter(isV1Event).filter(shouldRenderV1Event);
+  // Filter V1 events - use uiEvents for rendering (actions replaced by observations)
+  const v1UiEvents = uiEvents.filter(isV1Event).filter(shouldRenderV1Event);
+  // Keep full v1 events for lookups (includes both actions and observations)
+  const v1FullEvents = storeEvents.filter(isV1Event);
 
   // Combined events count for tracking
-  const totalEvents = v0Events.length || v1Events.length;
+  const totalEvents = v0Events.length || v1UiEvents.length;
 
   // Check if there are any substantive agent actions (not just system messages)
   const hasSubstantiveAgentActions = React.useMemo(
@@ -200,7 +232,7 @@ export function ChatInterface() {
   };
 
   const v0UserEventsExist = hasUserEvent(v0Events);
-  const v1UserEventsExist = hasV1UserEvent(v1Events);
+  const v1UserEventsExist = hasV1UserEvent(v1FullEvents);
   const userEventsExist = v0UserEventsExist || v1UserEventsExist;
 
   return (
@@ -220,11 +252,19 @@ export function ChatInterface() {
           onScroll={(e) => onChatBodyScroll(e.currentTarget)}
           className="custom-scrollbar-always flex flex-col grow overflow-y-auto overflow-x-hidden px-4 pt-4 gap-2 fast-smooth-scroll"
         >
-          {isLoadingMessages && !isV1Conversation && (
+          {isLoadingMessages && !isV1Conversation && !isTask && (
             <div className="flex justify-center">
               <LoadingSpinner size="small" />
             </div>
           )}
+
+          {(conversationWebSocket?.isLoadingHistory || !showV1Messages) &&
+            isV1Conversation &&
+            !isTask && (
+              <div className="flex justify-center">
+                <LoadingSpinner size="small" />
+              </div>
+            )}
 
           {!isLoadingMessages && v0UserEventsExist && (
             <V0Messages
@@ -235,13 +275,8 @@ export function ChatInterface() {
             />
           )}
 
-          {v1UserEventsExist && (
-            <V1Messages
-              messages={v1Events}
-              isAwaitingUserConfirmation={
-                curAgentState === AgentState.AWAITING_USER_CONFIRMATION
-              }
-            />
+          {showV1Messages && v1UserEventsExist && (
+            <V1Messages messages={v1UiEvents} allEvents={v1FullEvents} />
           )}
         </div>
 
@@ -249,7 +284,7 @@ export function ChatInterface() {
           <div className="flex justify-between relative">
             <div className="flex items-center gap-1">
               <ConfirmationModeEnabled />
-              {totalEvents > 0 && (
+              {totalEvents > 0 && !isV1Conversation && (
                 <TrajectoryActions
                   onPositiveFeedback={() =>
                     onClickShareFeedbackActionButton("positive")
@@ -274,7 +309,7 @@ export function ChatInterface() {
           <InteractiveChatBox onSubmit={handleSendMessage} />
         </div>
 
-        {config?.APP_MODE !== "saas" && (
+        {config?.APP_MODE !== "saas" && !isV1Conversation && (
           <FeedbackModal
             isOpen={feedbackModalIsOpen}
             onClose={() => setFeedbackModalIsOpen(false)}

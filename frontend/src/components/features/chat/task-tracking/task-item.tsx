@@ -1,7 +1,11 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import CircleIcon from "#/icons/u-circle.svg?react";
+import CheckCircleIcon from "#/icons/u-check-circle.svg?react";
+import LoadingIcon from "#/icons/loading.svg?react";
+import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
 import { Typography } from "#/ui/typography";
-import { StatusIcon } from "./status-icon";
-import { StatusBadge } from "./status-badge";
 
 interface TaskItemProps {
   task: {
@@ -10,33 +14,47 @@ interface TaskItemProps {
     status: "todo" | "in_progress" | "done";
     notes?: string;
   };
-  index: number;
 }
 
-export function TaskItem({ task, index }: TaskItemProps) {
+export function TaskItem({ task }: TaskItemProps) {
   const { t } = useTranslation();
 
+  const icon = useMemo(() => {
+    switch (task.status) {
+      case "todo":
+        return <CircleIcon className="w-4 h-4 text-[#ffffff]" />;
+      case "in_progress":
+        return <LoadingIcon className="w-4 h-4 text-[#ffffff]" />;
+      case "done":
+        return <CheckCircleIcon className="w-4 h-4 text-[#A3A3A3]" />;
+      default:
+        return <CircleIcon className="w-4 h-4 text-[#ffffff]" />;
+    }
+  }, [task.status]);
+
+  const isDoneStatus = task.status === "done";
+
   return (
-    <div className="border-l-2 border-gray-600 pl-3">
-      <div className="flex items-start gap-2">
-        <StatusIcon status={task.status} />
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <Typography.Text className="text-sm text-gray-400">
-              {index + 1}.
-            </Typography.Text>
-            <StatusBadge status={task.status} />
-          </div>
-          <h4 className="font-medium text-white mb-1">{task.title}</h4>
-          <Typography.Text className="text-xs text-gray-400 mb-1">
-            {t("TASK_TRACKING_OBSERVATION$TASK_ID")}: {task.id}
-          </Typography.Text>
-          {task.notes && (
-            <Typography.Text className="text-sm text-gray-300 italic">
-              {t("TASK_TRACKING_OBSERVATION$TASK_NOTES")}: {task.notes}
-            </Typography.Text>
+    <div
+      className="flex gap-[14px] items-center px-4 py-2 w-full"
+      data-name="item"
+    >
+      <div className="shrink-0">{icon}</div>
+      <div className="flex flex-col items-start justify-center leading-[20px] text-nowrap whitespace-pre font-normal">
+        <Typography.Text
+          className={cn(
+            "text-[12px] text-white",
+            isDoneStatus && "text-[#A3A3A3]",
           )}
-        </div>
+        >
+          {task.title}
+        </Typography.Text>
+        <Typography.Text className="text-[10px] text-[#A3A3A3] font-normal">
+          {t(I18nKey.TASK_TRACKING_OBSERVATION$TASK_ID)}: {task.id}
+        </Typography.Text>
+        <Typography.Text className="text-[10px] text-[#A3A3A3]">
+          {t(I18nKey.TASK_TRACKING_OBSERVATION$TASK_NOTES)}: {task.notes}
+        </Typography.Text>
       </div>
     </div>
   );

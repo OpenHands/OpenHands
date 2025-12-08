@@ -118,7 +118,7 @@ describe("parse-pr-url", () => {
     it("should handle typical microagent finish messages", () => {
       const text = `
         I have successfully created a pull request with the requested changes.
-        You can view the PR here: https://github.com/All-Hands-AI/OpenHands/pull/1234
+        You can view the PR here: https://github.com/OpenHands/OpenHands/pull/1234
 
         The changes include:
         - Updated the component
@@ -126,7 +126,7 @@ describe("parse-pr-url", () => {
         - Fixed the issue
       `;
       const url = getFirstPRUrl(text);
-      expect(url).toBe("https://github.com/All-Hands-AI/OpenHands/pull/1234");
+      expect(url).toBe("https://github.com/OpenHands/OpenHands/pull/1234");
     });
 
     it("should handle messages with PR URLs in the middle", () => {

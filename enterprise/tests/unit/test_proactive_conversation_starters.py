@@ -8,8 +8,8 @@ pytestmark = pytest.mark.asyncio
 
 
 # Mock the call_sync_from_async function to return the result of the function directly
-def mock_call_sync_from_async(func):
-    return func()
+def mock_call_sync_from_async(func, *args, **kwargs):
+    return func(*args, **kwargs)
 
 
 @pytest.fixture

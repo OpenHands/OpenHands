@@ -10,6 +10,7 @@ type SubmitFeedbackArgs = {
 
 export const useSubmitFeedback = () => {
   const { conversationId } = useConversationId();
+
   return useMutation({
     mutationFn: ({ feedback }: SubmitFeedbackArgs) =>
       ConversationService.submitFeedback(conversationId, feedback),

@@ -11,6 +11,7 @@ from openhands.integrations.service_types import (
     UnknownException,
     User,
 )
+from openhands.utils.http_session import httpx_verify_option
 
 
 class GitHubMixinBase(BaseGitService, HTTPClient):
@@ -43,7 +44,7 @@ class GitHubMixinBase(BaseGitService, HTTPClient):
         method: RequestMethod = RequestMethod.GET,
     ) -> tuple[Any, dict]:  # type: ignore[override]
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
                 github_headers = await self._get_headers()
 
                 # Make initial request
@@ -83,7 +84,7 @@ class GitHubMixinBase(BaseGitService, HTTPClient):
         self, query: str, variables: dict[str, Any]
     ) -> dict[str, Any]:
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
                 github_headers = await self._get_headers()
 
                 response = await client.post(

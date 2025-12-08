@@ -8,10 +8,11 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
-        "TASK_TRACKING_OBSERVATION$TASK_LIST": "Task List",
-        "TASK_TRACKING_OBSERVATION$TASK_ID": "ID",
-        "TASK_TRACKING_OBSERVATION$TASK_NOTES": "Notes",
-        "TASK_TRACKING_OBSERVATION$RESULT": "Result",
+        TASK_TRACKING_OBSERVATION$TASK_LIST: "Task List",
+        TASK_TRACKING_OBSERVATION$TASK_ID: "ID",
+        TASK_TRACKING_OBSERVATION$TASK_NOTES: "Notes",
+        TASK_TRACKING_OBSERVATION$RESULT: "Result",
+        COMMON$TASKS: "Tasks",
       };
       return translations[key] || key;
     },
@@ -61,19 +62,26 @@ describe("TaskTrackingObservationContent", () => {
   it("renders task list when command is 'plan' and tasks exist", () => {
     render(<TaskTrackingObservationContent event={mockEvent} />);
 
-    expect(screen.getByText("Task List (3 items)")).toBeInTheDocument();
+    expect(screen.getByText("Tasks")).toBeInTheDocument();
     expect(screen.getByText("Implement feature A")).toBeInTheDocument();
     expect(screen.getByText("Fix bug B")).toBeInTheDocument();
     expect(screen.getByText("Deploy to production")).toBeInTheDocument();
   });
 
   it("displays correct status icons and badges", () => {
-    render(<TaskTrackingObservationContent event={mockEvent} />);
+    const { container } = render(
+      <TaskTrackingObservationContent event={mockEvent} />,
+    );
 
-    // Check for status text (the icons are emojis)
-    expect(screen.getByText("todo")).toBeInTheDocument();
-    expect(screen.getByText("in progress")).toBeInTheDocument();
-    expect(screen.getByText("done")).toBeInTheDocument();
+    // Status is represented by icons, not text. Verify task items are rendered with their titles
+    // which indicates the status icons are present (status affects icon rendering)
+    expect(screen.getByText("Implement feature A")).toBeInTheDocument();
+    expect(screen.getByText("Fix bug B")).toBeInTheDocument();
+    expect(screen.getByText("Deploy to production")).toBeInTheDocument();
+
+    // Verify task items are present (they contain the status icons)
+    const taskItems = container.querySelectorAll('[data-name="item"]');
+    expect(taskItems).toHaveLength(3);
   });
 
   it("displays task IDs and notes", () => {
@@ -84,14 +92,9 @@ describe("TaskTrackingObservationContent", () => {
     expect(screen.getByText("ID: task-3")).toBeInTheDocument();
 
     expect(screen.getByText("Notes: This is a test task")).toBeInTheDocument();
-    expect(screen.getByText("Notes: Completed successfully")).toBeInTheDocument();
-  });
-
-  it("renders result section when content exists", () => {
-    render(<TaskTrackingObservationContent event={mockEvent} />);
-
-    expect(screen.getByText("Result")).toBeInTheDocument();
-    expect(screen.getByText("Task tracking operation completed successfully")).toBeInTheDocument();
+    expect(
+      screen.getByText("Notes: Completed successfully"),
+    ).toBeInTheDocument();
   });
 
   it("does not render task list when command is not 'plan'", () => {
@@ -105,7 +108,7 @@ describe("TaskTrackingObservationContent", () => {
 
     render(<TaskTrackingObservationContent event={eventWithoutPlan} />);
 
-    expect(screen.queryByText("Task List")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tasks")).not.toBeInTheDocument();
   });
 
   it("does not render task list when task list is empty", () => {
@@ -119,17 +122,6 @@ describe("TaskTrackingObservationContent", () => {
 
     render(<TaskTrackingObservationContent event={eventWithEmptyTasks} />);
 
-    expect(screen.queryByText("Task List")).not.toBeInTheDocument();
-  });
-
-  it("does not render result section when content is empty", () => {
-    const eventWithoutContent = {
-      ...mockEvent,
-      content: "",
-    };
-
-    render(<TaskTrackingObservationContent event={eventWithoutContent} />);
-
-    expect(screen.queryByText("Result")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tasks")).not.toBeInTheDocument();
   });
 });

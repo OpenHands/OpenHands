@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import itertools
 import json
@@ -5,12 +6,15 @@ import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 import base62
-from fastapi import APIRouter, Depends, status
+import httpx
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -24,6 +28,14 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_app_conversation_service,
+    depends_db_session,
+    depends_httpx_client,
+    depends_sandbox_service,
+)
+from openhands.app_server.sandbox.sandbox_service import SandboxService
+from openhands.app_server.services.db_session_injector import set_db_session_keep_open
+from openhands.app_server.services.httpx_client_injector import (
+    set_httpx_client_keep_open,
 )
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
@@ -50,7 +62,7 @@ from openhands.integrations.service_types import (
 )
 from openhands.runtime import get_runtime_cls
 from openhands.runtime.runtime_status import RuntimeStatus
-from openhands.sdk.conversation.state import AgentExecutionStatus
+from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 from openhands.server.data_models.conversation_info import ConversationInfo
 from openhands.server.data_models.conversation_info_result_set import (
@@ -71,8 +83,8 @@ from openhands.server.types import LLMAuthenticationError, MissingSettingsError
 from openhands.server.user_auth import (
     get_auth_type,
     get_provider_tokens,
+    get_secrets,
     get_user_id,
-    get_user_secrets,
     get_user_settings,
     get_user_settings_store,
 )
@@ -85,16 +97,20 @@ from openhands.storage.data_models.conversation_metadata import (
     ConversationTrigger,
 )
 from openhands.storage.data_models.conversation_status import ConversationStatus
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
-from openhands.storage.data_models.user_secrets import UserSecrets
 from openhands.storage.locations import get_experiment_config_filename
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import wait_all
 from openhands.utils.conversation_summary import get_default_conversation_title
+from openhands.utils.environment import get_effective_llm_base_url
 
 app = APIRouter(prefix='/api', dependencies=get_dependencies())
 app_conversation_service_dependency = depends_app_conversation_service()
 app_conversation_info_service_dependency = depends_app_conversation_info_service()
+sandbox_service_dependency = depends_sandbox_service()
+db_session_dependency = depends_db_session()
+httpx_client_dependency = depends_httpx_client()
 
 
 def _filter_conversations_by_age(
@@ -210,7 +226,7 @@ async def new_conversation(
     data: InitSessionRequest,
     user_id: str = Depends(get_user_id),
     provider_tokens: PROVIDER_TOKEN_TYPE = Depends(get_provider_tokens),
-    user_secrets: UserSecrets = Depends(get_user_secrets),
+    user_secrets: Secrets = Depends(get_secrets),
     auth_type: AuthType | None = Depends(get_auth_type),
 ) -> ConversationResponse:
     """Initialize a new session or join an existing one.
@@ -300,6 +316,12 @@ async def search_conversations(
     limit: int = 20,
     selected_repository: str | None = None,
     conversation_trigger: ConversationTrigger | None = None,
+    include_sub_conversations: Annotated[
+        bool,
+        Query(
+            title='If True, include sub-conversations in the results. If False (default), exclude all sub-conversations.'
+        ),
+    ] = False,
     conversation_store: ConversationStore = Depends(get_conversation_store),
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
 ) -> ConversationInfoResultSet:
@@ -334,6 +356,7 @@ async def search_conversations(
         limit=limit,
         # Apply age filter at the service level if possible
         created_at__gte=age_filter_date,
+        include_sub_conversations=include_sub_conversations,
     )
 
     # Convert V1 conversations to ConversationInfo format
@@ -463,17 +486,113 @@ async def get_conversation(
 
 @app.delete('/conversations/{conversation_id}')
 async def delete_conversation(
+    request: Request,
     conversation_id: str = Depends(validate_conversation_id),
     user_id: str | None = Depends(get_user_id),
+    app_conversation_service: AppConversationService = app_conversation_service_dependency,
+    app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    db_session: AsyncSession = db_session_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> bool:
+    set_db_session_keep_open(request.state, True)
+    set_httpx_client_keep_open(request.state, True)
+
+    # Try V1 conversation first
+    v1_result = await _try_delete_v1_conversation(
+        conversation_id,
+        app_conversation_service,
+        app_conversation_info_service,
+        sandbox_service,
+        db_session,
+        httpx_client,
+    )
+    if v1_result is not None:
+        return v1_result
+
+    # V0 conversation logic
+    return await _delete_v0_conversation(conversation_id, user_id)
+
+
+async def _try_delete_v1_conversation(
+    conversation_id: str,
+    app_conversation_service: AppConversationService,
+    app_conversation_info_service: AppConversationInfoService,
+    sandbox_service: SandboxService,
+    db_session: AsyncSession,
+    httpx_client: httpx.AsyncClient,
+) -> bool | None:
+    """Try to delete a V1 conversation. Returns None if not a V1 conversation."""
+    result = None
+    try:
+        conversation_uuid = uuid.UUID(conversation_id)
+        # Check if it's a V1 conversation by trying to get it
+        app_conversation_info = (
+            await app_conversation_info_service.get_app_conversation_info(
+                conversation_uuid
+            )
+        )
+        if app_conversation_info:
+            # This is a V1 conversation, delete it using the app conversation service
+            # Pass the conversation ID for secure deletion
+            result = await app_conversation_service.delete_app_conversation(
+                app_conversation_info.id
+            )
+
+            # Manually commit so that the conversation will vanish from the list
+            await db_session.commit()
+
+            # Delete the sandbox in the background
+            asyncio.create_task(
+                _delete_sandbox_and_close_connections(
+                    sandbox_service,
+                    app_conversation_info.sandbox_id,
+                    db_session,
+                    httpx_client,
+                )
+            )
+    except (ValueError, TypeError):
+        # Not a valid UUID, continue with V0 logic
+        pass
+    except Exception:
+        # Some other error, continue with V0 logic
+        pass
+
+    return result
+
+
+async def _delete_sandbox_and_close_connections(
+    sandbox_service: SandboxService,
+    sandbox_id: str,
+    db_session: AsyncSession,
+    httpx_client: httpx.AsyncClient,
+):
+    try:
+        await sandbox_service.delete_sandbox(sandbox_id)
+        await db_session.commit()
+    finally:
+        await asyncio.gather(
+            *[
+                db_session.aclose(),
+                httpx_client.aclose(),
+            ]
+        )
+
+
+async def _delete_v0_conversation(conversation_id: str, user_id: str | None) -> bool:
+    """Delete a V0 conversation using the legacy logic."""
     conversation_store = await ConversationStoreImpl.get_instance(config, user_id)
     try:
         await conversation_store.get_metadata(conversation_id)
     except FileNotFoundError:
         return False
+
+    # Stop the conversation if it's running
     is_running = await conversation_manager.is_agent_loop_running(conversation_id)
     if is_running:
         await conversation_manager.close_session(conversation_id)
+
+    # Clean up runtime and metadata
     runtime_cls = get_runtime_cls(config.runtime)
     await runtime_cls.delete(conversation_id)
     await conversation_store.delete_metadata(conversation_id)
@@ -501,10 +620,15 @@ async def get_prompt(
         # placeholder for error handling
         raise ValueError('Settings not found')
 
+    settings_base_url = settings.llm_base_url
+    effective_base_url = get_effective_llm_base_url(
+        settings.llm_model,
+        settings_base_url,
+    )
     llm_config = LLMConfig(
         model=settings.llm_model or '',
         api_key=settings.llm_api_key,
-        base_url=settings.llm_base_url,
+        base_url=effective_base_url,
     )
 
     prompt_template = generate_prompt_template(stringified_events)
@@ -1060,47 +1184,155 @@ def add_experiment_config_for_conversation(
     return False
 
 
-@app.get('/microagent-management/conversations')
-async def get_microagent_management_conversations(
-    selected_repository: str,
-    page_id: str | None = None,
-    limit: int = 20,
-    conversation_store: ConversationStore = Depends(get_conversation_store),
-    provider_tokens: PROVIDER_TOKEN_TYPE = Depends(get_provider_tokens),
-) -> ConversationInfoResultSet:
-    """Get conversations for the microagent management page with pagination support.
-
-    This endpoint returns conversations with conversation_trigger = 'microagent_management'
-    and only includes conversations with active PRs. Pagination is supported.
+def _parse_combined_page_id(page_id: str | None) -> tuple[str | None, str | None]:
+    """Parse combined page_id to extract separate V0 and V1 page_ids.
 
     Args:
-        page_id: Optional page ID for pagination
-        limit: Maximum number of results per page (default: 20)
-        selected_repository: Optional repository filter to limit results to a specific repository
-        conversation_store: Conversation store dependency
-        provider_tokens: Provider tokens for checking PR status
-    """
-    conversation_metadata_result_set = await conversation_store.search(page_id, limit)
+        page_id: Combined page_id (base64-encoded JSON) or legacy V0 page_id
 
-    # Apply age filter first using common function
-    filtered_results = _filter_conversations_by_age(
-        conversation_metadata_result_set.results, config.conversation_max_age_seconds
+    Returns:
+        Tuple of (v0_page_id, v1_page_id)
+    """
+    v0_page_id = None
+    v1_page_id = None
+
+    if page_id:
+        try:
+            # Try to parse as JSON first
+            page_data = json.loads(base64.b64decode(page_id))
+            v0_page_id = page_data.get('v0')
+            v1_page_id = page_data.get('v1')
+        except (json.JSONDecodeError, TypeError, Exception):
+            # Fallback: treat as v0 page_id for backward compatibility
+            # This catches base64 decode errors and any other parsing issues
+            v0_page_id = page_id
+
+    return v0_page_id, v1_page_id
+
+
+async def _fetch_v1_conversations_safe(
+    app_conversation_service: AppConversationService,
+    v1_page_id: str | None,
+    limit: int,
+) -> tuple[list[ConversationInfo], str | None]:
+    """Safely fetch V1 conversations with error handling.
+
+    Args:
+        app_conversation_service: App conversation service for V1
+        v1_page_id: Page ID for V1 pagination
+        limit: Maximum number of results
+        include_sub_conversations: If True, include sub-conversations in results
+
+    Returns:
+        Tuple of (v1_conversations, v1_next_page_id)
+    """
+    v1_conversations = []
+    v1_next_page_id = None
+
+    try:
+        age_filter_date = None
+        if config.conversation_max_age_seconds:
+            age_filter_date = datetime.now(timezone.utc) - timedelta(
+                seconds=config.conversation_max_age_seconds
+            )
+
+        app_conversation_page = await app_conversation_service.search_app_conversations(
+            page_id=v1_page_id,
+            limit=limit,
+            created_at__gte=age_filter_date,
+        )
+
+        v1_conversations = [
+            _to_conversation_info(app_conv) for app_conv in app_conversation_page.items
+        ]
+        v1_next_page_id = app_conversation_page.next_page_id
+    except Exception as e:
+        # V1 system might not be available or initialized yet
+        logger.debug(f'V1 conversation service not available: {str(e)}')
+
+    return v1_conversations, v1_next_page_id
+
+
+async def _process_v0_conversations(
+    conversation_metadata_result_set,
+) -> list[ConversationInfo]:
+    """Process V0 conversations with age filtering and agent loop info.
+
+    Args:
+        conversation_metadata_result_set: Result set from V0 conversation store
+
+    Returns:
+        List of processed ConversationInfo objects
+    """
+    # Apply age filter to V0 conversations
+    v0_filtered_results = _filter_conversations_by_age(
+        conversation_metadata_result_set.results,
+        config.conversation_max_age_seconds,
     )
 
-    # Check if the last PR is active (not closed/merged)
-    provider_handler = ProviderHandler(provider_tokens)
+    v0_conversation_ids = set(
+        conversation.conversation_id for conversation in v0_filtered_results
+    )
 
-    # Apply additional filters
-    final_filtered_results = []
-    for conversation in filtered_results:
+    # Get agent loop info for V0 conversations
+    await conversation_manager.get_connections(filter_to_sids=v0_conversation_ids)
+    v0_agent_loop_info = await conversation_manager.get_agent_loop_info(
+        filter_to_sids=v0_conversation_ids
+    )
+    v0_agent_loop_info_by_conversation_id = {
+        info.conversation_id: info for info in v0_agent_loop_info
+    }
+
+    # Convert to ConversationInfo objects
+    v0_conversations = await wait_all(
+        _get_conversation_info(
+            conversation=conversation,
+            num_connections=sum(
+                1
+                for conversation_id in v0_agent_loop_info_by_conversation_id.values()
+                if conversation_id == conversation.conversation_id
+            ),
+            agent_loop_info=v0_agent_loop_info_by_conversation_id.get(
+                conversation.conversation_id
+            ),
+        )
+        for conversation in v0_filtered_results
+    )
+
+    return v0_conversations
+
+
+async def _apply_microagent_filters(
+    conversations: list[ConversationInfo],
+    selected_repository: str,
+    provider_handler: ProviderHandler,
+) -> list[ConversationInfo]:
+    """Apply microagent management specific filters to conversations.
+
+    Filters conversations by:
+    - Trigger type (MICROAGENT_MANAGEMENT)
+    - Repository match
+    - PR status (only open PRs)
+
+    Args:
+        conversations: List of conversations to filter
+        selected_repository: Repository to filter by
+        provider_handler: Handler for checking PR status
+
+    Returns:
+        Filtered list of conversations
+    """
+    filtered = []
+    for conversation in conversations:
         # Only include microagent_management conversations
         if conversation.trigger != ConversationTrigger.MICROAGENT_MANAGEMENT:
             continue
 
-        # Apply repository filter if specified
+        # Apply repository filter
         if conversation.selected_repository != selected_repository:
             continue
 
+        # Check if PR is still open
         if (
             conversation.pr_number
             and len(conversation.pr_number) > 0
@@ -1115,11 +1347,100 @@ async def get_microagent_management_conversations(
             # Skip this conversation if the PR is closed/merged
             continue
 
-        final_filtered_results.append(conversation)
+        filtered.append(conversation)
 
-    return await _build_conversation_result_set(
-        final_filtered_results, conversation_metadata_result_set.next_page_id
+    return filtered
+
+
+def _create_combined_page_id(
+    v0_next_page_id: str | None, v1_next_page_id: str | None
+) -> str | None:
+    """Create a combined page_id from V0 and V1 page_ids.
+
+    Args:
+        v0_next_page_id: Next page ID for V0 conversations
+        v1_next_page_id: Next page ID for V1 conversations
+
+    Returns:
+        Base64-encoded JSON combining both page_ids, or None if no next pages
+    """
+    if not v0_next_page_id and not v1_next_page_id:
+        return None
+
+    next_page_data = {
+        'v0': v0_next_page_id,
+        'v1': v1_next_page_id,
+    }
+
+    return base64.b64encode(json.dumps(next_page_data).encode()).decode()
+
+
+@app.get('/microagent-management/conversations')
+async def get_microagent_management_conversations(
+    selected_repository: str,
+    page_id: str | None = None,
+    limit: int = 20,
+    conversation_store: ConversationStore = Depends(get_conversation_store),
+    provider_tokens: PROVIDER_TOKEN_TYPE = Depends(get_provider_tokens),
+    app_conversation_service: AppConversationService = app_conversation_service_dependency,
+) -> ConversationInfoResultSet:
+    """Get conversations for the microagent management page with pagination support.
+
+    This endpoint returns conversations with conversation_trigger = 'microagent_management'
+    and only includes conversations with active PRs. Pagination is supported.
+
+    Args:
+        page_id: Optional page ID for pagination
+        limit: Maximum number of results per page (default: 20)
+        selected_repository: Repository filter to limit results to a specific repository
+        conversation_store: Conversation store dependency
+        provider_tokens: Provider tokens for checking PR status
+        app_conversation_service: App conversation service for V1 conversations
+
+    Returns:
+        ConversationInfoResultSet with filtered and paginated results
+    """
+    # Parse page_id to extract V0 and V1 components
+    v0_page_id, v1_page_id = _parse_combined_page_id(page_id)
+
+    # Fetch V0 conversations
+    conversation_metadata_result_set = await conversation_store.search(
+        v0_page_id, limit
     )
+
+    # Fetch V1 conversations (with graceful error handling)
+    v1_conversations, v1_next_page_id = await _fetch_v1_conversations_safe(
+        app_conversation_service, v1_page_id, limit
+    )
+
+    # Process V0 conversations
+    v0_conversations = await _process_v0_conversations(conversation_metadata_result_set)
+
+    # Apply microagent-specific filters
+    provider_handler = ProviderHandler(provider_tokens)
+    v0_filtered = await _apply_microagent_filters(
+        v0_conversations, selected_repository, provider_handler
+    )
+    v1_filtered = await _apply_microagent_filters(
+        v1_conversations, selected_repository, provider_handler
+    )
+
+    # Combine and sort results
+    all_conversations = v0_filtered + v1_filtered
+    all_conversations.sort(
+        key=lambda x: x.created_at or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+    # Limit to requested number of results
+    final_results = all_conversations[:limit]
+
+    # Create combined page_id for pagination
+    next_page_id = _create_combined_page_id(
+        conversation_metadata_result_set.next_page_id, v1_next_page_id
+    )
+
+    return ConversationInfoResultSet(results=final_results, next_page_id=next_page_id)
 
 
 def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo:
@@ -1139,25 +1460,29 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
         app_conversation.sandbox_status, ConversationStatus.STOPPED
     )
 
-    runtime_status_mapping = {
-        AgentExecutionStatus.ERROR: RuntimeStatus.ERROR,
-        AgentExecutionStatus.IDLE: RuntimeStatus.READY,
-        AgentExecutionStatus.RUNNING: RuntimeStatus.READY,
-        AgentExecutionStatus.PAUSED: RuntimeStatus.READY,
-        AgentExecutionStatus.WAITING_FOR_CONFIRMATION: RuntimeStatus.READY,
-        AgentExecutionStatus.FINISHED: RuntimeStatus.READY,
-        AgentExecutionStatus.STUCK: RuntimeStatus.ERROR,
-    }
-    runtime_status = runtime_status_mapping.get(
-        app_conversation.agent_status, RuntimeStatus.ERROR
-    )
+    if conversation_status == ConversationStatus.RUNNING:
+        runtime_status_mapping = {
+            ConversationExecutionStatus.ERROR: RuntimeStatus.ERROR,
+            ConversationExecutionStatus.IDLE: RuntimeStatus.READY,
+            ConversationExecutionStatus.RUNNING: RuntimeStatus.READY,
+            ConversationExecutionStatus.PAUSED: RuntimeStatus.READY,
+            ConversationExecutionStatus.WAITING_FOR_CONFIRMATION: RuntimeStatus.READY,
+            ConversationExecutionStatus.FINISHED: RuntimeStatus.READY,
+            ConversationExecutionStatus.STUCK: RuntimeStatus.ERROR,
+        }
+        runtime_status = runtime_status_mapping.get(
+            app_conversation.execution_status, RuntimeStatus.ERROR
+        )
+    else:
+        runtime_status = None
+
     title = (
         app_conversation.title
         or f'Conversation {base62.encodebytes(app_conversation.id.bytes)}'
     )
 
     return ConversationInfo(
-        conversation_id=str(app_conversation.id),
+        conversation_id=app_conversation.id.hex,
         title=title,
         last_updated_at=app_conversation.updated_at,
         status=conversation_status,
@@ -1172,4 +1497,7 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
         created_at=app_conversation.created_at,
         pr_number=app_conversation.pr_number,
         conversation_version='V1',
+        sub_conversation_ids=[
+            sub_id.hex for sub_id in app_conversation.sub_conversation_ids
+        ],
     )

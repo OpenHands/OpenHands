@@ -30,7 +30,7 @@ from openhands.runtime.base import Runtime
 from openhands.runtime.impl.remote.remote_runtime import RemoteRuntime
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.server.services.conversation_stats import ConversationStats
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.files import FileStore
 from openhands.utils.async_utils import EXECUTOR, call_sync_from_async
 from openhands.utils.shutdown_listener import should_continue
@@ -128,7 +128,7 @@ class AgentSession:
         finished = False  # For monitoring
         runtime_connected = False
         restored_state = False
-        custom_secrets_handler = UserSecrets(
+        custom_secrets_handler = Secrets(
             custom_secrets=custom_secrets if custom_secrets else {}  # type: ignore[arg-type]
         )
         try:
@@ -316,7 +316,7 @@ class AgentSession:
         if self.runtime is not None:
             raise RuntimeError('Runtime already created')
 
-        custom_secrets_handler = UserSecrets(custom_secrets=custom_secrets or {})  # type: ignore[arg-type]
+        custom_secrets_handler = Secrets(custom_secrets=custom_secrets or {})  # type: ignore[arg-type]
         env_vars = custom_secrets_handler.get_env_vars()
 
         self.logger.debug(f'Initializing runtime `{runtime_name}` now...')

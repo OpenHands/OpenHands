@@ -64,7 +64,7 @@ python enterprise_local/convert_to_env.py
 You'll also need to set up the runtime image, so that the dev server doesn't try to rebuild it.
 
 ```
-export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:main-nikolaik
+export SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/openhands/runtime:main-nikolaik
 docker pull $SANDBOX_RUNTIME_CONTAINER_IMAGE
 ```
 
@@ -203,7 +203,7 @@ And then invoking `printenv`. NOTE: _DO NOT DO THIS WITH PROD!!!_ (Hopefully by 
                 "REDIS_HOST": "localhost:6379",
                 "OPENHANDS": "<YOUR LOCAL OSS OPENHANDS DIR>",
                 "FRONTEND_DIRECTORY": "<YOUR LOCAL OSS OPENHANDS DIR>/frontend/build",
-                "SANDBOX_RUNTIME_CONTAINER_IMAGE": "ghcr.io/all-hands-ai/runtime:main-nikolaik",
+                "SANDBOX_RUNTIME_CONTAINER_IMAGE": "ghcr.io/openhands/runtime:main-nikolaik",
                 "FILE_STORE_PATH": "<YOUR HOME DIRECTORY>>/.openhands-state",
                 "OPENHANDS_CONFIG_CLS": "server.config.SaaSServerConfig",
                 "GITHUB_APP_ID": "1062351",
@@ -237,7 +237,7 @@ And then invoking `printenv`. NOTE: _DO NOT DO THIS WITH PROD!!!_ (Hopefully by 
                 "REDIS_HOST": "localhost:6379",
                 "OPENHANDS": "<YOUR LOCAL OSS OPENHANDS DIR>",
                 "FRONTEND_DIRECTORY": "<YOUR LOCAL OSS OPENHANDS DIR>/frontend/build",
-                "SANDBOX_RUNTIME_CONTAINER_IMAGE": "ghcr.io/all-hands-ai/runtime:main-nikolaik",
+                "SANDBOX_RUNTIME_CONTAINER_IMAGE": "ghcr.io/openhands/runtime:main-nikolaik",
                 "FILE_STORE_PATH": "<YOUR HOME DIRECTORY>>/.openhands-state",
                 "OPENHANDS_CONFIG_CLS": "server.config.SaaSServerConfig",
                 "GITHUB_APP_ID": "1062351",

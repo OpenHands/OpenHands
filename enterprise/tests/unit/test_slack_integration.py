@@ -14,7 +14,7 @@ def slack_manager():
 @pytest.mark.parametrize(
     'message,expected',
     [
-        ('All-Hands-AI/Openhands', 'All-Hands-AI/Openhands'),
+        ('OpenHands/Openhands', 'OpenHands/Openhands'),
         ('deploy repo', 'deploy'),
         ('use hello world', None),
     ],

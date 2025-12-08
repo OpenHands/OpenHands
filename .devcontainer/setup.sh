@@ -7,5 +7,8 @@ git config --global --add safe.directory "$(realpath .)"
 # Install `nc`
 sudo apt update && sudo apt install netcat -y
 
+# Install `uv` and `uvx`
+wget -qO- https://astral.sh/uv/install.sh | sh
+
 # Do common setup tasks
 source .openhands/setup.sh

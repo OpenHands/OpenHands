@@ -732,7 +732,7 @@ def test_initialize_repository_for_runtime_with_bitbucket_token(
     # Set up environment with BITBUCKET_TOKEN
     with patch.dict(os.environ, {'BITBUCKET_TOKEN': 'username:app_password'}):
         result = initialize_repository_for_runtime(
-            runtime=mock_runtime, selected_repository='all-hands-ai/test-repo'
+            runtime=mock_runtime, selected_repository='openhands/test-repo'
         )
 
     # Verify the result
@@ -755,7 +755,7 @@ def test_initialize_repository_for_runtime_with_bitbucket_token(
     )
 
     # Check that the repository was passed correctly
-    assert args[3] == 'all-hands-ai/test-repo'  # selected_repository
+    assert args[3] == 'openhands/test-repo'  # selected_repository
     assert args[4] is None  # selected_branch
 
 
@@ -788,7 +788,7 @@ def test_initialize_repository_for_runtime_with_multiple_tokens(
         },
     ):
         result = initialize_repository_for_runtime(
-            runtime=mock_runtime, selected_repository='all-hands-ai/test-repo'
+            runtime=mock_runtime, selected_repository='openhands/test-repo'
         )
 
     # Verify the result
@@ -852,7 +852,7 @@ def test_initialize_repository_for_runtime_without_bitbucket_token(
             del os.environ['BITBUCKET_TOKEN']
 
         result = initialize_repository_for_runtime(
-            runtime=mock_runtime, selected_repository='all-hands-ai/test-repo'
+            runtime=mock_runtime, selected_repository='openhands/test-repo'
         )
 
     # Verify the result

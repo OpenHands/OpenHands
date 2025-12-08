@@ -7,7 +7,7 @@ import { GitChangeStatus } from "#/api/open-hands.types";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { cn } from "#/utils/utils";
 import ChevronUp from "#/icons/chveron-up.svg?react";
-import { useGitDiff } from "#/hooks/query/use-get-diff";
+import { useUnifiedGitDiff } from "#/hooks/query/use-unified-git-diff";
 
 interface LoadingSpinnerProps {
   className?: string;
@@ -64,7 +64,7 @@ export function FileDiffViewer({ path, type }: FileDiffViewerProps) {
     isLoading,
     isSuccess,
     isRefetching,
-  } = useGitDiff({
+  } = useUnifiedGitDiff({
     filePath,
     type,
     enabled: !isCollapsed,

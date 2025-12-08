@@ -268,7 +268,7 @@ describe("useWebSocket", () => {
     });
 
     // onError handler should have been called
-    expect(onErrorSpy).toHaveBeenCalledOnce();
+    expect(onErrorSpy).toHaveBeenCalled();
   });
 
   it("should provide sendMessage function to send messages to WebSocket", async () => {

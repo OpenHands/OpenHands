@@ -64,6 +64,7 @@ from openhands.events.action import (
     MessageAction,
     NullAction,
     SystemMessageAction,
+    LoopRecoveryAction,
 )
 from openhands.events.action.agent import (
     CondensationAction,
@@ -77,6 +78,7 @@ from openhands.events.observation import (
     ErrorObservation,
     NullObservation,
     Observation,
+    LoopDetectionObservation,
 )
 from openhands.events.serialization.event import truncate_content
 from openhands.llm.metrics import Metrics
@@ -523,6 +525,8 @@ class AgentController:
         elif isinstance(action, AgentRejectAction):
             self.state.outputs = action.outputs
             await self.set_agent_state_to(AgentState.REJECTED)
+        elif isinstance(action, LoopRecoveryAction):
+            await self._handle_loop_recovery_action(action)
 
     async def _handle_observation(self, observation: Observation) -> None:
         """Handles observation from the event stream.
@@ -594,6 +598,25 @@ class AgentController:
             # If the agent is waiting for a response, set the appropriate state
             if action.wait_for_response:
                 await self.set_agent_state_to(AgentState.AWAITING_USER_INPUT)
+
+    async def _handle_loop_recovery_action(self, action: LoopRecoveryAction) -> None:
+        # Check if this is a loop recovery option
+        if self._stuck_detector.stuck_analysis:
+            option = action.option
+
+            # Handle the loop recovery option
+            if option == 1:
+                # Option 1: Restart from before loop
+                await self._perform_loop_recovery(self._stuck_detector.stuck_analysis)
+            elif option == 2:
+                # Option 2: Restart with last user message
+                await self._restart_with_last_user_message(
+                    self._stuck_detector.stuck_analysis
+                )
+            elif option == 3:
+                # Option 3: Stop agent completely
+                await self.set_agent_state_to(AgentState.STOPPED)
+            return
 
     def _reset(self) -> None:
         """Resets the agent controller."""
@@ -854,7 +877,7 @@ class AgentController:
 
         # Synchronize spend across all llm services with the budget flag
         self.state_tracker.sync_budget_flag_with_metrics()
-        if self._is_stuck():
+        if self.agent.config.enable_stuck_detection and self._is_stuck():
             await self._react_to_exception(
                 AgentStuckInLoopError('Agent got stuck in a loop')
             )
@@ -951,7 +974,7 @@ class AgentController:
                 if self.agent.config.cli_mode:
                     # TODO(refactor): this is not ideal to have CLI been an exception
                     # We should refactor agent controller to consider this in the future
-                    # See issue: https://github.com/All-Hands-AI/OpenHands/issues/10464
+                    # See issue: https://github.com/OpenHands/OpenHands/issues/10464
                     action.confirmation_state = (  # type: ignore[union-attr]
                         ActionConfirmationStatus.AWAITING_CONFIRMATION
                     )
@@ -1084,6 +1107,45 @@ class AgentController:
 
         return self._stuck_detector.is_stuck(self.headless_mode)
 
+    def attempt_loop_recovery(self) -> bool:
+        """Attempts loop recovery when agent is stuck in a loop.
+        Only supports CLI for now.
+
+        Returns:
+            bool: True if recovery was successful and agent should continue,
+                  False if recovery failed or was not attempted.
+        """
+        # Check if we're in a loop
+        if not self._stuck_detector.stuck_analysis:
+            return False
+
+        """Handle loop recovery in CLI mode by pausing the agent and presenting recovery options."""
+        recovery_point = self._stuck_detector.stuck_analysis.loop_start_idx
+
+        # Present loop detection message
+        self.event_stream.add_event(
+            LoopDetectionObservation(
+                content=f"""⚠️  Agent detected in a loop!
+Loop type: {self._stuck_detector.stuck_analysis.loop_type}
+Loop detected at iteration {self.state.iteration_flag.current_value}
+\nRecovery options:
+/resume 1. Restart from before loop (preserves {recovery_point} events)
+/resume 2. Restart with last user message (reuses your most recent instruction)
+/exit. Quit directly
+\nThe agent has been paused. Type '/resume 1', '/resume 2', or '/exit' to choose an option.
+"""
+            ),
+            source=EventSource.ENVIRONMENT,
+        )
+
+        # Pause the agent using the same mechanism as Ctrl+P
+        # This ensures consistent behavior and avoids event loop conflicts
+        self.event_stream.add_event(
+            ChangeAgentStateAction(AgentState.PAUSED),
+            EventSource.ENVIRONMENT,  # Use ENVIRONMENT source to distinguish from user pause
+        )
+        return True
+
     def _prepare_metrics_for_frontend(self, action: Action) -> None:
         """Create a minimal metrics object for frontend display and log it.
 
@@ -1207,6 +1269,93 @@ class AgentController:
             None,
         )
         return self._cached_first_user_message
+
+    async def _perform_loop_recovery(
+        self, stuck_analysis: StuckDetector.StuckAnalysis
+    ) -> None:
+        """Perform loop recovery by truncating memory and restarting from before the loop."""
+        recovery_point = stuck_analysis.loop_start_idx
+
+        # Truncate memory to the recovery point
+        await self._truncate_memory_to_point(recovery_point)
+
+        # Set agent state to AWAITING_USER_INPUT to allow user to provide new instructions
+        await self.set_agent_state_to(AgentState.AWAITING_USER_INPUT)
+
+        self.event_stream.add_event(
+            LoopDetectionObservation(
+                content="""✅ Loop recovery completed. Agent has been reset to before the loop.
+You can now provide new instructions to continue.
+"""
+            ),
+            source=EventSource.ENVIRONMENT,
+        )
+
+    async def _truncate_memory_to_point(self, recovery_point: int) -> None:
+        """Truncate memory to the specified recovery point."""
+        # Get all events from state history
+        all_events = self.state.history
+
+        if recovery_point >= len(all_events):
+            return
+
+        # Keep only events up to the recovery point
+        events_to_keep = all_events[:recovery_point]
+
+        # Update state history
+        self.state.history = events_to_keep
+
+        # Update end_id to reflect the truncation
+        if events_to_keep:
+            self.state.end_id = events_to_keep[-1].id
+        else:
+            self.state.end_id = -1
+
+        # Clear any cached messages
+        self._cached_first_user_message = None
+
+    async def _restart_with_last_user_message(
+        self, stuck_analysis: StuckDetector.StuckAnalysis
+    ) -> None:
+        """Restart the agent using the last user message as the new instruction."""
+
+        # Find the last user message in the history
+        last_user_message = None
+        for event in reversed(self.state.history):
+            if isinstance(event, MessageAction) and event.source == EventSource.USER:
+                last_user_message = event
+                break
+
+        if last_user_message:
+            # Truncate memory to just before the loop started
+            recovery_point = stuck_analysis.loop_start_idx
+            await self._truncate_memory_to_point(recovery_point)
+
+            # Set agent state to RUNNING and re-use the last user message
+            await self.set_agent_state_to(AgentState.RUNNING)
+
+            # Re-use the last user message as the new instruction
+            self.event_stream.add_event(
+                LoopDetectionObservation(
+                    content=f"""\n✅ Restarting with your last instruction: {last_user_message.content}
+Agent is now continuing with the same task...
+"""
+                ),
+                source=EventSource.ENVIRONMENT,
+            )
+
+            # Create a new action with the last user message
+            new_action = MessageAction(
+                content=last_user_message.content, wait_for_response=False
+            )
+            new_action._source = EventSource.USER  # type: ignore [attr-defined]
+
+            # Process the action to restart the agent
+            await self._handle_action(new_action)
+        else:
+            # If no user message found, fall back to regular recovery
+            print('\n⚠️  No previous user message found. Using standard recovery.')
+            await self._perform_loop_recovery(stuck_analysis)
 
     def save_state(self):
         self.state_tracker.save_state()

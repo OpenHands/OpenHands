@@ -9,7 +9,7 @@ from pydantic import SecretStr
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
 from openhands.server.settings import Settings
 from openhands.server.shared import server_config
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.import_utils import get_impl
@@ -69,11 +69,15 @@ class UserAuth(ABC):
         """Get secrets store"""
 
     @abstractmethod
-    async def get_user_secrets(self) -> UserSecrets | None:
+    async def get_secrets(self) -> Secrets | None:
         """Get the user's secrets"""
 
     def get_auth_type(self) -> AuthType | None:
         return None
+
+    @abstractmethod
+    async def get_mcp_api_key(self) -> str | None:
+        """Get an mcp api key for the user"""
 
     @classmethod
     @abstractmethod

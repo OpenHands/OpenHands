@@ -116,6 +116,7 @@ class TestStuckDetector:
         state.history.append(cmd_observation)
 
         assert stuck_detector.is_stuck(headless_mode=True) is False
+        assert stuck_detector.stuck_analysis is None
 
     def test_interactive_mode_resets_after_user_message(
         self, stuck_detector: StuckDetector
@@ -237,6 +238,11 @@ class TestStuckDetector:
             assert stuck_detector.is_stuck(headless_mode=True) is True
             mock_warning.assert_called_once_with('Action, Observation loop detected')
 
+        # recover to before first loop pattern
+        assert stuck_detector.stuck_analysis.loop_type == 'repeating_action_observation'
+        assert stuck_detector.stuck_analysis.loop_repeat_times == 4
+        assert stuck_detector.stuck_analysis.loop_start_idx == 1
+
     def test_is_stuck_repeating_action_error(self, stuck_detector: StuckDetector):
         state = stuck_detector.state
         # (action, error_observation), not necessarily the same error
@@ -290,6 +296,9 @@ class TestStuckDetector:
             mock_warning.assert_called_once_with(
                 'Action, ErrorObservation loop detected'
             )
+        assert stuck_detector.stuck_analysis.loop_type == 'repeating_action_error'
+        assert stuck_detector.stuck_analysis.loop_repeat_times == 3
+        assert stuck_detector.stuck_analysis.loop_start_idx == 1
 
     def test_is_stuck_invalid_syntax_error(self, stuck_detector: StuckDetector):
         state = stuck_detector.state
@@ -494,6 +503,12 @@ class TestStuckDetector:
         with patch('logging.Logger.warning') as mock_warning:
             assert stuck_detector.is_stuck(headless_mode=True) is True
             mock_warning.assert_called_once_with('Action, Observation pattern detected')
+        assert (
+            stuck_detector.stuck_analysis.loop_type
+            == 'repeating_action_observation_pattern'
+        )
+        assert stuck_detector.stuck_analysis.loop_repeat_times == 3
+        assert stuck_detector.stuck_analysis.loop_start_idx == 0  # null ignored
 
     def test_is_stuck_not_stuck(self, stuck_detector: StuckDetector):
         state = stuck_detector.state
@@ -585,6 +600,9 @@ class TestStuckDetector:
         state.history.append(message_action_6)
 
         assert stuck_detector.is_stuck(headless_mode=True)
+        assert stuck_detector.stuck_analysis.loop_type == 'monologue'
+        assert stuck_detector.stuck_analysis.loop_repeat_times == 3
+        assert stuck_detector.stuck_analysis.loop_start_idx == 2  # null ignored
 
         # Add an observation event between the repeated message actions
         cmd_output_observation = CmdOutputObservation(
@@ -628,6 +646,9 @@ class TestStuckDetector:
             mock_warning.assert_called_once_with(
                 'Context window error loop detected - repeated condensation events'
             )
+        assert stuck_detector.stuck_analysis.loop_type == 'context_window_error'
+        assert stuck_detector.stuck_analysis.loop_repeat_times == 2
+        assert stuck_detector.stuck_analysis.loop_start_idx == 0
 
     def test_is_not_stuck_context_window_error_with_other_events(self, stuck_detector):
         """Test that we don't detect a loop when there are other events between condensation events."""
@@ -731,6 +752,9 @@ class TestStuckDetector:
             mock_warning.assert_called_once_with(
                 'Context window error loop detected - repeated condensation events'
             )
+        assert stuck_detector.stuck_analysis.loop_type == 'context_window_error'
+        assert stuck_detector.stuck_analysis.loop_repeat_times == 2
+        assert stuck_detector.stuck_analysis.loop_start_idx == 0
 
     def test_is_not_stuck_context_window_error_in_non_headless(self, stuck_detector):
         """Test that in non-headless mode, we don't detect a loop if the condensation events

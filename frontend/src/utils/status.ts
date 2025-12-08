@@ -4,6 +4,8 @@ import { AgentState } from "#/types/agent-state";
 import { ConversationStatus } from "#/types/conversation-status";
 import { StatusMessage } from "#/types/message";
 import { RuntimeStatus } from "#/types/runtime-status";
+import { V1AppConversationStartTaskStatus } from "#/api/conversation-service/v1-conversation-service.types";
+import { isTaskPolling } from "./utils";
 
 export enum IndicatorColor {
   BLUE = "bg-blue-500",
@@ -24,7 +26,7 @@ export const AGENT_STATUS_MAP: {
   // Ready/Idle/Waiting for user input states
   [AgentState.AWAITING_USER_INPUT]: I18nKey.AGENT_STATUS$WAITING_FOR_TASK,
   [AgentState.AWAITING_USER_CONFIRMATION]:
-    I18nKey.AGENT_STATUS$WAITING_FOR_TASK,
+    I18nKey.AGENT_STATUS$WAITING_FOR_USER_CONFIRMATION,
   [AgentState.USER_CONFIRMED]: I18nKey.AGENT_STATUS$WAITING_FOR_TASK,
   [AgentState.USER_REJECTED]: I18nKey.AGENT_STATUS$WAITING_FOR_TASK,
   [AgentState.FINISHED]: I18nKey.AGENT_STATUS$WAITING_FOR_TASK,
@@ -103,8 +105,16 @@ export function getStatusCode(
   conversationStatus: ConversationStatus | null,
   runtimeStatus: RuntimeStatus | null,
   agentState: AgentState | null,
+  taskStatus?: V1AppConversationStartTaskStatus | null,
+  subConversationTaskStatus?: V1AppConversationStartTaskStatus | null,
 ) {
-  // Handle conversation and runtime stopped states
+  // PRIORITY 1: Handle task error state (when start-tasks API returns ERROR)
+  // This must come first to prevent "Connecting..." from showing when task has errored
+  if (taskStatus === "ERROR" || subConversationTaskStatus === "ERROR") {
+    return I18nKey.AGENT_STATUS$ERROR_OCCURRED;
+  }
+
+  // PRIORITY 2: Handle conversation and runtime stopped states
   if (conversationStatus === "STOPPED" || runtimeStatus === "STATUS$STOPPED") {
     return I18nKey.CHAT_INTERFACE$STOPPED;
   }
@@ -134,11 +144,15 @@ export function getStatusCode(
     return runtimeStatus;
   }
 
-  // Handle WebSocket connection states
+  // PRIORITY 3: Handle WebSocket connection states
+  // Note: WebSocket may be stuck in CONNECTING when task errors, so we check taskStatus first
   if (webSocketStatus === "DISCONNECTED") {
     return I18nKey.CHAT_INTERFACE$DISCONNECTED;
   }
-  if (webSocketStatus === "CONNECTING") {
+  if (
+    webSocketStatus === "CONNECTING" ||
+    isTaskPolling(subConversationTaskStatus)
+  ) {
     return I18nKey.CHAT_INTERFACE$CONNECTING;
   }
 

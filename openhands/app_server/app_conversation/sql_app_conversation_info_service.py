@@ -45,6 +45,8 @@ from openhands.app_server.utils.sql_utils import (
     create_json_type_decorator,
 )
 from openhands.integrations.provider import ProviderType
+from openhands.sdk.conversation.conversation_stats import ConversationStats
+from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
@@ -88,6 +90,7 @@ class StoredConversationMetadata(Base):  # type: ignore
 
     conversation_version = Column(String, nullable=False, default='V0', index=True)
     sandbox_id = Column(String, nullable=True, index=True)
+    parent_conversation_id = Column(String, nullable=True, index=True)
 
 
 @dataclass
@@ -110,9 +113,17 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         sort_order: AppConversationSortOrder = AppConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
+        include_sub_conversations: bool = False,
     ) -> AppConversationInfoPage:
         """Search for sandboxed conversations without permission checks."""
         query = await self._secure_select()
+
+        # Conditionally exclude sub-conversations based on the parameter
+        if not include_sub_conversations:
+            # Exclude sub-conversations (only include top-level conversations)
+            query = query.where(
+                StoredConversationMetadata.parent_conversation_id.is_(None)
+            )
 
         query = self._apply_filters(
             query=query,
@@ -129,9 +140,9 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         elif sort_order == AppConversationSortOrder.CREATED_AT_DESC:
             query = query.order_by(StoredConversationMetadata.created_at.desc())
         elif sort_order == AppConversationSortOrder.UPDATED_AT:
-            query = query.order_by(StoredConversationMetadata.updated_at)
+            query = query.order_by(StoredConversationMetadata.last_updated_at)
         elif sort_order == AppConversationSortOrder.UPDATED_AT_DESC:
-            query = query.order_by(StoredConversationMetadata.updated_at.desc())
+            query = query.order_by(StoredConversationMetadata.last_updated_at.desc())
         elif sort_order == AppConversationSortOrder.TITLE:
             query = query.order_by(StoredConversationMetadata.title)
         elif sort_order == AppConversationSortOrder.TITLE_DESC:
@@ -180,9 +191,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         query = select(func.count(StoredConversationMetadata.conversation_id))
         user_id = await self.user_context.get_user_id()
         if user_id:
-            query = query.where(
-                StoredConversationMetadata.created_by_user_id == user_id
-            )
+            query = query.where(StoredConversationMetadata.user_id == user_id)
 
         query = self._apply_filters(
             query=query,
@@ -233,6 +242,26 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             query = query.where(*conditions)
         return query
 
+    async def get_sub_conversation_ids(
+        self, parent_conversation_id: UUID
+    ) -> list[UUID]:
+        """Get all sub-conversation IDs for a given parent conversation.
+
+        Args:
+            parent_conversation_id: The ID of the parent conversation
+
+        Returns:
+            List of sub-conversation IDs
+        """
+        query = await self._secure_select()
+        query = query.where(
+            StoredConversationMetadata.parent_conversation_id
+            == str(parent_conversation_id)
+        )
+        result_set = await self.db_session.execute(query)
+        rows = result_set.scalars().all()
+        return [UUID(row.conversation_id) for row in rows]
+
     async def get_app_conversation_info(
         self, conversation_id: UUID
     ) -> AppConversationInfo | None:
@@ -243,7 +272,9 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         result_set = await self.db_session.execute(query)
         result = result_set.scalar_one_or_none()
         if result:
-            return self._to_info(result)
+            # Fetch sub-conversation IDs
+            sub_conversation_ids = await self.get_sub_conversation_ids(conversation_id)
+            return self._to_info(result, sub_conversation_ids=sub_conversation_ids)
         return None
 
     async def batch_get_app_conversation_info(
@@ -262,8 +293,13 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         results: list[AppConversationInfo | None] = []
         for conversation_id in conversation_id_strs:
             info = info_by_id.get(conversation_id)
+            sub_conversation_ids = await self.get_sub_conversation_ids(
+                UUID(conversation_id)
+            )
             if info:
-                results.append(self._to_info(info))
+                results.append(
+                    self._to_info(info, sub_conversation_ids=sub_conversation_ids)
+                )
             else:
                 results.append(None)
 
@@ -275,11 +311,11 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         user_id = await self.user_context.get_user_id()
         if user_id:
             query = select(StoredConversationMetadata).where(
-                StoredConversationMetadata.conversation_id == info.id
+                StoredConversationMetadata.conversation_id == str(info.id)
             )
             result = await self.db_session.execute(query)
             existing = result.scalar_one_or_none()
-            assert existing is None or existing.created_by_user_id == user_id
+            assert existing is None or existing.user_id == user_id
 
         metrics = info.metrics or MetricsSnapshot()
         usage = metrics.accumulated_token_usage or TokenUsage()
@@ -309,11 +345,140 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             llm_model=info.llm_model,
             conversation_version='V1',
             sandbox_id=info.sandbox_id,
+            parent_conversation_id=(
+                str(info.parent_conversation_id)
+                if info.parent_conversation_id
+                else None
+            ),
         )
 
         await self.db_session.merge(stored)
         await self.db_session.commit()
         return info
+
+    async def update_conversation_statistics(
+        self, conversation_id: UUID, stats: ConversationStats
+    ) -> None:
+        """Update conversation statistics from stats event data.
+
+        Args:
+            conversation_id: The ID of the conversation to update
+            stats: ConversationStats object containing usage_to_metrics data from stats event
+        """
+        # Extract agent metrics from usage_to_metrics
+        usage_to_metrics = stats.usage_to_metrics
+        agent_metrics = usage_to_metrics.get('agent')
+
+        if not agent_metrics:
+            logger.debug(
+                'No agent metrics found in stats for conversation %s', conversation_id
+            )
+            return
+
+        # Query existing record using secure select (filters for V1 and user if available)
+        query = await self._secure_select()
+        query = query.where(
+            StoredConversationMetadata.conversation_id == str(conversation_id)
+        )
+        result = await self.db_session.execute(query)
+        stored = result.scalar_one_or_none()
+
+        if not stored:
+            logger.debug(
+                'Conversation %s not found or not accessible, skipping statistics update',
+                conversation_id,
+            )
+            return
+
+        # Extract accumulated_cost and max_budget_per_task from Metrics object
+        accumulated_cost = agent_metrics.accumulated_cost
+        max_budget_per_task = agent_metrics.max_budget_per_task
+
+        # Extract accumulated_token_usage from Metrics object
+        accumulated_token_usage = agent_metrics.accumulated_token_usage
+        if accumulated_token_usage:
+            prompt_tokens = accumulated_token_usage.prompt_tokens
+            completion_tokens = accumulated_token_usage.completion_tokens
+            cache_read_tokens = accumulated_token_usage.cache_read_tokens
+            cache_write_tokens = accumulated_token_usage.cache_write_tokens
+            reasoning_tokens = accumulated_token_usage.reasoning_tokens
+            context_window = accumulated_token_usage.context_window
+            per_turn_token = accumulated_token_usage.per_turn_token
+        else:
+            prompt_tokens = None
+            completion_tokens = None
+            cache_read_tokens = None
+            cache_write_tokens = None
+            reasoning_tokens = None
+            context_window = None
+            per_turn_token = None
+
+        # Update fields only if values are provided (not None)
+        if accumulated_cost is not None:
+            stored.accumulated_cost = accumulated_cost
+        if max_budget_per_task is not None:
+            stored.max_budget_per_task = max_budget_per_task
+        if prompt_tokens is not None:
+            stored.prompt_tokens = prompt_tokens
+        if completion_tokens is not None:
+            stored.completion_tokens = completion_tokens
+        if cache_read_tokens is not None:
+            stored.cache_read_tokens = cache_read_tokens
+        if cache_write_tokens is not None:
+            stored.cache_write_tokens = cache_write_tokens
+        if reasoning_tokens is not None:
+            stored.reasoning_tokens = reasoning_tokens
+        if context_window is not None:
+            stored.context_window = context_window
+        if per_turn_token is not None:
+            stored.per_turn_token = per_turn_token
+
+        # Update last_updated_at timestamp
+        stored.last_updated_at = utc_now()
+
+        await self.db_session.commit()
+
+    async def process_stats_event(
+        self,
+        event: ConversationStateUpdateEvent,
+        conversation_id: UUID,
+    ) -> None:
+        """Process a stats event and update conversation statistics.
+
+        Args:
+            event: The ConversationStateUpdateEvent with key='stats'
+            conversation_id: The ID of the conversation to update
+        """
+        try:
+            # Parse event value into ConversationStats model for type safety
+            # event.value can be a dict (from JSON deserialization) or a ConversationStats object
+            event_value = event.value
+            conversation_stats: ConversationStats | None = None
+
+            if isinstance(event_value, ConversationStats):
+                # Already a ConversationStats object
+                conversation_stats = event_value
+            elif isinstance(event_value, dict):
+                # Parse dict into ConversationStats model
+                # This validates the structure and ensures type safety
+                conversation_stats = ConversationStats.model_validate(event_value)
+            elif hasattr(event_value, 'usage_to_metrics'):
+                # Handle objects with usage_to_metrics attribute (e.g., from tests)
+                # Convert to dict first, then validate
+                stats_dict = {'usage_to_metrics': event_value.usage_to_metrics}
+                conversation_stats = ConversationStats.model_validate(stats_dict)
+
+            if conversation_stats and conversation_stats.usage_to_metrics:
+                # Pass ConversationStats object directly for type safety
+                await self.update_conversation_statistics(
+                    conversation_id, conversation_stats
+                )
+        except Exception:
+            logger.exception(
+                'Error updating conversation statistics for conversation %s',
+                conversation_id,
+                stack_info=True,
+            )
 
     async def _secure_select(self):
         query = select(StoredConversationMetadata).where(
@@ -326,7 +491,11 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             )
         return query
 
-    def _to_info(self, stored: StoredConversationMetadata) -> AppConversationInfo:
+    def _to_info(
+        self,
+        stored: StoredConversationMetadata,
+        sub_conversation_ids: list[UUID] | None = None,
+    ) -> AppConversationInfo:
         # V1 conversations should always have a sandbox_id
         sandbox_id = stored.sandbox_id
         assert sandbox_id is not None
@@ -358,14 +527,20 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             sandbox_id=stored.sandbox_id,
             selected_repository=stored.selected_repository,
             selected_branch=stored.selected_branch,
-            git_provider=ProviderType(stored.git_provider)
-            if stored.git_provider
-            else None,
+            git_provider=(
+                ProviderType(stored.git_provider) if stored.git_provider else None
+            ),
             title=stored.title,
             trigger=ConversationTrigger(stored.trigger) if stored.trigger else None,
             pr_number=stored.pr_number,
             llm_model=stored.llm_model,
             metrics=metrics,
+            parent_conversation_id=(
+                UUID(stored.parent_conversation_id)
+                if stored.parent_conversation_id
+                else None
+            ),
+            sub_conversation_ids=sub_conversation_ids or [],
             created_at=created_at,
             updated_at=updated_at,
         )
@@ -376,6 +551,33 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         if not value.tzinfo:
             value = value.replace(tzinfo=UTC)
         return value
+
+    async def delete_app_conversation_info(self, conversation_id: UUID) -> bool:
+        """Delete a conversation info from the database.
+
+        Args:
+            conversation_id: The ID of the conversation to delete.
+
+        Returns True if the conversation was deleted successfully, False otherwise.
+        """
+        from sqlalchemy import delete
+
+        # Build secure delete query with user context filtering
+        delete_query = delete(StoredConversationMetadata).where(
+            StoredConversationMetadata.conversation_id == str(conversation_id)
+        )
+
+        # Apply user security filtering - only allow deletion of conversations owned by the current user
+        user_id = await self.user_context.get_user_id()
+        if user_id:
+            delete_query = delete_query.where(
+                StoredConversationMetadata.user_id == user_id
+            )
+
+        # Execute the secure delete query
+        result = await self.db_session.execute(delete_query)
+
+        return result.rowcount > 0
 
 
 class SQLAppConversationInfoServiceInjector(AppConversationInfoServiceInjector):

@@ -25,7 +25,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.server.types import LLMAuthenticationError, MissingSettingsError
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 
 
 class GitlabManager(Manager):
@@ -198,7 +198,7 @@ class GitlabManager(Manager):
                     f'[GitLab] Creating new conversation for user {user_info.username}'
                 )
 
-                secret_store = UserSecrets(
+                secret_store = Secrets(
                     provider_tokens=MappingProxyType(
                         {
                             ProviderType.GITLAB: ProviderToken(

@@ -1,5 +1,5 @@
 ARG OPENHANDS_VERSION=latest
-ARG BASE="ghcr.io/all-hands-ai/openhands"
+ARG BASE="ghcr.io/openhands/openhands"
 FROM ${BASE}:${OPENHANDS_VERSION}
 
 # Datadog labels

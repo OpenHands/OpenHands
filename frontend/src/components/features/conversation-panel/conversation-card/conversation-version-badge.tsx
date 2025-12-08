@@ -25,10 +25,7 @@ export function ConversationVersionBadge({
     <Tooltip content={tooltipText} placement="top">
       <span
         className={cn(
-          "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0 cursor-help lowercase",
-          version === "V1"
-            ? "bg-green-500/20 text-green-500"
-            : "bg-neutral-500/20 text-neutral-400",
+          "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0 cursor-help lowercase bg-neutral-500/20 text-neutral-400",
           isConversationArchived && "opacity-60",
         )}
       >

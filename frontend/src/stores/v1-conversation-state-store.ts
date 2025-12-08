@@ -1,13 +1,13 @@
 import { create } from "zustand";
-import { V1AgentStatus } from "#/types/v1/core/base/common";
+import { V1ExecutionStatus } from "#/types/v1/core/base/common";
 
 interface V1ConversationStateStore {
-  agent_status: V1AgentStatus | null;
+  execution_status: V1ExecutionStatus | null;
 
   /**
    * Set the agent status
    */
-  setAgentStatus: (agent_status: V1AgentStatus) => void;
+  setExecutionStatus: (execution_status: V1ExecutionStatus) => void;
 
   /**
    * Reset the store to initial state
@@ -17,10 +17,11 @@ interface V1ConversationStateStore {
 
 export const useV1ConversationStateStore = create<V1ConversationStateStore>(
   (set) => ({
-    agent_status: null,
+    execution_status: null,
 
-    setAgentStatus: (agent_status: V1AgentStatus) => set({ agent_status }),
+    setExecutionStatus: (execution_status: V1ExecutionStatus) =>
+      set({ execution_status }),
 
-    reset: () => set({ agent_status: null }),
+    reset: () => set({ execution_status: null }),
   }),
 );

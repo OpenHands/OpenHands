@@ -189,7 +189,7 @@ model = "gpt-4o"
 # Whether to use native tool calling if supported by the model. Can be true, false, or None by default, which chooses the model's default behavior based on the evaluation.
 # ATTENTION: Based on evaluation, enabling native function calling may lead to worse results
 # in some scenarios. Use with caution and consider testing with your specific use case.
-# https://github.com/All-Hands-AI/OpenHands/pull/4711
+# https://github.com/OpenHands/OpenHands/pull/4711
 #native_tool_calling = None
 
 

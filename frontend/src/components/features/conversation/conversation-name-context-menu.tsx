@@ -6,6 +6,7 @@ import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
 import { Divider } from "#/ui/divider";
 import { I18nKey } from "#/i18n/declaration";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 import EditIcon from "#/icons/u-edit.svg?react";
 import RobotIcon from "#/icons/u-robot.svg?react";
@@ -52,6 +53,11 @@ export function ConversationNameContextMenu({
 
   const { t } = useTranslation();
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
+  const { data: conversation } = useActiveConversation();
+
+  // TODO: Hide microagent menu items for V1 conversations
+  // This is a temporary measure and may be re-enabled in the future
+  const isV1Conversation = conversation?.conversation_version === "V1";
 
   const hasDownload = Boolean(onDownloadViaVSCode);
   const hasExport = Boolean(onExportConversation);
@@ -85,7 +91,7 @@ export function ConversationNameContextMenu({
 
       {hasTools && <Divider testId="separator-tools" />}
 
-      {onShowMicroagents && (
+      {onShowMicroagents && !isV1Conversation && (
         <ContextMenuListItem
           testId="show-microagents-button"
           onClick={onShowMicroagents}
@@ -113,9 +119,11 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {(hasExport || hasDownload) && <Divider testId="separator-export" />}
+      {(hasExport || hasDownload) && !isV1Conversation && (
+        <Divider testId="separator-export" />
+      )}
 
-      {onExportConversation && (
+      {onExportConversation && !isV1Conversation && (
         <ContextMenuListItem
           testId="export-conversation-button"
           onClick={onExportConversation}
@@ -129,7 +137,7 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {onDownloadViaVSCode && (
+      {onDownloadViaVSCode && !isV1Conversation && (
         <ContextMenuListItem
           testId="download-vscode-button"
           onClick={onDownloadViaVSCode}
@@ -143,7 +151,9 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {(hasInfo || hasControl) && <Divider testId="separator-info-control" />}
+      {(hasInfo || hasControl) && !isV1Conversation && (
+        <Divider testId="separator-info-control" />
+      )}
 
       {onDisplayCost && (
         <ContextMenuListItem

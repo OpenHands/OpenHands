@@ -5,6 +5,7 @@ import {
   isActionEvent,
   isObservationEvent,
   isAgentErrorEvent,
+  isUserMessageEvent,
 } from "#/types/v1/type-guards";
 import { MicroagentStatus } from "#/types/microagent-status";
 import { useConfig } from "#/hooks/query/use-config";
@@ -14,14 +15,14 @@ import {
   ErrorEventMessage,
   UserAssistantEventMessage,
   FinishEventMessage,
-  ObservationPairEventMessage,
   GenericEventMessageWrapper,
+  ThoughtEventMessage,
 } from "./event-message-components";
+import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
 
 interface EventMessageProps {
-  event: OpenHandsEvent;
-  hasObservationPair: boolean;
-  isAwaitingUserConfirmation: boolean;
+  event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
+  messages: OpenHandsEvent[];
   isLastMessage: boolean;
   microagentStatus?: MicroagentStatus | null;
   microagentConversationId?: string;
@@ -34,11 +35,108 @@ interface EventMessageProps {
   isInLast10Actions: boolean;
 }
 
+/**
+ * Extracts activated skills from a MessageEvent, supporting both
+ * activated_skills and activated_microagents field names.
+ */
+const getActivatedSkills = (event: MessageEvent): string[] =>
+  (event as unknown as { activated_skills?: string[] }).activated_skills ||
+  event.activated_microagents ||
+  [];
+
+/**
+ * Checks if extended content contains valid text content.
+ */
+const hasValidExtendedContent = (
+  extendedContent: MessageEvent["extended_content"],
+): boolean => {
+  if (!extendedContent || extendedContent.length === 0) {
+    return false;
+  }
+
+  return extendedContent.some(
+    (content) => content.type === "text" && content.text.trim().length > 0,
+  );
+};
+
+/**
+ * Determines if a Skill Ready event should be displayed for the given message event.
+ */
+const shouldShowSkillReadyEvent = (messageEvent: MessageEvent): boolean => {
+  const activatedSkills = getActivatedSkills(messageEvent);
+  const hasActivatedSkills = activatedSkills.length > 0;
+  const hasExtendedContent = hasValidExtendedContent(
+    messageEvent.extended_content,
+  );
+
+  return hasActivatedSkills && hasExtendedContent;
+};
+
+interface CommonProps {
+  microagentStatus?: MicroagentStatus | null;
+  microagentConversationId?: string;
+  microagentPRUrl?: string;
+  actions?: Array<{
+    icon: React.ReactNode;
+    onClick: () => void;
+    tooltip?: string;
+  }>;
+  isLastMessage: boolean;
+  isInLast10Actions: boolean;
+  config: unknown;
+  isCheckingFeedback: boolean;
+  feedbackData: { exists: boolean };
+  isFromPlanningAgent: boolean;
+}
+
+/**
+ * Renders a user message with its corresponding Skill Ready event.
+ */
+const renderUserMessageWithSkillReady = (
+  messageEvent: MessageEvent,
+  commonProps: CommonProps,
+  isLastMessage: boolean,
+): React.ReactElement => {
+  try {
+    const skillReadyEvent = createSkillReadyEvent(messageEvent);
+    return (
+      <>
+        <UserAssistantEventMessage
+          event={messageEvent}
+          microagentStatus={commonProps.microagentStatus}
+          microagentConversationId={commonProps.microagentConversationId}
+          microagentPRUrl={commonProps.microagentPRUrl}
+          actions={commonProps.actions}
+          isLastMessage={false}
+          isFromPlanningAgent={commonProps.isFromPlanningAgent}
+        />
+        <GenericEventMessageWrapper
+          event={skillReadyEvent}
+          isLastMessage={isLastMessage}
+        />
+      </>
+    );
+  } catch (error) {
+    // If skill ready event creation fails, just render the user message
+    // Failed to create skill ready event, fallback to user message
+    return (
+      <UserAssistantEventMessage
+        event={messageEvent}
+        microagentStatus={commonProps.microagentStatus}
+        microagentConversationId={commonProps.microagentConversationId}
+        microagentPRUrl={commonProps.microagentPRUrl}
+        actions={commonProps.actions}
+        isLastMessage={isLastMessage}
+        isFromPlanningAgent={commonProps.isFromPlanningAgent}
+      />
+    );
+  }
+};
+
 /* eslint-disable react/jsx-props-no-spreading */
 export function EventMessage({
   event,
-  hasObservationPair,
-  isAwaitingUserConfirmation,
+  messages,
   isLastMessage,
   microagentStatus,
   microagentConversationId,
@@ -46,15 +144,15 @@ export function EventMessage({
   actions,
   isInLast10Actions,
 }: EventMessageProps) {
-  const shouldShowConfirmationButtons =
-    isLastMessage && event.source === "agent" && isAwaitingUserConfirmation;
-
   const { data: config } = useConfig();
 
   // V1 events use string IDs, but useFeedbackExists expects number
   // For now, we'll skip feedback functionality for V1 events
   const feedbackData = { exists: false };
   const isCheckingFeedback = false;
+
+  // Read isFromPlanningAgent directly from the event object
+  const isFromPlanningAgent = event.isFromPlanningAgent || false;
 
   // Common props for components that need them
   const commonProps = {
@@ -67,24 +165,12 @@ export function EventMessage({
     config,
     isCheckingFeedback,
     feedbackData,
+    isFromPlanningAgent,
   };
 
   // Agent error events
   if (isAgentErrorEvent(event)) {
     return <ErrorEventMessage event={event} {...commonProps} />;
-  }
-
-  // Observation pairs with actions
-  if (hasObservationPair && isActionEvent(event)) {
-    return (
-      <ObservationPairEventMessage
-        event={event}
-        microagentStatus={microagentStatus}
-        microagentConversationId={microagentConversationId}
-        microagentPRUrl={microagentPRUrl}
-        actions={actions}
-      />
-    );
   }
 
   // Finish actions
@@ -97,23 +183,64 @@ export function EventMessage({
     );
   }
 
+  // Action events - render thought + action (will be replaced by thought + observation)
+  if (isActionEvent(event)) {
+    return (
+      <>
+        <ThoughtEventMessage event={event} actions={actions} />
+        <GenericEventMessageWrapper
+          event={event}
+          isLastMessage={isLastMessage}
+        />
+      </>
+    );
+  }
+
+  // Observation events - find the corresponding action and render thought + observation
+  if (isObservationEvent(event)) {
+    // Find the action that this observation is responding to
+    const correspondingAction = messages.find(
+      (msg) => isActionEvent(msg) && msg.id === event.action_id,
+    );
+
+    return (
+      <>
+        {correspondingAction && isActionEvent(correspondingAction) && (
+          <ThoughtEventMessage event={correspondingAction} actions={actions} />
+        )}
+        <GenericEventMessageWrapper
+          event={event}
+          isLastMessage={isLastMessage}
+        />
+      </>
+    );
+  }
+
   // Message events (user and assistant messages)
   if (!isActionEvent(event) && !isObservationEvent(event)) {
-    // This is a MessageEvent
+    const messageEvent = event as MessageEvent;
+
+    // Check if this is a user message that should display a Skill Ready event
+    if (isUserMessageEvent(event) && shouldShowSkillReadyEvent(messageEvent)) {
+      return renderUserMessageWithSkillReady(
+        messageEvent,
+        commonProps,
+        isLastMessage,
+      );
+    }
+
+    // Render normal message event (user or assistant)
     return (
       <UserAssistantEventMessage
-        event={event as MessageEvent}
-        shouldShowConfirmationButtons={shouldShowConfirmationButtons}
+        event={messageEvent}
         {...commonProps}
+        isLastMessage={isLastMessage}
       />
     );
   }
 
-  // Generic fallback for all other events (including observation events)
+  // Generic fallback for all other events
   return (
-    <GenericEventMessageWrapper
-      event={event}
-      shouldShowConfirmationButtons={shouldShowConfirmationButtons}
-    />
+    <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
   );
 }

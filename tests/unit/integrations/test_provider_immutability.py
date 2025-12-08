@@ -9,8 +9,8 @@ from openhands.integrations.provider import (
     ProviderToken,
     ProviderType,
 )
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
-from openhands.storage.data_models.user_secrets import UserSecrets
 
 
 def test_provider_token_immutability():
@@ -34,8 +34,8 @@ def test_provider_token_immutability():
 
 
 def test_secret_store_immutability():
-    """Test that UserSecrets is immutable"""
-    store = UserSecrets(
+    """Test that Secrets is immutable"""
+    store = Secrets(
         provider_tokens={ProviderType.GITHUB: ProviderToken(token=SecretStr('test'))}
     )
 
@@ -69,7 +69,7 @@ def test_secret_store_immutability():
 def test_settings_immutability():
     """Test that Settings secrets_store is immutable"""
     settings = Settings(
-        secrets_store=UserSecrets(
+        secrets_store=Secrets(
             provider_tokens={
                 ProviderType.GITHUB: ProviderToken(token=SecretStr('test'))
             }
@@ -78,7 +78,7 @@ def test_settings_immutability():
 
     # Test direct modification of secrets_store
     with pytest.raises(ValidationError):
-        settings.secrets_store = UserSecrets()
+        settings.secrets_store = Secrets()
 
     # Test nested modification attempts
     with pytest.raises((TypeError, AttributeError)):
@@ -87,7 +87,7 @@ def test_settings_immutability():
         )
 
     # Test model_copy creates new instance
-    new_store = UserSecrets(
+    new_store = Secrets(
         provider_tokens={
             ProviderType.GITHUB: ProviderToken(token=SecretStr('new_token'))
         }
@@ -140,10 +140,10 @@ def test_provider_handler_immutability():
 
 
 def test_token_conversion():
-    """Test token conversion in UserSecrets.create"""
+    """Test token conversion in Secrets.create"""
     # Test with string token
     store1 = Settings(
-        secrets_store=UserSecrets(
+        secrets_store=Secrets(
             provider_tokens={
                 ProviderType.GITHUB: ProviderToken(token=SecretStr('test_token'))
             }
@@ -159,7 +159,7 @@ def test_token_conversion():
     assert store1.secrets_store.provider_tokens[ProviderType.GITHUB].user_id is None
 
     # Test with dict token
-    store2 = UserSecrets(
+    store2 = Secrets(
         provider_tokens={'github': {'token': 'test_token', 'user_id': 'user1'}}
     )
     assert (
@@ -170,14 +170,14 @@ def test_token_conversion():
 
     # Test with ProviderToken
     token = ProviderToken(token=SecretStr('test_token'), user_id='user2')
-    store3 = UserSecrets(provider_tokens={ProviderType.GITHUB: token})
+    store3 = Secrets(provider_tokens={ProviderType.GITHUB: token})
     assert (
         store3.provider_tokens[ProviderType.GITHUB].token.get_secret_value()
         == 'test_token'
     )
     assert store3.provider_tokens[ProviderType.GITHUB].user_id == 'user2'
 
-    store4 = UserSecrets(
+    store4 = Secrets(
         provider_tokens={
             ProviderType.GITHUB: 123  # Invalid type
         }
@@ -186,10 +186,10 @@ def test_token_conversion():
     assert ProviderType.GITHUB not in store4.provider_tokens
 
     # Test with empty/None token
-    store5 = UserSecrets(provider_tokens={ProviderType.GITHUB: None})
+    store5 = Secrets(provider_tokens={ProviderType.GITHUB: None})
     assert ProviderType.GITHUB not in store5.provider_tokens
 
-    store6 = UserSecrets(
+    store6 = Secrets(
         provider_tokens={
             'invalid_provider': 'test_token'  # Invalid provider type
         }

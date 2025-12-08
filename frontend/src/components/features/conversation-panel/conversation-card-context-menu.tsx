@@ -15,6 +15,7 @@ import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
 import { Divider } from "#/ui/divider";
 import { I18nKey } from "#/i18n/declaration";
 import { ContextMenuIconText } from "../context-menu/context-menu-icon-text";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 interface ConversationCardContextMenuProps {
   onClose: () => void;
@@ -41,6 +42,11 @@ export function ConversationCardContextMenu({
 }: ConversationCardContextMenuProps) {
   const { t } = useTranslation();
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
+  const { data: conversation } = useActiveConversation();
+
+  // TODO: Hide microagent menu items for V1 conversations
+  // This is a temporary measure and may be re-enabled in the future
+  const isV1Conversation = conversation?.conversation_version === "V1";
 
   const hasEdit = Boolean(onEdit);
   const hasDownload = Boolean(onDownloadViaVSCode);
@@ -97,7 +103,7 @@ export function ConversationCardContextMenu({
         </ContextMenuListItem>
       )}
 
-      {onShowMicroagents && (
+      {onShowMicroagents && !isV1Conversation && (
         <ContextMenuListItem
           testId="show-microagents-button"
           onClick={onShowMicroagents}

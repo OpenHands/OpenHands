@@ -77,6 +77,7 @@ export interface Conversation {
   session_api_key: string | null;
   pr_number?: number[] | null;
   conversation_version?: "V0" | "V1";
+  sub_conversation_ids?: string[];
 }
 
 export interface ResultSet<T> {
@@ -84,7 +85,12 @@ export interface ResultSet<T> {
   next_page_id: string | null;
 }
 
+/**
+ * @deprecated Use V1GitChangeStatus for new code. This type is maintained for backward compatibility with V0 API.
+ */
 export type GitChangeStatus = "M" | "A" | "D" | "R" | "U";
+
+export type V1GitChangeStatus = "MOVED" | "ADDED" | "DELETED" | "UPDATED";
 
 export interface GitChange {
   status: GitChangeStatus;

@@ -155,12 +155,13 @@ class LLM(RetryMixin, DebugMixin):
                 # don't send reasoning_effort to specific Claude Sonnet/Haiku 4.5 variants
                 kwargs.pop('reasoning_effort', None)
             else:
-                kwargs['reasoning_effort'] = self.config.reasoning_effort
+                if self.config.reasoning_effort is not None:
+                    kwargs['reasoning_effort'] = self.config.reasoning_effort
             kwargs.pop(
                 'temperature'
             )  # temperature is not supported for reasoning models
             kwargs.pop('top_p')  # reasoning model like o3 doesn't support top_p
-        # Azure issue: https://github.com/All-Hands-AI/OpenHands/issues/6777
+        # Azure issue: https://github.com/OpenHands/OpenHands/issues/6777
         if self.config.model.startswith('azure'):
             kwargs['max_tokens'] = self.config.max_output_tokens
             kwargs.pop('max_completion_tokens')
@@ -187,14 +188,20 @@ class LLM(RetryMixin, DebugMixin):
         if 'claude-opus-4-1' in self.config.model.lower():
             kwargs['thinking'] = {'type': 'disabled'}
 
-        # Anthropic constraint: Opus models cannot accept both temperature and top_p
+        # Anthropic constraint: Opus 4.1, Opus 4.5, and Sonnet 4 models cannot accept both temperature and top_p
         # Prefer temperature (drop top_p) if both are specified.
         _model_lower = self.config.model.lower()
-        # Limit to Opus 4.1 specifically to avoid changing behavior of other Anthropic models
-        if ('claude-opus-4-1' in _model_lower) and (
-            'temperature' in kwargs and 'top_p' in kwargs
-        ):
+        # Apply to Opus 4.1, Opus 4.5, and Sonnet 4 models to avoid API errors
+        if (
+            ('claude-opus-4-1' in _model_lower)
+            or ('claude-opus-4-5' in _model_lower)
+            or ('claude-sonnet-4' in _model_lower)
+        ) and ('temperature' in kwargs and 'top_p' in kwargs):
             kwargs.pop('top_p', None)
+
+        # Add completion_kwargs if present
+        if self.config.completion_kwargs is not None:
+            kwargs.update(self.config.completion_kwargs)
 
         self._completion = partial(
             litellm_completion,

@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useCommandStore } from "#/state/command-store";
-import { useJupyterStore } from "#/state/jupyter-store";
 import { useConversationStore } from "#/state/conversation-store";
 import { useAgentStore } from "#/stores/agent-store";
 import { AgentState } from "#/types/agent-state";
@@ -23,7 +22,7 @@ import { ConversationSubscriptionsProvider } from "#/context/conversation-subscr
 import { useUserProviders } from "#/hooks/use-user-providers";
 
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
-import { ConversationName } from "#/components/features/conversation/conversation-name";
+import { ConversationNameWithStatus } from "#/components/features/conversation/conversation-name-with-status";
 
 import { ConversationTabs } from "#/components/features/conversation/conversation-tabs/conversation-tabs";
 import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
@@ -53,7 +52,6 @@ function AppContent() {
   const setCurrentAgentState = useAgentStore(
     (state) => state.setCurrentAgentState,
   );
-  const clearJupyter = useJupyterStore((state) => state.clearJupyter);
   const removeErrorMessage = useErrorMessageStore(
     (state) => state.removeErrorMessage,
   );
@@ -70,7 +68,6 @@ function AppContent() {
   // 1. Cleanup Effect - runs when navigating to a different conversation
   React.useEffect(() => {
     clearTerminal();
-    clearJupyter();
     resetConversationState();
     setCurrentAgentState(AgentState.LOADING);
     removeErrorMessage();
@@ -84,7 +81,6 @@ function AppContent() {
   }, [
     conversationId,
     clearTerminal,
-    clearJupyter,
     resetConversationState,
     setCurrentAgentState,
     removeErrorMessage,
@@ -164,7 +160,7 @@ function AppContent() {
           className="p-3 md:p-0 flex flex-col h-full gap-3"
         >
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4.5 pt-2 lg:pt-0">
-            <ConversationName />
+            <ConversationNameWithStatus />
             <ConversationTabs />
           </div>
 

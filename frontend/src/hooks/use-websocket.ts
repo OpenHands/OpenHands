@@ -123,7 +123,10 @@ export const useWebSocket = <T = string>(
     shouldReconnectRef.current = true;
     attemptCountRef.current = 0;
 
-    connectWebSocket();
+    // Only attempt connection if we have a valid URL
+    if (url && url.trim() !== "") {
+      connectWebSocket();
+    }
 
     return () => {
       // Disable reconnection on unmount to prevent reconnection attempts

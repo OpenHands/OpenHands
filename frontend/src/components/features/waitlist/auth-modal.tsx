@@ -8,9 +8,11 @@ import { BrandButton } from "../settings/brand-button";
 import GitHubLogo from "#/assets/branding/github-logo.svg?react";
 import GitLabLogo from "#/assets/branding/gitlab-logo.svg?react";
 import BitbucketLogo from "#/assets/branding/bitbucket-logo.svg?react";
+import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
 import { useAuthUrl } from "#/hooks/use-auth-url";
 import { GetConfigResponse } from "#/api/option-service/option.types";
 import { Provider } from "#/types/settings";
+import { useTracking } from "#/hooks/use-tracking";
 
 interface AuthModalProps {
   githubAuthUrl: string | null;
@@ -26,6 +28,7 @@ export function AuthModal({
   providersConfigured,
 }: AuthModalProps) {
   const { t } = useTranslation();
+  const { trackLoginButtonClick } = useTracking();
 
   const gitlabAuthUrl = useAuthUrl({
     appMode: appMode || null,
@@ -39,6 +42,12 @@ export function AuthModal({
     authUrl,
   });
 
+  const azureDevOpsAuthUrl = useAuthUrl({
+    appMode: appMode || null,
+    identityProvider: "azure_devops",
+    authUrl,
+  });
+
   const enterpriseSsoUrl = useAuthUrl({
     appMode: appMode || null,
     identityProvider: "enterprise_sso",
@@ -47,6 +56,7 @@ export function AuthModal({
 
   const handleGitHubAuth = () => {
     if (githubAuthUrl) {
+      trackLoginButtonClick({ provider: "github" });
       // Always start the OIDC flow, let the backend handle TOS check
       window.location.href = githubAuthUrl;
     }
@@ -54,6 +64,7 @@ export function AuthModal({
 
   const handleGitLabAuth = () => {
     if (gitlabAuthUrl) {
+      trackLoginButtonClick({ provider: "gitlab" });
       // Always start the OIDC flow, let the backend handle TOS check
       window.location.href = gitlabAuthUrl;
     }
@@ -61,13 +72,22 @@ export function AuthModal({
 
   const handleBitbucketAuth = () => {
     if (bitbucketAuthUrl) {
+      trackLoginButtonClick({ provider: "bitbucket" });
       // Always start the OIDC flow, let the backend handle TOS check
       window.location.href = bitbucketAuthUrl;
     }
   };
 
+  const handleAzureDevOpsAuth = () => {
+    if (azureDevOpsAuthUrl) {
+      // Always start the OIDC flow, let the backend handle TOS check
+      window.location.href = azureDevOpsAuthUrl;
+    }
+  };
+
   const handleEnterpriseSsoAuth = () => {
     if (enterpriseSsoUrl) {
+      trackLoginButtonClick({ provider: "enterprise_sso" });
       // Always start the OIDC flow, let the backend handle TOS check
       window.location.href = enterpriseSsoUrl;
     }
@@ -86,6 +106,10 @@ export function AuthModal({
     providersConfigured &&
     providersConfigured.length > 0 &&
     providersConfigured.includes("bitbucket");
+  const showAzureDevOps =
+    providersConfigured &&
+    providersConfigured.length > 0 &&
+    providersConfigured.includes("azure_devops");
   const showEnterpriseSso =
     providersConfigured &&
     providersConfigured.length > 0 &&
@@ -145,6 +169,18 @@ export function AuthModal({
                   startContent={<BitbucketLogo width={20} height={20} />}
                 >
                   {t(I18nKey.BITBUCKET$CONNECT_TO_BITBUCKET)}
+                </BrandButton>
+              )}
+
+              {showAzureDevOps && (
+                <BrandButton
+                  type="button"
+                  variant="primary"
+                  onClick={handleAzureDevOpsAuth}
+                  className="w-full font-semibold"
+                  startContent={<AzureDevOpsLogo width={20} height={20} />}
+                >
+                  {t(I18nKey.AZURE_DEVOPS$CONNECT_ACCOUNT)}
                 </BrandButton>
               )}
 

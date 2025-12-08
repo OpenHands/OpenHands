@@ -8,6 +8,13 @@ vi.mock("#/hooks/use-auth-url", () => ({
   useAuthUrl: () => "https://gitlab.com/oauth/authorize",
 }));
 
+// Mock the useTracking hook
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackLoginButtonClick: vi.fn(),
+  }),
+}));
+
 describe("AuthModal", () => {
   beforeEach(() => {
     vi.stubGlobal("location", { href: "" });

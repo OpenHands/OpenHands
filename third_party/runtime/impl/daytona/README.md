@@ -48,7 +48,7 @@ Once executed, OpenHands should be running locally and ready for use.
 ## Manual Initialization
 
 ### Step 1: Set the `OPENHANDS_VERSION` Environment Variable
-Run the following command in your terminal, replacing `<openhands-release>` with the latest release's version seen in the [main README.md file](https://github.com/All-Hands-AI/OpenHands?tab=readme-ov-file#-quick-start):
+Run the following command in your terminal, replacing `<openhands-release>` with the latest release's version seen in the [main README.md file](https://github.com/OpenHands/OpenHands?tab=readme-ov-file#-quick-start):
 
 #### Mac/Linux:
 ```bash
@@ -85,14 +85,14 @@ This command pulls and runs the OpenHands container using Docker. Once executed,
 #### Mac/Linux:
 ```bash
 docker run -it --rm --pull=always \
-    -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:${OPENHANDS_VERSION}-nikolaik \
+    -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.openhands.dev/openhands/runtime:${OPENHANDS_VERSION}-nikolaik \
     -e LOG_ALL_EVENTS=true \
     -e RUNTIME=daytona \
     -e DAYTONA_API_KEY=${DAYTONA_API_KEY} \
     -v ~/.openhands:/.openhands \
     -p 3000:3000 \
     --name openhands-app \
-    docker.all-hands.dev/all-hands-ai/openhands:${OPENHANDS_VERSION}
+    docker.openhands.dev/openhands/openhands:${OPENHANDS_VERSION}
 ```
 
 > **Note**: If you used OpenHands before version 0.44, you may want to run `mv ~/.openhands-state ~/.openhands` to migrate your conversation history to the new location.
@@ -100,14 +100,14 @@ docker run -it --rm --pull=always \
 #### Windows:
 ```powershell
 docker run -it --rm --pull=always `
-    -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:${env:OPENHANDS_VERSION}-nikolaik `
+    -e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.openhands.dev/openhands/runtime:${env:OPENHANDS_VERSION}-nikolaik `
     -e LOG_ALL_EVENTS=true `
     -e RUNTIME=daytona `
     -e DAYTONA_API_KEY=${env:DAYTONA_API_KEY} `
     -v ~/.openhands:/.openhands `
     -p 3000:3000 `
     --name openhands-app `
-    docker.all-hands.dev/all-hands-ai/openhands:${env:OPENHANDS_VERSION}
+    docker.openhands.dev/openhands/openhands:${env:OPENHANDS_VERSION}
 ```
 
 > **Note**: If you used OpenHands before version 0.44, you may want to run `mv ~/.openhands-state ~/.openhands` to migrate your conversation history to the new location.

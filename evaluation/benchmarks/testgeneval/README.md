@@ -74,7 +74,7 @@ To contribute your evaluation results:
 ## Additional Resources
 
 - [TestGenEval Paper](https://arxiv.org/abs/2410.00752)
-- [OpenHands Documentation](https://github.com/All-Hands-AI/OpenHands)
+- [OpenHands Documentation](https://github.com/OpenHands/OpenHands)
 - [HuggingFace Datasets](https://huggingface.co/datasets)
 
-For any questions or issues, please open an issue in the [OpenHands repository](https://github.com/All-Hands-AI/OpenHands/issues).
+For any questions or issues, please open an issue in the [OpenHands repository](https://github.com/OpenHands/OpenHands/issues).

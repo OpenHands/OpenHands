@@ -381,7 +381,7 @@ def infer_repo_from_message(user_msg: str) -> list[str]:
     # Captures: protocol, domain, owner, repo (with optional .git extension)
     git_url_pattern = r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:[/?#].*?)?(?=\s|$|[^\w.-])'
 
-    # Pattern to match direct owner/repo mentions (e.g., "All-Hands-AI/OpenHands")
+    # Pattern to match direct owner/repo mentions (e.g., "OpenHands/OpenHands")
     # Must be surrounded by word boundaries or specific characters to avoid false positives
     direct_pattern = (
         r'(?:^|\s|[\[\(\'"])([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?=\s|$|[\]\)\'",.])'

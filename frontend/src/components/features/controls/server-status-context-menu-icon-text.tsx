@@ -13,7 +13,7 @@ export function ServerStatusContextMenuIconText({
 }: ServerStatusContextMenuIconTextProps) {
   return (
     <button
-      className="flex items-center gap-2 p-2 hover:bg-[#5C5D62] rounded text-sm text-white font-normal leading-5 cursor-pointer w-full"
+      className="flex items-center justify-between p-2 hover:bg-[#5C5D62] rounded text-sm text-white font-normal leading-5 cursor-pointer w-full"
       onClick={onClick}
       data-testid={testId}
       type="button"

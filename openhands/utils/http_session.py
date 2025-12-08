@@ -1,11 +1,34 @@
+import ssl
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import MutableMapping
 
 import httpx
 
 from openhands.core.logger import openhands_logger as logger
 
-CLIENT = httpx.Client()
+_client_lock = Lock()
+_verify_certificates: bool = True
+_client: httpx.Client | None = None
+
+
+def httpx_verify_option() -> ssl.SSLContext | bool:
+    """Return the verify option to pass when creating an HTTPX client."""
+
+    return ssl.create_default_context() if _verify_certificates else False
+
+
+def _build_client(verify: bool) -> httpx.Client:
+    return httpx.Client(verify=ssl.create_default_context() if verify else False)
+
+
+def _get_client() -> httpx.Client:
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = _build_client(_verify_certificates)
+    return _client
 
 
 @dataclass
@@ -28,7 +51,7 @@ class HttpSession:
         headers = {**self.headers, **headers}
         kwargs['headers'] = headers
         logger.debug(f'HttpSession:request called with args {args} and kwargs {kwargs}')
-        return CLIENT.request(*args, **kwargs)
+        return _get_client().request(*args, **kwargs)
 
     def stream(self, *args, **kwargs):
         if self._is_closed:
@@ -39,7 +62,7 @@ class HttpSession:
         headers = kwargs.get('headers') or {}
         headers = {**self.headers, **headers}
         kwargs['headers'] = headers
-        return CLIENT.stream(*args, **kwargs)
+        return _get_client().stream(*args, **kwargs)
 
     def get(self, *args, **kwargs):
         return self.request('GET', *args, **kwargs)

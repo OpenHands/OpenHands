@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file */
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useTerminal } from "#/hooks/use-terminal";
 import { Command, useCommandStore } from "#/state/command-store";
@@ -35,28 +36,39 @@ function TestTerminalComponent() {
 }
 
 describe("useTerminal", () => {
+  // Terminal is read-only - no longer tests user input functionality
   const mockTerminal = vi.hoisted(() => ({
     loadAddon: vi.fn(),
     open: vi.fn(),
     write: vi.fn(),
     writeln: vi.fn(),
-    onKey: vi.fn(),
-    attachCustomKeyEventHandler: vi.fn(),
     dispose: vi.fn(),
   }));
 
   beforeAll(() => {
-    // mock ResizeObserver
-    window.ResizeObserver = vi.fn().mockImplementation(() => ({
-      observe: vi.fn(),
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    }));
+    // mock ResizeObserver - use class for Vitest 4 constructor support
+    window.ResizeObserver = class {
+      observe = vi.fn();
 
-    // mock Terminal
+      unobserve = vi.fn();
+
+      disconnect = vi.fn();
+    } as unknown as typeof ResizeObserver;
+
+    // mock Terminal - use class for Vitest 4 constructor support
     vi.mock("@xterm/xterm", async (importOriginal) => ({
       ...(await importOriginal<typeof import("@xterm/xterm")>()),
-      Terminal: vi.fn().mockImplementation(() => mockTerminal),
+      Terminal: class {
+        loadAddon = mockTerminal.loadAddon;
+
+        open = mockTerminal.open;
+
+        write = mockTerminal.write;
+
+        writeln = mockTerminal.writeln;
+
+        dispose = mockTerminal.dispose;
+      },
     }));
   });
 

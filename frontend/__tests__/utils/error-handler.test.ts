@@ -32,6 +32,7 @@ describe("Error Handler", () => {
       const error = {
         message: "Test error",
         source: "test",
+        posthog,
       };
 
       trackError(error);
@@ -52,6 +53,7 @@ describe("Error Handler", () => {
           extra: "info",
           details: { foo: "bar" },
         },
+        posthog,
       };
 
       trackError(error);
@@ -73,6 +75,7 @@ describe("Error Handler", () => {
       const error = {
         message: "Toast error",
         source: "toast-test",
+        posthog,
       };
 
       showErrorToast(error);
@@ -94,6 +97,7 @@ describe("Error Handler", () => {
         message: "Toast error",
         source: "toast-test",
         metadata: { context: "testing" },
+        posthog,
       };
 
       showErrorToast(error);
@@ -113,6 +117,7 @@ describe("Error Handler", () => {
         message: "Agent error",
         source: "agent-status",
         metadata: { id: "error.agent" },
+        posthog,
       });
 
       expect(posthog.captureException).toHaveBeenCalledWith(
@@ -127,6 +132,7 @@ describe("Error Handler", () => {
         message: "Server error",
         source: "server",
         metadata: { error_code: 500, details: "Internal error" },
+        posthog,
       });
 
       expect(posthog.captureException).toHaveBeenCalledWith(
@@ -145,6 +151,7 @@ describe("Error Handler", () => {
         message: error.message,
         source: "feedback",
         metadata: { conversationId: "123", error },
+        posthog,
       });
 
       expect(posthog.captureException).toHaveBeenCalledWith(
@@ -164,6 +171,7 @@ describe("Error Handler", () => {
         message: "Chat error",
         source: "chat-test",
         msgId: "123",
+        posthog,
       };
 
       showChatError(error);

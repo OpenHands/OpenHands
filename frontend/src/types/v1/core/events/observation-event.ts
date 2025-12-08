@@ -21,8 +21,9 @@ export interface ObservationBaseEvent extends BaseEvent {
 }
 
 // Main observation event interface
-export interface ObservationEvent<T extends Observation = Observation>
-  extends ObservationBaseEvent {
+export interface ObservationEvent<
+  T extends Observation = Observation,
+> extends ObservationBaseEvent {
   /**
    * The observation (tool call) sent to LLM
    */

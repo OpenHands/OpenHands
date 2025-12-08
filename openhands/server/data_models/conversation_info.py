@@ -28,3 +28,4 @@ class ConversationInfo:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     pr_number: list[int] = field(default_factory=list)
     conversation_version: str = 'V0'
+    sub_conversation_ids: list[str] = field(default_factory=list)

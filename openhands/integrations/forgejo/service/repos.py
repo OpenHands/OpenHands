@@ -15,6 +15,7 @@ class ForgejoReposMixin(ForgejoMixinBase):
         sort: str,
         order: str,
         public: bool,
+        app_mode: AppMode,
     ) -> list[Repository]:  # type: ignore[override]
         url = f'{self.BASE_URL}/repos/search'
         params = {

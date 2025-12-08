@@ -3,6 +3,7 @@ import { openHands } from "../open-hands-axios";
 import { ConversationTrigger, GetVSCodeUrlResponse } from "../open-hands.types";
 import { Provider } from "#/types/settings";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
+import { buildSessionHeaders } from "#/utils/utils";
 import type {
   V1SendMessageRequest,
   V1SendMessageResponse,
@@ -13,21 +14,6 @@ import type {
 } from "./v1-conversation-service.types";
 
 class V1ConversationService {
-  /**
-   * Build headers for V1 API requests that require session authentication
-   * @param sessionApiKey Session API key for authentication
-   * @returns Headers object with X-Session-API-Key if provided
-   */
-  private static buildSessionHeaders(
-    sessionApiKey?: string | null,
-  ): Record<string, string> {
-    const headers: Record<string, string> = {};
-    if (sessionApiKey) {
-      headers["X-Session-API-Key"] = sessionApiKey;
-    }
-    return headers;
-  }
-
   /**
    * Build the full URL for V1 runtime-specific endpoints
    * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
@@ -74,6 +60,8 @@ class V1ConversationService {
     selected_branch?: string,
     conversationInstructions?: string,
     trigger?: ConversationTrigger,
+    parent_conversation_id?: string,
+    agent_type?: "default" | "plan",
   ): Promise<V1AppConversationStartTask> {
     const body: V1AppConversationStartRequest = {
       selected_repository: selectedRepository,
@@ -81,6 +69,8 @@ class V1ConversationService {
       selected_branch,
       title: conversationInstructions,
       trigger,
+      parent_conversation_id: parent_conversation_id || null,
+      agent_type,
     };
 
     // Add initial message if provided
@@ -125,17 +115,21 @@ class V1ConversationService {
    * Search for start tasks (ongoing tasks that haven't completed yet)
    * Use this to find tasks that were started but the user navigated away
    *
-   * Note: Backend only supports filtering by limit. To filter by repository/trigger,
+   * Note: Backend supports filtering by limit and created_at__gte. To filter by repository/trigger,
    * filter the results client-side after fetching.
    *
    * @param limit Maximum number of tasks to return (max 100)
-   * @returns Array of start tasks
+   * @returns Array of start tasks from the last 20 minutes
    */
   static async searchStartTasks(
     limit: number = 100,
   ): Promise<V1AppConversationStartTask[]> {
     const params = new URLSearchParams();
     params.append("limit", limit.toString());
+
+    // Only get tasks from the last 20 minutes
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+    params.append("created_at__gte", twentyMinutesAgo.toISOString());
 
     const { data } = await openHands.get<V1AppConversationStartTaskPage>(
       `/api/v1/app-conversations/start-tasks/search?${params.toString()}`,
@@ -160,7 +154,7 @@ class V1ConversationService {
     sessionApiKey?: string | null,
   ): Promise<GetVSCodeUrlResponse> {
     const url = this.buildRuntimeUrl(conversationUrl, "/api/vscode/url");
-    const headers = this.buildSessionHeaders(sessionApiKey);
+    const headers = buildSessionHeaders(sessionApiKey);
 
     // V1 API returns {url: '...'} instead of {vscode_url: '...'}
     // Map it to match the expected interface
@@ -188,7 +182,7 @@ class V1ConversationService {
       conversationUrl,
       `/api/conversations/${conversationId}/pause`,
     );
-    const headers = this.buildSessionHeaders(sessionApiKey);
+    const headers = buildSessionHeaders(sessionApiKey);
 
     const { data } = await axios.post<{ success: boolean }>(
       url,
@@ -199,31 +193,29 @@ class V1ConversationService {
   }
 
   /**
-   * Pause a V1 sandbox
-   * Calls the /api/v1/sandboxes/{id}/pause endpoint
+   * Resume a V1 conversation
+   * Uses the custom runtime URL from the conversation
    *
-   * @param sandboxId The sandbox ID to pause
+   * @param conversationId The conversation ID
+   * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
+   * @param sessionApiKey Session API key for authentication (required for V1)
    * @returns Success response
    */
-  static async pauseSandbox(sandboxId: string): Promise<{ success: boolean }> {
-    const { data } = await openHands.post<{ success: boolean }>(
-      `/api/v1/sandboxes/${sandboxId}/pause`,
-      {},
+  static async resumeConversation(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<{ success: boolean }> {
+    const url = this.buildRuntimeUrl(
+      conversationUrl,
+      `/api/conversations/${conversationId}/run`,
     );
-    return data;
-  }
+    const headers = buildSessionHeaders(sessionApiKey);
 
-  /**
-   * Resume a V1 sandbox
-   * Calls the /api/v1/sandboxes/{id}/resume endpoint
-   *
-   * @param sandboxId The sandbox ID to resume
-   * @returns Success response
-   */
-  static async resumeSandbox(sandboxId: string): Promise<{ success: boolean }> {
-    const { data } = await openHands.post<{ success: boolean }>(
-      `/api/v1/sandboxes/${sandboxId}/resume`,
+    const { data } = await axios.post<{ success: boolean }>(
+      url,
       {},
+      { headers },
     );
     return data;
   }
@@ -277,7 +269,7 @@ class V1ConversationService {
       conversationUrl,
       `/api/file/upload/${encodedPath}`,
     );
-    const headers = this.buildSessionHeaders(sessionApiKey);
+    const headers = buildSessionHeaders(sessionApiKey);
 
     // Create FormData with the file
     const formData = new FormData();
@@ -290,6 +282,38 @@ class V1ConversationService {
         "Content-Type": "multipart/form-data",
       },
     });
+  }
+
+  /**
+   * Get the conversation config (runtime_id) for a V1 conversation
+   * @param conversationId The conversation ID
+   * @returns Object containing runtime_id
+   */
+  static async getConversationConfig(
+    conversationId: string,
+  ): Promise<{ runtime_id: string }> {
+    const url = `/api/conversations/${conversationId}/config`;
+    const { data } = await openHands.get<{ runtime_id: string }>(url);
+    return data;
+  }
+
+  /**
+   * Read a file from a specific conversation's sandbox workspace
+   * @param conversationId The conversation ID
+   * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/PLAN.md)
+   * @returns The content of the file or an empty string if the file doesn't exist
+   */
+  static async readConversationFile(
+    conversationId: string,
+    filePath: string = "/workspace/project/PLAN.md",
+  ): Promise<string> {
+    const params = new URLSearchParams();
+    params.append("file_path", filePath);
+
+    const { data } = await openHands.get<string>(
+      `/api/v1/app-conversations/${conversationId}/file?${params.toString()}`,
+    );
+    return data;
   }
 }
 

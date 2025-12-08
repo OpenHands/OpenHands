@@ -21,6 +21,7 @@ const mockUseConfig = vi.fn();
 const mockUseRepositoryMicroagents = vi.fn();
 const mockUseMicroagentManagementConversations = vi.fn();
 const mockUseSearchRepositories = vi.fn();
+const mockUseCreateConversationAndSubscribeMultiple = vi.fn();
 
 vi.mock("#/hooks/use-user-providers", () => ({
   useUserProviders: () => mockUseUserProviders(),
@@ -45,6 +46,17 @@ vi.mock("#/hooks/query/use-microagent-management-conversations", () => ({
 
 vi.mock("#/hooks/query/use-search-repositories", () => ({
   useSearchRepositories: () => mockUseSearchRepositories(),
+}));
+
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackEvent: vi.fn(),
+  }),
+}));
+
+vi.mock("#/hooks/use-create-conversation-and-subscribe-multiple", () => ({
+  useCreateConversationAndSubscribeMultiple: () =>
+    mockUseCreateConversationAndSubscribeMultiple(),
 }));
 
 describe("MicroagentManagement", () => {
@@ -307,6 +319,16 @@ describe("MicroagentManagement", () => {
       data: mockConversations,
       isLoading: false,
       isError: false,
+    });
+
+    mockUseCreateConversationAndSubscribeMultiple.mockReturnValue({
+      createConversationAndSubscribe: vi.fn(({ onSuccessCallback }) => {
+        // Immediately call the success callback to close the modal
+        if (onSuccessCallback) {
+          onSuccessCallback();
+        }
+      }),
+      isPending: false,
     });
 
     // Mock the search repositories hook to return repositories with OpenHands suffixes

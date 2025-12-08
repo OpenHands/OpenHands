@@ -226,3 +226,17 @@ class TaskTrackingAction(Action):
             return 'Managing 1 task item.'
         else:
             return f'Managing {num_tasks} task items.'
+
+
+@dataclass
+class LoopRecoveryAction(Action):
+    """An action that shows three ways to handle dead loop.
+    The class should be invisible to LLM.
+    Attributes:
+        option (int): 1 allow user to prompt again
+                      2 automatically use latest user prompt
+                      3 stop agent
+    """
+
+    option: int = 1
+    action: str = ActionType.LOOP_RECOVERY

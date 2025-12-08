@@ -31,8 +31,7 @@ export interface CommandAction extends OpenHandsActionEvent<"run"> {
   };
 }
 
-export interface AssistantMessageAction
-  extends OpenHandsActionEvent<"message"> {
+export interface AssistantMessageAction extends OpenHandsActionEvent<"message"> {
   source: "agent";
   args: {
     thought: string;
@@ -87,8 +86,7 @@ export interface BrowseAction extends OpenHandsActionEvent<"browse"> {
   };
 }
 
-export interface BrowseInteractiveAction
-  extends OpenHandsActionEvent<"browse_interactive"> {
+export interface BrowseInteractiveAction extends OpenHandsActionEvent<"browse_interactive"> {
   source: "agent";
   timeout: number;
   args: {
@@ -162,8 +160,7 @@ export interface MCPAction extends OpenHandsActionEvent<"call_tool_mcp"> {
   };
 }
 
-export interface TaskTrackingAction
-  extends OpenHandsActionEvent<"task_tracking"> {
+export interface TaskTrackingAction extends OpenHandsActionEvent<"task_tracking"> {
   source: "agent";
   args: {
     command: string;

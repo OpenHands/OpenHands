@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 
 
 class SecretsStore(ABC):
@@ -21,11 +21,11 @@ class SecretsStore(ABC):
     """
 
     @abstractmethod
-    async def load(self) -> UserSecrets | None:
+    async def load(self) -> Secrets | None:
         """Load secrets."""
 
     @abstractmethod
-    async def store(self, secrets: UserSecrets) -> None:
+    async def store(self, secrets: Secrets) -> None:
         """Store secrets."""
 
     @classmethod

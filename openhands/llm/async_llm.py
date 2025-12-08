@@ -62,8 +62,11 @@ class AsyncLLM(LLM):
             elif 'messages' in kwargs:
                 messages = kwargs['messages']
 
-            # Set reasoning effort for models that support it
-            if get_features(self.config.model).supports_reasoning_effort:
+            # Set reasoning effort for models that support it, only if explicitly provided
+            if (
+                get_features(self.config.model).supports_reasoning_effort
+                and self.config.reasoning_effort is not None
+            ):
                 kwargs['reasoning_effort'] = self.config.reasoning_effort
 
             # ensure we work with a list of messages

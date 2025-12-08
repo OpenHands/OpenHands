@@ -18,7 +18,7 @@ from openhands.server.routes.secrets import (
     app as secrets_app,
 )
 from openhands.storage import get_file_store
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.secrets.file_secrets_store import FileSecretsStore
 
 
@@ -62,7 +62,7 @@ async def test_load_custom_secrets_names(test_client, file_secrets_store):
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
     }
-    user_secrets = UserSecrets(
+    user_secrets = Secrets(
         custom_secrets=custom_secrets, provider_tokens=provider_tokens
     )
 
@@ -101,7 +101,7 @@ async def test_load_custom_secrets_names_empty(test_client, file_secrets_store):
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
     }
-    user_secrets = UserSecrets(provider_tokens=provider_tokens, custom_secrets={})
+    user_secrets = Secrets(provider_tokens=provider_tokens, custom_secrets={})
 
     # Store the initial settings
     await file_secrets_store.store(user_secrets)
@@ -123,7 +123,7 @@ async def test_add_custom_secret(test_client, file_secrets_store):
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
     }
-    user_secrets = UserSecrets(provider_tokens=provider_tokens)
+    user_secrets = Secrets(provider_tokens=provider_tokens)
 
     # Store the initial settings
     await file_secrets_store.store(user_secrets)
@@ -184,7 +184,7 @@ async def test_update_existing_custom_secret(test_client, file_secrets_store):
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
     }
-    user_secrets = UserSecrets(
+    user_secrets = Secrets(
         custom_secrets=custom_secrets, provider_tokens=provider_tokens
     )
 
@@ -223,7 +223,7 @@ async def test_add_multiple_custom_secrets(test_client, file_secrets_store):
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
     }
-    user_secrets = UserSecrets(
+    user_secrets = Secrets(
         custom_secrets=custom_secrets, provider_tokens=provider_tokens
     )
 
@@ -285,7 +285,7 @@ async def test_delete_custom_secret(test_client, file_secrets_store):
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
     }
-    user_secrets = UserSecrets(
+    user_secrets = Secrets(
         custom_secrets=custom_secrets, provider_tokens=provider_tokens
     )
 
@@ -323,7 +323,7 @@ async def test_delete_nonexistent_custom_secret(test_client, file_secrets_store)
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
     }
-    user_secrets = UserSecrets(
+    user_secrets = Secrets(
         custom_secrets=custom_secrets, provider_tokens=provider_tokens
     )
 
@@ -355,7 +355,7 @@ async def test_add_git_providers_with_host(test_client, file_secrets_store):
     provider_tokens = {
         ProviderType.GITHUB: ProviderToken(token=SecretStr('github-token'))
     }
-    user_secrets = UserSecrets(provider_tokens=provider_tokens)
+    user_secrets = Secrets(provider_tokens=provider_tokens)
     await file_secrets_store.store(user_secrets)
 
     # Mock check_provider_tokens to return empty string (no error)
@@ -394,7 +394,7 @@ async def test_add_git_providers_update_host_only(test_client, file_secrets_stor
             token=SecretStr('github-token'), host='github.com'
         )
     }
-    user_secrets = UserSecrets(provider_tokens=provider_tokens)
+    user_secrets = Secrets(provider_tokens=provider_tokens)
     await file_secrets_store.store(user_secrets)
 
     # Mock check_provider_tokens to return empty string (no error)
@@ -433,7 +433,7 @@ async def test_add_git_providers_invalid_token_with_host(
 ):
     """Test adding an invalid token with a host."""
     # Create initial user secrets
-    user_secrets = UserSecrets()
+    user_secrets = Secrets()
     await file_secrets_store.store(user_secrets)
 
     # Mock validate_provider_token to return None (invalid token)
@@ -456,7 +456,7 @@ async def test_add_git_providers_invalid_token_with_host(
 async def test_add_multiple_git_providers_with_hosts(test_client, file_secrets_store):
     """Test adding multiple git providers with different hosts."""
     # Create initial user secrets
-    user_secrets = UserSecrets()
+    user_secrets = Secrets()
     await file_secrets_store.store(user_secrets)
 
     # Mock check_provider_tokens to return empty string (no error)

@@ -3,43 +3,45 @@ from datetime import UTC, datetime
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
+from server.config import get_config
 from server.constants import LITE_LLM_API_KEY, LITE_LLM_API_URL
 from storage.api_key_store import ApiKeyStore
 from storage.database import session_maker
-from storage.user_settings import UserSettings
+from storage.saas_settings_store import SaasSettingsStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
 from openhands.utils.async_utils import call_sync_from_async
+from openhands.utils.http_session import httpx_verify_option
 
 
 # Helper functions for BYOR API key management
 async def get_byor_key_from_db(user_id: str) -> str | None:
     """Get the BYOR key from the database for a user."""
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
 
-    def _get_byor_key():
-        with session_maker() as session:
-            user_db_settings = (
-                session.query(UserSettings)
-                .filter(UserSettings.keycloak_user_id == user_id)
-                .first()
-            )
-            if user_db_settings and user_db_settings.llm_api_key_for_byor:
-                return user_db_settings.llm_api_key_for_byor
-        return None
-
-    return await call_sync_from_async(_get_byor_key)
+    user_db_settings = await call_sync_from_async(
+        settings_store.get_user_settings_by_keycloak_id, user_id
+    )
+    if user_db_settings and user_db_settings.llm_api_key_for_byor:
+        return user_db_settings.llm_api_key_for_byor
+    return None
 
 
 async def store_byor_key_in_db(user_id: str, key: str) -> None:
     """Store the BYOR key in the database for a user."""
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
 
     def _update_user_settings():
         with session_maker() as session:
-            user_db_settings = (
-                session.query(UserSettings)
-                .filter(UserSettings.keycloak_user_id == user_id)
-                .first()
+            user_db_settings = settings_store.get_user_settings_by_keycloak_id(
+                user_id, session
             )
             if user_db_settings:
                 user_db_settings.llm_api_key_for_byor = key
@@ -67,9 +69,10 @@ async def generate_byor_key(user_id: str) -> str | None:
 
     try:
         async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
             headers={
                 'x-goog-api-key': LITE_LLM_API_KEY,
-            }
+            },
         ) as client:
             response = await client.post(
                 f'{LITE_LLM_API_URL}/key/generate',
@@ -119,9 +122,10 @@ async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
 
     try:
         async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
             headers={
                 'x-goog-api-key': LITE_LLM_API_KEY,
-            }
+            },
         ) as client:
             # Delete the key directly using the key value
             delete_url = f'{LITE_LLM_API_URL}/key/delete'

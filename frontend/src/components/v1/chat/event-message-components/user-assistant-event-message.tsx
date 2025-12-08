@@ -4,7 +4,7 @@ import { ChatMessage } from "../../../features/chat/chat-message";
 import { ImageCarousel } from "../../../features/images/image-carousel";
 // TODO: Implement file_urls support for V1 messages
 // import { FileList } from "../../../features/files/file-list";
-import { ConfirmationButtons } from "#/components/shared/buttons/confirmation-buttons";
+import { V1ConfirmationButtons } from "#/components/shared/buttons/v1-confirmation-buttons";
 import { MicroagentStatusWrapper } from "../../../features/chat/event-message-components/microagent-status-wrapper";
 // TODO: Implement V1 LikertScaleWrapper when API supports V1 event IDs
 // import { LikertScaleWrapper } from "../../../features/chat/event-message-components/likert-scale-wrapper";
@@ -13,7 +13,6 @@ import { MicroagentStatus } from "#/types/microagent-status";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
-  shouldShowConfirmationButtons: boolean;
   microagentStatus?: MicroagentStatus | null;
   microagentConversationId?: string;
   microagentPRUrl?: string;
@@ -22,15 +21,18 @@ interface UserAssistantEventMessageProps {
     onClick: () => void;
     tooltip?: string;
   }>;
+  isLastMessage: boolean;
+  isFromPlanningAgent: boolean;
 }
 
 export function UserAssistantEventMessage({
   event,
-  shouldShowConfirmationButtons,
   microagentStatus,
   microagentConversationId,
   microagentPRUrl,
   actions,
+  isLastMessage,
+  isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const message = parseMessageFromEvent(event);
 
@@ -46,12 +48,17 @@ export function UserAssistantEventMessage({
 
   return (
     <>
-      <ChatMessage type={event.source} message={message} actions={actions}>
+      <ChatMessage
+        type={event.source}
+        message={message}
+        actions={actions}
+        isFromPlanningAgent={isFromPlanningAgent}
+      >
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
         )}
         {/* TODO: Handle file_urls if V1 messages support them */}
-        {shouldShowConfirmationButtons && <ConfirmationButtons />}
+        {isLastMessage && <V1ConfirmationButtons />}
       </ChatMessage>
       <MicroagentStatusWrapper
         microagentStatus={microagentStatus}

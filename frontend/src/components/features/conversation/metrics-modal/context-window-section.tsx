@@ -12,7 +12,8 @@ export function ContextWindowSection({
 }: ContextWindowSectionProps) {
   const { t } = useTranslation();
 
-  const usagePercentage = (perTurnToken / contextWindow) * 100;
+  const usagePercentage =
+    contextWindow > 0 ? (perTurnToken / contextWindow) * 100 : 0;
   const progressWidth = Math.min(100, usagePercentage);
 
   return (

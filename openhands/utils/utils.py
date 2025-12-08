@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -5,6 +6,7 @@ from openhands.llm.llm_registry import LLMRegistry
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.storage import get_file_store
 from openhands.storage.data_models.settings import Settings
+from openhands.utils.environment import get_effective_llm_base_url
 
 
 def setup_llm_config(config: OpenHandsConfig, settings: Settings) -> OpenHandsConfig:
@@ -14,7 +16,19 @@ def setup_llm_config(config: OpenHandsConfig, settings: Settings) -> OpenHandsCo
     llm_config = config.get_llm_config()
     llm_config.model = settings.llm_model or ''
     llm_config.api_key = settings.llm_api_key
-    llm_config.base_url = settings.llm_base_url
+    env_base_url = os.environ.get('LLM_BASE_URL')
+    settings_base_url = settings.llm_base_url
+
+    # Use env_base_url if available, otherwise fall back to settings_base_url
+    base_url_to_use = (
+        env_base_url if env_base_url not in (None, '') else settings_base_url
+    )
+
+    llm_config.base_url = get_effective_llm_base_url(
+        llm_config.model,
+        base_url_to_use,
+        llm_config.custom_llm_provider,
+    )
     config.set_llm_config(llm_config)
     return config
 

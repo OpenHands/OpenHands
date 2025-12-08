@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { usePostHog } from "posthog-js/react";
 import {
   BaseModalTitle,
   BaseModalDescription,
@@ -17,6 +18,7 @@ interface AnalyticsConsentFormModalProps {
 export function AnalyticsConsentFormModal({
   onClose,
 }: AnalyticsConsentFormModalProps) {
+  const posthog = usePostHog();
   const { t } = useTranslation();
   const { mutate: saveUserSettings } = useSaveSettings();
 
@@ -29,7 +31,7 @@ export function AnalyticsConsentFormModal({
       { user_consents_to_analytics: analytics },
       {
         onSuccess: () => {
-          handleCaptureConsent(analytics);
+          handleCaptureConsent(posthog, analytics);
           onClose();
         },
       },

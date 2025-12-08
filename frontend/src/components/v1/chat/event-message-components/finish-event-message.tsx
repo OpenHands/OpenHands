@@ -27,13 +27,16 @@ export function FinishEventMessage({
   microagentPRUrl,
   actions,
 }: FinishEventMessageProps) {
+  const eventContent = getEventContent(event);
+  // For FinishAction, details is always a string (getActionContent returns string)
+  const message =
+    typeof eventContent.details === "string"
+      ? eventContent.details
+      : String(eventContent.details);
+
   return (
     <>
-      <ChatMessage
-        type="agent"
-        message={getEventContent(event).details}
-        actions={actions}
-      />
+      <ChatMessage type="agent" message={message} actions={actions} />
       <MicroagentStatusWrapper
         microagentStatus={microagentStatus}
         microagentConversationId={microagentConversationId}

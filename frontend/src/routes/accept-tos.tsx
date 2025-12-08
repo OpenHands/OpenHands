@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation } from "@tanstack/react-query";
+import { usePostHog } from "posthog-js/react";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 import { TOSCheckbox } from "#/components/features/waitlist/tos-checkbox";
@@ -9,12 +10,15 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { handleCaptureConsent } from "#/utils/handle-capture-consent";
 import { openHands } from "#/api/open-hands-axios";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { useTracking } from "#/hooks/use-tracking";
 
 export default function AcceptTOS() {
+  const posthog = usePostHog();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [isTosAccepted, setIsTosAccepted] = React.useState(false);
+  const { trackUserSignupCompleted } = useTracking();
 
   // Get the redirect URL from the query parameters
   const redirectUrl = searchParams.get("redirect_url") || "/";
@@ -23,7 +27,7 @@ export default function AcceptTOS() {
   const { mutate: acceptTOS, isPending: isSubmitting } = useMutation({
     mutationFn: async () => {
       // Set consent for analytics
-      handleCaptureConsent(true);
+      handleCaptureConsent(posthog, true);
 
       // Call the API to record TOS acceptance in the database
       return openHands.post("/api/accept_tos", {
@@ -31,6 +35,9 @@ export default function AcceptTOS() {
       });
     },
     onSuccess: (response) => {
+      // Track user signup completion
+      trackUserSignupCompleted();
+
       // Get the redirect URL from the response
       const finalRedirectUrl = response.data.redirect_url || redirectUrl;
 

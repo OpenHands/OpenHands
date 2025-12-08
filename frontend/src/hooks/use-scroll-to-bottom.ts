@@ -1,4 +1,10 @@
-import { RefObject, useEffect, useState, useCallback, useRef } from "react";
+import {
+  RefObject,
+  useState,
+  useCallback,
+  useRef,
+  useLayoutEffect,
+} from "react";
 
 export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
   // Track whether we should auto-scroll to the bottom when content changes
@@ -65,20 +71,20 @@ export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
   }, [scrollRef]);
 
   // Auto-scroll effect that runs when content changes
-  useEffect(() => {
+  // Use useLayoutEffect to scroll after DOM updates but before paint
+  useLayoutEffect(() => {
     // Only auto-scroll if autoscroll is enabled
     if (autoscroll) {
       const dom = scrollRef.current;
       if (dom) {
-        requestAnimationFrame(() => {
-          dom.scrollTo({
-            top: dom.scrollHeight,
-            behavior: "smooth",
-          });
+        // Scroll to bottom - this will trigger on any DOM change
+        dom.scrollTo({
+          top: dom.scrollHeight,
+          behavior: "smooth",
         });
       }
     }
-  });
+  }); // No dependency array - runs after every render to follow new content
 
   return {
     scrollRef,

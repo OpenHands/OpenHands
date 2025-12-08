@@ -10,12 +10,12 @@ from openhands.integrations.provider import (
     ProviderToken,
     ProviderType,
 )
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 
 
-class TestUserSecrets:
+class TestSecrets:
     def test_adding_only_provider_tokens(self):
-        """Test adding only provider tokens to the UserSecrets."""
+        """Test adding only provider tokens to the Secrets."""
         # Create provider tokens
         github_token = ProviderToken(
             token=SecretStr('github-token-123'), user_id='user1'
@@ -31,7 +31,7 @@ class TestUserSecrets:
         }
 
         # Initialize the store with a dict that will be converted to MappingProxyType
-        store = UserSecrets(provider_tokens=provider_tokens)
+        store = Secrets(provider_tokens=provider_tokens)
 
         # Verify the tokens were added correctly
         assert isinstance(store.provider_tokens, MappingProxyType)
@@ -52,7 +52,7 @@ class TestUserSecrets:
         assert len(store.custom_secrets) == 0
 
     def test_adding_only_custom_secrets(self):
-        """Test adding only custom secrets to the UserSecrets."""
+        """Test adding only custom secrets to the Secrets."""
         # Create custom secrets
         custom_secrets = {
             'API_KEY': CustomSecret(
@@ -64,7 +64,7 @@ class TestUserSecrets:
         }
 
         # Initialize the store with custom secrets
-        store = UserSecrets(custom_secrets=custom_secrets)
+        store = Secrets(custom_secrets=custom_secrets)
 
         # Verify the custom secrets were added correctly
         assert isinstance(store.custom_secrets, MappingProxyType)
@@ -95,7 +95,7 @@ class TestUserSecrets:
         custom_secrets_proxy = MappingProxyType({'API_KEY': custom_secret})
 
         # Test with dict for provider_tokens and MappingProxyType for custom_secrets
-        store1 = UserSecrets(
+        store1 = Secrets(
             provider_tokens=provider_tokens_dict, custom_secrets=custom_secrets_proxy
         )
 
@@ -120,7 +120,7 @@ class TestUserSecrets:
             'API_KEY': {'secret': 'api-key-123', 'description': 'API key'}
         }
 
-        store2 = UserSecrets(
+        store2 = Secrets(
             provider_tokens=provider_tokens_proxy, custom_secrets=custom_secrets_dict
         )
 
@@ -146,7 +146,7 @@ class TestUserSecrets:
             )
         }
 
-        initial_store = UserSecrets(
+        initial_store = Secrets(
             provider_tokens=MappingProxyType({ProviderType.GITHUB: github_token}),
             custom_secrets=MappingProxyType(custom_secret),
         )
@@ -212,7 +212,7 @@ class TestUserSecrets:
         )
 
     def test_serialization_with_expose_secrets(self):
-        """Test serializing the UserSecrets with expose_secrets=True."""
+        """Test serializing the Secrets with expose_secrets=True."""
         # Create a store with both provider tokens and custom secrets
         github_token = ProviderToken(
             token=SecretStr('github-token-123'), user_id='user1'
@@ -223,7 +223,7 @@ class TestUserSecrets:
             )
         }
 
-        store = UserSecrets(
+        store = Secrets(
             provider_tokens=MappingProxyType({ProviderType.GITHUB: github_token}),
             custom_secrets=MappingProxyType(custom_secrets),
         )
@@ -290,7 +290,7 @@ class TestUserSecrets:
         }
 
         # Initialize the store
-        store = UserSecrets(provider_tokens=mixed_provider_tokens)
+        store = Secrets(provider_tokens=mixed_provider_tokens)
 
         # Verify all tokens are converted to SecretStr
         assert isinstance(store.provider_tokens, MappingProxyType)
@@ -322,7 +322,7 @@ class TestUserSecrets:
         }
 
         # Initialize the store
-        store = UserSecrets(custom_secrets=custom_secrets_dict)
+        store = Secrets(custom_secrets=custom_secrets_dict)
 
         # Verify all secrets are converted to CustomSecret objects
         assert isinstance(store.custom_secrets, MappingProxyType)

@@ -28,7 +28,7 @@ from openhands.runtime import get_runtime_cls
 from openhands.runtime.base import Runtime
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.storage import get_file_store
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 
 
@@ -109,9 +109,9 @@ def get_provider_tokens():
         bitbucket_token = SecretStr(os.environ['BITBUCKET_TOKEN'])
         provider_tokens[ProviderType.BITBUCKET] = ProviderToken(token=bitbucket_token)
 
-    # Wrap provider tokens in UserSecrets if any tokens were found
+    # Wrap provider tokens in Secrets if any tokens were found
     secret_store = (
-        UserSecrets(provider_tokens=provider_tokens) if provider_tokens else None  # type: ignore[arg-type]
+        Secrets(provider_tokens=provider_tokens) if provider_tokens else None  # type: ignore[arg-type]
     )
     return secret_store.provider_tokens if secret_store else None
 

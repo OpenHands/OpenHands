@@ -1,5 +1,5 @@
 import React from "react";
-import posthog from "posthog-js";
+import { usePostHog } from "posthog-js/react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -44,6 +44,7 @@ export function ConversationCard({
   contextMenuOpen = false,
   onContextMenuToggle,
 }: ConversationCardProps) {
+  const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
 
   const onTitleSave = (newTitle: string) => {

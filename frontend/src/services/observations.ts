@@ -1,5 +1,4 @@
 import { ObservationMessage } from "#/types/message";
-import { useJupyterStore } from "#/state/jupyter-store";
 import { useCommandStore } from "#/state/command-store";
 import ObservationType from "#/types/observation-type";
 import { useBrowserStore } from "#/stores/browser-store";
@@ -22,14 +21,6 @@ export function handleObservationMessage(message: ObservationMessage) {
       useCommandStore.getState().appendOutput(content);
       break;
     }
-    case ObservationType.RUN_IPYTHON:
-      useJupyterStore.getState().appendJupyterOutput({
-        content: message.content,
-        imageUrls: Array.isArray(message.extras?.image_urls)
-          ? message.extras.image_urls
-          : undefined,
-      });
-      break;
     case ObservationType.BROWSE:
     case ObservationType.BROWSE_INTERACTIVE:
       if (

@@ -33,7 +33,22 @@ describe("AccountSettingsContextMenu", () => {
     expect(
       screen.getByTestId("account-settings-context-menu"),
     ).toBeInTheDocument();
+    expect(screen.getByText("SIDEBAR$DOCS")).toBeInTheDocument();
     expect(screen.getByText("ACCOUNT_SETTINGS$LOGOUT")).toBeInTheDocument();
+  });
+
+  it("should render Documentation link with correct attributes", () => {
+    renderWithRouter(
+      <AccountSettingsContextMenu
+        onLogout={onLogoutMock}
+        onClose={onCloseMock}
+      />,
+    );
+
+    const documentationLink = screen.getByText("SIDEBAR$DOCS").closest("a");
+    expect(documentationLink).toHaveAttribute("href", "https://docs.openhands.dev");
+    expect(documentationLink).toHaveAttribute("target", "_blank");
+    expect(documentationLink).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("should call onLogout when the logout option is clicked", async () => {

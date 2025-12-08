@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
+from server.config import get_config
 from server.constants import (
     LITE_LLM_API_KEY,
     LITE_LLM_API_URL,
@@ -22,10 +23,11 @@ from server.constants import (
 from server.logger import logger
 from storage.billing_session import BillingSession
 from storage.database import session_maker
+from storage.saas_settings_store import SaasSettingsStore
 from storage.subscription_access import SubscriptionAccess
-from storage.user_settings import UserSettings
 
 from openhands.server.user_auth import get_user_id
+from openhands.utils.http_session import httpx_verify_option
 
 stripe.api_key = STRIPE_API_KEY
 billing_router = APIRouter(prefix='/api/billing')
@@ -109,7 +111,7 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
         user_json = await _get_litellm_user(client, user_id)
         credits = calculate_credits(user_json['user_info'])
     return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))
@@ -429,7 +431,7 @@ async def success_callback(session_id: str, request: Request):
             )
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             # Update max budget in litellm
             user_json = await _get_litellm_user(client, billing_session.user_id)
             amount_subtotal = stripe_session.amount_subtotal or 0
@@ -617,11 +619,14 @@ async def stripe_webhook(request: Request) -> JSONResponse:
 
 def reset_user_to_free_tier_settings(user_id: str) -> None:
     """Reset user settings to free tier defaults when subscription ends."""
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
+
     with session_maker() as session:
-        user_settings = (
-            session.query(UserSettings)
-            .filter(UserSettings.keycloak_user_id == user_id)
-            .first()
+        user_settings = settings_store.get_user_settings_by_keycloak_id(
+            user_id, session
         )
 
         if user_settings:

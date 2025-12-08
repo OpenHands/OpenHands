@@ -35,6 +35,7 @@ class SaasConversationStore(ConversationStore):
             session.query(StoredConversationMetadata)
             .filter(StoredConversationMetadata.user_id == self.user_id)
             .filter(StoredConversationMetadata.conversation_id == conversation_id)
+            .filter(StoredConversationMetadata.conversation_version == 'V0')
         )
 
     def _to_external_model(self, conversation_metadata: StoredConversationMetadata):
@@ -59,6 +60,7 @@ class SaasConversationStore(ConversationStore):
         kwargs.pop('reasoning_tokens', None)
         kwargs.pop('context_window', None)
         kwargs.pop('per_turn_token', None)
+        kwargs.pop('parent_conversation_id', None)
 
         return ConversationMetadata(**kwargs)
 
@@ -123,6 +125,7 @@ class SaasConversationStore(ConversationStore):
                 conversations = (
                     session.query(StoredConversationMetadata)
                     .filter(StoredConversationMetadata.user_id == self.user_id)
+                    .filter(StoredConversationMetadata.conversation_version == 'V0')
                     .order_by(StoredConversationMetadata.created_at.desc())
                     .offset(offset)
                     .limit(limit + 1)

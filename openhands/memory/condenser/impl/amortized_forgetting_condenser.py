@@ -55,7 +55,7 @@ class AmortizedForgettingCondenser(RollingCondenser):
         return Condensation(action=event)
 
     def should_condense(self, view: View) -> bool:
-        return len(view) > self.max_size
+        return len(view) > self.max_size or view.unhandled_condensation_request
 
     @classmethod
     def from_config(

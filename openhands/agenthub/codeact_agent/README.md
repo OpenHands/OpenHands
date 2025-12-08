@@ -13,7 +13,7 @@ The CodeAct agent operates through a function calling interface. At each turn, t
    - Interact with web browsers using `browser` and `fetch`
    - Edit files using `str_replace_editor` or `edit_file`
 
-![image](https://github.com/All-Hands-AI/OpenHands/assets/38853559/92b622e3-72ad-4a61-8f41-8c040b6d5fb3)
+![image](https://github.com/OpenHands/OpenHands/assets/38853559/92b622e3-72ad-4a61-8f41-8c040b6d5fb3)
 
 ## Built-in Tools
 

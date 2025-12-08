@@ -1,7 +1,7 @@
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import React from "react";
-import posthog from "posthog-js";
+import { usePostHog } from "posthog-js/react";
 import { I18nKey } from "#/i18n/declaration";
 import { organizeModelsAndProviders } from "#/utils/organize-models-and-providers";
 import { DangerModal } from "../confirmation-modals/danger-modal";
@@ -22,6 +22,7 @@ interface SettingsFormProps {
 }
 
 export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
+  const posthog = usePostHog();
   const { mutate: saveUserSettings } = useSaveSettings();
 
   const location = useLocation();

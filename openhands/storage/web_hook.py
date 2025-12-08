@@ -3,6 +3,7 @@ import tenacity
 
 from openhands.storage.files import FileStore
 from openhands.utils.async_utils import EXECUTOR
+from openhands.utils.http_session import httpx_verify_option
 
 
 class WebHookFileStore(FileStore):
@@ -34,7 +35,7 @@ class WebHookFileStore(FileStore):
         self.file_store = file_store
         self.base_url = base_url
         if client is None:
-            client = httpx.Client()
+            client = httpx.Client(verify=httpx_verify_option())
         self.client = client
 
     def write(self, path: str, contents: str | bytes) -> None:

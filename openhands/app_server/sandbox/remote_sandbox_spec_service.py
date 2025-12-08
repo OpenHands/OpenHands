@@ -30,7 +30,7 @@ def get_default_sandbox_specs():
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
                 'OH_VSCODE_PORT': '60001',
             },
-            working_dir='/workspace/projects',
+            working_dir='/workspace/project',
         )
     ]
 

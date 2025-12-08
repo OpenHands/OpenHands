@@ -12,14 +12,16 @@ from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL_EXT,
+    ROLE_CHECK_ENABLED,
 )
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
-from server.config import sign_token
+from server.config import get_config, sign_token
 from server.constants import IS_FEATURE_ENV
 from server.routes.event_webhook import _get_session_api_key, _get_user_id
 from storage.database import session_maker
+from storage.saas_settings_store import SaasSettingsStore
 from storage.user_settings import UserSettings
 
 from openhands.core.logger import openhands_logger as logger
@@ -131,6 +133,12 @@ async def keycloak_callback(
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
     logger.debug(f'user_info: {user_info}')
+    if ROLE_CHECK_ENABLED and 'roles' not in user_info:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'Missing required role'},
+        )
+
     if 'sub' not in user_info or 'preferred_username' not in user_info:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -212,16 +220,14 @@ async def keycloak_callback(
             f'&state={state}'
         )
 
-    has_accepted_tos = False
-    with session_maker() as session:
-        user_settings = (
-            session.query(UserSettings)
-            .filter(UserSettings.keycloak_user_id == user_id)
-            .first()
-        )
-        has_accepted_tos = (
-            user_settings is not None and user_settings.accepted_tos is not None
-        )
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
+    user_settings = settings_store.get_user_settings_by_keycloak_id(user_id)
+    has_accepted_tos = (
+        user_settings is not None and user_settings.accepted_tos is not None
+    )
 
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:

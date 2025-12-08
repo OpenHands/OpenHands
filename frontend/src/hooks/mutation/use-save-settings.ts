@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import posthog from "posthog-js";
+import { usePostHog } from "posthog-js/react";
 import { DEFAULT_SETTINGS } from "#/services/settings";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { PostSettings } from "#/types/settings";
-import { PostApiSettings } from "#/settings-service/settings.types";
+import { PostApiSettings } from "#/api/settings-service/settings.types";
 import { useSettings } from "../query/use-settings";
 
 const saveSettingsMutationFn = async (settings: Partial<PostSettings>) => {
@@ -35,12 +35,14 @@ const saveSettingsMutationFn = async (settings: Partial<PostSettings>) => {
       settings.GIT_USER_NAME?.trim() || DEFAULT_SETTINGS.GIT_USER_NAME,
     git_user_email:
       settings.GIT_USER_EMAIL?.trim() || DEFAULT_SETTINGS.GIT_USER_EMAIL,
+    v1_enabled: settings.V1_ENABLED,
   };
 
   await SettingsService.saveSettings(apiSettings);
 };
 
 export const useSaveSettings = () => {
+  const posthog = usePostHog();
   const queryClient = useQueryClient();
   const { data: currentSettings } = useSettings();
 

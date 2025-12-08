@@ -7,6 +7,7 @@ import tenacity
 from openhands.core.logger import openhands_logger as logger
 from openhands.storage.files import FileStore
 from openhands.utils.async_utils import EXECUTOR
+from openhands.utils.http_session import httpx_verify_option
 
 # Constants for batching configuration
 WEBHOOK_BATCH_TIMEOUT_SECONDS = 5.0
@@ -65,7 +66,7 @@ class BatchedWebHookFileStore(FileStore):
         self.file_store = file_store
         self.base_url = base_url
         if client is None:
-            client = httpx.Client()
+            client = httpx.Client(verify=httpx_verify_option())
         self.client = client
 
         # Use provided values or default constants

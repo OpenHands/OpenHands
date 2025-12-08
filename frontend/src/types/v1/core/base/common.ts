@@ -64,7 +64,7 @@ export enum SecurityRisk {
 }
 
 // Agent status
-export enum V1AgentStatus {
+export enum V1ExecutionStatus {
   IDLE = "idle",
   RUNNING = "running",
   PAUSED = "paused",

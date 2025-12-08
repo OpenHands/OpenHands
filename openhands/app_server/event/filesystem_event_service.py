@@ -1,5 +1,6 @@
 """Filesystem-based EventService implementation."""
 
+import asyncio
 import glob
 import json
 import logging
@@ -75,6 +76,14 @@ class FilesystemEventService(EventService):
             # Use model_dump with mode='json' to handle UUID serialization
             data = event.model_dump(mode='json')
             f.write(json.dumps(data, indent=2))
+
+    def _load_events_from_files(self, file_paths: list[Path]) -> list[Event]:
+        events = []
+        for file_path in file_paths:
+            event = self._load_event_from_file(file_path)
+            if event is not None:
+                events.append(event)
+        return events
 
     def _load_event_from_file(self, filepath: Path) -> Event | None:
         """Load an event from a file."""
@@ -255,12 +264,11 @@ class FilesystemEventService(EventService):
         if start_index + limit < len(files):
             next_page_id = files[start_index + limit].name
 
-        # Load all events from files
-        page_events = []
-        for file_path in page_files:
-            event = self._load_event_from_file(file_path)
-            if event is not None:
-                page_events.append(event)
+        # Load all events from files in a background thread.
+        loop = asyncio.get_running_loop()
+        page_events = await loop.run_in_executor(
+            None, self._load_events_from_files, page_files
+        )
 
         return EventPage(items=page_events, next_page_id=next_page_id)
 

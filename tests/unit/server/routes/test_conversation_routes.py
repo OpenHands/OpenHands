@@ -11,10 +11,21 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    AgentType,
     AppConversationInfo,
+    AppConversationPage,
+    AppConversationStartRequest,
+    AppConversationStartTask,
+    AppConversationStartTaskStatus,
+)
+from openhands.app_server.app_conversation.app_conversation_service import (
+    AppConversationService,
 )
 from openhands.microagent.microagent import KnowledgeMicroagent, RepoMicroagent
 from openhands.microagent.types import MicroagentMetadata, MicroagentType
+from openhands.server.data_models.conversation_info_result_set import (
+    ConversationInfoResultSet,
+)
 from openhands.server.routes.conversation import (
     AddMessageRequest,
     add_message,
@@ -22,11 +33,15 @@ from openhands.server.routes.conversation import (
 )
 from openhands.server.routes.manage_conversations import (
     UpdateConversationRequest,
+    search_conversations,
     update_conversation,
 )
 from openhands.server.session.conversation import ServerConversation
 from openhands.storage.conversation.conversation_store import ConversationStore
-from openhands.storage.data_models.conversation_metadata import ConversationMetadata
+from openhands.storage.data_models.conversation_metadata import (
+    ConversationMetadata,
+    ConversationTrigger,
+)
 
 
 @pytest.mark.asyncio
@@ -1125,3 +1140,322 @@ async def test_add_message_empty_message():
         call_args = mock_manager.send_event_to_conversation.call_args
         message_data = call_args[0][1]
         assert message_data['args']['content'] == ''
+
+
+@pytest.mark.sub_conversation
+@pytest.mark.asyncio
+async def test_create_sub_conversation_with_planning_agent():
+    """Test creating a sub-conversation from a parent conversation with planning agent."""
+    from uuid import uuid4
+
+    parent_conversation_id = uuid4()
+    user_id = 'test_user_456'
+    sandbox_id = 'test_sandbox_123'
+
+    # Create mock parent conversation info
+    parent_info = AppConversationInfo(
+        id=parent_conversation_id,
+        created_by_user_id=user_id,
+        sandbox_id=sandbox_id,
+        selected_repository='test/repo',
+        selected_branch='main',
+        git_provider=None,
+        title='Parent Conversation',
+        llm_model='anthropic/claude-3-5-sonnet-20241022',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    # Create sub-conversation request with planning agent
+    sub_conversation_request = AppConversationStartRequest(
+        parent_conversation_id=parent_conversation_id,
+        agent_type=AgentType.PLAN,
+        initial_message=None,
+    )
+
+    # Create mock app conversation service
+    mock_app_conversation_service = MagicMock(spec=AppConversationService)
+    mock_app_conversation_info_service = MagicMock(spec=AppConversationInfoService)
+
+    # Mock the service to return parent info
+    mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+        return_value=parent_info
+    )
+
+    # Mock the start_app_conversation method to return a task
+    async def mock_start_generator(request):
+        task = AppConversationStartTask(
+            id=uuid4(),
+            created_by_user_id=user_id,
+            status=AppConversationStartTaskStatus.READY,
+            app_conversation_id=uuid4(),
+            sandbox_id=sandbox_id,
+            agent_server_url='http://agent-server:8000',
+            request=request,
+        )
+        yield task
+
+    mock_app_conversation_service.start_app_conversation = mock_start_generator
+
+    # Test the service method directly
+    async for task in mock_app_conversation_service.start_app_conversation(
+        sub_conversation_request
+    ):
+        # Verify the task was created with planning agent
+        assert task is not None
+        assert task.status == AppConversationStartTaskStatus.READY
+        assert task.request.agent_type == AgentType.PLAN
+        assert task.request.parent_conversation_id == parent_conversation_id
+        assert task.sandbox_id == sandbox_id
+        break
+
+
+@pytest.mark.asyncio
+async def test_search_conversations_include_sub_conversations_default_false():
+    """Test that include_sub_conversations defaults to False when not provided."""
+    with patch('openhands.server.routes.manage_conversations.config') as mock_config:
+        mock_config.conversation_max_age_seconds = 864000  # 10 days
+        with patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_manager:
+
+            async def mock_get_running_agent_loops(*args, **kwargs):
+                return set()
+
+            async def mock_get_connections(*args, **kwargs):
+                return {}
+
+            async def get_agent_loop_info(*args, **kwargs):
+                return []
+
+            mock_manager.get_running_agent_loops = mock_get_running_agent_loops
+            mock_manager.get_connections = mock_get_connections
+            mock_manager.get_agent_loop_info = get_agent_loop_info
+            with patch(
+                'openhands.server.routes.manage_conversations.datetime'
+            ) as mock_datetime:
+                mock_datetime.now.return_value = datetime.fromisoformat(
+                    '2025-01-01T00:00:00+00:00'
+                )
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                mock_datetime.timezone = timezone
+
+                # Mock the conversation store
+                mock_store = MagicMock()
+                mock_store.search = AsyncMock(
+                    return_value=ConversationInfoResultSet(results=[])
+                )
+
+                # Create a mock app conversation service
+                mock_app_conversation_service = AsyncMock()
+                mock_app_conversation_service.search_app_conversations.return_value = (
+                    AppConversationPage(items=[])
+                )
+
+                # Call search_conversations without include_sub_conversations parameter
+                await search_conversations(
+                    page_id=None,
+                    limit=20,
+                    selected_repository=None,
+                    conversation_trigger=None,
+                    conversation_store=mock_store,
+                    app_conversation_service=mock_app_conversation_service,
+                )
+
+                # Verify that search_app_conversations was called with include_sub_conversations=False (default)
+                mock_app_conversation_service.search_app_conversations.assert_called_once()
+                call_kwargs = (
+                    mock_app_conversation_service.search_app_conversations.call_args[1]
+                )
+                assert call_kwargs.get('include_sub_conversations') is False
+
+
+@pytest.mark.asyncio
+async def test_search_conversations_include_sub_conversations_explicit_false():
+    """Test that include_sub_conversations=False is properly passed through."""
+    with patch('openhands.server.routes.manage_conversations.config') as mock_config:
+        mock_config.conversation_max_age_seconds = 864000  # 10 days
+        with patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_manager:
+
+            async def mock_get_running_agent_loops(*args, **kwargs):
+                return set()
+
+            async def mock_get_connections(*args, **kwargs):
+                return {}
+
+            async def get_agent_loop_info(*args, **kwargs):
+                return []
+
+            mock_manager.get_running_agent_loops = mock_get_running_agent_loops
+            mock_manager.get_connections = mock_get_connections
+            mock_manager.get_agent_loop_info = get_agent_loop_info
+            with patch(
+                'openhands.server.routes.manage_conversations.datetime'
+            ) as mock_datetime:
+                mock_datetime.now.return_value = datetime.fromisoformat(
+                    '2025-01-01T00:00:00+00:00'
+                )
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                mock_datetime.timezone = timezone
+
+                # Mock the conversation store
+                mock_store = MagicMock()
+                mock_store.search = AsyncMock(
+                    return_value=ConversationInfoResultSet(results=[])
+                )
+
+                # Create a mock app conversation service
+                mock_app_conversation_service = AsyncMock()
+                mock_app_conversation_service.search_app_conversations.return_value = (
+                    AppConversationPage(items=[])
+                )
+
+                # Call search_conversations with include_sub_conversations=False
+                await search_conversations(
+                    page_id=None,
+                    limit=20,
+                    selected_repository=None,
+                    conversation_trigger=None,
+                    include_sub_conversations=False,
+                    conversation_store=mock_store,
+                    app_conversation_service=mock_app_conversation_service,
+                )
+
+                # Verify that search_app_conversations was called with include_sub_conversations=False
+                mock_app_conversation_service.search_app_conversations.assert_called_once()
+                call_kwargs = (
+                    mock_app_conversation_service.search_app_conversations.call_args[1]
+                )
+                assert call_kwargs.get('include_sub_conversations') is False
+
+
+@pytest.mark.asyncio
+async def test_search_conversations_include_sub_conversations_explicit_true():
+    """Test that include_sub_conversations=True is properly passed through."""
+    with patch('openhands.server.routes.manage_conversations.config') as mock_config:
+        mock_config.conversation_max_age_seconds = 864000  # 10 days
+        with patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_manager:
+
+            async def mock_get_running_agent_loops(*args, **kwargs):
+                return set()
+
+            async def mock_get_connections(*args, **kwargs):
+                return {}
+
+            async def get_agent_loop_info(*args, **kwargs):
+                return []
+
+            mock_manager.get_running_agent_loops = mock_get_running_agent_loops
+            mock_manager.get_connections = mock_get_connections
+            mock_manager.get_agent_loop_info = get_agent_loop_info
+            with patch(
+                'openhands.server.routes.manage_conversations.datetime'
+            ) as mock_datetime:
+                mock_datetime.now.return_value = datetime.fromisoformat(
+                    '2025-01-01T00:00:00+00:00'
+                )
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                mock_datetime.timezone = timezone
+
+                # Mock the conversation store
+                mock_store = MagicMock()
+                mock_store.search = AsyncMock(
+                    return_value=ConversationInfoResultSet(results=[])
+                )
+
+                # Create a mock app conversation service
+                mock_app_conversation_service = AsyncMock()
+                mock_app_conversation_service.search_app_conversations.return_value = (
+                    AppConversationPage(items=[])
+                )
+
+                # Call search_conversations with include_sub_conversations=True
+                await search_conversations(
+                    page_id=None,
+                    limit=20,
+                    selected_repository=None,
+                    conversation_trigger=None,
+                    include_sub_conversations=True,
+                    conversation_store=mock_store,
+                    app_conversation_service=mock_app_conversation_service,
+                )
+
+                # Verify that search_app_conversations was called with include_sub_conversations=True
+                mock_app_conversation_service.search_app_conversations.assert_called_once()
+                call_kwargs = (
+                    mock_app_conversation_service.search_app_conversations.call_args[1]
+                )
+                assert call_kwargs.get('include_sub_conversations') is True
+
+
+@pytest.mark.asyncio
+async def test_search_conversations_include_sub_conversations_with_other_filters():
+    """Test that include_sub_conversations works correctly with other filters."""
+    with patch('openhands.server.routes.manage_conversations.config') as mock_config:
+        mock_config.conversation_max_age_seconds = 864000  # 10 days
+        with patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_manager:
+
+            async def mock_get_running_agent_loops(*args, **kwargs):
+                return set()
+
+            async def mock_get_connections(*args, **kwargs):
+                return {}
+
+            async def get_agent_loop_info(*args, **kwargs):
+                return []
+
+            mock_manager.get_running_agent_loops = mock_get_running_agent_loops
+            mock_manager.get_connections = mock_get_connections
+            mock_manager.get_agent_loop_info = get_agent_loop_info
+            with patch(
+                'openhands.server.routes.manage_conversations.datetime'
+            ) as mock_datetime:
+                mock_datetime.now.return_value = datetime.fromisoformat(
+                    '2025-01-01T00:00:00+00:00'
+                )
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                mock_datetime.timezone = timezone
+
+                # Mock the conversation store
+                mock_store = MagicMock()
+                mock_store.search = AsyncMock(
+                    return_value=ConversationInfoResultSet(results=[])
+                )
+
+                # Create a mock app conversation service
+                mock_app_conversation_service = AsyncMock()
+                mock_app_conversation_service.search_app_conversations.return_value = (
+                    AppConversationPage(items=[])
+                )
+
+                # Create a valid base64-encoded page_id for testing
+                import base64
+
+                page_id_data = json.dumps({'v0': None, 'v1': 'test_v1_page_id'})
+                encoded_page_id = base64.b64encode(page_id_data.encode()).decode()
+
+                # Call search_conversations with include_sub_conversations and other filters
+                await search_conversations(
+                    page_id=encoded_page_id,
+                    limit=50,
+                    selected_repository='test/repo',
+                    conversation_trigger=ConversationTrigger.GUI,
+                    include_sub_conversations=True,
+                    conversation_store=mock_store,
+                    app_conversation_service=mock_app_conversation_service,
+                )
+
+                # Verify that search_app_conversations was called with all parameters including include_sub_conversations=True
+                mock_app_conversation_service.search_app_conversations.assert_called_once()
+                call_kwargs = (
+                    mock_app_conversation_service.search_app_conversations.call_args[1]
+                )
+                assert call_kwargs.get('include_sub_conversations') is True
+                assert call_kwargs.get('page_id') == 'test_v1_page_id'
+                assert call_kwargs.get('limit') == 50

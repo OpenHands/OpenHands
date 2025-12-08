@@ -8,6 +8,7 @@ import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useConfig } from "#/hooks/query/use-config";
 import { I18nKey } from "#/i18n/declaration";
 import LogOutIcon from "#/icons/log-out.svg?react";
+import DocumentIcon from "#/icons/document.svg?react";
 import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
 
 interface AccountSettingsContextMenuProps {
@@ -24,7 +25,14 @@ export function AccountSettingsContextMenu({
   const { data: config } = useConfig();
 
   const isSaas = config?.APP_MODE === "saas";
-  const navItems = (isSaas ? SAAS_NAV_ITEMS : OSS_NAV_ITEMS).map((item) => ({
+
+  // Get navigation items and filter out LLM settings if the feature flag is enabled
+  let items = isSaas ? SAAS_NAV_ITEMS : OSS_NAV_ITEMS;
+  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
+    items = items.filter((item) => item.to !== "/settings");
+  }
+
+  const navItems = items.map((item) => ({
     ...item,
     icon: React.cloneElement(item.icon, {
       width: 16,
@@ -57,6 +65,21 @@ export function AccountSettingsContextMenu({
       ))}
 
       <Divider />
+
+      <a
+        href="https://docs.openhands.dev"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-decoration-none"
+      >
+        <ContextMenuListItem
+          onClick={onClose}
+          className="flex items-center gap-2 p-2 hover:bg-[#5C5D62] rounded h-[30px]"
+        >
+          <DocumentIcon width={16} height={16} />
+          <span className="text-white text-sm">{t(I18nKey.SIDEBAR$DOCS)}</span>
+        </ContextMenuListItem>
+      </a>
 
       <ContextMenuListItem
         onClick={onLogout}

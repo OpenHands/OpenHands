@@ -23,6 +23,7 @@ export function Tools() {
     microagentsModalVisible,
     setMicroagentsModalVisible,
     systemMessage,
+    shouldShowAgentTools,
   } = useConversationNameContextMenu({
     conversationId,
     conversationStatus: conversation?.status,
@@ -52,6 +53,7 @@ export function Tools() {
           onClose={() => setContextMenuOpen(false)}
           onShowMicroagents={handleShowMicroagents}
           onShowAgentTools={handleShowAgentTools}
+          shouldShowAgentTools={shouldShowAgentTools}
         />
       )}
 
