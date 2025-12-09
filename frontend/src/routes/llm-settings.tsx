@@ -112,11 +112,25 @@ function LlmSettingsScreen() {
 
   // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
   const currentModel = currentSelectedModel || settings?.LLM_MODEL;
-  const isOpenHandsProvider =
-    (view === "basic" && selectedProvider === "openhands") ||
-    (view === "advanced" && currentModel?.startsWith("openhands/"));
+
   const isSaasMode = config?.APP_MODE === "saas";
-  const shouldUseOpenHandsKey = isOpenHandsProvider && isSaasMode;
+
+  const isOpenHandsProvider = () => {
+    if (view === "basic") {
+      return selectedProvider === "openhands";
+    }
+
+    if (view === "advanced") {
+      if (dirtyInputs.model) {
+        return currentModel?.startsWith("openhands/");
+      }
+      return settings?.LLM_MODEL?.startsWith("openhands/");
+    }
+
+    return false;
+  };
+
+  const shouldUseOpenHandsKey = isOpenHandsProvider() && isSaasMode;
 
   // Determine if we should hide the agent dropdown when V1 conversation API is enabled
   const isV1Enabled = settings?.V1_ENABLED;

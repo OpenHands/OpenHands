@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "#/hooks/query/use-settings";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { MCPConfig } from "#/types/settings";
 
 export function useDeleteMcpServer() {
@@ -25,6 +25,7 @@ export function useDeleteMcpServer() {
 
       const apiSettings = {
         mcp_config: newConfig,
+        v1_enabled: settings.V1_ENABLED,
       };
 
       await SettingsService.saveSettings(apiSettings);
