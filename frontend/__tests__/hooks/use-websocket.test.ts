@@ -1,3 +1,11 @@
+/**
+ * TODO: Fix flaky WebSocket tests (https://github.com/OpenHands/OpenHands/issues/11944)
+ *
+ * Several tests in this file are skipped because they fail intermittently in CI
+ * but pass locally. The SUSPECTED root cause is that `wsLink.broadcast()` sends messages
+ * to ALL connected clients across all tests, causing cross-test contamination
+ * when tests run in parallel with Vitest v4.
+ */
 import { renderHook, waitFor } from "@testing-library/react";
 import {
   describe,
