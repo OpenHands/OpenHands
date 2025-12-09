@@ -15,6 +15,7 @@ const mockUseAuth = vi.fn();
 const mockUseGitRepositories = vi.fn();
 const mockUseUserProviders = vi.fn();
 const mockUseSearchRepositories = vi.fn();
+const mockUseHomeStore = vi.fn();
 
 // Setup default mock returns
 mockUseUserRepositories.mockReturnValue({
@@ -52,8 +53,20 @@ vi.mock("#/hooks/use-user-providers", () => ({
   useUserProviders: () => mockUseUserProviders(),
 }));
 
+vi.mock("#/stores/home-store", () => ({
+  useHomeStore: () => mockUseHomeStore(),
+}));
+
 mockUseUserProviders.mockReturnValue({
   providers: ["github"],
+});
+
+mockUseHomeStore.mockReturnValue({
+  addRecentRepository: vi.fn(),
+  setLastSelectedProvider: vi.fn(),
+  getLastSelectedProvider: vi.fn().mockReturnValue(null),
+  getRecentRepositories: vi.fn().mockReturnValue([]),
+  recentRepositories: [],
 });
 
 // Default mock for useSearchRepositories
@@ -269,5 +282,42 @@ describe("RepositorySelectionForm", () => {
     // Since testing complex dropdown interactions is challenging with the current mocking setup,
     // we'll verify that the basic structure is in place and the callback is available
     expect(typeof mockOnRepoSelection).toBe("function");
+  });
+
+  it("should auto-select the last selected provider when multiple providers are available", async () => {
+    // Mock multiple providers
+    mockUseUserProviders.mockReturnValue({
+      providers: ["github", "gitlab", "bitbucket"],
+    });
+
+    // Mock that gitlab was the last selected provider
+    const mockGetLastSelectedProvider = vi.fn().mockReturnValue("gitlab");
+    mockUseHomeStore.mockReturnValue({
+      addRecentRepository: vi.fn(),
+      setLastSelectedProvider: vi.fn(),
+      getLastSelectedProvider: mockGetLastSelectedProvider,
+      getRecentRepositories: vi.fn().mockReturnValue([]),
+      recentRepositories: [],
+    });
+
+    renderForm();
+
+    // Verify that getLastSelectedProvider was called
+    expect(mockGetLastSelectedProvider).toHaveBeenCalled();
+
+    // The provider dropdown should be visible since there are multiple providers
+    expect(await screen.findByTestId("git-provider-dropdown")).toBeInTheDocument();
+  });
+
+  it("should not show provider dropdown when there's only one provider", async () => {
+    // Mock single provider
+    mockUseUserProviders.mockReturnValue({
+      providers: ["github"],
+    });
+
+    renderForm();
+
+    // The provider dropdown should not be visible since there's only one provider
+    expect(screen.queryByTestId("git-provider-dropdown")).not.toBeInTheDocument();
   });
 });
