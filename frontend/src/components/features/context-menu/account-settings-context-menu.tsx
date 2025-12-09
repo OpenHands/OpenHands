@@ -31,7 +31,6 @@ export function AccountSettingsContextMenu({
       height: 16,
     } as React.SVGProps<SVGSVGElement>),
   }));
-  // The Link component will handle the actual navigation
   const handleNavigationClick = () => onClose();
 
   return (

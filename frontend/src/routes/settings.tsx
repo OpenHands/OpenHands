@@ -44,7 +44,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
 function SettingsScreen() {
   const { t } = useTranslation();
   const location = useLocation();
-  // Get navigation items based on SaaS/OSS mode and feature flags (e.g., hiding LLM settings)
   const navItems = useSettingsNavItems();
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {
