@@ -59,12 +59,43 @@ vi.mock("react-router", async () => ({
 }));
 
 describe("Manage Org Route", () => {
+  const getMeSpy = vi.spyOn(organizationService, "getMe");
+
+  // Test data constants
+  const TEST_USERS = {
+    OWNER: {
+      id: "1",
+      email: "test@example.com",
+      role: "owner" as const,
+      status: "active" as const,
+    },
+    ADMIN: {
+      id: "1",
+      email: "test@example.com",
+      role: "admin" as const,
+      status: "active" as const,
+    },
+  };
+
+  // Helper function to set up user mock
+  const setupUserMock = (userData: {
+    id: string;
+    email: string;
+    role: "owner" | "admin" | "user";
+    status: "active" | "invited";
+  }) => {
+    getMeSpy.mockResolvedValue(userData);
+  };
+
   beforeEach(() => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     // @ts-expect-error - only return APP_MODE for these tests
     getConfigSpy.mockResolvedValue({
       APP_MODE: "saas",
     });
+
+    // Set default mock for user (owner role has all permissions)
+    setupUserMock(TEST_USERS.OWNER);
   });
 
   afterEach(() => {
@@ -472,7 +503,7 @@ describe("Manage Org Route", () => {
     });
   });
 
-  it("should NOT show add credits option for ADMIN role", async () => {
+  it("should show add credits option for ADMIN role", async () => {
     renderManageOrg();
     await screen.findByTestId("manage-org-screen");
 
@@ -484,9 +515,9 @@ describe("Manage Org Route", () => {
       expect(credits).toBeInTheDocument();
     });
 
-    // Verify add credits button is not present
-    const addButton = screen.queryByText(/add/i);
-    expect(addButton).not.toBeInTheDocument();
+    // Verify add credits button is present (admins can add credits)
+    const addButton = screen.getByText(/add/i);
+    expect(addButton).toBeInTheDocument();
   });
 
   describe("actions", () => {
@@ -542,6 +573,9 @@ describe("Manage Org Route", () => {
     });
 
     it("should NOT allow roles other than owners to change org name", async () => {
+      // Set admin role before rendering
+      setupUserMock(TEST_USERS.ADMIN);
+
       renderManageOrg();
       await screen.findByTestId("manage-org-screen");
 
@@ -555,6 +589,8 @@ describe("Manage Org Route", () => {
     });
 
     it("should NOT allow roles other than owners to delete an organization", async () => {
+      setupUserMock(TEST_USERS.ADMIN);
+
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
       // @ts-expect-error - only return the properties we need for this test
       getConfigSpy.mockResolvedValue({
@@ -606,5 +642,69 @@ describe("Manage Org Route", () => {
     });
 
     it.todo("should be able to update the organization billing info");
+  });
+
+  describe("Role-based delete organization permission behavior", () => {
+    it("should show delete organization button when user has canDeleteOrganization permission (Owner role)", async () => {
+      setupUserMock(TEST_USERS.OWNER);
+
+      renderManageOrg();
+      await screen.findByTestId("manage-org-screen");
+
+      await selectOrganization({ orgIndex: 0 });
+
+      const deleteButton = await screen.findByRole("button", {
+        name: /ORG\$DELETE_ORGANIZATION/i,
+      });
+
+      expect(deleteButton).toBeInTheDocument();
+      expect(deleteButton).not.toBeDisabled();
+    });
+
+    it.each([
+      { role: "admin" as const, roleName: "Admin" },
+      { role: "user" as const, roleName: "User" },
+    ])(
+      "should not show delete organization button when user lacks canDeleteOrganization permission ($roleName role)",
+      async ({ role }) => {
+        setupUserMock({
+          id: "1",
+          email: "test@example.com",
+          role,
+          status: "active",
+        });
+
+        renderManageOrg();
+        await screen.findByTestId("manage-org-screen");
+
+        await selectOrganization({ orgIndex: 0 });
+
+        const deleteButton = screen.queryByRole("button", {
+          name: /ORG\$DELETE_ORGANIZATION/i,
+        });
+
+        expect(deleteButton).not.toBeInTheDocument();
+      },
+    );
+
+    it("should open delete confirmation modal when delete button is clicked (with permission)", async () => {
+      setupUserMock(TEST_USERS.OWNER);
+
+      renderManageOrg();
+      await screen.findByTestId("manage-org-screen");
+
+      await selectOrganization({ orgIndex: 0 });
+
+      expect(
+        screen.queryByTestId("delete-org-confirmation"),
+      ).not.toBeInTheDocument();
+
+      const deleteButton = await screen.findByRole("button", {
+        name: /ORG\$DELETE_ORGANIZATION/i,
+      });
+      await userEvent.click(deleteButton);
+
+      expect(screen.getByTestId("delete-org-confirmation")).toBeInTheDocument();
+    });
   });
 });

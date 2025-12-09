@@ -11,6 +11,7 @@ interface OrganizationMemberListItemProps {
   role: OrganizationMember["role"];
   status: OrganizationMember["status"];
   hasPermissionToChangeRole: boolean;
+  availableRolesToChangeTo: OrganizationUserRole[];
 
   onRoleChange: (role: OrganizationUserRole) => void;
   onRemove?: () => void;
@@ -21,6 +22,7 @@ export function OrganizationMemberListItem({
   role,
   status,
   hasPermissionToChangeRole,
+  availableRolesToChangeTo,
   onRoleChange,
   onRemove,
 }: OrganizationMemberListItemProps) {
@@ -71,6 +73,7 @@ export function OrganizationMemberListItem({
             onClose={() => setContextMenuOpen(false)}
             onRoleChange={onRoleChange}
             onRemove={onRemove}
+            availableRolesToChangeTo={availableRolesToChangeTo}
           />
         )}
       </div>

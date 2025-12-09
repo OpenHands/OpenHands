@@ -19,27 +19,25 @@ interface OrganizationMemberRoleContextMenuProps {
   onClose: () => void;
   onRoleChange: (role: OrganizationUserRole) => void;
   onRemove?: () => void;
+  availableRolesToChangeTo: OrganizationUserRole[];
 }
 
 export function OrganizationMemberRoleContextMenu({
   onClose,
   onRoleChange,
   onRemove,
+  availableRolesToChangeTo,
 }: OrganizationMemberRoleContextMenuProps) {
   const { t } = useTranslation();
   const menuRef = useClickOutsideElement<HTMLUListElement>(onClose);
 
-  const handleAdminClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleRoleChangeClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    role: OrganizationUserRole,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
-    onRoleChange("admin");
-    onClose();
-  };
-
-  const handleUserClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onRoleChange("user");
+    onRoleChange(role);
     onClose();
   };
 
@@ -58,30 +56,57 @@ export function OrganizationMemberRoleContextMenu({
       alignment="right"
       className="min-h-fit mb-2 min-w-[195px] max-w-[195px] gap-0"
     >
-      <ContextMenuListItem
-        testId="admin-option"
-        onClick={handleAdminClick}
-        className={contextMenuListItemClassName}
-      >
-        <ContextMenuIconText
-          icon={
-            <AdminIcon width={16} height={16} className="text-white pl-[2px]" />
-          }
-          text={t(I18nKey.ORG$ROLE_ADMIN)}
-          className="capitalize"
-        />
-      </ContextMenuListItem>
-      <ContextMenuListItem
-        testId="user-option"
-        onClick={handleUserClick}
-        className={contextMenuListItemClassName}
-      >
-        <ContextMenuIconText
-          icon={<UserIcon width={16} height={16} className="text-white" />}
-          text={t(I18nKey.ORG$ROLE_USER)}
-          className="capitalize"
-        />
-      </ContextMenuListItem>
+      {availableRolesToChangeTo.includes("owner") && (
+        <ContextMenuListItem
+          testId="owner-option"
+          onClick={(event) => handleRoleChangeClick(event, "owner")}
+          className={contextMenuListItemClassName}
+        >
+          <ContextMenuIconText
+            icon={
+              <AdminIcon
+                width={16}
+                height={16}
+                className="text-white pl-[2px]"
+              />
+            }
+            text={t(I18nKey.ORG$ROLE_OWNER)}
+            className="capitalize"
+          />
+        </ContextMenuListItem>
+      )}
+      {availableRolesToChangeTo.includes("admin") && (
+        <ContextMenuListItem
+          testId="admin-option"
+          onClick={(event) => handleRoleChangeClick(event, "admin")}
+          className={contextMenuListItemClassName}
+        >
+          <ContextMenuIconText
+            icon={
+              <AdminIcon
+                width={16}
+                height={16}
+                className="text-white pl-[2px]"
+              />
+            }
+            text={t(I18nKey.ORG$ROLE_ADMIN)}
+            className="capitalize"
+          />
+        </ContextMenuListItem>
+      )}
+      {availableRolesToChangeTo.includes("user") && (
+        <ContextMenuListItem
+          testId="user-option"
+          onClick={(event) => handleRoleChangeClick(event, "user")}
+          className={contextMenuListItemClassName}
+        >
+          <ContextMenuIconText
+            icon={<UserIcon width={16} height={16} className="text-white" />}
+            text={t(I18nKey.ORG$ROLE_USER)}
+            className="capitalize"
+          />
+        </ContextMenuListItem>
+      )}
       <ContextMenuListItem
         testId="remove-option"
         onClick={handleRemoveClick}

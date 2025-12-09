@@ -15503,6 +15503,22 @@
     "de": "Benutzer",
     "uk": "користувач"
   },
+  "ORG$ROLE_OWNER": {
+    "en": "owner",
+    "ja": "所有者",
+    "zh-CN": "所有者",
+    "zh-TW": "所有者",
+    "ko-KR": "소유자",
+    "no": "eier",
+    "it": "proprietario",
+    "pt": "proprietário",
+    "es": "propietario",
+    "ar": "المالك",
+    "fr": "propriétaire",
+    "tr": "sahip",
+    "de": "Eigentümer",
+    "uk": "власник"
+  },
   "ORG$REMOVE": {
     "en": "remove",
     "ja": "削除",

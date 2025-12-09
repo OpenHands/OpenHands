@@ -68,9 +68,33 @@ function ManageOrganizationMembers() {
     // Users cannot change their own role
     if (memberId === user.id) return false;
 
+    // Owners cannot change another owner's role
+    if (user.role === "owner" && memberRole === "owner") return false;
+
+    // Admins cannot change another admin's role
+    if (user.role === "admin" && memberRole === "admin") return false;
+
     const userPermissions = rolePermissions[user.role];
     return userPermissions.includes(`change_user_role:${memberRole}`);
   };
+
+  const availableRolesToChangeTo = React.useMemo((): OrganizationUserRole[] => {
+    if (!user) return [];
+    const availableRoles: OrganizationUserRole[] = [];
+    const userPermissions = rolePermissions[user.role];
+
+    if (userPermissions.includes("change_user_role:owner")) {
+      availableRoles.push("owner");
+    }
+    if (userPermissions.includes("change_user_role:admin")) {
+      availableRoles.push("admin");
+    }
+    if (userPermissions.includes("change_user_role:user")) {
+      availableRoles.push("user");
+    }
+
+    return availableRoles;
+  }, [user]);
 
   return (
     <div
@@ -113,6 +137,7 @@ function ManageOrganizationMembers() {
                   member.id,
                   member.role,
                 )}
+                availableRolesToChangeTo={availableRolesToChangeTo}
                 onRoleChange={(role) =>
                   handleRoleSelectionClick(member.id, role)
                 }

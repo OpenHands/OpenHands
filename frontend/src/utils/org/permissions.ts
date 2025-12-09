@@ -28,6 +28,8 @@ const ownerPerms: UserPermission[] = [
 ];
 const adminPerms: UserPermission[] = [
   "invite_user_to_organization",
+  "add_credits",
+  "change_user_role:admin",
   "change_user_role:user",
 ];
 const userPerms: UserPermission[] = [];

@@ -29,7 +29,7 @@ export const INITIAL_MOCK_ORGS: Organization[] = [
   },
 ];
 
-export const ORGS_AND_MEMBERS: Record<string, OrganizationMember[]> = {
+const INITIAL_MOCK_MEMBERS: Record<string, OrganizationMember[]> = {
   "1": [
     {
       id: "1",
@@ -98,6 +98,12 @@ export const ORGS_AND_MEMBERS: Record<string, OrganizationMember[]> = {
   ],
 };
 
+export const ORGS_AND_MEMBERS: Record<string, OrganizationMember[]> = {
+  "1": INITIAL_MOCK_MEMBERS["1"].map((member) => ({ ...member })),
+  "2": INITIAL_MOCK_MEMBERS["2"].map((member) => ({ ...member })),
+  "3": INITIAL_MOCK_MEMBERS["3"].map((member) => ({ ...member })),
+};
+
 const orgs = new Map(INITIAL_MOCK_ORGS.map((org) => [org.id, org]));
 
 export const resetOrgMockData = () => {
@@ -105,6 +111,16 @@ export const resetOrgMockData = () => {
   orgs.clear();
   INITIAL_MOCK_ORGS.forEach((org) => {
     orgs.set(org.id, { ...org });
+  });
+};
+
+export const resetOrgsAndMembersMockData = () => {
+  // Reset ORGS_AND_MEMBERS to initial state
+  // Note: This is needed since ORGS_AND_MEMBERS is mutated by updateMemberRole
+  Object.keys(INITIAL_MOCK_MEMBERS).forEach((orgId) => {
+    ORGS_AND_MEMBERS[orgId] = INITIAL_MOCK_MEMBERS[orgId].map((member) => ({
+      ...member,
+    }));
   });
 };
 
