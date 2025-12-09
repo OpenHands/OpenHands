@@ -1,6 +1,5 @@
 import { FaClock } from "react-icons/fa";
 import CheckCircle from "#/icons/check-circle-solid.svg?react";
-import XCircle from "#/icons/x-circle-solid.svg?react";
 import { ObservationResultStatus } from "./event-content-helpers/get-observation-result";
 
 interface SuccessIndicatorProps {
@@ -14,13 +13,6 @@ export function SuccessIndicator({ status }: SuccessIndicatorProps) {
         <CheckCircle
           data-testid="status-icon"
           className="h-4 w-4 ml-2 inline fill-success"
-        />
-      )}
-
-      {status === "error" && (
-        <XCircle
-          data-testid="status-icon"
-          className="h-4 w-4 ml-2 inline fill-danger"
         />
       )}
 

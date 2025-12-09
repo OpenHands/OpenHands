@@ -61,7 +61,7 @@ describe("ExpandableMessage", () => {
     expect(icon).toHaveClass("fill-success");
   });
 
-  it("should render with error icon for failed action messages", () => {
+  it("should render with no icon for failed action messages", () => {
     renderWithProviders(
       <ExpandableMessage
         id="OBSERVATION_MESSAGE$RUN"
@@ -75,8 +75,7 @@ describe("ExpandableMessage", () => {
       "div.flex.gap-2.items-center.justify-start",
     );
     expect(container).toHaveClass("border-neutral-300");
-    const icon = screen.getByTestId("status-icon");
-    expect(icon).toHaveClass("fill-danger");
+    expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
   });
 
   it("should render with neutral border and no icon for action messages without success prop", () => {
