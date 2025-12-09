@@ -260,6 +260,29 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return None
 
+    async def get_sandbox_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxInfo | None:
+        """Get a single sandbox by session API key."""
+        try:
+            # Get all containers with our prefix
+            all_containers = self.docker_client.containers.list(all=True)
+
+            for container in all_containers:
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
+                    # Check if this container has the matching session API key
+                    env_vars = self._get_container_env_vars(container)
+                    container_session_key = env_vars.get(SESSION_API_KEY_VARIABLE)
+
+                    if container_session_key == session_api_key:
+                        return await self._container_to_checked_sandbox_info(container)
+
+            return None
+        except (NotFound, APIError):
+            return None
+
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
         """Start a new sandbox."""
         # Enforce sandbox limits by cleaning up old sandboxes
@@ -285,8 +308,7 @@ class DockerSandboxService(SandboxService):
         env_vars = sandbox_spec.initial_env.copy()
         env_vars[SESSION_API_KEY_VARIABLE] = session_api_key
         env_vars[WEBHOOK_CALLBACK_VARIABLE] = (
-            f'http://host.docker.internal:{self.host_port}'
-            f'/api/v1/webhooks/{container_name}'
+            f'http://host.docker.internal:{self.host_port}/api/v1/webhooks'
         )
 
         # Prepare port mappings and add port environment variables

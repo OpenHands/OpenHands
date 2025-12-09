@@ -14,6 +14,7 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
 import { useCommandStore } from "#/state/command-store";
+import { useBrowserStore } from "#/stores/browser-store";
 import {
   isV1Event,
   isAgentErrorEvent,
@@ -27,6 +28,8 @@ import {
   isExecuteBashObservationEvent,
   isConversationErrorEvent,
   isPlanningFileEditorObservationEvent,
+  isBrowserObservationEvent,
+  isBrowserNavigateActionEvent,
 } from "#/types/v1/type-guards";
 import { ConversationStateUpdateEventStats } from "#/types/v1/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
@@ -382,6 +385,22 @@ export function ConversationWebSocketProvider({
               .map((c) => c.text)
               .join("\n");
             appendOutput(textContent);
+          }
+
+          // Handle BrowserObservation events - update browser store with screenshot
+          if (isBrowserObservationEvent(event)) {
+            const { screenshot_data: screenshotData } = event.observation;
+            if (screenshotData) {
+              const screenshotSrc = screenshotData.startsWith("data:")
+                ? screenshotData
+                : `data:image/png;base64,${screenshotData}`;
+              useBrowserStore.getState().setScreenshotSrc(screenshotSrc);
+            }
+          }
+
+          // Handle BrowserNavigateAction events - update browser store with URL
+          if (isBrowserNavigateActionEvent(event)) {
+            useBrowserStore.getState().setUrl(event.action.url);
           }
         }
       } catch (error) {
