@@ -2,6 +2,7 @@ from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
 from openhands.integrations.service_types import ProviderType
+from openhands.sdk.conversation.secret_source import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth
 
 
@@ -44,11 +45,18 @@ class ResolverUserContext(UserContext):
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
         return await self.saas_user_auth.get_provider_tokens()
 
-    async def get_secrets(self) -> dict[str, str]:
+    async def get_secrets(self) -> dict[str, SecretSource]:
         """Get secrets for the user, including custom secrets."""
         secrets = await self.saas_user_auth.get_secrets()
         if secrets:
-            return dict(secrets.custom_secrets)
+            # Convert custom secrets to StaticSecret objects for SDK compatibility
+            # secrets.custom_secrets is of type Mapping[str, CustomSecret]
+            converted_secrets = {}
+            for key, custom_secret in secrets.custom_secrets.items():
+                # Extract the secret value from CustomSecret and convert to StaticSecret
+                secret_value = custom_secret.secret.get_secret_value()
+                converted_secrets[key] = StaticSecret(value=secret_value)
+            return converted_secrets
         return {}
 
     async def get_mcp_api_key(self) -> str | None:
