@@ -191,16 +191,15 @@ class GithubIssue(ResolverViewInterface):
                 conversation_id=uuid4().hex, selected_repository=self.full_repo_name
             )
 
-        else:
-            conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
-                user_id=self.user_info.keycloak_user_id,
-                conversation_id=None,
-                selected_repository=self.full_repo_name,
-                selected_branch=None,
-                conversation_trigger=ConversationTrigger.RESOLVER,
-                git_provider=ProviderType.GITHUB,
-            )
-            self.conversation_id = conversation_metadata.conversation_id
+        conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
+            user_id=self.user_info.keycloak_user_id,
+            conversation_id=None,
+            selected_repository=self.full_repo_name,
+            selected_branch=None,
+            conversation_trigger=ConversationTrigger.RESOLVER,
+            git_provider=ProviderType.GITHUB,
+        )
+        self.conversation_id = conversation_metadata.conversation_id
         return conversation_metadata
 
     async def create_new_conversation(
