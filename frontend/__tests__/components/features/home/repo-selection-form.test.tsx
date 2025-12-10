@@ -2,9 +2,9 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, vi, beforeEach, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RepositorySelectionForm } from "../../../../src/components/features/home/repo-selection-form";
-import UserService from "#/api/user-service/user-service.api";
 import GitService from "#/api/git-service/git-service.api";
 import { GitRepository } from "#/types/git";
+import { useHomeStore } from "#/stores/home-store";
 
 // Create mock functions
 const mockUseUserRepositories = vi.fn();
@@ -15,7 +15,6 @@ const mockUseAuth = vi.fn();
 const mockUseGitRepositories = vi.fn();
 const mockUseUserProviders = vi.fn();
 const mockUseSearchRepositories = vi.fn();
-const mockUseHomeStore = vi.fn();
 
 // Setup default mock returns
 mockUseUserRepositories.mockReturnValue({
@@ -53,20 +52,8 @@ vi.mock("#/hooks/use-user-providers", () => ({
   useUserProviders: () => mockUseUserProviders(),
 }));
 
-vi.mock("#/stores/home-store", () => ({
-  useHomeStore: () => mockUseHomeStore(),
-}));
-
 mockUseUserProviders.mockReturnValue({
   providers: ["github"],
-});
-
-mockUseHomeStore.mockReturnValue({
-  addRecentRepository: vi.fn(),
-  setLastSelectedProvider: vi.fn(),
-  getLastSelectedProvider: vi.fn().mockReturnValue(null),
-  getRecentRepositories: vi.fn().mockReturnValue([]),
-  recentRepositories: [],
 });
 
 // Default mock for useSearchRepositories
@@ -110,7 +97,7 @@ vi.mock("#/context/auth-context", () => ({
 // Mock debounce to simulate proper debounced behavior
 let debouncedValue = "";
 vi.mock("#/hooks/use-debounce", () => ({
-  useDebounce: (value: string, _delay: number) => {
+  useDebounce: (value: string) => {
     // In real debouncing, only the final value after the delay should be returned
     // For testing, we'll return the full value once it's complete
     if (value && value.length > 20) {
@@ -137,28 +124,51 @@ vi.mock("#/hooks/query/use-search-repositories", () => ({
 }));
 
 const mockOnRepoSelection = vi.fn();
-const renderForm = () =>
-  render(<RepositorySelectionForm onRepoSelection={mockOnRepoSelection} />, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider
-        client={
-          new QueryClient({
-            defaultOptions: {
-              queries: {
-                retry: false,
-              },
-            },
-          })
-        }
-      >
-        {children}
-      </QueryClientProvider>
-    ),
+
+// Helper function to render with custom store state
+const renderForm = (
+  storeOverrides: Partial<{
+    recentRepositories: GitRepository[];
+    lastSelectedProvider: string | null;
+  }> = {},
+) => {
+  // Set up the store state before rendering
+  useHomeStore.setState({
+    recentRepositories: [],
+    lastSelectedProvider: null,
+    ...storeOverrides,
   });
+
+  return render(
+    <RepositorySelectionForm onRepoSelection={mockOnRepoSelection} />,
+    {
+      wrapper: ({ children }) => (
+        <QueryClientProvider
+          client={
+            new QueryClient({
+              defaultOptions: {
+                queries: {
+                  retry: false,
+                },
+              },
+            })
+          }
+        >
+          {children}
+        </QueryClientProvider>
+      ),
+    },
+  );
+};
 
 describe("RepositorySelectionForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset the store to initial state
+    useHomeStore.setState({
+      recentRepositories: [],
+      lastSelectedProvider: null,
+    });
   });
 
   it("shows dropdown when repositories are loaded", async () => {
@@ -239,7 +249,7 @@ describe("RepositorySelectionForm", () => {
 
     renderForm();
 
-    const input = await screen.findByTestId("git-repo-dropdown");
+    await screen.findByTestId("git-repo-dropdown");
 
     // The test should verify that typing a URL triggers the search behavior
     // Since the component uses useSearchRepositories hook, just verify the hook is set up correctly
@@ -274,7 +284,7 @@ describe("RepositorySelectionForm", () => {
 
     renderForm();
 
-    const input = await screen.findByTestId("git-repo-dropdown");
+    await screen.findByTestId("git-repo-dropdown");
 
     // Verify that the onRepoSelection callback prop was provided
     expect(mockOnRepoSelection).toBeDefined();
@@ -290,23 +300,18 @@ describe("RepositorySelectionForm", () => {
       providers: ["github", "gitlab", "bitbucket"],
     });
 
-    // Mock that gitlab was the last selected provider
-    const mockGetLastSelectedProvider = vi.fn().mockReturnValue("gitlab");
-    mockUseHomeStore.mockReturnValue({
-      addRecentRepository: vi.fn(),
-      setLastSelectedProvider: vi.fn(),
-      getLastSelectedProvider: mockGetLastSelectedProvider,
-      getRecentRepositories: vi.fn().mockReturnValue([]),
-      recentRepositories: [],
+    // Set up the store with gitlab as the last selected provider
+    renderForm({
+      lastSelectedProvider: "gitlab",
     });
 
-    renderForm();
-
-    // Verify that getLastSelectedProvider was called
-    expect(mockGetLastSelectedProvider).toHaveBeenCalled();
-
     // The provider dropdown should be visible since there are multiple providers
-    expect(await screen.findByTestId("git-provider-dropdown")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("git-provider-dropdown"),
+    ).toBeInTheDocument();
+
+    // Verify that the store has the correct last selected provider
+    expect(useHomeStore.getState().lastSelectedProvider).toBe("gitlab");
   });
 
   it("should not show provider dropdown when there's only one provider", async () => {
@@ -318,6 +323,8 @@ describe("RepositorySelectionForm", () => {
     renderForm();
 
     // The provider dropdown should not be visible since there's only one provider
-    expect(screen.queryByTestId("git-provider-dropdown")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("git-provider-dropdown"),
+    ).not.toBeInTheDocument();
   });
 });
