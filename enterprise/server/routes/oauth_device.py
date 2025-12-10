@@ -8,6 +8,9 @@ from urllib.parse import quote
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from integrations.utils import (
+    HOST_URL,
+)
 from pydantic import BaseModel, SecretStr
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
@@ -324,8 +327,8 @@ async def keycloak_callback(
                 },
             )
             return _html_response(
-                title='Authentication Failed',
-                description='Failed to authenticate with Keycloak. Please try again.',
+                title='Failed to authenticate.',
+                description=f'Please re-login into <a href="{HOST_URL}" style="color:#ecedee;text-decoration:underline;">OpenHands Cloud</a>. Then try the device authorization again.',
                 status_code=400,
             )
 
@@ -334,8 +337,8 @@ async def keycloak_callback(
         if not user_info or not user_info.get('sub'):
             logger.warning('failed_to_get_user_info_from_keycloak')
             return _html_response(
-                title='Authentication Failed',
-                description='Failed to get user information. Please try again.',
+                title='Failed to authenticate.',
+                description=f'Please re-login into <a href="{HOST_URL}" style="color:#ecedee;text-decoration:underline;">OpenHands Cloud</a>. Then try the device authorization again.',
                 status_code=400,
             )
 
