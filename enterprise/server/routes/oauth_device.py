@@ -175,7 +175,7 @@ async def device_token(request: DeviceTokenRequest):
 
 
 @oauth_device_router.get('/verify')
-async def device_verification_page(user_code: Optional[str] = None):
+async def device_verification_page(user_code: Optional[str] = None, user_id: str = Depends(get_user_id)):
     """Device verification page where users enter their user code.
     
     This would typically render an HTML page, but for now we'll return
@@ -241,11 +241,6 @@ async def device_verification(http_request: Request, user_id: str = Depends(get_
             )
         
         # User is already authenticated via dependency injection
-        if not user_id:
-            return HTMLResponse(
-                content="<h1>Error</h1><p>User authentication required.</p>",
-                status_code=401
-            )
         
         # Get device code entry
         device_code_entry = device_code_store.get_by_user_code(user_code)
