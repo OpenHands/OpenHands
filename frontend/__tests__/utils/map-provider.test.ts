@@ -21,6 +21,7 @@ test("mapProvider", () => {
   expect(mapProvider("cloudflare")).toBe("Cloudflare Workers AI");
   expect(mapProvider("deepinfra")).toBe("DeepInfra");
   expect(mapProvider("ai21")).toBe("AI21");
+  expect(mapProvider("aibadgr")).toBe("AI Badgr");
   expect(mapProvider("replicate")).toBe("Replicate");
   expect(mapProvider("voyage")).toBe("Voyage AI");
   expect(mapProvider("openrouter")).toBe("OpenRouter");

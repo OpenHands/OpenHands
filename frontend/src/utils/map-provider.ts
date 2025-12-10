@@ -20,6 +20,7 @@ export const MAP_PROVIDER = {
   cloudflare: "Cloudflare Workers AI",
   deepinfra: "DeepInfra",
   ai21: "AI21",
+  aibadgr: "AI Badgr",
   replicate: "Replicate",
   voyage: "Voyage AI",
   openrouter: "OpenRouter",
