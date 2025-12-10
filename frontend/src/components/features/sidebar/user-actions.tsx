@@ -56,7 +56,13 @@ export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
       {(shouldShowUserActions || isOSS) && (
         <div
           className={cn(
-            "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+            // Base styles: hidden by default with smooth transition
+            "opacity-0 pointer-events-none transition-all duration-200",
+            // Show on parent hover (avatar)
+            "group-hover:opacity-100 group-hover:pointer-events-auto",
+            // Keep visible when hovering directly on menu (fixes diagonal cursor movement)
+            "hover:opacity-100 hover:pointer-events-auto",
+            // Show when menu is explicitly toggled via click
             showMenu && "opacity-100 pointer-events-auto",
           )}
         >
