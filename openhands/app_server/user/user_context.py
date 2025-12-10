@@ -5,7 +5,7 @@ from openhands.app_server.user.user_models import (
     UserInfo,
 )
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
-from openhands.sdk.conversation.secret_source import SecretSource
+from openhands.sdk.secret import SecretSource
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 

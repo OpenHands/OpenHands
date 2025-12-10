@@ -14,7 +14,7 @@ from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStat
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent
-from openhands.sdk.conversation.secret_source import LookupSecret, StaticSecret
+from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.llm import LLM
 from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
