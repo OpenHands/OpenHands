@@ -53,11 +53,11 @@ class DeviceVerificationRequest(BaseModel):
 
 
 # Initialize router and store
-oauth_device_router = APIRouter(prefix='/oauth/device')
+oauth_device_router = APIRouter(prefix='/oauth')
 device_code_store = DeviceCodeStore(session_maker)
 
 
-@oauth_device_router.post('/authorize', response_model=DeviceAuthorizationResponse)
+@oauth_device_router.post('/device/authorize', response_model=DeviceAuthorizationResponse)
 async def device_authorization(
     request: DeviceAuthorizationRequest, 
     http_request: Request
@@ -75,7 +75,7 @@ async def device_authorization(
         
         # Build verification URIs
         base_url = str(http_request.base_url).rstrip('/')
-        verification_uri = f"{base_url}/oauth/device/verify"
+        verification_uri = f"{base_url}/oauth/verify"
         verification_uri_complete = f"{verification_uri}?user_code={device_code_entry.user_code}"
         
         logger.info(
@@ -99,7 +99,7 @@ async def device_authorization(
         )
 
 
-@oauth_device_router.post('/token')
+@oauth_device_router.post('/device/token')
 async def device_token(request: DeviceTokenRequest):
     """Poll for OAuth 2.0 Device Flow token.
     
@@ -203,7 +203,7 @@ async def device_verification_page(user_code: Optional[str] = None):
             <h1>OpenHands Device Verification</h1>
             <p>Enter the code displayed on your device to authorize access:</p>
             
-            <form method="post" action="/oauth/device/verify">
+            <form method="post" action="/oauth/verify">
                 <input type="text" name="user_code" class="code-input" placeholder="Enter code" 
                        value="{user_code or ''}" maxlength="8" required>
                 <br>
@@ -241,6 +241,11 @@ async def device_verification(http_request: Request, user_id: str = Depends(get_
             )
         
         # User is already authenticated via dependency injection
+        if not user_id:
+            return HTMLResponse(
+                content="<h1>Error</h1><p>User authentication required.</p>",
+                status_code=401
+            )
         
         # Get device code entry
         device_code_entry = device_code_store.get_by_user_code(user_code)
@@ -255,13 +260,6 @@ async def device_verification(http_request: Request, user_id: str = Depends(get_
             return HTMLResponse(
                 content="<h1>Error</h1><p>User code is no longer valid.</p>",
                 status_code=400
-            )
-        
-        # Security check: Only the requesting user can authorize the device
-        if device_code_entry.keycloak_user_id != user_id:
-            return HTMLResponse(
-                content="<h1>Error</h1><p>You are not authorized to approve this device request.</p>",
-                status_code=403
             )
         
         # Process the user's decision
