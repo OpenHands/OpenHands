@@ -51,9 +51,9 @@ ENABLE_SOLVABILITY_ANALYSIS = (
     os.getenv('ENABLE_SOLVABILITY_ANALYSIS', 'false').lower() == 'true'
 )
 
-# Toggle for V1 conversation creation feature
-ENABLE_V1_CONVERSATIONS = (
-    os.getenv('ENABLE_V1_CONVERSATIONS', 'false').lower() == 'true'
+# Toggle for V1 GitHub resolver feature
+ENABLE_V1_GITHUB_RESOLVER = (
+    os.getenv('ENABLE_V1_GITHUB_RESOLVER', 'false').lower() == 'true'
 )
 
 

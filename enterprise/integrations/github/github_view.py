@@ -13,7 +13,7 @@ from integrations.resolver_context import ResolverUserContext
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
     ENABLE_PROACTIVE_CONVERSATION_STARTERS,
-    ENABLE_V1_CONVERSATIONS,
+    ENABLE_V1_GITHUB_RESOLVER,
     HOST,
     HOST_URL,
     get_oh_labels,
@@ -102,7 +102,7 @@ async def get_user_v1_enabled_setting(user_id: str) -> bool:
         the user's individual setting. Both must be true for the function to return true.
     """
     # Check the global environment variable first
-    if not ENABLE_V1_CONVERSATIONS:
+    if not ENABLE_V1_GITHUB_RESOLVER:
         return False
 
     config = get_config()
