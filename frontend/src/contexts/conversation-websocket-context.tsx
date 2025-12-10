@@ -578,9 +578,13 @@ export function ConversationWebSocketProvider({
         removeErrorMessage(); // Clear any previous error messages on successful connection
 
         // Fetch expected event count for history loading detection
-        if (conversationId) {
+        if (conversationId && conversationUrl) {
           try {
-            const count = await EventService.getEventCount(conversationId);
+            const count = await EventService.getEventCount(
+              conversationId,
+              conversationUrl,
+              sessionApiKey,
+            );
             setExpectedEventCountMain(count);
 
             // If no events expected, mark as loaded immediately
@@ -618,6 +622,7 @@ export function ConversationWebSocketProvider({
     removeErrorMessage,
     sessionApiKey,
     conversationId,
+    conversationUrl,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -642,10 +647,15 @@ export function ConversationWebSocketProvider({
         removeErrorMessage(); // Clear any previous error messages on successful connection
 
         // Fetch expected event count for history loading detection
-        if (planningAgentConversation?.id) {
+        if (
+          planningAgentConversation?.id &&
+          planningAgentConversation.conversation_url
+        ) {
           try {
             const count = await EventService.getEventCount(
               planningAgentConversation.id,
+              planningAgentConversation.conversation_url,
+              planningAgentConversation.session_api_key,
             );
             setExpectedEventCountPlanning(count);
 
