@@ -236,7 +236,7 @@ class GithubIssue(ResolverViewInterface):
         conversation_metadata: ConversationMetadata,
     ):
         """Create conversation using the legacy V0 system."""
-        logger.info('[GitHub V1]: Creating V0 conversation')
+        logger.info('[GitHub]: Creating V0 conversation')
         custom_secrets = await self._get_user_secrets()
 
         user_instructions, conversation_instructions = await self._get_instructions(
@@ -382,7 +382,18 @@ class GithubPRComment(GithubIssueComment):
         return user_instructions, conversation_instructions
 
     async def initialize_new_conversation(self) -> ConversationMetadata:
-        # FIXME: Handle if initialize_conversation returns None
+        v1_enabled = await get_user_v1_enabled_setting(self.user_info.keycloak_user_id)
+        logger.info(
+            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {v1_enabled}'
+        )
+        if v1_enabled:
+            # Create dummy conversationm metadata
+            # Don't save to conversation store
+            # V1 conversations are stored in a separate table
+            return ConversationMetadata(
+                conversation_id=uuid4().hex, selected_repository=self.full_repo_name
+            )
+
         conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
             user_id=self.user_info.keycloak_user_id,
             conversation_id=None,
