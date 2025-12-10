@@ -66,18 +66,18 @@ class DeviceVerificationRequest(BaseModel):
 
 
 # Initialize router and store
-oauth_device_router = APIRouter(prefix='/oauth')
+oauth_device_router = APIRouter(prefix='/oauth/device')
 device_code_store = DeviceCodeStore(session_maker)
 token_manager = TokenManager()
 
 
-@oauth_device_router.post('/device/authorize', response_model=DeviceAuthorizationResponse)
+@oauth_device_router.post('/authorize', response_model=DeviceAuthorizationResponse)
 async def device_authorization(
-    request: DeviceAuthorizationRequest, 
+    request: DeviceAuthorizationRequest,
     http_request: Request
 ):
     """Initiate OAuth 2.0 Device Flow authorization.
-    
+
     This endpoint starts the device flow by generating device and user codes.
     The client will poll the token endpoint while the user authorizes on another device.
     """
@@ -86,16 +86,16 @@ async def device_authorization(
         device_code_entry = device_code_store.create_device_code(
             expires_in=600  # 10 minutes
         )
-        
+
         # Build verification URIs
         base_url = str(http_request.base_url).rstrip('/')
-        verification_uri = f"{base_url}/oauth/verify"
+        verification_uri = f"{base_url}/oauth/device/verify"
         verification_uri_complete = f"{verification_uri}?user_code={device_code_entry.user_code}"
-        
+
         logger.info(
             f"Device authorization initiated: user_code={device_code_entry.user_code}"
         )
-        
+
         return DeviceAuthorizationResponse(
             device_code=device_code_entry.device_code,
             user_code=device_code_entry.user_code,
@@ -104,7 +104,7 @@ async def device_authorization(
             expires_in=600,  # 10 minutes
             interval=5  # Poll every 5 seconds
         )
-        
+
     except Exception as e:
         logger.exception(f"Error in device authorization: {str(e)}")
         raise HTTPException(
@@ -113,17 +113,17 @@ async def device_authorization(
         )
 
 
-@oauth_device_router.post('/device/token')
+@oauth_device_router.post('/token')
 async def device_token(request: DeviceTokenRequest):
     """Poll for OAuth 2.0 Device Flow token.
-    
+
     The client polls this endpoint until the user completes authorization
     or the device code expires.
     """
     try:
         # Get device code entry
         device_code_entry = device_code_store.get_by_device_code(request.device_code)
-        
+
         if not device_code_entry:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -132,7 +132,7 @@ async def device_token(request: DeviceTokenRequest):
                     error_description="Invalid device code"
                 ).model_dump()
             )
-        
+
         # Check if expired
         if device_code_entry.is_expired():
             return JSONResponse(
@@ -142,7 +142,7 @@ async def device_token(request: DeviceTokenRequest):
                     error_description="Device code has expired"
                 ).model_dump()
             )
-        
+
         # Check status
         if device_code_entry.status == "denied":
             return JSONResponse(
@@ -152,7 +152,7 @@ async def device_token(request: DeviceTokenRequest):
                     error_description="User denied the authorization request"
                 ).model_dump()
             )
-        
+
         if device_code_entry.status == "pending":
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -161,13 +161,13 @@ async def device_token(request: DeviceTokenRequest):
                     error_description="User has not yet completed authorization"
                 ).model_dump()
             )
-        
+
         if device_code_entry.status == "authorized":
             # Return the API key as access_token
             return DeviceTokenResponse(
                 access_token=device_code_entry.access_token  # This is the API key
             )
-        
+
         # Unknown status
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -176,7 +176,7 @@ async def device_token(request: DeviceTokenRequest):
                 error_description="Unknown device code status"
             ).model_dump()
         )
-        
+
     except Exception as e:
         logger.exception(f"Error in device token: {str(e)}")
         return JSONResponse(
@@ -191,7 +191,7 @@ async def device_token(request: DeviceTokenRequest):
 @oauth_device_router.get('/verify')
 async def device_verification_page(request: Request, user_code: Optional[str] = None):
     """Device verification page - redirects to Keycloak for authentication.
-    
+
     This endpoint initiates the OAuth device authorization flow by redirecting
     the user to Keycloak for authentication. After successful authentication,
     the user will be redirected back to complete device authorization.
@@ -213,13 +213,13 @@ async def device_verification_page(request: Request, user_code: Optional[str] = 
         <body>
             <h1>Device Authorization</h1>
             <p>Enter the code displayed on your device:</p>
-            
-            <form method="get" action="/oauth/verify">
+
+            <form method="get" action="/oauth/device/verify">
                 <div class="form-group">
                     <label for="user_code">Device Code:</label><br>
                     <input type="text" id="user_code" name="user_code" required>
                 </div>
-                
+
                 <div class="form-group">
                     <button type="submit">Continue</button>
                 </div>
@@ -228,7 +228,7 @@ async def device_verification_page(request: Request, user_code: Optional[str] = 
         </html>
         """
         return HTMLResponse(content=html_content)
-    
+
     # Validate the user_code exists
     device_code_entry = device_code_store.get_by_user_code(user_code)
     if not device_code_entry:
@@ -236,15 +236,15 @@ async def device_verification_page(request: Request, user_code: Optional[str] = 
             content="<h1>Error</h1><p>Invalid or expired device code.</p>",
             status_code=400
         )
-    
+
     # Create JWT state with user_code
     jwt_secret: SecretStr = config.jwt_secret  # type: ignore[assignment]
     payload = {'user_code': user_code}
     state = jwt.encode(payload, jwt_secret.get_secret_value(), algorithm='HS256')
-    
+
     # Redirect to Keycloak for authentication
     scope = quote('openid email profile offline_access')
-    redirect_uri = quote(f'{HOST_URL}/oauth/keycloak-callback')
+    redirect_uri = quote(f'{HOST_URL}/oauth/device/keycloak-callback')
     auth_url = (
         f'{KEYCLOAK_SERVER_URL_EXT}/realms/{KEYCLOAK_REALM_NAME}/protocol/openid-connect/auth'
         f'?client_id={KEYCLOAK_CLIENT_ID}&response_type=code'
@@ -252,7 +252,7 @@ async def device_verification_page(request: Request, user_code: Optional[str] = 
         f'&scope={scope}'
         f'&state={state}'
     )
-    
+
     return RedirectResponse(auth_url)
 
 
@@ -311,12 +311,12 @@ async def keycloak_callback(
         user_code = payload['user_code']
 
         # Get Keycloak tokens
-        redirect_uri = f'{HOST_URL}/oauth/keycloak-callback'
+        redirect_uri = f'{HOST_URL}/oauth/device/keycloak-callback'
         (
             keycloak_access_token,
             keycloak_refresh_token,
         ) = await token_manager.get_keycloak_tokens(code, redirect_uri)
-        
+
         if not keycloak_access_token or not keycloak_refresh_token:
             logger.warning(
                 'failed_to_get_keycloak_tokens',
@@ -364,7 +364,7 @@ async def keycloak_callback(
         api_key_store = ApiKeyStore.get_instance()
         try:
             cli_api_key = api_key_store.create_api_key(
-                user_id, 
+                user_id,
                 name="CLI Authentication",
                 expires_at=None  # No expiration for CLI keys
             )
@@ -411,24 +411,4 @@ async def keycloak_callback(
             description='An unexpected error occurred. Please try again.',
             status_code=500,
         )
-
-
-# Cleanup task (should be run periodically)
-async def cleanup_expired_device_codes():
-    """Background task to clean up expired device codes."""
-    try:
-        count = device_code_store.cleanup_expired_codes()
-        if count > 0:
-            logger.info(f"Cleaned up {count} expired device codes")
-    except Exception as e:
-        logger.exception(f"Error cleaning up expired device codes: {str(e)}")
-
-
-# Add cleanup task to run every 5 minutes
-async def start_cleanup_task():
-    """Start the periodic cleanup task."""
-    while True:
-        await asyncio.sleep(300)  # 5 minutes
-        await cleanup_expired_device_codes()
-
 
