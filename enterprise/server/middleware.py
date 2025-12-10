@@ -161,8 +161,14 @@ class SetAuthCookieMiddleware:
             '/api/billing/stripe-webhook',
         )
 
+        # OAuth Device Flow endpoints that should be public
+        is_oauth_device_public = path in (
+            '/oauth/device/authorize',  # Device authorization (unauthenticated)
+            '/oauth/device/token',      # Token polling (unauthenticated)
+        )
+
         is_mcp = path.startswith('/mcp')
-        return is_api_that_should_attach or is_mcp
+        return (is_api_that_should_attach or is_mcp) and not is_oauth_device_public
 
     async def _logout(self, request: Request):
         # Log out of keycloak - this prevents issues where you did not log in with the idp you believe you used
