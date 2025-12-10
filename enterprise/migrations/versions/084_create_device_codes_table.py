@@ -5,9 +5,9 @@ Revises: 083
 Create Date: 2024-12-10 12:00:00.000000
 
 """
-from alembic import op
-import sqlalchemy as sa
 
+import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '084'
@@ -30,12 +30,16 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('expires_at', sa.DateTime(), nullable=False),
         sa.Column('authorized_at', sa.DateTime(), nullable=True),
-        sa.PrimaryKeyConstraint('id')
+        sa.PrimaryKeyConstraint('id'),
     )
-    
+
     # Create indexes for efficient lookups
-    op.create_index('ix_device_codes_device_code', 'device_codes', ['device_code'], unique=True)
-    op.create_index('ix_device_codes_user_code', 'device_codes', ['user_code'], unique=True)
+    op.create_index(
+        'ix_device_codes_device_code', 'device_codes', ['device_code'], unique=True
+    )
+    op.create_index(
+        'ix_device_codes_user_code', 'device_codes', ['user_code'], unique=True
+    )
 
 
 def downgrade():

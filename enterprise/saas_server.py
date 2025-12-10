@@ -24,7 +24,6 @@ from server.rate_limit import setup_rate_limit_handler  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
-from server.routes.oauth_device import oauth_device_router  # noqa: E402
 from server.routes.debugging import add_debugging_routes  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
 from server.routes.event_webhook import event_webhook_router  # noqa: E402
@@ -35,6 +34,7 @@ from server.routes.integration.jira_dc import jira_dc_integration_router  # noqa
 from server.routes.integration.linear import linear_integration_router  # noqa: E402
 from server.routes.integration.slack import slack_router  # noqa: E402
 from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
+from server.routes.oauth_device import oauth_device_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
 
