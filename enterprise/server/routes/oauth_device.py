@@ -116,7 +116,7 @@ async def device_token(request: DeviceTokenRequest):
                 content=DeviceTokenErrorResponse(
                     error="invalid_grant",
                     error_description="Invalid device code"
-                ).dict()
+                ).model_dump()
             )
         
         # Check if expired
@@ -126,7 +126,7 @@ async def device_token(request: DeviceTokenRequest):
                 content=DeviceTokenErrorResponse(
                     error="expired_token",
                     error_description="Device code has expired"
-                ).dict()
+                ).model_dump()
             )
         
         # Check status
@@ -136,7 +136,7 @@ async def device_token(request: DeviceTokenRequest):
                 content=DeviceTokenErrorResponse(
                     error="access_denied",
                     error_description="User denied the authorization request"
-                ).dict()
+                ).model_dump()
             )
         
         if device_code_entry.status == "pending":
@@ -145,7 +145,7 @@ async def device_token(request: DeviceTokenRequest):
                 content=DeviceTokenErrorResponse(
                     error="authorization_pending",
                     error_description="User has not yet completed authorization"
-                ).dict()
+                ).model_dump()
             )
         
         if device_code_entry.status == "authorized":
@@ -160,7 +160,7 @@ async def device_token(request: DeviceTokenRequest):
             content=DeviceTokenErrorResponse(
                 error="server_error",
                 error_description="Unknown device code status"
-            ).dict()
+            ).model_dump()
         )
         
     except Exception as e:
@@ -170,7 +170,7 @@ async def device_token(request: DeviceTokenRequest):
             content=DeviceTokenErrorResponse(
                 error="server_error",
                 error_description="Internal server error"
-            ).dict()
+            ).model_dump()
         )
 
 
