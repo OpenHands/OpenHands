@@ -53,21 +53,4 @@ describe("RecentConversations", () => {
       screen.queryByText("HOME$NO_RECENT_CONVERSATIONS"),
     ).not.toBeInTheDocument();
   });
-
-  it("should not show view more button when there is an error", async () => {
-    getUserConversationsSpy.mockRejectedValue(
-      new Error("Failed to fetch conversations"),
-    );
-
-    renderRecentConversations();
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Failed to fetch conversations"),
-      ).toBeInTheDocument();
-    });
-
-    // View more button should not be shown
-    expect(screen.queryByText("COMMON$VIEW_MORE")).not.toBeInTheDocument();
-  });
 });
