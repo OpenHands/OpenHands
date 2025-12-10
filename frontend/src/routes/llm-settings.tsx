@@ -453,6 +453,10 @@ function LlmSettingsScreen() {
       label: t(I18nKey.SETTINGS$SECURITY_ANALYZER_NONE),
     });
 
+    if (isV1Enabled) {
+      return orderedItems;
+    }
+
     // Add Invariant analyzer third
     if (analyzers.includes("invariant")) {
       orderedItems.push({
