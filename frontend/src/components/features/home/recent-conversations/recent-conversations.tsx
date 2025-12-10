@@ -78,7 +78,7 @@ export function RecentConversations() {
         )}
       </div>
 
-      {!isInitialLoading && displayedConversations?.length === 0 && (
+      {!isInitialLoading && !error && displayedConversations?.length === 0 && (
         <span className="text-xs leading-4 text-white font-medium pl-4">
           {t(I18nKey.HOME$NO_RECENT_CONVERSATIONS)}
         </span>
