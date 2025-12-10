@@ -1,7 +1,7 @@
 """OAuth 2.0 Device Flow endpoints for CLI authentication."""
 
-from datetime import UTC, datetime, timedelta
 import html
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 from urllib.parse import quote
 
@@ -37,11 +37,12 @@ FAILED_AUTH_DESCRIPTION = (
 )
 
 API_KEY_NAME = 'CLI Authentication'
-KEY_EXPIRATION_TIME = timedelta(days=1) # Key expires in 24 hours
+KEY_EXPIRATION_TIME = timedelta(days=1)  # Key expires in 24 hours
 
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+
 
 class DeviceAuthorizationResponse(BaseModel):
     device_code: str
