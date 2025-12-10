@@ -382,7 +382,6 @@ class GithubPRComment(GithubIssueComment):
         return user_instructions, conversation_instructions
 
     async def initialize_new_conversation(self) -> ConversationMetadata:
-        # FIXME: Handle if initialize_conversation returns None
         v1_enabled = await get_user_v1_enabled_setting(self.user_info.keycloak_user_id)
         logger.info(
             f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {v1_enabled}'
