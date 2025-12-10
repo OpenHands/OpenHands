@@ -1,5 +1,6 @@
 """OAuth 2.0 Device Flow endpoints for CLI authentication."""
 
+from datetime import UTC, datetime, timedelta
 import html
 from typing import Optional
 from urllib.parse import quote
@@ -35,17 +36,12 @@ FAILED_AUTH_DESCRIPTION = (
     f'OpenHands Cloud</a>. Then try the device authorization again.'
 )
 
+API_KEY_NAME = 'CLI Authentication'
+KEY_EXPIRATION_TIME = timedelta(days=1) # Key expires in 24 hours
 
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
-
-
-class DeviceAuthorizationRequest(BaseModel):
-    """Body for device authorization request (currently unused)."""
-
-    pass
-
 
 class DeviceAuthorizationResponse(BaseModel):
     device_code: str
@@ -132,7 +128,6 @@ def _html_response(
 
 @oauth_device_router.post('/authorize', response_model=DeviceAuthorizationResponse)
 async def device_authorization(
-    request: DeviceAuthorizationRequest,
     http_request: Request,
 ) -> DeviceAuthorizationResponse:
     """Start device flow by generating device and user codes."""
@@ -230,7 +225,6 @@ async def device_token(request: DeviceTokenRequest):
 
 @oauth_device_router.get('/verify')
 async def device_verification_page(
-    request: Request,
     user_code: Optional[str] = None,
 ):
     """Show device code form, or redirect to Keycloak for authentication."""
@@ -378,10 +372,11 @@ async def keycloak_callback(
         # Create API key for CLI
         api_key_store = ApiKeyStore.get_instance()
         try:
+            api_key_store.delete_api_key(API_KEY_NAME)
             cli_api_key = api_key_store.create_api_key(
                 user_id,
-                name='CLI Authentication',
-                expires_at=None,  # No expiration for CLI keys
+                name=API_KEY_NAME,
+                expires_at=datetime.now(UTC) + KEY_EXPIRATION_TIME,
             )
             logger.info('Created new CLI API key for user', extra={'user_id': user_id})
         except Exception as e:
