@@ -20,7 +20,7 @@ from openhands.server.user_auth.user_auth import get_user_auth
 
 # OAuth Device Flow models
 class DeviceAuthorizationRequest(BaseModel):
-    pass  # No fields needed since endpoints are already authenticated
+    pass  # No fields needed for device authorization request
 
 
 class DeviceAuthorizationResponse(BaseModel):
@@ -61,8 +61,7 @@ device_code_store = DeviceCodeStore(session_maker)
 @oauth_device_router.post('/authorize', response_model=DeviceAuthorizationResponse)
 async def device_authorization(
     request: DeviceAuthorizationRequest, 
-    http_request: Request,
-    user_id: str = Depends(get_user_id)
+    http_request: Request
 ):
     """Initiate OAuth 2.0 Device Flow authorization.
     
@@ -70,9 +69,8 @@ async def device_authorization(
     The client will poll the token endpoint while the user authorizes on another device.
     """
     try:
-        # Create device code entry
+        # Create device code entry (no user authentication required at this stage)
         device_code_entry = device_code_store.create_device_code(
-            keycloak_user_id=user_id,
             expires_in=600  # 10 minutes
         )
         
@@ -82,8 +80,7 @@ async def device_authorization(
         verification_uri_complete = f"{verification_uri}?user_code={device_code_entry.user_code}"
         
         logger.info(
-            f"Device authorization initiated: user_code={device_code_entry.user_code}, "
-            f"keycloak_user_id={user_id}"
+            f"Device authorization initiated: user_code={device_code_entry.user_code}"
         )
         
         return DeviceAuthorizationResponse(

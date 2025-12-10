@@ -28,13 +28,11 @@ class DeviceCodeStore:
     
     def create_device_code(
         self, 
-        keycloak_user_id: str,
         expires_in: int = 600  # 10 minutes default
     ) -> DeviceCode:
         """Create a new device code entry.
         
         Args:
-            keycloak_user_id: The Keycloak user ID who is requesting device authorization
             expires_in: Expiration time in seconds
             
         Returns:
@@ -61,7 +59,7 @@ class DeviceCodeStore:
             device_code_entry = DeviceCode(
                 device_code=device_code,
                 user_code=user_code,
-                keycloak_user_id=keycloak_user_id,
+                keycloak_user_id=None,  # Will be set during authorization
                 expires_at=expires_at
             )
             
