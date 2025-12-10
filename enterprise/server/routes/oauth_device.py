@@ -175,13 +175,21 @@ async def device_token(request: DeviceTokenRequest):
 
 
 @oauth_device_router.get('/verify')
-async def device_verification_page(user_code: Optional[str] = None, user_id: str = Depends(get_user_id)):
+async def device_verification_page(http_request: Request, user_code: Optional[str] = None, user_id: Optional[str] = Depends(get_user_id)):
     """Device verification page where users enter their user code.
     
     This would typically render an HTML page, but for now we'll return
     a simple JSON response indicating what should be displayed.
     """
     from fastapi.responses import HTMLResponse
+    
+    # If user is not authenticated, redirect to login
+    if not user_id:
+        # Build login URL with return URL
+        base_url = str(http_request.base_url).rstrip('/')
+        current_url = str(http_request.url)
+        login_url = f"{base_url}/login?redirect_uri={current_url}"
+        return RedirectResponse(url=login_url, status_code=302)
     
     html_content = f"""
     <!DOCTYPE html>
@@ -221,12 +229,20 @@ async def device_verification_page(user_code: Optional[str] = None, user_id: str
 
 
 @oauth_device_router.post('/verify')
-async def device_verification(http_request: Request, user_id: str = Depends(get_user_id)):
+async def device_verification(http_request: Request, user_id: Optional[str] = Depends(get_user_id)):
     """Handle device verification form submission.
     
     This endpoint processes the user's authorization decision.
     """
     from fastapi.responses import HTMLResponse
+    
+    # If user is not authenticated, redirect to login
+    if not user_id:
+        # Build login URL with return URL
+        base_url = str(http_request.base_url).rstrip('/')
+        current_url = str(http_request.url)
+        login_url = f"{base_url}/login?redirect_uri={current_url}"
+        return RedirectResponse(url=login_url, status_code=302)
     
     try:
         # Parse form data

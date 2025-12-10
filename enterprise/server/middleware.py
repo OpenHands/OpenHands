@@ -165,6 +165,7 @@ class SetAuthCookieMiddleware:
         is_oauth_device_public = path in (
             '/oauth/device/authorize',  # Device authorization (unauthenticated)
             '/oauth/device/token',      # Token polling (unauthenticated)
+            '/oauth/verify',            # Device verification (handles auth manually)
         )
 
         is_mcp = path.startswith('/mcp')
