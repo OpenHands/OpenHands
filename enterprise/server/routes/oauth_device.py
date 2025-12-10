@@ -33,7 +33,6 @@ class DeviceAuthorizationResponse(BaseModel):
 
 
 class DeviceTokenRequest(BaseModel):
-    grant_type: str
     device_code: str
 
 
@@ -108,16 +107,6 @@ async def device_token(request: DeviceTokenRequest):
     or the device code expires.
     """
     try:
-        # Validate grant type
-        if request.grant_type != "urn:ietf:params:oauth:grant-type:device_code":
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content=DeviceTokenErrorResponse(
-                    error="unsupported_grant_type",
-                    error_description="Grant type must be 'urn:ietf:params:oauth:grant-type:device_code'"
-                ).dict()
-            )
-        
         # Get device code entry
         device_code_entry = device_code_store.get_by_device_code(request.device_code)
         
