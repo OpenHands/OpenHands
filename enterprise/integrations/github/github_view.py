@@ -236,7 +236,7 @@ class GithubIssue(ResolverViewInterface):
         conversation_metadata: ConversationMetadata,
     ):
         """Create conversation using the legacy V0 system."""
-        logger.info('[GitHub V1]: Creating V0 conversation')
+        logger.info('[GitHub]: Creating V0 conversation')
         custom_secrets = await self._get_user_secrets()
 
         user_instructions, conversation_instructions = await self._get_instructions(
