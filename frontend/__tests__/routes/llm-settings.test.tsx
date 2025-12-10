@@ -320,9 +320,15 @@ describe("Content", () => {
       );
       await userEvent.click(securityAnalyzer);
 
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
-      screen.getByText("SETTINGS$SECURITY_ANALYZER_INVARIANT");
+      expect(
+        screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
+      ).toBeInTheDocument();
     });
   });
 
