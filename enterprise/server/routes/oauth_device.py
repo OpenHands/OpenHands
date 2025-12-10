@@ -244,7 +244,7 @@ async def device_verification_page(request: Request, user_code: Optional[str] = 
     
     # Redirect to Keycloak for authentication
     scope = quote('openid email profile offline_access')
-    redirect_uri = quote(f'https://{request.url.netloc}/oauth/keycloak-callback')
+    redirect_uri = quote(f'{HOST_URL}/oauth/keycloak-callback')
     auth_url = (
         f'{KEYCLOAK_SERVER_URL_EXT}/realms/{KEYCLOAK_REALM_NAME}/protocol/openid-connect/auth'
         f'?client_id={KEYCLOAK_CLIENT_ID}&response_type=code'
@@ -311,7 +311,7 @@ async def keycloak_callback(
         user_code = payload['user_code']
 
         # Get Keycloak tokens
-        redirect_uri = f'https://{request.url.netloc}{request.url.path}'
+        redirect_uri = f'{HOST_URL}/oauth/keycloak-callback'
         (
             keycloak_access_token,
             keycloak_refresh_token,
