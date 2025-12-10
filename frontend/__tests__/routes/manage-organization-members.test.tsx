@@ -35,7 +35,7 @@ const RouteStub = createRoutesStub([
     children: [
       {
         Component: ManageOrganizationMembersWithPortalRoot,
-        path: "/settings/organization-members",
+        path: "/settings/org-members",
       },
       {
         Component: () => <div data-testid="user-settings" />,
@@ -79,7 +79,7 @@ describe("Manage Organization Members Route", () => {
   });
 
   const renderManageOrganizationMembers = () =>
-    render(<RouteStub initialEntries={["/settings/organization-members"]} />, {
+    render(<RouteStub initialEntries={["/settings/org-members"]} />, {
       wrapper: ({ children }) => (
         <QueryClientProvider client={queryClient}>
           {children}

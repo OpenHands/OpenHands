@@ -65,8 +65,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   // Filter out organization members/org nav items since they're already handled separately in the menu
   let navItems = (isOss ? OSS_NAV_ITEMS : SAAS_NAV_ITEMS).filter(
     (item) =>
-      item.to !== "/settings/organization-members" &&
-      item.to !== "/settings/org",
+      item.to !== "/settings/org-members" && item.to !== "/settings/org",
   );
   // Hide LLM settings when the feature flag is enabled
   if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
@@ -88,7 +87,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   };
 
   const handleManageOrganizationMembersClick = () => {
-    navigate("/settings/organization-members");
+    navigate("/settings/org-members");
     onClose();
   };
 

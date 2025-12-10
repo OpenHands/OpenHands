@@ -55,7 +55,7 @@ export const SAAS_NAV_ITEMS: SettingsNavItem[] = [
     text: "SETTINGS$NAV_MCP",
   },
   {
-    to: "/settings/organization-members",
+    to: "/settings/org-members",
     text: "Organization Members",
     icon: <FiUsers size={22} />,
   },

@@ -74,8 +74,7 @@ describe("UserContextMenu", () => {
     // Verify that navigation items are rendered (except organization-members/org which are filtered out)
     SAAS_NAV_ITEMS.filter(
       (item) =>
-        item.to !== "/settings/organization-members" &&
-        item.to !== "/settings/org",
+        item.to !== "/settings/org-members" && item.to !== "/settings/org",
     ).forEach((item) => {
       expect(screen.getByText(item.text)).toBeInTheDocument();
     });
@@ -238,7 +237,7 @@ describe("UserContextMenu", () => {
     expect(integrationsLink).toHaveAttribute("href", "/settings/integrations");
   });
 
-  it("should navigate to /settings/organization-members when Manage Organization Members is clicked", async () => {
+  it("should navigate to /settings/org-members when Manage Organization Members is clicked", async () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
     const manageOrganizationMembersButton = screen.getByText(
@@ -247,7 +246,7 @@ describe("UserContextMenu", () => {
     await userEvent.click(manageOrganizationMembersButton);
 
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith(
-      "/settings/organization-members",
+      "/settings/org-members",
     );
   });
 

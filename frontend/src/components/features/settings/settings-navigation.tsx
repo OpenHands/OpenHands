@@ -100,7 +100,7 @@ export function SettingsNavigation({
             .filter((navItem) => {
               // if user is not an admin or no org is selected, do not show organization members/org settings
               if (
-                (navItem.to === "/settings/organization-members" ||
+                (navItem.to === "/settings/org-members" ||
                   navItem.to === "/settings/org") &&
                 (isUser || !orgId)
               ) {
