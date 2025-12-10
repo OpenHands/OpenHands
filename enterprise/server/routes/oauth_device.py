@@ -3,7 +3,7 @@
 import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from server.auth.saas_user_auth import SaasUserAuth
@@ -14,13 +14,13 @@ from storage.device_code_store import DeviceCodeStore
 from storage.saas_settings_store import SaasSettingsStore
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.server.user_auth import get_user_id
 from openhands.server.user_auth.user_auth import get_user_auth
 
 
 # OAuth Device Flow models
 class DeviceAuthorizationRequest(BaseModel):
-    client_id: str
-    scope: Optional[str] = None
+    pass  # No fields needed since endpoints are already authenticated
 
 
 class DeviceAuthorizationResponse(BaseModel):
@@ -35,14 +35,12 @@ class DeviceAuthorizationResponse(BaseModel):
 class DeviceTokenRequest(BaseModel):
     grant_type: str
     device_code: str
-    client_id: str
 
 
 class DeviceTokenResponse(BaseModel):
     access_token: str  # This will be the user's API key
     token_type: str = "Bearer"
     expires_in: Optional[int] = None  # API keys may not have expiration
-    scope: Optional[str] = None
 
 
 class DeviceTokenErrorResponse(BaseModel):
@@ -61,24 +59,20 @@ device_code_store = DeviceCodeStore(session_maker)
 
 
 @oauth_device_router.post('/authorize', response_model=DeviceAuthorizationResponse)
-async def device_authorization(request: DeviceAuthorizationRequest, http_request: Request):
+async def device_authorization(
+    request: DeviceAuthorizationRequest, 
+    http_request: Request,
+    user_id: str = Depends(get_user_id)
+):
     """Initiate OAuth 2.0 Device Flow authorization.
     
     This endpoint starts the device flow by generating device and user codes.
     The client will poll the token endpoint while the user authorizes on another device.
     """
     try:
-        # Validate client_id (for now, accept any non-empty client_id)
-        if not request.client_id or not request.client_id.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid client_id"
-            )
-        
         # Create device code entry
         device_code_entry = device_code_store.create_device_code(
-            client_id=request.client_id,
-            scope=request.scope,
+            keycloak_user_id=user_id,
             expires_in=600  # 10 minutes
         )
         
@@ -89,7 +83,7 @@ async def device_authorization(request: DeviceAuthorizationRequest, http_request
         
         logger.info(
             f"Device authorization initiated: user_code={device_code_entry.user_code}, "
-            f"client_id={request.client_id}"
+            f"keycloak_user_id={user_id}"
         )
         
         return DeviceAuthorizationResponse(
@@ -171,8 +165,7 @@ async def device_token(request: DeviceTokenRequest):
         if device_code_entry.status == "authorized":
             # Return the API key as access_token
             return DeviceTokenResponse(
-                access_token=device_code_entry.access_token,  # This is the API key
-                scope=device_code_entry.scope
+                access_token=device_code_entry.access_token  # This is the API key
             )
         
         # Unknown status
@@ -242,7 +235,7 @@ async def device_verification_page(user_code: Optional[str] = None):
 
 
 @oauth_device_router.post('/verify')
-async def device_verification(http_request: Request):
+async def device_verification(http_request: Request, user_id: str = Depends(get_user_id)):
     """Handle device verification form submission.
     
     This endpoint processes the user's authorization decision.
@@ -261,17 +254,7 @@ async def device_verification(http_request: Request):
                 status_code=400
             )
         
-        # Get the authenticated user
-        user_auth: SaasUserAuth = await get_user_auth(http_request)
-        access_token = await user_auth.get_access_token()
-        refresh_token = user_auth.refresh_token
-        user_id = await user_auth.get_user_id()
-        
-        if not access_token or not refresh_token or not user_id:
-            return HTMLResponse(
-                content="<h1>Authentication Required</h1><p>Please log in to continue.</p>",
-                status_code=401
-            )
+        # User is already authenticated via dependency injection
         
         # Get device code entry
         device_code_entry = device_code_store.get_by_user_code(user_code)
@@ -286,6 +269,13 @@ async def device_verification(http_request: Request):
             return HTMLResponse(
                 content="<h1>Error</h1><p>User code is no longer valid.</p>",
                 status_code=400
+            )
+        
+        # Security check: Only the requesting user can authorize the device
+        if device_code_entry.keycloak_user_id != user_id:
+            return HTMLResponse(
+                content="<h1>Error</h1><p>You are not authorized to approve this device request.</p>",
+                status_code=403
             )
         
         # Process the user's decision

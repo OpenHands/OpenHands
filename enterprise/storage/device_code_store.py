@@ -28,15 +28,13 @@ class DeviceCodeStore:
     
     def create_device_code(
         self, 
-        client_id: str, 
-        scope: Optional[str] = None,
+        keycloak_user_id: str,
         expires_in: int = 600  # 10 minutes default
     ) -> DeviceCode:
         """Create a new device code entry.
         
         Args:
-            client_id: The OAuth client ID
-            scope: Requested scope (optional)
+            keycloak_user_id: The Keycloak user ID who is requesting device authorization
             expires_in: Expiration time in seconds
             
         Returns:
@@ -63,8 +61,7 @@ class DeviceCodeStore:
             device_code_entry = DeviceCode(
                 device_code=device_code,
                 user_code=user_code,
-                client_id=client_id,
-                scope=scope,
+                keycloak_user_id=keycloak_user_id,
                 expires_at=expires_at
             )
             
@@ -109,7 +106,7 @@ class DeviceCodeStore:
             if not device_code_entry.is_pending():
                 return False
             
-            device_code_entry.authorize(user_id, api_key, None)  # No refresh token
+            device_code_entry.authorize(user_id, api_key)
             session.commit()
             
             return True

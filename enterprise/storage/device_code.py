@@ -29,14 +29,14 @@ class DeviceCode(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     device_code = Column(String(128), unique=True, nullable=False, index=True)
     user_code = Column(String(16), unique=True, nullable=False, index=True)
-    client_id = Column(String(255), nullable=False)
-    scope = Column(Text, nullable=True)
     status = Column(String(32), nullable=False, default=DeviceCodeStatus.PENDING.value)
     
-    # User information (set when authorized)
+    # Keycloak user ID who requested the device authorization
+    keycloak_user_id = Column(String(255), nullable=False)
+    
+    # User information (set when authorized - should match keycloak_user_id)
     user_id = Column(String(255), nullable=True)
     access_token = Column(Text, nullable=True)
-    refresh_token = Column(Text, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -58,12 +58,11 @@ class DeviceCode(Base):
         """Check if the device code has been authorized."""
         return self.status == DeviceCodeStatus.AUTHORIZED.value
     
-    def authorize(self, user_id: str, access_token: str, refresh_token: str) -> None:
-        """Mark the device code as authorized with user tokens."""
+    def authorize(self, user_id: str, access_token: str) -> None:
+        """Mark the device code as authorized with user API key."""
         self.status = DeviceCodeStatus.AUTHORIZED.value
         self.user_id = user_id
         self.access_token = access_token
-        self.refresh_token = refresh_token
         self.authorized_at = datetime.now(timezone.utc)
     
     def deny(self) -> None:
