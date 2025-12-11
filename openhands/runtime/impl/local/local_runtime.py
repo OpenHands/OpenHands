@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import uuid
 from dataclasses import dataclass
 from typing import Callable
 from urllib.parse import urlparse
@@ -102,16 +103,25 @@ def check_dependencies(code_repo_path: str, check_browser: bool) -> None:
         import libtmux
 
         server = libtmux.Server()
+        session_name = f'test-session-{uuid.uuid4().hex[:8]}'
         try:
-            session = server.new_session(session_name='test-session')
-        except Exception:
-            raise ValueError('tmux is not properly installed or available on the path.')
-        pane = session.attached_pane
-        pane.send_keys('echo "test"')
-        pane_output = '\n'.join(pane.cmd('capture-pane', '-p').stdout)
-        session.kill_session()
-        if 'test' not in pane_output:
-            raise ValueError('libtmux is not properly installed. ' + ERROR_MESSAGE)
+            session = server.new_session(session_name=session_name)
+            pane = getattr(session, 'active_pane', None) or getattr(
+                session, 'attached_pane', None
+            )
+            if pane is None:
+                raise ValueError('tmux session has no active pane. ' + ERROR_MESSAGE)
+            pane.send_keys('echo "test"')
+            pane_output = '\n'.join(pane.cmd('capture-pane', '-p').stdout)
+            if 'test' not in pane_output:
+                raise ValueError('libtmux is not properly installed. ' + ERROR_MESSAGE)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError('tmux is not properly installed or available on the path.') from exc
+        finally:
+            try:
+                server.kill_session(session_name=session_name)
+            except Exception:
+                pass
 
     if check_browser:
         logger.debug('Checking dependencies: browser')
