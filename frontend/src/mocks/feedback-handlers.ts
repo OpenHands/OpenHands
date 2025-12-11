@@ -1,7 +1,7 @@
 import { http, delay, HttpResponse } from "msw";
 
 export const FEEDBACK_HANDLERS = [
-  http.post("http://localhost:3001/api/submit-feedback", async () => {
+  http.post("/api/submit-feedback", async () => {
     await delay(1200);
     return HttpResponse.json({
       statusCode: 200,
@@ -9,7 +9,7 @@ export const FEEDBACK_HANDLERS = [
     });
   }),
 
-  http.post("http://localhost:3001/api/submit-feedback", async () =>
+  http.post("/api/submit-feedback", async () =>
     HttpResponse.json({ statusCode: 200 }, { status: 200 }),
   ),
 ];

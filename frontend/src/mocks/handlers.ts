@@ -12,6 +12,7 @@ import {
 import { CONVERSATION_HANDLERS } from "./conversation-handlers";
 import { AUTH_HANDLERS } from "./auth-handlers";
 import { FEEDBACK_HANDLERS } from "./feedback-handlers";
+import { ANALYTICS_HANDLERS } from "./analytics-handlers";
 
 export const handlers = [
   ...STRIPE_BILLING_HANDLERS,
@@ -23,6 +24,7 @@ export const handlers = [
   ...CONVERSATION_HANDLERS,
   ...AUTH_HANDLERS,
   ...FEEDBACK_HANDLERS,
+  ...ANALYTICS_HANDLERS,
 ];
 
 export { MOCK_DEFAULT_USER_SETTINGS, resetTestHandlersMockSettings };

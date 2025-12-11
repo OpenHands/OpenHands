@@ -20,8 +20,4 @@ export const AUTH_HANDLERS = [
   ),
 
   http.post("/api/logout", () => HttpResponse.json(null, { status: 200 })),
-
-  http.post("https://us.i.posthog.com/e", async () =>
-    HttpResponse.json(null, { status: 200 }),
-  ),
 ];

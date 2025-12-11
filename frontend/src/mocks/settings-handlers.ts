@@ -7,8 +7,6 @@ import { GetConfigResponse } from "#/api/option-service/option.types";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Provider } from "#/types/settings";
 
-// --- Mock state & defaults ---
-
 export const MOCK_DEFAULT_USER_SETTINGS: ApiSettings | PostApiSettings = {
   llm_model: DEFAULT_SETTINGS.LLM_MODEL,
   llm_base_url: DEFAULT_SETTINGS.LLM_BASE_URL,
