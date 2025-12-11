@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import os
@@ -58,7 +59,8 @@ async def github_events(
         )
 
     try:
-        payload = await request.body()
+        # Add timeout to prevent hanging on slow/stalled clients
+        payload = await asyncio.wait_for(request.body(), timeout=15.0)
         verify_github_signature(payload, x_hub_signature_256)
 
         payload_data = await request.json()
@@ -77,6 +79,12 @@ async def github_events(
         return JSONResponse(
             status_code=200,
             content={'message': 'GitHub events endpoint reached successfully.'},
+        )
+    except asyncio.TimeoutError:
+        logger.warning('GitHub webhook request timed out waiting for request body')
+        return JSONResponse(
+            status_code=408,
+            content={'error': 'Request timeout - client took too long to send data.'},
         )
     except Exception as e:
         logger.exception(f'Error processing GitHub event: {e}')

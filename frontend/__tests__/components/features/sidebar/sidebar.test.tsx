@@ -3,7 +3,7 @@ import { renderWithProviders } from "test-utils";
 import { createRoutesStub } from "react-router";
 import { waitFor } from "@testing-library/react";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 
 // These tests will now fail because the conversation panel is rendered through a portal
 // and technically not a child of the Sidebar component.
