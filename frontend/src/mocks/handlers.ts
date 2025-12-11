@@ -7,7 +7,7 @@ import { Provider } from "#/types/settings";
 import {
   ApiSettings,
   PostApiSettings,
-} from "#/settings-service/settings.types";
+} from "#/api/settings-service/settings.types";
 import { FILE_SERVICE_HANDLERS } from "./file-service-handlers";
 import { GitUser } from "#/types/git";
 import { TASK_SUGGESTIONS_HANDLERS } from "./task-suggestions-handlers";

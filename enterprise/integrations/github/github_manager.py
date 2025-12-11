@@ -22,6 +22,7 @@ from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
 )
+from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
@@ -164,8 +165,13 @@ class GithubManager(Manager):
             )
 
         if await self.is_job_requested(message):
+            payload = message.message.get('payload', {})
+            user_id = payload['sender']['id']
+            keycloak_user_id = await self.token_manager.get_user_id_from_idp_user_id(
+                user_id, ProviderType.GITHUB
+            )
             github_view = await GithubFactory.create_github_view_from_payload(
-                message, self.token_manager
+                message, keycloak_user_id
             )
             logger.info(
                 f'[GitHub] Creating job for {github_view.user_info.username} in {github_view.full_repo_name}#{github_view.issue_number}'
@@ -282,8 +288,15 @@ class GithubManager(Manager):
                         f'[Github]: Error summarizing issue solvability: {str(e)}'
                     )
 
+                saas_user_auth = await get_saas_user_auth(
+                    github_view.user_info.keycloak_user_id, self.token_manager
+                )
+
                 await github_view.create_new_conversation(
-                    self.jinja_env, secret_store.provider_tokens, convo_metadata
+                    self.jinja_env,
+                    secret_store.provider_tokens,
+                    convo_metadata,
+                    saas_user_auth,
                 )
 
                 conversation_id = github_view.conversation_id
@@ -292,14 +305,7 @@ class GithubManager(Manager):
                     f'[GitHub] Created conversation {conversation_id} for user {user_info.username}'
                 )
 
-                from openhands.server.shared import ConversationStoreImpl, config
-
-                conversation_store = await ConversationStoreImpl.get_instance(
-                    config, github_view.user_info.keycloak_user_id
-                )
-                metadata = await conversation_store.get_metadata(conversation_id)
-
-                if metadata.conversation_version != 'v1':
+                if not github_view.v1:
                     # Create a GithubCallbackProcessor
                     processor = GithubCallbackProcessor(
                         github_view=github_view,

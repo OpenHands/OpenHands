@@ -14,7 +14,7 @@ from openhands.integrations.provider import (
     ProviderHandler,
     ProviderType,
 )
-from openhands.sdk.conversation.secret_source import SecretSource, StaticSecret
+from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
 USER_AUTH_ATTR = 'user_auth'
