@@ -116,7 +116,9 @@ def check_dependencies(code_repo_path: str, check_browser: bool) -> None:
             if 'test' not in pane_output:
                 raise ValueError('libtmux is not properly installed. ' + ERROR_MESSAGE)
         except Exception as exc:  # noqa: BLE001
-            raise ValueError('tmux is not properly installed or available on the path.') from exc
+            raise ValueError(
+                'tmux is not properly installed or available on the path.'
+            ) from exc
         finally:
             try:
                 server.kill_session(session_name=session_name)
