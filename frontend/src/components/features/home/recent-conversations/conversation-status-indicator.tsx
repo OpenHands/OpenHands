@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { Tooltip } from "@heroui/react";
 import { ConversationStatus } from "#/types/conversation-status";
 import { cn, getConversationStatusLabel } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
-import { TooltipButton } from "#/components/shared/buttons/tooltip-button";
 
 interface ConversationStatusIndicatorProps {
   conversationStatus: ConversationStatus;
@@ -34,20 +34,24 @@ export function ConversationStatusIndicator({
   );
 
   return (
-    <TooltipButton
-      tooltip={statusLabel}
-      ariaLabel={statusLabel}
+    <Tooltip
+      content={statusLabel}
+      closeDelay={100}
       placement="right"
       showArrow
-      className="p-0 border-0 bg-transparent hover:opacity-100"
-      tooltipClassName="bg-[#1a1a1a] text-white text-xs shadow-lg"
+      className="bg-[#1a1a1a] text-white text-xs shadow-lg"
     >
-      <div
-        className={cn(
-          "w-1.5 h-1.5 rounded-full",
-          conversationStatusBackgroundColor,
-        )}
-      />
-    </TooltipButton>
+      <span
+        aria-label={statusLabel}
+        className="p-0 border-0 bg-transparent hover:opacity-100 inline-flex"
+      >
+        <span
+          className={cn(
+            "w-1.5 h-1.5 rounded-full",
+            conversationStatusBackgroundColor,
+          )}
+        />
+      </span>
+    </Tooltip>
   );
 }

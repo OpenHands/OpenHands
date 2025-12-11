@@ -86,7 +86,7 @@ export function GenericDropdownMenu<T>({
             <>
               {stickyTopItem}
               {filteredItems.map((item, index) => (
-                <>
+                <React.Fragment key={index}>
                   {renderItem(
                     item,
                     index,
@@ -98,7 +98,7 @@ export function GenericDropdownMenu<T>({
                     index === numberOfRecentItems - 1 && (
                       <div className="border-b border-[#727987] bg-[#454545] pb-1 mb-1 h-[1px]" />
                     )}
-                </>
+                </React.Fragment>
               ))}
             </>
           )}
