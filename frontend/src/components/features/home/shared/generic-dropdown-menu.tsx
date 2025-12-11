@@ -52,10 +52,25 @@ export function GenericDropdownMenu<T>({
   testId,
   numberOfRecentItems = 0,
 }: GenericDropdownMenuProps<T>) {
-  if (!isOpen) return null;
-
   const hasItems = filteredItems.length > 0;
   const showEmptyState = !hasItems && !stickyTopItem && !stickyFooterItem;
+
+  // Always render the menu container (even when closed) so getMenuProps is always called
+  // This prevents the downshift warning about forgetting to call getMenuProps
+  if (!isOpen) {
+    return (
+      <div className="relative">
+        <ul
+          // eslint-disable-next-line react/jsx-props-no-spreading
+          {...getMenuProps({
+            ref: menuRef,
+            className: "hidden",
+            "data-testid": testId,
+          })}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative">

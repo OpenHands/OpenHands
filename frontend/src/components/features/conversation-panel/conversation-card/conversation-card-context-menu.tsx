@@ -45,18 +45,20 @@ export function ConversationCardContextMenu({
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
 
   const generateSection = useCallback(
-    (items: React.ReactNode[], isLast?: boolean) => {
+    (items: React.ReactNode[], sectionKey: string, isLast?: boolean) => {
       const filteredItems = items.filter((i) => i != null);
 
       if (filteredItems.length > 0) {
-        return !isLast
-          ? [
-              ...filteredItems,
-              <Divider key="conversation-card-context-menu-divider" />,
-            ]
-          : filteredItems;
+        return !isLast ? (
+          <React.Fragment key={sectionKey}>
+            {filteredItems}
+            <Divider />
+          </React.Fragment>
+        ) : (
+          <React.Fragment key={sectionKey}>{filteredItems}</React.Fragment>
+        );
       }
-      return [];
+      return null;
     },
     [],
   );
@@ -69,76 +71,91 @@ export function ConversationCardContextMenu({
       alignment="right"
       className="mt-0"
     >
-      {generateSection([
-        onEdit && (
-          <ContextMenuListItem
-            testId="edit-button"
-            onClick={onEdit}
-            className={contextMenuListItemClassName}
-          >
-            <ConversationNameContextMenuIconText
-              icon={<EditIcon width={16} height={16} />}
-              text={t(I18nKey.BUTTON$RENAME)}
-            />
-          </ContextMenuListItem>
-        ),
-      ])}
-      {generateSection([
-        onShowAgentTools && (
-          <ContextMenuListItem
-            testId="show-agent-tools-button"
-            onClick={onShowAgentTools}
-            className={contextMenuListItemClassName}
-          >
-            <ConversationNameContextMenuIconText
-              icon={<ToolsIcon width={16} height={16} />}
-              text={t(I18nKey.BUTTON$SHOW_AGENT_TOOLS_AND_METADATA)}
-            />
-          </ContextMenuListItem>
-        ),
-        onShowMicroagents && (
-          <ContextMenuListItem
-            testId="show-microagents-button"
-            onClick={onShowMicroagents}
-            className={contextMenuListItemClassName}
-          >
-            <ConversationNameContextMenuIconText
-              icon={<RobotIcon width={16} height={16} />}
-              text={t(I18nKey.CONVERSATION$SHOW_MICROAGENTS)}
-            />
-          </ContextMenuListItem>
-        ),
-      ])}
-      {generateSection([
-        onStop && (
-          <ContextMenuListItem
-            testId="stop-button"
-            onClick={onStop}
-            className={contextMenuListItemClassName}
-          >
-            <ConversationNameContextMenuIconText
-              icon={<CloseIcon width={16} height={16} />}
-              text={t(I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME)}
-            />
-          </ContextMenuListItem>
-        ),
-        onDownloadViaVSCode && (
-          <ContextMenuListItem
-            testId="download-vscode-button"
-            onClick={onDownloadViaVSCode}
-            className={contextMenuListItemClassName}
-          >
-            <ConversationNameContextMenuIconText
-              icon={<DownloadIcon width={16} height={16} />}
-              text={t(I18nKey.BUTTON$DOWNLOAD_VIA_VSCODE)}
-            />
-          </ContextMenuListItem>
-        ),
-      ])}
+      {generateSection(
+        [
+          onEdit && (
+            <ContextMenuListItem
+              key="edit-button"
+              testId="edit-button"
+              onClick={onEdit}
+              className={contextMenuListItemClassName}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<EditIcon width={16} height={16} />}
+                text={t(I18nKey.BUTTON$RENAME)}
+              />
+            </ContextMenuListItem>
+          ),
+        ],
+        "edit-section",
+      )}
+      {generateSection(
+        [
+          onShowAgentTools && (
+            <ContextMenuListItem
+              key="show-agent-tools-button"
+              testId="show-agent-tools-button"
+              onClick={onShowAgentTools}
+              className={contextMenuListItemClassName}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<ToolsIcon width={16} height={16} />}
+                text={t(I18nKey.BUTTON$SHOW_AGENT_TOOLS_AND_METADATA)}
+              />
+            </ContextMenuListItem>
+          ),
+          onShowMicroagents && (
+            <ContextMenuListItem
+              key="show-microagents-button"
+              testId="show-microagents-button"
+              onClick={onShowMicroagents}
+              className={contextMenuListItemClassName}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<RobotIcon width={16} height={16} />}
+                text={t(I18nKey.CONVERSATION$SHOW_MICROAGENTS)}
+              />
+            </ContextMenuListItem>
+          ),
+        ],
+        "tools-section",
+      )}
+      {generateSection(
+        [
+          onStop && (
+            <ContextMenuListItem
+              key="stop-button"
+              testId="stop-button"
+              onClick={onStop}
+              className={contextMenuListItemClassName}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<CloseIcon width={16} height={16} />}
+                text={t(I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME)}
+              />
+            </ContextMenuListItem>
+          ),
+          onDownloadViaVSCode && (
+            <ContextMenuListItem
+              key="download-vscode-button"
+              testId="download-vscode-button"
+              onClick={onDownloadViaVSCode}
+              className={contextMenuListItemClassName}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<DownloadIcon width={16} height={16} />}
+                text={t(I18nKey.BUTTON$DOWNLOAD_VIA_VSCODE)}
+              />
+            </ContextMenuListItem>
+          ),
+        ],
+        "control-section",
+      )}
       {generateSection(
         [
           onDisplayCost && (
             <ContextMenuListItem
+              key="display-cost-button"
               testId="display-cost-button"
               onClick={onDisplayCost}
               className={contextMenuListItemClassName}
@@ -151,6 +168,7 @@ export function ConversationCardContextMenu({
           ),
           onDelete && (
             <ContextMenuListItem
+              key="delete-button"
               testId="delete-button"
               onClick={onDelete}
               className={contextMenuListItemClassName}
@@ -158,10 +176,11 @@ export function ConversationCardContextMenu({
               <ConversationNameContextMenuIconText
                 icon={<DeleteIcon width={16} height={16} />}
                 text={t(I18nKey.COMMON$DELETE_CONVERSATION)}
-              />{" "}
+              />
             </ContextMenuListItem>
           ),
         ],
+        "info-section",
         true,
       )}
     </ContextMenu>
