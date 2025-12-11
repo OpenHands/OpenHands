@@ -1,5 +1,6 @@
 import asyncio
 from abc import ABC, abstractmethod
+import os
 
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_spec_models import (
@@ -57,3 +58,11 @@ class SandboxSpecServiceInjector(
     DiscriminatedUnionMixin, Injector[SandboxSpecService], ABC
 ):
     pass
+
+
+def get_default_agent_server_image():
+    agent_server_image_repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY')
+    agent_server_image_tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
+    if agent_server_image_repository and agent_server_image_tag:
+        return f'{agent_server_image_repository}:{agent_server_image_tag}'
+    return AGENT_SERVER_IMAGE
