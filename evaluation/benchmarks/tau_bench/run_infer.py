@@ -6,11 +6,11 @@ import os
 import time
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # type: ignore
 try:
-    from tau_bench.agents.base import Agent as TauAgent
-    from tau_bench.envs import get_env
-    from tau_bench.types import EnvInfo
+    from tau_bench.agents.base import Agent as TauAgent  # type: ignore
+    from tau_bench.envs import get_env  # type: ignore
+    from tau_bench.types import EnvInfo  # type: ignore
 except ImportError:
     TauAgent = Any
     get_env = Any
@@ -154,18 +154,19 @@ if __name__ == '__main__':
     llm_config = None
     if args.llm_config:
         llm_config = get_llm_config_arg(args.llm_config)
-        llm_config.modify_params = False
 
     if llm_config is None:
         raise ValueError(f'Could not find LLM config: --llm_config {args.llm_config}')
+
+    llm_config.modify_params = False
 
     # Load dataset
     # We need to load tasks from Tau-Bench
     # Since we can't import tau_bench yet, we might fail here.
     # But I will write the import and let the user/system install it.
     try:
-        from tau_bench.envs import get_env
-        from tau_bench.types import EnvInfo
+        from tau_bench.envs import get_env  # type: ignore
+        from tau_bench.types import EnvInfo  # type: ignore
     except ImportError:
         logger.error("Tau-Bench not installed. Please install it via `pip install tau-bench`")
         # For now, we create a dummy dataset to allow syntax checking

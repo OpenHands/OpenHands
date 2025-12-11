@@ -6,7 +6,7 @@ import os
 import time
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # type: ignore
 # Assuming bfcl-eval is installed or we use a similar local structure
 # The user mentioned: "Integrate bfcl-eval package for official metrics"
 
@@ -134,10 +134,11 @@ if __name__ == '__main__':
     llm_config = None
     if args.llm_config:
         llm_config = get_llm_config_arg(args.llm_config)
-        llm_config.modify_params = False
 
     if llm_config is None:
         raise ValueError(f'Could not find LLM config: --llm_config {args.llm_config}')
+
+    llm_config.modify_params = False
 
     # Load dataset
     if args.dataset_path:

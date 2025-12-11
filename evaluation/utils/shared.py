@@ -496,7 +496,7 @@ def run_evaluation(
     output_file: str,
     num_workers: int,
     process_instance_func: Callable[
-        [pd.Series, EvalMetadata, bool], Awaitable[EvalOutput]
+        [pd.Series, EvalMetadata, bool], EvalOutput
     ],
     max_retries: int = 5,  # number of retries for each instance
     timeout_seconds: int | None = None,
