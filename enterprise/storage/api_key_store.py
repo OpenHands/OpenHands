@@ -125,6 +125,33 @@ class ApiKeyStore:
 
         return None
 
+    def retrieve_api_key_by_name(self, user_id: str, name: str) -> str | None:
+        """Retrieve an API key by name for a specific user."""
+        with self.session_maker() as session:
+            key_record = (
+                session.query(ApiKey)
+                .filter(ApiKey.user_id == user_id, ApiKey.name == name)
+                .first()
+            )
+            return key_record.key if key_record else None
+
+    def delete_api_key_by_name(self, user_id: str, name: str) -> bool:
+        """Delete an API key by name for a specific user."""
+        with self.session_maker() as session:
+            key_record = (
+                session.query(ApiKey)
+                .filter(ApiKey.user_id == user_id, ApiKey.name == name)
+                .first()
+            )
+
+            if not key_record:
+                return False
+
+            session.delete(key_record)
+            session.commit()
+
+            return True
+
     @classmethod
     def get_instance(cls) -> ApiKeyStore:
         """Get an instance of the ApiKeyStore."""

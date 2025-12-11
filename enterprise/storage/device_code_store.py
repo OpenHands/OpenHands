@@ -84,13 +84,12 @@ class DeviceCodeStore:
         with self.session_maker() as session:
             return session.query(DeviceCode).filter_by(user_code=user_code).first()
 
-    def authorize_device_code(self, user_code: str, user_id: str, api_key: str) -> bool:
-        """Authorize a device code with user's API key.
+    def authorize_device_code(self, user_code: str, user_id: str) -> bool:
+        """Authorize a device code.
 
         Args:
             user_code: The user code to authorize
             user_id: The user ID from Keycloak
-            api_key: The user's API key
 
         Returns:
             True if authorization was successful, False otherwise
@@ -106,7 +105,7 @@ class DeviceCodeStore:
             if not device_code_entry.is_pending():
                 return False
 
-            device_code_entry.authorize(user_id, api_key)
+            device_code_entry.authorize(user_id)
             session.commit()
 
             return True

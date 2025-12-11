@@ -199,9 +199,26 @@ async def device_token(request: DeviceTokenRequest):
             )
 
         if device_code_entry.status == 'authorized':
+            # Retrieve the API key for this user
+            api_key_store = ApiKeyStore.get_instance()
+            cli_api_key = api_key_store.retrieve_api_key_by_name(
+                device_code_entry.keycloak_user_id, API_KEY_NAME
+            )
+            
+            if not cli_api_key:
+                logger.error(
+                    'No CLI API key found for authorized device',
+                    extra={'user_id': device_code_entry.keycloak_user_id},
+                )
+                return _oauth_error(
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'server_error',
+                    'API key not found',
+                )
+            
             # Return the API key as access_token
             return DeviceTokenResponse(
-                access_token=device_code_entry.access_token,
+                access_token=cli_api_key,
             )
 
         # Fallback for unexpected status values
@@ -373,7 +390,8 @@ async def keycloak_callback(
         # Create API key for CLI
         api_key_store = ApiKeyStore.get_instance()
         try:
-            api_key_store.delete_api_key(API_KEY_NAME)
+            # Delete any existing CLI API key for this user
+            api_key_store.delete_api_key_by_name(user_id, API_KEY_NAME)
             cli_api_key = api_key_store.create_api_key(
                 user_id,
                 name=API_KEY_NAME,
@@ -392,7 +410,6 @@ async def keycloak_callback(
         success = device_code_store.authorize_device_code(
             user_code=user_code,
             user_id=user_id,
-            api_key=cli_api_key,
         )
 
         if success:

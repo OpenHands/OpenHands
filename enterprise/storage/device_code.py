@@ -33,10 +33,6 @@ class DeviceCode(Base):
     # Keycloak user ID who authorized the device (set during verification)
     keycloak_user_id = Column(String(255), nullable=True)
 
-    # User information (set when authorized - should match keycloak_user_id)
-    user_id = Column(String(255), nullable=True)
-    access_token = Column(Text, nullable=True)
-
     # Timestamps
     created_at = Column(
         DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
@@ -66,12 +62,10 @@ class DeviceCode(Base):
         """Check if the device code has been authorized."""
         return self.status == DeviceCodeStatus.AUTHORIZED.value
 
-    def authorize(self, user_id: str, access_token: str) -> None:
-        """Mark the device code as authorized with user API key."""
+    def authorize(self, user_id: str) -> None:
+        """Mark the device code as authorized."""
         self.status = DeviceCodeStatus.AUTHORIZED.value
         self.keycloak_user_id = user_id  # Set the Keycloak user ID during authorization
-        self.user_id = user_id
-        self.access_token = access_token
         self.authorized_at = datetime.now(timezone.utc)
 
     def deny(self) -> None:

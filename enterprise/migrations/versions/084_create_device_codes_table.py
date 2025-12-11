@@ -25,8 +25,6 @@ def upgrade():
         sa.Column('user_code', sa.String(length=16), nullable=False),
         sa.Column('status', sa.String(length=32), nullable=False),
         sa.Column('keycloak_user_id', sa.String(length=255), nullable=True),
-        sa.Column('user_id', sa.String(length=255), nullable=True),
-        sa.Column('access_token', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('expires_at', sa.DateTime(), nullable=False),
         sa.Column('authorized_at', sa.DateTime(), nullable=True),
