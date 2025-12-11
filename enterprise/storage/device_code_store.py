@@ -5,7 +5,7 @@ import string
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from storage.device_code import DeviceCode, DeviceCodeStatus
+from storage.device_code import DeviceCode
 
 
 class DeviceCodeStore:
@@ -134,5 +134,3 @@ class DeviceCodeStore:
             session.commit()
 
             return True
-
-

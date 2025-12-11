@@ -1,10 +1,9 @@
 """Unit tests for DeviceCodeStore."""
 
-from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
-from storage.device_code import DeviceCode, DeviceCodeStatus
+from storage.device_code import DeviceCode
 from storage.device_code_store import DeviceCodeStore
 
 
@@ -36,7 +35,7 @@ class TestDeviceCodeStore:
     def test_generate_user_code(self, device_code_store):
         """Test user code generation."""
         code = device_code_store.generate_user_code()
-        
+
         assert len(code) == 8
         assert code.isupper()
         # Should not contain confusing characters
@@ -45,7 +44,7 @@ class TestDeviceCodeStore:
     def test_generate_device_code(self, device_code_store):
         """Test device code generation."""
         code = device_code_store.generate_device_code()
-        
+
         assert len(code) == 128
         assert code.isalnum()
 
@@ -53,9 +52,9 @@ class TestDeviceCodeStore:
         """Test device code creation."""
         # Mock no existing codes (unique generation)
         mock_session.query.return_value.filter_by.return_value.first.return_value = None
-        
+
         result = device_code_store.create_device_code(expires_in=600)
-        
+
         assert isinstance(result, DeviceCode)
         assert len(result.device_code) == 128
         assert len(result.user_code) == 8
@@ -69,40 +68,53 @@ class TestDeviceCodeStore:
             ('get_by_user_code', 'user_code'),
         ],
     )
-    def test_lookup_methods(self, device_code_store, mock_session, lookup_method, lookup_field):
+    def test_lookup_methods(
+        self, device_code_store, mock_session, lookup_method, lookup_field
+    ):
         """Test device code lookup methods."""
         test_code = 'test-code-123'
         mock_device_code = MagicMock()
-        mock_session.query.return_value.filter_by.return_value.first.return_value = mock_device_code
-        
+        mock_session.query.return_value.filter_by.return_value.first.return_value = (
+            mock_device_code
+        )
+
         result = getattr(device_code_store, lookup_method)(test_code)
-        
+
         assert result == mock_device_code
         mock_session.query.assert_called_once_with(DeviceCode)
-        mock_session.query.return_value.filter_by.assert_called_once_with(**{lookup_field: test_code})
+        mock_session.query.return_value.filter_by.assert_called_once_with(
+            **{lookup_field: test_code}
+        )
 
     @pytest.mark.parametrize(
         'device_exists,is_pending,expected_result',
         [
-            (True, True, True),   # Success case
-            (False, True, False), # Device not found
-            (True, False, False), # Device not pending
+            (True, True, True),  # Success case
+            (False, True, False),  # Device not found
+            (True, False, False),  # Device not pending
         ],
     )
-    def test_authorize_device_code(self, device_code_store, mock_session, device_exists, is_pending, expected_result):
+    def test_authorize_device_code(
+        self,
+        device_code_store,
+        mock_session,
+        device_exists,
+        is_pending,
+        expected_result,
+    ):
         """Test device code authorization."""
         user_code = 'ABC12345'
         user_id = 'test-user-123'
-        
+
         if device_exists:
             mock_device = MagicMock()
             mock_device.is_pending.return_value = is_pending
             mock_session.query.return_value.filter_by.return_value.first.return_value = mock_device
         else:
             mock_session.query.return_value.filter_by.return_value.first.return_value = None
-        
+
         result = device_code_store.authorize_device_code(user_code, user_id)
-        
+
         assert result == expected_result
         if expected_result:
             mock_device.authorize.assert_called_once_with(user_id)
@@ -113,10 +125,12 @@ class TestDeviceCodeStore:
         user_code = 'ABC12345'
         mock_device = MagicMock()
         mock_device.is_pending.return_value = True
-        mock_session.query.return_value.filter_by.return_value.first.return_value = mock_device
-        
+        mock_session.query.return_value.filter_by.return_value.first.return_value = (
+            mock_device
+        )
+
         result = device_code_store.deny_device_code(user_code)
-        
+
         assert result is True
         mock_device.deny.assert_called_once()
         mock_session.commit.assert_called_once()

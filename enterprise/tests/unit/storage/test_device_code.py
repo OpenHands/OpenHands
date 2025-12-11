@@ -62,9 +62,9 @@ class TestDeviceCode:
     def test_authorize(self, device_code):
         """Test device authorization."""
         user_id = 'test-user-123'
-        
+
         device_code.authorize(user_id)
-        
+
         assert device_code.status == DeviceCodeStatus.AUTHORIZED.value
         assert device_code.keycloak_user_id == user_id
         assert device_code.authorized_at is not None

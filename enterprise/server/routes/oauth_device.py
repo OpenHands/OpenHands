@@ -204,7 +204,7 @@ async def device_token(request: DeviceTokenRequest):
             cli_api_key = api_key_store.retrieve_api_key_by_name(
                 device_code_entry.keycloak_user_id, API_KEY_NAME
             )
-            
+
             if not cli_api_key:
                 logger.error(
                     'No CLI API key found for authorized device',
@@ -215,7 +215,7 @@ async def device_token(request: DeviceTokenRequest):
                     'server_error',
                     'API key not found',
                 )
-            
+
             # Return the API key as access_token
             return DeviceTokenResponse(
                 access_token=cli_api_key,
@@ -392,7 +392,7 @@ async def keycloak_callback(
         try:
             # Delete any existing CLI API key for this user
             api_key_store.delete_api_key_by_name(user_id, API_KEY_NAME)
-            cli_api_key = api_key_store.create_api_key(
+            api_key_store.create_api_key(
                 user_id,
                 name=API_KEY_NAME,
                 expires_at=datetime.now(UTC) + KEY_EXPIRATION_TIME,
