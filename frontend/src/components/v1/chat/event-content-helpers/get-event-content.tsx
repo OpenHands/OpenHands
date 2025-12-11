@@ -11,10 +11,6 @@ import { TaskTrackerObservation } from "#/types/v1/core/base/observation";
 import { SkillReadyEvent, isSkillReadyEvent } from "./create-skill-ready-event";
 import i18n from "#/i18n";
 
-const trimText = (text: string, maxLength: number): string => {
-  if (!text) return "";
-  return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
-};
 
 // Helper function to create title from translation key
 const createTitleFromKey = (
@@ -53,7 +49,7 @@ const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
     case "TerminalAction":
       actionKey = "ACTION_MESSAGE$RUN";
       actionValues = {
-        command: trimText(event.action.command, 80),
+        command: event.action.command || "",
       };
       break;
     case "FileEditorAction":
@@ -124,9 +120,7 @@ const getObservationEventTitle = (event: OpenHandsEvent): React.ReactNode => {
     case "TerminalObservation":
       observationKey = "OBSERVATION_MESSAGE$RUN";
       observationValues = {
-        command: event.observation.command
-          ? trimText(event.observation.command, 80)
-          : "",
+        command: event.observation.command || "",
       };
       break;
     case "FileEditorObservation":

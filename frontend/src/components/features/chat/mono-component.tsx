@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import EventLogger from "#/utils/event-logger";
 
+const MAX_DISPLAY_LENGTH = 80;
+
 const decodeHtmlEntities = (text: string): string => {
   const textarea = document.createElement("textarea");
   textarea.innerHTML = text;
@@ -10,25 +12,43 @@ const decodeHtmlEntities = (text: string): string => {
 function MonoComponent(props: { children?: ReactNode }) {
   const { children } = props;
 
-  const decodeString = (str: string): string => {
+  const processString = (str: string): ReactNode => {
     try {
-      return decodeHtmlEntities(str);
+      const decoded = decodeHtmlEntities(str);
+      const isTruncated = decoded.length > MAX_DISPLAY_LENGTH;
+      const displayText = isTruncated
+        ? `${decoded.substring(0, MAX_DISPLAY_LENGTH)}...`
+        : decoded;
+
+      if (isTruncated) {
+        return (
+          <span className="font-mono cursor-help" title={decoded}>
+            {displayText}
+          </span>
+        );
+      }
+
+      return <span className="font-mono">{displayText}</span>;
     } catch (e) {
       EventLogger.error(String(e));
-      return str;
+      return <span className="font-mono">{str}</span>;
     }
   };
 
   if (Array.isArray(children)) {
-    const processedChildren = children.map((child) =>
-      typeof child === "string" ? decodeString(child) : child,
+    const processedChildren = children.map((child, index) =>
+      typeof child === "string" ? (
+        <span key={index}>{processString(child)}</span>
+      ) : (
+        child
+      ),
     );
 
     return <strong className="font-mono">{processedChildren}</strong>;
   }
 
   if (typeof children === "string") {
-    return <strong className="font-mono">{decodeString(children)}</strong>;
+    return <strong>{processString(children)}</strong>;
   }
 
   return <strong className="font-mono">{children}</strong>;
