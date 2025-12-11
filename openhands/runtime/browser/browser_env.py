@@ -101,9 +101,7 @@ class BrowserEnv:
         else:
             downloads_path = os.getenv('BROWSERGYM_DOWNLOAD_DIR')
             if not downloads_path and _is_local_runtime():
-                downloads_path = str(
-                    Path.home() / '.cache' / 'browsergym-downloads'
-                )
+                downloads_path = str(Path.home() / '.cache' / 'browsergym-downloads')
             if not downloads_path:
                 downloads_path = '/workspace/.downloads/'
             env = gym.make(
