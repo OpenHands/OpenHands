@@ -13,7 +13,6 @@ from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
     ConversationInfo,
-    NeverConfirm,
     SendMessageRequest,
     StartConversationRequest,
 )
@@ -72,7 +71,6 @@ from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.security.confirmation_policy import AlwaysConfirm
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 from openhands.tools.preset.default import (
@@ -307,6 +305,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         processor=processor,
                     )
                 )
+
+            # Set security analyzer from settings
+            user = await self.user_context.get_user_info()
+            await self._set_security_analyzer_from_settings(
+                agent_server_url,
+                sandbox.session_api_key,
+                info.id,
+                user.security_analyzer,
+                self.httpx_client,
+            )
 
             # Update the start task
             task.status = AppConversationStartTaskStatus.READY
@@ -749,8 +757,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_id=conversation_id,
             agent=agent,
             workspace=workspace,
-            confirmation_policy=(
-                AlwaysConfirm() if user.confirmation_mode else NeverConfirm()
+            confirmation_policy=self._select_confirmation_policy(
+                bool(user.confirmation_mode), user.security_analyzer
             ),
             initial_message=initial_message,
             secrets=secrets,
