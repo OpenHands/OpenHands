@@ -135,16 +135,17 @@ class TestDeviceVerification:
         assert 'Device Authorization' in result.body.decode()
         assert 'user_code' in result.body.decode()
 
-    @patch('server.routes.oauth_device.device_code_store')
-    async def test_verification_page_invalid_code(self, mock_store):
-        """Test verification page with invalid user code."""
-        mock_store.get_by_user_code.return_value = None
+    @patch('server.routes.oauth_device.config')
+    async def test_verification_page_invalid_code(self, mock_config):
+        """Test verification page with invalid user code - now redirects to Keycloak."""
+        mock_config.jwt_secret.get_secret_value.return_value = 'test-secret'
 
-        result = await device_verification_page(user_code='INVALID')
+        with patch('server.routes.oauth_device.jwt.encode', return_value='test-jwt'):
+            result = await device_verification_page(user_code='INVALID')
 
-        assert isinstance(result, HTMLResponse)
-        assert result.status_code == 400
-        assert 'Invalid or expired' in result.body.decode()
+        # Invalid codes now redirect to Keycloak - validation happens after auth
+        assert result.status_code in (302, 307)  # Redirect
+        assert 'keycloak' in result.headers['location']
 
     @patch('server.routes.oauth_device.config')
     @patch('server.routes.oauth_device.device_code_store')

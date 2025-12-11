@@ -279,16 +279,8 @@ async def device_verification_page(
         """
         return HTMLResponse(content=html_content)
 
-    # Validate the user_code
-    device_code_entry = device_code_store.get_by_user_code(user_code)
-    if not device_code_entry:
-        return _html_response(
-            title='Error',
-            description='Invalid or expired device code.',
-            status_code=400,
-        )
-
-    # Encode user_code into JWT state
+    # Encode user_code into JWT state without validating against database
+    # Database validation will happen after Keycloak authentication in the callback
     jwt_secret: SecretStr = config.jwt_secret  # type: ignore[assignment]
     state = jwt.encode(
         {'user_code': user_code},
