@@ -116,9 +116,9 @@ pybase62 = "^1.0.0"
 #openhands-agent-server = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-agent-server", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
 #openhands-sdk = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-sdk", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
 #openhands-tools = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-tools", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
-openhands-sdk = "1.5.0"
-openhands-agent-server = "1.5.0"
-openhands-tools = "1.5.0"
+openhands-sdk = "1.5.2"
+openhands-agent-server = "1.5.2"
+openhands-tools = "1.5.2"
 python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
