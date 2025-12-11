@@ -135,26 +135,4 @@ class DeviceCodeStore:
 
             return True
 
-    def cleanup_expired_codes(self) -> int:
-        """Clean up expired device codes.
 
-        Returns:
-            Number of expired codes cleaned up
-        """
-        with self.session_maker() as session:
-            expired_codes = (
-                session.query(DeviceCode)
-                .filter(
-                    DeviceCode.expires_at < datetime.now(timezone.utc),
-                    DeviceCode.status == DeviceCodeStatus.PENDING.value,
-                )
-                .all()
-            )
-
-            count = 0
-            for code in expired_codes:
-                code.expire()
-                count += 1
-
-            session.commit()
-            return count

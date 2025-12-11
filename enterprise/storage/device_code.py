@@ -34,9 +34,6 @@ class DeviceCode(Base):
     keycloak_user_id = Column(String(255), nullable=True)
 
     # Timestamps
-    created_at = Column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
-    )
     expires_at = Column(DateTime, nullable=False)
     authorized_at = Column(DateTime, nullable=True)
 
