@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 
-export function DeviceVerify() {
+export default function DeviceVerify() {
   const [searchParams] = useSearchParams();
   const { data: isAuthed, isLoading: isAuthLoading } = useIsAuthed();
   const [verificationResult, setVerificationResult] = useState<{
