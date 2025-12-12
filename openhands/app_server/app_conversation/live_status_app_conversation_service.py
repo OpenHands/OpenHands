@@ -4,16 +4,15 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from time import time
-from typing import AsyncGenerator, Sequence
+from typing import Any, AsyncGenerator, Sequence
 from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Request
-from pydantic import Field, TypeAdapter
+from pydantic import Field, SecretStr, TypeAdapter
 
 from openhands.agent_server.models import (
     ConversationInfo,
-    NeverConfirm,
     SendMessageRequest,
     StartConversationRequest,
 )
@@ -63,19 +62,24 @@ from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
-from openhands.sdk import LocalWorkspace
-from openhands.sdk.conversation.secret_source import LookupSecret, StaticSecret
+from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
-from openhands.sdk.security.confirmation_policy import AlwaysConfirm
+from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
-from openhands.tools.preset.default import get_default_agent
-from openhands.tools.preset.planning import get_planning_agent
+from openhands.tools.preset.default import (
+    get_default_tools,
+)
+from openhands.tools.preset.planning import (
+    format_plan_structure,
+    get_planning_tools,
+)
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
@@ -96,9 +100,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     sandbox_startup_poll_frequency: int
     httpx_client: httpx.AsyncClient
     web_url: str | None
+    openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
     keycloak_auth_cookie: str | None = None
+    tavily_api_key: str | None = None
 
     async def search_app_conversations(
         self,
@@ -230,10 +236,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 await self._build_start_conversation_request_for_user(
                     sandbox,
                     request.initial_message,
+                    request.system_message_suffix,
                     request.git_provider,
                     sandbox_spec.working_dir,
                     request.agent_type,
                     request.llm_model,
+                    request.conversation_id,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
                 )
@@ -279,21 +287,33 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
             # Setup default processors
-            processors = request.processors
-            if processors is None:
-                processors = [SetTitleCallbackProcessor()]
+            processors = request.processors or []
+
+            # Always ensure SetTitleCallbackProcessor is included
+            has_set_title_processor = any(
+                isinstance(processor, SetTitleCallbackProcessor)
+                for processor in processors
+            )
+            if not has_set_title_processor:
+                processors.append(SetTitleCallbackProcessor())
 
             # Save processors
-            await asyncio.gather(
-                *[
-                    self.event_callback_service.save_event_callback(
-                        EventCallback(
-                            conversation_id=info.id,
-                            processor=processor,
-                        )
+            for processor in processors:
+                await self.event_callback_service.save_event_callback(
+                    EventCallback(
+                        conversation_id=info.id,
+                        processor=processor,
                     )
-                    for processor in processors
-                ]
+                )
+
+            # Set security analyzer from settings
+            user = await self.user_context.get_user_info()
+            await self._set_security_analyzer_from_settings(
+                agent_server_url,
+                sandbox.session_api_key,
+                info.id,
+                user.security_analyzer,
+                self.httpx_client,
             )
 
             # Update the start task
@@ -515,31 +535,35 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
 
-    async def _build_start_conversation_request_for_user(
-        self,
-        sandbox: SandboxInfo,
-        initial_message: SendMessageRequest | None,
-        git_provider: ProviderType | None,
-        working_dir: str,
-        agent_type: AgentType = AgentType.DEFAULT,
-        llm_model: str | None = None,
-        remote_workspace: AsyncRemoteWorkspace | None = None,
-        selected_repository: str | None = None,
-    ) -> StartConversationRequest:
-        user = await self.user_context.get_user_info()
+    async def _setup_secrets_for_git_providers(self, user: UserInfo) -> dict:
+        """Set up secrets for all git provider authentication.
 
-        # Set up a secret for the git token
+        Args:
+            user: User information containing authentication details
+
+        Returns:
+            Dictionary of secrets for the conversation
+        """
         secrets = await self.user_context.get_secrets()
-        if git_provider:
-            secret_name = f'{git_provider.name}_TOKEN'
+
+        # Get all provider tokens from user authentication
+        provider_tokens = await self.user_context.get_provider_tokens()
+        if not provider_tokens:
+            return secrets
+
+        # Create secrets for each provider token
+        for provider_type, provider_token in provider_tokens.items():
+            if not provider_token.token:
+                continue
+
+            secret_name = f'{provider_type.name}_TOKEN'
+
             if self.web_url:
-                # If there is a web url, then we create an access token to access it.
-                # For security reasons, we are explicit here - only this user, and
-                # only this provider, with a timeout
+                # Create an access token for web-based authentication
                 access_token = self.jwt_service.create_jws_token(
                     payload={
                         'user_id': user.id,
-                        'provider_type': git_provider.value,
+                        'provider_type': provider_type.value,
                     },
                     expires_in=self.access_token_hard_timeout,
                 )
@@ -554,36 +578,171 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     headers=headers,
                 )
             else:
-                # If there is no URL specified where the sandbox can access the app server
-                # then we supply a static secret with the most recent value. Depending
-                # on the type, this may eventually expire.
-                static_token = await self.user_context.get_latest_token(git_provider)
+                # Use static token for environments without web URL access
+                static_token = await self.user_context.get_latest_token(provider_type)
                 if static_token:
                     secrets[secret_name] = StaticSecret(value=static_token)
 
-        workspace = LocalWorkspace(working_dir=working_dir)
+        return secrets
 
-        # Use provided llm_model if available, otherwise fall back to user's default
+    async def _configure_llm_and_mcp(
+        self, user: UserInfo, llm_model: str | None
+    ) -> tuple[LLM, dict]:
+        """Configure LLM and MCP (Model Context Protocol) settings.
+
+        Args:
+            user: User information containing LLM preferences
+            llm_model: Optional specific model to use, falls back to user default
+
+        Returns:
+            Tuple of (configured LLM instance, MCP config dictionary)
+        """
+        # Configure LLM
         model = llm_model or user.llm_model
+        base_url = user.llm_base_url
+        if model and model.startswith('openhands/'):
+            base_url = user.llm_base_url or self.openhands_provider_base_url
         llm = LLM(
             model=model,
-            base_url=user.llm_base_url,
+            base_url=base_url,
             api_key=user.llm_api_key,
             usage_id='agent',
         )
-        # The agent gets passed initial instructions
-        # Select agent based on agent_type
-        if agent_type == AgentType.PLAN:
-            agent = get_planning_agent(llm=llm)
-        else:
-            agent = get_default_agent(llm=llm)
 
-        conversation_id = uuid4()
+        # Configure MCP
+        mcp_config: dict[str, Any] = {}
+        if self.web_url:
+            mcp_url = f'{self.web_url}/mcp/mcp'
+            mcp_config = {
+                'default': {
+                    'url': mcp_url,
+                }
+            }
+
+            # Add API key if available
+            mcp_api_key = await self.user_context.get_mcp_api_key()
+            if mcp_api_key:
+                mcp_config['default']['headers'] = {
+                    'X-Session-API-Key': mcp_api_key,
+                }
+
+            # Get the actual API key values, prioritizing user's key over service key
+            user_search_key = None
+            if user.search_api_key:
+                key_value = user.search_api_key.get_secret_value()
+                if key_value and key_value.strip():
+                    user_search_key = key_value
+
+            service_tavily_key = None
+            if self.tavily_api_key:
+                # tavily_api_key is already a string (extracted in the factory method)
+                if self.tavily_api_key.strip():
+                    service_tavily_key = self.tavily_api_key
+
+            tavily_api_key = user_search_key or service_tavily_key
+
+            if tavily_api_key:
+                _logger.info('Adding search engine to MCP config')
+                mcp_config['tavily'] = {
+                    'url': f'https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}'
+                }
+            else:
+                _logger.info('No search engine API key found, skipping search engine')
+
+        return llm, mcp_config
+
+    def _create_agent_with_context(
+        self,
+        llm: LLM,
+        agent_type: AgentType,
+        system_message_suffix: str | None,
+        mcp_config: dict,
+        condenser_max_size: int | None,
+        secrets: dict | None = None,
+    ) -> Agent:
+        """Create an agent with appropriate tools and context based on agent type.
+
+        Args:
+            llm: Configured LLM instance
+            agent_type: Type of agent to create (PLAN or DEFAULT)
+            system_message_suffix: Optional suffix for system messages
+            mcp_config: MCP configuration dictionary
+            condenser_max_size: condenser_max_size setting
+            secrets: Optional dictionary of secrets for authentication
+
+        Returns:
+            Configured Agent instance with context
+        """
+        # Create condenser with user's settings
+        condenser = self._create_condenser(llm, agent_type, condenser_max_size)
+
+        # Create agent based on type
+        if agent_type == AgentType.PLAN:
+            agent = Agent(
+                llm=llm,
+                tools=get_planning_tools(),
+                system_prompt_filename='system_prompt_planning.j2',
+                system_prompt_kwargs={'plan_structure': format_plan_structure()},
+                condenser=condenser,
+                security_analyzer=None,
+                mcp_config=mcp_config,
+            )
+        else:
+            agent = Agent(
+                llm=llm,
+                tools=get_default_tools(enable_browser=True),
+                system_prompt_kwargs={'cli_mode': False},
+                condenser=condenser,
+                mcp_config=mcp_config,
+            )
+
+        # Add agent context
+        agent_context = AgentContext(
+            system_message_suffix=system_message_suffix, secrets=secrets
+        )
+        agent = agent.model_copy(update={'agent_context': agent_context})
+
+        return agent
+
+    async def _finalize_conversation_request(
+        self,
+        agent: Agent,
+        conversation_id: UUID | None,
+        user: UserInfo,
+        workspace: LocalWorkspace,
+        initial_message: SendMessageRequest | None,
+        secrets: dict,
+        sandbox: SandboxInfo,
+        remote_workspace: AsyncRemoteWorkspace | None,
+        selected_repository: str | None,
+        working_dir: str,
+    ) -> StartConversationRequest:
+        """Finalize the conversation request with experiment variants and skills.
+
+        Args:
+            agent: The configured agent
+            conversation_id: Optional conversation ID, generates new one if None
+            user: User information
+            workspace: Local workspace instance
+            initial_message: Optional initial message for the conversation
+            secrets: Dictionary of secrets for authentication
+            sandbox: Sandbox information
+            remote_workspace: Optional remote workspace for skills loading
+            selected_repository: Optional repository name
+            working_dir: Working directory path
+
+        Returns:
+            Complete StartConversationRequest ready for use
+        """
+        # Generate conversation ID if not provided
+        conversation_id = conversation_id or uuid4()
+
+        # Apply experiment variants
         agent = ExperimentManagerImpl.run_agent_variant_tests__v1(
             user.id, conversation_id, agent
         )
 
-        # Load and merge all skills if remote_workspace is available
+        # Load and merge skills if remote workspace is available
         if remote_workspace:
             try:
                 agent = await self._load_skills_and_update_agent(
@@ -593,17 +752,71 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 _logger.warning(f'Failed to load skills: {e}', exc_info=True)
                 # Continue without skills - don't fail conversation startup
 
-        start_conversation_request = StartConversationRequest(
+        # Create and return the final request
+        return StartConversationRequest(
             conversation_id=conversation_id,
             agent=agent,
             workspace=workspace,
-            confirmation_policy=(
-                AlwaysConfirm() if user.confirmation_mode else NeverConfirm()
+            confirmation_policy=self._select_confirmation_policy(
+                bool(user.confirmation_mode), user.security_analyzer
             ),
             initial_message=initial_message,
             secrets=secrets,
         )
-        return start_conversation_request
+
+    async def _build_start_conversation_request_for_user(
+        self,
+        sandbox: SandboxInfo,
+        initial_message: SendMessageRequest | None,
+        system_message_suffix: str | None,
+        git_provider: ProviderType | None,
+        working_dir: str,
+        agent_type: AgentType = AgentType.DEFAULT,
+        llm_model: str | None = None,
+        conversation_id: UUID | None = None,
+        remote_workspace: AsyncRemoteWorkspace | None = None,
+        selected_repository: str | None = None,
+    ) -> StartConversationRequest:
+        """Build a complete conversation request for a user.
+
+        This method orchestrates the creation of a conversation request by:
+        1. Setting up git provider secrets
+        2. Configuring LLM and MCP settings
+        3. Creating an agent with appropriate context
+        4. Finalizing the request with skills and experiment variants
+        """
+        user = await self.user_context.get_user_info()
+        workspace = LocalWorkspace(working_dir=working_dir)
+
+        # Set up secrets for all git providers
+        secrets = await self._setup_secrets_for_git_providers(user)
+
+        # Configure LLM and MCP
+        llm, mcp_config = await self._configure_llm_and_mcp(user, llm_model)
+
+        # Create agent with context
+        agent = self._create_agent_with_context(
+            llm,
+            agent_type,
+            system_message_suffix,
+            mcp_config,
+            user.condenser_max_size,
+            secrets=secrets,
+        )
+
+        # Finalize and return the conversation request
+        return await self._finalize_conversation_request(
+            agent,
+            conversation_id,
+            user,
+            workspace,
+            initial_message,
+            secrets,
+            sandbox,
+            remote_workspace,
+            selected_repository,
+            working_dir,
+        )
 
     async def update_agent_server_conversation_title(
         self,
@@ -808,6 +1021,10 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
             'be retrieved by a sandboxed conversation.'
         ),
     )
+    tavily_api_key: SecretStr | None = Field(
+        default=None,
+        description='The Tavily Search API key to add to MCP integration',
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -865,6 +1082,14 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
 
+            # We supply the global tavily key only if the app mode is not SAAS, where
+            # currently the search endpoints are patched into the app server instead
+            # so the tavily key does not need to be shared
+            if self.tavily_api_key and app_mode != AppMode.SAAS:
+                tavily_api_key = self.tavily_api_key.get_secret_value()
+            else:
+                tavily_api_key = None
+
             yield LiveStatusAppConversationService(
                 init_git_in_empty_workspace=self.init_git_in_empty_workspace,
                 user_context=user_context,
@@ -878,7 +1103,9 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 sandbox_startup_poll_frequency=self.sandbox_startup_poll_frequency,
                 httpx_client=httpx_client,
                 web_url=web_url,
+                openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
                 keycloak_auth_cookie=keycloak_auth_cookie,
+                tavily_api_key=tavily_api_key,
             )

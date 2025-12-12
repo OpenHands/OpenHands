@@ -58,6 +58,9 @@ export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
           className={cn(
             "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
             showMenu && "opacity-100 pointer-events-auto",
+            // Invisible hover bridge: extends hover zone to create a "safe corridor"
+            // for diagonal mouse movement to the menu (only active when menu is visible)
+            "group-hover:before:absolute group-hover:before:bottom-0 group-hover:before:right-0 group-hover:before:w-[200px] group-hover:before:h-[300px]",
           )}
         >
           <AccountSettingsContextMenu

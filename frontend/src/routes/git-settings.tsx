@@ -9,7 +9,6 @@ import { GitLabTokenInput } from "#/components/features/settings/git-settings/gi
 import { BitbucketTokenInput } from "#/components/features/settings/git-settings/bitbucket-token-input";
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
-import { ConfigureAzureDevOpsAnchor } from "#/components/features/settings/git-settings/configure-azure-devops-anchor";
 import { InstallSlackAppAnchor } from "#/components/features/settings/git-settings/install-slack-app-anchor";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -51,10 +50,10 @@ function GitSettingsScreen() {
   const [azureDevOpsHostInputHasValue, setAzureDevOpsHostInputHasValue] =
     React.useState(false);
 
-  const existingGithubHost = settings?.PROVIDER_TOKENS_SET.github;
-  const existingGitlabHost = settings?.PROVIDER_TOKENS_SET.gitlab;
-  const existingBitbucketHost = settings?.PROVIDER_TOKENS_SET.bitbucket;
-  const existingAzureDevOpsHost = settings?.PROVIDER_TOKENS_SET.azure_devops;
+  const existingGithubHost = settings?.provider_tokens_set.github;
+  const existingGitlabHost = settings?.provider_tokens_set.gitlab;
+  const existingBitbucketHost = settings?.provider_tokens_set.bitbucket;
+  const existingAzureDevOpsHost = settings?.provider_tokens_set.azure_devops;
 
   const isSaas = config?.APP_MODE === "saas";
   const isGitHubTokenSet = providers.includes("github");
@@ -148,18 +147,6 @@ function GitSettingsScreen() {
                   {t(I18nKey.SETTINGS$GITHUB)}
                 </h3>
                 <ConfigureGitHubRepositoriesAnchor slug={config.APP_SLUG!} />
-              </div>
-              <div className="w-1/2 border-b border-gray-200" />
-            </>
-          )}
-
-          {shouldRenderExternalConfigureButtons && !isLoading && (
-            <>
-              <div className="pb-1 mt-6 flex flex-col">
-                <h3 className="text-xl font-medium text-white">
-                  {t(I18nKey.SETTINGS$AZURE_DEVOPS)}
-                </h3>
-                <ConfigureAzureDevOpsAnchor />
               </div>
               <div className="w-1/2 border-b border-gray-200" />
             </>

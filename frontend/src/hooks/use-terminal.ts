@@ -44,7 +44,7 @@ export const useTerminal = () => {
     new Terminal({
       fontFamily: "Menlo, Monaco, 'Courier New', monospace",
       fontSize: 14,
-      scrollback: 1000,
+      scrollback: 10000,
       scrollSensitivity: 1,
       fastScrollModifier: "alt",
       fastScrollSensitivity: 5,
@@ -62,6 +62,7 @@ export const useTerminal = () => {
         terminal.current.open(ref.current);
         // Hide cursor for read-only terminal using ANSI escape sequence
         terminal.current.write("\x1b[?25l");
+        fitAddon.current?.fit();
       }
     }
   };

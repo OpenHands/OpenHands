@@ -43,6 +43,7 @@ from openhands.app_server.user.specifiy_user_context import (
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Event
+from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
@@ -59,16 +60,22 @@ _logger = logging.getLogger(__name__)
 
 
 async def valid_sandbox(
-    sandbox_id: str,
     user_context: UserContext = Depends(as_admin),
     session_api_key: str = Depends(
         APIKeyHeader(name='X-Session-API-Key', auto_error=False)
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
 ) -> SandboxInfo:
-    sandbox_info = await sandbox_service.get_sandbox(sandbox_id)
-    if sandbox_info is None or sandbox_info.session_api_key != session_api_key:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+    if session_api_key is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail='X-Session-API-Key header is required'
+        )
+
+    sandbox_info = await sandbox_service.get_sandbox_by_session_api_key(session_api_key)
+    if sandbox_info is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
+        )
     return sandbox_info
 
 
@@ -93,7 +100,7 @@ async def valid_conversation(
     return app_conversation_info
 
 
-@router.post('/{sandbox_id}/conversations')
+@router.post('/conversations')
 async def on_conversation_update(
     conversation_info: ConversationInfo,
     sandbox_info: SandboxInfo = Depends(valid_sandbox),
@@ -124,7 +131,7 @@ async def on_conversation_update(
     return Success()
 
 
-@router.post('/{sandbox_id}/events/{conversation_id}')
+@router.post('/events/{conversation_id}')
 async def on_event(
     events: list[Event],
     conversation_id: UUID,
@@ -143,6 +150,13 @@ async def on_event(
         await asyncio.gather(
             *[event_service.save_event(conversation_id, event) for event in events]
         )
+
+        # Process stats events for V1 conversations
+        for event in events:
+            if isinstance(event, ConversationStateUpdateEvent) and event.key == 'stats':
+                await app_conversation_info_service.process_stats_event(
+                    event, conversation_id
+                )
 
         asyncio.create_task(
             _run_callbacks_in_bg_and_close(

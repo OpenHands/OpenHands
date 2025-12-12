@@ -106,16 +106,16 @@ export default function MainApp() {
 
   React.useEffect(() => {
     // Don't change language when on TOS page
-    if (!isOnTosPage && settings?.LANGUAGE) {
-      i18n.changeLanguage(settings.LANGUAGE);
+    if (!isOnTosPage && settings?.language) {
+      i18n.changeLanguage(settings.language);
     }
-  }, [settings?.LANGUAGE, isOnTosPage]);
+  }, [settings?.language, isOnTosPage]);
 
   React.useEffect(() => {
     // Don't show consent form when on TOS page
     if (!isOnTosPage) {
       const consentFormModalIsOpen =
-        settings?.USER_CONSENTS_TO_ANALYTICS === null;
+        settings?.user_consents_to_analytics === null;
 
       setConsentFormIsOpen(consentFormModalIsOpen);
     }
@@ -134,10 +134,10 @@ export default function MainApp() {
   }, [isOnTosPage]);
 
   React.useEffect(() => {
-    if (settings?.IS_NEW_USER && config.data?.APP_MODE === "saas") {
+    if (settings?.is_new_user && config.data?.APP_MODE === "saas") {
       displaySuccessToast(t(I18nKey.BILLING$YOURE_IN));
     }
-  }, [settings?.IS_NEW_USER, config.data?.APP_MODE]);
+  }, [settings?.is_new_user, config.data?.APP_MODE]);
 
   React.useEffect(() => {
     // Don't do any redirects when on TOS page
@@ -249,7 +249,7 @@ export default function MainApp() {
 
       {config.data?.FEATURE_FLAGS.ENABLE_BILLING &&
         config.data?.APP_MODE === "saas" &&
-        settings?.IS_NEW_USER && <SetupPaymentModal />}
+        settings?.is_new_user && <SetupPaymentModal />}
     </div>
   );
 }

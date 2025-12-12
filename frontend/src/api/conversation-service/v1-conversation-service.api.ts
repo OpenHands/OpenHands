@@ -296,6 +296,25 @@ class V1ConversationService {
     const { data } = await openHands.get<{ runtime_id: string }>(url);
     return data;
   }
+
+  /**
+   * Read a file from a specific conversation's sandbox workspace
+   * @param conversationId The conversation ID
+   * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/PLAN.md)
+   * @returns The content of the file or an empty string if the file doesn't exist
+   */
+  static async readConversationFile(
+    conversationId: string,
+    filePath: string = "/workspace/project/PLAN.md",
+  ): Promise<string> {
+    const params = new URLSearchParams();
+    params.append("file_path", filePath);
+
+    const { data } = await openHands.get<string>(
+      `/api/v1/app-conversations/${conversationId}/file?${params.toString()}`,
+    );
+    return data;
+  }
 }
 
 export default V1ConversationService;
