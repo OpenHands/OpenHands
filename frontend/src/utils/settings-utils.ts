@@ -67,9 +67,7 @@ export const parseMaxBudgetPerTask = (value: string): number | null => {
     : null;
 };
 
-export const extractSettings = (
-  formData: FormData,
-): Partial<Settings> & { llm_api_key?: string | null } => {
+export const extractSettings = (formData: FormData): Partial<Settings> => {
   const { LLM_MODEL, LLM_API_KEY, AGENT, LANGUAGE } =
     extractBasicFormData(formData);
 
@@ -82,14 +80,14 @@ export const extractSettings = (
   } = extractAdvancedFormData(formData);
 
   return {
-    LLM_MODEL: CUSTOM_LLM_MODEL || LLM_MODEL,
-    LLM_API_KEY_SET: !!LLM_API_KEY,
-    AGENT,
-    LANGUAGE,
-    LLM_BASE_URL,
-    CONFIRMATION_MODE,
-    SECURITY_ANALYZER,
-    ENABLE_DEFAULT_CONDENSER,
+    llm_model: CUSTOM_LLM_MODEL || LLM_MODEL,
+    llm_api_key_set: !!LLM_API_KEY,
+    agent: AGENT,
+    language: LANGUAGE,
+    llm_base_url: LLM_BASE_URL,
+    confirmation_mode: CONFIRMATION_MODE,
+    security_analyzer: SECURITY_ANALYZER,
+    enable_default_condenser: ENABLE_DEFAULT_CONDENSER,
     llm_api_key: LLM_API_KEY,
   };
 };

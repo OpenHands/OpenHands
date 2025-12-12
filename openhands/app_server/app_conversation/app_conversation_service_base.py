@@ -4,7 +4,11 @@ import tempfile
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import TYPE_CHECKING, AsyncGenerator
+from uuid import UUID
+
+if TYPE_CHECKING:
+    import httpx
 
 import base62
 
@@ -29,6 +33,14 @@ from openhands.sdk.context.agent_context import AgentContext
 from openhands.sdk.context.condenser import LLMSummarizingCondenser
 from openhands.sdk.context.skills import load_user_skills
 from openhands.sdk.llm import LLM
+from openhands.sdk.security.analyzer import SecurityAnalyzerBase
+from openhands.sdk.security.confirmation_policy import (
+    AlwaysConfirm,
+    ConfirmationPolicyBase,
+    ConfirmRisky,
+    NeverConfirm,
+)
+from openhands.sdk.security.llm_analyzer import LLMSecurityAnalyzer
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)
@@ -379,3 +391,95 @@ class AppConversationServiceBase(AppConversationService, ABC):
         condenser = LLMSummarizingCondenser(**condenser_kwargs)
 
         return condenser
+
+    def _create_security_analyzer_from_string(
+        self, security_analyzer_str: str | None
+    ) -> SecurityAnalyzerBase | None:
+        """Convert security analyzer string from settings to SecurityAnalyzerBase instance.
+
+        Args:
+            security_analyzer_str: String value from settings. Valid values:
+                - "llm" -> LLMSecurityAnalyzer
+                - "none" or None -> None
+                - Other values -> None (unsupported analyzers are ignored)
+
+        Returns:
+            SecurityAnalyzerBase instance or None
+        """
+        if not security_analyzer_str or security_analyzer_str.lower() == 'none':
+            return None
+
+        if security_analyzer_str.lower() == 'llm':
+            return LLMSecurityAnalyzer()
+
+        # For unknown values, log a warning and return None
+        _logger.warning(
+            f'Unknown security analyzer value: {security_analyzer_str}. '
+            'Supported values: "llm", "none". Defaulting to None.'
+        )
+        return None
+
+    def _select_confirmation_policy(
+        self, confirmation_mode: bool, security_analyzer: str | None
+    ) -> ConfirmationPolicyBase:
+        """Choose confirmation policy using only mode flag and analyzer string."""
+        if not confirmation_mode:
+            return NeverConfirm()
+
+        analyzer_kind = (security_analyzer or '').lower()
+        if analyzer_kind == 'llm':
+            return ConfirmRisky()
+
+        return AlwaysConfirm()
+
+    async def _set_security_analyzer_from_settings(
+        self,
+        agent_server_url: str,
+        session_api_key: str | None,
+        conversation_id: UUID,
+        security_analyzer_str: str | None,
+        httpx_client: 'httpx.AsyncClient',
+    ) -> None:
+        """Set security analyzer on conversation using only the analyzer string.
+
+        Args:
+            agent_server_url: URL of the agent server
+            session_api_key: Session API key for authentication
+            conversation_id: ID of the conversation to update
+            security_analyzer_str: String value from settings
+            httpx_client: HTTP client for making API requests
+        """
+
+        if session_api_key is None:
+            return
+
+        security_analyzer = self._create_security_analyzer_from_string(
+            security_analyzer_str
+        )
+
+        # Only make API call if we have a security analyzer to set
+        # (None is the default, so we can skip the call if it's None)
+        if security_analyzer is None:
+            return
+
+        try:
+            # Prepare the request payload
+            payload = {'security_analyzer': security_analyzer.model_dump()}
+
+            # Call agent server API to set security analyzer
+            response = await httpx_client.post(
+                f'{agent_server_url}/api/conversations/{conversation_id}/security_analyzer',
+                json=payload,
+                headers={'X-Session-API-Key': session_api_key},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            _logger.info(
+                f'Successfully set security analyzer for conversation {conversation_id}'
+            )
+        except Exception as e:
+            # Log error but don't fail conversation creation
+            _logger.warning(
+                f'Failed to set security analyzer for conversation {conversation_id}: {e}',
+                exc_info=True,
+            )
