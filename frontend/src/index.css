@@ -2,18 +2,18 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Outfit:wght@100..900&display=swap');
 
 :root {
-  --bg-dark: var(--color-base);
-  --bg-light: var(--color-surface-strong);
-  --bg-input: var(--color-surface-muted);
-  --bg-workspace: var(--color-base-secondary);
-  --border: var(--color-neutral-dark);
-  --text-editor-base: var(--color-basic);
-  --text-editor-active: var(--color-highlight);
-  --bg-editor-sidebar: var(--color-base-secondary);
-  --bg-editor-active: var(--color-surface-strong);
-  --border-editor-sidebar: var(--color-neutral-dark);
-  background-color: var(--color-base) !important;
-  --bg-neutral-muted: var(--color-neutral-muted);
+  --bg-dark: #0c0e10;
+  --bg-light: #292929;
+  --bg-input: #393939;
+  --bg-workspace: #1f2228;
+  --border: #3c3c4a;
+  --text-editor-base: #9099ac;
+  --text-editor-active: #c4cbda;
+  --bg-editor-sidebar: #24272e;
+  --bg-editor-active: #31343d;
+  --border-editor-sidebar: #3c3c4a;
+  background-color: var(--base) !important;
+  --bg-neutral-muted: #afb8c133;
 }
 
 body {
@@ -36,10 +36,10 @@ code {
   margin: 0;
   font-size: 85%;
   white-space: break-spaces;
-  background-color: var(--color-code-surface);
+  background-color: #2a3038;
   border-radius: 4px;
-  color: var(--color-border-subtle);
-  border: 1px solid var(--color-code-border);
+  color: #e6edf3;
+  border: 1px solid #30363d;
   letter-spacing: -0.2px;
 }
 
