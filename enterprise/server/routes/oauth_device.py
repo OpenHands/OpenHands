@@ -207,6 +207,47 @@ async def device_token(request: DeviceTokenRequest):
 
 
 
+@oauth_device_router.get('/verify')
+async def device_verification(
+    request: Request,
+):
+    """Handle device verification - redirect unauthenticated users to frontend."""
+    try:
+        from openhands.server.user_auth.user_auth import get_user_auth
+        user_auth = await get_user_auth(request)
+        user_id = await user_auth.get_user_id()
+        
+        # Get user_code from query parameters
+        user_code = request.query_params.get('user_code')
+        
+        if not user_id:
+            # User is not authenticated - redirect to frontend with redirect_url
+            base_url = str(request.base_url).rstrip('/')
+            redirect_url = f"{base_url}/oauth/device/verify"
+            if user_code:
+                redirect_url += f"?user_code={user_code}"
+            
+            # Redirect to frontend (this will trigger the auth modal)
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=redirect_url, status_code=302)
+        
+        # User is authenticated - redirect to frontend to handle verification
+        base_url = str(request.base_url).rstrip('/')
+        frontend_url = f"{base_url}/oauth/device/verify"
+        if user_code:
+            frontend_url += f"?user_code={user_code}"
+            
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=frontend_url, status_code=302)
+        
+    except Exception as e:
+        logger.exception('Error in device verification: %s', str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred. Please try again."
+        )
+
+
 @oauth_device_router.post('/verify-authenticated')
 async def device_verification_authenticated(
     request: Request,
