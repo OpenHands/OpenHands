@@ -10,7 +10,7 @@ import { SettingsNavItem } from "#/constants/settings-nav";
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
   onCloseMobileMenu: () => void;
-  navigationItems: SettingsNavItem[]; // <-- FIXED
+  navigationItems: SettingsNavItem[];
 }
 
 export function SettingsNavigation({
