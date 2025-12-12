@@ -272,7 +272,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user_id = await self.user_context.get_user_id()
             app_conversation_info = AppConversationInfo(
                 id=info.id,
-                title=f'Conversation {info.id.hex}',
+                title=f'Conversation {info.id.hex[:5]}',
                 sandbox_id=sandbox.id,
                 created_by_user_id=user_id,
                 llm_model=start_conversation_request.agent.llm.model,
