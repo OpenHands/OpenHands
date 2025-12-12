@@ -3,6 +3,7 @@ import { usePostHog } from "posthog-js/react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { ConversationStatus } from "#/types/conversation-status";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { ConversationCardHeader } from "./conversation-card-header";
@@ -101,6 +102,38 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
+  const handleDownloadTrajectory = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    posthog.capture("download_trajectory_button_clicked");
+
+    if (conversationId && conversationVersion === "V1") {
+      try {
+        const blob =
+          await V1ConversationService.downloadConversationTrajectory(
+            conversationId,
+          );
+
+        // Create a download link
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `conversation_${conversationId}_trajectory.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error("Failed to download trajectory:", error);
+        // Could add a toast notification here for user feedback
+      }
+    }
+
+    onContextMenuToggle?.(false);
+  };
+
   const hasContextMenu = !!(onDelete || onChangeTitle || showOptions);
 
   return (
@@ -130,6 +163,11 @@ export function ConversationCard({
             onStop={onStop && handleStop}
             onEdit={onChangeTitle && handleEdit}
             onDownloadViaVSCode={handleDownloadViaVSCode}
+            onDownloadTrajectory={
+              conversationVersion === "V1"
+                ? handleDownloadTrajectory
+                : undefined
+            }
             conversationStatus={conversationStatus}
             conversationId={conversationId}
             showOptions={showOptions}

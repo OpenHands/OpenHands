@@ -1,5 +1,9 @@
 import asyncio
+import json
 import logging
+import os
+import tempfile
+import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -44,6 +48,7 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 )
 from openhands.app_server.config import get_event_callback_service
 from openhands.app_server.errors import SandboxError
+from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
 from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
@@ -80,6 +85,7 @@ from openhands.tools.preset.planning import (
     format_plan_structure,
     get_planning_tools,
 )
+from openhands.utils.search_utils import iterate
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
@@ -93,6 +99,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     app_conversation_info_service: AppConversationInfoService
     app_conversation_start_task_service: AppConversationStartTaskService
     event_callback_service: EventCallbackService
+    event_service: EventService
     sandbox_service: SandboxService
     sandbox_spec_service: SandboxSpecService
     jwt_service: JwtService
@@ -1002,6 +1009,77 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return deleted_info or deleted_tasks
 
+    async def download_conversation_trajectory(self, conversation_id: UUID) -> bytes:
+        """Download a conversation trajectory as a zip file.
+
+        Args:
+            conversation_id: The UUID of the conversation to download.
+
+        Returns the zip file as bytes.
+        """
+        # Get the conversation info to verify it exists and user has access
+        conversation_info = (
+            await self.app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+        )
+        if not conversation_info:
+            raise ValueError(f'Conversation not found: {conversation_id}')
+
+        # Create a temporary directory to store files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Get all events for this conversation using the iterate pattern
+            events = []
+
+            # Create an adapter function for the iterate utility
+            async def search_events_adapter(**kwargs):
+                result = await self.event_service.search_events(
+                    conversation_id__eq=conversation_id, **kwargs
+                )
+
+                # Adapt EventPage to the expected interface for iterate()
+                class AdaptedResult:
+                    def __init__(self, event_page):
+                        self.results = event_page.items
+                        self.next_page_id = event_page.next_page_id
+
+                return AdaptedResult(result)
+
+            async for event in iterate(search_events_adapter):
+                events.append(event)
+
+            # Save each event as a JSON file
+            for i, event in enumerate(events):
+                event_filename = f'event_{i:06d}_{event.id}.json'
+                event_path = os.path.join(temp_dir, event_filename)
+
+                with open(event_path, 'w') as f:
+                    # Use model_dump with mode='json' to handle UUID serialization
+                    event_data = event.model_dump(mode='json')
+                    json.dump(event_data, f, indent=2)
+
+            # Create meta.json with conversation info
+            meta_path = os.path.join(temp_dir, 'meta.json')
+            with open(meta_path, 'w') as f:
+                f.write(conversation_info.model_dump_json(indent=2))
+
+            # Create zip file in memory
+            zip_buffer = tempfile.NamedTemporaryFile()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Add all files from temp directory to zip
+                for root, dirs, files in os.walk(temp_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, temp_dir)
+                        zipf.write(file_path, arcname)
+
+            # Read the zip file content
+            zip_buffer.seek(0)
+            zip_content = zip_buffer.read()
+            zip_buffer.close()
+
+            return zip_content
+
 
 class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
     sandbox_startup_timeout: int = Field(
@@ -1032,6 +1110,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
         from openhands.app_server.config import (
             get_app_conversation_info_service,
             get_app_conversation_start_task_service,
+            get_event_service,
             get_global_config,
             get_httpx_client,
             get_jwt_service,
@@ -1051,6 +1130,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 state, request
             ) as app_conversation_start_task_service,
             get_event_callback_service(state, request) as event_callback_service,
+            get_event_service(state, request) as event_service,
             get_jwt_service(state, request) as jwt_service,
             get_httpx_client(state, request) as httpx_client,
         ):
@@ -1098,6 +1178,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 app_conversation_info_service=app_conversation_info_service,
                 app_conversation_start_task_service=app_conversation_start_task_service,
                 event_callback_service=event_callback_service,
+                event_service=event_service,
                 jwt_service=jwt_service,
                 sandbox_startup_timeout=self.sandbox_startup_timeout,
                 sandbox_startup_poll_frequency=self.sandbox_startup_poll_frequency,

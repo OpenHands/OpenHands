@@ -5407,6 +5407,22 @@
     "tr": "VS Code ile İndir",
     "uk": "Завантажити через VS Code"
   },
+  "BUTTON$DOWNLOAD_TRAJECTORY": {
+    "en": "Download Trajectory",
+    "ja": "軌跡をダウンロード",
+    "zh-CN": "下载轨迹",
+    "zh-TW": "下載軌跡",
+    "ko-KR": "궤적 다운로드",
+    "fr": "Télécharger la trajectoire",
+    "es": "Descargar trayectoria",
+    "de": "Trajektorie herunterladen",
+    "it": "Scarica traiettoria",
+    "pt": "Baixar trajetória",
+    "ar": "تحميل المسار",
+    "no": "Last ned bane",
+    "tr": "Yörüngeyi İndir",
+    "uk": "Завантажити траєкторію"
+  },
   "BUTTON$DISPLAY_COST": {
     "en": "Display Cost",
     "ja": "コストを表示",

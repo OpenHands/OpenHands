@@ -400,6 +400,51 @@ async def read_conversation_file(
     return ''
 
 
+@router.get('/{conversation_id}/download')
+async def download_conversation_trajectory(
+    conversation_id: UUID,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+):
+    """Download a conversation trajectory as a zip file.
+
+    Returns a zip file containing all events and metadata for the conversation.
+
+    Args:
+        conversation_id: The UUID of the conversation to download
+
+    Returns:
+        A zip file containing the conversation trajectory
+    """
+    from fastapi.responses import Response
+
+    try:
+        # Get the zip file content
+        zip_content = await app_conversation_service.download_conversation_trajectory(
+            conversation_id
+        )
+
+        # Return as a downloadable zip file
+        return Response(
+            content=zip_content,
+            media_type='application/zip',
+            headers={
+                'Content-Disposition': f'attachment; filename="conversation_{conversation_id}_trajectory.zip"'
+            },
+        )
+    except ValueError as e:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=500, detail=f'Failed to download trajectory: {str(e)}'
+        )
+
+
 async def _consume_remaining(
     async_iter, db_session: AsyncSession, httpx_client: httpx.AsyncClient
 ):

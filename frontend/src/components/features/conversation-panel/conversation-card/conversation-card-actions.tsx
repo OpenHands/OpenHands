@@ -11,6 +11,7 @@ interface ConversationCardActionsProps {
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadTrajectory?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   conversationStatus?: ConversationStatus;
   conversationId?: string;
   showOptions?: boolean;
@@ -23,6 +24,7 @@ export function ConversationCardActions({
   onStop,
   onEdit,
   onDownloadViaVSCode,
+  onDownloadTrajectory,
   conversationStatus,
   conversationId,
   showOptions,
@@ -61,6 +63,9 @@ export function ConversationCardActions({
           onEdit={onEdit}
           onDownloadViaVSCode={
             conversationId && showOptions ? onDownloadViaVSCode : undefined
+          }
+          onDownloadTrajectory={
+            conversationId && showOptions ? onDownloadTrajectory : undefined
           }
           position="bottom"
         />
