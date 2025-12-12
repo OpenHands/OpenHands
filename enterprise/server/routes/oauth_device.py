@@ -1,27 +1,16 @@
 """OAuth 2.0 Device Flow endpoints for CLI authentication."""
 
-import html
 from datetime import UTC, datetime, timedelta
 from typing import Optional
-from urllib.parse import quote
 
-import jwt
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from integrations.utils import HOST_URL
-from pydantic import BaseModel, SecretStr
-from server.auth.constants import (
-    KEYCLOAK_CLIENT_ID,
-    KEYCLOAK_REALM_NAME,
-    KEYCLOAK_SERVER_URL_EXT,
-)
-from server.auth.token_manager import TokenManager
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from storage.api_key_store import ApiKeyStore
 from storage.database import session_maker
 from storage.device_code_store import DeviceCodeStore
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.shared import config
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -29,12 +18,6 @@ from openhands.server.shared import config
 
 DEVICE_CODE_EXPIRES_IN = 600  # 10 minutes
 DEVICE_TOKEN_POLL_INTERVAL = 5  # seconds
-
-FAILED_AUTH_DESCRIPTION = (
-    f'Please re-login into '
-    f'<a href="{HOST_URL}" style="color:#ecedee;text-decoration:underline;">'
-    f'OpenHands Cloud</a>. Then try the device authorization again.'
-)
 
 API_KEY_NAME = 'CLI Authentication'
 KEY_EXPIRATION_TIME = timedelta(days=1)  # Key expires in 24 hours
@@ -97,29 +80,10 @@ def _oauth_error(
     )
 
 
-def _html_response(
-    title: str, description: str, status_code: int = 200
-) -> HTMLResponse:
-    """Helper to build a simple HTML page."""
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>{html.escape(title)}</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }}
-            .container {{ text-align: center; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>{html.escape(title)}</h1>
-            <p>{description}</p>
-        </div>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content, status_code=status_code)
+
+
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -241,142 +205,47 @@ async def device_token(request: DeviceTokenRequest):
         )
 
 
-@oauth_device_router.get('/verify')
-async def device_verification_page(
-    user_code: Optional[str] = None,
-):
-    """Show device code form, or redirect to Keycloak for authentication."""
-    # If no user_code provided, show a simple HTML form
-    if not user_code:
-        html_content = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Device Verification</title>
-            <style>
-                body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-                .form-group { margin: 20px 0; }
-                input[type="text"] { padding: 10px; font-size: 16px; width: 200px; }
-                button { padding: 10px 20px; font-size: 16px; background-color: #4CAF50; color: white; border: none; }
-            </style>
-        </head>
-        <body>
-            <h1>Device Authorization</h1>
-            <p>Enter the code displayed on your device:</p>
-
-            <form method="get" action="/oauth/device/verify">
-                <div class="form-group">
-                    <label for="user_code">Device Code:</label><br>
-                    <input type="text" id="user_code" name="user_code" required>
-                </div>
-
-                <div class="form-group">
-                    <button type="submit">Continue</button>
-                </div>
-            </form>
-        </body>
-        </html>
-        """
-        return HTMLResponse(content=html_content)
-
-    # Encode user_code into JWT state without validating against database
-    # Database validation will happen after Keycloak authentication in the callback
-    jwt_secret: SecretStr = config.jwt_secret  # type: ignore[assignment]
-    state = jwt.encode(
-        {'user_code': user_code},
-        jwt_secret.get_secret_value(),
-        algorithm='HS256',
-    )
-
-    # Redirect to Keycloak
-    scope = quote('openid email profile offline_access')
-    redirect_uri = quote(f'{HOST_URL}/oauth/device/keycloak-callback')
-    auth_url = (
-        f'{KEYCLOAK_SERVER_URL_EXT}/realms/{KEYCLOAK_REALM_NAME}'
-        f'/protocol/openid-connect/auth'
-        f'?client_id={KEYCLOAK_CLIENT_ID}'
-        f'&response_type=code'
-        f'&redirect_uri={redirect_uri}'
-        f'&scope={scope}'
-        f'&state={state}'
-    )
-
-    return RedirectResponse(auth_url)
 
 
-@oauth_device_router.get('/keycloak-callback')
-async def keycloak_callback(
+
+@oauth_device_router.post('/verify-authenticated')
+async def device_verification_authenticated(
     request: Request,
-    code: str = '',
-    state: str = '',
-    error: str = '',
 ):
-    """Handle Keycloak callback and complete device authorization."""
-    if not code or error:
-        logger.warning(
-            'keycloak_callback_error',
-            extra={'code': code, 'state': state, 'error': error},
-        )
-        return _html_response(
-            title='Authentication Error',
-            description=html.escape(error or 'No authorization code provided'),
-            status_code=400,
-        )
-
+    """Process device verification for authenticated users (called by frontend)."""
     try:
-        # Decode state to get user_code
-        jwt_secret: SecretStr = config.jwt_secret  # type: ignore[assignment]
-        payload: dict[str, str] = jwt.decode(
-            state,
-            jwt_secret.get_secret_value(),
-            algorithms=['HS256'],
-        )
-        user_code = payload['user_code']
-
-        # Exchange code for Keycloak tokens
-        redirect_uri = f'{HOST_URL}/oauth/device/keycloak-callback'
-        (
-            keycloak_access_token,
-            keycloak_refresh_token,
-        ) = await token_manager.get_keycloak_tokens(code, redirect_uri)
-
-        if not keycloak_access_token or not keycloak_refresh_token:
-            logger.warning(
-                'failed_to_get_keycloak_tokens',
-                extra={'code': code, 'state': state, 'error': error},
+        # Extract user_code from form data
+        form_data = await request.form()
+        user_code = form_data.get('user_code')
+        
+        if not user_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="user_code is required"
             )
-            return _html_response(
-                title='Failed to authenticate.',
-                description=FAILED_AUTH_DESCRIPTION,
-                status_code=400,
+        
+        from openhands.server.user_auth.user_auth import get_user_auth
+        user_auth = await get_user_auth(request)
+        user_id = await user_auth.get_user_id()
+        
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required"
             )
-
-        # Get user info
-        user_info = await token_manager.get_user_info(keycloak_access_token)
-        if not user_info or not user_info.get('sub'):
-            logger.warning('failed_to_get_user_info_from_keycloak')
-            return _html_response(
-                title='Failed to authenticate.',
-                description=FAILED_AUTH_DESCRIPTION,
-                status_code=400,
-            )
-
-        user_id = user_info['sub']
 
         # Validate device code
         device_code_entry = device_code_store.get_by_user_code(user_code)
         if not device_code_entry:
-            return _html_response(
-                title='Invalid Code',
-                description='The device code is invalid or has expired.',
-                status_code=400,
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The device code is invalid or has expired."
             )
 
         if not device_code_entry.is_pending():
-            return _html_response(
-                title='Code Already Used',
-                description='This device code has already been processed.',
-                status_code=400,
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This device code has already been processed."
             )
 
         # Create API key for CLI
@@ -392,10 +261,9 @@ async def keycloak_callback(
             logger.info('Created new CLI API key for user', extra={'user_id': user_id})
         except Exception as e:
             logger.exception('Failed to create CLI API key: %s', str(e))
-            return _html_response(
-                title='Error',
-                description='Failed to create API key for CLI access.',
-                status_code=500,
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create API key for CLI access."
             )
 
         # Mark device as authorized
@@ -409,32 +277,28 @@ async def keycloak_callback(
                 'Device code authorized',
                 extra={'user_code': user_code, 'user_id': user_id},
             )
-            return _html_response(
-                title='Success!',
-                description='Device authorized successfully! You can now return to your CLI and close this window.',
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={"message": "Device authorized successfully!"}
             )
 
         logger.error(
             'Failed to authorize device code',
             extra={'user_code': user_code, 'user_id': user_id},
         )
-        return _html_response(
-            title='Authorization Failed',
-            description='Failed to authorize the device. Please try again.',
-            status_code=500,
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to authorize the device. Please try again."
         )
 
-    except jwt.InvalidTokenError:
-        logger.warning('invalid_jwt_state_token')
-        return _html_response(
-            title='Invalid Request',
-            description='Invalid authentication state. Please try again.',
-            status_code=400,
-        )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception('Error in keycloak callback: %s', str(e))
-        return _html_response(
-            title='Internal Error',
-            description='An unexpected error occurred. Please try again.',
-            status_code=500,
+        logger.exception('Error in device verification: %s', str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred. Please try again."
         )
+
+
+
