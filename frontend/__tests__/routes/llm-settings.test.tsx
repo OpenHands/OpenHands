@@ -253,6 +253,83 @@ describe("Content", () => {
         expect(securityAnalyzer).toHaveValue("SETTINGS$SECURITY_ANALYZER_NONE");
       });
     });
+
+    it("should omit invariant and custom analyzers when V1 is enabled", async () => {
+      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+      getSettingsSpy.mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        confirmation_mode: true,
+        security_analyzer: "llm",
+        v1_enabled: true,
+      });
+
+      const getSecurityAnalyzersSpy = vi.spyOn(
+        OptionService,
+        "getSecurityAnalyzers",
+      );
+      getSecurityAnalyzersSpy.mockResolvedValue([
+        "llm",
+        "none",
+        "invariant",
+        "custom",
+      ]);
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+      await userEvent.click(advancedSwitch);
+
+      const securityAnalyzer = await screen.findByTestId(
+        "security-analyzer-input",
+      );
+      await userEvent.click(securityAnalyzer);
+
+      // Only llm + none should be available when V1 is enabled
+      screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT");
+      screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE");
+      expect(
+        screen.queryByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("custom")).not.toBeInTheDocument();
+    });
+
+    it("should include invariant analyzer option when V1 is disabled", async () => {
+      const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+      getSettingsSpy.mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        confirmation_mode: true,
+        security_analyzer: "llm",
+        v1_enabled: false,
+      });
+
+      const getSecurityAnalyzersSpy = vi.spyOn(
+        OptionService,
+        "getSecurityAnalyzers",
+      );
+      getSecurityAnalyzersSpy.mockResolvedValue(["llm", "none", "invariant"]);
+
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+
+      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+      await userEvent.click(advancedSwitch);
+
+      const securityAnalyzer = await screen.findByTestId(
+        "security-analyzer-input",
+      );
+      await userEvent.click(securityAnalyzer);
+
+      expect(
+        screen.getByText("SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("SETTINGS$SECURITY_ANALYZER_NONE"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("SETTINGS$SECURITY_ANALYZER_INVARIANT"),
+      ).toBeInTheDocument();
+    });
   });
 
   it.todo("should render an indicator if the llm api key is set");

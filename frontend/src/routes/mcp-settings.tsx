@@ -41,7 +41,7 @@ function MCPSettingsScreen() {
     useState(false);
   const [serverToDelete, setServerToDelete] = useState<string | null>(null);
 
-  const mcpConfig: MCPConfig = settings?.MCP_CONFIG || {
+  const mcpConfig: MCPConfig = settings?.mcp_config || {
     sse_servers: [],
     stdio_servers: [],
     shttp_servers: [],

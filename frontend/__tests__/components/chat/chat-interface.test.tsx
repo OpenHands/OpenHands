@@ -25,10 +25,7 @@ import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files
 import { OpenHandsAction } from "#/types/core/actions";
 import { useEventStore } from "#/stores/use-event-store";
 
-// Mock the hooks
 vi.mock("#/context/ws-client-provider");
-vi.mock("#/stores/error-message-store");
-vi.mock("#/stores/optimistic-user-message-store");
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-get-trajectory");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
@@ -102,24 +99,20 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    // Default mock implementations
     (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       send: vi.fn(),
       isLoadingMessages: false,
       parsedEvents: [],
     });
-    (
-      useOptimisticUserMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setOptimisticUserMessage: vi.fn(),
-      getOptimisticUserMessage: vi.fn(() => null),
+
+    useOptimisticUserMessageStore.setState({
+      optimisticUserMessage: null,
     });
-    (
-      useErrorMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setErrorMessage: vi.fn(),
-      removeErrorMessage: vi.fn(),
+
+    useErrorMessageStore.setState({
+      errorMessage: null,
     });
+
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: { APP_MODE: "local" },
     });
@@ -204,11 +197,8 @@ describe("ChatInterface - Chat Suggestions", () => {
   });
 
   test("should hide chat suggestions when there is an optimistic user message", () => {
-    (
-      useOptimisticUserMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setOptimisticUserMessage: vi.fn(),
-      getOptimisticUserMessage: vi.fn(() => "Optimistic message"),
+    useOptimisticUserMessageStore.setState({
+      optimisticUserMessage: "Optimistic message",
     });
 
     renderWithQueryClient(<ChatInterface />, queryClient);
@@ -240,24 +230,19 @@ describe("ChatInterface - Empty state", () => {
   });
 
   beforeEach(() => {
-    // Reset mocks to ensure empty state
     (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       send: sendMock,
       status: "CONNECTED",
       isLoadingMessages: false,
       parsedEvents: [],
     });
-    (
-      useOptimisticUserMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setOptimisticUserMessage: vi.fn(),
-      getOptimisticUserMessage: vi.fn(() => null),
+
+    useOptimisticUserMessageStore.setState({
+      optimisticUserMessage: null,
     });
-    (
-      useErrorMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setErrorMessage: vi.fn(),
-      removeErrorMessage: vi.fn(),
+
+    useErrorMessageStore.setState({
+      errorMessage: null,
     });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: { APP_MODE: "local" },

@@ -70,8 +70,8 @@ from openhands.app_server.utils.docker_utils import (
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
-from openhands.sdk.conversation.secret_source import LookupSecret, StaticSecret
 from openhands.sdk.llm import LLM
+from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.security.confirmation_policy import AlwaysConfirm
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
@@ -650,6 +650,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         system_message_suffix: str | None,
         mcp_config: dict,
         condenser_max_size: int | None,
+        secrets: dict | None = None,
     ) -> Agent:
         """Create an agent with appropriate tools and context based on agent type.
 
@@ -659,6 +660,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             system_message_suffix: Optional suffix for system messages
             mcp_config: MCP configuration dictionary
             condenser_max_size: condenser_max_size setting
+            secrets: Optional dictionary of secrets for authentication
 
         Returns:
             Configured Agent instance with context
@@ -687,7 +689,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
         # Add agent context
-        agent_context = AgentContext(system_message_suffix=system_message_suffix)
+        agent_context = AgentContext(
+            system_message_suffix=system_message_suffix, secrets=secrets
+        )
         agent = agent.model_copy(update={'agent_context': agent_context})
 
         return agent
@@ -784,7 +788,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Create agent with context
         agent = self._create_agent_with_context(
-            llm, agent_type, system_message_suffix, mcp_config, user.condenser_max_size
+            llm,
+            agent_type,
+            system_message_suffix,
+            mcp_config,
+            user.condenser_max_size,
+            secrets=secrets,
         )
 
         # Finalize and return the conversation request

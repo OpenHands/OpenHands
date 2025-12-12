@@ -122,12 +122,12 @@ function UserSettingsScreen() {
   const prevVerificationStatusRef = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
-    if (settings?.EMAIL) {
-      setEmail(settings.EMAIL);
-      setOriginalEmail(settings.EMAIL);
-      setIsEmailValid(EMAIL_REGEX.test(settings.EMAIL));
+    if (settings?.email) {
+      setEmail(settings.email);
+      setOriginalEmail(settings.email);
+      setIsEmailValid(EMAIL_REGEX.test(settings.email));
     }
-  }, [settings?.EMAIL]);
+  }, [settings?.email]);
 
   useEffect(() => {
     if (pollingIntervalRef.current) {
@@ -137,7 +137,7 @@ function UserSettingsScreen() {
 
     if (
       prevVerificationStatusRef.current === false &&
-      settings?.EMAIL_VERIFIED === true
+      settings?.email_verified === true
     ) {
       // Display toast notification instead of setting state
       displaySuccessToast(t("SETTINGS$EMAIL_VERIFIED_SUCCESSFULLY"));
@@ -146,9 +146,9 @@ function UserSettingsScreen() {
       }, 2000);
     }
 
-    prevVerificationStatusRef.current = settings?.EMAIL_VERIFIED;
+    prevVerificationStatusRef.current = settings?.email_verified;
 
-    if (settings?.EMAIL_VERIFIED === false) {
+    if (settings?.email_verified === false) {
       pollingIntervalRef.current = window.setInterval(() => {
         refetch();
       }, 5000);
@@ -160,7 +160,7 @@ function UserSettingsScreen() {
         pollingIntervalRef.current = null;
       }
     };
-  }, [settings?.EMAIL_VERIFIED, refetch, queryClient, t]);
+  }, [settings?.email_verified, refetch, queryClient, t]);
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newEmail = e.target.value;
@@ -215,10 +215,10 @@ function UserSettingsScreen() {
             isSaving={isSaving}
             isResendingVerification={isResendingVerification}
             isEmailChanged={isEmailChanged}
-            emailVerified={settings?.EMAIL_VERIFIED}
+            emailVerified={settings?.email_verified}
             isEmailValid={isEmailValid}
           >
-            {settings?.EMAIL_VERIFIED === false && <VerificationAlert />}
+            {settings?.email_verified === false && <VerificationAlert />}
           </EmailInputSection>
         )}
       </div>
