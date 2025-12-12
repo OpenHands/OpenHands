@@ -12,6 +12,7 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useMe } from "#/hooks/query/use-me";
+import { useConfig } from "#/hooks/query/use-config";
 import { rolePermissions } from "#/utils/org/permissions";
 import {
   getSelectedOrgFromQueryClient,
@@ -305,6 +306,7 @@ function ManageOrg() {
   const { data: me } = useMe();
   const { data: organization } = useOrganization();
   const { data: organizationPaymentInfo } = useOrganizationPaymentInfo();
+  const { data: config } = useConfig();
 
   const [addCreditsFormVisible, setAddCreditsFormVisible] =
     React.useState(false);
@@ -319,6 +321,7 @@ function ManageOrg() {
     !!me && rolePermissions[me.role].includes("delete_organization");
   const canAddCredits =
     !!me && rolePermissions[me.role].includes("add_credits");
+  const isBillingHidden = config?.FEATURE_FLAGS?.HIDE_BILLING;
 
   return (
     <div
@@ -336,23 +339,27 @@ function ManageOrg() {
         />
       )}
 
-      <div className="flex flex-col gap-2">
-        <span className="text-white text-xs font-semibold ml-1">
-          {t(I18nKey.ORG$CREDITS)}
-        </span>
-        <div className="flex items-center gap-2">
-          <TempChip data-testid="available-credits">
-            {organization?.balance}
-          </TempChip>
-          {canAddCredits && (
-            <TempInteractiveChip onClick={() => setAddCreditsFormVisible(true)}>
-              {t(I18nKey.ORG$ADD)}
-            </TempInteractiveChip>
-          )}
+      {!isBillingHidden && (
+        <div className="flex flex-col gap-2">
+          <span className="text-white text-xs font-semibold ml-1">
+            {t(I18nKey.ORG$CREDITS)}
+          </span>
+          <div className="flex items-center gap-2">
+            <TempChip data-testid="available-credits">
+              {organization?.balance}
+            </TempChip>
+            {canAddCredits && (
+              <TempInteractiveChip
+                onClick={() => setAddCreditsFormVisible(true)}
+              >
+                {t(I18nKey.ORG$ADD)}
+              </TempInteractiveChip>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {addCreditsFormVisible && (
+      {addCreditsFormVisible && !isBillingHidden && (
         <AddCreditsModal onClose={() => setAddCreditsFormVisible(false)} />
       )}
 
@@ -380,21 +387,23 @@ function ManageOrg() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 w-sm">
-        <span className="text-white text-xs font-semibold ml-1">
-          {t(I18nKey.ORG$BILLING_INFORMATION)}
-        </span>
+      {!isBillingHidden && (
+        <div className="flex flex-col gap-2 w-sm">
+          <span className="text-white text-xs font-semibold ml-1">
+            {t(I18nKey.ORG$BILLING_INFORMATION)}
+          </span>
 
-        <span
-          data-testid="billing-info"
-          className={cn(
-            "text-sm p-3 bg-base rounded text-[#A3A3A3]",
-            "flex items-center justify-between",
-          )}
-        >
-          {organizationPaymentInfo?.cardNumber}
-        </span>
-      </div>
+          <span
+            data-testid="billing-info"
+            className={cn(
+              "text-sm p-3 bg-base rounded text-[#A3A3A3]",
+              "flex items-center justify-between",
+            )}
+          >
+            {organizationPaymentInfo?.cardNumber}
+          </span>
+        </div>
+      )}
 
       {canDeleteOrg && (
         <button

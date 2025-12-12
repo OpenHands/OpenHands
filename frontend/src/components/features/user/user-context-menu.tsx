@@ -71,6 +71,10 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
     navItems = navItems.filter((item) => item.to !== "/settings");
   }
+  // Hide billing when the feature flag is enabled
+  if (config?.FEATURE_FLAGS?.HIDE_BILLING) {
+    navItems = navItems.filter((item) => item.to !== "/settings/billing");
+  }
 
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
     React.useState(false);

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -22,6 +22,7 @@ vi.mock("react-i18next", async () => {
           SETTINGS$NAV_SECRETS: "Secrets",
           SETTINGS$NAV_MCP: "MCP",
           SETTINGS$NAV_USER: "User",
+          SETTINGS$NAV_BILLING: "Billing",
           SETTINGS$TITLE: "Settings",
         };
         return translations[key] || key;
@@ -60,6 +61,10 @@ describe("Settings Screen", () => {
         {
           Component: () => <div data-testid="llm-settings-screen" />,
           path: "/settings",
+        },
+        {
+          Component: () => <div data-testid="user-settings-screen" />,
+          path: "/settings/user",
         },
         {
           Component: () => <div data-testid="git-settings-screen" />,
@@ -192,4 +197,66 @@ describe("Settings Screen", () => {
   });
 
   it.todo("should not be able to access oss-only routes in saas mode");
+
+  describe("HIDE_BILLING feature flag", () => {
+    it("should hide billing navigation item when HIDE_BILLING is true", async () => {
+      // Arrange
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      getConfigSpy.mockResolvedValue({
+        APP_MODE: "saas",
+        GITHUB_CLIENT_ID: "test",
+        POSTHOG_CLIENT_KEY: "test",
+        FEATURE_FLAGS: {
+          ENABLE_BILLING: false,
+          HIDE_LLM_SETTINGS: false,
+          HIDE_BILLING: true,
+          ENABLE_JIRA: false,
+          ENABLE_JIRA_DC: false,
+          ENABLE_LINEAR: false,
+        },
+      });
+
+      mockQueryClient.clear();
+
+      // Act
+      renderSettingsScreen();
+
+      // Assert
+      const navbar = await screen.findByTestId("settings-navbar");
+      expect(within(navbar).queryByText("Billing")).not.toBeInTheDocument();
+
+      getConfigSpy.mockRestore();
+    });
+
+    it("should show billing navigation item when HIDE_BILLING is false", async () => {
+      // Arrange
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      getConfigSpy.mockResolvedValue({
+        APP_MODE: "saas",
+        GITHUB_CLIENT_ID: "test",
+        POSTHOG_CLIENT_KEY: "test",
+        FEATURE_FLAGS: {
+          ENABLE_BILLING: false,
+          HIDE_LLM_SETTINGS: false,
+          HIDE_BILLING: false,
+          ENABLE_JIRA: false,
+          ENABLE_JIRA_DC: false,
+          ENABLE_LINEAR: false,
+        },
+      });
+
+      mockQueryClient.clear();
+
+      // Act
+      renderSettingsScreen();
+
+      // Assert
+      const navbar = await screen.findByTestId("settings-navbar");
+      await waitFor(() => {
+        expect(within(navbar).getByText("Billing")).toBeInTheDocument();
+      });
+
+      getConfigSpy.mockRestore();
+    });
+  });
 });

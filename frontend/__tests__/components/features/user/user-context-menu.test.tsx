@@ -104,6 +104,7 @@ describe("UserContextMenu", () => {
         FEATURE_FLAGS: {
           ENABLE_BILLING: false,
           HIDE_LLM_SETTINGS: false,
+          HIDE_BILLING: false,
           ENABLE_JIRA: false,
           ENABLE_JIRA_DC: false,
           ENABLE_LINEAR: false,
@@ -151,6 +152,7 @@ describe("UserContextMenu", () => {
         FEATURE_FLAGS: {
           ENABLE_BILLING: false,
           HIDE_LLM_SETTINGS: true,
+          HIDE_BILLING: false,
           ENABLE_JIRA: false,
           ENABLE_JIRA_DC: false,
           ENABLE_LINEAR: false,
@@ -177,6 +179,7 @@ describe("UserContextMenu", () => {
         FEATURE_FLAGS: {
           ENABLE_BILLING: false,
           HIDE_LLM_SETTINGS: false,
+          HIDE_BILLING: false,
           ENABLE_JIRA: false,
           ENABLE_JIRA_DC: false,
           ENABLE_LINEAR: false,

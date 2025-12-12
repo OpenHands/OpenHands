@@ -395,12 +395,14 @@ describe("Settings 404", () => {
   });
 
   it("should not open the settings modal if GET /settings fails but is SaaS mode", async () => {
-    // @ts-expect-error - we only need APP_MODE for this test
     getConfigSpy.mockResolvedValue({
       APP_MODE: "saas",
+      GITHUB_CLIENT_ID: "test",
+      POSTHOG_CLIENT_KEY: "test",
       FEATURE_FLAGS: {
         ENABLE_BILLING: false,
         HIDE_LLM_SETTINGS: false,
+        HIDE_BILLING: false,
         ENABLE_JIRA: false,
         ENABLE_JIRA_DC: false,
         ENABLE_LINEAR: false,
@@ -420,12 +422,14 @@ describe("Setup Payment modal", () => {
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
   it("should only render if SaaS mode and is new user", async () => {
-    // @ts-expect-error - we only need the APP_MODE for this test
     getConfigSpy.mockResolvedValue({
       APP_MODE: "saas",
+      GITHUB_CLIENT_ID: "test",
+      POSTHOG_CLIENT_KEY: "test",
       FEATURE_FLAGS: {
         ENABLE_BILLING: true,
         HIDE_LLM_SETTINGS: false,
+        HIDE_BILLING: false,
         ENABLE_JIRA: false,
         ENABLE_JIRA_DC: false,
         ENABLE_LINEAR: false,

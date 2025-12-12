@@ -45,6 +45,15 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     return redirect("/settings/mcp");
   }
 
+  // If billing is hidden and user tries to access the billing page
+  if (config?.FEATURE_FLAGS?.HIDE_BILLING && pathname === "/settings/billing") {
+    // Redirect to the first available settings page
+    if (isSaas) {
+      return redirect("/settings/user");
+    }
+    return redirect("/settings/mcp");
+  }
+
   return null;
 };
 
@@ -57,7 +66,7 @@ function SettingsScreen() {
 
   // Navigation items configuration
   const navItems = useMemo(() => {
-    const items = [];
+    let items = [];
     if (isSaas) {
       items.push(...SAAS_NAV_ITEMS);
     } else {
@@ -66,11 +75,20 @@ function SettingsScreen() {
 
     // Filter out LLM settings if the feature flag is enabled
     if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
-      return items.filter((item) => item.to !== "/settings");
+      items = items.filter((item) => item.to !== "/settings");
+    }
+
+    // Filter out billing if the feature flag is enabled
+    if (config?.FEATURE_FLAGS?.HIDE_BILLING) {
+      items = items.filter((item) => item.to !== "/settings/billing");
     }
 
     return items;
-  }, [isSaas, config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS]);
+  }, [
+    isSaas,
+    config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS,
+    config?.FEATURE_FLAGS?.HIDE_BILLING,
+  ]);
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {
