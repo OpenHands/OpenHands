@@ -7,7 +7,7 @@ const dividerVariants = cva("w-full", {
       horizontal: "h-[1px]",
     },
     color: {
-      light: "bg-[var(--color-surface-hover)]",
+      light: "bg-[#5C5D62]",
     },
     size: {
       thin: "h-[1px]",

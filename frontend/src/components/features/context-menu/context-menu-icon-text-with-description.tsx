@@ -21,7 +21,7 @@ export function ContextMenuIconTextWithDescription({
   return (
     <div
       className={cn(
-        "flex flex-col gap-1 justify-center hover:bg-[var(--color-surface-hover)] rounded p-2",
+        "flex flex-col gap-1 justify-center hover:bg-[#5C5D62] rounded p-2",
         className,
       )}
     >
@@ -31,7 +31,7 @@ export function ContextMenuIconTextWithDescription({
         className="px-0"
         iconClassName={iconClassName}
       />
-      <Typography.Text className="text-[var(--color-muted)] text-[10px] font-normal whitespace-pre-wrap break-words">
+      <Typography.Text className="text-[#A3A3A3] text-[10px] font-normal whitespace-pre-wrap break-words">
         {description}
       </Typography.Text>
     </div>

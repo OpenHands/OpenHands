@@ -3,9 +3,9 @@ import toast, { ToastOptions } from "react-hot-toast";
 import { calculateToastDuration } from "./toast-duration";
 
 const TOAST_STYLE: CSSProperties = {
-  background: "var(--color-tertiary)",
+  background: "#454545",
   border: "1px solid #717888",
-  color: "var(--color-white)",
+  color: "#fff",
   borderRadius: "4px",
 };
 

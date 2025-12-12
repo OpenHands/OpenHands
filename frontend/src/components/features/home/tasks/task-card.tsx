@@ -75,7 +75,7 @@ export function TaskCard({ task }: TaskCardProps) {
       type="button"
       data-testid="task-launch-button"
       className={cn(
-        "w-full p-[14px] text-left flex items-center justify-between cursor-pointer hover:bg-[var(--color-surface-hover)] transition-all duration-300 rounded-lg",
+        "w-full p-[14px] text-left flex items-center justify-between cursor-pointer hover:bg-[#5C5D62] transition-all duration-300 rounded-lg",
         isCreatingConversation && "cursor-not-allowed",
       )}
       disabled={isCreatingConversation}
@@ -89,7 +89,7 @@ export function TaskCard({ task }: TaskCardProps) {
             {getTaskTypeMap(t)[task.task_type]}
           </span>
           <span
-            className="text-xs text-[var(--color-muted)] leading-4 font-normal max-w-70 truncate"
+            className="text-xs text-[#A3A3A3] leading-4 font-normal max-w-70 truncate"
             title={task.title}
           >
             {task.title}

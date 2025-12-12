@@ -78,7 +78,7 @@ export function MicroagentManagementRepositories({
           base: "shadow-none bg-transparent cursor-pointer px-0",
           trigger: "cursor-pointer gap-2 py-3",
           indicator:
-            "flex items-center justify-center p-0.5 pr-[3px] text-white hover:bg-[var(--color-tertiary)] rounded transition-colors duration-200 rotate-180",
+            "flex items-center justify-center p-0.5 pr-[3px] text-white hover:bg-[#454545] rounded transition-colors duration-200 rotate-180",
         }}
         selectionMode="multiple"
       >

@@ -116,9 +116,7 @@ export function V1ConfirmationButtons() {
       {isHighRisk && (
         <RiskAlert
           content={t(I18nKey.CHAT_INTERFACE$HIGH_RISK_WARNING)}
-          icon={
-            <WarningIcon width={16} height={16} color="var(--color-white)" />
-          }
+          icon={<WarningIcon width={16} height={16} color="#fff" />}
           severity="high"
           title={t(I18nKey.COMMON$HIGH_RISK)}
         />

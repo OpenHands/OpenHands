@@ -17,7 +17,7 @@ export function UploadedFile({
   const fileExtension = getFileExtension(file.name);
 
   return (
-    <div className="group flex gap-2 rounded-lg bg-[var(--color-border)] max-w-[160px] px-3 py-1 relative">
+    <div className="group flex gap-2 rounded-lg bg-[#525252] max-w-[160px] px-3 py-1 relative">
       <div className="flex flex-col justify-center gap-0.25">
         <RemoveFileButton onClick={onRemove} />
         <div className="flex items-center gap-2 w-full">

@@ -19,10 +19,10 @@ export function MicroagentManagementOpeningPr() {
 
   return (
     <div className="flex-1 flex flex-col h-full items-center justify-center">
-      <div className="text-[var(--color-white)99] text-[22px] font-semibold pb-2">
+      <div className="text-[#ffffff99] text-[22px] font-semibold pb-2">
         {t(I18nKey.COMMON$WORKING_ON_IT)}!
       </div>
-      <div className="text-[var(--color-white)99] text-[18px] font-normal text-center max-w-[518px] pb-[22px]">
+      <div className="text-[#ffffff99] text-[18px] font-normal text-center max-w-[518px] pb-[22px]">
         {t(I18nKey.MICROAGENT_MANAGEMENT$WE_ARE_WORKING_ON_IT)}
       </div>
       <Loader size="small" className="pb-[22px]" />

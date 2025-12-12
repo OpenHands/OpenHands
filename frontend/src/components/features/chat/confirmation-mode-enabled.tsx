@@ -19,7 +19,7 @@ function ConfirmationModeEnabled() {
       closeDelay={100}
       className="bg-white text-black hover:bg-transparent"
     >
-      <div className="flex items-center justify-center w-[26px] h-[26px] rounded-lg bg-[var(--color-surface-alt)]">
+      <div className="flex items-center justify-center w-[26px] h-[26px] rounded-lg bg-[#25272D]">
         <LockIcon width={15} height={15} />
       </div>
     </Tooltip>

@@ -32,7 +32,7 @@ export const useV0ConversationConfig = () => {
       // eslint-disable-next-line no-console
       console.log(
         "Runtime ID: %c%s",
-        "background: var(--color-tertiary); color: var(--color-warning-bright); font-weight: bold; padding: 2px 4px; border-radius: 4px;",
+        "background: #444; color: #ffeb3b; font-weight: bold; padding: 2px 4px; border-radius: 4px;",
         runtimeId,
       );
     }
@@ -63,7 +63,7 @@ export const useV1ConversationConfig = () => {
       // eslint-disable-next-line no-console
       console.log(
         "Runtime ID: %c%s",
-        "background: var(--color-tertiary); color: var(--color-warning-bright); font-weight: bold; padding: 2px 4px; border-radius: 4px;",
+        "background: #444; color: #ffeb3b; font-weight: bold; padding: 2px 4px; border-radius: 4px;",
         runtimeId,
       );
     }
@@ -106,7 +106,7 @@ export const useUnifiedConversationConfig = () => {
       // eslint-disable-next-line no-console
       console.log(
         "Runtime ID: %c%s",
-        "background: var(--color-tertiary); color: var(--color-warning-bright); font-weight: bold; padding: 2px 4px; border-radius: 4px;",
+        "background: #444; color: #ffeb3b; font-weight: bold; padding: 2px 4px; border-radius: 4px;",
         runtimeId,
       );
     }

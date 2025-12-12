@@ -5,7 +5,7 @@ const helpLinkVariants = cva("", {
   variants: {
     size: {
       default: "text-xs",
-      settings: "text-sm text-[var(--color-muted)] font-normal leading-5.5",
+      settings: "text-sm text-[#A3A3A3] font-normal leading-5.5",
     },
     linkColor: {
       default: "",

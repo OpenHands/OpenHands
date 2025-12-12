@@ -33,7 +33,7 @@ export function BrandButton({
       onClick={onClick}
       className={cn(
         "w-fit p-2 text-sm rounded-sm disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-80 cursor-pointer",
-        variant === "primary" && "bg-primary text-[var(--color-base)]",
+        variant === "primary" && "bg-primary text-[#0D0F11]",
         variant === "secondary" && "border border-primary text-primary",
         variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
         variant === "ghost-danger" &&

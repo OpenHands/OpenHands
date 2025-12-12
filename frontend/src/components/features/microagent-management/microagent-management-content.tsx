@@ -321,7 +321,7 @@ export function MicroagentManagementContent() {
   if (width < 1024) {
     return (
       <div className="w-full h-full flex flex-col gap-6">
-        <div className="w-full rounded-lg border border-[var(--color-border)] bg-[#24272E] max-h-[494px] min-h-[494px]">
+        <div className="w-full rounded-lg border border-[#525252] bg-[#24272E] max-h-[494px] min-h-[494px]">
           {providersAreSet && (
             <MicroagentManagementSidebar
               isSmallerScreen
@@ -329,7 +329,7 @@ export function MicroagentManagementContent() {
             />
           )}
         </div>
-        <div className="w-full rounded-lg border border-[var(--color-border)] bg-[#24272E] flex-1 min-h-[494px]">
+        <div className="w-full rounded-lg border border-[#525252] bg-[#24272E] flex-1 min-h-[494px]">
           <MicroagentManagementMain />
         </div>
         {renderModals()}
@@ -338,7 +338,7 @@ export function MicroagentManagementContent() {
   }
 
   return (
-    <div className="w-full h-full flex rounded-lg border border-[var(--color-border)] bg-[#24272E] overflow-hidden">
+    <div className="w-full h-full flex rounded-lg border border-[#525252] bg-[#24272E] overflow-hidden">
       {providersAreSet && <MicroagentManagementSidebar providers={providers} />}
       <div className="flex-1">
         <MicroagentManagementMain />

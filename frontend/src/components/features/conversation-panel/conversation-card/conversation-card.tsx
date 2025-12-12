@@ -110,7 +110,7 @@ export function ConversationCard({
       onClick={onClick}
       className={cn(
         "relative h-auto w-full p-3.5 border-b border-neutral-600 cursor-pointer",
-        "data-[context-menu-open=false]:hover:bg-[var(--color-tertiary)]",
+        "data-[context-menu-open=false]:hover:bg-[#454545]",
       )}
     >
       <div className="flex items-center justify-between w-full">

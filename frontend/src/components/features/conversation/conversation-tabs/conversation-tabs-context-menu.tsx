@@ -99,7 +99,7 @@ export function ConversationTabsContextMenu({
           <ContextMenuListItem
             key={tab}
             onClick={() => handleTabClick(tab)}
-            className="flex items-center gap-2 p-2 hover:bg-[var(--color-surface-hover)] rounded h-[30px]"
+            className="flex items-center gap-2 p-2 hover:bg-[#5C5D62] rounded h-[30px]"
           >
             <Icon className="w-4 h-4" />
             <span className="text-white text-sm">{t(i18nKey)}</span>

@@ -25,7 +25,7 @@ export function MicroagentManagementReviewPr() {
 
   return (
     <div className="flex-1 flex flex-col h-full items-center justify-center">
-      <div className="text-[var(--color-white)99] text-[22px] font-bold pb-[22px] text-center max-w-[455px]">
+      <div className="text-[#ffffff99] text-[22px] font-bold pb-[22px] text-center max-w-[455px]">
         {t(I18nKey.MICROAGENT_MANAGEMENT$YOUR_MICROAGENT_IS_READY)}
       </div>
       <div className="flex gap-[22px]">

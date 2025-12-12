@@ -16,7 +16,7 @@ export function ToolsContextMenuIconText({
   return (
     <div
       className={cn(
-        "flex items-center justify-between p-2 hover:bg-[var(--color-surface-hover)] rounded",
+        "flex items-center justify-between p-2 hover:bg-[#5C5D62] rounded",
         className,
       )}
     >

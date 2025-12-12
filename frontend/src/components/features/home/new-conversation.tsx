@@ -23,7 +23,7 @@ export function NewConversation() {
     isPending || isSuccess || isCreatingConversationElsewhere;
 
   return (
-    <section className="w-full min-h-[286px] md:min-h-auto flex flex-col rounded-[12px] p-[20px] gap-[10px] border border-[var(--color-border-strong)] bg-[var(--color-surface-alt)] relative">
+    <section className="w-full min-h-[286px] md:min-h-auto flex flex-col rounded-[12px] p-[20px] gap-[10px] border border-[#727987] bg-[#26282D] relative">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-[10px]">
           <PlusIcon width={17} height={14} />

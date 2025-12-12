@@ -21,7 +21,7 @@ export function ChevronLeft({
         fillRule="evenodd"
         clipRule="evenodd"
         d="M11.204 15.0037L6.65511 9.99993L11.204 4.99617L12.1289 5.83701L8.34444 9.99993L12.1289 14.1628L11.204 15.0037Z"
-        fill={active ? "#D4D4D4" : "var(--color-border)"}
+        fill={active ? "#D4D4D4" : "#525252"}
       />
     </svg>
   );

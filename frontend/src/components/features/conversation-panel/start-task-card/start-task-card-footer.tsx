@@ -29,7 +29,7 @@ export function StartTaskCardFooter({
           <NoRepository />
         )}
         {createdAt && (
-          <p className="text-xs text-[var(--color-muted)] flex-1 text-right">
+          <p className="text-xs text-[#A3A3A3] flex-1 text-right">
             <time>
               {`${formatTimeDelta(createdAt)} ${t(I18nKey.CONVERSATION$AGO)}`}
             </time>

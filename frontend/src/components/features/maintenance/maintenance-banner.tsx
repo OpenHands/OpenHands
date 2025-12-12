@@ -80,7 +80,7 @@ export function MaintenanceBanner({ startTime }: MaintenanceBannerProps) {
     <div
       data-testid="maintenance-banner"
       className={cn(
-        "bg-primary text-[var(--color-base)] p-4 rounded",
+        "bg-primary text-[#0D0F11] p-4 rounded",
         "flex flex-row items-center justify-between m-1",
         pathname === "/" && "mt-3 mr-3",
       )}
@@ -101,7 +101,7 @@ export function MaintenanceBanner({ startTime }: MaintenanceBannerProps) {
         data-testid="dismiss-button"
         onClick={() => setDismissedAt(localTime)}
         className={cn(
-          "bg-[var(--color-base)] rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
+          "bg-[#0D0F11] rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
         )}
       >
         <CloseIcon />

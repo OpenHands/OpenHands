@@ -103,10 +103,10 @@ export function FileDiffViewer({ path, type }: FileDiffViewerProps) {
         "diffEditor.removedTextBackground": "#750000AA", // Stronger red background
         "diffEditor.insertedLineBackground": "#003f00AA", // Dark green for added lines
         "diffEditor.removedLineBackground": "#5a0000AA", // Dark red for removed lines
-        "diffEditor.border": "var(--color-tertiary)444", // Border between diff editors
+        "diffEditor.border": "#444444", // Border between diff editors
 
-        "editorUnnecessaryCode.border": "var(--color-base)00", // No border for unnecessary code
-        "editorUnnecessaryCode.opacity": "var(--color-base)77", // Slightly faded
+        "editorUnnecessaryCode.border": "#00000000", // No border for unnecessary code
+        "editorUnnecessaryCode.opacity": "#00000077", // Slightly faded
       },
     });
   };

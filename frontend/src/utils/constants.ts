@@ -18,7 +18,7 @@ export const JSON_VIEW_THEME = {
   base04: "#969896", // dark foreground
   base05: "#d9d9d9", // default foreground
   base06: "#e8e8e8", // light foreground
-  base07: "var(--color-white)", // light background
+  base07: "#ffffff", // light background
   base08: "#ff5370", // variables, red
   base09: "#f78c6c", // integers, orange
   base0A: "#ffcb6b", // booleans, yellow

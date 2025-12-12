@@ -118,7 +118,7 @@ export function ChangeAgentButton() {
     if (isExecutionAgent) {
       return <CodeTagIcon width={18} height={18} color="#737373" />;
     }
-    return <LessonPlanIcon width={18} height={18} color="var(--color-white)" />;
+    return <LessonPlanIcon width={18} height={18} color="#ffffff" />;
   }, [isExecutionAgent]);
 
   if (!shouldUsePlanningAgent) {
@@ -132,9 +132,8 @@ export function ChangeAgentButton() {
         onClick={handleButtonClick}
         disabled={isButtonDisabled}
         className={cn(
-          "flex items-center border border-[var(--color-border)] rounded-[100px] transition-opacity",
-          !isExecutionAgent &&
-            "border-[var(--color-info)] bg-[var(--color-link)]",
+          "flex items-center border border-[#4B505F] rounded-[100px] transition-opacity",
+          !isExecutionAgent && "border-[#597FF4] bg-[#4A67BD]",
           isButtonDisabled
             ? "opacity-50 cursor-not-allowed"
             : "cursor-pointer hover:opacity-80",
@@ -146,11 +145,7 @@ export function ChangeAgentButton() {
             {buttonLabel}
           </Typography.Text>
         </div>
-        <ChevronDownSmallIcon
-          width={24}
-          height={24}
-          color="var(--color-white)"
-        />
+        <ChevronDownSmallIcon width={24} height={24} color="#ffffff" />
       </button>
       {contextMenuOpen && (
         <ChangeAgentContextMenu

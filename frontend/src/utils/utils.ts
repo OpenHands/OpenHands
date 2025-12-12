@@ -705,7 +705,7 @@ export const getStatusColor = (options: {
   // Show task status if we're polling a task
   if (isTask && taskStatus) {
     if (taskStatus === "ERROR") {
-      return "var(--color-danger-accent)";
+      return "#FF684E";
     }
     return "#FFD600";
   }
@@ -714,10 +714,10 @@ export const getStatusColor = (options: {
     return "#FFD600";
   }
   if (isStopStatus) {
-    return "var(--color-white)";
+    return "#ffffff";
   }
   if (curAgentState === AgentState.ERROR) {
-    return "var(--color-danger-accent)";
+    return "#FF684E";
   }
   return "#BCFF8C";
 };

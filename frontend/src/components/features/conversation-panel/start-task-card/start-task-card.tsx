@@ -31,7 +31,7 @@ export function StartTaskCard({ task, onClick }: StartTaskCardProps) {
       onClick={onClick}
       className={cn(
         "relative h-auto w-full p-3.5 border-b border-neutral-600 cursor-pointer",
-        "hover:bg-[var(--color-tertiary)]",
+        "hover:bg-[#454545]",
       )}
     >
       <div className="flex items-center justify-between w-full">

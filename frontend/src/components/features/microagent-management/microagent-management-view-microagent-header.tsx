@@ -31,7 +31,7 @@ export function MicroagentManagementViewMicroagentHeader() {
 
   return (
     <div className="flex items-center justify-between pb-2">
-      <span className="text-sm text-[var(--color-white)99]">
+      <span className="text-sm text-[#ffffff99]">
         {selectedRepository.full_name}
       </span>
       <div className="flex items-center justify-end gap-2">
