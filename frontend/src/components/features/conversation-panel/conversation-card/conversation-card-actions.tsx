@@ -65,7 +65,7 @@ export function ConversationCardActions({
             conversationId && showOptions ? onDownloadViaVSCode : undefined
           }
           onDownloadTrajectory={
-            conversationId && showOptions ? onDownloadTrajectory : undefined
+            conversationId ? onDownloadTrajectory : undefined
           }
           position="bottom"
         />
