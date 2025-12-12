@@ -67,10 +67,10 @@ describe("extractSettings", () => {
 
       // Verify that the model name case is preserved
       const expectedModel = `${provider}/${model}`;
-      expect(settings.LLM_MODEL).toBe(expectedModel);
+      expect(settings.llm_model).toBe(expectedModel);
       // Only test that it's not lowercased if the original has uppercase letters
       if (expectedModel !== expectedModel.toLowerCase()) {
-        expect(settings.LLM_MODEL).not.toBe(expectedModel.toLowerCase());
+        expect(settings.llm_model).not.toBe(expectedModel.toLowerCase());
       }
     });
   });
@@ -85,7 +85,7 @@ describe("extractSettings", () => {
     const settings = extractSettings(formData);
 
     // Custom model should take precedence and preserve case
-    expect(settings.LLM_MODEL).toBe("Custom-Model-Name");
-    expect(settings.LLM_MODEL).not.toBe("custom-model-name");
+    expect(settings.llm_model).toBe("Custom-Model-Name");
+    expect(settings.llm_model).not.toBe("custom-model-name");
   });
 });
