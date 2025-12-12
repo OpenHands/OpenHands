@@ -157,7 +157,10 @@ export function ConversationName() {
 
         {titleMode !== "edit" && (
           <div className="relative flex items-center">
-            <EllipsisButton fill="#B1B9D3" onClick={handleEllipsisClick} />
+            <EllipsisButton
+              fill="var(--color-highlight)"
+              onClick={handleEllipsisClick}
+            />
             {contextMenuOpen && (
               <ConversationNameContextMenu
                 onClose={() => setContextMenuOpen(false)}

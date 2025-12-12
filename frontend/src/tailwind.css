@@ -43,6 +43,7 @@
   --color-placeholder: #a1a1a1;
   --color-highlight: #d0d9fa;
   --color-white: #ffffff;
+  --color-white-10: rgba(255, 255, 255, 0.1);
   --color-base-transparent: #00000000;
   --color-base-faded: #00000077;
 

@@ -31,7 +31,7 @@ export function MicroagentManagementViewMicroagentContent() {
   }
 
   return (
-    <div className="w-full h-full p-6 bg-[#ffffff1a] rounded-2xl text-white text-sm">
+    <div className="w-full h-full p-6 bg-[var(--color-white-10)] rounded-2xl text-white text-sm">
       {isLoading && (
         <div className="flex items-center justify-center w-full h-full">
           <Spinner size="lg" data-testid="loading-microagent-content-spinner" />

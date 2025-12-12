@@ -15,7 +15,7 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <li
-      className="px-3 py-2 text-[#B7BDC2] text-sm rounded-lg mx-0.5 my-0.5"
+      className="px-3 py-2 text-[var(--color-tertiary-light)] text-sm rounded-lg mx-0.5 my-0.5"
       data-testid={testId}
     >
       {inputValue ? searchMessage : emptyMessage}

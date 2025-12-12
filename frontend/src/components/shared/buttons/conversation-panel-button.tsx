@@ -30,7 +30,7 @@ export function ConversationPanelButton({
         height={24}
         className={cn(
           "cursor-pointer",
-          isOpen ? "text-white" : "text-[#B1B9D3]",
+          isOpen ? "text-white" : "text-[var(--color-highlight)]",
           disabled && "opacity-50",
         )}
       />

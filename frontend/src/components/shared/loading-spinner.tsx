@@ -13,7 +13,7 @@ export function LoadingSpinner({ size }: LoadingSpinnerProps) {
     <div data-testid="loading-spinner" className={cn("relative", sizeStyle)}>
       <div
         className={cn(
-          "rounded-full border-4 border-[#525252] absolute",
+          "rounded-full border-4 border-[var(--color-border)] absolute",
           sizeStyle,
         )}
       />

@@ -11,7 +11,7 @@ export function TaskIssueNumber({ href, issueNumber }: TaskIssueNumberProps) {
       rel="noopener noreferrer"
       data-testid="task-id"
     >
-      <span className="text-xs text-[#A3A3A3] leading-4 font-normal">
+      <span className="text-xs text-[var(--color-muted)] leading-4 font-normal">
         #{issueNumber}
       </span>
     </a>

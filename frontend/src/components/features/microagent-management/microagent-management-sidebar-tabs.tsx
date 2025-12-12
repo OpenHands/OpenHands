@@ -23,7 +23,7 @@ export function MicroagentManagementSidebarTabs({
         classNames={{
           base: "py-6",
           tabList:
-            "w-full bg-transparent border border-[#ffffff40] rounded-[6px]",
+            "w-full bg-transparent border border-[var(--color-white)40] rounded-[6px]",
           tab: "px-2 h-[22px]",
           tabContent: "text-white text-[12px] font-normal",
           panel: "p-0",

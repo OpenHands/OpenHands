@@ -95,8 +95,8 @@ export function MicroagentManagementMicroagentCard({
   return (
     <div
       className={cn(
-        "rounded-lg bg-[#ffffff0d] border border-[#ffffff33] p-4 cursor-pointer hover:bg-[#ffffff33] hover:border-[#C9B974] transition-all duration-300",
-        isCardSelected && "bg-[#ffffff33] border-[#C9B974]",
+        "rounded-lg bg-[var(--color-white)0d] border border-[var(--color-white)33] p-4 cursor-pointer hover:bg-[var(--color-white)33] hover:border-[#C9B974] transition-all duration-300",
+        isCardSelected && "bg-[var(--color-white)33] border-[#C9B974]",
       )}
       onClick={onMicroagentCardClicked}
     >

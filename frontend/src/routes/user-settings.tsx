@@ -65,7 +65,7 @@ function EmailInputSection({
             type="button"
             onClick={onSaveEmail}
             disabled={!isEmailChanged || isSaving || !isEmailValid}
-            className="px-4 py-2 rounded-sm bg-primary text-white hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:text-[#0D0F11]"
+            className="px-4 py-2 rounded-sm bg-primary text-white hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:text-[var(--color-base)]"
             data-testid="save-email-button"
           >
             {isSaving ? t("SETTINGS$SAVING") : t("SETTINGS$SAVE")}
@@ -76,7 +76,7 @@ function EmailInputSection({
               type="button"
               onClick={onResendVerification}
               disabled={isResendingVerification}
-              className="px-4 py-2 rounded-sm bg-primary text-white hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:text-[#0D0F11]"
+              className="px-4 py-2 rounded-sm bg-primary text-white hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:text-[var(--color-base)]"
               data-testid="resend-verification-button"
             >
               {isResendingVerification

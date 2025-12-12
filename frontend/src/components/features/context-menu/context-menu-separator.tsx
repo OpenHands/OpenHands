@@ -12,7 +12,7 @@ export function ContextMenuSeparator({
   return (
     <div
       data-testid={testId}
-      className={cn("w-full h-[1px] bg-[#525252]", className)}
+      className={cn("w-full h-[1px] bg-[var(--color-border)]", className)}
     />
   );
 }

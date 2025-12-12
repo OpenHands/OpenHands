@@ -106,7 +106,7 @@ export function RecentConversations() {
           <button
             type="button"
             onClick={handleToggleExpansion}
-            className="text-xs leading-4 text-[#FAFAFA] font-normal cursor-pointer hover:underline"
+            className="text-xs leading-4 text-[var(--color-white)] font-normal cursor-pointer hover:underline"
           >
             {isExpanded
               ? t(I18nKey.COMMON$VIEW_LESS)

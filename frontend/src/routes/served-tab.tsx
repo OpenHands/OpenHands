@@ -50,8 +50,12 @@ function ServedApp() {
   if (!currentActiveHost) {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-10">
-        <ServerProcessIcon width={113} height={113} color="#A1A1A1" />
-        <span className="text-[#8D95A9] text-[19px] font-normal leading-5">
+        <ServerProcessIcon
+          width={113}
+          height={113}
+          color="var(--color-placeholder)"
+        />
+        <span className="text-[var(--color-muted)] text-[19px] font-normal leading-5">
           {t(I18nKey.BROWSER$SERVER_MESSAGE)}
         </span>
       </div>

@@ -23,7 +23,7 @@ export function ConversationStatusIndicator({
       case "STARTING":
         return "bg-[#FFD43B]"; // Busy/starting - yellow
       case "ERROR":
-        return "bg-[#FF684E]"; // Error - red
+        return "bg-[var(--color-danger-accent)]"; // Error - red
       default:
         return "bg-[#3C3C49]"; // Default to grey for unknown states
     }

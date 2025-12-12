@@ -24,11 +24,11 @@ export function code({
         <code
           className={className}
           style={{
-            backgroundColor: "#2a3038",
+            backgroundColor: "var(--color-code-surface)",
             padding: "0.2em 0.4em",
             borderRadius: "4px",
             color: "#e6edf3",
-            border: "1px solid #30363d",
+            border: "1px solid var(--color-code-border)",
           }}
         >
           {children}
@@ -39,11 +39,11 @@ export function code({
     return (
       <pre
         style={{
-          backgroundColor: "#2a3038",
+          backgroundColor: "var(--color-code-surface)",
           padding: "1em",
           borderRadius: "4px",
           color: "#e6edf3",
-          border: "1px solid #30363d",
+          border: "1px solid var(--color-code-border)",
           overflow: "auto",
         }}
       >
