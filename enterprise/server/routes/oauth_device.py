@@ -57,7 +57,6 @@ class DeviceTokenErrorResponse(BaseModel):
 
 oauth_device_router = APIRouter(prefix='/oauth/device')
 device_code_store = DeviceCodeStore(session_maker)
-token_manager = TokenManager()
 
 
 # ---------------------------------------------------------------------------
