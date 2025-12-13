@@ -321,7 +321,7 @@ class V1ConversationService {
    * @param conversationId The conversation ID
    * @returns A blob containing the zip file
    */
-  static async exportConversation(conversationId: string): Promise<Blob> {
+  static async downloadConversation(conversationId: string): Promise<Blob> {
     const response = await openHands.get(
       `/api/v1/app-conversations/${conversationId}/download`,
       {

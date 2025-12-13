@@ -162,7 +162,7 @@ export function useConversationNameContextMenu({
     if (conversationId && conversation?.conversation_version === "V1") {
       try {
         const blob =
-          await V1ConversationService.exportConversation(conversationId);
+          await V1ConversationService.downloadConversation(conversationId);
 
         // Create a download link
         const url = window.URL.createObjectURL(blob);
