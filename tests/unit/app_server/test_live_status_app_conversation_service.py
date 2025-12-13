@@ -1074,9 +1074,7 @@ class TestLiveStatusAppConversationService:
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.iterate'
     )
-    async def test_export_conversation_iterate_function_usage(
-        self, mock_iterate
-    ):
+    async def test_export_conversation_iterate_function_usage(self, mock_iterate):
         """Test that the download method correctly uses the iterate function."""
         # Arrange
         conversation_id = uuid4()
