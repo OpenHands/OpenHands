@@ -174,7 +174,6 @@ export function useConversationNameContextMenu({
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       } catch (error) {
-        console.error("Failed to download conversation:", error);
         displayErrorToast(t(I18nKey.CONVERSATION$DOWNLOAD_ERROR));
       }
     }
@@ -238,8 +237,8 @@ export function useConversationNameContextMenu({
     shouldShowExport: Boolean(conversationId && showOptions),
     shouldShowDownloadConversation: Boolean(
       conversationId &&
-        showOptions &&
-        conversation?.conversation_version === "V1",
+      showOptions &&
+      conversation?.conversation_version === "V1",
     ),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
