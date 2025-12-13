@@ -27,6 +27,9 @@ def upgrade():
         sa.Column('keycloak_user_id', sa.String(length=255), nullable=True),
         sa.Column('expires_at', sa.DateTime(), nullable=False),
         sa.Column('authorized_at', sa.DateTime(), nullable=True),
+        # Rate limiting fields for RFC 8628 section 3.5 compliance
+        sa.Column('last_poll_time', sa.DateTime(), nullable=True),
+        sa.Column('current_interval', sa.Integer(), nullable=False, default=5),
         sa.PrimaryKeyConstraint('id'),
     )
 

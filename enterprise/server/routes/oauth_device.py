@@ -50,6 +50,7 @@ class DeviceTokenResponse(BaseModel):
 class DeviceTokenErrorResponse(BaseModel):
     error: str
     error_description: Optional[str] = None
+    interval: Optional[int] = None  # Required for slow_down error
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +70,7 @@ def _oauth_error(
     status_code: int,
     error: str,
     description: str,
+    interval: Optional[int] = None,
 ) -> JSONResponse:
     """Return a JSON OAuth-style error response."""
     return JSONResponse(
@@ -76,6 +78,7 @@ def _oauth_error(
         content=DeviceTokenErrorResponse(
             error=error,
             error_description=description,
+            interval=interval,
         ).model_dump(),
     )
 
@@ -134,6 +137,31 @@ async def device_token(request: DeviceTokenRequest):
                 'invalid_grant',
                 'Invalid device code',
             )
+
+        # Check rate limiting (RFC 8628 section 3.5)
+        is_too_fast, current_interval = device_code_entry.check_rate_limit()
+        if is_too_fast:
+            # Update poll time and increase interval
+            device_code_store.update_poll_time(
+                request.device_code, increase_interval=True
+            )
+            logger.warning(
+                'Client polling too fast, returning slow_down error',
+                extra={
+                    'device_code': request.device_code[:8]
+                    + '...',  # Log partial for privacy
+                    'new_interval': current_interval,
+                },
+            )
+            return _oauth_error(
+                status.HTTP_400_BAD_REQUEST,
+                'slow_down',
+                f'Polling too frequently. Wait at least {current_interval} seconds between requests.',
+                interval=current_interval,
+            )
+
+        # Update poll time for successful rate limit check
+        device_code_store.update_poll_time(request.device_code, increase_interval=False)
 
         if device_code_entry.is_expired():
             return _oauth_error(

@@ -87,7 +87,10 @@ class TestDeviceToken:
             mock_device = MagicMock()
             mock_device.is_expired.return_value = status == 'expired'
             mock_device.status = status
+            # Mock rate limiting - return False (not too fast) and default interval
+            mock_device.check_rate_limit.return_value = (False, 5)
             mock_store.get_by_device_code.return_value = mock_device
+            mock_store.update_poll_time.return_value = True
         else:
             mock_store.get_by_device_code.return_value = None
 
@@ -113,7 +116,10 @@ class TestDeviceToken:
         mock_device.user_code = (
             'ABC12345'  # Add user_code for device-specific API key lookup
         )
+        # Mock rate limiting - return False (not too fast) and default interval
+        mock_device.check_rate_limit.return_value = (False, 5)
         mock_store.get_by_device_code.return_value = mock_device
+        mock_store.update_poll_time.return_value = True
 
         # Mock API key retrieval
         mock_api_key_store = MagicMock()
@@ -122,6 +128,7 @@ class TestDeviceToken:
 
         result = await device_token(request)
 
+        # Check that result is a DeviceTokenResponse
         assert result.access_token == 'test-api-key'
         assert result.token_type == 'Bearer'
 
@@ -255,3 +262,188 @@ class TestDeviceVerificationAuthenticated:
 
         # Should NOT delete any existing API keys
         mock_api_key_store.delete_api_key_by_name.assert_not_called()
+
+
+class TestDeviceTokenRateLimiting:
+    """Test rate limiting for device token polling (RFC 8628 section 3.5)."""
+
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_first_poll_allowed(self, mock_store):
+        """Test that the first poll is always allowed."""
+        # Create a device code with no previous poll time
+        mock_device = DeviceCode(
+            device_code='test_device_code',
+            user_code='ABC123',
+            status='pending',
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            last_poll_time=None,  # First poll
+            current_interval=5,
+        )
+        mock_store.get_by_device_code.return_value = mock_device
+        mock_store.update_poll_time.return_value = True
+
+        request = DeviceTokenRequest(device_code='test_device_code')
+        result = await device_token(request)
+
+        # Should return authorization_pending, not slow_down
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 400
+        content = result.body.decode()
+        assert 'authorization_pending' in content
+        assert 'slow_down' not in content
+
+        # Should update poll time without increasing interval
+        mock_store.update_poll_time.assert_called_with(
+            'test_device_code', increase_interval=False
+        )
+
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_normal_polling_allowed(self, mock_store):
+        """Test that normal polling (respecting interval) is allowed."""
+        # Create a device code with last poll time 6 seconds ago (interval is 5)
+        last_poll = datetime.now(UTC) - timedelta(seconds=6)
+        mock_device = DeviceCode(
+            device_code='test_device_code',
+            user_code='ABC123',
+            status='pending',
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            last_poll_time=last_poll,
+            current_interval=5,
+        )
+        mock_store.get_by_device_code.return_value = mock_device
+        mock_store.update_poll_time.return_value = True
+
+        request = DeviceTokenRequest(device_code='test_device_code')
+        result = await device_token(request)
+
+        # Should return authorization_pending, not slow_down
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 400
+        content = result.body.decode()
+        assert 'authorization_pending' in content
+        assert 'slow_down' not in content
+
+        # Should update poll time without increasing interval
+        mock_store.update_poll_time.assert_called_with(
+            'test_device_code', increase_interval=False
+        )
+
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_fast_polling_returns_slow_down(self, mock_store):
+        """Test that polling too fast returns slow_down error."""
+        # Create a device code with last poll time 2 seconds ago (interval is 5)
+        last_poll = datetime.now(UTC) - timedelta(seconds=2)
+        mock_device = DeviceCode(
+            device_code='test_device_code',
+            user_code='ABC123',
+            status='pending',
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            last_poll_time=last_poll,
+            current_interval=5,
+        )
+        mock_store.get_by_device_code.return_value = mock_device
+        mock_store.update_poll_time.return_value = True
+
+        request = DeviceTokenRequest(device_code='test_device_code')
+        result = await device_token(request)
+
+        # Should return slow_down error
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 400
+        content = result.body.decode()
+        assert 'slow_down' in content
+        assert 'interval' in content
+        assert '10' in content  # New interval should be 5 + 5 = 10
+
+        # Should update poll time and increase interval
+        mock_store.update_poll_time.assert_called_with(
+            'test_device_code', increase_interval=True
+        )
+
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_interval_increases_with_repeated_fast_polling(self, mock_store):
+        """Test that interval increases with repeated fast polling."""
+        # Create a device code with higher current interval from previous slow_down
+        last_poll = datetime.now(UTC) - timedelta(seconds=5)  # 5 seconds ago
+        mock_device = DeviceCode(
+            device_code='test_device_code',
+            user_code='ABC123',
+            status='pending',
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            last_poll_time=last_poll,
+            current_interval=15,  # Already increased from previous slow_down
+        )
+        mock_store.get_by_device_code.return_value = mock_device
+        mock_store.update_poll_time.return_value = True
+
+        request = DeviceTokenRequest(device_code='test_device_code')
+        result = await device_token(request)
+
+        # Should return slow_down error with increased interval
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 400
+        content = result.body.decode()
+        assert 'slow_down' in content
+        assert '20' in content  # New interval should be 15 + 5 = 20
+
+        # Should update poll time and increase interval
+        mock_store.update_poll_time.assert_called_with(
+            'test_device_code', increase_interval=True
+        )
+
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_interval_caps_at_maximum(self, mock_store):
+        """Test that interval is capped at maximum value."""
+        # Create a device code with interval near maximum
+        last_poll = datetime.now(UTC) - timedelta(seconds=30)
+        mock_device = DeviceCode(
+            device_code='test_device_code',
+            user_code='ABC123',
+            status='pending',
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            last_poll_time=last_poll,
+            current_interval=58,  # Near maximum of 60
+        )
+        mock_store.get_by_device_code.return_value = mock_device
+        mock_store.update_poll_time.return_value = True
+
+        request = DeviceTokenRequest(device_code='test_device_code')
+        result = await device_token(request)
+
+        # Should return slow_down error with capped interval
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 400
+        content = result.body.decode()
+        assert 'slow_down' in content
+        assert '60' in content  # Should be capped at 60, not 63
+
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_rate_limiting_with_authorized_device(self, mock_store):
+        """Test that rate limiting still applies to authorized devices."""
+        # Create an authorized device code with recent poll
+        last_poll = datetime.now(UTC) - timedelta(seconds=2)
+        mock_device = DeviceCode(
+            device_code='test_device_code',
+            user_code='ABC123',
+            status='authorized',  # Device is authorized
+            keycloak_user_id='user123',
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            last_poll_time=last_poll,
+            current_interval=5,
+        )
+        mock_store.get_by_device_code.return_value = mock_device
+        mock_store.update_poll_time.return_value = True
+
+        request = DeviceTokenRequest(device_code='test_device_code')
+        result = await device_token(request)
+
+        # Should still return slow_down error even for authorized device
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 400
+        content = result.body.decode()
+        assert 'slow_down' in content
+
+        # Should update poll time and increase interval
+        mock_store.update_poll_time.assert_called_with(
+            'test_device_code', increase_interval=True
+        )

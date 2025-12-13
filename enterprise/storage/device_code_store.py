@@ -140,3 +140,28 @@ class DeviceCodeStore:
             session.commit()
 
             return True
+
+    def update_poll_time(
+        self, device_code: str, increase_interval: bool = False
+    ) -> bool:
+        """Update the poll time for a device code and optionally increase interval.
+
+        Args:
+            device_code: The device code to update
+            increase_interval: If True, increase the polling interval for slow_down
+
+        Returns:
+            True if update was successful, False otherwise
+        """
+        with self.session_maker() as session:
+            device_code_entry = (
+                session.query(DeviceCode).filter_by(device_code=device_code).first()
+            )
+
+            if not device_code_entry:
+                return False
+
+            device_code_entry.update_poll_time(increase_interval)
+            session.commit()
+
+            return True

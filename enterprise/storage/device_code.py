@@ -37,6 +37,10 @@ class DeviceCode(Base):
     expires_at = Column(DateTime, nullable=False)
     authorized_at = Column(DateTime, nullable=True)
 
+    # Rate limiting fields for RFC 8628 section 3.5 compliance
+    last_poll_time = Column(DateTime, nullable=True)
+    current_interval = Column(Integer, nullable=False, default=5)
+
     def __repr__(self) -> str:
         return f"<DeviceCode(user_code='{self.user_code}', status='{self.status}')>"
 
@@ -72,3 +76,45 @@ class DeviceCode(Base):
     def expire(self) -> None:
         """Mark the device code as expired."""
         self.status = DeviceCodeStatus.EXPIRED.value
+
+    def check_rate_limit(self) -> tuple[bool, int]:
+        """Check if the client is polling too fast.
+
+        Returns:
+            tuple: (is_too_fast, current_interval)
+                - is_too_fast: True if client should receive slow_down error
+                - current_interval: Current polling interval to use
+        """
+        now = datetime.now(timezone.utc)
+
+        # If this is the first poll, allow it
+        if self.last_poll_time is None:
+            return False, self.current_interval
+
+        # Handle timezone-naive datetime from database
+        last_poll = self.last_poll_time
+        if last_poll.tzinfo is None:
+            last_poll = last_poll.replace(tzinfo=timezone.utc)
+
+        # Calculate time since last poll
+        time_since_last_poll = (now - last_poll).total_seconds()
+
+        # Check if polling too fast
+        if time_since_last_poll < self.current_interval:
+            # Increase interval for slow_down (RFC 8628 section 3.5)
+            new_interval = min(self.current_interval + 5, 60)  # Cap at 60 seconds
+            return True, new_interval
+
+        return False, self.current_interval
+
+    def update_poll_time(self, increase_interval: bool = False) -> None:
+        """Update the last poll time and optionally increase the interval.
+
+        Args:
+            increase_interval: If True, increase the current interval for slow_down
+        """
+        self.last_poll_time = datetime.now(timezone.utc)
+
+        if increase_interval:
+            # Increase interval by 5 seconds, cap at 60 seconds (RFC 8628)
+            self.current_interval = min(self.current_interval + 5, 60)
