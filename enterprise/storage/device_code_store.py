@@ -3,7 +3,6 @@
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from storage.device_code import DeviceCode
 
@@ -90,15 +89,23 @@ class DeviceCodeStore:
 
             return device_code_entry
 
-    def get_by_device_code(self, device_code: str) -> Optional[DeviceCode]:
+    def get_by_device_code(self, device_code: str) -> DeviceCode | None:
         """Get device code entry by device code."""
         with self.session_maker() as session:
-            return session.query(DeviceCode).filter_by(device_code=device_code).first()
+            result = (
+                session.query(DeviceCode).filter_by(device_code=device_code).first()
+            )
+            if result:
+                session.expunge(result)  # Detach from session cleanly
+            return result
 
-    def get_by_user_code(self, user_code: str) -> Optional[DeviceCode]:
+    def get_by_user_code(self, user_code: str) -> DeviceCode | None:
         """Get device code entry by user code."""
         with self.session_maker() as session:
-            return session.query(DeviceCode).filter_by(user_code=user_code).first()
+            result = session.query(DeviceCode).filter_by(user_code=user_code).first()
+            if result:
+                session.expunge(result)  # Detach from session cleanly
+            return result
 
     def authorize_device_code(self, user_code: str, user_id: str) -> bool:
         """Authorize a device code.
