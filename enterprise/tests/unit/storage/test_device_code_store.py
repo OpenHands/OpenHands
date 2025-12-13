@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from storage.device_code import DeviceCode
 from storage.device_code_store import DeviceCodeStore
 
@@ -48,42 +49,74 @@ class TestDeviceCodeStore:
         assert len(code) == 128
         assert code.isalnum()
 
-    def test_create_device_code(self, device_code_store, mock_session):
-        """Test device code creation."""
-        # Mock no existing codes (unique generation)
-        mock_session.query.return_value.filter.return_value.first.return_value = None
+    def test_create_device_code_success(self, device_code_store, mock_session):
+        """Test successful device code creation."""
+        # Mock successful creation (no IntegrityError)
+        mock_device_code = MagicMock(spec=DeviceCode)
+        mock_device_code.device_code = 'test-device-code-123'
+        mock_device_code.user_code = 'TESTCODE'
+
+        # Mock the session to return our mock device code after refresh
+        def mock_refresh(obj):
+            obj.device_code = mock_device_code.device_code
+            obj.user_code = mock_device_code.user_code
+
+        mock_session.refresh.side_effect = mock_refresh
 
         result = device_code_store.create_device_code(expires_in=600)
 
         assert isinstance(result, DeviceCode)
-        assert len(result.device_code) == 128
-        assert len(result.user_code) == 8
         mock_session.add.assert_called_once()
         mock_session.commit.assert_called_once()
+        mock_session.refresh.assert_called_once()
+        mock_session.expunge.assert_called_once()
 
-    def test_generate_unique_codes_success(self, device_code_store, mock_session):
-        """Test successful unique code generation."""
-        # Mock no existing codes (unique generation)
-        mock_session.query.return_value.filter.return_value.first.return_value = None
+    def test_create_device_code_with_retries(
+        self, device_code_store, mock_session_maker
+    ):
+        """Test device code creation with constraint violation retries."""
+        mock_session = MagicMock()
+        mock_session_maker.return_value.__enter__.return_value = mock_session
+        mock_session_maker.return_value.__exit__.return_value = None
 
-        user_code, device_code = device_code_store._generate_unique_codes(mock_session)
+        # First attempt fails with IntegrityError, second succeeds
+        mock_session.commit.side_effect = [IntegrityError('', '', ''), None]
 
-        assert len(user_code) == 8
-        assert len(device_code) == 128
-        mock_session.query.assert_called_once_with(DeviceCode)
+        mock_device_code = MagicMock(spec=DeviceCode)
+        mock_device_code.device_code = 'test-device-code-456'
+        mock_device_code.user_code = 'TESTCD2'
 
-    def test_generate_unique_codes_failure(self, device_code_store, mock_session):
-        """Test unique code generation failure after max attempts."""
-        # Mock existing codes (collision on every attempt)
-        mock_session.query.return_value.filter.return_value.first.return_value = (
-            MagicMock()
-        )
+        def mock_refresh(obj):
+            obj.device_code = mock_device_code.device_code
+            obj.user_code = mock_device_code.user_code
+
+        mock_session.refresh.side_effect = mock_refresh
+
+        store = DeviceCodeStore(mock_session_maker)
+        result = store.create_device_code(expires_in=600)
+
+        assert isinstance(result, DeviceCode)
+        assert mock_session.add.call_count == 2  # Two attempts
+        assert mock_session.commit.call_count == 2  # Two attempts
+
+    def test_create_device_code_max_attempts_exceeded(
+        self, device_code_store, mock_session_maker
+    ):
+        """Test device code creation failure after max attempts."""
+        mock_session = MagicMock()
+        mock_session_maker.return_value.__enter__.return_value = mock_session
+        mock_session_maker.return_value.__exit__.return_value = None
+
+        # All attempts fail with IntegrityError
+        mock_session.commit.side_effect = IntegrityError('', '', '')
+
+        store = DeviceCodeStore(mock_session_maker)
 
         with pytest.raises(
             RuntimeError,
             match='Failed to generate unique device codes after 3 attempts',
         ):
-            device_code_store._generate_unique_codes(mock_session, max_attempts=3)
+            store.create_device_code(expires_in=600, max_attempts=3)
 
     @pytest.mark.parametrize(
         'lookup_method,lookup_field',

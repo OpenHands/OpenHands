@@ -4,6 +4,7 @@ import secrets
 import string
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import IntegrityError
 from storage.device_code import DeviceCode
 
 
@@ -24,56 +25,29 @@ class DeviceCodeStore:
         alphabet = string.ascii_letters + string.digits
         return ''.join(secrets.choice(alphabet) for _ in range(128))
 
-    def _generate_unique_codes(
-        self, session, max_attempts: int = 10
-    ) -> tuple[str, str]:
-        """Generate unique user and device codes.
+    def create_device_code(
+        self,
+        expires_in: int = 600,  # 10 minutes default
+        max_attempts: int = 10,
+    ) -> DeviceCode:
+        """Create a new device code entry.
+
+        Uses database constraints to ensure uniqueness, avoiding TOCTOU race conditions.
+        Retries on constraint violations until unique codes are generated.
 
         Args:
-            session: Database session
+            expires_in: Expiration time in seconds
             max_attempts: Maximum number of attempts to generate unique codes
 
         Returns:
-            Tuple of (user_code, device_code)
+            The created DeviceCode instance
 
         Raises:
             RuntimeError: If unable to generate unique codes after max_attempts
         """
-        for _ in range(max_attempts):
+        for attempt in range(max_attempts):
             user_code = self.generate_user_code()
             device_code = self.generate_device_code()
-
-            # Check uniqueness with a single query using OR condition
-            existing = (
-                session.query(DeviceCode)
-                .filter(
-                    (DeviceCode.user_code == user_code)
-                    | (DeviceCode.device_code == device_code)
-                )
-                .first()
-            )
-
-            if not existing:
-                return user_code, device_code
-
-        raise RuntimeError(
-            f'Failed to generate unique device codes after {max_attempts} attempts'
-        )
-
-    def create_device_code(
-        self,
-        expires_in: int = 600,  # 10 minutes default
-    ) -> DeviceCode:
-        """Create a new device code entry.
-
-        Args:
-            expires_in: Expiration time in seconds
-
-        Returns:
-            The created DeviceCode instance
-        """
-        with self.session_maker() as session:
-            user_code, device_code = self._generate_unique_codes(session)
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
             device_code_entry = DeviceCode(
@@ -83,11 +57,20 @@ class DeviceCodeStore:
                 expires_at=expires_at,
             )
 
-            session.add(device_code_entry)
-            session.commit()
-            session.refresh(device_code_entry)
+            try:
+                with self.session_maker() as session:
+                    session.add(device_code_entry)
+                    session.commit()
+                    session.refresh(device_code_entry)
+                    session.expunge(device_code_entry)  # Detach from session cleanly
+                    return device_code_entry
+            except IntegrityError:
+                # Constraint violation - codes already exist, retry with new codes
+                continue
 
-            return device_code_entry
+        raise RuntimeError(
+            f'Failed to generate unique device codes after {max_attempts} attempts'
+        )
 
     def get_by_device_code(self, device_code: str) -> DeviceCode | None:
         """Get device code entry by device code."""
