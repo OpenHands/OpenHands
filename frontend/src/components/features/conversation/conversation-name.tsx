@@ -30,7 +30,7 @@ export function ConversationName() {
     handleDelete,
     handleStop,
     handleDownloadViaVSCode,
-    handleDownloadTrajectory,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
     handleShowMicroagents,
@@ -51,7 +51,7 @@ export function ConversationName() {
     shouldShowStop,
     shouldShowDownload,
     shouldShowExport,
-    shouldShowDownloadTrajectory,
+    shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
     shouldShowMicroagents,
@@ -181,9 +181,9 @@ export function ConversationName() {
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
-                onDownloadTrajectory={
-                  shouldShowDownloadTrajectory
-                    ? handleDownloadTrajectory
+                onDownloadConversation={
+                  shouldShowDownloadConversation
+                    ? handleDownloadConversation
                     : undefined
                 }
                 position="bottom"

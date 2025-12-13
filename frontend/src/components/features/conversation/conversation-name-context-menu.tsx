@@ -34,7 +34,7 @@ interface ConversationNameContextMenuProps {
   onShowMicroagents?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onExportConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onDownloadTrajectory?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
 }
 
@@ -48,7 +48,7 @@ export function ConversationNameContextMenu({
   onShowMicroagents,
   onExportConversation,
   onDownloadViaVSCode,
-  onDownloadTrajectory,
+  onDownloadConversation,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
   const { width } = useWindowSize();
@@ -61,7 +61,7 @@ export function ConversationNameContextMenu({
   // This is a temporary measure and may be re-enabled in the future
   const isV1Conversation = conversation?.conversation_version === "V1";
 
-  const hasDownload = Boolean(onDownloadViaVSCode || onDownloadTrajectory);
+  const hasDownload = Boolean(onDownloadViaVSCode || onDownloadConversation);
   const hasExport = Boolean(onExportConversation);
   const hasTools = Boolean(onShowAgentTools || onShowMicroagents);
   const hasInfo = Boolean(onDisplayCost);
@@ -153,10 +153,10 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {onDownloadTrajectory && isV1Conversation && (
+      {onDownloadConversation && isV1Conversation && (
         <ContextMenuListItem
           testId="download-trajectory-button"
-          onClick={onDownloadTrajectory}
+          onClick={onDownloadConversation}
           className={contextMenuListItemClassName}
         >
           <ConversationNameContextMenuIconText

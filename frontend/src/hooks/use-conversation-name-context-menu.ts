@@ -152,12 +152,12 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
-  const handleDownloadTrajectory = async (
+  const handleDownloadConversation = async (
     event: React.MouseEvent<HTMLButtonElement>,
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    posthog.capture("download_trajectory_button_clicked");
+    posthog.capture("download_conversation_button_clicked");
 
     if (conversationId && conversation?.conversation_version === "V1") {
       try {
@@ -168,13 +168,13 @@ export function useConversationNameContextMenu({
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `conversation_${conversationId}_trajectory.zip`;
+        link.download = `conversation_${conversationId}.zip`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       } catch (error) {
-        console.error("Failed to download trajectory:", error);
+        console.error("Failed to download conversation:", error);
         displayErrorToast(t(I18nKey.CONVERSATION$DOWNLOAD_ERROR));
       }
     }
@@ -209,7 +209,7 @@ export function useConversationNameContextMenu({
     handleEdit,
     handleExportConversation,
     handleDownloadViaVSCode,
-    handleDownloadTrajectory,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
     handleShowMicroagents,
@@ -236,7 +236,7 @@ export function useConversationNameContextMenu({
     shouldShowStop: conversationStatus !== "STOPPED",
     shouldShowDownload: Boolean(conversationId && showOptions),
     shouldShowExport: Boolean(conversationId && showOptions),
-    shouldShowDownloadTrajectory: Boolean(
+    shouldShowDownloadConversation: Boolean(
       conversationId &&
         showOptions &&
         conversation?.conversation_version === "V1",
