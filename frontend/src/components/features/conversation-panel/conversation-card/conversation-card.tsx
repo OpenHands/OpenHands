@@ -102,7 +102,7 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
-  const handleDownloadTrajectory = async (
+  const handleDownloadConversation = async (
     event: React.MouseEvent<HTMLButtonElement>,
   ) => {
     event.preventDefault();
@@ -118,7 +118,7 @@ export function ConversationCard({
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `conversation_${conversationId}_trajectory.zip`;
+        link.download = `conversation_${conversationId}.zip`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -161,9 +161,9 @@ export function ConversationCard({
             onStop={onStop && handleStop}
             onEdit={onChangeTitle && handleEdit}
             onDownloadViaVSCode={handleDownloadViaVSCode}
-            onDownloadTrajectory={
+            onDownloadConversation={
               conversationVersion === "V1"
-                ? handleDownloadTrajectory
+                ? handleDownloadConversation
                 : undefined
             }
             conversationStatus={conversationStatus}

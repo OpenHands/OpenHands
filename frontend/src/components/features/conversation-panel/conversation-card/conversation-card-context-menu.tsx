@@ -24,7 +24,7 @@ interface ConversationCardContextMenuProps {
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowMicroagents?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onDownloadTrajectory?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
 }
 
@@ -40,7 +40,7 @@ export function ConversationCardContextMenu({
   onShowAgentTools,
   onShowMicroagents,
   onDownloadViaVSCode,
-  onDownloadTrajectory,
+  onDownloadConversation,
   position = "bottom",
 }: ConversationCardContextMenuProps) {
   const { t } = useTranslation();
@@ -136,10 +136,10 @@ export function ConversationCardContextMenu({
             />
           </ContextMenuListItem>
         ),
-        onDownloadTrajectory && (
+        onDownloadConversation && (
           <ContextMenuListItem
             testId="download-trajectory-button"
-            onClick={onDownloadTrajectory}
+            onClick={onDownloadConversation}
             className={contextMenuListItemClassName}
           >
             <ConversationNameContextMenuIconText
