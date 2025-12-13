@@ -51,6 +51,7 @@ class TestDeviceAuthorization:
             device_code='test-device-code-123',
             user_code='ABC12345',
             expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            current_interval=5,  # Default interval
         )
         mock_store.create_device_code.return_value = mock_device
 
@@ -59,9 +60,31 @@ class TestDeviceAuthorization:
         assert result.device_code == 'test-device-code-123'
         assert result.user_code == 'ABC12345'
         assert result.expires_in == 600
-        assert result.interval == 5
+        assert result.interval == 5  # Should match device's current_interval
         assert 'verify' in result.verification_uri
         assert 'ABC12345' in result.verification_uri_complete
+
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_device_authorization_with_increased_interval(
+        self, mock_store, mock_request
+    ):
+        """Test device authorization returns increased interval from rate limiting."""
+        mock_device = DeviceCode(
+            device_code='test-device-code-456',
+            user_code='XYZ98765',
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            current_interval=15,  # Increased interval from previous rate limiting
+        )
+        mock_store.create_device_code.return_value = mock_device
+
+        result = await device_authorization(mock_request)
+
+        assert result.device_code == 'test-device-code-456'
+        assert result.user_code == 'XYZ98765'
+        assert result.expires_in == 600
+        assert result.interval == 15  # Should match device's increased current_interval
+        assert 'verify' in result.verification_uri
+        assert 'XYZ98765' in result.verification_uri_complete
 
 
 class TestDeviceToken:

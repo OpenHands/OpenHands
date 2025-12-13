@@ -115,7 +115,7 @@ async def device_authorization(
             verification_uri=verification_uri,
             verification_uri_complete=verification_uri_complete,
             expires_in=DEVICE_CODE_EXPIRES_IN,
-            interval=DEVICE_TOKEN_POLL_INTERVAL,
+            interval=device_code_entry.current_interval,
         )
     except Exception as e:
         logger.exception('Error in device authorization: %s', str(e))
