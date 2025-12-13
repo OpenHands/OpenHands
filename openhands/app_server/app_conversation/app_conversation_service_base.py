@@ -22,6 +22,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 )
 from openhands.app_server.app_conversation.skill_loader import (
     load_global_skills,
+    load_org_skills,
     load_repo_skills,
     load_sandbox_skills,
     merge_skills,
@@ -94,13 +95,20 @@ class AppConversationServiceBase(AppConversationService, ABC):
             except Exception as e:
                 _logger.warning(f'Failed to load user skills: {str(e)}')
                 user_skills = []
+
+            # Load organization-level skills
+            org_skills = await load_org_skills(
+                remote_workspace, selected_repository, working_dir, self.user_context
+            )
+
             repo_skills = await load_repo_skills(
                 remote_workspace, selected_repository, working_dir
             )
 
             # Merge all skills (later lists override earlier ones)
+            # Precedence: sandbox < global < user < org < repo
             all_skills = merge_skills(
-                [sandbox_skills, global_skills, user_skills, repo_skills]
+                [sandbox_skills, global_skills, user_skills, org_skills, repo_skills]
             )
 
             _logger.info(
