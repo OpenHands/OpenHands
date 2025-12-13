@@ -34,6 +34,7 @@ interface ConversationNameContextMenuProps {
   onShowMicroagents?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onExportConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadTrajectory?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
 }
 
@@ -47,6 +48,7 @@ export function ConversationNameContextMenu({
   onShowMicroagents,
   onExportConversation,
   onDownloadViaVSCode,
+  onDownloadTrajectory,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
   const { width } = useWindowSize();
@@ -59,7 +61,7 @@ export function ConversationNameContextMenu({
   // This is a temporary measure and may be re-enabled in the future
   const isV1Conversation = conversation?.conversation_version === "V1";
 
-  const hasDownload = Boolean(onDownloadViaVSCode);
+  const hasDownload = Boolean(onDownloadViaVSCode || onDownloadTrajectory);
   const hasExport = Boolean(onExportConversation);
   const hasTools = Boolean(onShowAgentTools || onShowMicroagents);
   const hasInfo = Boolean(onDisplayCost);
@@ -119,9 +121,10 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {(hasExport || hasDownload) && !isV1Conversation && (
+      {((hasExport || hasDownload) && !isV1Conversation) ||
+      (hasDownload && isV1Conversation) ? (
         <Divider testId="separator-export" />
-      )}
+      ) : null}
 
       {onExportConversation && !isV1Conversation && (
         <ContextMenuListItem
@@ -151,9 +154,21 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {(hasInfo || hasControl) && !isV1Conversation && (
-        <Divider testId="separator-info-control" />
+      {onDownloadTrajectory && isV1Conversation && (
+        <ContextMenuListItem
+          testId="download-trajectory-button"
+          onClick={onDownloadTrajectory}
+          className={contextMenuListItemClassName}
+        >
+          <ConversationNameContextMenuIconText
+            icon={<DownloadIcon width={16} height={16} />}
+            text={t(I18nKey.BUTTON$DOWNLOAD_TRAJECTORY)}
+            className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
+          />
+        </ContextMenuListItem>
       )}
+
+      {(hasInfo || hasControl) && <Divider testId="separator-info-control" />}
 
       {onDisplayCost && (
         <ContextMenuListItem
