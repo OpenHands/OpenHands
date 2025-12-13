@@ -105,7 +105,7 @@ export function ConversationCardContextMenu({
 
       {onShowMicroagents && !isV1Conversation && (
         <ContextMenuListItem
-          testId="show-microagents-button"
+          testId="show-skills-button"
           onClick={onShowMicroagents}
         >
           <ContextMenuIconText

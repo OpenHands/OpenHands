@@ -98,13 +98,13 @@ export function ConversationCardContextMenu({
         ),
         onShowMicroagents && (
           <ContextMenuListItem
-            testId="show-microagents-button"
+            testId="show-skills-button"
             onClick={onShowMicroagents}
             className={contextMenuListItemClassName}
           >
             <ConversationNameContextMenuIconText
               icon={<RobotIcon width={16} height={16} />}
-              text={t(I18nKey.CONVERSATION$SHOW_MICROAGENTS)}
+              text={t(I18nKey.CONVERSATION$SHOW_SKILLS)}
             />
           </ContextMenuListItem>
         ),

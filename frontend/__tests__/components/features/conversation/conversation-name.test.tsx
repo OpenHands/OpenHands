@@ -304,7 +304,7 @@ describe("ConversationNameContextMenu", () => {
     expect(screen.getByTestId("stop-button")).toBeInTheDocument();
     expect(screen.getByTestId("display-cost-button")).toBeInTheDocument();
     expect(screen.getByTestId("show-agent-tools-button")).toBeInTheDocument();
-    expect(screen.getByTestId("show-microagents-button")).toBeInTheDocument();
+    expect(screen.getByTestId("show-skills-button")).toBeInTheDocument();
     expect(
       screen.getByTestId("export-conversation-button"),
     ).toBeInTheDocument();
@@ -321,9 +321,7 @@ describe("ConversationNameContextMenu", () => {
     expect(
       screen.queryByTestId("show-agent-tools-button"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("show-microagents-button"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("show-skills-button")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("export-conversation-button"),
     ).not.toBeInTheDocument();
@@ -410,19 +408,19 @@ describe("ConversationNameContextMenu", () => {
 
   it("should call show microagents handler when show microagents button is clicked", async () => {
     const user = userEvent.setup();
-    const onShowMicroagents = vi.fn();
+    const onShowSkills = vi.fn();
 
     renderWithProviders(
       <ConversationNameContextMenu
         {...defaultProps}
-        onShowMicroagents={onShowMicroagents}
+        onShowSkills={onShowSkills}
       />,
     );
 
-    const showMicroagentsButton = screen.getByTestId("show-microagents-button");
+    const showMicroagentsButton = screen.getByTestId("show-skills-button");
     await user.click(showMicroagentsButton);
 
-    expect(onShowMicroagents).toHaveBeenCalledTimes(1);
+    expect(onShowSkills).toHaveBeenCalledTimes(1);
   });
 
   it("should call export conversation handler when export conversation button is clicked", async () => {
@@ -541,8 +539,8 @@ describe("ConversationNameContextMenu", () => {
     expect(screen.getByTestId("show-agent-tools-button")).toHaveTextContent(
       "Show Agent Tools",
     );
-    expect(screen.getByTestId("show-microagents-button")).toHaveTextContent(
-      "Show Microagents",
+    expect(screen.getByTestId("show-skills-button")).toHaveTextContent(
+      "Show Skills",
     );
     expect(screen.getByTestId("export-conversation-button")).toHaveTextContent(
       "Export Conversation",

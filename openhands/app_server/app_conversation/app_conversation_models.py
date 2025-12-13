@@ -161,3 +161,12 @@ class AppConversationStartTask(BaseModel):
 class AppConversationStartTaskPage(BaseModel):
     items: list[AppConversationStartTask]
     next_page_id: str | None = None
+
+
+class SkillResponse(BaseModel):
+    """Response model for skills endpoint."""
+
+    name: str
+    type: str  # 'repo' or 'knowledge'
+    content: str
+    triggers: list[str] = []
