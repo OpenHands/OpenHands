@@ -162,9 +162,7 @@ export function useConversationNameContextMenu({
     if (conversationId && conversation?.conversation_version === "V1") {
       try {
         const blob =
-          await V1ConversationService.downloadConversationTrajectory(
-            conversationId,
-          );
+          await V1ConversationService.exportConversation(conversationId);
 
         // Create a download link
         const url = window.URL.createObjectURL(blob);
@@ -240,8 +238,8 @@ export function useConversationNameContextMenu({
     shouldShowExport: Boolean(conversationId && showOptions),
     shouldShowDownloadTrajectory: Boolean(
       conversationId &&
-      showOptions &&
-      conversation?.conversation_version === "V1",
+        showOptions &&
+        conversation?.conversation_version === "V1",
     ),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
