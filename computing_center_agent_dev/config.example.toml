@@ -1,0 +1,145 @@
+###################### 算力中心 Agent 配置示例 ######################
+#
+# 这是 ComputingCenterAgent 的配置文件示例
+# 复制此文件为 config.toml 并根据实际情况修改
+#
+######################################################################
+
+#################################### Core ####################################
+# 核心配置
+##############################################################################
+[core]
+# 默认 Agent
+default_agent = "ComputingCenterAgent"
+
+# 运行时环境: docker, local, cli
+runtime = "docker"
+
+# 最大迭代次数
+max_iterations = 500
+
+# 工作目录
+workspace_base = "./workspace"
+
+#################################### LLM #####################################
+# LLM 配置
+##############################################################################
+[llm]
+# 模型名称
+model = "gpt-4o"
+
+# API Key (必填)
+api_key = ""
+
+# 自定义 Base URL (可选)
+#base_url = ""
+
+# 温度 (0-1)
+temperature = 0.1
+
+# 最大输出 token
+#max_output_tokens = 4096
+
+#################################### Agent ###################################
+# Agent 配置
+##############################################################################
+[agent]
+# 基础工具开关 (继承自 CodeActAgent)
+enable_browsing = false    # CLI 模式建议禁用
+enable_jupyter = true
+enable_cmd = true
+enable_think = true
+enable_finish = true
+enable_editor = true
+enable_plan_mode = true
+
+################################# ComputingCenterAgent #######################
+# 算力中心 Agent 专用配置
+##############################################################################
+[agent.ComputingCenterAgent]
+
+# ========== 集群基础配置 ==========
+# 集群调度系统类型: slurm, pbs, k8s, custom
+cluster_type = "slurm"
+
+# 集群名称 (用于多集群场景)
+cluster_name = "my_hpc_cluster"
+
+# ========== 工具开关 ==========
+# 集群监控
+enable_cluster_monitor = true
+
+# GPU 监控
+enable_gpu_monitor = true
+
+# 作业管理
+enable_job_manager = true
+
+# 故障诊断
+enable_diagnostic = true
+
+# 日志分析
+enable_log_analyzer = true
+
+# 资源管理
+enable_resource_manager = true
+
+# ========== 集群连接配置 ==========
+# SSH 配置文件路径 (用于远程集群)
+#ssh_config_path = "~/.ssh/config"
+
+# 集群头节点地址
+#head_node = "login.cluster.example.com"
+
+# ========== 显示配置 ==========
+# 默认分区
+default_partition = "gpu"
+
+# 最大显示作业数
+max_jobs_display = 50
+
+# 最大显示节点数
+max_nodes_display = 100
+
+# ========== GPU 配置 ==========
+# GPU 厂商: nvidia, amd, intel
+gpu_vendor = "nvidia"
+
+# ========== 告警阈值 ==========
+# GPU 利用率低于此值告警 (%)
+alert_gpu_util_low = 30
+
+# GPU 内存高于此值告警 (%)
+alert_gpu_memory_high = 90
+
+# CPU 使用率高于此值告警 (%)
+alert_cpu_high = 95
+
+# 磁盘使用率高于此值告警 (%)
+alert_disk_high = 90
+
+#################################### Sandbox #################################
+# 沙箱配置
+##############################################################################
+[sandbox]
+# 容器镜像
+#base_container_image = "nikolaik/python-nodejs:python3.12-nodejs22"
+
+# 超时时间 (秒)
+timeout = 300
+
+# 启用 GPU
+#enable_gpu = true
+
+#################################### Condenser ###############################
+# 上下文压缩配置
+##############################################################################
+[agent.ComputingCenterAgent.condenser]
+# 压缩类型: noop, observation_masking, recent, llm
+type = "recent"
+
+# 保留最近事件数
+max_events = 50
+
+# 保留初始事件数
+keep_first = 1
