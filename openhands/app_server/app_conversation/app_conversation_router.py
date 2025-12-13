@@ -430,7 +430,7 @@ async def export_conversation(
             content=zip_content,
             media_type='application/zip',
             headers={
-                'Content-Disposition': f'attachment; filename="conversation_{conversation_id}_trajectory.zip"'
+                'Content-Disposition': f'attachment; filename="conversation_{conversation_id}.zip"'
             },
         )
     except ValueError as e:
