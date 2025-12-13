@@ -20,7 +20,7 @@ from openhands.server.user_auth import get_user_id
 DEVICE_CODE_EXPIRES_IN = 600  # 10 minutes
 DEVICE_TOKEN_POLL_INTERVAL = 5  # seconds
 
-API_KEY_NAME = 'CLI Authentication'
+API_KEY_NAME = 'Device Link Access Key'
 KEY_EXPIRATION_TIME = timedelta(days=1)  # Key expires in 24 hours
 
 # ---------------------------------------------------------------------------
@@ -157,16 +157,20 @@ async def device_token(request: DeviceTokenRequest):
             )
 
         if device_code_entry.status == 'authorized':
-            # Retrieve the API key for this user
+            # Retrieve the specific API key for this device using the user_code
             api_key_store = ApiKeyStore.get_instance()
-            cli_api_key = api_key_store.retrieve_api_key_by_name(
-                device_code_entry.keycloak_user_id, API_KEY_NAME
+            device_key_name = f'{API_KEY_NAME} ({device_code_entry.user_code})'
+            device_api_key = api_key_store.retrieve_api_key_by_name(
+                device_code_entry.keycloak_user_id, device_key_name
             )
 
-            if not cli_api_key:
+            if not device_api_key:
                 logger.error(
-                    'No CLI API key found for authorized device',
-                    extra={'user_id': device_code_entry.keycloak_user_id},
+                    'No device API key found for authorized device',
+                    extra={
+                        'user_id': device_code_entry.keycloak_user_id,
+                        'user_code': device_code_entry.user_code,
+                    },
                 )
                 return _oauth_error(
                     status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -176,7 +180,7 @@ async def device_token(request: DeviceTokenRequest):
 
             # Return the API key as access_token
             return DeviceTokenResponse(
-                access_token=cli_api_key,
+                access_token=device_api_key,
             )
 
         # Fallback for unexpected status values
@@ -226,25 +230,28 @@ async def device_verification_authenticated(
                 detail='This device code has already been processed.',
             )
 
-        # Create API key for CLI
+        # Create API key for this specific device
         api_key_store = ApiKeyStore.get_instance()
         try:
-            # Delete any existing CLI API key for this user
-            api_key_store.delete_api_key_by_name(user_id, API_KEY_NAME)
+            # Create a unique API key for this device using user_code in the name
+            device_key_name = f'{API_KEY_NAME} ({user_code})'
             api_key_store.create_api_key(
                 user_id,
-                name=API_KEY_NAME,
+                name=device_key_name,
                 expires_at=datetime.now(UTC) + KEY_EXPIRATION_TIME,
             )
-            logger.info('Created new CLI API key for user', extra={'user_id': user_id})
+            logger.info(
+                'Created new device API key for user',
+                extra={'user_id': user_id, 'user_code': user_code},
+            )
         except Exception as e:
-            logger.exception('Failed to create CLI API key: %s', str(e))
+            logger.exception('Failed to create device API key: %s', str(e))
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail='Failed to create API key for CLI access.',
+                detail='Failed to create API key for device access.',
             )
 
-        # Mark device as authorized
+        # Mark device as authorized and store the API key
         success = device_code_store.authorize_device_code(
             user_code=user_code,
             user_id=user_id,
@@ -252,7 +259,7 @@ async def device_verification_authenticated(
 
         if success:
             logger.info(
-                'Device code authorized',
+                'Device code authorized with API key',
                 extra={'user_code': user_code, 'user_id': user_id},
             )
             return JSONResponse(
