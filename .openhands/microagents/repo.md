@@ -2,14 +2,11 @@ This repository contains the code for OpenHands, an automated AI software engine
 (in the `openhands` directory) and React frontend (in the `frontend` directory).
 
 ## General Setup:
-
 To set up the entire repo, including frontend and backend, run `make build`.
 You don't need to do this unless the user asks you to, or if you're trying to run the entire application.
 
 ## Running OpenHands with OpenHands:
-
 To run the full application to debug issues:
-
 ```bash
 export INSTALL_DOCKER=0
 export RUNTIME=local
@@ -20,15 +17,14 @@ IMPORTANT: Before making any changes to the codebase, ALWAYS run `make install-p
 
 Before pushing any changes, you MUST ensure that any lint errors or simple test errors have been fixed.
 
-- If you've made changes to the backend, you should run `pre-commit run --config ./dev_config/python/.pre-commit-config.yaml` (this will run on staged files).
-- If you've made changes to the frontend, you should run `cd frontend && npm run lint:fix && npm run build ; cd ..`
-- If you've made changes to the VSCode extension, you should run `cd openhands/integrations/vscode && npm run lint:fix && npm run compile ; cd ../../..`
+* If you've made changes to the backend, you should run `pre-commit run --config ./dev_config/python/.pre-commit-config.yaml` (this will run on staged files).
+* If you've made changes to the frontend, you should run `cd frontend && npm run lint:fix && npm run build ; cd ..`
+* If you've made changes to the VSCode extension, you should run `cd openhands/integrations/vscode && npm run lint:fix && npm run compile ; cd ../../..`
 
 The pre-commit hooks MUST pass successfully before pushing any changes to the repository. This is a mandatory requirement to maintain code quality and consistency.
 
 If either command fails, it may have automatically fixed some issues. You should fix any issues that weren't automatically fixed,
 then re-run the command to ensure it passes. Common issues include:
-
 - Mypy type errors
 - Ruff formatting issues
 - Trailing whitespace
@@ -41,9 +37,7 @@ then re-run the command to ensure it passes. Common issues include:
 - When remote has new changes, use `git fetch upstream && git rebase upstream/<branch>` on the same branch
 
 ## Repository Structure
-
 Backend:
-
 - Located in the `openhands` directory
 - Testing:
   - All tests are in `tests/unit/test_*.py`
@@ -51,7 +45,6 @@ Backend:
   - Write all tests with pytest
 
 Frontend:
-
 - Located in the `frontend` directory
 - Prerequisites: A recent version of NodeJS / NPM
 - Setup: Run `npm install` in the frontend directory
@@ -75,7 +68,6 @@ Frontend:
   - Architecture rule: UI components → TanStack Query hooks → Data Access Layer (`frontend/src/api`) → API endpoints
 
 VSCode Extension:
-
 - Located in the `openhands/integrations/vscode` directory
 - Setup: Run `npm install` in the extension directory
 - Linting:
@@ -94,7 +86,6 @@ VSCode Extension:
 ## Enterprise Directory
 
 The `enterprise/` directory contains additional functionality that extends the open-source OpenHands codebase. This includes:
-
 - Authentication and user management (Keycloak integration)
 - Database migrations (Alembic)
 - Integration services (GitHub, GitLab, Jira, Linear, Slack)
@@ -104,20 +95,17 @@ The `enterprise/` directory contains additional functionality that extends the o
 ### Enterprise Development Setup
 
 **Prerequisites:**
-
 - Python 3.12
 - Poetry (for dependency management)
 - Node.js 22.x (for frontend)
 - Docker (optional)
 
 **Setup Steps:**
-
 1. First, build the main OpenHands project: `make build`
 2. Then install enterprise dependencies: `cd enterprise && poetry install --with dev,test` (This can take a very long time. Be patient.)
 3. Set up enterprise pre-commit hooks: `poetry run pre-commit install --config ./dev_config/python/.pre-commit-config.yaml`
 
 **Running Enterprise Tests:**
-
 ```bash
 # Enterprise unit tests (full suite)
 PYTHONPATH=".:$PYTHONPATH" poetry run --project=enterprise pytest --forked -n auto -s -p no:ddtrace -p no:ddtrace.pytest_bdd -p no:ddtrace.pytest_benchmark ./enterprise/tests/unit --cov=enterprise --cov-branch
@@ -131,7 +119,6 @@ poetry run pre-commit run --all-files --show-diff-on-failure --config ./dev_conf
 ```
 
 **Running Enterprise Server:**
-
 ```bash
 cd enterprise
 make start-backend  # Development mode with hot reload
@@ -140,7 +127,6 @@ make run  # Full application (backend + frontend)
 ```
 
 **Key Configuration Files:**
-
 - `enterprise/pyproject.toml` - Enterprise-specific dependencies
 - `enterprise/Makefile` - Enterprise build and run commands
 - `enterprise/dev_config/python/` - Linting and type checking configuration
@@ -148,14 +134,12 @@ make run  # Full application (backend + frontend)
 
 **Database Migrations:**
 Enterprise uses Alembic for database migrations. When making schema changes:
-
 1. Create migration files in `enterprise/migrations/versions/`
 2. Test migrations thoroughly
 3. The CI will check for migration conflicts on PRs
 
 **Integration Development:**
 The enterprise codebase includes integrations for:
-
 - **GitHub** - PR management, webhooks, app installations
 - **GitLab** - Similar to GitHub but for GitLab instances
 - **Jira** - Issue tracking and project management
@@ -165,7 +149,6 @@ The enterprise codebase includes integrations for:
 Each integration follows a consistent pattern with service classes, storage models, and API endpoints.
 
 **Important Notes:**
-
 - Enterprise code is licensed under Polyform Free Trial License (30-day limit)
 - The enterprise server extends the OSS server through dynamic imports
 - Database changes require careful migration planning in `enterprise/migrations/`
@@ -175,40 +158,34 @@ Each integration follows a consistent pattern with service classes, storage mode
 **Enterprise Testing Best Practices:**
 
 **Database Testing:**
-
 - Use SQLite in-memory databases (`sqlite:///:memory:`) for unit tests instead of real PostgreSQL
 - Create module-specific `conftest.py` files with database fixtures
 - Mock external database connections in unit tests to avoid dependency on running services
 - Use real database connections only for integration tests
 
 **Import Patterns:**
-
 - Use relative imports without `enterprise.` prefix in enterprise code
 - Example: `from storage.database import session_maker` not `from enterprise.storage.database import session_maker`
 - This ensures code works in both OSS and enterprise contexts
 
 **Test Structure:**
-
 - Place tests in `enterprise/tests/unit/` following the same structure as the source code
 - Use `--confcutdir=tests/unit/[module]` when testing specific modules
 - Create comprehensive fixtures for complex objects (databases, external services)
 - Write platform-agnostic tests (avoid hardcoded OS-specific assertions)
 
 **Mocking Strategy:**
-
 - Use `AsyncMock` for async operations and `MagicMock` for complex objects
 - Mock all external dependencies (databases, APIs, file systems) in unit tests
 - Use `patch` with correct import paths (e.g., `telemetry.registry.logger` not `enterprise.telemetry.registry.logger`)
 - Test both success and failure scenarios with proper error handling
 
 **Coverage Goals:**
-
 - Aim for 90%+ test coverage on new enterprise modules
 - Focus on critical business logic and error handling paths
 - Use `--cov-report=term-missing` to identify uncovered lines
 
 **Troubleshooting:**
-
 - If tests fail, ensure all dependencies are installed: `poetry install --with dev,test`
 - For database issues, check migration status and run migrations if needed
 - For frontend issues, ensure the main OpenHands frontend is built: `make build`
@@ -229,22 +206,19 @@ These details may or may not be useful for your current task.
 Microagents are specialized prompts that enhance OpenHands with domain-specific knowledge and task-specific workflows. They are Markdown files that can include frontmatter for configuration.
 
 #### Types:
-
 - **Public Microagents**: Located in `microagents/`, available to all users
 - **Repository Microagents**: Located in `.openhands/microagents/`, specific to this repository
 
 #### Loading Behavior:
-
 - **Without frontmatter**: Always loaded into LLM context
 - **With triggers in frontmatter**: Only loaded when user's message matches the specified trigger keywords
 
 #### Structure:
-
 ```yaml
 ---
 triggers:
-  - keyword1
-  - keyword2
+- keyword1
+- keyword2
 ---
 # Microagent Content
 Your specialized knowledge and instructions here...
@@ -253,7 +227,6 @@ Your specialized knowledge and instructions here...
 ### Frontend
 
 #### Action Handling:
-
 - Actions are defined in `frontend/src/types/action-type.ts`
 - The `HANDLED_ACTIONS` array in `frontend/src/state/chat-slice.ts` determines which actions are displayed as collapsible UI elements
 - To add a new action type to the UI:
@@ -265,7 +238,6 @@ Your specialized knowledge and instructions here...
   - Special actions (like "think") are displayed as collapsible elements only
 
 #### Adding User Settings:
-
 - To add a new user setting to OpenHands, follow these steps:
   1. Add the setting to the frontend:
      - Add the setting to the `Settings` type in `frontend/src/types/settings.ts`
@@ -285,7 +257,6 @@ Your specialized knowledge and instructions here...
 There are two main patterns for saving settings in the OpenHands frontend:
 
 **Pattern 1: Entity-based Resources (Immediate Save)**
-
 - Used for: API Keys, Secrets, MCP Servers
 - Behavior: Changes are saved immediately when user performs actions (add/edit/delete)
 - Implementation:
@@ -297,7 +268,6 @@ There are two main patterns for saving settings in the OpenHands frontend:
 - Benefits: Simpler UX, no risk of losing changes, consistent with modern web app patterns
 
 **Pattern 2: Form-based Settings (Manual Save)**
-
 - Used for: Application settings, LLM configuration
 - Behavior: Changes are accumulated locally and saved when user clicks "Save Changes"
 - Implementation:
@@ -308,7 +278,6 @@ There are two main patterns for saving settings in the OpenHands frontend:
 - Benefits: Allows bulk changes, explicit save action, can validate all fields before saving
 
 **When to use each pattern:**
-
 - Use Pattern 1 (Immediate Save) for entity management where each item is independent
 - Use Pattern 2 (Manual Save) for configuration forms where settings are interdependent or need validation
 
@@ -319,7 +288,6 @@ To add a new LLM model to OpenHands, you need to update multiple files across bo
 #### Model Configuration Procedure:
 
 1. **Frontend Model Arrays** (`frontend/src/utils/verified-models.ts`):
-
    - Add the model to `VERIFIED_MODELS` array (main list of all verified models)
    - Add to provider-specific arrays based on the model's provider:
      - `VERIFIED_OPENAI_MODELS` for OpenAI models
@@ -328,18 +296,15 @@ To add a new LLM model to OpenHands, you need to update multiple files across bo
      - `VERIFIED_OPENHANDS_MODELS` for models available through OpenHands provider
 
 2. **Backend CLI Integration** (`openhands/cli/utils.py`):
-
    - Add the model to the appropriate `VERIFIED_*_MODELS` arrays
    - This ensures the model appears in CLI model selection
 
 3. **Backend Model List** (`openhands/utils/llm.py`):
-
    - **CRITICAL**: Add the model to the `openhands_models` list (lines 57-66) if using OpenHands provider
    - This is required for the model to appear in the frontend model selector
    - Format: `'openhands/model-name'` (e.g., `'openhands/o3'`)
 
 4. **Backend LLM Configuration** (`openhands/llm/llm.py`):
-
    - Add to feature-specific arrays based on model capabilities:
      - `FUNCTION_CALLING_SUPPORTED_MODELS` if the model supports function calling
      - `REASONING_EFFORT_SUPPORTED_MODELS` if the model supports reasoning effort parameters
