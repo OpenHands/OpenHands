@@ -1,7 +1,7 @@
 """Unit tests for OAuth2 Device Flow endpoints."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
@@ -126,82 +126,41 @@ class TestDeviceToken:
 class TestDeviceVerificationAuthenticated:
     """Test device verification authenticated endpoint."""
 
-    @patch('openhands.server.user_auth.user_auth.get_user_auth')
-    async def test_verification_missing_user_code(self, mock_get_user_auth):
-        """Test verification with missing user code."""
-        mock_request = MagicMock()
-        mock_request.form = AsyncMock(return_value={'other_field': 'value'})
-
-        with pytest.raises(HTTPException):
-            await device_verification_authenticated(mock_request)
-
-    @patch('openhands.server.user_auth.user_auth.get_user_auth')
-    async def test_verification_unauthenticated_user(self, mock_get_user_auth):
+    async def test_verification_unauthenticated_user(self):
         """Test verification with unauthenticated user."""
-        mock_request = MagicMock()
-        mock_request.form = AsyncMock(return_value={'user_code': 'ABC12345'})
-
-        mock_user_auth = AsyncMock()
-        mock_user_auth.get_user_id = AsyncMock(return_value=None)
-        mock_get_user_auth.return_value = mock_user_auth
-
         with pytest.raises(HTTPException):
-            await device_verification_authenticated(mock_request)
+            await device_verification_authenticated(user_code='ABC12345', user_id=None)
 
     @patch('server.routes.oauth_device.ApiKeyStore')
     @patch('server.routes.oauth_device.device_code_store')
-    @patch('openhands.server.user_auth.user_auth.get_user_auth')
     async def test_verification_invalid_device_code(
-        self, mock_get_user_auth, mock_store, mock_api_key_class
+        self, mock_store, mock_api_key_class
     ):
         """Test verification with invalid device code."""
-        mock_request = MagicMock()
-        mock_request.form = AsyncMock(return_value={'user_code': 'INVALID'})
-
-        mock_user_auth = AsyncMock()
-        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
-        mock_get_user_auth.return_value = mock_user_auth
-
         mock_store.get_by_user_code.return_value = None
 
         with pytest.raises(HTTPException):
-            await device_verification_authenticated(mock_request)
+            await device_verification_authenticated(
+                user_code='INVALID', user_id='user-123'
+            )
 
     @patch('server.routes.oauth_device.ApiKeyStore')
     @patch('server.routes.oauth_device.device_code_store')
-    @patch('openhands.server.user_auth.user_auth.get_user_auth')
-    async def test_verification_already_processed(
-        self, mock_get_user_auth, mock_store, mock_api_key_class
-    ):
+    async def test_verification_already_processed(self, mock_store, mock_api_key_class):
         """Test verification with already processed device code."""
-        mock_request = MagicMock()
-        mock_request.form = AsyncMock(return_value={'user_code': 'ABC12345'})
-
-        mock_user_auth = AsyncMock()
-        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
-        mock_get_user_auth.return_value = mock_user_auth
-
         mock_device = MagicMock()
         mock_device.is_pending.return_value = False
         mock_store.get_by_user_code.return_value = mock_device
 
         with pytest.raises(HTTPException):
-            await device_verification_authenticated(mock_request)
+            await device_verification_authenticated(
+                user_code='ABC12345', user_id='user-123'
+            )
 
     @patch('server.routes.oauth_device.ApiKeyStore')
     @patch('server.routes.oauth_device.device_code_store')
-    @patch('openhands.server.user_auth.user_auth.get_user_auth')
-    async def test_verification_success(
-        self, mock_get_user_auth, mock_store, mock_api_key_class
-    ):
+    async def test_verification_success(self, mock_store, mock_api_key_class):
         """Test successful device verification."""
-        mock_request = MagicMock()
-        mock_request.form = AsyncMock(return_value={'user_code': 'ABC12345'})
-
-        mock_user_auth = AsyncMock()
-        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
-        mock_get_user_auth.return_value = mock_user_auth
-
         # Mock device code
         mock_device = MagicMock()
         mock_device.is_pending.return_value = True
@@ -212,7 +171,9 @@ class TestDeviceVerificationAuthenticated:
         mock_api_key_store = MagicMock()
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
-        result = await device_verification_authenticated(mock_request)
+        result = await device_verification_authenticated(
+            user_code='ABC12345', user_id='user-123'
+        )
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == 200

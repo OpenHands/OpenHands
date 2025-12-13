@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from storage.api_key_store import ApiKeyStore
@@ -11,6 +11,7 @@ from storage.database import session_maker
 from storage.device_code_store import DeviceCodeStore
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.server.user_auth import get_user_id
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -200,24 +201,11 @@ async def device_token(request: DeviceTokenRequest):
 
 @oauth_device_router.post('/verify-authenticated')
 async def device_verification_authenticated(
-    request: Request,
+    user_code: str = Form(...),
+    user_id: str = Depends(get_user_id),
 ):
     """Process device verification for authenticated users (called by frontend)."""
     try:
-        # Extract user_code from form data
-        form_data = await request.form()
-        user_code = form_data.get('user_code')
-
-        if not user_code:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail='user_code is required'
-            )
-
-        from openhands.server.user_auth.user_auth import get_user_auth
-
-        user_auth = await get_user_auth(request)
-        user_id = await user_auth.get_user_id()
-
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
