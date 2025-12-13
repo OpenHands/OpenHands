@@ -79,12 +79,6 @@ def _oauth_error(
     )
 
 
-
-
-
-
-
-
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -204,9 +198,6 @@ async def device_token(request: DeviceTokenRequest):
         )
 
 
-
-
-
 @oauth_device_router.post('/verify-authenticated')
 async def device_verification_authenticated(
     request: Request,
@@ -216,21 +207,21 @@ async def device_verification_authenticated(
         # Extract user_code from form data
         form_data = await request.form()
         user_code = form_data.get('user_code')
-        
+
         if not user_code:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="user_code is required"
+                status_code=status.HTTP_400_BAD_REQUEST, detail='user_code is required'
             )
-        
+
         from openhands.server.user_auth.user_auth import get_user_auth
+
         user_auth = await get_user_auth(request)
         user_id = await user_auth.get_user_id()
-        
+
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required"
+                detail='Authentication required',
             )
 
         # Validate device code
@@ -238,13 +229,13 @@ async def device_verification_authenticated(
         if not device_code_entry:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="The device code is invalid or has expired."
+                detail='The device code is invalid or has expired.',
             )
 
         if not device_code_entry.is_pending():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This device code has already been processed."
+                detail='This device code has already been processed.',
             )
 
         # Create API key for CLI
@@ -262,7 +253,7 @@ async def device_verification_authenticated(
             logger.exception('Failed to create CLI API key: %s', str(e))
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create API key for CLI access."
+                detail='Failed to create API key for CLI access.',
             )
 
         # Mark device as authorized
@@ -278,7 +269,7 @@ async def device_verification_authenticated(
             )
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
-                content={"message": "Device authorized successfully!"}
+                content={'message': 'Device authorized successfully!'},
             )
 
         logger.error(
@@ -287,7 +278,7 @@ async def device_verification_authenticated(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to authorize the device. Please try again."
+            detail='Failed to authorize the device. Please try again.',
         )
 
     except HTTPException:
@@ -296,8 +287,5 @@ async def device_verification_authenticated(
         logger.exception('Error in device verification: %s', str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred. Please try again."
+            detail='An unexpected error occurred. Please try again.',
         )
-
-
-
