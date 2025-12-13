@@ -1,17 +1,16 @@
 """Unit tests for OAuth2 Device Flow endpoints."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 from server.routes.oauth_device import (
     DeviceTokenRequest,
     device_authorization,
     device_token,
-    device_verification_page,
-    keycloak_callback,
+    device_verification_authenticated,
 )
 from storage.device_code import DeviceCode
 
@@ -51,7 +50,7 @@ class TestDeviceAuthorization:
         mock_device = DeviceCode(
             device_code='test-device-code-123',
             user_code='ABC12345',
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
         )
         mock_store.create_device_code.return_value = mock_device
 
@@ -124,82 +123,84 @@ class TestDeviceToken:
         assert result.token_type == 'Bearer'
 
 
-class TestDeviceVerification:
-    """Test device verification endpoint."""
+class TestDeviceVerificationAuthenticated:
+    """Test device verification authenticated endpoint."""
 
-    async def test_verification_page_no_code(self):
-        """Test verification page without user code."""
-        result = await device_verification_page()
-
-        assert isinstance(result, HTMLResponse)
-        assert 'Device Authorization' in result.body.decode()
-        assert 'user_code' in result.body.decode()
-
-    @patch('server.routes.oauth_device.config')
-    async def test_verification_page_invalid_code(self, mock_config):
-        """Test verification page with invalid user code - now redirects to Keycloak."""
-        mock_config.jwt_secret.get_secret_value.return_value = 'test-secret'
-
-        with patch('server.routes.oauth_device.jwt.encode', return_value='test-jwt'):
-            result = await device_verification_page(user_code='INVALID')
-
-        # Invalid codes now redirect to Keycloak - validation happens after auth
-        assert result.status_code in (302, 307)  # Redirect
-        assert 'keycloak' in result.headers['location']
-
-    @patch('server.routes.oauth_device.config')
-    @patch('server.routes.oauth_device.device_code_store')
-    async def test_verification_page_valid_code(self, mock_store, mock_config):
-        """Test verification page with valid user code."""
-        mock_device = MagicMock()
-        mock_store.get_by_user_code.return_value = mock_device
-        mock_config.jwt_secret.get_secret_value.return_value = 'test-secret'
-
-        with patch('server.routes.oauth_device.jwt.encode', return_value='test-jwt'):
-            result = await device_verification_page(user_code='ABC12345')
-
-        assert result.status_code in (302, 307)  # Redirect
-        assert 'keycloak' in result.headers['location']
-
-
-class TestKeycloakCallback:
-    """Test Keycloak callback endpoint."""
-
-    @pytest.mark.parametrize(
-        'code,error,expected_status',
-        [
-            ('', 'access_denied', 400),
-            ('valid-code', 'server_error', 400),
-            ('', '', 400),  # No code or error
-        ],
-    )
-    async def test_keycloak_callback_errors(self, code, error, expected_status):
-        """Test Keycloak callback error cases."""
+    @patch('openhands.server.user_auth.user_auth.get_user_auth')
+    async def test_verification_missing_user_code(self, mock_get_user_auth):
+        """Test verification with missing user code."""
         mock_request = MagicMock()
+        mock_request.form = AsyncMock(return_value={'other_field': 'value'})
 
-        result = await keycloak_callback(mock_request, code=code, error=error)
+        with pytest.raises(HTTPException):
+            await device_verification_authenticated(mock_request)
 
-        assert isinstance(result, HTMLResponse)
-        assert result.status_code == expected_status
+    @patch('openhands.server.user_auth.user_auth.get_user_auth')
+    async def test_verification_unauthenticated_user(self, mock_get_user_auth):
+        """Test verification with unauthenticated user."""
+        mock_request = MagicMock()
+        mock_request.form = AsyncMock(return_value={'user_code': 'ABC12345'})
+
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_user_id = AsyncMock(return_value=None)
+        mock_get_user_auth.return_value = mock_user_auth
+
+        with pytest.raises(HTTPException):
+            await device_verification_authenticated(mock_request)
 
     @patch('server.routes.oauth_device.ApiKeyStore')
     @patch('server.routes.oauth_device.device_code_store')
-    @patch('server.routes.oauth_device.token_manager')
-    @patch('server.routes.oauth_device.config')
-    async def test_keycloak_callback_success(
-        self, mock_config, mock_token_mgr, mock_store, mock_api_key_class
+    @patch('openhands.server.user_auth.user_auth.get_user_auth')
+    async def test_verification_invalid_device_code(
+        self, mock_get_user_auth, mock_store, mock_api_key_class
     ):
-        """Test successful Keycloak callback."""
+        """Test verification with invalid device code."""
         mock_request = MagicMock()
+        mock_request.form = AsyncMock(return_value={'user_code': 'INVALID'})
 
-        # Mock JWT decoding
-        mock_config.jwt_secret.get_secret_value.return_value = 'test-secret'
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
+        mock_get_user_auth.return_value = mock_user_auth
 
-        # Mock token manager
-        mock_token_mgr.get_keycloak_tokens = AsyncMock(
-            return_value=('access-token', 'refresh-token')
-        )
-        mock_token_mgr.get_user_info = AsyncMock(return_value={'sub': 'user-123'})
+        mock_store.get_by_user_code.return_value = None
+
+        with pytest.raises(HTTPException):
+            await device_verification_authenticated(mock_request)
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    @patch('openhands.server.user_auth.user_auth.get_user_auth')
+    async def test_verification_already_processed(
+        self, mock_get_user_auth, mock_store, mock_api_key_class
+    ):
+        """Test verification with already processed device code."""
+        mock_request = MagicMock()
+        mock_request.form = AsyncMock(return_value={'user_code': 'ABC12345'})
+
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
+        mock_get_user_auth.return_value = mock_user_auth
+
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = False
+        mock_store.get_by_user_code.return_value = mock_device
+
+        with pytest.raises(HTTPException):
+            await device_verification_authenticated(mock_request)
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    @patch('openhands.server.user_auth.user_auth.get_user_auth')
+    async def test_verification_success(
+        self, mock_get_user_auth, mock_store, mock_api_key_class
+    ):
+        """Test successful device verification."""
+        mock_request = MagicMock()
+        mock_request.form = AsyncMock(return_value={'user_code': 'ABC12345'})
+
+        mock_user_auth = AsyncMock()
+        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
+        mock_get_user_auth.return_value = mock_user_auth
 
         # Mock device code
         mock_device = MagicMock()
@@ -207,21 +208,18 @@ class TestKeycloakCallback:
         mock_store.get_by_user_code.return_value = mock_device
         mock_store.authorize_device_code.return_value = True
 
-        # Mock API key creation
+        # Mock API key store
         mock_api_key_store = MagicMock()
-        mock_api_key_store.create_api_key.return_value = 'new-api-key'
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
-        with patch(
-            'server.routes.oauth_device.jwt.decode',
-            return_value={'user_code': 'ABC12345'},
-        ):
-            result = await keycloak_callback(
-                mock_request, code='auth-code', state='jwt-state'
-            )
+        result = await device_verification_authenticated(mock_request)
 
-        assert isinstance(result, HTMLResponse)
+        assert isinstance(result, JSONResponse)
         assert result.status_code == 200
-        assert 'Success!' in result.body.decode()
-        mock_api_key_store.delete_api_key_by_name.assert_called_once()
+        mock_api_key_store.delete_api_key_by_name.assert_called_once_with(
+            'user-123', 'CLI Authentication'
+        )
         mock_api_key_store.create_api_key.assert_called_once()
+        mock_store.authorize_device_code.assert_called_once_with(
+            user_code='ABC12345', user_id='user-123'
+        )
