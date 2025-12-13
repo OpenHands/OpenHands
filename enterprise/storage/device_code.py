@@ -47,7 +47,6 @@ class DeviceCode(Base):
     def is_expired(self) -> bool:
         """Check if the device code has expired."""
         now = datetime.now(timezone.utc)
-        # Database now stores timezone-aware datetimes, no conversion needed
         return now > self.expires_at
 
     def is_pending(self) -> bool:
@@ -86,7 +85,7 @@ class DeviceCode(Base):
         if self.last_poll_time is None:
             return False, self.current_interval
 
-        # Calculate time since last poll (database now stores timezone-aware datetimes)
+        # Calculate time since last poll
         time_since_last_poll = (now - self.last_poll_time).total_seconds()
 
         # Check if polling too fast
