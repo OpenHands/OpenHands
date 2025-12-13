@@ -34,11 +34,11 @@ class DeviceCode(Base):
     keycloak_user_id = Column(String(255), nullable=True)
 
     # Timestamps
-    expires_at = Column(DateTime, nullable=False)
-    authorized_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    authorized_at = Column(DateTime(timezone=True), nullable=True)
 
     # Rate limiting fields for RFC 8628 section 3.5 compliance
-    last_poll_time = Column(DateTime, nullable=True)
+    last_poll_time = Column(DateTime(timezone=True), nullable=True)
     current_interval = Column(Integer, nullable=False, default=5)
 
     def __repr__(self) -> str:
@@ -47,13 +47,8 @@ class DeviceCode(Base):
     def is_expired(self) -> bool:
         """Check if the device code has expired."""
         now = datetime.now(timezone.utc)
-        expires_at = self.expires_at
-
-        # Handle timezone-naive datetime from database
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-
-        return now > expires_at
+        # Database now stores timezone-aware datetimes, no conversion needed
+        return now > self.expires_at
 
     def is_pending(self) -> bool:
         """Check if the device code is still pending authorization."""
@@ -91,13 +86,8 @@ class DeviceCode(Base):
         if self.last_poll_time is None:
             return False, self.current_interval
 
-        # Handle timezone-naive datetime from database
-        last_poll = self.last_poll_time
-        if last_poll.tzinfo is None:
-            last_poll = last_poll.replace(tzinfo=timezone.utc)
-
-        # Calculate time since last poll
-        time_since_last_poll = (now - last_poll).total_seconds()
+        # Calculate time since last poll (database now stores timezone-aware datetimes)
+        time_since_last_poll = (now - self.last_poll_time).total_seconds()
 
         # Check if polling too fast
         if time_since_last_poll < self.current_interval:
