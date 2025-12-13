@@ -121,8 +121,7 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {((hasExport || hasDownload) && !isV1Conversation) ||
-      (hasDownload && isV1Conversation) ? (
+      {(hasExport || hasDownload) && !isV1Conversation ? (
         <Divider testId="separator-export" />
       ) : null}
 
