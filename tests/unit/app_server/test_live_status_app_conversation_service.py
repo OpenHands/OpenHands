@@ -838,7 +838,7 @@ class TestLiveStatusAppConversationService:
         self.service._finalize_conversation_request.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_download_conversation_trajectory_success(self):
+    async def test_export_conversation_success(self):
         """Test successful download of conversation trajectory."""
         # Arrange
         conversation_id = uuid4()
@@ -887,7 +887,7 @@ class TestLiveStatusAppConversationService:
         )
 
         # Act
-        result = await self.service.download_conversation_trajectory(conversation_id)
+        result = await self.service.export_conversation(conversation_id)
 
         # Assert
         assert result is not None
@@ -927,7 +927,7 @@ class TestLiveStatusAppConversationService:
         mock_conversation_info.model_dump_json.assert_called_once_with(indent=2)
 
     @pytest.mark.asyncio
-    async def test_download_conversation_trajectory_conversation_not_found(self):
+    async def test_export_conversation_conversation_not_found(self):
         """Test download when conversation is not found."""
         # Arrange
         conversation_id = uuid4()
@@ -939,7 +939,7 @@ class TestLiveStatusAppConversationService:
         with pytest.raises(
             ValueError, match=f'Conversation not found: {conversation_id}'
         ):
-            await self.service.download_conversation_trajectory(conversation_id)
+            await self.service.export_conversation(conversation_id)
 
         # Verify service calls
         self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
@@ -948,7 +948,7 @@ class TestLiveStatusAppConversationService:
         self.mock_event_service.search_events.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_download_conversation_trajectory_empty_events(self):
+    async def test_export_conversation_empty_events(self):
         """Test download with conversation that has no events."""
         # Arrange
         conversation_id = uuid4()
@@ -973,7 +973,7 @@ class TestLiveStatusAppConversationService:
         self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
 
         # Act
-        result = await self.service.download_conversation_trajectory(conversation_id)
+        result = await self.service.export_conversation(conversation_id)
 
         # Assert
         assert result is not None
@@ -994,7 +994,7 @@ class TestLiveStatusAppConversationService:
         self.mock_event_service.search_events.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_download_conversation_trajectory_large_pagination(self):
+    async def test_export_conversation_large_pagination(self):
         """Test download with multiple pages of events."""
         # Arrange
         conversation_id = uuid4()
@@ -1050,7 +1050,7 @@ class TestLiveStatusAppConversationService:
         )
 
         # Act
-        result = await self.service.download_conversation_trajectory(conversation_id)
+        result = await self.service.export_conversation(conversation_id)
 
         # Assert
         assert result is not None
@@ -1074,7 +1074,7 @@ class TestLiveStatusAppConversationService:
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.iterate'
     )
-    async def test_download_conversation_trajectory_iterate_function_usage(
+    async def test_export_conversation_iterate_function_usage(
         self, mock_iterate
     ):
         """Test that the download method correctly uses the iterate function."""
@@ -1105,7 +1105,7 @@ class TestLiveStatusAppConversationService:
         mock_iterate.return_value = mock_iterate_generator(None)
 
         # Act
-        result = await self.service.download_conversation_trajectory(conversation_id)
+        result = await self.service.export_conversation(conversation_id)
 
         # Assert
         assert result is not None

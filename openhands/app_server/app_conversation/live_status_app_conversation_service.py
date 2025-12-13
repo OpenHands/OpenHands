@@ -1009,7 +1009,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return deleted_info or deleted_tasks
 
-    async def download_conversation_trajectory(self, conversation_id: UUID) -> bytes:
+    async def export_conversation(self, conversation_id: UUID) -> bytes:
         """Download a conversation trajectory as a zip file.
 
         Args:

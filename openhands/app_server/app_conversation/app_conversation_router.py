@@ -401,7 +401,7 @@ async def read_conversation_file(
 
 
 @router.get('/{conversation_id}/download')
-async def download_conversation_trajectory(
+async def export_conversation(
     conversation_id: UUID,
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
@@ -421,7 +421,7 @@ async def download_conversation_trajectory(
 
     try:
         # Get the zip file content
-        zip_content = await app_conversation_service.download_conversation_trajectory(
+        zip_content = await app_conversation_service.export_conversation(
             conversation_id
         )
 
