@@ -928,11 +928,21 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
     """Test _load_and_merge_all_skills includes organization skills."""
 
     @pytest.mark.asyncio
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills')
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
     async def test_load_and_merge_includes_org_skills(
         self,
         mock_load_repo,
@@ -996,11 +1006,21 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             )
 
     @pytest.mark.asyncio
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills')
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
     async def test_load_and_merge_org_skills_precedence(
         self,
         mock_load_repo,
@@ -1056,11 +1076,21 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             assert result[0].source == 'repo'
 
     @pytest.mark.asyncio
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills')
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
     async def test_load_and_merge_org_skills_override_user_skills(
         self,
         mock_load_repo,
@@ -1111,11 +1141,21 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             assert result[0].priority == 'high'  # Org skill should win
 
     @pytest.mark.asyncio
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills')
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
     async def test_load_and_merge_handles_org_skills_failure(
         self,
         mock_load_repo,
@@ -1164,11 +1204,21 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             assert names == {'global_skill', 'repo_skill'}
 
     @pytest.mark.asyncio
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills')
-    @patch('openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills')
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
     async def test_load_and_merge_no_selected_repository(
         self,
         mock_load_repo,

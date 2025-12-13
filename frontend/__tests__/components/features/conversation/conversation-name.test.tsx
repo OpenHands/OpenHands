@@ -43,6 +43,7 @@ vi.mock("react-i18next", async () => {
           BUTTON$DOWNLOAD_VIA_VSCODE: "Download via VS Code",
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
           CONVERSATION$SHOW_MICROAGENTS: "Show Microagents",
+          CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Cost",
           COMMON$CLOSE_CONVERSATION_STOP_RUNTIME:
             "Close Conversation (Stop Runtime)",
@@ -290,7 +291,7 @@ describe("ConversationNameContextMenu", () => {
       onStop: vi.fn(),
       onDisplayCost: vi.fn(),
       onShowAgentTools: vi.fn(),
-      onShowMicroagents: vi.fn(),
+      onShowSkills: vi.fn(),
       onExportConversation: vi.fn(),
       onDownloadViaVSCode: vi.fn(),
     };
@@ -517,7 +518,7 @@ describe("ConversationNameContextMenu", () => {
       onStop: vi.fn(),
       onDisplayCost: vi.fn(),
       onShowAgentTools: vi.fn(),
-      onShowMicroagents: vi.fn(),
+      onShowSkills: vi.fn(),
       onExportConversation: vi.fn(),
       onDownloadViaVSCode: vi.fn(),
     };
