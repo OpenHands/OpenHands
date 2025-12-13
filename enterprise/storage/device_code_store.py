@@ -25,6 +25,42 @@ class DeviceCodeStore:
         alphabet = string.ascii_letters + string.digits
         return ''.join(secrets.choice(alphabet) for _ in range(128))
 
+    def _generate_unique_codes(
+        self, session, max_attempts: int = 10
+    ) -> tuple[str, str]:
+        """Generate unique user and device codes.
+
+        Args:
+            session: Database session
+            max_attempts: Maximum number of attempts to generate unique codes
+
+        Returns:
+            Tuple of (user_code, device_code)
+
+        Raises:
+            RuntimeError: If unable to generate unique codes after max_attempts
+        """
+        for _ in range(max_attempts):
+            user_code = self.generate_user_code()
+            device_code = self.generate_device_code()
+
+            # Check uniqueness with a single query using OR condition
+            existing = (
+                session.query(DeviceCode)
+                .filter(
+                    (DeviceCode.user_code == user_code)
+                    | (DeviceCode.device_code == device_code)
+                )
+                .first()
+            )
+
+            if not existing:
+                return user_code, device_code
+
+        raise RuntimeError(
+            f'Failed to generate unique device codes after {max_attempts} attempts'
+        )
+
     def create_device_code(
         self,
         expires_in: int = 600,  # 10 minutes default
@@ -38,27 +74,7 @@ class DeviceCodeStore:
             The created DeviceCode instance
         """
         with self.session_maker() as session:
-            # Generate unique codes
-            max_attempts = 10
-            for _ in range(max_attempts):
-                user_code = self.generate_user_code()
-                device_code = self.generate_device_code()
-
-                # Check if codes are unique
-                existing_user = (
-                    session.query(DeviceCode).filter_by(user_code=user_code).first()
-                )
-                existing_device = (
-                    session.query(DeviceCode).filter_by(device_code=device_code).first()
-                )
-
-                if not existing_user and not existing_device:
-                    break
-            else:
-                raise RuntimeError(
-                    'Failed to generate unique device codes after multiple attempts'
-                )
-
+            user_code, device_code = self._generate_unique_codes(session)
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
             device_code_entry = DeviceCode(

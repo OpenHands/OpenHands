@@ -51,7 +51,7 @@ class TestDeviceCodeStore:
     def test_create_device_code(self, device_code_store, mock_session):
         """Test device code creation."""
         # Mock no existing codes (unique generation)
-        mock_session.query.return_value.filter_by.return_value.first.return_value = None
+        mock_session.query.return_value.filter.return_value.first.return_value = None
 
         result = device_code_store.create_device_code(expires_in=600)
 
@@ -60,6 +60,30 @@ class TestDeviceCodeStore:
         assert len(result.user_code) == 8
         mock_session.add.assert_called_once()
         mock_session.commit.assert_called_once()
+
+    def test_generate_unique_codes_success(self, device_code_store, mock_session):
+        """Test successful unique code generation."""
+        # Mock no existing codes (unique generation)
+        mock_session.query.return_value.filter.return_value.first.return_value = None
+
+        user_code, device_code = device_code_store._generate_unique_codes(mock_session)
+
+        assert len(user_code) == 8
+        assert len(device_code) == 128
+        mock_session.query.assert_called_once_with(DeviceCode)
+
+    def test_generate_unique_codes_failure(self, device_code_store, mock_session):
+        """Test unique code generation failure after max attempts."""
+        # Mock existing codes (collision on every attempt)
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            MagicMock()
+        )
+
+        with pytest.raises(
+            RuntimeError,
+            match='Failed to generate unique device codes after 3 attempts',
+        ):
+            device_code_store._generate_unique_codes(mock_session, max_attempts=3)
 
     @pytest.mark.parametrize(
         'lookup_method,lookup_field',
