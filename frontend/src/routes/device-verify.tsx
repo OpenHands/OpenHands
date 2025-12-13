@@ -14,20 +14,10 @@ export default function DeviceVerify() {
 
   // Get user_code from URL parameters
   const userCode = searchParams.get("user_code");
-  
-  console.log("DeviceVerify component rendered:", {
-    userCode,
-    isAuthed,
-    isAuthLoading,
-    verificationResult,
-    isProcessing,
-  });
 
   const processDeviceVerification = async (code: string) => {
-    console.log("processDeviceVerification called with code:", code);
     try {
       setIsProcessing(true);
-      console.log("Making request to /oauth/device/verify-authenticated");
 
       // Call the backend API endpoint to process device verification
       const response = await fetch("/oauth/device/verify-authenticated", {
@@ -38,15 +28,8 @@ export default function DeviceVerify() {
         body: `user_code=${encodeURIComponent(code)}`,
         credentials: "include", // Include cookies for authentication
       });
-      
-      console.log("Response received:", {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-      });
 
       if (response.ok) {
-        console.log("Verification successful");
         // Show success message
         setVerificationResult({
           success: true,
@@ -55,14 +38,12 @@ export default function DeviceVerify() {
         });
       } else {
         const errorText = await response.text();
-        console.log("Verification failed:", errorText);
         setVerificationResult({
           success: false,
           message: errorText || "Failed to authorize device. Please try again.",
         });
       }
     } catch (error) {
-      console.error("Error in processDeviceVerification:", error);
       setVerificationResult({
         success: false,
         message:
@@ -74,17 +55,8 @@ export default function DeviceVerify() {
   };
 
   useEffect(() => {
-    console.log("useEffect triggered:", {
-      isAuthed,
-      userCode,
-      verificationResult,
-      isProcessing,
-      shouldProcess: isAuthed && userCode && !verificationResult && !isProcessing,
-    });
-    
     // If user is authenticated and we have a user_code, process verification
     if (isAuthed && userCode && !verificationResult && !isProcessing) {
-      console.log("Conditions met, calling processDeviceVerification");
       processDeviceVerification(userCode);
     }
   }, [isAuthed, userCode, verificationResult, isProcessing]);
@@ -93,7 +65,6 @@ export default function DeviceVerify() {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const code = formData.get("user_code") as string;
-    console.log("Manual submit:", { code, isAuthed });
     if (code && isAuthed) {
       processDeviceVerification(code);
     }
@@ -101,7 +72,6 @@ export default function DeviceVerify() {
 
   // Show verification result if we have one
   if (verificationResult) {
-    console.log("Rendering verification result");
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
@@ -162,7 +132,6 @@ export default function DeviceVerify() {
 
   // Show processing state
   if (isProcessing) {
-    console.log("Rendering processing state");
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
@@ -179,7 +148,6 @@ export default function DeviceVerify() {
 
   // Show manual code entry form if no code in URL or user is authenticated
   if (isAuthed && !userCode) {
-    console.log("Rendering manual code entry form");
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
@@ -220,7 +188,6 @@ export default function DeviceVerify() {
 
   // Show loading state while checking authentication
   if (isAuthLoading) {
-    console.log("Rendering auth loading state");
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -234,7 +201,6 @@ export default function DeviceVerify() {
   }
 
   // Show authentication required message (this will trigger the auth modal via root layout)
-  console.log("Rendering authentication required message");
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg text-center">
