@@ -3,6 +3,10 @@
 import pytest
 from datetime import datetime, UTC
 from uuid import uuid4
+from typing import AsyncGenerator
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from openhands.app_server.app_conversation.app_conversation_models import AppConversationInfo
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
@@ -14,6 +18,8 @@ from openhands.app_server.sharing.public_conversation_models import (
 from openhands.app_server.sharing.sql_public_conversation_info_service import (
     SQLPublicConversationInfoService,
 )
+from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
+from openhands.app_server.utils.sql_utils import Base
 from openhands.integrations.provider import ProviderType
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
@@ -21,15 +27,47 @@ from openhands.storage.data_models.conversation_metadata import ConversationTrig
 
 
 @pytest.fixture
-async def public_conversation_service(db_session):
-    """Create a PublicConversationInfoService for testing."""
-    return SQLPublicConversationInfoService(db_session=db_session)
+async def async_engine():
+    """Create an async SQLite engine for testing."""
+    engine = create_async_engine(
+        'sqlite+aiosqlite:///:memory:',
+        poolclass=StaticPool,
+        connect_args={'check_same_thread': False},
+        echo=False,
+    )
+
+    # Create all tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield engine
+
+    await engine.dispose()
 
 
 @pytest.fixture
-async def app_conversation_service(db_session):
+async def async_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
+    """Create an async session for testing."""
+    async_session_maker = async_sessionmaker(
+        async_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    async with async_session_maker() as db_session:
+        yield db_session
+
+
+@pytest.fixture
+async def public_conversation_service(async_session):
+    """Create a PublicConversationInfoService for testing."""
+    return SQLPublicConversationInfoService(db_session=async_session)
+
+
+@pytest.fixture
+async def app_conversation_service(async_session):
     """Create an AppConversationInfoService for creating test data."""
-    return SQLAppConversationInfoService(db_session=db_session)
+    return SQLAppConversationInfoService(
+        db_session=async_session, user_context=SpecifyUserContext(user_id=None)
+    )
 
 
 @pytest.fixture
@@ -43,8 +81,8 @@ def sample_conversation_info():
         selected_branch='main',
         git_provider=ProviderType.GITHUB,
         title='Test Conversation',
-        trigger=ConversationTrigger.USER,
-        pr_number=123,
+        trigger=ConversationTrigger.GUI,
+        pr_number=[123],
         llm_model='gpt-4',
         metrics=MetricsSnapshot(
             accumulated_cost=1.5,
@@ -77,8 +115,8 @@ def sample_private_conversation_info():
         selected_branch='main',
         git_provider=ProviderType.GITHUB,
         title='Private Conversation',
-        trigger=ConversationTrigger.USER,
-        pr_number=124,
+        trigger=ConversationTrigger.GUI,
+        pr_number=[124],
         llm_model='gpt-4',
         metrics=MetricsSnapshot(
             accumulated_cost=2.0,
@@ -103,6 +141,8 @@ def sample_private_conversation_info():
 class TestPublicConversationInfoService:
     """Test cases for PublicConversationInfoService."""
 
+    @pytest.mark.asyncio
+    @pytest.mark.asyncio
     async def test_get_public_conversation_info_returns_public_conversation(
         self,
         public_conversation_service,
@@ -111,7 +151,7 @@ class TestPublicConversationInfoService:
     ):
         """Test that get_public_conversation_info returns a public conversation."""
         # Create a public conversation
-        await app_conversation_service.save_conversation_info(sample_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
 
         # Retrieve it via public service
         result = await public_conversation_service.get_public_conversation_info(
@@ -123,6 +163,7 @@ class TestPublicConversationInfoService:
         assert result.title == sample_conversation_info.title
         assert result.created_by_user_id == sample_conversation_info.created_by_user_id
 
+    @pytest.mark.asyncio
     async def test_get_public_conversation_info_returns_none_for_private_conversation(
         self,
         public_conversation_service,
@@ -131,7 +172,7 @@ class TestPublicConversationInfoService:
     ):
         """Test that get_public_conversation_info returns None for private conversations."""
         # Create a private conversation
-        await app_conversation_service.save_conversation_info(sample_private_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_private_conversation_info)
 
         # Try to retrieve it via public service
         result = await public_conversation_service.get_public_conversation_info(
@@ -140,6 +181,7 @@ class TestPublicConversationInfoService:
 
         assert result is None
 
+    @pytest.mark.asyncio
     async def test_get_public_conversation_info_returns_none_for_nonexistent_conversation(
         self, public_conversation_service
     ):
@@ -148,6 +190,7 @@ class TestPublicConversationInfoService:
         result = await public_conversation_service.get_public_conversation_info(nonexistent_id)
         assert result is None
 
+    @pytest.mark.asyncio
     async def test_search_public_conversation_info_returns_only_public_conversations(
         self,
         public_conversation_service,
@@ -157,8 +200,8 @@ class TestPublicConversationInfoService:
     ):
         """Test that search only returns public conversations."""
         # Create both public and private conversations
-        await app_conversation_service.save_conversation_info(sample_conversation_info)
-        await app_conversation_service.save_conversation_info(sample_private_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_private_conversation_info)
 
         # Search for all conversations
         result = await public_conversation_service.search_public_conversation_info()
@@ -168,6 +211,7 @@ class TestPublicConversationInfoService:
         assert result.items[0].id == sample_conversation_info.id
         assert result.items[0].title == sample_conversation_info.title
 
+    @pytest.mark.asyncio
     async def test_search_public_conversation_info_with_title_filter(
         self,
         public_conversation_service,
@@ -176,7 +220,7 @@ class TestPublicConversationInfoService:
     ):
         """Test searching with title filter."""
         # Create a public conversation
-        await app_conversation_service.save_conversation_info(sample_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
 
         # Search with matching title
         result = await public_conversation_service.search_public_conversation_info(
@@ -190,6 +234,7 @@ class TestPublicConversationInfoService:
         )
         assert len(result.items) == 0
 
+    @pytest.mark.asyncio
     async def test_search_public_conversation_info_with_sort_order(
         self,
         public_conversation_service,
@@ -226,8 +271,8 @@ class TestPublicConversationInfoService:
             ),
         )
 
-        await app_conversation_service.save_conversation_info(conv1)
-        await app_conversation_service.save_conversation_info(conv2)
+        await app_conversation_service.save_app_conversation_info(conv1)
+        await app_conversation_service.save_app_conversation_info(conv2)
 
         # Test sort by title ascending
         result = await public_conversation_service.search_public_conversation_info(
@@ -261,6 +306,7 @@ class TestPublicConversationInfoService:
         assert result.items[0].id == conv2.id
         assert result.items[1].id == conv1.id
 
+    @pytest.mark.asyncio
     async def test_count_public_conversation_info(
         self,
         public_conversation_service,
@@ -274,15 +320,16 @@ class TestPublicConversationInfoService:
         assert count == 0
 
         # Create a public conversation
-        await app_conversation_service.save_conversation_info(sample_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
         count = await public_conversation_service.count_public_conversation_info()
         assert count == 1
 
         # Create a private conversation - count should remain 1
-        await app_conversation_service.save_conversation_info(sample_private_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_private_conversation_info)
         count = await public_conversation_service.count_public_conversation_info()
         assert count == 1
 
+    @pytest.mark.asyncio
     async def test_batch_get_public_conversation_info(
         self,
         public_conversation_service,
@@ -292,8 +339,8 @@ class TestPublicConversationInfoService:
     ):
         """Test batch getting public conversations."""
         # Create both public and private conversations
-        await app_conversation_service.save_conversation_info(sample_conversation_info)
-        await app_conversation_service.save_conversation_info(sample_private_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
+        await app_conversation_service.save_app_conversation_info(sample_private_conversation_info)
 
         # Batch get both conversations
         result = await public_conversation_service.batch_get_public_conversation_info(
@@ -306,6 +353,7 @@ class TestPublicConversationInfoService:
         assert result[0].id == sample_conversation_info.id
         assert result[1] is None
 
+    @pytest.mark.asyncio
     async def test_search_with_pagination(
         self,
         public_conversation_service,
@@ -330,7 +378,7 @@ class TestPublicConversationInfoService:
                 ),
             )
             conversations.append(conv)
-            await app_conversation_service.save_conversation_info(conv)
+            await app_conversation_service.save_app_conversation_info(conv)
 
         # Get first page with limit 2
         result = await public_conversation_service.search_public_conversation_info(

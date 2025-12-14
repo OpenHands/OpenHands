@@ -20,6 +20,9 @@ router = APIRouter(prefix='/public-conversations', tags=['Public Conversations']
 
 public_conversation_service_dependency = depends_public_conversation_info_service()
 
+# Attach dependency to router for testing
+router.public_conversation_service_dependency = public_conversation_service_dependency
+
 
 # Read methods
 
@@ -127,7 +130,9 @@ async def batch_get_public_conversations(
 ) -> list[PublicConversation | None]:
     """Get a batch of public conversations given their ids. Return None for any missing or non-public."""
     assert len(ids) <= 100
-    public_conversations = await public_conversation_service.batch_get_public_conversation_info(ids)
+    public_conversations = (
+        await public_conversation_service.batch_get_public_conversation_info(ids)
+    )
     return public_conversations
 
 
@@ -137,4 +142,6 @@ async def get_public_conversation(
     public_conversation_service: PublicConversationInfoService = public_conversation_service_dependency,
 ) -> PublicConversation | None:
     """Get a single public conversation by ID."""
-    return await public_conversation_service.get_public_conversation_info(conversation_id)
+    return await public_conversation_service.get_public_conversation_info(
+        conversation_id
+    )

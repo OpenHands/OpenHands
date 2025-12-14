@@ -39,11 +39,15 @@ class PublicEventServiceImpl(PublicEventService):
     public_conversation_service: PublicConversationInfoService
     event_service: EventService
 
-    async def get_public_event(self, conversation_id: UUID, event_id: str) -> Event | None:
+    async def get_public_event(
+        self, conversation_id: UUID, event_id: str
+    ) -> Event | None:
         """Given a conversation_id and event_id, retrieve an event if the conversation is public."""
         # First check if the conversation is public
-        public_conversation = await self.public_conversation_service.get_public_conversation_info(
-            conversation_id
+        public_conversation = (
+            await self.public_conversation_service.get_public_conversation_info(
+                conversation_id
+            )
         )
         if public_conversation is None:
             return None
@@ -63,8 +67,10 @@ class PublicEventServiceImpl(PublicEventService):
     ) -> EventPage:
         """Search events for a specific public conversation."""
         # First check if the conversation is public
-        public_conversation = await self.public_conversation_service.get_public_conversation_info(
-            conversation_id
+        public_conversation = (
+            await self.public_conversation_service.get_public_conversation_info(
+                conversation_id
+            )
         )
         if public_conversation is None:
             # Return empty page if conversation is not public
@@ -91,8 +97,10 @@ class PublicEventServiceImpl(PublicEventService):
     ) -> int:
         """Count events for a specific public conversation."""
         # First check if the conversation is public
-        public_conversation = await self.public_conversation_service.get_public_conversation_info(
-            conversation_id
+        public_conversation = (
+            await self.public_conversation_service.get_public_conversation_info(
+                conversation_id
+            )
         )
         if public_conversation is None:
             return 0
@@ -118,7 +126,9 @@ class PublicEventServiceImplInjector(PublicEventServiceInjector):
         )
 
         async with (
-            get_public_conversation_info_service(state, request) as public_conversation_service,
+            get_public_conversation_info_service(
+                state, request
+            ) as public_conversation_service,
             get_event_service(state, request) as event_service,
         ):
             service = PublicEventServiceImpl(

@@ -16,7 +16,7 @@ from openhands.app_server.sharing.public_conversation_models import (
     PublicConversationPage,
     PublicConversationSortOrder,
 )
-from openhands.app_server.sharing.public_conversation_router import router
+from openhands.app_server.sharing.public_conversation_router import router, public_conversation_service_dependency
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
 
@@ -35,7 +35,7 @@ def app(mock_public_conversation_service):
     
     # Override the dependency
     app.dependency_overrides[
-        router.public_conversation_service_dependency
+        public_conversation_service_dependency
     ] = lambda: mock_public_conversation_service
     
     return app

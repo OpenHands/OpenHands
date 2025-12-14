@@ -190,7 +190,9 @@ class SQLPublicConversationInfoService(PublicConversationInfoService):
             )
 
         if created_at__gte is not None:
-            query = query.where(StoredConversationMetadata.created_at >= created_at__gte)
+            query = query.where(
+                StoredConversationMetadata.created_at >= created_at__gte
+            )
 
         if created_at__lt is not None:
             query = query.where(StoredConversationMetadata.created_at < created_at__lt)

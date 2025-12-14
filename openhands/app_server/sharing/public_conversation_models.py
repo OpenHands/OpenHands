@@ -1,16 +1,16 @@
 from datetime import datetime
 from enum import Enum
-from uuid import UUID, uuid4
-
-from pydantic import BaseModel, Field
 
 # Simplified imports to avoid dependency chain issues
 # from openhands.integrations.service_types import ProviderType
 # from openhands.sdk.llm import MetricsSnapshot
 # from openhands.storage.data_models.conversation_metadata import ConversationTrigger
-
 # For now, use Any to avoid import issues
 from typing import Any
+from uuid import UUID, uuid4
+
+from pydantic import BaseModel, Field
+
 ProviderType = Any
 MetricsSnapshot = Any
 ConversationTrigger = Any
@@ -18,9 +18,11 @@ ConversationTrigger = Any
 # Type alias for UUID
 OpenHandsUUID = UUID
 
+
 def utc_now() -> datetime:
     """Return current UTC time."""
     from datetime import UTC
+
     return datetime.now(UTC)
 
 

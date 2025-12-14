@@ -16,6 +16,9 @@ router = APIRouter(prefix='/public-events', tags=['Public Events'])
 
 public_event_service_dependency = depends_public_event_service()
 
+# Attach dependency to router for testing
+router.public_event_service_dependency = public_event_service_dependency
+
 
 # Read methods
 

@@ -8,10 +8,7 @@ from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import Injector
 from openhands.sdk import Event
-# Simple implementation of DiscriminatedUnionMixin for now
-class DiscriminatedUnionMixin:
-    """Simple mixin for discriminated unions."""
-    pass
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 _logger = logging.getLogger(__name__)
 
@@ -20,7 +17,9 @@ class PublicEventService(ABC):
     """Event Service for getting events from public conversations only."""
 
     @abstractmethod
-    async def get_public_event(self, conversation_id: UUID, event_id: str) -> Event | None:
+    async def get_public_event(
+        self, conversation_id: UUID, event_id: str
+    ) -> Event | None:
         """Given a conversation_id and event_id, retrieve an event if the conversation is public."""
 
     @abstractmethod

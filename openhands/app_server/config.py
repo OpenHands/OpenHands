@@ -416,15 +416,7 @@ def get_public_conversation_info_service(
 ) -> AsyncContextManager[PublicConversationInfoService]:
     injector = get_global_config().public_conversation_info
     assert injector is not None
-    return injector.inject(state, request)
-
-
-def get_event_service(
-    state: InjectorState, request: Request | None = None
-) -> AsyncContextManager[EventService]:
-    injector = get_global_config().event
-    assert injector is not None
-    return injector.inject(state, request)
+    return injector.context(state, request)
 
 
 def get_public_event_service(
@@ -432,4 +424,4 @@ def get_public_event_service(
 ) -> AsyncContextManager[PublicEventService]:
     injector = get_global_config().public_event
     assert injector is not None
-    return injector.inject(state, request)
+    return injector.context(state, request)

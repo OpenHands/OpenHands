@@ -9,10 +9,7 @@ from openhands.app_server.sharing.public_conversation_models import (
     PublicConversationPage,
     PublicConversationSortOrder,
 )
-# Simple implementation of DiscriminatedUnionMixin for now
-class DiscriminatedUnionMixin:
-    """Simple mixin for discriminated unions."""
-    pass
+from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
 class PublicConversationInfoService(ABC):
