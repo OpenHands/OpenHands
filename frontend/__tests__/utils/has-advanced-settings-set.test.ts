@@ -12,20 +12,20 @@ describe("hasAdvancedSettingsSet", () => {
   });
 
   describe("should be true if", () => {
-    test("LLM_BASE_URL is set", () => {
+    test("llm_base_url is set", () => {
       expect(
         hasAdvancedSettingsSet({
           ...DEFAULT_SETTINGS,
-          LLM_BASE_URL: "test",
+          llm_base_url: "test",
         }),
       ).toBe(true);
     });
 
-    test("AGENT is not default value", () => {
+    test("agent is not default value", () => {
       expect(
         hasAdvancedSettingsSet({
           ...DEFAULT_SETTINGS,
-          AGENT: "test",
+          agent: "test",
         }),
       ).toBe(true);
     });
