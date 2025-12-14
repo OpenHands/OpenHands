@@ -28,17 +28,11 @@ from fastapi import Request
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, Select, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
     AppConversationInfoServiceInjector,
 )
-
-# Simple implementation of utc_now for now
-from datetime import datetime, UTC
-
-def utc_now() -> datetime:
-    """Return current UTC time."""
-    return datetime.now(UTC)
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
