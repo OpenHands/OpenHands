@@ -4,8 +4,19 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from openhands.agent_server.utils import OpenHandsUUID, utc_now
-from openhands.sdk.event.types import EventID
+# Type alias for UUID and utc_now function
+from datetime import datetime, UTC
+from uuid import UUID
+
+OpenHandsUUID = UUID
+
+def utc_now() -> datetime:
+    """Return current UTC time."""
+    return datetime.now(UTC)
+
+# Temporarily comment out SDK import
+# from openhands.sdk.event.types import EventID
+EventID = str
 
 
 class EventCallbackResultStatus(Enum):

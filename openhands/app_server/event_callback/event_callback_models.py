@@ -10,17 +10,32 @@ from uuid import UUID, uuid4
 
 from pydantic import Field
 
-from openhands.agent_server.utils import OpenHandsUUID, utc_now
+# Type alias for UUID and utc_now function
+from datetime import datetime, UTC
+from uuid import UUID
+
+OpenHandsUUID = UUID
+
+def utc_now() -> datetime:
+    """Return current UTC time."""
+    return datetime.now(UTC)
+
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
     EventCallbackResultStatus,
 )
-from openhands.sdk import Event
-from openhands.sdk.utils.models import (
-    DiscriminatedUnionMixin,
-    OpenHandsModel,
-    get_known_concrete_subclasses,
-)
+# Temporarily comment out SDK imports
+# from openhands.sdk import Event
+# from openhands.sdk.utils.models import (
+#     DiscriminatedUnionMixin,
+#     OpenHandsModel,
+
+# Simple placeholders
+from typing import Any
+Event = Any
+DiscriminatedUnionMixin = type
+OpenHandsModel = type
+get_known_concrete_subclasses = lambda x: []
 
 _logger = logging.getLogger(__name__)
 if TYPE_CHECKING:

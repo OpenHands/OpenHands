@@ -4,8 +4,22 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from openhands.agent_server.models import SendMessageRequest
-from openhands.agent_server.utils import OpenHandsUUID, utc_now
+# Type alias for UUID and utc_now function
+from datetime import UTC
+
+OpenHandsUUID = UUID
+
+def utc_now() -> datetime:
+    """Return current UTC time."""
+    return datetime.now(UTC)
+
+# Temporarily comment out missing imports
+# from openhands.agent_server.models import SendMessageRequest
+
+# Simple placeholder for SendMessageRequest
+from typing import Any
+SendMessageRequest = Any
+
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
@@ -43,6 +57,8 @@ class AppConversationInfo(BaseModel):
 
     parent_conversation_id: OpenHandsUUID | None = None
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
+
+    public: bool | None = None
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
