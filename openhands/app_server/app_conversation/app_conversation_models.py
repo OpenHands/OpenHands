@@ -115,6 +115,12 @@ class AppConversationStartRequest(BaseModel):
     parent_conversation_id: OpenHandsUUID | None = None
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
 
+    public: bool | None = None
+
+
+class AppConversationUpdateRequest(BaseModel):
+    public: bool
+
 
 class AppConversationStartTaskStatus(Enum):
     WORKING = 'WORKING'

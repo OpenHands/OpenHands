@@ -125,23 +125,13 @@ async def count_public_conversations(
 
 @router.get('')
 async def batch_get_public_conversations(
-    ids: Annotated[list[UUID], Query()],
+    ids: Annotated[list[str], Query()],
     public_conversation_service: PublicConversationInfoService = public_conversation_service_dependency,
 ) -> list[PublicConversation | None]:
     """Get a batch of public conversations given their ids. Return None for any missing or non-public."""
     assert len(ids) <= 100
+    uuids = [UUID(id_) for id_ in ids]
     public_conversations = (
-        await public_conversation_service.batch_get_public_conversation_info(ids)
+        await public_conversation_service.batch_get_public_conversation_info(uuids)
     )
     return public_conversations
-
-
-@router.get('/{conversation_id}')
-async def get_public_conversation(
-    conversation_id: UUID,
-    public_conversation_service: PublicConversationInfoService = public_conversation_service_dependency,
-) -> PublicConversation | None:
-    """Get a single public conversation by ID."""
-    return await public_conversation_service.get_public_conversation_info(
-        conversation_id
-    )

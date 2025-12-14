@@ -28,7 +28,7 @@ else:
         return await async_iterator.__anext__()
 
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
+    AppConversationUpdateRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
@@ -208,6 +209,20 @@ async def start_app_conversation(
     result = await anext(async_iter)
     asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
     return result
+
+
+@router.post('/{conversation_id}')
+async def update_app_conversation(
+    conversation_id: str,
+    update_request: AppConversationUpdateRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+) -> AppConversation:
+    info = await app_conversation_service.update_app_conversation(UUID(conversation_id), update_request)
+    if info is None:
+        raise HTTPException(404, 'unknown_app_conversation')
+    return info
 
 
 @router.post('/stream-start')

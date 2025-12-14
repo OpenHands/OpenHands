@@ -26,7 +26,7 @@ router.public_event_service_dependency = public_event_service_dependency
 @router.get('/search')
 async def search_public_events(
     conversation_id: Annotated[
-        UUID,
+        str,
         Query(title='Conversation ID to search events for'),
     ],
     kind__eq: Annotated[
@@ -59,7 +59,7 @@ async def search_public_events(
     assert limit > 0
     assert limit <= 100
     return await public_event_service.search_public_events(
-        conversation_id=conversation_id,
+        conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
