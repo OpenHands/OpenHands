@@ -15,6 +15,7 @@ from openhands.app_server.app_conversation.app_conversation_models import AgentT
 from openhands.app_server.app_conversation.app_conversation_service_base import (
     AppConversationServiceBase,
 )
+from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
 
 
@@ -916,3 +917,350 @@ async def test_configure_git_user_settings_special_characters_in_name(mock_works
     mock_workspace.execute_command.assert_any_call(
         'git config --global user.name "Test O\'Brien"', '/workspace/project'
     )
+
+
+# =============================================================================
+# Tests for _load_and_merge_all_skills with org skills
+# =============================================================================
+
+
+class TestLoadAndMergeAllSkillsWithOrgSkills:
+    """Test _load_and_merge_all_skills includes organization skills."""
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
+    async def test_load_and_merge_includes_org_skills(
+        self,
+        mock_load_repo,
+        mock_load_org,
+        mock_load_user,
+        mock_load_global,
+        mock_load_sandbox,
+    ):
+        """Test that _load_and_merge_all_skills loads and merges org skills."""
+        # Arrange
+        mock_user_context = Mock(spec=UserContext)
+        with patch.object(
+            AppConversationServiceBase,
+            '__abstractmethods__',
+            set(),
+        ):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True,
+                user_context=mock_user_context,
+            )
+
+            sandbox = Mock(spec=SandboxInfo)
+            sandbox.exposed_urls = []
+            remote_workspace = AsyncMock()
+
+            # Create distinct mock skills for each source
+            sandbox_skill = Mock()
+            sandbox_skill.name = 'sandbox_skill'
+            global_skill = Mock()
+            global_skill.name = 'global_skill'
+            user_skill = Mock()
+            user_skill.name = 'user_skill'
+            org_skill = Mock()
+            org_skill.name = 'org_skill'
+            repo_skill = Mock()
+            repo_skill.name = 'repo_skill'
+
+            mock_load_sandbox.return_value = [sandbox_skill]
+            mock_load_global.return_value = [global_skill]
+            mock_load_user.return_value = [user_skill]
+            mock_load_org.return_value = [org_skill]
+            mock_load_repo.return_value = [repo_skill]
+
+            # Act
+            result = await service._load_and_merge_all_skills(
+                sandbox, remote_workspace, 'owner/repo', '/workspace'
+            )
+
+            # Assert
+            assert len(result) == 5
+            names = {s.name for s in result}
+            assert names == {
+                'sandbox_skill',
+                'global_skill',
+                'user_skill',
+                'org_skill',
+                'repo_skill',
+            }
+            mock_load_org.assert_called_once_with(
+                remote_workspace, 'owner/repo', '/workspace', mock_user_context
+            )
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
+    async def test_load_and_merge_org_skills_precedence(
+        self,
+        mock_load_repo,
+        mock_load_org,
+        mock_load_user,
+        mock_load_global,
+        mock_load_sandbox,
+    ):
+        """Test that org skills have correct precedence (higher than user, lower than repo)."""
+        # Arrange
+        mock_user_context = Mock(spec=UserContext)
+        with patch.object(
+            AppConversationServiceBase,
+            '__abstractmethods__',
+            set(),
+        ):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True,
+                user_context=mock_user_context,
+            )
+
+            sandbox = Mock(spec=SandboxInfo)
+            sandbox.exposed_urls = []
+            remote_workspace = AsyncMock()
+
+            # Create skills with same name but different sources
+            user_skill = Mock()
+            user_skill.name = 'common_skill'
+            user_skill.source = 'user'
+
+            org_skill = Mock()
+            org_skill.name = 'common_skill'
+            org_skill.source = 'org'
+
+            repo_skill = Mock()
+            repo_skill.name = 'common_skill'
+            repo_skill.source = 'repo'
+
+            mock_load_sandbox.return_value = []
+            mock_load_global.return_value = []
+            mock_load_user.return_value = [user_skill]
+            mock_load_org.return_value = [org_skill]
+            mock_load_repo.return_value = [repo_skill]
+
+            # Act
+            result = await service._load_and_merge_all_skills(
+                sandbox, remote_workspace, 'owner/repo', '/workspace'
+            )
+
+            # Assert
+            # Should have only one skill with repo source (highest precedence)
+            assert len(result) == 1
+            assert result[0].source == 'repo'
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
+    async def test_load_and_merge_org_skills_override_user_skills(
+        self,
+        mock_load_repo,
+        mock_load_org,
+        mock_load_user,
+        mock_load_global,
+        mock_load_sandbox,
+    ):
+        """Test that org skills override user skills for same name."""
+        # Arrange
+        mock_user_context = Mock(spec=UserContext)
+        with patch.object(
+            AppConversationServiceBase,
+            '__abstractmethods__',
+            set(),
+        ):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True,
+                user_context=mock_user_context,
+            )
+
+            sandbox = Mock(spec=SandboxInfo)
+            sandbox.exposed_urls = []
+            remote_workspace = AsyncMock()
+
+            # Create skills with same name
+            user_skill = Mock()
+            user_skill.name = 'shared_skill'
+            user_skill.priority = 'low'
+
+            org_skill = Mock()
+            org_skill.name = 'shared_skill'
+            org_skill.priority = 'high'
+
+            mock_load_sandbox.return_value = []
+            mock_load_global.return_value = []
+            mock_load_user.return_value = [user_skill]
+            mock_load_org.return_value = [org_skill]
+            mock_load_repo.return_value = []
+
+            # Act
+            result = await service._load_and_merge_all_skills(
+                sandbox, remote_workspace, 'owner/repo', '/workspace'
+            )
+
+            # Assert
+            assert len(result) == 1
+            assert result[0].priority == 'high'  # Org skill should win
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
+    async def test_load_and_merge_handles_org_skills_failure(
+        self,
+        mock_load_repo,
+        mock_load_org,
+        mock_load_user,
+        mock_load_global,
+        mock_load_sandbox,
+    ):
+        """Test that failure to load org skills doesn't break the overall process."""
+        # Arrange
+        mock_user_context = Mock(spec=UserContext)
+        with patch.object(
+            AppConversationServiceBase,
+            '__abstractmethods__',
+            set(),
+        ):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True,
+                user_context=mock_user_context,
+            )
+
+            sandbox = Mock(spec=SandboxInfo)
+            sandbox.exposed_urls = []
+            remote_workspace = AsyncMock()
+
+            global_skill = Mock()
+            global_skill.name = 'global_skill'
+            repo_skill = Mock()
+            repo_skill.name = 'repo_skill'
+
+            mock_load_sandbox.return_value = []
+            mock_load_global.return_value = [global_skill]
+            mock_load_user.return_value = []
+            mock_load_org.return_value = []  # Org skills failed/empty
+            mock_load_repo.return_value = [repo_skill]
+
+            # Act
+            result = await service._load_and_merge_all_skills(
+                sandbox, remote_workspace, 'owner/repo', '/workspace'
+            )
+
+            # Assert
+            # Should still have skills from other sources
+            assert len(result) == 2
+            names = {s.name for s in result}
+            assert names == {'global_skill', 'repo_skill'}
+
+    @pytest.mark.asyncio
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_sandbox_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_global_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_user_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_org_skills'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.load_repo_skills'
+    )
+    async def test_load_and_merge_no_selected_repository(
+        self,
+        mock_load_repo,
+        mock_load_org,
+        mock_load_user,
+        mock_load_global,
+        mock_load_sandbox,
+    ):
+        """Test skill loading when no repository is selected."""
+        # Arrange
+        mock_user_context = Mock(spec=UserContext)
+        with patch.object(
+            AppConversationServiceBase,
+            '__abstractmethods__',
+            set(),
+        ):
+            service = AppConversationServiceBase(
+                init_git_in_empty_workspace=True,
+                user_context=mock_user_context,
+            )
+
+            sandbox = Mock(spec=SandboxInfo)
+            sandbox.exposed_urls = []
+            remote_workspace = AsyncMock()
+
+            global_skill = Mock()
+            global_skill.name = 'global_skill'
+
+            mock_load_sandbox.return_value = []
+            mock_load_global.return_value = [global_skill]
+            mock_load_user.return_value = []
+            mock_load_org.return_value = []
+            mock_load_repo.return_value = []
+
+            # Act
+            result = await service._load_and_merge_all_skills(
+                sandbox, remote_workspace, None, '/workspace'
+            )
+
+            # Assert
+            assert len(result) == 1
+            # Org skills should be called even with None repository
+            mock_load_org.assert_called_once_with(
+                remote_workspace, None, '/workspace', mock_user_context
+            )
