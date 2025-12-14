@@ -47,6 +47,12 @@ from openhands.app_server.services.db_session_injector import (
 from openhands.app_server.services.httpx_client_injector import HttpxClientInjector
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService, JwtServiceInjector
+from openhands.app_server.public_conversations.public_conversation_info_service import (
+    PublicConversationInfoService,
+)
+from openhands.app_server.public_conversations.public_event_service import (
+    PublicEventService,
+)
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
 from openhands.sdk.utils.models import OpenHandsModel
 
@@ -105,6 +111,8 @@ class AppServerConfig(OpenHandsModel):
     app_conversation_info: AppConversationInfoServiceInjector | None = None
     app_conversation_start_task: AppConversationStartTaskServiceInjector | None = None
     app_conversation: AppConversationServiceInjector | None = None
+    public_conversation_info: object | None = None  # PublicConversationInfoServiceInjector
+    public_event: object | None = None  # PublicEventServiceInjector
     user: UserContextInjector | None = None
     jwt: JwtServiceInjector | None = None
     httpx: HttpxClientInjector = Field(default_factory=HttpxClientInjector)
@@ -152,6 +160,12 @@ def config_from_env() -> AppServerConfig:
     )
     from openhands.app_server.sandbox.remote_sandbox_spec_service import (
         RemoteSandboxSpecServiceInjector,
+    )
+    from openhands.app_server.public_conversations.filesystem_public_event_service import (
+        FilesystemPublicEventServiceInjector,
+    )
+    from openhands.app_server.public_conversations.sql_public_conversation_info_service import (
+        SQLPublicConversationInfoServiceInjector,
     )
     from openhands.app_server.user.auth_user_context import (
         AuthUserContextInjector,
@@ -201,6 +215,12 @@ def config_from_env() -> AppServerConfig:
         config.app_conversation = LiveStatusAppConversationServiceInjector(
             tavily_api_key=tavily_api_key
         )
+
+    if config.public_conversation_info is None:
+        config.public_conversation_info = SQLPublicConversationInfoServiceInjector()
+
+    if config.public_event is None:
+        config.public_event = FilesystemPublicEventServiceInjector()
 
     if config.user is None:
         config.user = AuthUserContextInjector()
@@ -373,3 +393,15 @@ def depends_jwt_service():
 
 def depends_db_session():
     return Depends(get_global_config().db_session.depends)
+
+
+def depends_public_conversation_info_service():
+    injector = get_global_config().public_conversation_info
+    assert injector is not None
+    return Depends(injector.depends)
+
+
+def depends_public_event_service():
+    injector = get_global_config().public_event
+    assert injector is not None
+    return Depends(injector.depends)

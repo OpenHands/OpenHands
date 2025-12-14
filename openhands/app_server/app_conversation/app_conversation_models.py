@@ -9,6 +9,9 @@ from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
+from openhands.app_server.public_conversations.public_conversation_models import (
+    PublicConversationInfo,
+)
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.integrations.service_types import ProviderType
 from openhands.sdk.conversation.state import ConversationExecutionStatus
@@ -23,29 +26,11 @@ class AgentType(Enum):
     PLAN = 'plan'
 
 
-class AppConversationInfo(BaseModel):
+class AppConversationInfo(PublicConversationInfo):
     """Conversation info which does not contain status."""
 
-    id: OpenHandsUUID = Field(default_factory=uuid4)
-
     created_by_user_id: str | None
-    sandbox_id: str
-
-    selected_repository: str | None = None
-    selected_branch: str | None = None
-    git_provider: ProviderType | None = None
-    title: str | None = None
-    trigger: ConversationTrigger | None = None
-    pr_number: list[int] = Field(default_factory=list)
-    llm_model: str | None = None
-
-    metrics: MetricsSnapshot | None = None
-
-    parent_conversation_id: OpenHandsUUID | None = None
-    sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
-
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    public: bool = Field(default=False, description='Whether the conversation is publicly accessible')
 
 
 class AppConversationSortOrder(Enum):
