@@ -1,22 +1,20 @@
 """Tests for PublicEventService."""
 
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 from uuid import uuid4
-from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.app_server.event_callback.event_callback_models import EventKind
+from openhands.app_server.event.event_service import EventService
 from openhands.app_server.sharing.public_conversation_info_service import (
     PublicConversationInfoService,
 )
 from openhands.app_server.sharing.public_conversation_models import PublicConversation
-from openhands.app_server.sharing.public_event_service_impl import PublicEventServiceImpl
-from openhands.app_server.event.event_service import EventService
-from openhands.sdk import Event
-from openhands.sdk.event.llm_convertible.message import MessageEvent
-from openhands.events.action import MessageAction
-from openhands.events.observation import NullObservation
+from openhands.app_server.sharing.public_event_service_impl import (
+    PublicEventServiceImpl,
+)
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
 
@@ -112,7 +110,9 @@ class TestPublicEventService:
         event_id = 'test_event_id'
 
         # Mock the public conversation service to return None (private conversation)
-        mock_public_conversation_service.get_public_conversation_info.return_value = None
+        mock_public_conversation_service.get_public_conversation_info.return_value = (
+            None
+        )
 
         # Call the method
         result = await public_event_service.get_public_event(conversation_id, event_id)
@@ -148,7 +148,7 @@ class TestPublicEventService:
         # Call the method
         result = await public_event_service.search_public_events(
             conversation_id=conversation_id,
-            kind__eq="ActionEvent",
+            kind__eq='ActionEvent',
             limit=10,
         )
 
@@ -161,7 +161,7 @@ class TestPublicEventService:
         )
         mock_event_service.search_events.assert_called_once_with(
             conversation_id__eq=conversation_id,
-            kind__eq="ActionEvent",
+            kind__eq='ActionEvent',
             timestamp__gte=None,
             timestamp__lt=None,
             sort_order=EventSortOrder.TIMESTAMP,
@@ -179,7 +179,9 @@ class TestPublicEventService:
         conversation_id = uuid4()
 
         # Mock the public conversation service to return None (private conversation)
-        mock_public_conversation_service.get_public_conversation_info.return_value = None
+        mock_public_conversation_service.get_public_conversation_info.return_value = (
+            None
+        )
 
         # Call the method
         result = await public_event_service.search_public_events(
@@ -219,7 +221,7 @@ class TestPublicEventService:
         # Call the method
         result = await public_event_service.count_public_events(
             conversation_id=conversation_id,
-            kind__eq="ActionEvent",
+            kind__eq='ActionEvent',
         )
 
         # Verify the result
@@ -230,7 +232,7 @@ class TestPublicEventService:
         )
         mock_event_service.count_events.assert_called_once_with(
             conversation_id__eq=conversation_id,
-            kind__eq="ActionEvent",
+            kind__eq='ActionEvent',
             timestamp__gte=None,
             timestamp__lt=None,
             sort_order=EventSortOrder.TIMESTAMP,
@@ -246,7 +248,9 @@ class TestPublicEventService:
         conversation_id = uuid4()
 
         # Mock the public conversation service to return None (private conversation)
-        mock_public_conversation_service.get_public_conversation_info.return_value = None
+        mock_public_conversation_service.get_public_conversation_info.return_value = (
+            None
+        )
 
         # Call the method
         result = await public_event_service.count_public_events(
@@ -293,7 +297,10 @@ class TestPublicEventService:
         assert result[1] is None
 
         # Verify that get_public_conversation_info was called for each event
-        assert mock_public_conversation_service.get_public_conversation_info.call_count == 2
+        assert (
+            mock_public_conversation_service.get_public_conversation_info.call_count
+            == 2
+        )
         # Verify that get_event was called for each event
         assert mock_event_service.get_event.call_count == 2
 
@@ -308,7 +315,9 @@ class TestPublicEventService:
         event_ids = ['event1', 'event2']
 
         # Mock the public conversation service to return None (private conversation)
-        mock_public_conversation_service.get_public_conversation_info.return_value = None
+        mock_public_conversation_service.get_public_conversation_info.return_value = (
+            None
+        )
 
         # Call the method
         result = await public_event_service.batch_get_public_events(
@@ -321,7 +330,10 @@ class TestPublicEventService:
         assert result[1] is None
 
         # Verify that get_public_conversation_info was called for each event
-        assert mock_public_conversation_service.get_public_conversation_info.call_count == 2
+        assert (
+            mock_public_conversation_service.get_public_conversation_info.call_count
+            == 2
+        )
         # Event service should not be called
         mock_event_service.get_event.assert_not_called()
 
@@ -349,7 +361,7 @@ class TestPublicEventService:
         # Call the method with all parameters
         result = await public_event_service.search_public_events(
             conversation_id=conversation_id,
-            kind__eq="ObservationEvent",
+            kind__eq='ObservationEvent',
             timestamp__gte=timestamp_gte,
             timestamp__lt=timestamp_lt,
             sort_order=EventSortOrder.TIMESTAMP_DESC,
@@ -362,7 +374,7 @@ class TestPublicEventService:
 
         mock_event_service.search_events.assert_called_once_with(
             conversation_id__eq=conversation_id,
-            kind__eq="ObservationEvent",
+            kind__eq='ObservationEvent',
             timestamp__gte=timestamp_gte,
             timestamp__lt=timestamp_lt,
             sort_order=EventSortOrder.TIMESTAMP_DESC,

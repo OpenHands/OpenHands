@@ -1,14 +1,16 @@
 """Tests for PublicConversationInfoService."""
 
-import pytest
-from datetime import datetime, UTC
-from uuid import uuid4
+from datetime import UTC, datetime
 from typing import AsyncGenerator
+from uuid import uuid4
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from openhands.app_server.app_conversation.app_conversation_models import AppConversationInfo
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationInfo,
+)
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
@@ -151,7 +153,9 @@ class TestPublicConversationInfoService:
     ):
         """Test that get_public_conversation_info returns a public conversation."""
         # Create a public conversation
-        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
+        await app_conversation_service.save_app_conversation_info(
+            sample_conversation_info
+        )
 
         # Retrieve it via public service
         result = await public_conversation_service.get_public_conversation_info(
@@ -172,7 +176,9 @@ class TestPublicConversationInfoService:
     ):
         """Test that get_public_conversation_info returns None for private conversations."""
         # Create a private conversation
-        await app_conversation_service.save_app_conversation_info(sample_private_conversation_info)
+        await app_conversation_service.save_app_conversation_info(
+            sample_private_conversation_info
+        )
 
         # Try to retrieve it via public service
         result = await public_conversation_service.get_public_conversation_info(
@@ -187,7 +193,9 @@ class TestPublicConversationInfoService:
     ):
         """Test that get_public_conversation_info returns None for nonexistent conversations."""
         nonexistent_id = uuid4()
-        result = await public_conversation_service.get_public_conversation_info(nonexistent_id)
+        result = await public_conversation_service.get_public_conversation_info(
+            nonexistent_id
+        )
         assert result is None
 
     @pytest.mark.asyncio
@@ -200,8 +208,12 @@ class TestPublicConversationInfoService:
     ):
         """Test that search only returns public conversations."""
         # Create both public and private conversations
-        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
-        await app_conversation_service.save_app_conversation_info(sample_private_conversation_info)
+        await app_conversation_service.save_app_conversation_info(
+            sample_conversation_info
+        )
+        await app_conversation_service.save_app_conversation_info(
+            sample_private_conversation_info
+        )
 
         # Search for all conversations
         result = await public_conversation_service.search_public_conversation_info()
@@ -220,7 +232,9 @@ class TestPublicConversationInfoService:
     ):
         """Test searching with title filter."""
         # Create a public conversation
-        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
+        await app_conversation_service.save_app_conversation_info(
+            sample_conversation_info
+        )
 
         # Search with matching title
         result = await public_conversation_service.search_public_conversation_info(
@@ -320,12 +334,16 @@ class TestPublicConversationInfoService:
         assert count == 0
 
         # Create a public conversation
-        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
+        await app_conversation_service.save_app_conversation_info(
+            sample_conversation_info
+        )
         count = await public_conversation_service.count_public_conversation_info()
         assert count == 1
 
         # Create a private conversation - count should remain 1
-        await app_conversation_service.save_app_conversation_info(sample_private_conversation_info)
+        await app_conversation_service.save_app_conversation_info(
+            sample_private_conversation_info
+        )
         count = await public_conversation_service.count_public_conversation_info()
         assert count == 1
 
@@ -339,8 +357,12 @@ class TestPublicConversationInfoService:
     ):
         """Test batch getting public conversations."""
         # Create both public and private conversations
-        await app_conversation_service.save_app_conversation_info(sample_conversation_info)
-        await app_conversation_service.save_app_conversation_info(sample_private_conversation_info)
+        await app_conversation_service.save_app_conversation_info(
+            sample_conversation_info
+        )
+        await app_conversation_service.save_app_conversation_info(
+            sample_private_conversation_info
+        )
 
         # Batch get both conversations
         result = await public_conversation_service.batch_get_public_conversation_info(

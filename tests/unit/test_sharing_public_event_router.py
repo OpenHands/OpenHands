@@ -1,17 +1,17 @@
 """Tests for public event router."""
 
-import pytest
-from datetime import datetime, UTC
-from uuid import uuid4
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
-from fastapi.testclient import TestClient
+import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
-from openhands.app_server.sharing.public_event_service import PublicEventService
 from openhands.app_server.sharing.public_event_router import router
+from openhands.app_server.sharing.public_event_service import PublicEventService
 from openhands.sdk import Event
 
 
@@ -26,12 +26,12 @@ def app(mock_public_event_service):
     """Create a FastAPI app for testing."""
     app = FastAPI()
     app.include_router(router)
-    
+
     # Override the dependency
-    app.dependency_overrides[
-        router.public_event_service_dependency
-    ] = lambda: mock_public_event_service
-    
+    app.dependency_overrides[router.public_event_service_dependency] = (
+        lambda: mock_public_event_service
+    )
+
     return app
 
 
@@ -92,9 +92,7 @@ class TestPublicEventRouter:
             limit=100,
         )
 
-    def test_search_public_events_with_filters(
-        self, client, mock_public_event_service
-    ):
+    def test_search_public_events_with_filters(self, client, mock_public_event_service):
         """Test searching public events with filters."""
         conversation_id = uuid4()
 
@@ -216,7 +214,9 @@ class TestPublicEventRouter:
         # Should fail validation
         assert response.status_code == 422
 
-    def test_batch_get_public_events(self, client, mock_public_event_service, sample_event):
+    def test_batch_get_public_events(
+        self, client, mock_public_event_service, sample_event
+    ):
         """Test batch getting public events."""
         conversation_id = uuid4()
         event_ids = ['event1', 'event2']
@@ -332,7 +332,7 @@ class TestPublicEventRouter:
         # Make the request with timestamp filters
         timestamp_gte = '2023-01-01T00:00:00Z'
         timestamp_lt = '2023-12-31T23:59:59Z'
-        
+
         response = client.get(
             '/public-events/search',
             params={

@@ -34,7 +34,6 @@ from openhands.app_server.sharing.public_conversation_models import (
 from openhands.integrations.provider import ProviderType
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +249,6 @@ class SQLPublicConversationInfoService(PublicConversationInfoService):
                 ProviderType(stored.git_provider) if stored.git_provider else None
             ),
             title=stored.title,
-            trigger=ConversationTrigger(stored.trigger) if stored.trigger else None,
             pr_number=stored.pr_number,
             llm_model=stored.llm_model,
             metrics=metrics,

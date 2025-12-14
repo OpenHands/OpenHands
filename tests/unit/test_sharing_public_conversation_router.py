@@ -1,12 +1,12 @@
 """Tests for public conversation router."""
 
-import pytest
-from datetime import datetime, UTC
-from uuid import uuid4
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
-from fastapi.testclient import TestClient
+import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from openhands.app_server.sharing.public_conversation_info_service import (
     PublicConversationInfoService,
@@ -16,7 +16,10 @@ from openhands.app_server.sharing.public_conversation_models import (
     PublicConversationPage,
     PublicConversationSortOrder,
 )
-from openhands.app_server.sharing.public_conversation_router import router, public_conversation_service_dependency
+from openhands.app_server.sharing.public_conversation_router import (
+    public_conversation_service_dependency,
+    router,
+)
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
 
@@ -32,12 +35,12 @@ def app(mock_public_conversation_service):
     """Create a FastAPI app for testing."""
     app = FastAPI()
     app.include_router(router)
-    
+
     # Override the dependency
-    app.dependency_overrides[
-        public_conversation_service_dependency
-    ] = lambda: mock_public_conversation_service
-    
+    app.dependency_overrides[public_conversation_service_dependency] = (
+        lambda: mock_public_conversation_service
+    )
+
     return app
 
 
@@ -79,9 +82,7 @@ class TestPublicConversationRouter:
         mock_page = PublicConversationPage(
             items=[sample_public_conversation], next_page_id=None
         )
-        mock_public_conversation_service.search_public_conversation_info.return_value = (
-            mock_page
-        )
+        mock_public_conversation_service.search_public_conversation_info.return_value = mock_page
 
         # Make the request
         response = client.get('/public-conversations/search')
@@ -113,9 +114,7 @@ class TestPublicConversationRouter:
         """Test searching public conversations with filters."""
         # Mock the service response
         mock_page = PublicConversationPage(items=[], next_page_id=None)
-        mock_public_conversation_service.search_public_conversation_info.return_value = (
-            mock_page
-        )
+        mock_public_conversation_service.search_public_conversation_info.return_value = mock_page
 
         # Make the request with filters
         response = client.get(
@@ -271,7 +270,9 @@ class TestPublicConversationRouter:
         conversation_id = uuid4()
 
         # Mock the service response
-        mock_public_conversation_service.get_public_conversation_info.return_value = None
+        mock_public_conversation_service.get_public_conversation_info.return_value = (
+            None
+        )
 
         # Make the request
         response = client.get(f'/public-conversations/{conversation_id}')

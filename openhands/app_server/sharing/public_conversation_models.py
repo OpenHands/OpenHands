@@ -7,23 +7,15 @@ from enum import Enum
 # from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 # For now, use Any to avoid import issues
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
+
+from openhands.agent_server.utils import OpenHandsUUID, utc_now
 
 ProviderType = Any
 MetricsSnapshot = Any
 ConversationTrigger = Any
-
-# Type alias for UUID
-OpenHandsUUID = UUID
-
-
-def utc_now() -> datetime:
-    """Return current UTC time."""
-    from datetime import UTC
-
-    return datetime.now(UTC)
 
 
 class PublicConversation(BaseModel):
@@ -38,7 +30,6 @@ class PublicConversation(BaseModel):
     selected_branch: str | None = None
     git_provider: ProviderType | None = None
     title: str | None = None
-    trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
     llm_model: str | None = None
 
