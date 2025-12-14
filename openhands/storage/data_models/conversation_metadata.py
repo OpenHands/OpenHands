@@ -39,3 +39,7 @@ class ConversationMetadata:
     # V1 compatibility
     sandbox_id: str | None = None
     conversation_version: str | None = None
+    # Public sharing fields
+    is_public: bool = False
+    public_share_token: str | None = None
+    shared_at: datetime | None = None

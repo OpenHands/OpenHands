@@ -25,7 +25,17 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import Column, DateTime, Float, Integer, Select, String, func, select
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    Select,
+    String,
+    func,
+    select,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.utils import utc_now
@@ -91,6 +101,11 @@ class StoredConversationMetadata(Base):  # type: ignore
     conversation_version = Column(String, nullable=False, default='V0', index=True)
     sandbox_id = Column(String, nullable=True, index=True)
     parent_conversation_id = Column(String, nullable=True, index=True)
+
+    # Public sharing fields
+    is_public = Column(Boolean, default=False, nullable=False, index=True)
+    public_share_token = Column(String, nullable=True, index=True)
+    shared_at = Column(DateTime(timezone=True), nullable=True)
 
 
 @dataclass

@@ -28,6 +28,9 @@ from openhands.server.routes.manage_conversations import (
 )
 from openhands.server.routes.mcp import mcp_server
 from openhands.server.routes.public import app as public_api_router
+from openhands.server.routes.public_conversations import (
+    app as public_conversations_router,
+)
 from openhands.server.routes.secrets import app as secrets_router
 from openhands.server.routes.security import app as security_api_router
 from openhands.server.routes.settings import app as settings_router
@@ -81,6 +84,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 
 app.include_router(public_api_router)
+app.include_router(public_conversations_router)
 app.include_router(files_api_router)
 app.include_router(security_api_router)
 app.include_router(feedback_api_router)

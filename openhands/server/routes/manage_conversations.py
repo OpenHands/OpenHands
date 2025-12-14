@@ -10,7 +10,7 @@ from typing import Annotated
 
 import base62
 import httpx
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel, ConfigDict, Field
@@ -1444,7 +1444,7 @@ async def get_microagent_management_conversations(
 
 
 def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo:
-    """Convert a V1 AppConversation into an old style ConversationInfo"""
+    """Convert a V1 AppConversation into an old style ConversationInfo."""
     from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
     # Map SandboxStatus to ConversationStatus
@@ -1501,3 +1501,170 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
             sub_id.hex for sub_id in app_conversation.sub_conversation_ids
         ],
     )
+
+
+class PublicSharingRequest(BaseModel):
+    """Request model for public sharing operations."""
+
+    is_public: bool
+
+
+class PublicSharingResponse(BaseModel):
+    """Response model for public sharing operations."""
+
+    is_public: bool
+    share_token: str | None = None
+    share_url: str | None = None
+
+
+@app.post(
+    '/conversations/{conversation_id}/public-sharing',
+    response_model=PublicSharingResponse,
+)
+async def update_conversation_public_sharing(
+    data: PublicSharingRequest,
+    conversation_id: str = Depends(validate_conversation_id),
+    user_id: str | None = Depends(get_user_id),
+    conversation_store: ConversationStore = Depends(get_conversation_store),
+) -> PublicSharingResponse:
+    """Update conversation public sharing status.
+
+    This endpoint allows users to make their conversations public or private.
+    Only the conversation owner can change the sharing status.
+
+    Args:
+        conversation_id: The ID of the conversation to update
+        data: The public sharing request data
+        user_id: The authenticated user ID
+        conversation_store: The conversation store dependency
+
+    Returns:
+        PublicSharingResponse with sharing status and token
+
+    Raises:
+        HTTPException: If conversation is not found or user lacks permission
+    """
+    from openhands.server.services.public_conversation_service import (
+        PublicConversationService,
+    )
+
+    logger.info(
+        f'Updating conversation {conversation_id} public sharing to: {data.is_public}',
+        extra={'session_id': conversation_id, 'user_id': user_id},
+    )
+
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail='Authentication required'
+        )
+
+    service = PublicConversationService(conversation_store)
+
+    try:
+        if data.is_public:
+            # Make conversation public
+            share_token = await service.make_conversation_public(
+                conversation_id, user_id
+            )
+            share_url = f'/public/conversations/{conversation_id}'
+
+            logger.info(
+                f'Conversation {conversation_id} made public',
+                extra={'session_id': conversation_id, 'user_id': user_id},
+            )
+
+            return PublicSharingResponse(
+                is_public=True, share_token=share_token, share_url=share_url
+            )
+        else:
+            # Make conversation private
+            await service.make_conversation_private(conversation_id, user_id)
+
+            logger.info(
+                f'Conversation {conversation_id} made private',
+                extra={'session_id': conversation_id, 'user_id': user_id},
+            )
+
+            return PublicSharingResponse(is_public=False)
+
+    except FileNotFoundError:
+        logger.warning(
+            f'Conversation {conversation_id} not found for public sharing update',
+            extra={'session_id': conversation_id, 'user_id': user_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Conversation not found'
+        )
+    except PermissionError:
+        logger.warning(
+            f'User {user_id} attempted to update public sharing for conversation {conversation_id} without permission',
+            extra={'session_id': conversation_id, 'user_id': user_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Permission denied: You can only update your own conversations',
+        )
+
+
+@app.get(
+    '/conversations/{conversation_id}/public-sharing',
+    response_model=PublicSharingResponse,
+)
+async def get_conversation_public_sharing(
+    conversation_id: str = Depends(validate_conversation_id),
+    user_id: str | None = Depends(get_user_id),
+    conversation_store: ConversationStore = Depends(get_conversation_store),
+) -> PublicSharingResponse:
+    """Get conversation public sharing status.
+
+    This endpoint allows users to check if their conversation is public.
+    Only the conversation owner can view the sharing status.
+
+    Args:
+        conversation_id: The ID of the conversation to check
+        user_id: The authenticated user ID
+        conversation_store: The conversation store dependency
+
+    Returns:
+        PublicSharingResponse with current sharing status
+
+    Raises:
+        HTTPException: If conversation is not found or user lacks permission
+    """
+    logger.info(
+        f'Getting conversation {conversation_id} public sharing status',
+        extra={'session_id': conversation_id, 'user_id': user_id},
+    )
+
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail='Authentication required'
+        )
+
+    try:
+        # Validate user owns the conversation
+        if not await conversation_store.validate_metadata(conversation_id, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Permission denied: You can only view your own conversations',
+            )
+
+        # Get conversation metadata
+        metadata = await conversation_store.get_metadata(conversation_id)
+
+        response = PublicSharingResponse(is_public=metadata.is_public)
+
+        if metadata.is_public:
+            response.share_token = metadata.public_share_token
+            response.share_url = f'/public/conversations/{conversation_id}'
+
+        return response
+
+    except FileNotFoundError:
+        logger.warning(
+            f'Conversation {conversation_id} not found for public sharing status',
+            extra={'session_id': conversation_id, 'user_id': user_id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Conversation not found'
+        )
