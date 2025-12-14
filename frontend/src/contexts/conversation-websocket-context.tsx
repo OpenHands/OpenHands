@@ -603,7 +603,7 @@ export function ConversationWebSocketProvider({
         // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
         if (event.code !== 1000 && hasConnectedRefMain.current) {
           setErrorMessage(
-            `Connection lost: ${event.reason || "Unexpected disconnect"}`,
+            `Connection lost: ${event.reason || "Disconnected. Please refresh the page"}`,
           );
         }
       },
@@ -675,7 +675,7 @@ export function ConversationWebSocketProvider({
         // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
         if (event.code !== 1000 && hasConnectedRefPlanning.current) {
           setErrorMessage(
-            `Connection lost: ${event.reason || "Unexpected disconnect"}`,
+            `Connection lost: ${event.reason || "Disconnected. Please refresh the page"}`,
           );
         }
       },
