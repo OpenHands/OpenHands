@@ -4,6 +4,10 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { usePublicConversation } from "#/hooks/query/use-public-conversation";
 import { usePublicConversationEvents } from "#/hooks/query/use-public-conversation-events";
+import { Messages as V1Messages } from "#/components/v1/chat";
+import { transformPublicEventsToV1 } from "#/utils/public-event-transformer";
+import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
 export default function PublicConversation() {
   const { t } = useTranslation();
@@ -23,10 +27,22 @@ export default function PublicConversation() {
   const isLoading = isLoadingConversation || isLoadingEvents;
   const error = conversationError || eventsError;
 
+  // Transform public events to V1 format
+  const v1Events = React.useMemo(() => {
+    if (!eventsData?.items) return [];
+    return transformPublicEventsToV1(eventsData.items);
+  }, [eventsData?.items]);
+
+  // Filter events that should be rendered
+  const renderableEvents = React.useMemo(
+    () => v1Events.filter(shouldRenderEvent),
+    [v1Events],
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-white">Loading...</div>
+        <LoadingSpinner size="large" />
       </div>
     );
   }
@@ -40,9 +56,9 @@ export default function PublicConversation() {
   }
 
   return (
-    <div className="h-screen bg-neutral-900 text-white">
+    <div className="h-screen bg-neutral-900 text-white flex flex-col">
       {/* Header with conversation title and branch info */}
-      <div className="border-b border-neutral-700 p-4">
+      <div className="border-b border-neutral-700 p-4 flex-shrink-0">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-xl font-semibold mb-2">
             {conversation?.title || t(I18nKey.CONVERSATION$PUBLIC_CONVERSATION)}
@@ -62,31 +78,19 @@ export default function PublicConversation() {
       </div>
 
       {/* Chat panel - read-only */}
-      <div className="max-w-4xl mx-auto p-4">
-        <div className="bg-neutral-800 rounded-lg p-4">
-          {eventsData?.items && eventsData.items.length > 0 ? (
-            <div className="space-y-4">
-              {eventsData.items.map((event) => (
-                <div
-                  key={event.id}
-                  className="border-b border-neutral-700 pb-4"
-                >
-                  <div className="text-sm text-neutral-400 mb-2">
-                    {new Date(event.timestamp).toLocaleString()} - {event.kind}
-                  </div>
-                  <div className="text-white">
-                    <pre className="whitespace-pre-wrap text-sm">
-                      {JSON.stringify(event.data, null, 2)}
-                    </pre>
-                  </div>
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full flex flex-col">
+          <div className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2">
+            {renderableEvents.length > 0 ? (
+              <V1Messages messages={renderableEvents} allEvents={v1Events} />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center text-neutral-400 py-8">
+                  {t(I18nKey.CONVERSATION$NO_HISTORY_AVAILABLE)}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center text-neutral-400 py-8">
-              {t(I18nKey.CONVERSATION$NO_HISTORY_AVAILABLE)}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
