@@ -555,7 +555,9 @@ class TestDeviceVerificationTransactionIntegrity:
         mock_device.is_pending.return_value = True
         mock_store.get_by_user_code.return_value = mock_device
         mock_store.authorize_device_code.return_value = True  # Authorization succeeds
-        mock_store.deny_device_code.side_effect = Exception('Cleanup failed')  # Cleanup fails
+        mock_store.deny_device_code.side_effect = Exception(
+            'Cleanup failed'
+        )  # Cleanup fails
 
         # Mock API key store to fail on creation
         mock_api_key_store = MagicMock()

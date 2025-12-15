@@ -37,9 +37,6 @@ class DeviceAuthorizationResponse(BaseModel):
     interval: int
 
 
-
-
-
 class DeviceTokenResponse(BaseModel):
     access_token: str  # This will be the user's API key
     token_type: str = 'Bearer'
@@ -141,14 +138,11 @@ async def device_token(device_code: str = Form(...)):
         is_too_fast, current_interval = device_code_entry.check_rate_limit()
         if is_too_fast:
             # Update poll time and increase interval
-            device_code_store.update_poll_time(
-                device_code, increase_interval=True
-            )
+            device_code_store.update_poll_time(device_code, increase_interval=True)
             logger.warning(
                 'Client polling too fast, returning slow_down error',
                 extra={
-                    'device_code': device_code[:8]
-                    + '...',  # Log partial for privacy
+                    'device_code': device_code[:8] + '...',  # Log partial for privacy
                     'new_interval': current_interval,
                 },
             )
@@ -275,7 +269,6 @@ async def device_verification_authenticated(
 
         # Only create API key AFTER successful authorization
         api_key_store = ApiKeyStore.get_instance()
-        api_key_created = False
         try:
             # Create a unique API key for this device using user_code in the name
             device_key_name = f'{API_KEY_NAME} ({user_code})'
@@ -284,14 +277,15 @@ async def device_verification_authenticated(
                 name=device_key_name,
                 expires_at=datetime.now(UTC) + KEY_EXPIRATION_TIME,
             )
-            api_key_created = True
             logger.info(
                 'Created new device API key for user after successful authorization',
                 extra={'user_id': user_id, 'user_code': user_code},
             )
         except Exception as e:
-            logger.exception('Failed to create device API key after authorization: %s', str(e))
-            
+            logger.exception(
+                'Failed to create device API key after authorization: %s', str(e)
+            )
+
             # Clean up: revert the device authorization since API key creation failed
             # This prevents the device from being in an authorized state without an API key
             try:
@@ -302,10 +296,10 @@ async def device_verification_authenticated(
                 )
             except Exception as cleanup_error:
                 logger.exception(
-                    'Failed to revert device authorization during cleanup: %s', 
-                    str(cleanup_error)
+                    'Failed to revert device authorization during cleanup: %s',
+                    str(cleanup_error),
                 )
-            
+
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail='Failed to create API key for device access.',
