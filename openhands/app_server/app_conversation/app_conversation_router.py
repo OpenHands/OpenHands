@@ -211,7 +211,7 @@ async def start_app_conversation(
     return result
 
 
-@router.post('/{conversation_id}')
+@router.patch('/{conversation_id}')
 async def update_app_conversation(
     conversation_id: str,
     update_request: AppConversationUpdateRequest,
