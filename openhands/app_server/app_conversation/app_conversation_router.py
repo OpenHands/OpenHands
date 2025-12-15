@@ -219,7 +219,9 @@ async def update_app_conversation(
         app_conversation_service_dependency
     ),
 ) -> AppConversation:
-    info = await app_conversation_service.update_app_conversation(UUID(conversation_id), update_request)
+    info = await app_conversation_service.update_app_conversation(
+        UUID(conversation_id), update_request
+    )
     if info is None:
         raise HTTPException(404, 'unknown_app_conversation')
     return info

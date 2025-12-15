@@ -6,7 +6,6 @@ from uuid import UUID
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
-    AppConversationInfo,
     AppConversationPage,
     AppConversationSortOrder,
     AppConversationStartRequest,
@@ -101,7 +100,9 @@ class AppConversationService(ABC):
         yield task
 
     @abstractmethod
-    async def update_app_conversation(self, conversation_id: UUID, request: AppConversationUpdateRequest) -> AppConversation | None:
+    async def update_app_conversation(
+        self, conversation_id: UUID, request: AppConversationUpdateRequest
+    ) -> AppConversation | None:
         """Update an app conversation and return it. Return None if the conversation
         did not exist."""
 

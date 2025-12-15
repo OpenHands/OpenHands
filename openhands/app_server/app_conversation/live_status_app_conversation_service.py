@@ -16,7 +16,6 @@ from openhands.agent_server.models import (
     SendMessageRequest,
     StartConversationRequest,
 )
-from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -1030,10 +1029,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             f'Successfully updated agent-server conversation {conversation_id} title to "{new_title}"'
         )
 
-    async def update_app_conversation(self, conversation_id: UUID, request: AppConversationUpdateRequest) -> AppConversation | None:
+    async def update_app_conversation(
+        self, conversation_id: UUID, request: AppConversationUpdateRequest
+    ) -> AppConversation | None:
         """Update an app conversation and return it. Return None if the conversation
         did not exist."""
-        info = await self.app_conversation_info_service.get_app_conversation_info(conversation_id)
+        info = await self.app_conversation_info_service.get_app_conversation_info(
+            conversation_id
+        )
         if info is None:
             return None
         for field_name in request.model_fields:
