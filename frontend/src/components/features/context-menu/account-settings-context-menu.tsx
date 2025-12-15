@@ -5,11 +5,10 @@ import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "./context-menu-list-item";
 import { Divider } from "#/ui/divider";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
-import { useConfig } from "#/hooks/query/use-config";
 import { I18nKey } from "#/i18n/declaration";
 import LogOutIcon from "#/icons/log-out.svg?react";
 import DocumentIcon from "#/icons/document.svg?react";
-import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
+import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 
 interface AccountSettingsContextMenuProps {
   onLogout: () => void;
@@ -22,15 +21,8 @@ export function AccountSettingsContextMenu({
 }: AccountSettingsContextMenuProps) {
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { t } = useTranslation();
-  const { data: config } = useConfig();
-
-  const isSaas = config?.APP_MODE === "saas";
-
   // Get navigation items and filter out LLM settings if the feature flag is enabled
-  let items = isSaas ? SAAS_NAV_ITEMS : OSS_NAV_ITEMS;
-  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
-    items = items.filter((item) => item.to !== "/settings");
-  }
+  const items = useSettingsNavItems();
 
   const navItems = items.map((item) => ({
     ...item,
@@ -39,11 +31,7 @@ export function AccountSettingsContextMenu({
       height: 16,
     } as React.SVGProps<SVGSVGElement>),
   }));
-
-  const handleNavigationClick = () => {
-    onClose();
-    // The Link component will handle the actual navigation
-  };
+  const handleNavigationClick = () => onClose();
 
   return (
     <ContextMenu
@@ -55,7 +43,7 @@ export function AccountSettingsContextMenu({
       {navItems.map(({ to, text, icon }) => (
         <Link key={to} to={to} className="text-decoration-none">
           <ContextMenuListItem
-            onClick={() => handleNavigationClick()}
+            onClick={handleNavigationClick}
             className="flex items-center gap-2 p-2 hover:bg-[#5C5D62] rounded h-[30px]"
           >
             {icon}

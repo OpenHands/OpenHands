@@ -1,4 +1,5 @@
 import asyncio
+import os
 from abc import ABC, abstractmethod
 
 from openhands.app_server.errors import SandboxError
@@ -11,7 +12,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 # The version of the agent server to use for deployments.
 # Typically this will be the same as the values from the pyproject.toml
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:d96a368-python'
+AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:8f90b92-python'
 
 
 class SandboxSpecService(ABC):
@@ -57,3 +58,11 @@ class SandboxSpecServiceInjector(
     DiscriminatedUnionMixin, Injector[SandboxSpecService], ABC
 ):
     pass
+
+
+def get_default_agent_server_image():
+    agent_server_image_repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY')
+    agent_server_image_tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
+    if agent_server_image_repository and agent_server_image_tag:
+        return f'{agent_server_image_repository}:{agent_server_image_tag}'
+    return AGENT_SERVER_IMAGE
