@@ -258,8 +258,25 @@ async def device_verification_authenticated(
                 detail='This device code has already been processed.',
             )
 
-        # Create API key for this specific device
+        # First, authorize the device code
+        success = device_code_store.authorize_device_code(
+            user_code=user_code,
+            user_id=user_id,
+        )
+
+        if not success:
+            logger.error(
+                'Failed to authorize device code',
+                extra={'user_code': user_code, 'user_id': user_id},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Failed to authorize the device. Please try again.',
+            )
+
+        # Only create API key AFTER successful authorization
         api_key_store = ApiKeyStore.get_instance()
+        api_key_created = False
         try:
             # Create a unique API key for this device using user_code in the name
             device_key_name = f'{API_KEY_NAME} ({user_code})'
@@ -268,40 +285,40 @@ async def device_verification_authenticated(
                 name=device_key_name,
                 expires_at=datetime.now(UTC) + KEY_EXPIRATION_TIME,
             )
+            api_key_created = True
             logger.info(
-                'Created new device API key for user',
+                'Created new device API key for user after successful authorization',
                 extra={'user_id': user_id, 'user_code': user_code},
             )
         except Exception as e:
-            logger.exception('Failed to create device API key: %s', str(e))
+            logger.exception('Failed to create device API key after authorization: %s', str(e))
+            
+            # Clean up: revert the device authorization since API key creation failed
+            # This prevents the device from being in an authorized state without an API key
+            try:
+                device_code_store.deny_device_code(user_code)
+                logger.info(
+                    'Reverted device authorization due to API key creation failure',
+                    extra={'user_code': user_code, 'user_id': user_id},
+                )
+            except Exception as cleanup_error:
+                logger.exception(
+                    'Failed to revert device authorization during cleanup: %s', 
+                    str(cleanup_error)
+                )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail='Failed to create API key for device access.',
             )
 
-        # Mark device as authorized and store the API key
-        success = device_code_store.authorize_device_code(
-            user_code=user_code,
-            user_id=user_id,
-        )
-
-        if success:
-            logger.info(
-                'Device code authorized with API key',
-                extra={'user_code': user_code, 'user_id': user_id},
-            )
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={'message': 'Device authorized successfully!'},
-            )
-
-        logger.error(
-            'Failed to authorize device code',
+        logger.info(
+            'Device code authorized with API key successfully',
             extra={'user_code': user_code, 'user_id': user_id},
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to authorize the device. Please try again.',
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={'message': 'Device authorized successfully!'},
         )
 
     except HTTPException:

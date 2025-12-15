@@ -470,3 +470,140 @@ class TestDeviceTokenRateLimiting:
         mock_store.update_poll_time.assert_called_with(
             'test_device_code', increase_interval=True
         )
+
+
+class TestDeviceVerificationTransactionIntegrity:
+    """Test transaction integrity for device verification to prevent orphaned API keys."""
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_authorization_failure_prevents_api_key_creation(
+        self, mock_store, mock_api_key_class
+    ):
+        """Test that if device authorization fails, no API key is created."""
+        # Mock device code
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = True
+        mock_store.get_by_user_code.return_value = mock_device
+        mock_store.authorize_device_code.return_value = False  # Authorization fails
+
+        # Mock API key store
+        mock_api_key_store = MagicMock()
+        mock_api_key_class.get_instance.return_value = mock_api_key_store
+
+        # Should raise HTTPException due to authorization failure
+        with pytest.raises(HTTPException) as exc_info:
+            await device_verification_authenticated(
+                user_code='ABC12345', user_id='user-123'
+            )
+
+        assert exc_info.value.status_code == 500
+        assert 'Failed to authorize the device' in exc_info.value.detail
+
+        # API key should NOT be created since authorization failed
+        mock_api_key_store.create_api_key.assert_not_called()
+        mock_store.authorize_device_code.assert_called_once_with(
+            user_code='ABC12345', user_id='user-123'
+        )
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_api_key_creation_failure_reverts_authorization(
+        self, mock_store, mock_api_key_class
+    ):
+        """Test that if API key creation fails after authorization, the authorization is reverted."""
+        # Mock device code
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = True
+        mock_store.get_by_user_code.return_value = mock_device
+        mock_store.authorize_device_code.return_value = True  # Authorization succeeds
+        mock_store.deny_device_code.return_value = True  # Cleanup succeeds
+
+        # Mock API key store to fail on creation
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.create_api_key.side_effect = Exception('Database error')
+        mock_api_key_class.get_instance.return_value = mock_api_key_store
+
+        # Should raise HTTPException due to API key creation failure
+        with pytest.raises(HTTPException) as exc_info:
+            await device_verification_authenticated(
+                user_code='ABC12345', user_id='user-123'
+            )
+
+        assert exc_info.value.status_code == 500
+        assert 'Failed to create API key for device access' in exc_info.value.detail
+
+        # Authorization should have been attempted first
+        mock_store.authorize_device_code.assert_called_once_with(
+            user_code='ABC12345', user_id='user-123'
+        )
+
+        # API key creation should have been attempted after authorization
+        mock_api_key_store.create_api_key.assert_called_once()
+
+        # Authorization should be reverted due to API key creation failure
+        mock_store.deny_device_code.assert_called_once_with('ABC12345')
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_api_key_creation_failure_cleanup_failure_logged(
+        self, mock_store, mock_api_key_class
+    ):
+        """Test that cleanup failure is logged but doesn't prevent the main error from being raised."""
+        # Mock device code
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = True
+        mock_store.get_by_user_code.return_value = mock_device
+        mock_store.authorize_device_code.return_value = True  # Authorization succeeds
+        mock_store.deny_device_code.side_effect = Exception('Cleanup failed')  # Cleanup fails
+
+        # Mock API key store to fail on creation
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.create_api_key.side_effect = Exception('Database error')
+        mock_api_key_class.get_instance.return_value = mock_api_key_store
+
+        # Should still raise HTTPException for the original API key creation failure
+        with pytest.raises(HTTPException) as exc_info:
+            await device_verification_authenticated(
+                user_code='ABC12345', user_id='user-123'
+            )
+
+        assert exc_info.value.status_code == 500
+        assert 'Failed to create API key for device access' in exc_info.value.detail
+
+        # Both operations should have been attempted
+        mock_store.authorize_device_code.assert_called_once()
+        mock_api_key_store.create_api_key.assert_called_once()
+        mock_store.deny_device_code.assert_called_once_with('ABC12345')
+
+    @patch('server.routes.oauth_device.ApiKeyStore')
+    @patch('server.routes.oauth_device.device_code_store')
+    async def test_successful_flow_creates_api_key_after_authorization(
+        self, mock_store, mock_api_key_class
+    ):
+        """Test that in the successful flow, API key is created only after authorization."""
+        # Mock device code
+        mock_device = MagicMock()
+        mock_device.is_pending.return_value = True
+        mock_store.get_by_user_code.return_value = mock_device
+        mock_store.authorize_device_code.return_value = True  # Authorization succeeds
+
+        # Mock API key store
+        mock_api_key_store = MagicMock()
+        mock_api_key_class.get_instance.return_value = mock_api_key_store
+
+        result = await device_verification_authenticated(
+            user_code='ABC12345', user_id='user-123'
+        )
+
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 200
+
+        # Verify the order: authorization first, then API key creation
+        mock_store.authorize_device_code.assert_called_once_with(
+            user_code='ABC12345', user_id='user-123'
+        )
+        mock_api_key_store.create_api_key.assert_called_once()
+
+        # No cleanup should be needed in successful case
+        mock_store.deny_device_code.assert_not_called()
