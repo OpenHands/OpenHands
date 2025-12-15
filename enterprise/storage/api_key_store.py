@@ -57,9 +57,15 @@ class ApiKeyStore:
                 return None
 
             # Check if the key has expired
-            if key_record.expires_at and key_record.expires_at < now:
-                logger.info(f'API key has expired: {key_record.id}')
-                return None
+            if key_record.expires_at:
+                # Handle timezone-naive datetime from database by assuming it's UTC
+                expires_at = key_record.expires_at
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
+
+                if expires_at < now:
+                    logger.info(f'API key has expired: {key_record.id}')
+                    return None
 
             # Update last_used_at timestamp
             session.execute(
