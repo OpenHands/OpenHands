@@ -1,3 +1,4 @@
+import { OpenHandsEvent } from "#/types/v1/core";
 import { openHands } from "./open-hands-axios";
 
 export interface PublicConversation {
@@ -17,16 +18,8 @@ export interface PublicConversation {
   updated_at: string;
 }
 
-export interface PublicEvent {
-  id: string;
-  conversation_id: string;
-  timestamp: string;
-  kind: string;
-  data: unknown;
-}
-
 export interface EventPage {
-  items: PublicEvent[];
+  items: OpenHandsEvent[];
   next_page_id: string | null;
 }
 

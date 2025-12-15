@@ -5,7 +5,6 @@ import { I18nKey } from "#/i18n/declaration";
 import { usePublicConversation } from "#/hooks/query/use-public-conversation";
 import { usePublicConversationEvents } from "#/hooks/query/use-public-conversation-events";
 import { Messages as V1Messages } from "#/components/v1/chat";
-import { transformPublicEventsToV1 } from "#/utils/public-event-transformer";
 import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
@@ -28,10 +27,7 @@ export default function PublicConversation() {
   const error = conversationError || eventsError;
 
   // Transform public events to V1 format
-  const v1Events = React.useMemo(() => {
-    if (!eventsData?.items) return [];
-    return transformPublicEventsToV1(eventsData.items);
-  }, [eventsData?.items]);
+  const v1Events = eventsData?.items || [];
 
   // Filter events that should be rendered
   const renderableEvents = React.useMemo(
