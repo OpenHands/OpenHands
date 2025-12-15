@@ -482,7 +482,11 @@ class AgentController:
             event (Event): The incoming event to process.
         """
         # Wrap in weave.thread to group all events for this conversation under the same thread
-        with (weave.thread(self.id) if weave.client.get_current_client() else nullcontext()):
+        with (
+            weave.thread(self.id)
+            if weave.client.get_current_client()
+            else nullcontext()
+        ):
             # If we have a delegate that is not finished or errored, forward events to it
             if self.delegate is not None:
                 delegate_state = self.delegate.get_agent_state()
