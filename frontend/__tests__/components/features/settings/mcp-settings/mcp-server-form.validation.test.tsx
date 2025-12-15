@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import { MCPServerForm } from "../mcp-server-form";
+import { MCPServerForm } from "#/components/features/settings/mcp-settings/mcp-server-form";
 
 // i18n mock
 vi.mock("react-i18next", () => ({

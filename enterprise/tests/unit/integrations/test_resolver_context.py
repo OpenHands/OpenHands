@@ -15,7 +15,7 @@ from enterprise.integrations.resolver_context import ResolverUserContext
 from openhands.integrations.provider import CustomSecret
 
 # Import the SDK types we need for testing
-from openhands.sdk.conversation.secret_source import SecretSource, StaticSecret
+from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.storage.data_models.secrets import Secrets
 
 

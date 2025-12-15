@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import {
   displaySuccessToast,
   displayErrorToast,
-} from "../custom-toast-handlers";
+} from "#/utils/custom-toast-handlers";
 
 // Mock react-hot-toast
 vi.mock("react-hot-toast", () => ({

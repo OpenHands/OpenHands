@@ -8,14 +8,8 @@ import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useConversationStore } from "#/state/conversation-store";
 
-// Mock the agent state hook
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(),
-}));
-
-// Mock the conversation store
-vi.mock("#/state/conversation-store", () => ({
-  useConversationStore: vi.fn(),
 }));
 
 // Mock React Router hooks
@@ -58,44 +52,23 @@ vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
 describe("InteractiveChatBox", () => {
   const onSubmitMock = vi.fn();
 
-  // Helper function to mock stores
   const mockStores = (agentState: AgentState = AgentState.INIT) => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: agentState,
     });
 
-    vi.mocked(useConversationStore).mockReturnValue({
+    useConversationStore.setState({
       images: [],
       files: [],
-      addImages: vi.fn(),
-      addFiles: vi.fn(),
-      clearAllFiles: vi.fn(),
-      addFileLoading: vi.fn(),
-      removeFileLoading: vi.fn(),
-      addImageLoading: vi.fn(),
-      removeImageLoading: vi.fn(),
-      submittedMessage: null,
-      setShouldHideSuggestions: vi.fn(),
-      setSubmittedMessage: vi.fn(),
-      isRightPanelShown: true,
-      selectedTab: "editor" as const,
       loadingFiles: [],
       loadingImages: [],
+      submittedMessage: null,
       messageToSend: null,
       shouldShownAgentLoading: false,
       shouldHideSuggestions: false,
+      isRightPanelShown: true,
+      selectedTab: "editor" as const,
       hasRightPanelToggled: true,
-      setIsRightPanelShown: vi.fn(),
-      setSelectedTab: vi.fn(),
-      setShouldShownAgentLoading: vi.fn(),
-      removeImage: vi.fn(),
-      removeFile: vi.fn(),
-      clearImages: vi.fn(),
-      clearFiles: vi.fn(),
-      clearAllLoading: vi.fn(),
-      setMessageToSend: vi.fn(),
-      resetConversationState: vi.fn(),
-      setHasRightPanelToggled: vi.fn(),
     });
   };
 

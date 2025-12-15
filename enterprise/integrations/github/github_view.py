@@ -13,6 +13,7 @@ from integrations.resolver_context import ResolverUserContext
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
     ENABLE_PROACTIVE_CONVERSATION_STARTERS,
+    ENABLE_V1_GITHUB_RESOLVER,
     HOST,
     HOST_URL,
     get_oh_labels,
@@ -95,7 +96,15 @@ async def get_user_v1_enabled_setting(user_id: str) -> bool:
 
     Returns:
         True if V1 conversations are enabled for this user, False otherwise
+
+    Note:
+        This function checks both the global environment variable kill switch AND
+        the user's individual setting. Both must be true for the function to return true.
     """
+    # Check the global environment variable first
+    if not ENABLE_V1_GITHUB_RESOLVER:
+        return False
+
     config = get_config()
     settings_store = SaasSettingsStore(
         user_id=user_id, session_maker=session_maker, config=config
