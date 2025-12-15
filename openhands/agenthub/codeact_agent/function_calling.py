@@ -5,6 +5,7 @@ This is similar to the functionality of `CodeActResponseParser`.
 
 import json
 
+import weave
 from litellm import (
     ModelResponse,
 )
@@ -70,6 +71,7 @@ def set_security_risk(action: Action, arguments: dict) -> None:
             logger.warning(f'Invalid security_risk value: {arguments["security_risk"]}')
 
 
+@weave.op(name='response_to_actions')
 def response_to_actions(
     response: ModelResponse, mcp_tool_names: list[str] | None = None
 ) -> list[Action]:

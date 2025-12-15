@@ -3,6 +3,8 @@ import json
 import shutil
 from typing import TYPE_CHECKING
 
+import weave
+
 if TYPE_CHECKING:
     from openhands.controller.agent import Agent
     from openhands.memory.memory import Memory
@@ -154,6 +156,7 @@ async def create_mcp_clients(
     return mcp_clients
 
 
+@weave.op(name='mcp_fetch_tools')
 async def fetch_mcp_tools_from_config(
     mcp_config: MCPConfig, conversation_id: str | None = None, use_stdio: bool = False
 ) -> list[dict]:
@@ -209,6 +212,7 @@ async def fetch_mcp_tools_from_config(
     return mcp_tools
 
 
+@weave.op(name='mcp_call_tool')
 async def call_tool_mcp(mcp_clients: list[MCPClient], action: MCPAction) -> Observation:
     """Call a tool on an MCP server and return the observation.
 
@@ -286,6 +290,7 @@ async def call_tool_mcp(mcp_clients: list[MCPClient], action: MCPAction) -> Obse
         )
 
 
+@weave.op(name='mcp_add_tools_to_agent')
 async def add_mcp_tools_to_agent(
     agent: 'Agent', runtime: Runtime, memory: 'Memory'
 ) -> MCPConfig:

@@ -21,6 +21,8 @@ from openhands.runtime.plugins import (
     PluginRequirement,
 )
 
+import weave
+
 
 def get_error_prefix(obs: BrowserOutputObservation) -> str:
     # temporary fix for OneStopMarket to ignore timeout errors
@@ -127,6 +129,7 @@ class VisualBrowsingAgent(Agent):
     sandbox_plugins: list[PluginRequirement] = []
     response_parser = BrowsingResponseParser()
 
+    @weave.op(name='visualbrowsing_agent_init')
     def __init__(self, config: AgentConfig, llm_registry: LLMRegistry) -> None:
         """Initializes a new instance of the VisualBrowsingAgent class.
 
@@ -177,6 +180,7 @@ Note:
         # Reset agent-specific counters but not LLM metrics
         self.error_accumulator = 0
 
+    @weave.op(name='visualbrowsing_agent_step')
     def step(self, state: State) -> Action:
         """Performs one step using the VisualBrowsingAgent.
 

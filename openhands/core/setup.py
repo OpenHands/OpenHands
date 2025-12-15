@@ -3,6 +3,7 @@ import os
 import uuid
 from typing import Callable
 
+import weave
 from pydantic import SecretStr
 
 import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
@@ -199,6 +200,7 @@ def create_memory(
     return memory
 
 
+@weave.op(name='create_agent')
 def create_agent(config: OpenHandsConfig, llm_registry: LLMRegistry) -> Agent:
     agent_cls: type[Agent] = Agent.get_cls(config.default_agent)
     agent_config = config.get_agent_config(config.default_agent)

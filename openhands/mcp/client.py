@@ -1,6 +1,7 @@
 import asyncio
 from typing import Optional
 
+import weave
 from fastmcp import Client
 from fastmcp.client.transports import (
     SSETransport,
@@ -146,6 +147,7 @@ class MCPClient(BaseModel):
             )
             raise
 
+    @weave.op(name='mcp_client_call_tool')
     async def call_tool(self, tool_name: str, args: dict) -> CallToolResult:
         """Call a tool on the MCP server with timeout from server configuration.
 

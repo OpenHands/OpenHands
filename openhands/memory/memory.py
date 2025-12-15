@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+import weave
+
 import openhands
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.logger import openhands_logger as logger
@@ -87,6 +89,7 @@ class Memory:
         """Handle an event from the event stream."""
         asyncio.get_event_loop().run_until_complete(self._on_event(event))
 
+    @weave.op(name='memory_on_event')
     async def _on_event(self, event: Event):
         """Handle an event from the event stream asynchronously."""
         try:
@@ -136,6 +139,7 @@ class Memory:
             self.set_runtime_status(RuntimeStatus.ERROR_MEMORY, error_str)
             return
 
+    @weave.op(name='memory_on_workspace_context_recall')
     def _on_workspace_context_recall(
         self, event: RecallAction
     ) -> RecallObservation | None:
@@ -221,6 +225,7 @@ class Memory:
             return obs
         return None
 
+    @weave.op(name='memory_on_microagent_recall')
     def _on_microagent_recall(
         self,
         event: RecallAction,
@@ -239,6 +244,7 @@ class Memory:
             return obs
         return None
 
+    @weave.op(name='memory_find_microagent_knowledge')
     def _find_microagent_knowledge(self, query: str) -> list[MicroagentKnowledge]:
         """Find microagent knowledge based on a query.
 

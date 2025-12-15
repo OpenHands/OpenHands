@@ -15,6 +15,7 @@ with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm
 
+import weave
 from litellm import Message as LiteLLMMessage
 from litellm import ModelInfo, PromptTokensDetails
 from litellm import completion as litellm_completion
@@ -228,6 +229,7 @@ class LLM(RetryMixin, DebugMixin):
             retry_multiplier=self.config.retry_multiplier,
             retry_listener=self.retry_listener,
         )
+        @weave.op(name='llm_completion')
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for the litellm completion function. Logs the input and output of the completion function."""
             from openhands.io import json
@@ -411,12 +413,21 @@ class LLM(RetryMixin, DebugMixin):
                     # Save fncall_messages/response separately
                     _d['fncall_messages'] = original_fncall_messages
                     _d['fncall_response'] = resp
+
+                # call observability hook with completion data
+                self._log_completion_data(_d)
+
                 with open(log_file, 'w') as f:
                     f.write(json.dumps(_d))
 
             return resp
 
         self._completion = wrapper
+
+    @weave.op(name='llm_completion_parsed')
+    def _log_completion_data(self, completion_data: dict[str, Any]) -> None:
+        """Hook for observability tools to capture parsed completion data."""
+        pass
 
     @property
     def completion(self) -> Callable:

@@ -122,6 +122,25 @@ class AgentSession:
         if self._closed:
             self.logger.warning('Session closed before starting')
             return
+
+        # Initialize weave for observability tracing if configured
+        if config.weave_project:
+            import os
+            import weave
+
+            # Set WANDB_API_KEY env var if provided in config (weave uses this for auth)
+            if config.wandb_api_key:
+                os.environ['WANDB_API_KEY'] = config.wandb_api_key.get_secret_value()
+            elif not os.environ.get('WANDB_API_KEY'):
+                raise ValueError('WANDB_API_KEY must be set in config.toml or as an environment variable to enable Weave tracing.')
+
+            project_name = (
+                f'{config.weave_entity}/{config.weave_project}'
+                if config.weave_entity
+                else config.weave_project
+            )
+            weave.init(project_name)
+
         self._starting = True
         started_at = time.time()
         self._started_at = started_at
@@ -243,6 +262,12 @@ class AgentSession:
             await self.controller.close()
         if self.runtime is not None:
             EXECUTOR.submit(self.runtime.close)
+
+        # Exit weave thread context if it was started
+        weave_ctx = getattr(self, '_weave_thread_ctx', None)
+        if weave_ctx is not None:
+            weave_ctx.__exit__(None, None, None)
+            self._weave_thread_ctx = None
 
     def _run_replay(
         self,

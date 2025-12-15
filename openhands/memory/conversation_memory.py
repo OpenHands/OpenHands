@@ -1,5 +1,6 @@
 from typing import Generator
 
+import weave
 from litellm import ModelResponse
 
 from openhands.core.config.agent_config import AgentConfig
@@ -72,6 +73,7 @@ class ConversationMemory:
         """
         return bool(url and url.strip())
 
+    @weave.op(name='conversation_memory_process_events')
     def process_events(
         self,
         condensed_history: list[Event],

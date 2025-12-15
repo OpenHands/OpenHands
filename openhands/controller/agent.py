@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from openhands.events.action import Action
     from openhands.events.action.message import SystemMessageAction
     from openhands.utils.prompt import PromptManager
+import weave
 from litellm import ChatCompletionToolParam
 
 from openhands.core.config import AgentConfig
@@ -37,6 +38,7 @@ class Agent(ABC):
     config_model: type[AgentConfig] = AgentConfig
     """Class field that specifies the config model to use for the agent. Subclasses may override with a derived config model if needed."""
 
+    @weave.op(name='agent_init')
     def __init__(
         self,
         config: AgentConfig,

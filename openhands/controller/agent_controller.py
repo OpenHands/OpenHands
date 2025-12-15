@@ -4,7 +4,7 @@ import asyncio
 import copy
 import os
 import time
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from openhands.security.analyzer import SecurityAnalyzer
@@ -86,6 +86,9 @@ from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.storage.files import FileStore
 
+import weave
+from weave.trace.call import Call
+
 # note: RESUME is only available on web GUI
 TRAFFIC_CONTROL_REMINDER = (
     "Please click on resume button if you'd like to continue, or start a new task."
@@ -96,6 +99,36 @@ ERROR_ACTION_NOT_EXECUTED_STOPPED = (
     'Stop button pressed. The action has not been executed.'
 )
 ERROR_ACTION_NOT_EXECUTED_ERROR = 'The action has not been executed due to a runtime error. The runtime system may have crashed and restarted due to resource constraints. Any previously established system state, dependencies, or environment variables may have been lost.'
+
+
+def _postprocess_on_event_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+    """Add event metadata for display naming before Weave serializes inputs.
+
+    This only affects what gets LOGGED - the actual function receives original inputs.
+    We add metadata keys alongside (not replacing) the original event.
+    """
+    result = dict(inputs)  # shallow copy
+    event = inputs.get('event')
+    if event is not None:
+        # Add metadata keys that will survive serialization
+        result['_event_type'] = type(event).__name__
+        # EventSource is an enum - use .name to get 'USER', 'AGENT', etc.
+        source = getattr(event, 'source', None)
+        result['_event_source'] = source.name if source else None
+    return result
+
+
+def _get_on_event_display_name(call: Call) -> str:
+    """Generate descriptive display name from preprocessed event metadata."""
+    try:
+        event_type = call.inputs.get('_event_type', 'Event')
+        event_source = call.inputs.get('_event_source')
+
+        if event_source:
+            return f'{event_type}[{event_source}]'
+        return event_type
+    except Exception:
+        return 'on_event'
 
 
 class AgentController:
@@ -399,6 +432,7 @@ class AgentController:
                 )
             await self._react_to_exception(reported)
 
+    @weave.op(name='agent_controller_should_step')
     def should_step(self, event: Event) -> bool:
         """Whether the agent should take a step based on an event.
 
@@ -446,34 +480,41 @@ class AgentController:
         Args:
             event (Event): The incoming event to process.
         """
-        # If we have a delegate that is not finished or errored, forward events to it
-        if self.delegate is not None:
-            delegate_state = self.delegate.get_agent_state()
-            if (
-                delegate_state
-                not in (
-                    AgentState.FINISHED,
-                    AgentState.ERROR,
-                    AgentState.REJECTED,
-                )
-                or 'RuntimeError: Agent reached maximum iteration.'
-                in self.delegate.state.last_error
-                or 'RuntimeError:Agent reached maximum budget for conversation'
-                in self.delegate.state.last_error
-            ):
-                # Forward the event to delegate and skip parent processing
-                asyncio.get_event_loop().run_until_complete(
-                    self.delegate._on_event(event)
-                )
-                return
-            else:
-                # delegate is done or errored, so end it
-                self.end_delegate()
-                return
+        # Wrap in weave.thread to group all events for this conversation under the same thread
+        with weave.thread(self.id):
+            # If we have a delegate that is not finished or errored, forward events to it
+            if self.delegate is not None:
+                delegate_state = self.delegate.get_agent_state()
+                if (
+                    delegate_state
+                    not in (
+                        AgentState.FINISHED,
+                        AgentState.ERROR,
+                        AgentState.REJECTED,
+                    )
+                    or 'RuntimeError: Agent reached maximum iteration.'
+                    in self.delegate.state.last_error
+                    or 'RuntimeError:Agent reached maximum budget for conversation'
+                    in self.delegate.state.last_error
+                ):
+                    # Forward the event to delegate and skip parent processing
+                    asyncio.get_event_loop().run_until_complete(
+                        self.delegate._on_event(event)
+                    )
+                    return
+                else:
+                    # delegate is done or errored, so end it
+                    self.end_delegate()
+                    return
 
-        # continue parent processing only if there's no active delegate
-        asyncio.get_event_loop().run_until_complete(self._on_event(event))
+            # continue parent processing only if there's no active delegate
+            asyncio.get_event_loop().run_until_complete(self._on_event(event))
 
+    @weave.op(
+        name='agent_controller_on_event',
+        call_display_name=_get_on_event_display_name,
+        postprocess_inputs=_postprocess_on_event_inputs,
+    )
     async def _on_event(self, event: Event) -> None:
         if hasattr(event, 'hidden') and event.hidden:
             return
@@ -501,6 +542,7 @@ class AgentController:
                 extra={'msg_type': 'NOT_STEPPING_AFTER_USER_MESSAGE'},
             )
 
+    @weave.op(name='agent_controller_handle_action')
     async def _handle_action(self, action: Action) -> None:
         """Handles an Action from the agent or delegate."""
         if isinstance(action, ChangeAgentStateAction):
@@ -528,6 +570,7 @@ class AgentController:
         elif isinstance(action, LoopRecoveryAction):
             await self._handle_loop_recovery_action(action)
 
+    @weave.op(name='agent_controller_handle_observation')
     async def _handle_observation(self, observation: Observation) -> None:
         """Handles observation from the event stream.
 
@@ -558,6 +601,7 @@ class AgentController:
                 await self.set_agent_state_to(AgentState.AWAITING_USER_INPUT)
             return
 
+    @weave.op(name='agent_controller_handle_message_action')
     async def _handle_message_action(self, action: MessageAction) -> None:
         """Handles message actions from the event stream.
 
@@ -659,6 +703,7 @@ class AgentController:
         self._pending_action = None
         self.agent.reset()
 
+    @weave.op(name='agent_controller_set_agent_state_to')
     async def set_agent_state_to(self, new_state: AgentState) -> None:
         """Updates the agent's state and handles side effects. Can emit events to the event stream.
 
@@ -721,6 +766,7 @@ class AgentController:
         """
         return self.state.agent_state
 
+    @weave.op(name='agent_controller_start_delegate')
     async def start_delegate(self, action: AgentDelegateAction) -> None:
         """Start a delegate agent to handle a subtask.
 
@@ -782,6 +828,7 @@ class AgentController:
             security_analyzer=self.security_analyzer,
         )
 
+    @weave.op(name='agent_controller_end_delegate')
     def end_delegate(self) -> None:
         """Ends the currently active delegate (e.g., if it is finished or errored).
 
@@ -849,6 +896,7 @@ class AgentController:
         # unset delegate so parent can resume normal handling
         self.delegate = None
 
+    @weave.op(name='agent_controller_step')
     async def _step(self) -> None:
         """Executes a single step of the parent or delegate agent. Detects stuck agents and limits on the number of iterations and the task budget."""
         if self.get_agent_state() != AgentState.RUNNING:

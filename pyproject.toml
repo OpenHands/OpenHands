@@ -60,6 +60,7 @@ whatthepatch = "^1.0.6"
 protobuf = "^5.0.0,<6.0.0"                         # Updated to support newer opentelemetry
 opentelemetry-api = "^1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
+weave = "^0.52.22"
 
 libtmux = ">=0.46.2"
 pygithub = "^2.5.0"

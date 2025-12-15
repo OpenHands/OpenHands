@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import ClassVar, Union
 
 import frontmatter
+import weave
 from pydantic import BaseModel
 
 from openhands.core.exceptions import (
@@ -49,6 +50,7 @@ class BaseMicroagent(BaseModel):
         return None
 
     @classmethod
+    @weave.op(name='microagent_load')
     def load(
         cls,
         path: Union[str, Path],
@@ -186,6 +188,7 @@ class KnowledgeMicroagent(BaseMicroagent):
         if self.type not in [MicroagentType.KNOWLEDGE, MicroagentType.TASK]:
             raise ValueError('KnowledgeMicroagent must have type KNOWLEDGE or TASK')
 
+    @weave.op(name='knowledge_microagent_match_trigger')
     def match_trigger(self, message: str) -> str | None:
         """Match a trigger in the message.
 
@@ -215,6 +218,7 @@ class RepoMicroagent(BaseMicroagent):
         - Custom documentation references
     """
 
+    @weave.op(name='repo_microagent_init')
     def __init__(self, **data):
         super().__init__(**data)
         if self.type != MicroagentType.REPO_KNOWLEDGE:
@@ -230,6 +234,7 @@ class TaskMicroagent(KnowledgeMicroagent):
     and will prompt the user for any required inputs before proceeding.
     """
 
+    @weave.op(name='task_microagent_init')
     def __init__(self, **data):
         super().__init__(**data)
         if self.type != MicroagentType.TASK:
@@ -274,6 +279,7 @@ class TaskMicroagent(KnowledgeMicroagent):
         return self.metadata.inputs
 
 
+@weave.op(name='load_microagents_from_dir')
 def load_microagents_from_dir(
     microagent_dir: Union[str, Path],
 ) -> tuple[dict[str, RepoMicroagent], dict[str, KnowledgeMicroagent]]:

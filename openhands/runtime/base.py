@@ -15,6 +15,7 @@ from typing import Callable, cast
 from zipfile import ZipFile
 
 import httpx
+import weave
 
 from openhands.core.config import OpenHandsConfig, SandboxConfig
 from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
@@ -962,6 +963,7 @@ fi
 
         return loaded_microagents
 
+    @weave.op(name='runtime_run_action')
     def run_action(self, action: Action) -> Observation:
         """Run an action and return the resulting observation.
         If the action is not runnable in any runtime, a NullObservation is returned.

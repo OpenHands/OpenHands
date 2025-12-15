@@ -82,6 +82,18 @@ class OpenHandsConfig(BaseModel):
         default=None,
         description='API key for Tavily search engine (https://tavily.com/). Required for search functionality.',
     )
+    weave_project: str | None = Field(
+        default=None,
+        description='W&B Weave project name for observability tracing.',
+    )
+    weave_entity: str | None = Field(
+        default=None,
+        description='W&B Weave entity (i.e. user or team) name for observability tracing.',
+    )
+    wandb_api_key: SecretStr | None = Field(
+        default=None,
+        description='API key for W&B Weave authentication.',
+    )
 
     workspace_base: str | None = Field(default=None)
     workspace_mount_path_in_sandbox: str = Field(
