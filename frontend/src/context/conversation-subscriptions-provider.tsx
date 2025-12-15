@@ -31,13 +31,7 @@ interface ConversationSubscriptionsContextType {
   subscribeToConversation: (options: {
     conversationId: string;
     sessionApiKey: string | null;
-    providersSet: (
-      | "github"
-      | "gitlab"
-      | "bitbucket"
-      | "azure_devops"
-      | "enterprise_sso"
-    )[];
+    providersSet: import("#/types/settings").Provider[];
     baseUrl: string;
     socketPath?: string;
     onEvent?: (event: unknown, conversationId: string) => void;
@@ -141,13 +135,7 @@ export function ConversationSubscriptionsProvider({
     (options: {
       conversationId: string;
       sessionApiKey: string | null;
-      providersSet: (
-        | "github"
-        | "gitlab"
-        | "bitbucket"
-        | "azure_devops"
-        | "enterprise_sso"
-      )[];
+      providersSet: import("#/types/settings").Provider[];
       baseUrl: string;
       socketPath?: string;
       onEvent?: (event: unknown, conversationId: string) => void;

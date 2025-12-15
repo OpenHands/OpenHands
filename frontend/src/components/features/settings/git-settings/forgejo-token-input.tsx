@@ -35,7 +35,10 @@ export function ForgejoTokenInput({
         placeholder={isForgejoTokenSet ? "<hidden>" : ""}
         startContent={
           isForgejoTokenSet && (
-            <KeyStatusIcon testId="forgejo-set-token-indicator" isSet={isForgejoTokenSet} />
+            <KeyStatusIcon
+              testId="forgejo-set-token-indicator"
+              isSet={isForgejoTokenSet}
+            />
           )
         }
       />
@@ -50,7 +53,8 @@ export function ForgejoTokenInput({
         placeholder="codeberg.org"
         defaultValue={forgejoHostSet || undefined}
         startContent={
-          forgejoHostSet && forgejoHostSet.trim() !== "" && (
+          forgejoHostSet &&
+          forgejoHostSet.trim() !== "" && (
             <KeyStatusIcon testId="forgejo-set-host-indicator" isSet />
           )
         }

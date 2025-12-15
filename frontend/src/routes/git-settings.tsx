@@ -83,8 +83,7 @@ function GitSettingsScreen() {
       formData.get("bitbucket-token-input")?.toString() || "";
     const azureDevOpsToken =
       formData.get("azure-devops-token-input")?.toString() || "";
-    const forgejoToken =
-      formData.get("forgejo-token-input")?.toString() || "";
+    const forgejoToken = formData.get("forgejo-token-input")?.toString() || "";
     const githubHost = formData.get("github-host-input")?.toString() || "";
     const gitlabHost = formData.get("gitlab-host-input")?.toString() || "";
     const bitbucketHost =
@@ -242,20 +241,19 @@ function GitSettingsScreen() {
               />
             )}
           </div>
-            {!isSaas && (
-              <ForgejoTokenInput
-                name="forgejo-token-input"
-                isForgejoTokenSet={isForgejoTokenSet}
-                onChange={(value) => {
-                  setForgejoTokenInputHasValue(!!value);
-                }}
-                onForgejoHostChange={(value) => {
-                  setForgejoHostInputHasValue(!!value);
-                }}
-                forgejoHostSet={existingForgejoHost}
-              />
-            )}
-
+          {!isSaas && (
+            <ForgejoTokenInput
+              name="forgejo-token-input"
+              isForgejoTokenSet={isForgejoTokenSet}
+              onChange={(value) => {
+                setForgejoTokenInputHasValue(!!value);
+              }}
+              onForgejoHostChange={(value) => {
+                setForgejoHostInputHasValue(!!value);
+              }}
+              forgejoHostSet={existingForgejoHost}
+            />
+          )}
         </div>
       )}
 
