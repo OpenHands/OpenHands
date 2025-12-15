@@ -17,7 +17,6 @@ import DownloadIcon from "#/icons/u-download.svg?react";
 import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
-import GlobeIcon from "#/icons/globe.svg?react";
 import { ConversationNameContextMenuIconText } from "./conversation-name-context-menu-icon-text";
 import { CONTEXT_MENU_ICON_TEXT_CLASSNAME } from "#/utils/constants";
 
@@ -186,12 +185,11 @@ export function ConversationNameContextMenu({
           className={contextMenuListItemClassName}
         >
           <div className="flex items-center gap-2">
-            <GlobeIcon width={16} height={16} />
             <input
               type="checkbox"
               checked={conversation?.public || false}
               onChange={() => {}} // Handled by parent onClick
-              className="w-4 h-4"
+              className="w-4 h-4 ml-2"
             />
             <span>{t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}</span>
           </div>
