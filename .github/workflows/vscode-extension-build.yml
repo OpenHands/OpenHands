@@ -70,7 +70,7 @@ jobs:
           fi
 
       - name: Upload VSCode extension artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vscode-extension
           path: openhands/integrations/vscode/openhands-vscode-0.0.1.vsix
