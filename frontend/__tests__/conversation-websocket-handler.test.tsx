@@ -6,6 +6,7 @@ import {
   beforeEach,
   afterAll,
   afterEach,
+  vi,
 } from "vitest";
 import { screen, waitFor, render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -141,6 +142,11 @@ describe("Conversation WebSocket Handler", () => {
     });
 
     it("should handle malformed/invalid event data gracefully", async () => {
+      // Suppress expected console.warn for invalid JSON parsing
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
       // Set up MSW to send various invalid events when connection is established
       mswServer.use(
         wsLink.addEventListener("connection", ({ client, server }) => {
@@ -203,6 +209,9 @@ describe("Conversation WebSocket Handler", () => {
         "valid-event-123",
       );
       expect(screen.getByTestId("ui-events-count")).toHaveTextContent("1");
+
+      // Restore console.warn
+      consoleWarnSpy.mockRestore();
     });
   });
 
