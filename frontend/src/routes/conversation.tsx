@@ -20,6 +20,7 @@ import { useDocumentTitleFromState } from "#/hooks/use-document-title-from-state
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { ConversationSubscriptionsProvider } from "#/context/conversation-subscriptions-provider";
 import { useUserProviders } from "#/hooks/use-user-providers";
+import { usePublicConversation } from "#/hooks/query/use-public-conversation";
 
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
 import { ConversationNameWithStatus } from "#/components/features/conversation/conversation-name-with-status";
@@ -30,6 +31,7 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useUnifiedResumeConversationSandbox } from "#/hooks/mutation/use-unified-start-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
+import { PublicConversationPage } from "#/components/features/conversation/public-conversation-page";
 
 function AppContent() {
   useConversationConfig();
@@ -45,6 +47,9 @@ function AppContent() {
   const { mutate: startConversation, isPending: isStarting } =
     useUnifiedResumeConversationSandbox();
   const { data: isAuthed } = useIsAuthed();
+  const { data: publicConversation } = usePublicConversation(
+    conversationId || "",
+  );
   const { providers } = useUserProviders();
   const { resetConversationState } = useConversationStore();
   const navigate = useNavigate();
@@ -58,6 +63,9 @@ function AppContent() {
 
   // Track which conversation ID we've auto-started to prevent auto-restart after manual stop
   const processedConversationId = React.useRef<string | null>(null);
+
+  // Track whether we should show the public view
+  const [showPublicView, setShowPublicView] = React.useState(false);
 
   // Fetch batch feedback data when conversation is loaded
   useBatchFeedback();
@@ -99,14 +107,34 @@ function AppContent() {
   // 3. Auto-start Effect - handles conversation not found and auto-starting STOPPED conversations
   React.useEffect(() => {
     // Wait for data to be fetched
-    if (!isFetched || !isAuthed) return;
+    if (!isFetched) return;
 
-    // Handle conversation not found
-    if (!conversation) {
+    // If user is not authenticated, check for public conversation
+    if (!isAuthed) {
+      if (publicConversation) {
+        setShowPublicView(true);
+        return;
+      }
+      // No public conversation available, redirect to home
       displayErrorToast(t(I18nKey.CONVERSATION$NOT_EXIST_OR_NO_PERMISSION));
       navigate("/");
       return;
     }
+
+    // Handle conversation not found for authenticated users
+    if (!conversation) {
+      // Check if there's a public version available
+      if (publicConversation) {
+        setShowPublicView(true);
+        return;
+      }
+      displayErrorToast(t(I18nKey.CONVERSATION$NOT_EXIST_OR_NO_PERMISSION));
+      navigate("/");
+      return;
+    }
+
+    // Reset public view if we have a private conversation
+    setShowPublicView(false);
 
     const currentConversationId = conversation.conversation_id;
     const currentStatus = conversation.status;
@@ -142,6 +170,7 @@ function AppContent() {
     conversation?.conversation_id,
     isFetched,
     isAuthed,
+    publicConversation,
     isStarting,
     providers,
     startConversation,
@@ -149,6 +178,11 @@ function AppContent() {
     refetch,
     t,
   ]);
+
+  // If we should show the public view, render the public conversation page
+  if (showPublicView) {
+    return <PublicConversationPage />;
+  }
 
   const isV0Conversation = conversation?.conversation_version === "V0";
 

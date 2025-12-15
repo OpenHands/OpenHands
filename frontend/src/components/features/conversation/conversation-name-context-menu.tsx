@@ -16,6 +16,7 @@ import DownloadIcon from "#/icons/u-download.svg?react";
 import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
+import CheckIcon from "#/icons/checkmark.svg?react";
 import { ConversationNameContextMenuIconText } from "./conversation-name-context-menu-icon-text";
 import { CONTEXT_MENU_ICON_TEXT_CLASSNAME } from "#/utils/constants";
 
@@ -34,6 +35,8 @@ interface ConversationNameContextMenuProps {
   onShowMicroagents?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onExportConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onTogglePublic?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  isConversationPublic?: boolean;
   position?: "top" | "bottom";
 }
 
@@ -47,6 +50,8 @@ export function ConversationNameContextMenu({
   onShowMicroagents,
   onExportConversation,
   onDownloadViaVSCode,
+  onTogglePublic,
+  isConversationPublic,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
   const { width } = useWindowSize();
@@ -164,6 +169,33 @@ export function ConversationNameContextMenu({
           <ConversationNameContextMenuIconText
             icon={<CreditCardIcon width={16} height={16} />}
             text={t(I18nKey.BUTTON$DISPLAY_COST)}
+            className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
+          />
+        </ContextMenuListItem>
+      )}
+
+      {onTogglePublic && (
+        <ContextMenuListItem
+          testId="toggle-public-button"
+          onClick={onTogglePublic}
+          className={contextMenuListItemClassName}
+        >
+          <ConversationNameContextMenuIconText
+            icon={
+              <div className="flex items-center">
+                <div
+                  className={cn(
+                    "w-4 h-4 border border-gray-400 rounded flex items-center justify-center mr-2",
+                    isConversationPublic && "bg-blue-500 border-blue-500",
+                  )}
+                >
+                  {isConversationPublic && (
+                    <CheckIcon width={12} height={12} className="text-white" />
+                  )}
+                </div>
+              </div>
+            }
+            text={t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}
             className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
           />
         </ContextMenuListItem>

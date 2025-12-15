@@ -11,10 +11,16 @@ import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversationSandbox } from "./mutation/use-unified-stop-conversation";
 import { useGetTrajectory } from "./mutation/use-get-trajectory";
 import { downloadTrajectory } from "#/utils/download-trajectory";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV0Event } from "#/types/v1/type-guards";
+import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
+import { useActiveConversation } from "./query/use-active-conversation";
+import { useConfig } from "./query/use-config";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -37,6 +43,9 @@ export function useConversationNameContextMenu({
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: stopConversation } = useUnifiedPauseConversationSandbox();
   const { mutate: getTrajectory } = useGetTrajectory();
+  const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();
+  const { data: conversation } = useActiveConversation();
+  const { data: config } = useConfig();
   const metrics = useMetricsStore();
 
   const [metricsModalVisible, setMetricsModalVisible] = React.useState(false);
@@ -169,6 +178,36 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
+  const handleTogglePublic = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (conversationId) {
+      const newPublicState = !conversation?.public;
+      updatePublicFlag(
+        { conversationId, isPublic: newPublicState },
+        {
+          onSuccess: () => {
+            displaySuccessToast(
+              newPublicState
+                ? t(I18nKey.CONVERSATION$MADE_PUBLIC)
+                : t(I18nKey.CONVERSATION$MADE_PRIVATE),
+            );
+          },
+          onError: () => {
+            displayErrorToast(t(I18nKey.CONVERSATION$UPDATE_PUBLIC_ERROR));
+          },
+        },
+      );
+    }
+    onContextMenuToggle?.(false);
+  };
+
+  // Check if we should show the public toggle
+  const isV1Conversation = conversation?.conversation_version === "V1";
+  const isSaasMode = config?.APP_MODE === "saas";
+  const shouldShowPublicToggle = Boolean(
+    showOptions && conversationId && isV1Conversation && isSaasMode,
+  );
+
   return {
     // Handlers
     handleDelete,
@@ -179,6 +218,7 @@ export function useConversationNameContextMenu({
     handleDisplayCost,
     handleShowAgentTools,
     handleShowMicroagents,
+    handleTogglePublic,
     handleConfirmDelete,
     handleConfirmStop,
 
@@ -205,5 +245,7 @@ export function useConversationNameContextMenu({
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
     shouldShowMicroagents: Boolean(showOptions && conversationId),
+    shouldShowPublicToggle,
+    isConversationPublic: Boolean(conversation?.public),
   };
 }

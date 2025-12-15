@@ -34,6 +34,7 @@ export function ConversationName() {
     handleShowAgentTools,
     handleShowMicroagents,
     handleExportConversation,
+    handleTogglePublic,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -53,6 +54,8 @@ export function ConversationName() {
     shouldShowDisplayCost,
     shouldShowAgentTools,
     shouldShowMicroagents,
+    shouldShowPublicToggle,
+    isConversationPublic,
   } = useConversationNameContextMenu({
     conversationId,
     conversationStatus: conversation?.status,
@@ -179,6 +182,10 @@ export function ConversationName() {
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
+                onTogglePublic={
+                  shouldShowPublicToggle ? handleTogglePublic : undefined
+                }
+                isConversationPublic={isConversationPublic}
                 position="bottom"
               />
             )}

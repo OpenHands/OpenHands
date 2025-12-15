@@ -315,6 +315,23 @@ class V1ConversationService {
     );
     return data;
   }
+
+  /**
+   * Update a V1 conversation's public flag
+   * @param conversationId The conversation ID
+   * @param isPublic Whether the conversation should be public
+   * @returns The updated conversation
+   */
+  static async updateConversationPublicFlag(
+    conversationId: string,
+    isPublic: boolean,
+  ): Promise<V1AppConversation> {
+    const { data } = await openHands.post<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      { public: isPublic },
+    );
+    return data;
+  }
 }
 
 export default V1ConversationService;
