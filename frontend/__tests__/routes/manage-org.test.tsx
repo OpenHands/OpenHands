@@ -64,25 +64,43 @@ describe("Manage Org Route", () => {
   // Test data constants
   const TEST_USERS = {
     OWNER: {
-      id: "1",
+      org_id: "1",
+      user_id: "1",
       email: "test@example.com",
       role: "owner" as const,
+      llm_api_key: "**********",
+      max_iterations: 20,
+      llm_model: "gpt-4",
+      llm_api_key_for_byor: null,
+      llm_base_url: "https://api.openai.com",
       status: "active" as const,
     },
     ADMIN: {
-      id: "1",
+      org_id: "1",
+      user_id: "1",
       email: "test@example.com",
       role: "admin" as const,
+      llm_api_key: "**********",
+      max_iterations: 20,
+      llm_model: "gpt-4",
+      llm_api_key_for_byor: null,
+      llm_base_url: "https://api.openai.com",
       status: "active" as const,
     },
   };
 
   // Helper function to set up user mock
   const setupUserMock = (userData: {
-    id: string;
+    org_id: string;
+    user_id: string;
     email: string;
     role: "owner" | "admin" | "user";
-    status: "active" | "invited";
+    llm_api_key: string;
+    max_iterations: number;
+    llm_model: string;
+    llm_api_key_for_byor: string | null;
+    llm_base_url: string;
+    status: "active" | "invited" | "inactive";
   }) => {
     getMeSpy.mockResolvedValue(userData);
   };
@@ -668,9 +686,15 @@ describe("Manage Org Route", () => {
       "should not show delete organization button when user lacks canDeleteOrganization permission ($roleName role)",
       async ({ role }) => {
         setupUserMock({
-          id: "1",
+          org_id: "1",
+          user_id: "1",
           email: "test@example.com",
           role,
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active",
         });
 

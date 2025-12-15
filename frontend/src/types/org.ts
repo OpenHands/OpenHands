@@ -7,8 +7,14 @@ export interface Organization {
 }
 
 export interface OrganizationMember {
-  id: string;
+  org_id: string;
+  user_id: string;
   email: string;
   role: OrganizationUserRole;
-  status: "active" | "invited";
+  llm_api_key: string;
+  max_iterations: number;
+  llm_model: string;
+  llm_api_key_for_byor: string | null;
+  llm_base_url: string;
+  status: "active" | "invited" | "inactive";
 }

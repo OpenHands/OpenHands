@@ -61,9 +61,15 @@ describe("Manage Organization Members Route", () => {
 
     // Set default mock for user (admin role has invite permission)
     getMeSpy.mockResolvedValue({
-      id: "1",
+      org_id: "1",
+      user_id: "1",
       email: "test@example.com",
       role: "admin",
+      llm_api_key: "**********",
+      max_iterations: 20,
+      llm_model: "gpt-4",
+      llm_api_key_for_byor: null,
+      llm_base_url: "https://api.openai.com",
       status: "active",
     });
   });
@@ -138,10 +144,16 @@ describe("Manage Organization Members Route", () => {
   // Helper function to setup test with user and organization
   const setupTestWithUserAndOrg = async (
     userData: {
-      id: string;
+      org_id: string;
+      user_id: string;
       email: string;
       role: "owner" | "admin" | "user";
-      status: "active" | "invited";
+      llm_api_key: string;
+      max_iterations: number;
+      llm_model: string;
+      llm_api_key_for_byor: string | null;
+      llm_base_url: string;
+      status: "active" | "invited" | "inactive";
     },
     orgIndex: number,
   ) => {
@@ -158,10 +170,16 @@ describe("Manage Organization Members Route", () => {
   // Helper function to verify role change is not permitted
   const verifyRoleChangeNotPermitted = async (
     userData: {
-      id: string;
+      org_id: string;
+      user_id: string;
       email: string;
       role: "owner" | "admin" | "user";
-      status: "active" | "invited";
+      llm_api_key: string;
+      max_iterations: number;
+      llm_model: string;
+      llm_api_key_for_byor: string | null;
+      llm_base_url: string;
+      status: "active" | "invited" | "inactive";
     },
     orgIndex: number,
     targetMemberIndex: number,
@@ -268,9 +286,15 @@ describe("Manage Organization Members Route", () => {
   test("an admin should be able to change the role of a organization member", async () => {
     await setupTestWithUserAndOrg(
       {
-        id: "1",
+        org_id: "1",
+        user_id: "1",
         email: "test@example.com",
         role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
         status: "active",
       },
       0,
@@ -315,9 +339,15 @@ describe("Manage Organization Members Route", () => {
   it("should not allow an admin to change the owner's role", async () => {
     await verifyRoleChangeNotPermitted(
       {
-        id: "1",
+        org_id: "3",
+        user_id: "1",
         email: "test@example.com",
         role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
         status: "active",
       },
       2, // user is admin in org 3
@@ -329,9 +359,15 @@ describe("Manage Organization Members Route", () => {
   it("should not allow an admin to change another admin's role", async () => {
     await verifyRoleChangeNotPermitted(
       {
-        id: "1",
+        org_id: "3",
+        user_id: "1",
         email: "test@example.com",
         role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
         status: "active",
       },
       2, // user is admin in org 3
@@ -344,13 +380,19 @@ describe("Manage Organization Members Route", () => {
     // Mock the /me endpoint to return a user ID that matches one of the members
     await verifyRoleChangeNotPermitted(
       {
-        id: "1", // Same as Alice from org 1
+        org_id: "1",
+        user_id: "1", // Same as first member from org 1
         email: "alice@acme.org",
         role: "owner",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
         status: "active",
       },
       0,
-      0, // First member is Alice (id: "1")
+      0, // First member (user_id: "1")
       "Owner",
     );
   });
@@ -442,9 +484,15 @@ describe("Manage Organization Members Route", () => {
 
       getOrganizationMembersSpy.mockResolvedValue([
         {
-          id: "4",
+          org_id: "1",
+          user_id: "4",
           email: "tom@acme.org",
           role: "user",
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "invited",
         },
       ]);
@@ -479,9 +527,15 @@ describe("Manage Organization Members Route", () => {
       "should show invite button when user has canInviteUsers permission ($roleName role)",
       async ({ role }) => {
         getMeSpy.mockResolvedValue({
-          id: "1",
+          org_id: "1",
+          user_id: "1",
           email: "test@example.com",
           role,
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active",
         });
 
@@ -496,9 +550,15 @@ describe("Manage Organization Members Route", () => {
 
     it("should not show invite button when user lacks canInviteUsers permission (User role)", async () => {
       const userData = {
-        id: "1",
+        org_id: "1",
+        user_id: "1",
         email: "test@example.com",
         role: "user" as const,
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
         status: "active" as const,
       };
 
@@ -530,9 +590,15 @@ describe("Manage Organization Members Route", () => {
     it("should not allow an owner to change another owner's role", async () => {
       await verifyRoleChangeNotPermitted(
         {
-          id: "1", // Alice is owner in org 1
+          org_id: "1",
+          user_id: "1", // First member is owner in org 1
           email: "alice@acme.org",
           role: "owner",
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active",
         },
         0,
@@ -544,9 +610,15 @@ describe("Manage Organization Members Route", () => {
     it("Owner should see all three role options (owner, admin, user) in dropdown regardless of target member's role", async () => {
       await setupTestWithUserAndOrg(
         {
-          id: "1", // Alice is owner in org 1
+          org_id: "1",
+          user_id: "1", // First member is owner in org 1
           email: "alice@acme.org",
           role: "owner",
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active",
         },
         0,
@@ -555,7 +627,7 @@ describe("Manage Organization Members Route", () => {
       const memberListItems = await screen.findAllByTestId("member-item");
 
       // Test with admin member
-      const adminMember = memberListItems[1]; // Second member is admin (bob@acme.org)
+      const adminMember = memberListItems[1]; // Second member is admin (user_id: "2")
       const adminDropdown = await openRoleDropdown(adminMember, "admin");
 
       // Verify all three role options are present for admin member
@@ -575,9 +647,15 @@ describe("Manage Organization Members Route", () => {
     it("Admin should not see owner option in role dropdown for any member", async () => {
       await setupTestWithUserAndOrg(
         {
-          id: "7", // Ray is admin in org 3
+          org_id: "3",
+          user_id: "7", // Ray is admin in org 3
           email: "ray@all-hands.dev",
           role: "admin",
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active",
         },
         2, // org 3
@@ -605,9 +683,15 @@ describe("Manage Organization Members Route", () => {
     it("Owner should be able to change any member's role to owner", async () => {
       await setupTestWithUserAndOrg(
         {
-          id: "1", // Alice is owner in org 1
+          org_id: "1",
+          user_id: "1", // First member is owner in org 1
           email: "alice@acme.org",
           role: "owner",
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active",
         },
         0,
@@ -618,7 +702,7 @@ describe("Manage Organization Members Route", () => {
       const memberListItems = await screen.findAllByTestId("member-item");
 
       // Test changing admin to owner
-      const adminMember = memberListItems[1]; // Second member is admin (bob@acme.org)
+      const adminMember = memberListItems[1]; // Second member is admin (user_id: "2")
       await changeMemberRole(adminMember, "admin", "owner");
 
       expect(updateMemberRoleSpy).toHaveBeenNthCalledWith(1, {
@@ -643,9 +727,15 @@ describe("Manage Organization Members Route", () => {
         description:
           "Owner should be able to change admin's role to admin (no change)",
         userData: {
-          id: "1", // Alice is owner in org 1
+          org_id: "1",
+          user_id: "1", // First member is owner in org 1
           email: "alice@acme.org",
           role: "owner" as const,
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
         orgIndex: 0,
@@ -662,9 +752,15 @@ describe("Manage Organization Members Route", () => {
         description:
           "Admin should be able to change user's role to user (no change)",
         userData: {
-          id: "7", // Ray is admin in org 3
+          org_id: "3",
+          user_id: "7", // Ray is admin in org 3
           email: "ray@all-hands.dev",
           role: "admin" as const,
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
         orgIndex: 2, // org 3
@@ -680,9 +776,15 @@ describe("Manage Organization Members Route", () => {
       {
         description: "Admin should be able to change user's role to admin",
         userData: {
-          id: "7", // Ray is admin in org 3
+          org_id: "3",
+          user_id: "7", // Ray is admin in org 3
           email: "ray@all-hands.dev",
           role: "admin" as const,
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
         orgIndex: 2, // org 3

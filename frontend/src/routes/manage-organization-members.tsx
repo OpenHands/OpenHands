@@ -66,7 +66,7 @@ function ManageOrganizationMembers() {
     if (!user) return false;
 
     // Users cannot change their own role
-    if (memberId === user.id) return false;
+    if (memberId === user.user_id) return false;
 
     // Owners cannot change another owner's role
     if (user.role === "owner" && memberRole === "owner") return false;
@@ -125,7 +125,7 @@ function ManageOrganizationMembers() {
         <ul>
           {organizationMembers.map((member) => (
             <li
-              key={member.id}
+              key={member.user_id}
               data-testid="member-item"
               className="border-b border-tertiary"
             >
@@ -134,14 +134,14 @@ function ManageOrganizationMembers() {
                 role={member.role}
                 status={member.status}
                 hasPermissionToChangeRole={checkIfUserHasPermissionToChangeRole(
-                  member.id,
+                  member.user_id,
                   member.role,
                 )}
                 availableRolesToChangeTo={availableRolesToChangeTo}
                 onRoleChange={(role) =>
-                  handleRoleSelectionClick(member.id, role)
+                  handleRoleSelectionClick(member.user_id, role)
                 }
-                onRemove={() => handleRemoveMember(member.id)}
+                onRemove={() => handleRemoveMember(member.user_id)}
               />
             </li>
           ))}
