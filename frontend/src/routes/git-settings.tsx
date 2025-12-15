@@ -8,6 +8,7 @@ import { GitHubTokenInput } from "#/components/features/settings/git-settings/gi
 import { GitLabTokenInput } from "#/components/features/settings/git-settings/gitlab-token-input";
 import { BitbucketTokenInput } from "#/components/features/settings/git-settings/bitbucket-token-input";
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
+import { ForgejoTokenInput } from "#/components/features/settings/git-settings/forgejo-token-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
 import { InstallSlackAppAnchor } from "#/components/features/settings/git-settings/install-slack-app-anchor";
 import { I18nKey } from "#/i18n/declaration";
@@ -40,6 +41,8 @@ function GitSettingsScreen() {
     React.useState(false);
   const [azureDevOpsTokenInputHasValue, setAzureDevOpsTokenInputHasValue] =
     React.useState(false);
+  const [forgejoTokenInputHasValue, setForgejoTokenInputHasValue] =
+    React.useState(false);
 
   const [githubHostInputHasValue, setGithubHostInputHasValue] =
     React.useState(false);
@@ -49,17 +52,21 @@ function GitSettingsScreen() {
     React.useState(false);
   const [azureDevOpsHostInputHasValue, setAzureDevOpsHostInputHasValue] =
     React.useState(false);
+  const [forgejoHostInputHasValue, setForgejoHostInputHasValue] =
+    React.useState(false);
 
   const existingGithubHost = settings?.PROVIDER_TOKENS_SET.github;
   const existingGitlabHost = settings?.PROVIDER_TOKENS_SET.gitlab;
   const existingBitbucketHost = settings?.PROVIDER_TOKENS_SET.bitbucket;
   const existingAzureDevOpsHost = settings?.PROVIDER_TOKENS_SET.azure_devops;
+  const existingForgejoHost = settings?.PROVIDER_TOKENS_SET.forgejo;
 
   const isSaas = config?.APP_MODE === "saas";
   const isGitHubTokenSet = providers.includes("github");
   const isGitLabTokenSet = providers.includes("gitlab");
   const isBitbucketTokenSet = providers.includes("bitbucket");
   const isAzureDevOpsTokenSet = providers.includes("azure_devops");
+  const isForgejoTokenSet = providers.includes("forgejo");
 
   const formAction = async (formData: FormData) => {
     const disconnectButtonClicked =
@@ -76,12 +83,15 @@ function GitSettingsScreen() {
       formData.get("bitbucket-token-input")?.toString() || "";
     const azureDevOpsToken =
       formData.get("azure-devops-token-input")?.toString() || "";
+    const forgejoToken =
+      formData.get("forgejo-token-input")?.toString() || "";
     const githubHost = formData.get("github-host-input")?.toString() || "";
     const gitlabHost = formData.get("gitlab-host-input")?.toString() || "";
     const bitbucketHost =
       formData.get("bitbucket-host-input")?.toString() || "";
     const azureDevOpsHost =
       formData.get("azure-devops-host-input")?.toString() || "";
+    const forgejoHost = formData.get("forgejo-host-input")?.toString() || "";
 
     // Create providers object with all tokens
     const providerTokens: Record<string, { token: string; host: string }> = {
@@ -89,6 +99,7 @@ function GitSettingsScreen() {
       gitlab: { token: gitlabToken, host: gitlabHost },
       bitbucket: { token: bitbucketToken, host: bitbucketHost },
       azure_devops: { token: azureDevOpsToken, host: azureDevOpsHost },
+      forgejo: { token: forgejoToken, host: forgejoHost },
     };
 
     saveGitProviders(
@@ -108,10 +119,12 @@ function GitSettingsScreen() {
           setGitlabTokenInputHasValue(false);
           setBitbucketTokenInputHasValue(false);
           setAzureDevOpsTokenInputHasValue(false);
+          setForgejoTokenInputHasValue(false);
           setGithubHostInputHasValue(false);
           setGitlabHostInputHasValue(false);
           setBitbucketHostInputHasValue(false);
           setAzureDevOpsHostInputHasValue(false);
+          setForgejoHostInputHasValue(false);
         },
       },
     );
@@ -122,10 +135,12 @@ function GitSettingsScreen() {
     !gitlabTokenInputHasValue &&
     !bitbucketTokenInputHasValue &&
     !azureDevOpsTokenInputHasValue &&
+    !forgejoTokenInputHasValue &&
     !githubHostInputHasValue &&
     !gitlabHostInputHasValue &&
     !bitbucketHostInputHasValue &&
-    !azureDevOpsHostInputHasValue;
+    !azureDevOpsHostInputHasValue &&
+    !forgejoHostInputHasValue;
   const shouldRenderExternalConfigureButtons = isSaas && config.APP_SLUG;
   const shouldRenderProjectManagementIntegrations =
     config?.FEATURE_FLAGS?.ENABLE_JIRA ||
@@ -227,6 +242,20 @@ function GitSettingsScreen() {
               />
             )}
           </div>
+            {!isSaas && (
+              <ForgejoTokenInput
+                name="forgejo-token-input"
+                isForgejoTokenSet={isForgejoTokenSet}
+                onChange={(value) => {
+                  setForgejoTokenInputHasValue(!!value);
+                }}
+                onForgejoHostChange={(value) => {
+                  setForgejoHostInputHasValue(!!value);
+                }}
+                forgejoHostSet={existingForgejoHost}
+              />
+            )}
+
         </div>
       )}
 
@@ -244,7 +273,8 @@ function GitSettingsScreen() {
                 !isGitHubTokenSet &&
                 !isGitLabTokenSet &&
                 !isBitbucketTokenSet &&
-                !isAzureDevOpsTokenSet
+                !isAzureDevOpsTokenSet &&
+                !isForgejoTokenSet
               }
             >
               {t(I18nKey.GIT$DISCONNECT_TOKENS)}

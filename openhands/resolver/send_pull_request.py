@@ -760,10 +760,11 @@ def main() -> None:
         or os.getenv('GITHUB_TOKEN')
         or os.getenv('GITLAB_TOKEN')
         or os.getenv('AZURE_DEVOPS_TOKEN')
+        or os.getenv('FORGEJO_TOKEN')
     )
     if not token:
         raise ValueError(
-            'token is not set, set via --token or GITHUB_TOKEN, GITLAB_TOKEN, or AZURE_DEVOPS_TOKEN environment variable.'
+            'token is not set, set via --token or GITHUB_TOKEN, GITLAB_TOKEN, AZURE_DEVOPS_TOKEN, or FORGEJO_TOKEN environment variable.'
         )
     username = my_args.username if my_args.username else os.getenv('GIT_USERNAME')
 
