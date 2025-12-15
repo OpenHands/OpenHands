@@ -37,8 +37,7 @@ class DeviceAuthorizationResponse(BaseModel):
     interval: int
 
 
-class DeviceTokenRequest(BaseModel):
-    device_code: str
+
 
 
 class DeviceTokenResponse(BaseModel):
@@ -126,10 +125,10 @@ async def device_authorization(
 
 
 @oauth_device_router.post('/token')
-async def device_token(request: DeviceTokenRequest):
+async def device_token(device_code: str = Form(...)):
     """Poll for a token until the user authorizes or the code expires."""
     try:
-        device_code_entry = device_code_store.get_by_device_code(request.device_code)
+        device_code_entry = device_code_store.get_by_device_code(device_code)
 
         if not device_code_entry:
             return _oauth_error(
@@ -143,12 +142,12 @@ async def device_token(request: DeviceTokenRequest):
         if is_too_fast:
             # Update poll time and increase interval
             device_code_store.update_poll_time(
-                request.device_code, increase_interval=True
+                device_code, increase_interval=True
             )
             logger.warning(
                 'Client polling too fast, returning slow_down error',
                 extra={
-                    'device_code': request.device_code[:8]
+                    'device_code': device_code[:8]
                     + '...',  # Log partial for privacy
                     'new_interval': current_interval,
                 },
@@ -161,7 +160,7 @@ async def device_token(request: DeviceTokenRequest):
             )
 
         # Update poll time for successful rate limit check
-        device_code_store.update_poll_time(request.device_code, increase_interval=False)
+        device_code_store.update_poll_time(device_code, increase_interval=False)
 
         if device_code_entry.is_expired():
             return _oauth_error(
