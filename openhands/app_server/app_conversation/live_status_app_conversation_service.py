@@ -270,7 +270,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user_id = await self.user_context.get_user_id()
             app_conversation_info = AppConversationInfo(
                 id=info.id,
-                title=f'Conversation {info.id.hex}',
+                title=f'Conversation {info.id.hex[:5]}',
                 sandbox_id=sandbox.id,
                 created_by_user_id=user_id,
                 llm_model=start_conversation_request.agent.llm.model,
@@ -585,6 +585,204 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return secrets
 
+    def _configure_llm(self, user: UserInfo, llm_model: str | None) -> LLM:
+        """Configure LLM settings.
+
+        Args:
+            user: User information containing LLM preferences
+            llm_model: Optional specific model to use, falls back to user default
+
+        Returns:
+            Configured LLM instance
+        """
+        model = llm_model or user.llm_model
+        base_url = user.llm_base_url
+        if model and model.startswith('openhands/'):
+            base_url = user.llm_base_url or self.openhands_provider_base_url
+
+        return LLM(
+            model=model,
+            base_url=base_url,
+            api_key=user.llm_api_key,
+            usage_id='agent',
+        )
+
+    async def _get_tavily_api_key(self, user: UserInfo) -> str | None:
+        """Get Tavily search API key, prioritizing user's key over service key.
+
+        Args:
+            user: User information
+
+        Returns:
+            Tavily API key if available, None otherwise
+        """
+        # Get the actual API key values, prioritizing user's key over service key
+        user_search_key = None
+        if user.search_api_key:
+            key_value = user.search_api_key.get_secret_value()
+            if key_value and key_value.strip():
+                user_search_key = key_value
+
+        service_tavily_key = None
+        if self.tavily_api_key:
+            # tavily_api_key is already a string (extracted in the factory method)
+            if self.tavily_api_key.strip():
+                service_tavily_key = self.tavily_api_key
+
+        return user_search_key or service_tavily_key
+
+    async def _add_system_mcp_servers(
+        self, mcp_servers: dict[str, Any], user: UserInfo
+    ) -> None:
+        """Add system-generated MCP servers (default OpenHands server and Tavily).
+
+        Args:
+            mcp_servers: Dictionary to add servers to
+            user: User information for API keys
+        """
+        if not self.web_url:
+            return
+
+        # Add default OpenHands MCP server
+        mcp_url = f'{self.web_url}/mcp/mcp'
+        mcp_servers['default'] = {'url': mcp_url}
+
+        # Add API key if available
+        mcp_api_key = await self.user_context.get_mcp_api_key()
+        if mcp_api_key:
+            mcp_servers['default']['headers'] = {
+                'X-Session-API-Key': mcp_api_key,
+            }
+
+        # Add Tavily search if API key is available
+        tavily_api_key = await self._get_tavily_api_key(user)
+        if tavily_api_key:
+            _logger.info('Adding search engine to MCP config')
+            mcp_servers['tavily'] = {
+                'url': f'https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}'
+            }
+        else:
+            _logger.info('No search engine API key found, skipping search engine')
+
+    def _add_custom_sse_servers(
+        self, mcp_servers: dict[str, Any], sse_servers: list
+    ) -> None:
+        """Add custom SSE MCP servers from user configuration.
+
+        Args:
+            mcp_servers: Dictionary to add servers to
+            sse_servers: List of SSE server configurations
+        """
+        for sse_server in sse_servers:
+            server_config = {
+                'url': sse_server.url,
+                'transport': 'sse',
+            }
+            if sse_server.api_key:
+                server_config['headers'] = {
+                    'Authorization': f'Bearer {sse_server.api_key}'
+                }
+
+            # Generate unique server name using UUID
+            # TODO: Let the users specify the server name
+            server_name = f'sse_{uuid4().hex[:8]}'
+            mcp_servers[server_name] = server_config
+            _logger.debug(
+                f'Added custom SSE server: {server_name} for {sse_server.url}'
+            )
+
+    def _add_custom_shttp_servers(
+        self, mcp_servers: dict[str, Any], shttp_servers: list
+    ) -> None:
+        """Add custom SHTTP MCP servers from user configuration.
+
+        Args:
+            mcp_servers: Dictionary to add servers to
+            shttp_servers: List of SHTTP server configurations
+        """
+        for shttp_server in shttp_servers:
+            server_config = {
+                'url': shttp_server.url,
+                'transport': 'streamable-http',
+            }
+            if shttp_server.api_key:
+                server_config['headers'] = {
+                    'Authorization': f'Bearer {shttp_server.api_key}'
+                }
+            if shttp_server.timeout:
+                server_config['timeout'] = shttp_server.timeout
+
+            # Generate unique server name using UUID
+            # TODO: Let the users specify the server name
+            server_name = f'shttp_{uuid4().hex[:8]}'
+            mcp_servers[server_name] = server_config
+            _logger.debug(
+                f'Added custom SHTTP server: {server_name} for {shttp_server.url}'
+            )
+
+    def _add_custom_stdio_servers(
+        self, mcp_servers: dict[str, Any], stdio_servers: list
+    ) -> None:
+        """Add custom STDIO MCP servers from user configuration.
+
+        Args:
+            mcp_servers: Dictionary to add servers to
+            stdio_servers: List of STDIO server configurations
+        """
+        for stdio_server in stdio_servers:
+            server_config = {
+                'command': stdio_server.command,
+                'args': stdio_server.args,
+            }
+            if stdio_server.env:
+                server_config['env'] = stdio_server.env
+
+            # STDIO servers have an explicit name field
+            mcp_servers[stdio_server.name] = server_config
+            _logger.debug(f'Added custom STDIO server: {stdio_server.name}')
+
+    def _merge_custom_mcp_config(
+        self, mcp_servers: dict[str, Any], user: UserInfo
+    ) -> None:
+        """Merge custom MCP configuration from user settings.
+
+        Args:
+            mcp_servers: Dictionary to add servers to
+            user: User information containing custom MCP config
+        """
+        if not user.mcp_config:
+            return
+
+        try:
+            sse_count = len(user.mcp_config.sse_servers)
+            shttp_count = len(user.mcp_config.shttp_servers)
+            stdio_count = len(user.mcp_config.stdio_servers)
+
+            _logger.info(
+                f'Loading custom MCP config from user settings: '
+                f'{sse_count} SSE, {shttp_count} SHTTP, {stdio_count} STDIO servers'
+            )
+
+            # Add each type of custom server
+            self._add_custom_sse_servers(mcp_servers, user.mcp_config.sse_servers)
+            self._add_custom_shttp_servers(mcp_servers, user.mcp_config.shttp_servers)
+            self._add_custom_stdio_servers(mcp_servers, user.mcp_config.stdio_servers)
+
+            _logger.info(
+                f'Successfully merged custom MCP config: added {sse_count} SSE, '
+                f'{shttp_count} SHTTP, and {stdio_count} STDIO servers'
+            )
+
+        except Exception as e:
+            _logger.error(
+                f'Error loading custom MCP config from user settings: {e}',
+                exc_info=True,
+            )
+            # Continue with system config only, don't fail conversation startup
+            _logger.warning(
+                'Continuing with system-generated MCP config only due to custom config error'
+            )
+
     async def _configure_llm_and_mcp(
         self, user: UserInfo, llm_model: str | None
     ) -> tuple[LLM, dict]:
@@ -598,56 +796,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             Tuple of (configured LLM instance, MCP config dictionary)
         """
         # Configure LLM
-        model = llm_model or user.llm_model
-        base_url = user.llm_base_url
-        if model and model.startswith('openhands/'):
-            base_url = user.llm_base_url or self.openhands_provider_base_url
-        llm = LLM(
-            model=model,
-            base_url=base_url,
-            api_key=user.llm_api_key,
-            usage_id='agent',
-        )
+        llm = self._configure_llm(user, llm_model)
 
-        # Configure MCP
-        mcp_config: dict[str, Any] = {}
-        if self.web_url:
-            mcp_url = f'{self.web_url}/mcp/mcp'
-            mcp_config = {
-                'default': {
-                    'url': mcp_url,
-                }
-            }
+        # Configure MCP - SDK expects format: {'mcpServers': {'server_name': {...}}}
+        mcp_servers: dict[str, Any] = {}
 
-            # Add API key if available
-            mcp_api_key = await self.user_context.get_mcp_api_key()
-            if mcp_api_key:
-                mcp_config['default']['headers'] = {
-                    'X-Session-API-Key': mcp_api_key,
-                }
+        # Add system-generated servers (default + tavily)
+        await self._add_system_mcp_servers(mcp_servers, user)
 
-            # Get the actual API key values, prioritizing user's key over service key
-            user_search_key = None
-            if user.search_api_key:
-                key_value = user.search_api_key.get_secret_value()
-                if key_value and key_value.strip():
-                    user_search_key = key_value
+        # Merge custom servers from user settings
+        self._merge_custom_mcp_config(mcp_servers, user)
 
-            service_tavily_key = None
-            if self.tavily_api_key:
-                # tavily_api_key is already a string (extracted in the factory method)
-                if self.tavily_api_key.strip():
-                    service_tavily_key = self.tavily_api_key
-
-            tavily_api_key = user_search_key or service_tavily_key
-
-            if tavily_api_key:
-                _logger.info('Adding search engine to MCP config')
-                mcp_config['tavily'] = {
-                    'url': f'https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}'
-                }
-            else:
-                _logger.info('No search engine API key found, skipping search engine')
+        # Wrap in the mcpServers structure required by the SDK
+        mcp_config = {'mcpServers': mcp_servers} if mcp_servers else {}
+        _logger.info(f'Final MCP configuration: {mcp_config}')
 
         return llm, mcp_config
 

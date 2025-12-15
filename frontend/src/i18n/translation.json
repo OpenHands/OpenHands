@@ -8511,6 +8511,38 @@
     "tr": "Bağlandı",
     "uk": "Підключено"
   },
+  "STATUS$CONNECTION_LOST": {
+    "en": "Connection lost",
+    "ja": "接続が切断されました",
+    "zh-CN": "连接已断开",
+    "zh-TW": "連接已斷開",
+    "ko-KR": "연결이 끊어졌습니다",
+    "de": "Verbindung verloren",
+    "no": "Tilkobling mistet",
+    "it": "Connessione persa",
+    "pt": "Conexão perdida",
+    "es": "Conexión perdida",
+    "ar": "فُقد الاتصال",
+    "fr": "Connexion perdue",
+    "tr": "Bağlantı kesildi",
+    "uk": "Втрачено з'єднання"
+  },
+  "STATUS$DISCONNECTED_REFRESH_PAGE": {
+    "en": "Disconnected. Please refresh the page",
+    "ja": "切断されました。ページを更新してください",
+    "zh-CN": "已断开连接。请刷新页面",
+    "zh-TW": "已斷開連接。請重新整理頁面",
+    "ko-KR": "연결이 끊어졌습니다. 페이지를 새로고침하세요",
+    "de": "Getrennt. Bitte aktualisieren Sie die Seite",
+    "no": "Koblet fra. Vennligst oppdater siden",
+    "it": "Disconnesso. Si prega di aggiornare la pagina",
+    "pt": "Desconectado. Por favor, atualize a página",
+    "es": "Desconectado. Por favor, actualice la página",
+    "ar": "تم قطع الاتصال. يرجى تحديث الصفحة",
+    "fr": "Déconnecté. Veuillez actualiser la page",
+    "tr": "Bağlantı kesildi. Lütfen sayfayı yenileyin",
+    "uk": "Відключено. Будь ласка, оновіть сторінку"
+  },
   "BROWSER$NO_PAGE_LOADED": {
     "en": "No page loaded",
     "ja": "ブラウザは空です",
