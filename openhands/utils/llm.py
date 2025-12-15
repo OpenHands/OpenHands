@@ -90,4 +90,4 @@ def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
     ]
     model_list = clarifai_models + model_list
 
-    return list(sorted(set(model_list)))
+    return sorted(set(model_list))

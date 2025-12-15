@@ -17,7 +17,7 @@ export const useTracking = () => {
     app_surface: config?.APP_MODE || "unknown",
     plan_tier: null,
     current_url: window.location.href,
-    user_email: settings?.EMAIL || settings?.GIT_USER_EMAIL || null,
+    user_email: settings?.email || settings?.git_user_email || null,
   };
 
   const trackLoginButtonClick = ({ provider }: { provider: Provider }) => {
