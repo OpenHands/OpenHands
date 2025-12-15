@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getObservationContent } from "../get-observation-content";
+import { getObservationContent } from "#/components/v1/chat/event-content-helpers/get-observation-content";
 import { ObservationEvent } from "#/types/v1/core";
 import { BrowserObservation } from "#/types/v1/core/base/observation";
 

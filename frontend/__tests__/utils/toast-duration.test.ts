@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateToastDuration } from "../toast-duration";
+import { calculateToastDuration } from "#/utils/toast-duration";
 
 describe("calculateToastDuration", () => {
   it("should return minimum duration for short messages", () => {
