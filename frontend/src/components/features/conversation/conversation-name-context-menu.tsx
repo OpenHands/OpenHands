@@ -7,6 +7,7 @@ import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
 import { Divider } from "#/ui/divider";
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useConfig } from "#/hooks/query/use-config";
 
 import EditIcon from "#/icons/u-edit.svg?react";
 import RobotIcon from "#/icons/u-robot.svg?react";
@@ -16,6 +17,7 @@ import DownloadIcon from "#/icons/u-download.svg?react";
 import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
+import GlobeIcon from "#/icons/globe.svg?react";
 import { ConversationNameContextMenuIconText } from "./conversation-name-context-menu-icon-text";
 import { CONTEXT_MENU_ICON_TEXT_CLASSNAME } from "#/utils/constants";
 
@@ -34,6 +36,7 @@ interface ConversationNameContextMenuProps {
   onShowMicroagents?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onExportConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onTogglePublic?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
 }
 
@@ -47,6 +50,7 @@ export function ConversationNameContextMenu({
   onShowMicroagents,
   onExportConversation,
   onDownloadViaVSCode,
+  onTogglePublic,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
   const { width } = useWindowSize();
@@ -54,10 +58,16 @@ export function ConversationNameContextMenu({
   const { t } = useTranslation();
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { data: conversation } = useActiveConversation();
+  const { data: config } = useConfig();
 
   // TODO: Hide microagent menu items for V1 conversations
   // This is a temporary measure and may be re-enabled in the future
   const isV1Conversation = conversation?.conversation_version === "V1";
+
+  // Check if we should show the public sharing option
+  // Only show for V1 conversations in SAAS mode
+  const shouldShowPublicSharing =
+    isV1Conversation && config?.APP_MODE === "saas" && onTogglePublic;
 
   const hasDownload = Boolean(onDownloadViaVSCode);
   const hasExport = Boolean(onExportConversation);
@@ -166,6 +176,25 @@ export function ConversationNameContextMenu({
             text={t(I18nKey.BUTTON$DISPLAY_COST)}
             className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
           />
+        </ContextMenuListItem>
+      )}
+
+      {shouldShowPublicSharing && (
+        <ContextMenuListItem
+          testId="share-publicly-button"
+          onClick={onTogglePublic}
+          className={contextMenuListItemClassName}
+        >
+          <div className="flex items-center gap-2">
+            <GlobeIcon width={16} height={16} />
+            <input
+              type="checkbox"
+              checked={conversation?.public || false}
+              onChange={() => {}} // Handled by parent onClick
+              className="w-4 h-4"
+            />
+            <span>{t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}</span>
+          </div>
         </ContextMenuListItem>
       )}
 

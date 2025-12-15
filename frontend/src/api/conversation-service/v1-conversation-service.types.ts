@@ -98,4 +98,5 @@ export interface V1AppConversation {
   execution_status: V1ConversationExecutionStatus | null;
   conversation_url: string | null;
   session_api_key: string | null;
+  public?: boolean;
 }

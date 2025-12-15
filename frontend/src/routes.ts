@@ -22,4 +22,9 @@ export default [
     route("conversations/:conversationId", "routes/conversation.tsx"),
     route("microagent-management", "routes/microagent-management.tsx"),
   ]),
+  // Public routes that don't require authentication
+  route(
+    "public/conversations/:conversationId",
+    "routes/public-conversation.tsx",
+  ),
 ] satisfies RouteConfig;

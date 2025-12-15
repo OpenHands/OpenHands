@@ -34,6 +34,7 @@ export function ConversationName() {
     handleShowAgentTools,
     handleShowMicroagents,
     handleExportConversation,
+    handleTogglePublic,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -179,6 +180,7 @@ export function ConversationName() {
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
+                onTogglePublic={handleTogglePublic}
                 position="bottom"
               />
             )}
