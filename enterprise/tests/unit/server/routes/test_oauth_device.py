@@ -7,7 +7,6 @@ import pytest
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from server.routes.oauth_device import (
-    DeviceTokenRequest,
     device_authorization,
     device_token,
     device_verification_authenticated,
@@ -104,7 +103,7 @@ class TestDeviceToken:
         self, mock_store, device_exists, status, expected_error
     ):
         """Test various error cases for device token endpoint."""
-        request = DeviceTokenRequest(device_code='test-device-code')
+        device_code = 'test-device-code'
 
         if device_exists:
             mock_device = MagicMock()
@@ -117,7 +116,7 @@ class TestDeviceToken:
         else:
             mock_store.get_by_device_code.return_value = None
 
-        result = await device_token(request)
+        result = await device_token(device_code=device_code)
 
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
@@ -129,7 +128,7 @@ class TestDeviceToken:
     @patch('server.routes.oauth_device.device_code_store')
     async def test_device_token_success(self, mock_store, mock_api_key_class):
         """Test successful device token retrieval."""
-        request = DeviceTokenRequest(device_code='test-device-code')
+        device_code = 'test-device-code'
 
         # Mock authorized device
         mock_device = MagicMock()
@@ -149,7 +148,7 @@ class TestDeviceToken:
         mock_api_key_store.retrieve_api_key_by_name.return_value = 'test-api-key'
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
-        result = await device_token(request)
+        result = await device_token(device_code=device_code)
 
         # Check that result is a DeviceTokenResponse
         assert result.access_token == 'test-api-key'
@@ -305,8 +304,8 @@ class TestDeviceTokenRateLimiting:
         mock_store.get_by_device_code.return_value = mock_device
         mock_store.update_poll_time.return_value = True
 
-        request = DeviceTokenRequest(device_code='test_device_code')
-        result = await device_token(request)
+        device_code = 'test_device_code'
+        result = await device_token(device_code=device_code)
 
         # Should return authorization_pending, not slow_down
         assert isinstance(result, JSONResponse)
@@ -336,8 +335,8 @@ class TestDeviceTokenRateLimiting:
         mock_store.get_by_device_code.return_value = mock_device
         mock_store.update_poll_time.return_value = True
 
-        request = DeviceTokenRequest(device_code='test_device_code')
-        result = await device_token(request)
+        device_code = 'test_device_code'
+        result = await device_token(device_code=device_code)
 
         # Should return authorization_pending, not slow_down
         assert isinstance(result, JSONResponse)
@@ -367,8 +366,8 @@ class TestDeviceTokenRateLimiting:
         mock_store.get_by_device_code.return_value = mock_device
         mock_store.update_poll_time.return_value = True
 
-        request = DeviceTokenRequest(device_code='test_device_code')
-        result = await device_token(request)
+        device_code = 'test_device_code'
+        result = await device_token(device_code=device_code)
 
         # Should return slow_down error
         assert isinstance(result, JSONResponse)
@@ -399,8 +398,8 @@ class TestDeviceTokenRateLimiting:
         mock_store.get_by_device_code.return_value = mock_device
         mock_store.update_poll_time.return_value = True
 
-        request = DeviceTokenRequest(device_code='test_device_code')
-        result = await device_token(request)
+        device_code = 'test_device_code'
+        result = await device_token(device_code=device_code)
 
         # Should return slow_down error with increased interval
         assert isinstance(result, JSONResponse)
@@ -430,8 +429,8 @@ class TestDeviceTokenRateLimiting:
         mock_store.get_by_device_code.return_value = mock_device
         mock_store.update_poll_time.return_value = True
 
-        request = DeviceTokenRequest(device_code='test_device_code')
-        result = await device_token(request)
+        device_code = 'test_device_code'
+        result = await device_token(device_code=device_code)
 
         # Should return slow_down error with capped interval
         assert isinstance(result, JSONResponse)
@@ -457,8 +456,8 @@ class TestDeviceTokenRateLimiting:
         mock_store.get_by_device_code.return_value = mock_device
         mock_store.update_poll_time.return_value = True
 
-        request = DeviceTokenRequest(device_code='test_device_code')
-        result = await device_token(request)
+        device_code = 'test_device_code'
+        result = await device_token(device_code=device_code)
 
         # Should still return slow_down error even for authorized device
         assert isinstance(result, JSONResponse)
