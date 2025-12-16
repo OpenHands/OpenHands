@@ -90,6 +90,50 @@ def test_validate_api_key_expired(api_key_store, mock_session):
     mock_session.commit.assert_not_called()
 
 
+def test_validate_api_key_expired_timezone_naive(api_key_store, mock_session):
+    """Test validating an expired API key with timezone-naive datetime from database."""
+    # Setup
+    api_key = 'test-api-key'
+    mock_key_record = MagicMock()
+    # Simulate timezone-naive datetime as returned from database
+    mock_key_record.expires_at = datetime.now() - timedelta(days=1)  # No UTC timezone
+    mock_key_record.id = 1
+    mock_session.query.return_value.filter.return_value.first.return_value = (
+        mock_key_record
+    )
+
+    # Execute
+    result = api_key_store.validate_api_key(api_key)
+
+    # Verify
+    assert result is None
+    mock_session.execute.assert_not_called()
+    mock_session.commit.assert_not_called()
+
+
+def test_validate_api_key_valid_timezone_naive(api_key_store, mock_session):
+    """Test validating a valid API key with timezone-naive datetime from database."""
+    # Setup
+    api_key = 'test-api-key'
+    user_id = 'test-user-123'
+    mock_key_record = MagicMock()
+    mock_key_record.user_id = user_id
+    # Simulate timezone-naive datetime as returned from database (future date)
+    mock_key_record.expires_at = datetime.now() + timedelta(days=1)  # No UTC timezone
+    mock_key_record.id = 1
+    mock_session.query.return_value.filter.return_value.first.return_value = (
+        mock_key_record
+    )
+
+    # Execute
+    result = api_key_store.validate_api_key(api_key)
+
+    # Verify
+    assert result == user_id
+    mock_session.execute.assert_called_once()
+    mock_session.commit.assert_called_once()
+
+
 def test_validate_api_key_not_found(api_key_store, mock_session):
     """Test validating a non-existent API key."""
     # Setup

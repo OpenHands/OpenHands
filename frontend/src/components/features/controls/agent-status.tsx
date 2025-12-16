@@ -59,12 +59,14 @@ export function AgentStatus({
   );
 
   const shouldShownAgentLoading =
-    isPausing ||
     curAgentState === AgentState.INIT ||
     curAgentState === AgentState.LOADING ||
     (webSocketStatus === "CONNECTING" && taskStatus !== "ERROR") ||
     isTaskPolling(taskStatus) ||
     isTaskPolling(subConversationTaskStatus);
+
+  // For UI rendering - includes pause state
+  const isLoading = shouldShownAgentLoading || isPausing;
 
   const shouldShownAgentError =
     curAgentState === AgentState.ERROR ||
@@ -93,25 +95,28 @@ export function AgentStatus({
       <div
         className={cn(
           "bg-[#525252] box-border content-stretch flex flex-row gap-[3px] items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95",
-          !shouldShownAgentLoading &&
+          !isLoading &&
             (shouldShownAgentStop || shouldShownAgentResume) &&
             "hover:bg-[#737373] cursor-pointer",
         )}
       >
-        {shouldShownAgentLoading && <AgentLoading />}
-        {!shouldShownAgentLoading && shouldShownAgentStop && (
+        {isLoading && <AgentLoading />}
+        {!isLoading && shouldShownAgentStop && (
           <ChatStopButton handleStop={handleStop} />
         )}
-        {!shouldShownAgentLoading && shouldShownAgentResume && (
+        {!isLoading && shouldShownAgentResume && (
           <ChatResumeAgentButton
             onAgentResumed={handleResumeAgent}
             disabled={disabled}
           />
         )}
-        {!shouldShownAgentLoading && shouldShownAgentError && (
-          <CircleErrorIcon className="w-4 h-4" />
+        {!isLoading && shouldShownAgentError && (
+          <CircleErrorIcon
+            className="w-4 h-4"
+            data-testid="circle-error-icon"
+          />
         )}
-        {!shouldShownAgentLoading &&
+        {!isLoading &&
           !shouldShownAgentStop &&
           !shouldShownAgentResume &&
           !shouldShownAgentError && <ClockIcon className="w-4 h-4" />}
