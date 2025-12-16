@@ -37,9 +37,7 @@ export function ObservationPairEventMessage({
   // Defensive check: ensure action exists and has kind property
   if (
     thoughtContent &&
-    event.action &&
-    typeof event.action === "object" &&
-    "kind" in event.action &&
+    event.action?.kind &&
     event.action.kind !== "ThinkAction"
   ) {
     return (
