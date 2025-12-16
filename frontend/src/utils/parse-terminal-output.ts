@@ -21,5 +21,8 @@ export const parseTerminalOutput = (raw: string) => {
   }
   start += START.length;
   const end = raw.indexOf("]", start);
+  if (end <= start) {
+    return raw;
+  }
   return raw.substring(start, end).trim();
 };
