@@ -16,6 +16,14 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
   // Render action events (with filtering)
   if (isActionEvent(event)) {
     // For V1, action is an object with kind property
+    // Additional null check as defensive programming
+    if (
+      !event.action ||
+      typeof event.action !== "object" ||
+      !("kind" in event.action)
+    ) {
+      return false;
+    }
     const actionType = event.action.kind;
 
     // Hide user commands from the chat interface

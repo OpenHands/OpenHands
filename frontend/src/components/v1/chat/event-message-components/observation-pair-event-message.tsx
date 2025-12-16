@@ -34,7 +34,14 @@ export function ObservationPairEventMessage({
     .map((t) => t.text)
     .join("\n");
 
-  if (thoughtContent && event.action.kind !== "ThinkAction") {
+  // Defensive check: ensure action exists and has kind property
+  if (
+    thoughtContent &&
+    event.action &&
+    typeof event.action === "object" &&
+    "kind" in event.action &&
+    event.action.kind !== "ThinkAction"
+  ) {
     return (
       <div>
         <ChatMessage type="agent" message={thoughtContent} actions={actions} />
