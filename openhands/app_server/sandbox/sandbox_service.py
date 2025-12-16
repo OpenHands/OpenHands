@@ -8,7 +8,7 @@ from openhands.app_server.sandbox.sandbox_models import (
 )
 from openhands.app_server.services.injector import Injector
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
-from openhands.utils.search_utils import iterate
+from openhands.sdk.utils.paging import page_iterator
 
 
 class SandboxService(ABC):
@@ -86,7 +86,7 @@ class SandboxService(ABC):
 
         # Get all running sandboxes (iterate through all pages)
         running_sandboxes = []
-        async for sandbox in iterate(self.search_sandboxes, limit=100):
+        async for sandbox in page_iterator(self.search_sandboxes, limit=100):
             if sandbox.status == SandboxStatus.RUNNING:
                 running_sandboxes.append(sandbox)
 

@@ -22,9 +22,7 @@ async def iterate(fn: Callable, **kwargs) -> AsyncIterator:
     kwargs['page_id'] = None
     while True:
         result_set = await fn(**kwargs)
-        # Handle both 'results' and 'items' attributes for different model types
-        items = getattr(result_set, 'results', None) or getattr(result_set, 'items', [])
-        for result in items:
+        for result in result_set.results:
             yield result
         if result_set.next_page_id is None:
             return

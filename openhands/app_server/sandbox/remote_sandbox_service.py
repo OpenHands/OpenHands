@@ -44,7 +44,7 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
-from openhands.utils.search_utils import iterate
+from openhands.sdk.utils.paging import page_iterator
 
 _logger = logging.getLogger(__name__)
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
@@ -506,7 +506,7 @@ async def poll_agent_servers(api_url: str, api_key: str, sleep_interval: int):
                     get_httpx_client(state) as httpx_client,
                 ):
                     matches = 0
-                    async for app_conversation_info in iterate(
+                    async for app_conversation_info in page_iterator(
                         app_conversation_info_service.search_app_conversation_info
                     ):
                         runtime = runtimes_by_sandbox_id.get(
@@ -592,7 +592,7 @@ async def refresh_conversation(
             response.raise_for_status()
             return EventPage.model_validate(response.json())
 
-        async for event in iterate(fetch_events_page):
+        async for event in page_iterator(fetch_events_page):
             existing = await event_service.get_event(event.id)
             if existing is None:
                 await event_service.save_event(app_conversation_info.id, event)
