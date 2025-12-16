@@ -11,22 +11,46 @@ const MOCK_ME: Omit<OrganizationMember, "role"> = {
   status: "active",
 };
 
+const createMockOrganization = (
+  id: string,
+  name: string,
+  credits: number,
+): Organization => ({
+  id,
+  name,
+  contact_name: "Contact Name",
+  contact_email: "contact@example.com",
+  conversation_expiration: 86400,
+  agent: "default-agent",
+  default_max_iterations: 20,
+  security_analyzer: "standard",
+  confirmation_mode: false,
+  default_llm_model: "gpt-5-1",
+  default_llm_api_key_for_byor: "*********",
+  default_llm_base_url: "https://api.example-llm.com",
+  remote_runtime_resource_factor: 2,
+  enable_default_condenser: true,
+  billing_margin: 0.15,
+  enable_proactive_conversation_starters: true,
+  sandbox_base_container_image: "ghcr.io/example/sandbox-base:latest",
+  sandbox_runtime_container_image: "ghcr.io/example/sandbox-runtime:latest",
+  org_version: 0,
+  mcp_config: {
+    tools: [],
+    settings: {},
+  },
+  search_api_key: null,
+  sandbox_api_key: null,
+  max_budget_per_task: 25.0,
+  enable_solvability_analysis: false,
+  v1_enabled: true,
+  credits,
+});
+
 export const INITIAL_MOCK_ORGS: Organization[] = [
-  {
-    id: "1",
-    name: "Acme Corp",
-    balance: 1000,
-  },
-  {
-    id: "2",
-    name: "Beta LLC",
-    balance: 500,
-  },
-  {
-    id: "3",
-    name: "All Hands AI",
-    balance: 750,
-  },
+  createMockOrganization("1", "Acme Corp", 1000),
+  createMockOrganization("2", "Beta LLC", 500),
+  createMockOrganization("3", "All Hands AI", 750),
 ];
 
 const INITIAL_MOCK_MEMBERS: Record<string, OrganizationMember[]> = {

@@ -320,7 +320,7 @@ function ManageOrg() {
         </span>
         <div className="flex items-center gap-2">
           <TempChip data-testid="available-credits">
-            {organization?.balance}
+            {organization?.credits}
           </TempChip>
           {canAddCredits && (
             <TempInteractiveChip onClick={() => setAddCreditsFormVisible(true)}>
