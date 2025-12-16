@@ -65,8 +65,10 @@ RUNTIME_URL_PATTERN = os.getenv(
 RUNTIME_ROUTING_MODE = os.getenv('RUNTIME_ROUTING_MODE', 'subdomain').lower()
 
 # Pattern for base URL for the runtime
-RUNTIME_CONVERSATION_URL = (
-    RUNTIME_URL_PATTERN + '/runtime/api/conversations/{conversation_id}'
+RUNTIME_CONVERSATION_URL = RUNTIME_URL_PATTERN + (
+    '/runtime/api/conversations/{conversation_id}'
+    if RUNTIME_ROUTING_MODE == 'path'
+    else '/api/conversations/{conversation_id}'
 )
 
 RUNTIME_USERNAME = os.getenv('RUNTIME_USERNAME')
