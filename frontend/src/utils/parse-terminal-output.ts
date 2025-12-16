@@ -15,7 +15,7 @@ const START = "[Python Interpreter: ";
  * console.log(parsed.symbol); // openhands@659478cb008c:/workspace $
  */
 export const parseTerminalOutput = (raw: string) => {
-  let start = raw.indexOf("[Python Interpreter: ");
+  let start = raw.indexOf(START);
   if (start < 0) {
     return raw;
   }
