@@ -21,6 +21,11 @@ class FileSettingsStore(SettingsStore):
             json_str = await call_sync_from_async(self.file_store.read, self.path)
             kwargs = json.loads(json_str)
             settings = Settings(**kwargs)
+
+            # Turn on V1 in OpenHands
+            # We can simplify / remove this as part of V0 removal
+            settings.v1_enabled = True
+
             return settings
         except FileNotFoundError:
             return None
