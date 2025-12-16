@@ -95,9 +95,6 @@ class SaasSettingsStore(SettingsStore):
             self._decrypt_kwargs(kwargs)
             settings = Settings(**kwargs)
 
-            # Testing on the feature branch, we will remove this once we merge the feature branch to main
-            settings.v1_enabled = True
-
             return settings
 
     async def store(self, item: Settings):
