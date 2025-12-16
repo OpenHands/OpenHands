@@ -19,7 +19,7 @@ class PRStatus(Enum):
 class UserData(BaseModel):
     user_id: int
     username: str
-    keycloak_user_id: str | None
+    keycloak_user_id: str
 
 
 @dataclass

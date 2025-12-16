@@ -153,6 +153,7 @@ class TestExperimentManagerIntegration:
                     llm_api_key=None,
                     confirmation_mode=False,
                     condenser_max_size=None,
+                    security_analyzer=None,
                 )
 
             async def get_secrets(self):
@@ -188,6 +189,7 @@ class TestExperimentManagerIntegration:
             sandbox_startup_poll_frequency=1,
             httpx_client=httpx_client,
             web_url=None,
+            openhands_provider_base_url=None,
             access_token_hard_timeout=None,
         )
 
@@ -203,7 +205,7 @@ class TestExperimentManagerIntegration:
         with (
             patch.object(
                 service,
-                '_setup_secrets_for_git_provider',
+                '_setup_secrets_for_git_providers',
                 return_value={},
             ),
             patch.object(

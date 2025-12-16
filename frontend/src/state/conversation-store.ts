@@ -61,10 +61,48 @@ interface ConversationActions {
 
 type ConversationStore = ConversationState & ConversationActions;
 
-// Helper function to get initial right panel state from localStorage
+const getConversationIdFromLocation = (): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const match = window.location.pathname.match(/\/conversations\/([^/]+)/);
+  return match ? match[1] : null;
+};
+
+const parseStoredBoolean = (value: string | null): boolean | null => {
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
 const getInitialRightPanelState = (): boolean => {
-  const stored = localStorage.getItem("conversation-right-panel-shown");
-  return stored !== null ? JSON.parse(stored) : true;
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const conversationId = getConversationIdFromLocation();
+  const keysToCheck = conversationId
+    ? [`conversation-right-panel-shown-${conversationId}`]
+    : [];
+
+  // Fallback to legacy global key for users who haven't switched tabs yet
+  keysToCheck.push("conversation-right-panel-shown");
+
+  for (const key of keysToCheck) {
+    const parsed = parseStoredBoolean(localStorage.getItem(key));
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return true;
 };
 
 export const useConversationStore = create<ConversationStore>()(

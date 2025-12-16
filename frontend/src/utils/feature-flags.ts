@@ -17,6 +17,4 @@ export const HIDE_LLM_SETTINGS = () => loadFeatureFlag("HIDE_LLM_SETTINGS");
 export const VSCODE_IN_NEW_TAB = () => loadFeatureFlag("VSCODE_IN_NEW_TAB");
 export const ENABLE_TRAJECTORY_REPLAY = () =>
   loadFeatureFlag("TRAJECTORY_REPLAY");
-export const USE_V1_CONVERSATION_API = () =>
-  loadFeatureFlag("USE_V1_CONVERSATION_API");
 export const USE_PLANNING_AGENT = () => loadFeatureFlag("USE_PLANNING_AGENT");

@@ -2166,6 +2166,7 @@ async def test_delete_v1_conversation_with_sub_conversations():
         sandbox_startup_poll_frequency=2,
         httpx_client=mock_httpx_client,
         web_url=None,
+        openhands_provider_base_url=None,
         access_token_hard_timeout=None,
     )
 
@@ -2287,6 +2288,7 @@ async def test_delete_v1_conversation_with_no_sub_conversations():
         sandbox_startup_poll_frequency=2,
         httpx_client=mock_httpx_client,
         web_url=None,
+        openhands_provider_base_url=None,
         access_token_hard_timeout=None,
     )
 
@@ -2438,6 +2440,7 @@ async def test_delete_v1_conversation_sub_conversation_deletion_error():
         sandbox_startup_poll_frequency=2,
         httpx_client=mock_httpx_client,
         web_url=None,
+        openhands_provider_base_url=None,
         access_token_hard_timeout=None,
     )
 

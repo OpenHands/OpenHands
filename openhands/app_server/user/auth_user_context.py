@@ -9,8 +9,12 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
 from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import ProviderHandler, ProviderType
-from openhands.sdk.conversation.secret_source import SecretSource, StaticSecret
+from openhands.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+    ProviderType,
+)
+from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
 USER_AUTH_ATTR = 'user_auth'
@@ -43,6 +47,9 @@ class AuthUserContext(UserContext):
             )
             self._user_info = user_info
         return user_info
+
+    async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
+        return await self.user_auth.get_provider_tokens()
 
     async def get_provider_handler(self):
         provider_handler = self._provider_handler

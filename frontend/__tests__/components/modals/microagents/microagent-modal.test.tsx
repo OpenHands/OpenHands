@@ -57,7 +57,7 @@ describe("MicroagentsModal - Refresh Button", () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("Refresh Button Rendering", () => {
@@ -74,13 +74,15 @@ describe("MicroagentsModal - Refresh Button", () => {
   describe("Refresh Button Functionality", () => {
     it("should call refetch when refresh button is clicked", async () => {
       const user = userEvent.setup();
+      const refreshSpy = vi.spyOn(ConversationService, "getMicroagents");
 
       renderWithProviders(<MicroagentsModal {...defaultProps} />);
 
-      const refreshSpy = vi.spyOn(ConversationService, "getMicroagents");
-
       // Wait for the component to load and render the refresh button
       const refreshButton = await screen.findByTestId("refresh-microagents");
+
+      refreshSpy.mockClear();
+
       await user.click(refreshButton);
 
       expect(refreshSpy).toHaveBeenCalledTimes(1);

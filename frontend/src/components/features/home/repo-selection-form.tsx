@@ -35,7 +35,11 @@ export function RepositorySelectionForm({
     React.useState<Provider | null>(null);
 
   const { providers } = useUserProviders();
-  const { addRecentRepository } = useHomeStore();
+  const {
+    addRecentRepository,
+    setLastSelectedProvider,
+    getLastSelectedProvider,
+  } = useHomeStore();
   const {
     mutate: createConversation,
     isPending,
@@ -46,12 +50,24 @@ export function RepositorySelectionForm({
 
   const { t } = useTranslation();
 
-  // Auto-select provider if there's only one
+  // Auto-select provider logic
   React.useEffect(() => {
+    if (providers.length === 0) return;
+
+    // If there's only one provider, auto-select it
     if (providers.length === 1 && !selectedProvider) {
       setSelectedProvider(providers[0]);
+      return;
     }
-  }, [providers, selectedProvider]);
+
+    // If there are multiple providers and none is selected, try to use the last selected one
+    if (providers.length > 1 && !selectedProvider) {
+      const lastSelected = getLastSelectedProvider();
+      if (lastSelected && providers.includes(lastSelected)) {
+        setSelectedProvider(lastSelected);
+      }
+    }
+  }, [providers, selectedProvider, getLastSelectedProvider]);
 
   // We check for isSuccess because the app might require time to render
   // into the new conversation screen after the conversation is created.
@@ -66,6 +82,7 @@ export function RepositorySelectionForm({
     }
 
     setSelectedProvider(provider);
+    setLastSelectedProvider(provider); // Store the selected provider
     setSelectedRepository(null); // Reset repository selection when provider changes
     setSelectedBranch(null); // Reset branch selection when provider changes
     onRepoSelection(null); // Reset parent component's selected repo
