@@ -70,4 +70,26 @@ def get_default_agent_server_image() -> str:
 
 
 def get_default_agent_server_env() -> dict[str, str]:
-    return env_parser.from_env(dict, "OH_AGENT_SERVER_ENV")
+    """Get environment variables to be injected into agent server sandbox environments.
+
+    This function reads environment variable overrides from the OH_AGENT_SERVER_ENV
+    environment variable, which should contain a JSON string mapping variable names
+    to their values.
+
+    Usage:
+        Set OH_AGENT_SERVER_ENV to a JSON string:
+        OH_AGENT_SERVER_ENV='{"DEBUG": "true", "LOG_LEVEL": "info", "CUSTOM_VAR": "value"}'
+
+        This will inject the following environment variables into all sandbox environments:
+        - DEBUG=true
+        - LOG_LEVEL=info
+        - CUSTOM_VAR=value
+
+    Returns:
+        dict[str, str]: Dictionary of environment variable names to values.
+                       Returns empty dict if OH_AGENT_SERVER_ENV is not set or invalid.
+
+    Raises:
+        JSONDecodeError: If OH_AGENT_SERVER_ENV contains invalid JSON.
+    """
+    return env_parser.from_env(dict[str, str], 'OH_AGENT_SERVER_ENV')
