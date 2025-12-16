@@ -314,7 +314,7 @@ export const ORG_HANDLERS = [
   }),
 
   http.post(
-    "/api/organizations/:orgId/invite/batch",
+    "/api/organizations/:orgId/members/invite",
     async ({ request, params }) => {
       const { emails } = (await request.json()) as { emails: string[] };
       const orgId = params.orgId?.toString();
