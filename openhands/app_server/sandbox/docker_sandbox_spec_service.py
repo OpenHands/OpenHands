@@ -45,7 +45,7 @@ def get_default_sandbox_specs():
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
                 'PYTHONUNBUFFERED': '1',
                 'ENV_LOG_LEVEL': '20',
-                **get_default_agent_server_env()
+                **get_default_agent_server_env(),
             },
             working_dir='/workspace/project',
         )

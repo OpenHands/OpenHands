@@ -3,7 +3,6 @@ from typing import AsyncGenerator
 from fastapi import Request
 from pydantic import Field
 
-from openhands.agent_server import env_parser
 from openhands.app_server.sandbox.preset_sandbox_spec_service import (
     PresetSandboxSpecService,
 )
@@ -31,7 +30,7 @@ def get_default_sandbox_specs():
                 'OH_CONVERSATIONS_PATH': '/workspace/conversations',
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
                 'OH_VSCODE_PORT': '60001',
-                **get_default_agent_server_env()
+                **get_default_agent_server_env(),
             },
             working_dir='/workspace/project',
         )
