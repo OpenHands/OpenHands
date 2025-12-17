@@ -15,13 +15,13 @@ const START = "[Python Interpreter: ";
  * console.log(parsed.symbol); // openhands@659478cb008c:/workspace $
  */
 export const parseTerminalOutput = (raw: string) => {
-  let start = raw.indexOf(START);
+  const start = raw.indexOf(START);
   if (start < 0) {
     return raw;
   }
-  start += START.length;
-  const end = raw.indexOf("]", start);
-  if (end <= start) {
+  const offset = start + START.length;
+  const end = raw.indexOf("]", offset);
+  if (end <= offset) {
     return raw;
   }
   return raw.substring(0, start).trim();
