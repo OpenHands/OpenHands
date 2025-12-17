@@ -41,8 +41,7 @@ export function useConversationNameContextMenu({
 
   const [metricsModalVisible, setMetricsModalVisible] = React.useState(false);
   const [systemModalVisible, setSystemModalVisible] = React.useState(false);
-  const [microagentsModalVisible, setMicroagentsModalVisible] =
-    React.useState(false);
+  const [skillsModalVisible, setSkillsModalVisible] = React.useState(false);
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
@@ -161,11 +160,9 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
-  const handleShowMicroagents = (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
+  const handleShowSkills = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setMicroagentsModalVisible(true);
+    setSkillsModalVisible(true);
     onContextMenuToggle?.(false);
   };
 
@@ -178,7 +175,7 @@ export function useConversationNameContextMenu({
     handleDownloadViaVSCode,
     handleDisplayCost,
     handleShowAgentTools,
-    handleShowMicroagents,
+    handleShowSkills,
     handleConfirmDelete,
     handleConfirmStop,
 
@@ -187,8 +184,8 @@ export function useConversationNameContextMenu({
     setMetricsModalVisible,
     systemModalVisible,
     setSystemModalVisible,
-    microagentsModalVisible,
-    setMicroagentsModalVisible,
+    skillsModalVisible,
+    setSkillsModalVisible,
     confirmDeleteModalVisible,
     setConfirmDeleteModalVisible,
     confirmStopModalVisible,
@@ -204,6 +201,6 @@ export function useConversationNameContextMenu({
     shouldShowExport: Boolean(conversationId && showOptions),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
-    shouldShowMicroagents: Boolean(showOptions && conversationId),
+    shouldShowSkills: Boolean(showOptions && conversationId),
   };
 }
