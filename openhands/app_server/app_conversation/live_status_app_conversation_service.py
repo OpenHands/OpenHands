@@ -77,6 +77,7 @@ from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.sdk.utils.paging import page_iterator
 from openhands.server.types import AppMode
 from openhands.tools.preset.default import (
     get_default_tools,
@@ -85,7 +86,6 @@ from openhands.tools.preset.planning import (
     format_plan_structure,
     get_planning_tools,
 )
-from openhands.utils.search_utils import iterate
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
@@ -1190,28 +1190,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Create a temporary directory to store files
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Get all events for this conversation using the iterate pattern
-            events = []
-
-            # Create an adapter function for the iterate utility
-            async def search_events_adapter(**kwargs):
-                result = await self.event_service.search_events(
-                    conversation_id__eq=conversation_id, **kwargs
-                )
-
-                # Adapt EventPage to the expected interface for iterate()
-                class AdaptedResult:
-                    def __init__(self, event_page):
-                        self.results = event_page.items
-                        self.next_page_id = event_page.next_page_id
-
-                return AdaptedResult(result)
-
-            async for event in iterate(search_events_adapter):
-                events.append(event)
-
-            # Save each event as a JSON file
-            for i, event in enumerate(events):
+            # Get all events for this conversation
+            i = 0
+            async for event in page_iterator(self.event_service.search_events, conversation_id__eq=conversation_id):
                 event_filename = f'event_{i:06d}_{event.id}.json'
                 event_path = os.path.join(temp_dir, event_filename)
 
@@ -1219,6 +1200,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     # Use model_dump with mode='json' to handle UUID serialization
                     event_data = event.model_dump(mode='json')
                     json.dump(event_data, f, indent=2)
+                i += 1
 
             # Create meta.json with conversation info
             meta_path = os.path.join(temp_dir, 'meta.json')
