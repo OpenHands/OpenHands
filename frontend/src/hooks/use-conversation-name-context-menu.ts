@@ -49,7 +49,7 @@ export function useConversationNameContextMenu({
     React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
-  const { mutate: downloadConversation } = useDownloadConversation();
+  const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const systemMessage = events
     .filter(isV0Event)
@@ -152,13 +152,13 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
-  const handleDownloadConversation = (
+  const handleDownloadConversation = async (
     event: React.MouseEvent<HTMLButtonElement>,
   ) => {
     event.preventDefault();
     event.stopPropagation();
     if (conversationId && conversation?.conversation_version === "V1") {
-      downloadConversation(conversationId);
+      await downloadConversation(conversationId);
     }
     onContextMenuToggle?.(false);
   };
