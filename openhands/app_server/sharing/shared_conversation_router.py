@@ -28,7 +28,7 @@ router.shared_conversation_service_dependency = shared_conversation_service_depe
 
 
 @router.get('/search')
-async def search_public_conversations(
+async def search_shared_conversations(
     title__contains: Annotated[
         str | None,
         Query(title='Filter by title containing this string'),
@@ -73,10 +73,10 @@ async def search_public_conversations(
     ] = False,
     shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
 ) -> SharedConversationPage:
-    """Search / List public conversations."""
+    """Search / List shared conversations."""
     assert limit > 0
     assert limit <= 100
-    return await shared_conversation_service.search_public_conversation_info(
+    return await shared_conversation_service.search_shared_conversation_info(
         title__contains=title__contains,
         created_at__gte=created_at__gte,
         created_at__lt=created_at__lt,
@@ -90,7 +90,7 @@ async def search_public_conversations(
 
 
 @router.get('/count')
-async def count_public_conversations(
+async def count_shared_conversations(
     title__contains: Annotated[
         str | None,
         Query(title='Filter by title containing this string'),
@@ -113,7 +113,7 @@ async def count_public_conversations(
     ] = None,
     shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
 ) -> int:
-    """Count public conversations matching the given filters."""
+    """Count shared conversations matching the given filters."""
     return await shared_conversation_service.count_shared_conversation_info(
         title__contains=title__contains,
         created_at__gte=created_at__gte,
@@ -124,14 +124,14 @@ async def count_public_conversations(
 
 
 @router.get('')
-async def batch_get_public_conversations(
+async def batch_get_shared_conversations(
     ids: Annotated[list[str], Query()],
     shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
 ) -> list[SharedConversation | None]:
-    """Get a batch of public conversations given their ids. Return None for any missing or non-public."""
+    """Get a batch of shared conversations given their ids. Return None for any missing or non-shared."""
     assert len(ids) <= 100
     uuids = [UUID(id_) for id_ in ids]
-    public_conversations = (
+    shared_conversation_info = (
         await shared_conversation_service.batch_get_shared_conversation_info(uuids)
     )
-    return public_conversations
+    return shared_conversation_info

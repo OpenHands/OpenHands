@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SharedEventServiceImpl(SharedEventService):
-    """Implementation of SharedEventService that validates public access."""
+    """Implementation of SharedEventService that validates shared access."""
 
-    public_conversation_service: SharedConversationInfoService
+    shared_conversation_info_service: SharedConversationInfoService
     event_service: EventService
 
     async def get_shared_event(
@@ -45,7 +45,7 @@ class SharedEventServiceImpl(SharedEventService):
         """Given a conversation_id and event_id, retrieve an event if the conversation is shared."""
         # First check if the conversation is shared
         public_conversation = (
-            await self.public_conversation_service.get_public_conversation_info(
+            await self.shared_conversation_info_service.get_shared_conversation_info(
                 conversation_id
             )
         )
@@ -67,12 +67,12 @@ class SharedEventServiceImpl(SharedEventService):
     ) -> EventPage:
         """Search events for a specific shared conversation."""
         # First check if the conversation is shared
-        public_conversation = (
-            await self.public_conversation_service.get_public_conversation_info(
+        shared_conversation_info = (
+            await self.shared_conversation_info_service.get_shared_conversation_info(
                 conversation_id
             )
         )
-        if public_conversation is None:
+        if shared_conversation_info is None:
             # Return empty page if conversation is not public
             return EventPage(items=[], next_page_id=None)
 
@@ -97,12 +97,12 @@ class SharedEventServiceImpl(SharedEventService):
     ) -> int:
         """Count events for a specific shared conversation."""
         # First check if the conversation is shared
-        public_conversation = (
-            await self.public_conversation_service.get_public_conversation_info(
+        shared_conversation_info = (
+            await self.shared_conversation_info_service.get_shared_conversation_info(
                 conversation_id
             )
         )
-        if public_conversation is None:
+        if shared_conversation_info is None:
             return 0
 
         # If conversation is shared, count events for this conversation
@@ -128,11 +128,11 @@ class SharedEventServiceImplInjector(SharedEventServiceInjector):
         async with (
             get_shared_conversation_info_service(
                 state, request
-            ) as public_conversation_service,
+            ) as shared_conversation_info_service,
             get_event_service(state, request) as event_service,
         ):
             service = SharedEventServiceImpl(
-                public_conversation_service=public_conversation_service,
+                shared_conversation_info_service=shared_conversation_info_service,
                 event_service=event_service,
             )
             yield service

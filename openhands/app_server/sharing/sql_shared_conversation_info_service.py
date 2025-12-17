@@ -111,7 +111,7 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
         if has_more:
             rows = rows[:limit]
 
-        items = [self._to_public_conversation(row) for row in rows]
+        items = [self._to_shared_conversation(row) for row in rows]
 
         # Calculate next page ID
         next_page_id = None
@@ -128,11 +128,11 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
     ) -> int:
-        """Count public conversations matching the given filters."""
+        """Count shared conversations matching the given filters."""
         from sqlalchemy import func
 
         query = select(func.count(StoredConversationMetadata.conversation_id))
-        # Only include public conversations
+        # Only include shared conversations
         query = query.where(StoredConversationMetadata.public == True)  # noqa: E712
         query = query.where(StoredConversationMetadata.conversation_version == 'V1')
 
@@ -151,7 +151,7 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
     async def get_shared_conversation_info(
         self, conversation_id: UUID
     ) -> SharedConversation | None:
-        """Get a single public conversation info, returning None if missing or not public."""
+        """Get a single public conversation info, returning None if missing or not shared."""
         query = self._public_select().where(
             StoredConversationMetadata.conversation_id == str(conversation_id)
         )
@@ -162,7 +162,7 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
         if stored is None:
             return None
 
-        return self._to_public_conversation(stored)
+        return self._to_shared_conversation(stored)
 
     def _public_select(self):
         """Create a select query that only returns public conversations."""
@@ -208,7 +208,7 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
 
         return query
 
-    def _to_public_conversation(
+    def _to_shared_conversation(
         self,
         stored: StoredConversationMetadata,
         sub_conversation_ids: list[UUID] | None = None,

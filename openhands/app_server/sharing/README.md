@@ -1,20 +1,20 @@
 # Sharing Package
 
-This package contains functionality for sharing conversations publicly.
+This package contains functionality for sharing conversations.
 
 ## Components
 
-- **public_conversation_models.py**: Data models for public conversations
-- **public_conversation_info_service.py**: Service interface for accessing public conversation info
-- **sql_public_conversation_info_service.py**: SQL implementation of the public conversation info service
-- **public_event_service.py**: Service interface for accessing public events
-- **public_event_service_impl.py**: Implementation of the public event service
-- **public_conversation_router.py**: REST API endpoints for public conversations
-- **public_event_router.py**: REST API endpoints for public events
+- **shared.py**: Data models for shared conversations
+- **shared_conversation_info_service.py**: Service interface for accessing shared conversation info
+- **sql_shared_conversation_info_service.py**: SQL implementation of the shared conversation info service
+- **shared_event_service.py**: Service interface for accessing shared events
+- **shared_event_service_impl.py**: Implementation of the shared event service
+- **shared_conversation_router.py**: REST API endpoints for shared conversations
+- **shared_event_router.py**: REST API endpoints for shared events
 
 ## Features
 
-- Read-only access to public conversations
-- Event access for public conversations
+- Read-only access to shared conversations
+- Event access for shared conversations
 - Search and filtering capabilities
 - Pagination support

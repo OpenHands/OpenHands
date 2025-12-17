@@ -55,7 +55,7 @@ async def search_shared_events(
     ] = 100,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> EventPage:
-    """Search / List events for a public conversation."""
+    """Search / List events for a shared conversation."""
     assert limit > 0
     assert limit <= 100
     return await shared_event_service.search_shared_events(
@@ -70,7 +70,7 @@ async def search_shared_events(
 
 
 @router.get('/count')
-async def count_public_events(
+async def count_shared_events(
     conversation_id: Annotated[
         UUID,
         Query(title='Conversation ID to count events for'),
@@ -93,8 +93,8 @@ async def count_public_events(
     ] = EventSortOrder.TIMESTAMP,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> int:
-    """Count events for a public conversation matching the given filters."""
-    return await shared_event_service.count_public_events(
+    """Count events for a shared conversation matching the given filters."""
+    return await shared_event_service.count_shared_events(
         conversation_id=conversation_id,
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
@@ -112,17 +112,17 @@ async def batch_get_shared_events(
     id: Annotated[list[str], Query()],
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> list[Event | None]:
-    """Get a batch of events for a public conversation given their ids, returning null for any missing event."""
+    """Get a batch of events for a shared conversation given their ids, returning null for any missing event."""
     assert len(id) <= 100
     events = await shared_event_service.batch_get_shared_events(conversation_id, id)
     return events
 
 
 @router.get('/{conversation_id}/{event_id}')
-async def get_public_event(
+async def get_shared_event(
     conversation_id: UUID,
     event_id: str,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> Event | None:
-    """Get a single event from a public conversation by conversation_id and event_id."""
-    return await shared_event_service.get_public_event(conversation_id, event_id)
+    """Get a single event from a shared conversation by conversation_id and event_id."""
+    return await shared_event_service.get_shared_event(conversation_id, event_id)
