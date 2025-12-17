@@ -44,12 +44,12 @@ class SharedEventServiceImpl(SharedEventService):
     ) -> Event | None:
         """Given a conversation_id and event_id, retrieve an event if the conversation is shared."""
         # First check if the conversation is shared
-        public_conversation = (
+        shared_conversation_info = (
             await self.shared_conversation_info_service.get_shared_conversation_info(
                 conversation_id
             )
         )
-        if public_conversation is None:
+        if shared_conversation_info is None:
             return None
 
         # If conversation is shared, get the event
@@ -73,7 +73,7 @@ class SharedEventServiceImpl(SharedEventService):
             )
         )
         if shared_conversation_info is None:
-            # Return empty page if conversation is not public
+            # Return empty page if conversation is not shared
             return EventPage(items=[], next_page_id=None)
 
         # If conversation is shared, search events for this conversation

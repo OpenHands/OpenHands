@@ -12,12 +12,8 @@ from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.sharing.shared_event_service import SharedEventService
 from openhands.sdk import Event
 
-router = APIRouter(prefix='/shared-events', tags=['Shared Events'])
-
+router = APIRouter(prefix='/shared-events', tags=['Sharing'])
 shared_event_service_dependency = depends_shared_event_service()
-
-# Attach dependency to router for testing
-router.shared_event_service_dependency = shared_event_service_dependency
 
 
 # Read methods
@@ -72,7 +68,7 @@ async def search_shared_events(
 @router.get('/count')
 async def count_shared_events(
     conversation_id: Annotated[
-        UUID,
+        str,
         Query(title='Conversation ID to count events for'),
     ],
     kind__eq: Annotated[
@@ -95,7 +91,7 @@ async def count_shared_events(
 ) -> int:
     """Count events for a shared conversation matching the given filters."""
     return await shared_event_service.count_shared_events(
-        conversation_id=conversation_id,
+        conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,

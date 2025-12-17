@@ -16,12 +16,8 @@ from openhands.app_server.sharing.shared_conversation_models import (
     SharedConversationSortOrder,
 )
 
-router = APIRouter(prefix='/shared-conversations', tags=['Shared Conversations'])
-
+router = APIRouter(prefix='/shared-conversations', tags=['Sharing'])
 shared_conversation_service_dependency = depends_shared_conversation_info_service()
-
-# Attach dependency to router for testing
-router.shared_conversation_service_dependency = shared_conversation_service_dependency
 
 
 # Read methods
