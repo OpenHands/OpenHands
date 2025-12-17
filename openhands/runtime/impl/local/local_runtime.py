@@ -45,6 +45,8 @@ from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.http_session import httpx_verify_option
 from openhands.utils.tenacity_stop import stop_if_should_exit
 
+DISABLE_VSCODE_PLUGIN = os.getenv('DISABLE_VSCODE_PLUGIN', 'false').lower() == 'true'
+
 
 @dataclass
 class ActionExecutionServerInfo:
@@ -406,7 +408,7 @@ class LocalRuntime(ActionExecutionClient):
             plugins = _get_plugins(config)
 
             # Copy the logic from Runtime where we add a VSCodePlugin on init if missing
-            if not headless_mode:
+            if not headless_mode and not DISABLE_VSCODE_PLUGIN:
                 plugins.append(VSCodeRequirement())
 
             for _ in range(initial_num_warm_servers):

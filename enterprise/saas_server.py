@@ -34,6 +34,7 @@ from server.routes.integration.jira_dc import jira_dc_integration_router  # noqa
 from server.routes.integration.linear import linear_integration_router  # noqa: E402
 from server.routes.integration.slack import slack_router  # noqa: E402
 from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
+from server.routes.oauth_device import oauth_device_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
 
@@ -60,6 +61,7 @@ base_app.mount('/internal/metrics', metrics_app())
 base_app.include_router(readiness_router)  # Add routes for readiness checks
 base_app.include_router(api_router)  # Add additional route for github auth
 base_app.include_router(oauth_router)  # Add additional route for oauth callback
+base_app.include_router(oauth_device_router)  # Add OAuth 2.0 Device Flow routes
 base_app.include_router(saas_user_router)  # Add additional route SAAS user calls
 base_app.include_router(
     billing_router

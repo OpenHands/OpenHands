@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { handleStatusMessage } from "../actions";
+import { handleStatusMessage } from "#/services/actions";
 import { StatusMessage } from "#/types/message";
 import { queryClient } from "#/query-client-config";
 import { useStatusStore } from "#/state/status-store";
