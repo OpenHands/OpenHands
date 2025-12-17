@@ -45,15 +45,11 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
+from openhands.app_server.app_conversation.app_conversation_service_base import (
+    AppConversationServiceBase,
+)
 from openhands.app_server.app_conversation.app_conversation_start_task_service import (
     AppConversationStartTaskService,
-)
-from openhands.app_server.app_conversation.skill_loader import (
-    load_global_skills,
-    load_org_skills,
-    load_repo_skills,
-    load_sandbox_skills,
-    merge_skills,
 )
 from openhands.app_server.config import (
     depends_app_conversation_service,
@@ -74,7 +70,7 @@ from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
-from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger, load_user_skills
+from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 router = APIRouter(prefix='/app-conversations', tags=['Conversations'])
@@ -419,7 +415,6 @@ async def get_conversation_skills(
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
     sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
-    user_context: UserContext = user_context_dependency,
 ) -> JSONResponse:
     """Get all skills associated with the conversation.
 
@@ -496,38 +491,15 @@ async def get_conversation_skills(
         # Load skills from all sources
         logger.info(f'Loading skills for conversation {conversation_id}')
 
-        # Load sandbox skills (exposed URLs)
-        sandbox_skills = load_sandbox_skills(sandbox)
-
-        # Load global skills from OpenHands/skills/
-        global_skills = load_global_skills()
-
-        # Load user skills from ~/.openhands/skills/
-        try:
-            user_skills = load_user_skills()
-        except Exception as e:
-            logger.warning(f'Failed to load user skills: {str(e)}')
-            user_skills = []
-
-        # Load organization-level skills
-        org_skills = await load_org_skills(
-            remote_workspace,
-            conversation.selected_repository,
-            sandbox_spec.working_dir,
-            user_context,
-        )
-
-        # Load repository-level skills
-        repo_skills = await load_repo_skills(
-            remote_workspace,
-            conversation.selected_repository,
-            sandbox_spec.working_dir,
-        )
-
-        # Merge all skills with proper precedence
-        all_skills = merge_skills(
-            [sandbox_skills, global_skills, user_skills, org_skills, repo_skills]
-        )
+        # Prefer the shared loader to avoid duplication; otherwise return empty list.
+        all_skills: list = []
+        if isinstance(app_conversation_service, AppConversationServiceBase):
+            all_skills = await app_conversation_service._load_and_merge_all_skills(
+                sandbox,
+                remote_workspace,
+                conversation.selected_repository,
+                sandbox_spec.working_dir,
+            )
 
         logger.info(
             f'Loaded {len(all_skills)} skills for conversation {conversation_id}: '

@@ -22,7 +22,7 @@ interface ConversationCardContextMenuProps {
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onShowMicroagents?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
 }
@@ -37,7 +37,7 @@ export function ConversationCardContextMenu({
   onEdit,
   onDisplayCost,
   onShowAgentTools,
-  onShowMicroagents,
+  onShowSkills,
   onDownloadViaVSCode,
   position = "bottom",
 }: ConversationCardContextMenuProps) {
@@ -96,10 +96,10 @@ export function ConversationCardContextMenu({
             />
           </ContextMenuListItem>
         ),
-        onShowMicroagents && (
+        onShowSkills && (
           <ContextMenuListItem
             testId="show-skills-button"
-            onClick={onShowMicroagents}
+            onClick={onShowSkills}
             className={contextMenuListItemClassName}
           >
             <ConversationNameContextMenuIconText

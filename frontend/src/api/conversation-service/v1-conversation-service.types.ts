@@ -100,7 +100,7 @@ export interface V1AppConversation {
   session_api_key: string | null;
 }
 
-export interface V1Skill {
+export interface Skill {
   name: string;
   type: "repo" | "knowledge";
   content: string;
@@ -108,5 +108,5 @@ export interface V1Skill {
 }
 
 export interface GetSkillsResponse {
-  skills: V1Skill[];
+  skills: Skill[];
 }

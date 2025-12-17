@@ -97,7 +97,7 @@ describe("SkillsModal - Refresh Button", () => {
 describe("useConversationSkills - V1 API Integration", () => {
   const conversationId = "test-conversation-id";
 
-  const mockV0Skills = [
+  const mockMicroagents = [
     {
       name: "V0 Test Agent",
       type: "repo" as const,
@@ -106,7 +106,7 @@ describe("useConversationSkills - V1 API Integration", () => {
     },
   ];
 
-  const mockV1Skills = [
+  const mockSkills = [
     {
       name: "V1 Test Skill",
       type: "knowledge" as const,
@@ -133,7 +133,7 @@ describe("useConversationSkills - V1 API Integration", () => {
       // Arrange
       const getMicroagentsSpy = vi
         .spyOn(ConversationService, "getMicroagents")
-        .mockResolvedValue({ microagents: mockV0Skills });
+        .mockResolvedValue({ microagents: mockMicroagents });
 
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
         v1_enabled: false,
@@ -169,7 +169,7 @@ describe("useConversationSkills - V1 API Integration", () => {
     it("should display v0 skills correctly", async () => {
       // Arrange
       vi.spyOn(ConversationService, "getMicroagents").mockResolvedValue({
-        microagents: mockV0Skills,
+        microagents: mockMicroagents,
       });
 
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
@@ -208,7 +208,7 @@ describe("useConversationSkills - V1 API Integration", () => {
       // Arrange
       const getSkillsSpy = vi
         .spyOn(V1ConversationService, "getSkills")
-        .mockResolvedValue({ skills: mockV1Skills });
+        .mockResolvedValue({ skills: mockSkills });
 
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
         v1_enabled: true,
@@ -244,7 +244,7 @@ describe("useConversationSkills - V1 API Integration", () => {
     it("should display v1 skills correctly", async () => {
       // Arrange
       vi.spyOn(V1ConversationService, "getSkills").mockResolvedValue({
-        skills: mockV1Skills,
+        skills: mockSkills,
       });
 
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
@@ -304,7 +304,7 @@ describe("useConversationSkills - V1 API Integration", () => {
       const getSkillsSpy = vi
         .spyOn(V1ConversationService, "getSkills")
         .mockResolvedValue({
-          skills: mockV1Skills,
+          skills: mockSkills,
         });
 
       // Act
@@ -322,10 +322,10 @@ describe("useConversationSkills - V1 API Integration", () => {
       // Arrange
       const getMicroagentsSpy = vi
         .spyOn(ConversationService, "getMicroagents")
-        .mockResolvedValue({ microagents: mockV0Skills });
+        .mockResolvedValue({ microagents: mockMicroagents });
       const getSkillsSpy = vi
         .spyOn(V1ConversationService, "getSkills")
-        .mockResolvedValue({ skills: mockV1Skills });
+        .mockResolvedValue({ skills: mockSkills });
 
       const settingsSpy = vi
         .spyOn(SettingsService, "getSettings")

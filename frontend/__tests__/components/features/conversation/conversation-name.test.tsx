@@ -42,7 +42,6 @@ vi.mock("react-i18next", async () => {
           BUTTON$EXPORT_CONVERSATION: "Export Conversation",
           BUTTON$DOWNLOAD_VIA_VSCODE: "Download via VS Code",
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
-          CONVERSATION$SHOW_MICROAGENTS: "Show Microagents",
           CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Cost",
           COMMON$CLOSE_CONVERSATION_STOP_RUNTIME:

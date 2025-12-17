@@ -10239,22 +10239,6 @@
     "tr": "Kullanılabilir bir mikro ajan kullanarak OpenHands'i deponuz için özelleştirebilirsiniz. OpenHands'ten deponun açıklamasını, kodun nasıl çalıştırılacağı dahil, .openhands/microagents/repo.md dosyasına koymasını isteyin.",
     "uk": "Ви можете налаштувати OpenHands для свого репозиторію за допомогою доступного мікроагента. Попросіть OpenHands розмістити опис репозиторію, включаючи інформацію про те, як запустити код, у файлі .openhands/microagents/repo.md."
   },
-  "CONVERSATION$SHOW_MICROAGENTS": {
-    "en": "Show Available Microagents",
-    "ja": "利用可能なマイクロエージェントを表示",
-    "zh-CN": "显示可用微代理",
-    "zh-TW": "顯示可用微代理",
-    "ko-KR": "사용 가능한 마이크로에이전트 표시",
-    "no": "Vis tilgjengelige mikroagenter",
-    "ar": "عرض الوكلاء المصغرين المتاحة",
-    "de": "Verfügbare Mikroagenten anzeigen",
-    "fr": "Afficher les micro-agents disponibles",
-    "it": "Mostra microagenti disponibili",
-    "pt": "Mostrar microagentes disponíveis",
-    "es": "Mostrar microagentes disponibles",
-    "tr": "Kullanılabilir mikro ajanları göster",
-    "uk": "Показати доступних мікроагентів"
-  },
   "CONVERSATION$NO_SKILLS": {
     "en": "No available skills found for this conversation.",
     "ja": "この会話には利用可能なスキルが見つかりません。",

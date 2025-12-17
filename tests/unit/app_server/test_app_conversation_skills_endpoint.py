@@ -4,7 +4,7 @@ This module tests the GET /{conversation_id}/skills endpoint functionality,
 following TDD best practices with AAA structure.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -16,6 +16,9 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_router import (
     get_conversation_skills,
 )
+from openhands.app_server.app_conversation.app_conversation_service_base import (
+    AppConversationServiceBase,
+)
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     ExposedUrl,
@@ -25,6 +28,31 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk.context.skills import KeywordTrigger, Skill, TaskTrigger
+
+
+def _make_service_mock(
+    *,
+    user_context: UserContext,
+    conversation_return: AppConversation | None = None,
+    skills_return: list[Skill] | None = None,
+    raise_on_load: bool = False,
+):
+    """Create a mock service that passes the isinstance check and returns the desired values."""
+
+    mock_cls = type('AppConversationServiceMock', (MagicMock,), {})
+    AppConversationServiceBase.register(mock_cls)
+
+    service = mock_cls()
+    service.user_context = user_context
+    service.get_app_conversation = AsyncMock(return_value=conversation_return)
+
+    async def _load_skills(*_args, **_kwargs):
+        if raise_on_load:
+            raise Exception('Skill loading failed')
+        return skills_return or []
+
+    service._load_and_merge_all_skills = AsyncMock(side_effect=_load_skills)
+    return service
 
 
 @pytest.mark.asyncio
@@ -84,9 +112,11 @@ class TestGetConversationSkills:
         )
 
         # Mock services
-        mock_app_conversation_service = MagicMock()
-        mock_app_conversation_service.get_app_conversation = AsyncMock(
-            return_value=mock_conversation
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
+            skills_return=[repo_skill, knowledge_skill],
         )
 
         mock_sandbox_service = MagicMock()
@@ -97,70 +127,40 @@ class TestGetConversationSkills:
             return_value=mock_sandbox_spec
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        # Act
+        response = await get_conversation_skills(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
 
-        # Mock skill loaders
-        with (
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_sandbox_skills',
-                return_value=[],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_global_skills',
-                return_value=[repo_skill],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_user_skills',
-                return_value=[],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_org_skills',
-                new=AsyncMock(return_value=[]),
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_repo_skills',
-                new=AsyncMock(return_value=[knowledge_skill]),
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.merge_skills',
-                return_value=[repo_skill, knowledge_skill],
-            ),
-        ):
-            # Act
-            response = await get_conversation_skills(
-                conversation_id=conversation_id,
-                app_conversation_service=mock_app_conversation_service,
-                sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=mock_sandbox_spec_service,
-                user_context=mock_user_context,
-            )
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        content = response.body.decode('utf-8')
+        import json
 
-            # Assert
-            assert response.status_code == status.HTTP_200_OK
-            content = response.body.decode('utf-8')
-            import json
+        data = json.loads(content)
+        assert 'skills' in data
+        assert len(data['skills']) == 2
 
-            data = json.loads(content)
-            assert 'skills' in data
-            assert len(data['skills']) == 2
+        # Check repo skill
+        repo_skill_data = next(
+            (s for s in data['skills'] if s['name'] == 'repo_skill'), None
+        )
+        assert repo_skill_data is not None
+        assert repo_skill_data['type'] == 'repo'
+        assert repo_skill_data['content'] == 'Repository skill content'
+        assert repo_skill_data['triggers'] == []
 
-            # Check repo skill
-            repo_skill_data = next(
-                (s for s in data['skills'] if s['name'] == 'repo_skill'), None
-            )
-            assert repo_skill_data is not None
-            assert repo_skill_data['type'] == 'repo'
-            assert repo_skill_data['content'] == 'Repository skill content'
-            assert repo_skill_data['triggers'] == []
-
-            # Check knowledge skill
-            knowledge_skill_data = next(
-                (s for s in data['skills'] if s['name'] == 'knowledge_skill'), None
-            )
-            assert knowledge_skill_data is not None
-            assert knowledge_skill_data['type'] == 'knowledge'
-            assert knowledge_skill_data['content'] == 'Knowledge skill content'
-            assert knowledge_skill_data['triggers'] == ['test', 'help']
+        # Check knowledge skill
+        knowledge_skill_data = next(
+            (s for s in data['skills'] if s['name'] == 'knowledge_skill'), None
+        )
+        assert knowledge_skill_data is not None
+        assert knowledge_skill_data['type'] == 'knowledge'
+        assert knowledge_skill_data['content'] == 'Knowledge skill content'
+        assert knowledge_skill_data['triggers'] == ['test', 'help']
 
     async def test_get_skills_returns_404_when_conversation_not_found(self):
         """Test endpoint returns 404 when conversation doesn't exist.
@@ -172,14 +172,14 @@ class TestGetConversationSkills:
         # Arrange
         conversation_id = uuid4()
 
-        mock_app_conversation_service = MagicMock()
-        mock_app_conversation_service.get_app_conversation = AsyncMock(
-            return_value=None
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=None,
         )
 
         mock_sandbox_service = MagicMock()
         mock_sandbox_spec_service = MagicMock()
-        mock_user_context = MagicMock(spec=UserContext)
 
         # Act
         response = await get_conversation_skills(
@@ -187,7 +187,6 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
-            user_context=mock_user_context,
         )
 
         # Assert
@@ -217,16 +216,16 @@ class TestGetConversationSkills:
             sandbox_status=SandboxStatus.RUNNING,
         )
 
-        mock_app_conversation_service = MagicMock()
-        mock_app_conversation_service.get_app_conversation = AsyncMock(
-            return_value=mock_conversation
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
         )
 
         mock_sandbox_service = MagicMock()
         mock_sandbox_service.get_sandbox = AsyncMock(return_value=None)
 
         mock_sandbox_spec_service = MagicMock()
-        mock_user_context = MagicMock(spec=UserContext)
 
         # Act
         response = await get_conversation_skills(
@@ -234,7 +233,6 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
-            user_context=mock_user_context,
         )
 
         # Assert
@@ -272,16 +270,16 @@ class TestGetConversationSkills:
             session_api_key='test-api-key',
         )
 
-        mock_app_conversation_service = MagicMock()
-        mock_app_conversation_service.get_app_conversation = AsyncMock(
-            return_value=mock_conversation
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
         )
 
         mock_sandbox_service = MagicMock()
         mock_sandbox_service.get_sandbox = AsyncMock(return_value=mock_sandbox)
 
         mock_sandbox_spec_service = MagicMock()
-        mock_user_context = MagicMock(spec=UserContext)
 
         # Act
         response = await get_conversation_skills(
@@ -289,7 +287,6 @@ class TestGetConversationSkills:
             app_conversation_service=mock_app_conversation_service,
             sandbox_service=mock_sandbox_service,
             sandbox_spec_service=mock_sandbox_spec_service,
-            user_context=mock_user_context,
         )
 
         # Assert
@@ -341,9 +338,11 @@ class TestGetConversationSkills:
             trigger=TaskTrigger(triggers=['task', 'execute']),
         )
 
-        mock_app_conversation_service = MagicMock()
-        mock_app_conversation_service.get_app_conversation = AsyncMock(
-            return_value=mock_conversation
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
+            skills_return=[task_skill],
         )
 
         mock_sandbox_service = MagicMock()
@@ -354,53 +353,24 @@ class TestGetConversationSkills:
             return_value=mock_sandbox_spec
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        # Act
+        response = await get_conversation_skills(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
 
-        with (
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_sandbox_skills',
-                return_value=[],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_global_skills',
-                return_value=[],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_user_skills',
-                return_value=[],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_org_skills',
-                new=AsyncMock(return_value=[]),
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_repo_skills',
-                new=AsyncMock(return_value=[task_skill]),
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.merge_skills',
-                return_value=[task_skill],
-            ),
-        ):
-            # Act
-            response = await get_conversation_skills(
-                conversation_id=conversation_id,
-                app_conversation_service=mock_app_conversation_service,
-                sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=mock_sandbox_spec_service,
-                user_context=mock_user_context,
-            )
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        content = response.body.decode('utf-8')
+        import json
 
-            # Assert
-            assert response.status_code == status.HTTP_200_OK
-            content = response.body.decode('utf-8')
-            import json
-
-            data = json.loads(content)
-            assert len(data['skills']) == 1
-            skill_data = data['skills'][0]
-            assert skill_data['type'] == 'knowledge'
-            assert skill_data['triggers'] == ['task', 'execute']
+        data = json.loads(content)
+        assert len(data['skills']) == 1
+        skill_data = data['skills'][0]
+        assert skill_data['type'] == 'knowledge'
+        assert skill_data['triggers'] == ['task', 'execute']
 
     async def test_get_skills_returns_500_on_skill_loading_error(self):
         """Test endpoint returns 500 when skill loading fails.
@@ -435,9 +405,11 @@ class TestGetConversationSkills:
             id=str(uuid4()), command=None, working_dir='/workspace'
         )
 
-        mock_app_conversation_service = MagicMock()
-        mock_app_conversation_service.get_app_conversation = AsyncMock(
-            return_value=mock_conversation
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
+            raise_on_load=True,
         )
 
         mock_sandbox_service = MagicMock()
@@ -448,30 +420,22 @@ class TestGetConversationSkills:
             return_value=mock_sandbox_spec
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        # Act
+        response = await get_conversation_skills(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
 
-        # Mock load_global_skills to raise exception
-        with patch(
-            'openhands.app_server.app_conversation.app_conversation_router.load_global_skills',
-            side_effect=Exception('Skill loading failed'),
-        ):
-            # Act
-            response = await get_conversation_skills(
-                conversation_id=conversation_id,
-                app_conversation_service=mock_app_conversation_service,
-                sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=mock_sandbox_spec_service,
-                user_context=mock_user_context,
-            )
+        # Assert
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        content = response.body.decode('utf-8')
+        import json
 
-            # Assert
-            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            content = response.body.decode('utf-8')
-            import json
-
-            data = json.loads(content)
-            assert 'error' in data
-            assert 'Error getting skills' in data['error']
+        data = json.loads(content)
+        assert 'error' in data
+        assert 'Error getting skills' in data['error']
 
     async def test_get_skills_returns_empty_list_when_no_skills_loaded(self):
         """Test endpoint returns empty skills list when no skills are found.
@@ -506,9 +470,11 @@ class TestGetConversationSkills:
             id=str(uuid4()), command=None, working_dir='/workspace'
         )
 
-        mock_app_conversation_service = MagicMock()
-        mock_app_conversation_service.get_app_conversation = AsyncMock(
-            return_value=mock_conversation
+        mock_user_context = MagicMock(spec=UserContext)
+        mock_app_conversation_service = _make_service_mock(
+            user_context=mock_user_context,
+            conversation_return=mock_conversation,
+            skills_return=[],
         )
 
         mock_sandbox_service = MagicMock()
@@ -519,48 +485,19 @@ class TestGetConversationSkills:
             return_value=mock_sandbox_spec
         )
 
-        mock_user_context = MagicMock(spec=UserContext)
+        # Act
+        response = await get_conversation_skills(
+            conversation_id=conversation_id,
+            app_conversation_service=mock_app_conversation_service,
+            sandbox_service=mock_sandbox_service,
+            sandbox_spec_service=mock_sandbox_spec_service,
+        )
 
-        with (
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_sandbox_skills',
-                return_value=[],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_global_skills',
-                return_value=[],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_user_skills',
-                return_value=[],
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_org_skills',
-                new=AsyncMock(return_value=[]),
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.load_repo_skills',
-                new=AsyncMock(return_value=[]),
-            ),
-            patch(
-                'openhands.app_server.app_conversation.app_conversation_router.merge_skills',
-                return_value=[],
-            ),
-        ):
-            # Act
-            response = await get_conversation_skills(
-                conversation_id=conversation_id,
-                app_conversation_service=mock_app_conversation_service,
-                sandbox_service=mock_sandbox_service,
-                sandbox_spec_service=mock_sandbox_spec_service,
-                user_context=mock_user_context,
-            )
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        content = response.body.decode('utf-8')
+        import json
 
-            # Assert
-            assert response.status_code == status.HTTP_200_OK
-            content = response.body.decode('utf-8')
-            import json
-
-            data = json.loads(content)
-            assert 'skills' in data
-            assert len(data['skills']) == 0
+        data = json.loads(content)
+        assert 'skills' in data
+        assert len(data['skills']) == 0

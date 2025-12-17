@@ -2,10 +2,10 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Typography } from "#/ui/typography";
 import { SkillTriggers } from "./skill-triggers";
 import { SkillContent } from "./skill-content";
-import { V1Skill } from "#/api/conversation-service/v1-conversation-service.types";
+import { Skill } from "#/api/conversation-service/v1-conversation-service.types";
 
 interface SkillItemProps {
-  skill: V1Skill;
+  skill: Skill;
   isExpanded: boolean;
   onToggle: (agentName: string) => void;
 }
