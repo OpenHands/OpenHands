@@ -61,7 +61,7 @@ class SandboxSpecServiceInjector(
     pass
 
 
-def get_default_agent_server_image() -> str:
+def get_agent_server_image() -> str:
     agent_server_image_repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY')
     agent_server_image_tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
     if agent_server_image_repository and agent_server_image_tag:
@@ -69,7 +69,7 @@ def get_default_agent_server_image() -> str:
     return AGENT_SERVER_IMAGE
 
 
-def get_default_agent_server_env() -> dict[str, str]:
+def get_agent_server_env() -> dict[str, str]:
     """Get environment variables to be injected into agent server sandbox environments.
 
     This function reads environment variable overrides from the OH_AGENT_SERVER_ENV

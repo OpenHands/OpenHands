@@ -25,17 +25,17 @@ from openhands.app_server.sandbox.remote_sandbox_spec_service import (
     get_default_sandbox_specs as get_default_remote_sandbox_specs,
 )
 from openhands.app_server.sandbox.sandbox_spec_service import (
-    get_default_agent_server_env,
+    get_agent_server_env,
 )
 
 
-class TestGetDefaultAgentServerEnv:
-    """Test cases for get_default_agent_server_env function."""
+class TestGetAgentServerEnv:
+    """Test cases for get_agent_server_env function."""
 
     def test_no_environment_variables(self):
         """Test when no OH_AGENT_SERVER_ENV variable is set."""
         with patch.dict(os.environ, {}, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             assert result == {}
 
     def test_empty_json_environment_variable(self):
@@ -45,7 +45,7 @@ class TestGetDefaultAgentServerEnv:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             assert result == {}
 
     def test_single_environment_variable(self):
@@ -56,7 +56,7 @@ class TestGetDefaultAgentServerEnv:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             assert result == {'CUSTOM_VAR': 'custom_value'}
 
     def test_multiple_environment_variables(self):
@@ -68,7 +68,7 @@ class TestGetDefaultAgentServerEnv:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             expected = {
                 'VAR1': 'value1',
                 'VAR2': 'value2',
@@ -84,7 +84,7 @@ class TestGetDefaultAgentServerEnv:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             expected = {
                 'EMPTY': '',
                 'NORMAL': 'value',
@@ -98,7 +98,7 @@ class TestGetDefaultAgentServerEnv:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             expected = {
                 'JSON': '{"key": "value", "number": 123}',
                 'PATH': '/usr/local/bin:/usr/bin',
@@ -114,7 +114,7 @@ class TestGetDefaultAgentServerEnv:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             expected = {
                 'lowercase': 'lower',
                 'UPPERCASE': 'upper',
@@ -129,7 +129,7 @@ class TestGetDefaultAgentServerEnv:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             expected = {
                 'VAR_1': 'value1',
                 'VAR_2_TEST': 'value2',
@@ -148,7 +148,7 @@ class TestGetDefaultAgentServerEnv:
 
         with patch.dict(os.environ, env_vars, clear=True):
             with pytest.raises(json.JSONDecodeError):  # Should raise JSON decode error
-                get_default_agent_server_env()
+                get_agent_server_env()
 
     def test_non_string_values_in_json(self):
         """Test that non-string values in JSON are converted to strings."""
@@ -160,7 +160,7 @@ class TestGetDefaultAgentServerEnv:
             # This might fail if the parser is strict about string values
             # The behavior depends on the implementation
             try:
-                result = get_default_agent_server_env()
+                result = get_agent_server_env()
                 # If it succeeds, values should be converted to strings
                 assert isinstance(result.get('NUMBER'), str)
                 assert isinstance(result.get('BOOLEAN'), str)
@@ -176,7 +176,7 @@ class TestGetDefaultAgentServerEnv:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            result = get_default_agent_server_env()
+            result = get_agent_server_env()
             expected = {
                 'DEBUG': 'true',
                 'LOG_LEVEL': 'info',
