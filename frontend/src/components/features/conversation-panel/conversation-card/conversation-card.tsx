@@ -8,7 +8,7 @@ import { RepositorySelection } from "#/api/open-hands.types";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
-import { downloadConversation } from "#/utils/download-conversation";
+import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -47,6 +47,7 @@ export function ConversationCard({
 }: ConversationCardProps) {
   const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
+  const { downloadConversation } = useDownloadConversation();
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -110,12 +111,7 @@ export function ConversationCard({
     posthog.capture("download_trajectory_button_clicked");
 
     if (conversationId && conversationVersion === "V1") {
-      try {
-        await downloadConversation(conversationId);
-      } catch (error) {
-        console.error("Failed to download trajectory:", error);
-        // Could add a toast notification here for user feedback
-      }
+      await downloadConversation(conversationId);
     }
 
     onContextMenuToggle?.(false);

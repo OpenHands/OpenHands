@@ -16,7 +16,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV0Event } from "#/types/v1/type-guards";
 import { useActiveConversation } from "./query/use-active-conversation";
-import { downloadConversation } from "#/utils/download-conversation";
+import { useDownloadConversation } from "./use-download-conversation";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -49,6 +49,7 @@ export function useConversationNameContextMenu({
     React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
+  const { downloadConversation } = useDownloadConversation();
 
   const systemMessage = events
     .filter(isV0Event)
@@ -156,16 +157,9 @@ export function useConversationNameContextMenu({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    posthog.capture("download_trajectory_button_clicked");
-
     if (conversationId && conversation?.conversation_version === "V1") {
-      try {
-        await downloadConversation(conversationId);
-      } catch (error) {
-        displayErrorToast(t(I18nKey.CONVERSATION$DOWNLOAD_ERROR));
-      }
+      await downloadConversation(conversationId);
     }
-
     onContextMenuToggle?.(false);
   };
 
