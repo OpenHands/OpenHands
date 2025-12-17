@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { useEventStore } from "#/stores/use-event-store";
@@ -44,6 +45,7 @@ import { isBudgetOrCreditError } from "#/utils/error-handler";
 import { useTracking } from "#/hooks/use-tracking";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
+import { I18nKey } from "#/i18n/declaration";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type V1_WebSocketConnectionState =
@@ -122,6 +124,8 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
+
+  const { t } = useTranslation();
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -603,7 +607,7 @@ export function ConversationWebSocketProvider({
         // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
         if (event.code !== 1000 && hasConnectedRefMain.current) {
           setErrorMessage(
-            `Connection lost: ${event.reason || "Unexpected disconnect"}`,
+            `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
           );
         }
       },
@@ -675,7 +679,7 @@ export function ConversationWebSocketProvider({
         // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
         if (event.code !== 1000 && hasConnectedRefPlanning.current) {
           setErrorMessage(
-            `Connection lost: ${event.reason || "Unexpected disconnect"}`,
+            `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
           );
         }
       },
