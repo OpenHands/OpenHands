@@ -220,7 +220,7 @@ def config_from_env() -> AppServerConfig:
         config.shared_conversation_info = SQLSharedConversationInfoServiceInjector()
 
     if config.shared_event is None:
-        from openhands.app_server.sharing.shared_event_service_impl import (
+        from openhands.app_server.sharing.filesystem_shared_event_service import (
             SharedEventServiceImplInjector,
         )
 
