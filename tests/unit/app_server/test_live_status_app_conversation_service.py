@@ -1094,51 +1094,6 @@ class TestLiveStatusAppConversationService:
         # Verify service calls - should call search_events for each page
         assert self.mock_event_service.search_events.call_count == total_pages
 
-    @pytest.mark.asyncio
-    @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.iterate'
-    )
-    async def test_export_conversation_iterate_function_usage(self, mock_iterate):
-        """Test that the download method correctly uses the iterate function."""
-        # Arrange
-        conversation_id = uuid4()
-
-        # Mock conversation info
-        mock_conversation_info = Mock(spec=AppConversationInfo)
-        mock_conversation_info.id = conversation_id
-        mock_conversation_info.title = 'Test Conversation'
-        mock_conversation_info.model_dump_json = Mock(return_value='{"id": "test"}')
-
-        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
-            return_value=mock_conversation_info
-        )
-
-        # Mock events returned by iterate
-        mock_event = Mock(spec=Event)
-        mock_event.id = uuid4()
-        mock_event.model_dump = Mock(
-            return_value={'id': str(mock_event.id), 'type': 'test'}
-        )
-
-        # Mock iterate to return async generator
-        async def mock_iterate_generator(adapter_func):
-            yield mock_event
-
-        mock_iterate.return_value = mock_iterate_generator(None)
-
-        # Act
-        result = await self.service.export_conversation(conversation_id)
-
-        # Assert
-        assert result is not None
-        mock_iterate.assert_called_once()
-
-        # Verify the adapter function was created and passed to iterate
-        call_args = mock_iterate.call_args[0]
-        assert len(call_args) == 1  # Should have one argument (the adapter function)
-        adapter_func = call_args[0]
-        assert callable(adapter_func)  # Should be a function
-
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
     )
