@@ -51,7 +51,7 @@ def _make_service_mock(
             raise Exception('Skill loading failed')
         return skills_return or []
 
-    service._load_and_merge_all_skills = AsyncMock(side_effect=_load_skills)
+    service.load_and_merge_all_skills = AsyncMock(side_effect=_load_skills)
     return service
 
 

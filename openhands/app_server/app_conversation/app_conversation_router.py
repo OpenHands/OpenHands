@@ -494,7 +494,7 @@ async def get_conversation_skills(
         # Prefer the shared loader to avoid duplication; otherwise return empty list.
         all_skills: list = []
         if isinstance(app_conversation_service, AppConversationServiceBase):
-            all_skills = await app_conversation_service._load_and_merge_all_skills(
+            all_skills = await app_conversation_service.load_and_merge_all_skills(
                 sandbox,
                 remote_workspace,
                 conversation.selected_repository,
