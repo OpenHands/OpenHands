@@ -819,14 +819,12 @@ class SaasNestedConversationManager(ConversationManager):
         if self._runtime_container_image:
             config.sandbox.runtime_container_image = self._runtime_container_image
 
-        logger.info(f'agent.sandbox_plugins:{agent.sandbox_plugins}')
-
         plugins = [
             plugin
             for plugin in agent.sandbox_plugins
             if not (DISABLE_VSCODE_PLUGIN and isinstance(plugin, VSCodeRequirement))
         ]
-        logger.info(f'plugins:{plugins}')
+        logger.info(f'Loaded plugins for runtime {sid}: {plugins}')
 
         runtime = RemoteRuntime(
             config=config,
