@@ -157,7 +157,7 @@ export function useConversationNameContextMenu({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    posthog.capture("download_conversation_button_clicked");
+    posthog.capture("download_trajectory_button_clicked");
 
     if (conversationId && conversation?.conversation_version === "V1") {
       try {
