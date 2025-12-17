@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 from datetime import datetime
-from typing import Annotated, AsyncGenerator
+from typing import Annotated, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
@@ -510,6 +510,7 @@ async def get_conversation_skills(
         skills_response = []
         for skill in all_skills:
             # Determine type based on trigger
+            skill_type: Literal['repo', 'knowledge']
             if skill.trigger is None:
                 skill_type = 'repo'
             else:

@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -167,6 +168,6 @@ class SkillResponse(BaseModel):
     """Response model for skills endpoint."""
 
     name: str
-    type: str  # 'repo' or 'knowledge'
+    type: Literal['repo', 'knowledge']
     content: str
     triggers: list[str] = []
