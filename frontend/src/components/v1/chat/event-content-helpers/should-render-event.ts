@@ -16,7 +16,7 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
   // Render action events (with filtering)
   if (isActionEvent(event)) {
     // For V1, action is an object with kind property
-    const actionType = event.action?.kind;
+    const actionType = event.action.kind;
 
     if (!actionType) {
       return false;
