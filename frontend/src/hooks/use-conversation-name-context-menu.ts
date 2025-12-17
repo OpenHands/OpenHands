@@ -7,7 +7,6 @@ import useMetricsStore from "#/stores/metrics-store";
 import { isSystemMessage, isActionOrObservation } from "#/types/core/guards";
 import { ConversationStatus } from "#/types/conversation-status";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversationSandbox } from "./mutation/use-unified-stop-conversation";
 import { useGetTrajectory } from "./mutation/use-get-trajectory";
@@ -17,6 +16,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV0Event } from "#/types/v1/type-guards";
 import { useActiveConversation } from "./query/use-active-conversation";
+import { downloadConversation } from "#/utils/download-conversation";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -161,18 +161,7 @@ export function useConversationNameContextMenu({
 
     if (conversationId && conversation?.conversation_version === "V1") {
       try {
-        const blob =
-          await V1ConversationService.downloadConversation(conversationId);
-
-        // Create a download link
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `conversation_${conversationId}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+        await downloadConversation(conversationId);
       } catch (error) {
         displayErrorToast(t(I18nKey.CONVERSATION$DOWNLOAD_ERROR));
       }

@@ -3,12 +3,12 @@ import { usePostHog } from "posthog-js/react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { ConversationStatus } from "#/types/conversation-status";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
+import { downloadConversation } from "#/utils/download-conversation";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -111,18 +111,7 @@ export function ConversationCard({
 
     if (conversationId && conversationVersion === "V1") {
       try {
-        const blob =
-          await V1ConversationService.downloadConversation(conversationId);
-
-        // Create a download link
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `conversation_${conversationId}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+        await downloadConversation(conversationId);
       } catch (error) {
         console.error("Failed to download trajectory:", error);
         // Could add a toast notification here for user feedback
