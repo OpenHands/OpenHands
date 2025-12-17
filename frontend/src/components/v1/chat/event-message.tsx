@@ -174,13 +174,7 @@ export function EventMessage({
   }
 
   // Finish actions
-  if (
-    isActionEvent(event) &&
-    event.action &&
-    typeof event.action === "object" &&
-    "kind" in event.action &&
-    event.action.kind === "FinishAction"
-  ) {
+  if (isActionEvent(event) && event.action?.kind === "FinishAction") {
     return (
       <FinishEventMessage
         event={event as ActionEvent<FinishAction>}
