@@ -18,8 +18,8 @@ MetricsSnapshot = Any
 ConversationTrigger = Any
 
 
-class PublicConversation(BaseModel):
-    """Public conversation info model with all fields from AppConversationInfo."""
+class SharedConversation(BaseModel):
+    """Shared conversation info model with all fields from AppConversationInfo."""
 
     id: OpenHandsUUID = Field(default_factory=uuid4)
 
@@ -42,7 +42,7 @@ class PublicConversation(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
-class PublicConversationSortOrder(Enum):
+class SharedConversationSortOrder(Enum):
     CREATED_AT = 'CREATED_AT'
     CREATED_AT_DESC = 'CREATED_AT_DESC'
     UPDATED_AT = 'UPDATED_AT'
@@ -51,6 +51,6 @@ class PublicConversationSortOrder(Enum):
     TITLE_DESC = 'TITLE_DESC'
 
 
-class PublicConversationPage(BaseModel):
-    items: list[PublicConversation]
+class SharedConversationPage(BaseModel):
+    items: list[SharedConversation]
     next_page_id: str | None = None

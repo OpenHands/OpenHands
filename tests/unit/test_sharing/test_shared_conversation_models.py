@@ -3,19 +3,19 @@
 from datetime import datetime
 from uuid import uuid4
 
-from openhands.app_server.sharing.public_conversation_models import (
-    PublicConversation,
-    PublicConversationPage,
-    PublicConversationSortOrder,
+from openhands.app_server.sharing.shared_conversation_models import (
+    SharedConversation,
+    SharedConversationPage,
+    SharedConversationSortOrder,
 )
 
 
 def test_public_conversation_creation():
-    """Test that PublicConversation can be created with all required fields."""
+    """Test that SharedConversation can be created with all required fields."""
     conversation_id = uuid4()
     now = datetime.utcnow()
 
-    conversation = PublicConversation(
+    conversation = SharedConversation(
         id=conversation_id,
         created_by_user_id='test_user',
         sandbox_id='test_sandbox',
@@ -33,11 +33,11 @@ def test_public_conversation_creation():
 
 
 def test_public_conversation_page_creation():
-    """Test that PublicConversationPage can be created."""
+    """Test that SharedConversationPage can be created."""
     conversation_id = uuid4()
     now = datetime.utcnow()
 
-    conversation = PublicConversation(
+    conversation = SharedConversation(
         id=conversation_id,
         created_by_user_id='test_user',
         sandbox_id='test_sandbox',
@@ -48,7 +48,7 @@ def test_public_conversation_page_creation():
         parent_conversation_id=None,
     )
 
-    page = PublicConversationPage(
+    page = SharedConversationPage(
         items=[conversation],
         next_page_id='next_page',
     )
@@ -59,22 +59,22 @@ def test_public_conversation_page_creation():
 
 
 def test_public_conversation_sort_order_enum():
-    """Test that PublicConversationSortOrder enum has expected values."""
-    assert hasattr(PublicConversationSortOrder, 'CREATED_AT')
-    assert hasattr(PublicConversationSortOrder, 'CREATED_AT_DESC')
-    assert hasattr(PublicConversationSortOrder, 'UPDATED_AT')
-    assert hasattr(PublicConversationSortOrder, 'UPDATED_AT_DESC')
-    assert hasattr(PublicConversationSortOrder, 'TITLE')
-    assert hasattr(PublicConversationSortOrder, 'TITLE_DESC')
+    """Test that SharedConversationSortOrder enum has expected values."""
+    assert hasattr(SharedConversationSortOrder, 'CREATED_AT')
+    assert hasattr(SharedConversationSortOrder, 'CREATED_AT_DESC')
+    assert hasattr(SharedConversationSortOrder, 'UPDATED_AT')
+    assert hasattr(SharedConversationSortOrder, 'UPDATED_AT_DESC')
+    assert hasattr(SharedConversationSortOrder, 'TITLE')
+    assert hasattr(SharedConversationSortOrder, 'TITLE_DESC')
 
 
 def test_public_conversation_optional_fields():
-    """Test that PublicConversation works with optional fields."""
+    """Test that SharedConversation works with optional fields."""
     conversation_id = uuid4()
     parent_id = uuid4()
     now = datetime.utcnow()
 
-    conversation = PublicConversation(
+    conversation = SharedConversation(
         id=conversation_id,
         created_by_user_id='test_user',
         sandbox_id='test_sandbox',

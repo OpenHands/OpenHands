@@ -1,4 +1,4 @@
-"""Public Event router for OpenHands Server."""
+"""Shared Event router for OpenHands Server."""
 
 from datetime import datetime
 from typing import Annotated
@@ -7,24 +7,24 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.app_server.config import depends_public_event_service
+from openhands.app_server.config import depends_shared_event_service
 from openhands.app_server.event_callback.event_callback_models import EventKind
-from openhands.app_server.sharing.public_event_service import PublicEventService
+from openhands.app_server.sharing.shared_event_service import SharedEventService
 from openhands.sdk import Event
 
-router = APIRouter(prefix='/public-events', tags=['Public Events'])
+router = APIRouter(prefix='/shared-events', tags=['Shared Events'])
 
-public_event_service_dependency = depends_public_event_service()
+shared_event_service_dependency = depends_shared_event_service()
 
 # Attach dependency to router for testing
-router.public_event_service_dependency = public_event_service_dependency
+router.shared_event_service_dependency = shared_event_service_dependency
 
 
 # Read methods
 
 
 @router.get('/search')
-async def search_public_events(
+async def search_shared_events(
     conversation_id: Annotated[
         str,
         Query(title='Conversation ID to search events for'),
@@ -53,12 +53,12 @@ async def search_public_events(
         int,
         Query(title='The max number of results in the page', gt=0, lte=100),
     ] = 100,
-    public_event_service: PublicEventService = public_event_service_dependency,
+    shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> EventPage:
     """Search / List events for a public conversation."""
     assert limit > 0
     assert limit <= 100
-    return await public_event_service.search_public_events(
+    return await shared_event_service.search_shared_events(
         conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
@@ -91,10 +91,10 @@ async def count_public_events(
         EventSortOrder,
         Query(title='Sort order for results'),
     ] = EventSortOrder.TIMESTAMP,
-    public_event_service: PublicEventService = public_event_service_dependency,
+    shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> int:
     """Count events for a public conversation matching the given filters."""
-    return await public_event_service.count_public_events(
+    return await shared_event_service.count_public_events(
         conversation_id=conversation_id,
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
@@ -104,17 +104,17 @@ async def count_public_events(
 
 
 @router.get('')
-async def batch_get_public_events(
+async def batch_get_shared_events(
     conversation_id: Annotated[
         UUID,
         Query(title='Conversation ID to get events for'),
     ],
     id: Annotated[list[str], Query()],
-    public_event_service: PublicEventService = public_event_service_dependency,
+    shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> list[Event | None]:
     """Get a batch of events for a public conversation given their ids, returning null for any missing event."""
     assert len(id) <= 100
-    events = await public_event_service.batch_get_public_events(conversation_id, id)
+    events = await shared_event_service.batch_get_shared_events(conversation_id, id)
     return events
 
 
@@ -122,7 +122,7 @@ async def batch_get_public_events(
 async def get_public_event(
     conversation_id: UUID,
     event_id: str,
-    public_event_service: PublicEventService = public_event_service_dependency,
+    shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> Event | None:
     """Get a single event from a public conversation by conversation_id and event_id."""
-    return await public_event_service.get_public_event(conversation_id, event_id)
+    return await shared_event_service.get_public_event(conversation_id, event_id)

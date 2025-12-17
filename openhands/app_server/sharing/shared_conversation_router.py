@@ -1,4 +1,4 @@
-"""Public Conversation router for OpenHands Server."""
+"""Shared Conversation router for OpenHands Server."""
 
 from datetime import datetime
 from typing import Annotated
@@ -6,22 +6,22 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 
-from openhands.app_server.config import depends_public_conversation_info_service
-from openhands.app_server.sharing.public_conversation_info_service import (
-    PublicConversationInfoService,
+from openhands.app_server.config import depends_shared_conversation_info_service
+from openhands.app_server.sharing.shared_conversation_info_service import (
+    SharedConversationInfoService,
 )
-from openhands.app_server.sharing.public_conversation_models import (
-    PublicConversation,
-    PublicConversationPage,
-    PublicConversationSortOrder,
+from openhands.app_server.sharing.shared_conversation_models import (
+    SharedConversation,
+    SharedConversationPage,
+    SharedConversationSortOrder,
 )
 
-router = APIRouter(prefix='/public-conversations', tags=['Public Conversations'])
+router = APIRouter(prefix='/shared-conversations', tags=['Shared Conversations'])
 
-public_conversation_service_dependency = depends_public_conversation_info_service()
+shared_conversation_service_dependency = depends_shared_conversation_info_service()
 
 # Attach dependency to router for testing
-router.public_conversation_service_dependency = public_conversation_service_dependency
+router.shared_conversation_service_dependency = shared_conversation_service_dependency
 
 
 # Read methods
@@ -50,9 +50,9 @@ async def search_public_conversations(
         Query(title='Filter by updated_at less than this datetime'),
     ] = None,
     sort_order: Annotated[
-        PublicConversationSortOrder,
+        SharedConversationSortOrder,
         Query(title='Sort order for results'),
-    ] = PublicConversationSortOrder.CREATED_AT_DESC,
+    ] = SharedConversationSortOrder.CREATED_AT_DESC,
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -71,12 +71,12 @@ async def search_public_conversations(
             title='If True, include sub-conversations in the results. If False (default), exclude all sub-conversations.'
         ),
     ] = False,
-    public_conversation_service: PublicConversationInfoService = public_conversation_service_dependency,
-) -> PublicConversationPage:
+    shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
+) -> SharedConversationPage:
     """Search / List public conversations."""
     assert limit > 0
     assert limit <= 100
-    return await public_conversation_service.search_public_conversation_info(
+    return await shared_conversation_service.search_public_conversation_info(
         title__contains=title__contains,
         created_at__gte=created_at__gte,
         created_at__lt=created_at__lt,
@@ -111,10 +111,10 @@ async def count_public_conversations(
         datetime | None,
         Query(title='Filter by updated_at less than this datetime'),
     ] = None,
-    public_conversation_service: PublicConversationInfoService = public_conversation_service_dependency,
+    shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
 ) -> int:
     """Count public conversations matching the given filters."""
-    return await public_conversation_service.count_public_conversation_info(
+    return await shared_conversation_service.count_shared_conversation_info(
         title__contains=title__contains,
         created_at__gte=created_at__gte,
         created_at__lt=created_at__lt,
@@ -126,12 +126,12 @@ async def count_public_conversations(
 @router.get('')
 async def batch_get_public_conversations(
     ids: Annotated[list[str], Query()],
-    public_conversation_service: PublicConversationInfoService = public_conversation_service_dependency,
-) -> list[PublicConversation | None]:
+    shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
+) -> list[SharedConversation | None]:
     """Get a batch of public conversations given their ids. Return None for any missing or non-public."""
     assert len(ids) <= 100
     uuids = [UUID(id_) for id_ in ids]
     public_conversations = (
-        await public_conversation_service.batch_get_public_conversation_info(uuids)
+        await shared_conversation_service.batch_get_shared_conversation_info(uuids)
     )
     return public_conversations

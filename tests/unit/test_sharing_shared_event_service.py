@@ -1,4 +1,4 @@
-"""Tests for PublicEventService."""
+"""Tests for SharedEventService."""
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
@@ -8,12 +8,12 @@ import pytest
 
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event.event_service import EventService
-from openhands.app_server.sharing.public_conversation_info_service import (
-    PublicConversationInfoService,
+from openhands.app_server.sharing.shared_conversation_info_service import (
+    SharedConversationInfoService,
 )
-from openhands.app_server.sharing.public_conversation_models import PublicConversation
-from openhands.app_server.sharing.public_event_service_impl import (
-    PublicEventServiceImpl,
+from openhands.app_server.sharing.shared_conversation_models import SharedConversation
+from openhands.app_server.sharing.shared_event_service_impl import (
+    SharedEventServiceImpl,
 )
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
@@ -21,8 +21,8 @@ from openhands.sdk.llm.utils.metrics import TokenUsage
 
 @pytest.fixture
 def mock_public_conversation_service():
-    """Create a mock PublicConversationInfoService."""
-    return AsyncMock(spec=PublicConversationInfoService)
+    """Create a mock SharedConversationInfoService."""
+    return AsyncMock(spec=SharedConversationInfoService)
 
 
 @pytest.fixture
@@ -32,9 +32,9 @@ def mock_event_service():
 
 
 @pytest.fixture
-def public_event_service(mock_public_conversation_service, mock_event_service):
-    """Create a PublicEventService for testing."""
-    return PublicEventServiceImpl(
+def shared_event_service(mock_public_conversation_service, mock_event_service):
+    """Create a SharedEventService for testing."""
+    return SharedEventServiceImpl(
         public_conversation_service=mock_public_conversation_service,
         event_service=mock_event_service,
     )
@@ -43,7 +43,7 @@ def public_event_service(mock_public_conversation_service, mock_event_service):
 @pytest.fixture
 def sample_public_conversation():
     """Create a sample public conversation."""
-    return PublicConversation(
+    return SharedConversation(
         id=uuid4(),
         created_by_user_id='test_user',
         sandbox_id='test_sandbox',
@@ -66,12 +66,12 @@ def sample_event():
     return None
 
 
-class TestPublicEventService:
-    """Test cases for PublicEventService."""
+class TestSharedEventService:
+    """Test cases for SharedEventService."""
 
     async def test_get_public_event_returns_event_for_public_conversation(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
         sample_public_conversation,
@@ -90,7 +90,7 @@ class TestPublicEventService:
         mock_event_service.get_event.return_value = sample_event
 
         # Call the method
-        result = await public_event_service.get_public_event(conversation_id, event_id)
+        result = await shared_event_service.get_public_event(conversation_id, event_id)
 
         # Verify the result
         assert result == sample_event
@@ -101,7 +101,7 @@ class TestPublicEventService:
 
     async def test_get_public_event_returns_none_for_private_conversation(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
     ):
@@ -115,7 +115,7 @@ class TestPublicEventService:
         )
 
         # Call the method
-        result = await public_event_service.get_public_event(conversation_id, event_id)
+        result = await shared_event_service.get_public_event(conversation_id, event_id)
 
         # Verify the result
         assert result is None
@@ -127,7 +127,7 @@ class TestPublicEventService:
 
     async def test_search_public_events_returns_events_for_public_conversation(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
         sample_public_conversation,
@@ -146,7 +146,7 @@ class TestPublicEventService:
         mock_event_service.search_events.return_value = mock_event_page
 
         # Call the method
-        result = await public_event_service.search_public_events(
+        result = await shared_event_service.search_public_events(
             conversation_id=conversation_id,
             kind__eq='ActionEvent',
             limit=10,
@@ -171,7 +171,7 @@ class TestPublicEventService:
 
     async def test_search_public_events_returns_empty_for_private_conversation(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
     ):
@@ -184,7 +184,7 @@ class TestPublicEventService:
         )
 
         # Call the method
-        result = await public_event_service.search_public_events(
+        result = await shared_event_service.search_public_events(
             conversation_id=conversation_id,
             limit=10,
         )
@@ -202,7 +202,7 @@ class TestPublicEventService:
 
     async def test_count_public_events_returns_count_for_public_conversation(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
         sample_public_conversation,
@@ -219,7 +219,7 @@ class TestPublicEventService:
         mock_event_service.count_events.return_value = 5
 
         # Call the method
-        result = await public_event_service.count_public_events(
+        result = await shared_event_service.count_public_events(
             conversation_id=conversation_id,
             kind__eq='ActionEvent',
         )
@@ -240,7 +240,7 @@ class TestPublicEventService:
 
     async def test_count_public_events_returns_zero_for_private_conversation(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
     ):
@@ -253,7 +253,7 @@ class TestPublicEventService:
         )
 
         # Call the method
-        result = await public_event_service.count_public_events(
+        result = await shared_event_service.count_public_events(
             conversation_id=conversation_id,
         )
 
@@ -268,7 +268,7 @@ class TestPublicEventService:
 
     async def test_batch_get_public_events_returns_events_for_public_conversation(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
         sample_public_conversation,
@@ -287,7 +287,7 @@ class TestPublicEventService:
         mock_event_service.get_event.side_effect = [sample_event, None]
 
         # Call the method
-        result = await public_event_service.batch_get_public_events(
+        result = await shared_event_service.batch_get_public_events(
             conversation_id, event_ids
         )
 
@@ -306,7 +306,7 @@ class TestPublicEventService:
 
     async def test_batch_get_public_events_returns_none_for_private_conversation(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
     ):
@@ -320,7 +320,7 @@ class TestPublicEventService:
         )
 
         # Call the method
-        result = await public_event_service.batch_get_public_events(
+        result = await shared_event_service.batch_get_public_events(
             conversation_id, event_ids
         )
 
@@ -339,7 +339,7 @@ class TestPublicEventService:
 
     async def test_search_public_events_with_all_parameters(
         self,
-        public_event_service,
+        shared_event_service,
         mock_public_conversation_service,
         mock_event_service,
         sample_public_conversation,
@@ -359,7 +359,7 @@ class TestPublicEventService:
         mock_event_service.search_events.return_value = mock_event_page
 
         # Call the method with all parameters
-        result = await public_event_service.search_public_events(
+        result = await shared_event_service.search_public_events(
             conversation_id=conversation_id,
             kind__eq='ObservationEvent',
             timestamp__gte=timestamp_gte,

@@ -1,4 +1,4 @@
-"""Tests for PublicConversationInfoService."""
+"""Tests for SharedConversationInfoService."""
 
 from datetime import UTC, datetime
 from typing import AsyncGenerator
@@ -14,11 +14,11 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
-from openhands.app_server.sharing.public_conversation_models import (
-    PublicConversationSortOrder,
+from openhands.app_server.sharing.shared_conversation_models import (
+    SharedConversationSortOrder,
 )
-from openhands.app_server.sharing.sql_public_conversation_info_service import (
-    SQLPublicConversationInfoService,
+from openhands.app_server.sharing.sql_shared_conversation_info_service import (
+    SQLSharedConversationInfoService,
 )
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
@@ -60,8 +60,8 @@ async def async_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
 
 @pytest.fixture
 async def public_conversation_service(async_session):
-    """Create a PublicConversationInfoService for testing."""
-    return SQLPublicConversationInfoService(db_session=async_session)
+    """Create a SharedConversationInfoService for testing."""
+    return SQLSharedConversationInfoService(db_session=async_session)
 
 
 @pytest.fixture
@@ -140,8 +140,8 @@ def sample_private_conversation_info():
     )
 
 
-class TestPublicConversationInfoService:
-    """Test cases for PublicConversationInfoService."""
+class TestSharedConversationInfoService:
+    """Test cases for SharedConversationInfoService."""
 
     @pytest.mark.asyncio
     @pytest.mark.asyncio
@@ -290,7 +290,7 @@ class TestPublicConversationInfoService:
 
         # Test sort by title ascending
         result = await public_conversation_service.search_public_conversation_info(
-            sort_order=PublicConversationSortOrder.TITLE
+            sort_order=SharedConversationSortOrder.TITLE
         )
         assert len(result.items) == 2
         assert result.items[0].title == 'A First Conversation'
@@ -298,7 +298,7 @@ class TestPublicConversationInfoService:
 
         # Test sort by title descending
         result = await public_conversation_service.search_public_conversation_info(
-            sort_order=PublicConversationSortOrder.TITLE_DESC
+            sort_order=SharedConversationSortOrder.TITLE_DESC
         )
         assert len(result.items) == 2
         assert result.items[0].title == 'B Second Conversation'
@@ -306,7 +306,7 @@ class TestPublicConversationInfoService:
 
         # Test sort by created_at ascending
         result = await public_conversation_service.search_public_conversation_info(
-            sort_order=PublicConversationSortOrder.CREATED_AT
+            sort_order=SharedConversationSortOrder.CREATED_AT
         )
         assert len(result.items) == 2
         assert result.items[0].id == conv1.id
@@ -314,7 +314,7 @@ class TestPublicConversationInfoService:
 
         # Test sort by created_at descending (default)
         result = await public_conversation_service.search_public_conversation_info(
-            sort_order=PublicConversationSortOrder.CREATED_AT_DESC
+            sort_order=SharedConversationSortOrder.CREATED_AT_DESC
         )
         assert len(result.items) == 2
         assert result.items[0].id == conv2.id
@@ -404,7 +404,7 @@ class TestPublicConversationInfoService:
 
         # Get first page with limit 2
         result = await public_conversation_service.search_public_conversation_info(
-            limit=2, sort_order=PublicConversationSortOrder.CREATED_AT
+            limit=2, sort_order=SharedConversationSortOrder.CREATED_AT
         )
         assert len(result.items) == 2
         assert result.next_page_id is not None
@@ -413,7 +413,7 @@ class TestPublicConversationInfoService:
         result2 = await public_conversation_service.search_public_conversation_info(
             limit=2,
             page_id=result.next_page_id,
-            sort_order=PublicConversationSortOrder.CREATED_AT,
+            sort_order=SharedConversationSortOrder.CREATED_AT,
         )
         assert len(result2.items) == 2
         assert result2.next_page_id is not None

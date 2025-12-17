@@ -1,8 +1,8 @@
-"""SQL implementation of PublicConversationInfoService.
+"""SQL implementation of SharedConversationInfoService.
 
-This implementation provides read-only access to public conversations:
+This implementation provides read-only access to shared conversations:
 - Direct database access without user permission checks
-- Filters only conversations marked as public
+- Filters only conversations marked as shared (currently public)
 - Full async/await support using SQL async db_sessions
 """
 
@@ -22,14 +22,14 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
     StoredConversationMetadata,
 )
 from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.sharing.public_conversation_info_service import (
-    PublicConversationInfoService,
-    PublicConversationInfoServiceInjector,
+from openhands.app_server.sharing.shared_conversation_info_service import (
+    SharedConversationInfoService,
+    SharedConversationInfoServiceInjector,
 )
-from openhands.app_server.sharing.public_conversation_models import (
-    PublicConversation,
-    PublicConversationPage,
-    PublicConversationSortOrder,
+from openhands.app_server.sharing.shared_conversation_models import (
+    SharedConversation,
+    SharedConversationPage,
+    SharedConversationSortOrder,
 )
 from openhands.integrations.provider import ProviderType
 from openhands.sdk.llm import MetricsSnapshot
@@ -39,24 +39,24 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class SQLPublicConversationInfoService(PublicConversationInfoService):
-    """SQL implementation of PublicConversationInfoService for public conversations only."""
+class SQLSharedConversationInfoService(SharedConversationInfoService):
+    """SQL implementation of SharedConversationInfoService for shared conversations only."""
 
     db_session: AsyncSession
 
-    async def search_public_conversation_info(
+    async def search_shared_conversation_info(
         self,
         title__contains: str | None = None,
         created_at__gte: datetime | None = None,
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
-        sort_order: PublicConversationSortOrder = PublicConversationSortOrder.CREATED_AT_DESC,
+        sort_order: SharedConversationSortOrder = SharedConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
         include_sub_conversations: bool = False,
-    ) -> PublicConversationPage:
-        """Search for public conversations."""
+    ) -> SharedConversationPage:
+        """Search for shared conversations."""
         query = self._public_select()
 
         # Conditionally exclude sub-conversations based on the parameter
@@ -76,17 +76,17 @@ class SQLPublicConversationInfoService(PublicConversationInfoService):
         )
 
         # Add sort order
-        if sort_order == PublicConversationSortOrder.CREATED_AT:
+        if sort_order == SharedConversationSortOrder.CREATED_AT:
             query = query.order_by(StoredConversationMetadata.created_at)
-        elif sort_order == PublicConversationSortOrder.CREATED_AT_DESC:
+        elif sort_order == SharedConversationSortOrder.CREATED_AT_DESC:
             query = query.order_by(StoredConversationMetadata.created_at.desc())
-        elif sort_order == PublicConversationSortOrder.UPDATED_AT:
+        elif sort_order == SharedConversationSortOrder.UPDATED_AT:
             query = query.order_by(StoredConversationMetadata.last_updated_at)
-        elif sort_order == PublicConversationSortOrder.UPDATED_AT_DESC:
+        elif sort_order == SharedConversationSortOrder.UPDATED_AT_DESC:
             query = query.order_by(StoredConversationMetadata.last_updated_at.desc())
-        elif sort_order == PublicConversationSortOrder.TITLE:
+        elif sort_order == SharedConversationSortOrder.TITLE:
             query = query.order_by(StoredConversationMetadata.title)
-        elif sort_order == PublicConversationSortOrder.TITLE_DESC:
+        elif sort_order == SharedConversationSortOrder.TITLE_DESC:
             query = query.order_by(StoredConversationMetadata.title.desc())
 
         # Apply pagination
@@ -118,9 +118,9 @@ class SQLPublicConversationInfoService(PublicConversationInfoService):
         if has_more:
             next_page_id = str(offset + limit)
 
-        return PublicConversationPage(items=items, next_page_id=next_page_id)
+        return SharedConversationPage(items=items, next_page_id=next_page_id)
 
-    async def count_public_conversation_info(
+    async def count_shared_conversation_info(
         self,
         title__contains: str | None = None,
         created_at__gte: datetime | None = None,
@@ -148,9 +148,9 @@ class SQLPublicConversationInfoService(PublicConversationInfoService):
         result = await self.db_session.execute(query)
         return result.scalar() or 0
 
-    async def get_public_conversation_info(
+    async def get_shared_conversation_info(
         self, conversation_id: UUID
-    ) -> PublicConversation | None:
+    ) -> SharedConversation | None:
         """Get a single public conversation info, returning None if missing or not public."""
         query = self._public_select().where(
             StoredConversationMetadata.conversation_id == str(conversation_id)
@@ -212,8 +212,8 @@ class SQLPublicConversationInfoService(PublicConversationInfoService):
         self,
         stored: StoredConversationMetadata,
         sub_conversation_ids: list[UUID] | None = None,
-    ) -> PublicConversation:
-        """Convert StoredConversationMetadata to PublicConversation."""
+    ) -> SharedConversation:
+        """Convert StoredConversationMetadata to SharedConversation."""
         # V1 conversations should always have a sandbox_id
         sandbox_id = stored.sandbox_id
         assert sandbox_id is not None
@@ -239,7 +239,7 @@ class SQLPublicConversationInfoService(PublicConversationInfoService):
         created_at = self._fix_timezone(stored.created_at)
         updated_at = self._fix_timezone(stored.last_updated_at)
 
-        return PublicConversation(
+        return SharedConversation(
             id=UUID(stored.conversation_id),
             created_by_user_id=stored.user_id if stored.user_id else None,
             sandbox_id=stored.sandbox_id,
@@ -270,13 +270,13 @@ class SQLPublicConversationInfoService(PublicConversationInfoService):
         return value
 
 
-class SQLPublicConversationInfoServiceInjector(PublicConversationInfoServiceInjector):
+class SQLSharedConversationInfoServiceInjector(SharedConversationInfoServiceInjector):
     async def inject(
         self, state: InjectorState, request: Request | None = None
-    ) -> AsyncGenerator[PublicConversationInfoService, None]:
+    ) -> AsyncGenerator[SharedConversationInfoService, None]:
         # Define inline to prevent circular lookup
         from openhands.app_server.config import get_db_session
 
         async with get_db_session(state, request) as db_session:
-            service = SQLPublicConversationInfoService(db_session=db_session)
+            service = SQLSharedConversationInfoService(db_session=db_session)
             yield service

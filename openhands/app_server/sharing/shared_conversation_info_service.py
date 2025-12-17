@@ -4,34 +4,34 @@ from datetime import datetime
 from uuid import UUID
 
 from openhands.app_server.services.injector import Injector
-from openhands.app_server.sharing.public_conversation_models import (
-    PublicConversation,
-    PublicConversationPage,
-    PublicConversationSortOrder,
+from openhands.app_server.sharing.shared_conversation_models import (
+    SharedConversation,
+    SharedConversationPage,
+    SharedConversationSortOrder,
 )
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
-class PublicConversationInfoService(ABC):
-    """Service for accessing public conversation info without user restrictions."""
+class SharedConversationInfoService(ABC):
+    """Service for accessing shared conversation info without user restrictions."""
 
     @abstractmethod
-    async def search_public_conversation_info(
+    async def search_shared_conversation_info(
         self,
         title__contains: str | None = None,
         created_at__gte: datetime | None = None,
         created_at__lt: datetime | None = None,
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
-        sort_order: PublicConversationSortOrder = PublicConversationSortOrder.CREATED_AT_DESC,
+        sort_order: SharedConversationSortOrder = SharedConversationSortOrder.CREATED_AT_DESC,
         page_id: str | None = None,
         limit: int = 100,
         include_sub_conversations: bool = False,
-    ) -> PublicConversationPage:
-        """Search for public conversations."""
+    ) -> SharedConversationPage:
+        """Search for shared conversations."""
 
     @abstractmethod
-    async def count_public_conversation_info(
+    async def count_shared_conversation_info(
         self,
         title__contains: str | None = None,
         created_at__gte: datetime | None = None,
@@ -39,27 +39,27 @@ class PublicConversationInfoService(ABC):
         updated_at__gte: datetime | None = None,
         updated_at__lt: datetime | None = None,
     ) -> int:
-        """Count public conversations."""
+        """Count shared conversations."""
 
     @abstractmethod
-    async def get_public_conversation_info(
+    async def get_shared_conversation_info(
         self, conversation_id: UUID
-    ) -> PublicConversation | None:
-        """Get a single public conversation info, returning None if missing or not public."""
+    ) -> SharedConversation | None:
+        """Get a single shared conversation info, returning None if missing or not shared."""
 
-    async def batch_get_public_conversation_info(
+    async def batch_get_shared_conversation_info(
         self, conversation_ids: list[UUID]
-    ) -> list[PublicConversation | None]:
-        """Get a batch of public conversation info, return None for any missing or non-public."""
+    ) -> list[SharedConversation | None]:
+        """Get a batch of shared conversation info, return None for any missing or non-shared."""
         return await asyncio.gather(
             *[
-                self.get_public_conversation_info(conversation_id)
+                self.get_shared_conversation_info(conversation_id)
                 for conversation_id in conversation_ids
             ]
         )
 
 
-class PublicConversationInfoServiceInjector(
-    DiscriminatedUnionMixin, Injector[PublicConversationInfoService], ABC
+class SharedConversationInfoServiceInjector(
+    DiscriminatedUnionMixin, Injector[SharedConversationInfoService], ABC
 ):
     pass
