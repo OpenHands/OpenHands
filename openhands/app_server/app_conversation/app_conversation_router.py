@@ -28,7 +28,7 @@ else:
         return await async_iterator.__anext__()
 
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -417,8 +417,6 @@ async def export_conversation(
     Returns:
         A zip file containing the conversation trajectory
     """
-    from fastapi.responses import Response
-
     try:
         # Get the zip file content
         zip_content = await app_conversation_service.export_conversation(
@@ -434,12 +432,8 @@ async def export_conversation(
             },
         )
     except ValueError as e:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=500, detail=f'Failed to download trajectory: {str(e)}'
         )
