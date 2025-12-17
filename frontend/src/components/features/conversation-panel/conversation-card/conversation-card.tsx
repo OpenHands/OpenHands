@@ -47,7 +47,7 @@ export function ConversationCard({
 }: ConversationCardProps) {
   const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
-  const { downloadConversation } = useDownloadConversation();
+  const { mutate: downloadConversation } = useDownloadConversation();
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -103,15 +103,14 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
-  const handleDownloadConversation = async (
+  const handleDownloadConversation = (
     event: React.MouseEvent<HTMLButtonElement>,
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    posthog.capture("download_trajectory_button_clicked");
 
     if (conversationId && conversationVersion === "V1") {
-      await downloadConversation(conversationId);
+      downloadConversation(conversationId);
     }
 
     onContextMenuToggle?.(false);
