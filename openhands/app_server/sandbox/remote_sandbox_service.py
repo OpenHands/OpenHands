@@ -306,18 +306,24 @@ class RemoteSandboxService(SandboxService):
         try:
             response = await self._send_runtime_api_request(
                 'GET',
-                f'/list',
+                '/list',
             )
             response.raise_for_status()
             content = response.json()
             for runtime in content['runtimes']:
                 if session_api_key == runtime['session_api_key']:
-                    sandbox = await self._secure_select().filter(StoredRemoteSandbox.id == runtime.get('session_id')).first()
+                    sandbox = (
+                        await self._secure_select()
+                        .filter(StoredRemoteSandbox.id == runtime.get('session_id'))
+                        .first()
+                    )
                     if sandbox is None:
                         raise ValueError('sandbox_not_found')
                     return await self._to_sandbox_info(sandbox, runtime)
-        except Exception as e:
-            _logger.exception('Error getting sandbox from session_api_key', stack_info=True)
+        except Exception:
+            _logger.exception(
+                'Error getting sandbox from session_api_key', stack_info=True
+            )
         return None
 
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
