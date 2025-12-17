@@ -11,6 +11,7 @@ import type {
   V1AppConversationStartTask,
   V1AppConversationStartTaskPage,
   V1AppConversation,
+  GetSkillsResponse,
 } from "./v1-conversation-service.types";
 
 class V1ConversationService {
@@ -329,6 +330,18 @@ class V1ConversationService {
       },
     );
     return response.data;
+  }
+
+  /**
+   * Get all skills associated with a V1 conversation
+   * @param conversationId The conversation ID
+   * @returns The available skills associated with the conversation
+   */
+  static async getSkills(conversationId: string): Promise<GetSkillsResponse> {
+    const { data } = await openHands.get<GetSkillsResponse>(
+      `/api/v1/app-conversations/${conversationId}/skills`,
+    );
+    return data;
   }
 }
 
