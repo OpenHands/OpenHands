@@ -76,8 +76,8 @@ from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.sdk.utils.paging import page_iterator
+from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 from openhands.tools.preset.default import (
     get_default_tools,
@@ -1192,7 +1192,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Get all events for this conversation
             i = 0
-            async for event in page_iterator(self.event_service.search_events, conversation_id__eq=conversation_id):
+            async for event in page_iterator(
+                self.event_service.search_events, conversation_id__eq=conversation_id
+            ):
                 event_filename = f'event_{i:06d}_{event.id}.json'
                 event_path = os.path.join(temp_dir, event_filename)
 
