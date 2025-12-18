@@ -184,6 +184,7 @@ export const handlers = [
       FEATURE_FLAGS: {
         ENABLE_BILLING: false,
         HIDE_LLM_SETTINGS: IS_MOCK_SAAS,
+        HIDE_BILLING: false,
         ENABLE_JIRA: false,
         ENABLE_JIRA_DC: false,
         ENABLE_LINEAR: false,

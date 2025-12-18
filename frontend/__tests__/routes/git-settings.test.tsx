@@ -21,6 +21,7 @@ const VALID_OSS_CONFIG: GetConfigResponse = {
   FEATURE_FLAGS: {
     ENABLE_BILLING: false,
     HIDE_LLM_SETTINGS: false,
+    HIDE_BILLING: false,
     ENABLE_JIRA: false,
     ENABLE_JIRA_DC: false,
     ENABLE_LINEAR: false,
@@ -34,6 +35,7 @@ const VALID_SAAS_CONFIG: GetConfigResponse = {
   FEATURE_FLAGS: {
     ENABLE_BILLING: false,
     HIDE_LLM_SETTINGS: false,
+    HIDE_BILLING: false,
     ENABLE_JIRA: false,
     ENABLE_JIRA_DC: false,
     ENABLE_LINEAR: false,
@@ -353,7 +355,9 @@ describe("Form submission", () => {
 
     renderGitSettingsScreen();
 
-    const azureDevOpsInput = await screen.findByTestId("azure-devops-token-input");
+    const azureDevOpsInput = await screen.findByTestId(
+      "azure-devops-token-input",
+    );
     const submit = await screen.findByTestId("submit-button");
 
     await userEvent.type(azureDevOpsInput, "test-token");

@@ -97,7 +97,7 @@ export const organizationService = {
     emails: string[];
   }) => {
     const { data } = await openHands.post<OrganizationMember[]>(
-      `/api/organizations/${orgId}/invite/batch`,
+      `/api/organizations/${orgId}/members/invite`,
       {
         emails,
       },

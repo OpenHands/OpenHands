@@ -66,6 +66,7 @@ class SaaSServerConfig(ServerConfig):
     github_client_id: str = os.environ.get('GITHUB_APP_CLIENT_ID', '')
     enable_billing = os.environ.get('ENABLE_BILLING', 'false') == 'true'
     hide_llm_settings = os.environ.get('HIDE_LLM_SETTINGS', 'false') == 'true'
+    hide_billing = os.environ.get('HIDE_BILLING', 'false') == 'true'
     auth_url: str | None = os.environ.get('AUTH_URL')
     settings_store_class: str = 'storage.saas_settings_store.SaasSettingsStore'
     secret_store_class: str = 'storage.saas_secrets_store.SaasSecretsStore'
@@ -171,6 +172,7 @@ class SaaSServerConfig(ServerConfig):
             'FEATURE_FLAGS': {
                 'ENABLE_BILLING': self.enable_billing,
                 'HIDE_LLM_SETTINGS': self.hide_llm_settings,
+                'HIDE_BILLING': self.hide_billing,
                 'ENABLE_JIRA': self.enable_jira,
                 'ENABLE_JIRA_DC': self.enable_jira_dc,
                 'ENABLE_LINEAR': self.enable_linear,
