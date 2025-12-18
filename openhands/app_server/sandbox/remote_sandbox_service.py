@@ -346,7 +346,6 @@ class RemoteSandboxService(SandboxService):
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
-            await self.get_sandbox_by_session_api_key('ab5a203c-d274-4f9f-9881-daa886f95e87')
 
             # Enforce sandbox limits by cleaning up old sandboxes
             await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
