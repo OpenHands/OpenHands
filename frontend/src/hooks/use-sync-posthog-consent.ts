@@ -19,7 +19,7 @@ export const useSyncPostHogConsent = () => {
       return;
     }
 
-    const backendConsent = settings.USER_CONSENTS_TO_ANALYTICS;
+    const backendConsent = settings.user_consents_to_analytics;
 
     // Only sync if there's a backend preference set
     if (backendConsent !== null) {

@@ -24,7 +24,7 @@ export function useAddMcpServer() {
     mutationFn: async (server: MCPServerConfig): Promise<void> => {
       if (!settings) return;
 
-      const currentConfig = settings.MCP_CONFIG || {
+      const currentConfig = settings.mcp_config || {
         sse_servers: [],
         stdio_servers: [],
         shttp_servers: [],
@@ -57,7 +57,7 @@ export function useAddMcpServer() {
 
       const apiSettings = {
         mcp_config: newConfig,
-        v1_enabled: settings.V1_ENABLED,
+        v1_enabled: settings.v1_enabled,
       };
 
       await SettingsService.saveSettings(apiSettings);

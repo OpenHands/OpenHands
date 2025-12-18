@@ -82,13 +82,45 @@ export function ConversationTabContent() {
     isPlannerActive,
   ]);
 
+  const conversationKey = useMemo(() => {
+    if (isEditorActive) {
+      return "editor";
+    }
+    if (isBrowserActive) {
+      return "browser";
+    }
+    if (isServedActive) {
+      return "served";
+    }
+    if (isVSCodeActive) {
+      return "vscode";
+    }
+    if (isTerminalActive) {
+      return "terminal";
+    }
+    if (isPlannerActive) {
+      return "planner";
+    }
+    return "";
+  }, [
+    isEditorActive,
+    isBrowserActive,
+    isServedActive,
+    isVSCodeActive,
+    isTerminalActive,
+    isPlannerActive,
+  ]);
+
   if (shouldShownAgentLoading) {
     return <ConversationLoading />;
   }
 
   return (
     <TabContainer>
-      <ConversationTabTitle title={conversationTabTitle} />
+      <ConversationTabTitle
+        title={conversationTabTitle}
+        conversationKey={conversationKey}
+      />
       <TabContentArea>
         {tabs.map(({ key, component: Component, isActive }) => (
           <TabWrapper

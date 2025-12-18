@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -161,3 +162,12 @@ class AppConversationStartTask(BaseModel):
 class AppConversationStartTaskPage(BaseModel):
     items: list[AppConversationStartTask]
     next_page_id: str | None = None
+
+
+class SkillResponse(BaseModel):
+    """Response model for skills endpoint."""
+
+    name: str
+    type: Literal['repo', 'knowledge']
+    content: str
+    triggers: list[str] = []

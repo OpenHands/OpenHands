@@ -38,37 +38,31 @@ export type MCPConfig = {
 };
 
 export type Settings = {
-  LLM_MODEL: string;
-  LLM_BASE_URL: string;
-  AGENT: string;
-  LANGUAGE: string;
-  LLM_API_KEY_SET: boolean;
-  SEARCH_API_KEY_SET: boolean;
-  CONFIRMATION_MODE: boolean;
-  SECURITY_ANALYZER: string | null;
-  REMOTE_RUNTIME_RESOURCE_FACTOR: number | null;
-  PROVIDER_TOKENS_SET: Partial<Record<Provider, string | null>>;
-  ENABLE_DEFAULT_CONDENSER: boolean;
+  llm_model: string;
+  llm_base_url: string;
+  agent: string;
+  language: string;
+  llm_api_key: string | null;
+  llm_api_key_set: boolean;
+  search_api_key_set: boolean;
+  confirmation_mode: boolean;
+  security_analyzer: string | null;
+  remote_runtime_resource_factor: number | null;
+  provider_tokens_set: Partial<Record<Provider, string | null>>;
+  enable_default_condenser: boolean;
   // Maximum number of events before the condenser runs
-  CONDENSER_MAX_SIZE: number | null;
-  ENABLE_SOUND_NOTIFICATIONS: boolean;
-  ENABLE_PROACTIVE_CONVERSATION_STARTERS: boolean;
-  ENABLE_SOLVABILITY_ANALYSIS: boolean;
-  USER_CONSENTS_TO_ANALYTICS: boolean | null;
-  SEARCH_API_KEY?: string;
-  IS_NEW_USER?: boolean;
-  MCP_CONFIG?: MCPConfig;
-  MAX_BUDGET_PER_TASK: number | null;
-  EMAIL?: string;
-  EMAIL_VERIFIED?: boolean;
-  GIT_USER_NAME?: string;
-  GIT_USER_EMAIL?: string;
-  V1_ENABLED?: boolean;
-};
-
-export type PostSettings = Settings & {
+  condenser_max_size: number | null;
+  enable_sound_notifications: boolean;
+  enable_proactive_conversation_starters: boolean;
+  enable_solvability_analysis: boolean;
   user_consents_to_analytics: boolean | null;
-  llm_api_key?: string | null;
   search_api_key?: string;
+  is_new_user?: boolean;
   mcp_config?: MCPConfig;
+  max_budget_per_task: number | null;
+  email?: string;
+  email_verified?: boolean;
+  git_user_name?: string;
+  git_user_email?: string;
+  v1_enabled?: boolean;
 };

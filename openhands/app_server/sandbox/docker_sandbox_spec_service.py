@@ -14,9 +14,9 @@ from openhands.app_server.sandbox.sandbox_spec_models import (
     SandboxSpecInfo,
 )
 from openhands.app_server.sandbox.sandbox_spec_service import (
-    AGENT_SERVER_IMAGE,
     SandboxSpecService,
     SandboxSpecServiceInjector,
+    get_default_agent_server_image,
 )
 from openhands.app_server.services.injector import InjectorState
 
@@ -34,7 +34,7 @@ def get_docker_client() -> docker.DockerClient:
 def get_default_sandbox_specs():
     return [
         SandboxSpecInfo(
-            id=AGENT_SERVER_IMAGE,
+            id=get_default_agent_server_image(),
             command=['--port', '8000'],
             initial_env={
                 'OPENVSCODE_SERVER_ROOT': '/openhands/.openvscode-server',
