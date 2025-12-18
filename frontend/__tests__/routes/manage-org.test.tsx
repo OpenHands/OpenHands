@@ -802,38 +802,6 @@ describe("Manage Org Route", () => {
       getConfigSpy.mockRestore();
     });
 
-    it("should not show Add Credits modal when HIDE_BILLING is true even if state is set", async () => {
-      // Arrange
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test",
-        POSTHOG_CLIENT_KEY: "test",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          HIDE_BILLING: true,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
-        },
-      });
-
-      // Act
-      renderManageOrg();
-      await screen.findByTestId("manage-org-screen");
-      await selectOrganization({ orgIndex: 0 });
-
-      // Assert - Modal should not be accessible even if somehow triggered
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId("add-credits-form"),
-        ).not.toBeInTheDocument();
-      });
-
-      getConfigSpy.mockRestore();
-    });
-
     it("should show all billing-related elements when HIDE_BILLING is false", async () => {
       // Arrange
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");

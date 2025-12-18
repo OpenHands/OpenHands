@@ -1,6 +1,5 @@
 import React from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { redirect, useNavigate } from "react-router";
+import { redirect } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useCreateStripeCheckoutSession } from "#/hooks/mutation/stripe/use-create-stripe-checkout-session";
 import { useOrganization } from "#/hooks/query/use-organization";
@@ -8,7 +7,6 @@ import { useOrganizationPaymentInfo } from "#/hooks/query/use-organization-payme
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { cn } from "#/utils/utils";
 import { organizationService } from "#/api/organization-service/organization-service.api";
-import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useMe } from "#/hooks/query/use-me";
@@ -21,6 +19,8 @@ import {
 import { queryClient } from "#/query-client-config";
 import { I18nKey } from "#/i18n/declaration";
 import { amountIsValid } from "#/utils/amount-is-valid";
+import { useUpdateOrganization } from "#/hooks/mutation/use-update-organization";
+import { useDeleteOrganization } from "#/hooks/mutation/use-delete-organization";
 
 function TempChip({
   children,
@@ -88,15 +88,7 @@ interface ChangeOrgNameModalProps {
 
 function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
   const { t } = useTranslation();
-  const { orgId } = useSelectedOrganizationId();
-  const qClient = useQueryClient();
-
-  const { mutate: updateOrganization } = useMutation({
-    mutationFn: (name: string) => {
-      if (!orgId) throw new Error("Organization ID is required");
-      return organizationService.updateOrganization({ orgId, name });
-    },
-  });
+  const { mutate: updateOrganization } = useUpdateOrganization();
 
   const formAction = (formData: FormData) => {
     const orgName = formData.get("org-name")?.toString();
@@ -104,7 +96,6 @@ function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
     if (orgName?.trim()) {
       updateOrganization(orgName, {
         onSuccess: () => {
-          qClient.invalidateQueries({ queryKey: ["organizations", orgId] });
           onClose();
         },
       });
@@ -154,20 +145,7 @@ function DeleteOrgConfirmationModal({
   onClose,
 }: DeleteOrgConfirmationModalProps) {
   const { t } = useTranslation();
-  const qClient = useQueryClient();
-  const navigate = useNavigate();
-  const { orgId, setOrgId } = useSelectedOrganizationId();
-  const { mutate: deleteOrganization } = useMutation({
-    mutationFn: () => {
-      if (!orgId) throw new Error("Organization ID is required");
-      return organizationService.deleteOrganization({ orgId });
-    },
-    onSuccess: () => {
-      qClient.invalidateQueries({ queryKey: ["organizations"] });
-      setOrgId(null);
-      navigate("/");
-    },
-  });
+  const { mutate: deleteOrganization } = useDeleteOrganization();
 
   return (
     <div data-testid="delete-org-confirmation">
@@ -346,7 +324,7 @@ function ManageOrg() {
           </span>
           <div className="flex items-center gap-2">
             <TempChip data-testid="available-credits">
-              {organization?.balance}
+              {organization?.credits}
             </TempChip>
             {canAddCredits && (
               <TempInteractiveChip
