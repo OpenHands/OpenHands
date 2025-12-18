@@ -315,7 +315,9 @@ class RemoteSandboxService(SandboxService):
             for runtime in content['runtimes']:
                 if session_api_key == runtime['session_api_key']:
                     query = await self._secure_select()
-                    query = query.filter(StoredRemoteSandbox.id == runtime.get('session_id'))
+                    query = query.filter(
+                        StoredRemoteSandbox.id == runtime.get('session_id')
+                    )
                     result = await self.db_session.execute(query)
                     sandbox = result.first()
                     if sandbox is None:
@@ -346,7 +348,6 @@ class RemoteSandboxService(SandboxService):
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
-
             # Enforce sandbox limits by cleaning up old sandboxes
             await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
