@@ -303,6 +303,31 @@ class RemoteSandboxService(SandboxService):
         self, session_api_key: str
     ) -> Union[SandboxInfo, None]:
         """Get a single sandbox by session API key."""
+        # TODO: We should definitely refactor this and store the session_api_key in
+        # the v1_remote_sandbox table
+        try:
+            response = await self._send_runtime_api_request(
+                'GET',
+                '/list',
+            )
+            response.raise_for_status()
+            content = response.json()
+            for runtime in content['runtimes']:
+                if session_api_key == runtime['session_api_key']:
+                    query = await self._secure_select()
+                    query = query.filter(
+                        StoredRemoteSandbox.id == runtime.get('session_id')
+                    )
+                    result = await self.db_session.execute(query)
+                    sandbox = result.first()
+                    if sandbox is None:
+                        raise ValueError('sandbox_not_found')
+                    return await self._to_sandbox_info(sandbox, runtime)
+        except Exception:
+            _logger.exception(
+                'Error getting sandbox from session_api_key', stack_info=True
+            )
+
         # Get all stored sandboxes for the current user
         stmt = await self._secure_select()
         result = await self.db_session.execute(stmt)
