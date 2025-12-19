@@ -122,18 +122,7 @@ class RemoteSandboxService(SandboxService):
             _logger.error(f'HTTP error for URL {url}: {e}')
             raise
 
-    async def _to_sandbox_info(
-        self, stored: StoredRemoteSandbox, runtime: dict[str, Any] | None = None
-    ) -> SandboxInfo:
-        # If we did not get passsed runtime data, load some
-        if runtime is None:
-            try:
-                runtime = await self._get_runtime(stored.id)
-            except Exception:
-                _logger.exception(
-                    f'Error getting runtime: {stored.id}', stack_info=True
-                )
-
+    def _to_sandbox_info(self, stored: StoredRemoteSandbox, runtime: dict[str, Any] | None = None):
         status = self._get_sandbox_status_from_runtime(runtime)
 
         # Get session_api_key and exposed urls
@@ -323,14 +312,10 @@ class RemoteSandboxService(SandboxService):
         runtimes_by_id = await self._get_runtimes_batch(sandbox_ids)
 
         # Convert stored sandboxes to domain models with runtime data
-        items = await asyncio.gather(
-            *[
-                self._to_sandbox_info(
-                    stored_sandbox, runtime=runtimes_by_id.get(stored_sandbox.id)
-                )
-                for stored_sandbox in stored_sandboxes
-            ]
-        )
+        items = [
+            self._to_sandbox_info(stored_sandbox, runtimes_by_id.get(stored_sandbox.id))
+            for stored_sandbox in stored_sandboxes
+        ]
 
         return SandboxPage(items=items, next_page_id=next_page_id)
 
@@ -339,7 +324,16 @@ class RemoteSandboxService(SandboxService):
         stored_sandbox = await self._get_stored_sandbox(sandbox_id)
         if stored_sandbox is None:
             return None
-        return await self._to_sandbox_info(stored_sandbox)
+
+        runtime = None
+        try:
+            runtime = await self._get_runtime(stored_sandbox.id)
+        except Exception:
+            _logger.exception(
+                f'Error getting runtime: {stored_sandbox.id}', stack_info=True
+            )
+
+        return self._to_sandbox_info(stored_sandbox, runtime)
 
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str
@@ -364,7 +358,7 @@ class RemoteSandboxService(SandboxService):
                     sandbox = result.first()
                     if sandbox is None:
                         raise ValueError('sandbox_not_found')
-                    return await self._to_sandbox_info(sandbox, runtime)
+                    return self._to_sandbox_info(sandbox, runtime)
         except Exception:
             _logger.exception(
                 'Error getting sandbox from session_api_key', stack_info=True
@@ -380,7 +374,7 @@ class RemoteSandboxService(SandboxService):
             try:
                 runtime = await self._get_runtime(stored_sandbox.id)
                 if runtime and runtime.get('session_api_key') == session_api_key:
-                    return await self._to_sandbox_info(stored_sandbox, runtime)
+                    return self._to_sandbox_info(stored_sandbox, runtime)
             except Exception:
                 # Continue checking other sandboxes if one fails
                 continue
@@ -453,7 +447,7 @@ class RemoteSandboxService(SandboxService):
             # Hack - result doesn't contain this
             runtime_data['pod_status'] = 'pending'
 
-            return await self._to_sandbox_info(stored_sandbox, runtime_data)
+            return self._to_sandbox_info(stored_sandbox, runtime_data)
 
         except httpx.HTTPError as e:
             _logger.error(f'Failed to start sandbox: {e}')

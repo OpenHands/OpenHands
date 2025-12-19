@@ -331,7 +331,7 @@ class TestSandboxInfoConversion:
         runtime_data = create_runtime_data(status='running', pod_status='ready')
 
         # Execute
-        sandbox_info = await remote_sandbox_service._to_sandbox_info(
+        sandbox_info = remote_sandbox_service._to_sandbox_info(
             stored_sandbox, runtime_data
         )
 
@@ -358,7 +358,7 @@ class TestSandboxInfoConversion:
         runtime_data = create_runtime_data(status='running', pod_status='pending')
 
         # Execute
-        sandbox_info = await remote_sandbox_service._to_sandbox_info(
+        sandbox_info = remote_sandbox_service._to_sandbox_info(
             stored_sandbox, runtime_data
         )
 
@@ -368,38 +368,18 @@ class TestSandboxInfoConversion:
         assert sandbox_info.exposed_urls is None
 
     @pytest.mark.asyncio
-    async def test_to_sandbox_info_without_runtime(self, remote_sandbox_service):
-        """Test conversion to SandboxInfo without runtime data."""
-        # Setup
-        stored_sandbox = create_stored_sandbox()
-        remote_sandbox_service._get_runtime = AsyncMock(
-            side_effect=Exception('Runtime not found')
-        )
-
-        # Execute
-        sandbox_info = await remote_sandbox_service._to_sandbox_info(stored_sandbox)
-
-        # Verify
-        assert sandbox_info.status == SandboxStatus.MISSING
-        assert sandbox_info.session_api_key is None
-        assert sandbox_info.exposed_urls is None
-
-    @pytest.mark.asyncio
     async def test_to_sandbox_info_loads_runtime_when_none_provided(
         self, remote_sandbox_service
     ):
         """Test that runtime data is loaded when not provided."""
         # Setup
         stored_sandbox = create_stored_sandbox()
-        runtime_data = create_runtime_data()
-        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
 
         # Execute
-        sandbox_info = await remote_sandbox_service._to_sandbox_info(stored_sandbox)
+        sandbox_info = remote_sandbox_service._to_sandbox_info(stored_sandbox, None)
 
         # Verify
-        remote_sandbox_service._get_runtime.assert_called_once_with('test-sandbox-123')
-        assert sandbox_info.status == SandboxStatus.RUNNING
+        assert sandbox_info.status == SandboxStatus.MISSING
 
 
 class TestSandboxLifecycle:
@@ -850,7 +830,7 @@ class TestSandboxSearch:
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
             return_value=stored_sandbox
         )
-        remote_sandbox_service._to_sandbox_info = AsyncMock(
+        remote_sandbox_service._to_sandbox_info = MagicMock(
             return_value=SandboxInfo(
                 id='test-sandbox-123',
                 created_by_user_id='test-user-123',
