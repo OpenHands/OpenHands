@@ -134,7 +134,7 @@ export const SETTINGS_HANDLERS = [
       const providerTokensSet: Partial<Record<Provider, string | null>> =
         Object.fromEntries(
           Object.entries(rawTokens)
-            .filter(([, val]) => val && val.token)
+            .filter(([, val]) => val?.token)
             .map(([provider]) => [provider as Provider, ""]),
         );
 

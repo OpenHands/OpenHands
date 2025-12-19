@@ -99,7 +99,7 @@ export function GitRepoDropdown({
     );
 
     // If no input value, return all recent repos for this provider
-    if (!inputValue || !inputValue.trim()) {
+    if (!inputValue?.trim()) {
       return providerFilteredRepos;
     }
 
@@ -139,7 +139,7 @@ export function GitRepoDropdown({
       baseRepositories = repositories;
     }
     // If no input value, show all repositories
-    else if (!inputValue || !inputValue.trim()) {
+    else if (!inputValue?.trim()) {
       baseRepositories = repositories;
     }
     // For URL inputs, use the processed search input for filtering
@@ -246,8 +246,7 @@ export function GitRepoDropdown({
   // Create sticky footer item for GitHub provider
   const stickyFooterItem = useMemo(() => {
     if (
-      !config ||
-      !config.APP_SLUG ||
+      !config?.APP_SLUG ||
       provider !== ProviderOptions.github ||
       config.APP_MODE !== "saas"
     )

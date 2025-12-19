@@ -17,10 +17,13 @@ from openhands.core.logger import openhands_logger as logger
 class ApiKeyStore:
     session_maker: sessionmaker
 
+    API_KEY_PREFIX = 'sk-oh-'
+
     def generate_api_key(self, length: int = 32) -> str:
-        """Generate a random API key."""
+        """Generate a random API key with the sk-oh- prefix."""
         alphabet = string.ascii_letters + string.digits
-        return ''.join(secrets.choice(alphabet) for _ in range(length))
+        random_part = ''.join(secrets.choice(alphabet) for _ in range(length))
+        return f'{self.API_KEY_PREFIX}{random_part}'
 
     def create_api_key(
         self, user_id: str, name: str | None = None, expires_at: datetime | None = None
