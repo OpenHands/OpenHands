@@ -517,6 +517,51 @@ class RemoteSandboxService(SandboxService):
             _logger.error(f'Error deleting sandbox {sandbox_id}: {e}')
             return False
 
+    async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
+        """Stop the oldest sandboxes if there are more than max_num_sandboxes running.
+        In a multi user environment, this will pause sandboxes only for the current user.
+
+        Args:
+            max_num_sandboxes: Maximum number of sandboxes to keep running
+
+        Returns:
+            List of sandbox IDs that were paused
+        """
+        if max_num_sandboxes <= 0:
+            raise ValueError('max_num_sandboxes must be greater than 0')
+
+        response = await self._send_runtime_api_request(
+            'GET',
+            '/list',
+        )
+        content = response.json()
+        running_session_ids = [runtime.get('session_id') for runtime in content['runtimes']]
+
+        query = await self._secure_select()
+        query = query.filter(StoredRemoteSandbox.id.in_(running_session_ids)).order_by(StoredRemoteSandbox.created_at.desc())
+        running_sandboxes = list(await self.db_session.execute(query))
+
+        # If we're within the limit, no cleanup needed
+        if len(running_sandboxes) <= max_num_sandboxes:
+            return []
+
+        # Determine how many to pause
+        num_to_pause = len(running_sandboxes) - max_num_sandboxes
+        sandboxes_to_pause = running_sandboxes[:num_to_pause]
+
+        # Stop the oldest sandboxes
+        paused_sandbox_ids = []
+        for sandbox in sandboxes_to_pause:
+            try:
+                success = await self.pause_sandbox(sandbox.id)
+                if success:
+                    paused_sandbox_ids.append(sandbox.id)
+            except Exception:
+                # Continue trying to pause other sandboxes even if one fails
+                pass
+
+        return paused_sandbox_ids
+
 
 def _build_service_url(url: str, service_name: str):
     scheme, host_and_path = url.split('://')

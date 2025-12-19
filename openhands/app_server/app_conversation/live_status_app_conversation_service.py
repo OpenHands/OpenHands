@@ -498,7 +498,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 # There are still bugs in the remote runtime - they report running while still just
                 # starting resulting in a race condition. Manually check that it is actually
                 # running.
-                if await self._check_agent_server_alive(sandbox):
+                if await self._check_agent_server_alive(sandbox_info):
                     return
         raise SandboxError(f'Sandbox failed to start: {sandbox.id}')
 
