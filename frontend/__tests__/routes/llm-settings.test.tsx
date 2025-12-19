@@ -11,6 +11,8 @@ import {
 import * as AdvancedSettingsUtlls from "#/utils/has-advanced-settings-set";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import OptionService from "#/api/option-service/option-service.api";
+import { useLlmSettingsViewStore } from "#/stores/llm-settings-view-store";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 
 // Mock react-router hooks
 const mockUseSearchParams = vi.fn();
@@ -36,6 +38,9 @@ const renderLlmSettingsScreen = () =>
 beforeEach(() => {
   vi.resetAllMocks();
   resetTestHandlersMockSettings();
+
+  // Reset store state to allow auto-determination (persist middleware will sync to localStorage)
+  useLlmSettingsViewStore.getState().clearView();
 
   // Default mock for useSearchParams - returns empty params
   mockUseSearchParams.mockReturnValue([
@@ -907,6 +912,173 @@ describe("Form submission", () => {
         confirmation_mode: false, // Confirmation mode is now an advanced setting, should be cleared when saving basic settings
       }),
     );
+  });
+});
+
+describe("View persistence", () => {
+  it("should preserve advanced view after saving settings", async () => {
+    // Arrange: Set up initial state with basic settings (no advanced settings)
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      llm_model: "openhands/claude-opus-4-5-20251101",
+      llm_base_url: "",
+      agent: DEFAULT_SETTINGS.agent,
+    });
+
+    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+
+    // Act: Render component, manually switch to advanced, change a setting, and save
+    renderLlmSettingsScreen();
+    await screen.findByTestId("llm-settings-screen");
+
+    // User manually switches to advanced view
+    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+    await userEvent.click(advancedSwitch);
+    await screen.findByTestId("llm-settings-form-advanced");
+
+    // Verify preference was stored
+    expect(useLlmSettingsViewStore.getState().view).toBe("advanced");
+
+    // User changes a non-model setting (confirmation mode)
+    const confirmationSwitch = screen.getByTestId(
+      "enable-confirmation-mode-switch",
+    );
+    await userEvent.click(confirmationSwitch);
+
+    // User saves settings
+    const submitButton = screen.getByTestId("submit-button");
+    await userEvent.click(submitButton);
+
+    // Wait for save to complete
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalled();
+    });
+
+    // Simulate settings refetch after save (with same basic settings - no advanced settings)
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      llm_model: "openhands/claude-opus-4-5-20251101",
+      llm_base_url: "",
+      agent: DEFAULT_SETTINGS.agent,
+      confirmation_mode: true, // Updated setting (but still no advanced settings like base_url)
+    });
+
+    // Assert: View should remain on advanced (not switch back to basic) due to stored preference
+    // The component should not auto-switch because storedView is not null
+    await waitFor(() => {
+      expect(advancedSwitch).toBeChecked();
+      expect(
+        screen.getByTestId("llm-settings-form-advanced"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-settings-form-basic"),
+      ).not.toBeInTheDocument();
+    });
+
+    // Verify preference is still stored
+    expect(useLlmSettingsViewStore.getState().view).toBe("advanced");
+  });
+
+  it("should use stored preference on initial load instead of auto-determining", async () => {
+    // Arrange: Store a preference for advanced view
+    useLlmSettingsViewStore.getState().setView("advanced");
+
+    // Settings that would normally show basic view (no advanced settings)
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      llm_model: "openhands/claude-opus-4-5-20251101",
+      llm_base_url: "",
+      agent: DEFAULT_SETTINGS.agent,
+    });
+
+    // Act: Render component
+    renderLlmSettingsScreen();
+
+    // Assert: Should use stored preference (advanced) instead of auto-determining basic
+    await waitFor(() => {
+      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+      expect(advancedSwitch).toBeChecked();
+      expect(
+        screen.getByTestId("llm-settings-form-advanced"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("should auto-determine view when no stored preference exists", async () => {
+    // Arrange: Ensure no stored preference and settings that require advanced view
+    useLlmSettingsViewStore.getState().clearView();
+
+    const hasAdvancedSettingsSetSpy = vi.spyOn(
+      AdvancedSettingsUtlls,
+      "hasAdvancedSettingsSet",
+    );
+    hasAdvancedSettingsSetSpy.mockReturnValue(true);
+
+    // Act: Render component
+    renderLlmSettingsScreen();
+
+    // Assert: Should auto-determine and show advanced view
+    await waitFor(() => {
+      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+      expect(advancedSwitch).toBeChecked();
+      expect(
+        screen.getByTestId("llm-settings-form-advanced"),
+      ).toBeInTheDocument();
+    });
+
+    // Verify preference was stored after auto-determination
+    expect(useLlmSettingsViewStore.getState().view).toBe("advanced");
+  });
+
+  it("should store preference when user manually toggles view", async () => {
+    // Arrange: Start with no stored preference
+    useLlmSettingsViewStore.getState().clearView();
+
+    renderLlmSettingsScreen();
+    await screen.findByTestId("llm-settings-screen");
+
+    // Act: User manually toggles to advanced
+    const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+    await userEvent.click(advancedSwitch);
+
+    // Assert: Preference should be stored
+    expect(useLlmSettingsViewStore.getState().view).toBe("advanced");
+    expect(advancedSwitch).toBeChecked();
+    expect(
+      screen.getByTestId("llm-settings-form-advanced"),
+    ).toBeInTheDocument();
+
+    // Act: User toggles back to basic
+    await userEvent.click(advancedSwitch);
+
+    // Assert: Preference should be updated
+    expect(useLlmSettingsViewStore.getState().view).toBe("basic");
+    expect(advancedSwitch).not.toBeChecked();
+    expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
+  });
+
+  it("should not auto-determine when stored preference exists, even if settings change", async () => {
+    // Arrange: Store preference for basic view
+    useLlmSettingsViewStore.getState().setView("basic");
+
+    // Settings that would normally require advanced view
+    const hasAdvancedSettingsSetSpy = vi.spyOn(
+      AdvancedSettingsUtlls,
+      "hasAdvancedSettingsSet",
+    );
+    hasAdvancedSettingsSetSpy.mockReturnValue(true);
+
+    // Act: Render component
+    renderLlmSettingsScreen();
+
+    // Assert: Should use stored preference (basic) and not auto-determine to advanced
+    await waitFor(() => {
+      const advancedSwitch = screen.getByTestId("advanced-settings-switch");
+      expect(advancedSwitch).not.toBeChecked();
+      expect(screen.getByTestId("llm-settings-form-basic")).toBeInTheDocument();
+    });
   });
 });
 
