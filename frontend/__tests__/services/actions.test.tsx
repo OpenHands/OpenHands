@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ActionType from "#/types/action-type";
 import { ActionMessage } from "#/types/message";
-import { useCommandStore } from "#/state/command-store";
+import { useCommandStore } from "#/stores/command-store";
 
 const mockDispatch = vi.fn();
 const mockAppendInput = vi.fn();
