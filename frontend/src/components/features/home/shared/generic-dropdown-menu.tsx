@@ -33,6 +33,7 @@ export interface GenericDropdownMenuProps<T> {
   stickyFooterItem?: React.ReactNode;
   testId?: string;
   numberOfRecentItems?: number;
+  getItemKey?: (item: T) => string | number;
 }
 
 export function GenericDropdownMenu<T>({
@@ -51,6 +52,7 @@ export function GenericDropdownMenu<T>({
   stickyFooterItem,
   testId,
   numberOfRecentItems = 0,
+  getItemKey,
 }: GenericDropdownMenuProps<T>) {
   const hasItems = filteredItems.length > 0;
   const showEmptyState = !hasItems && !stickyTopItem && !stickyFooterItem;
@@ -100,21 +102,24 @@ export function GenericDropdownMenu<T>({
           ) : (
             <>
               {stickyTopItem}
-              {filteredItems.map((item, index) => (
-                <React.Fragment key={index}>
-                  {renderItem(
-                    item,
-                    index,
-                    highlightedIndex,
-                    selectedItem,
-                    getItemProps,
-                  )}
-                  {numberOfRecentItems > 0 &&
-                    index === numberOfRecentItems - 1 && (
-                      <div className="border-b border-[#727987] bg-[#454545] pb-1 mb-1 h-[1px]" />
+              {filteredItems.map((item, index) => {
+                const key = getItemKey ? getItemKey(item) : index;
+                return (
+                  <React.Fragment key={key}>
+                    {renderItem(
+                      item,
+                      index,
+                      highlightedIndex,
+                      selectedItem,
+                      getItemProps,
                     )}
-                </React.Fragment>
-              ))}
+                    {numberOfRecentItems > 0 &&
+                      index === numberOfRecentItems - 1 && (
+                        <div className="border-b border-[#727987] bg-[#454545] pb-1 mb-1 h-[1px]" />
+                      )}
+                  </React.Fragment>
+                );
+              })}
             </>
           )}
         </ul>

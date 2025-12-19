@@ -16,6 +16,7 @@ export interface TooltipButtonProps {
   disabled?: boolean;
   placement?: TooltipProps["placement"];
   showArrow?: boolean;
+  asSpan?: boolean;
 }
 
 export function TooltipButton({
@@ -31,6 +32,7 @@ export function TooltipButton({
   disabled = false,
   placement = "right",
   showArrow = false,
+  asSpan = false,
 }: TooltipButtonProps) {
   const handleClick = (e: React.MouseEvent) => {
     if (onClick && !disabled) {
@@ -39,7 +41,29 @@ export function TooltipButton({
     }
   };
 
-  const buttonContent = (
+  const buttonContent = asSpan ? (
+    <span
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if ((e.key === "Enter" || e.key === " ") && onClick && !disabled) {
+          onClick();
+          e.preventDefault();
+        }
+      }}
+      className={cn(
+        "hover:opacity-80",
+        disabled && "opacity-50 cursor-not-allowed",
+        className,
+      )}
+      aria-disabled={disabled}
+    >
+      {children}
+    </span>
+  ) : (
     <button
       type="button"
       aria-label={ariaLabel}

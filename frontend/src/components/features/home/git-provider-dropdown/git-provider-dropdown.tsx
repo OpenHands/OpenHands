@@ -211,6 +211,7 @@ export function GitProviderDropdown({
         getItemProps={getItemProps}
         renderItem={renderItem}
         renderEmptyState={renderEmptyState}
+        getItemKey={(provider) => provider}
       />
 
       <ErrorMessage isError={!!errorMessage} message={errorMessage} />
