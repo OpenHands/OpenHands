@@ -194,9 +194,12 @@ class CodeActAgent(Agent):
         # event we'll just return that instead of an action. The controller will
         # immediately ask the agent to step again with the new view.
         condensed_history: list[Event] = []
+        # Track which event IDs have been forgotten/condensed
+        forgotten_event_ids: set[int] = set()
         match self.condenser.condensed_history(state):
-            case View(events=events):
+            case View(events=events, forgotten_event_ids=forgotten_ids):
                 condensed_history = events
+                forgotten_event_ids = forgotten_ids
 
             case Condensation(action=condensation_action):
                 return condensation_action
@@ -206,7 +209,9 @@ class CodeActAgent(Agent):
         )
 
         initial_user_message = self._get_initial_user_message(state.history)
-        messages = self._get_messages(condensed_history, initial_user_message)
+        messages = self._get_messages(
+            condensed_history, initial_user_message, forgotten_event_ids
+        )
         params: dict = {
             'messages': messages,
         }
@@ -245,7 +250,10 @@ class CodeActAgent(Agent):
         return initial_user_message
 
     def _get_messages(
-        self, events: list[Event], initial_user_message: MessageAction
+        self,
+        events: list[Event],
+        initial_user_message: MessageAction,
+        forgotten_event_ids: set[int],
     ) -> list[Message]:
         """Constructs the message history for the LLM conversation.
 
@@ -284,6 +292,7 @@ class CodeActAgent(Agent):
         messages = self.conversation_memory.process_events(
             condensed_history=events,
             initial_user_action=initial_user_message,
+            forgotten_event_ids=forgotten_event_ids,
             max_message_chars=self.llm.config.max_message_chars,
             vision_is_active=self.llm.vision_is_active(),
         )

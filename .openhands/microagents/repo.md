@@ -63,7 +63,7 @@ Frontend:
   - We use TanStack Query (fka React Query) for data fetching and cache management
   - Data Access Layer: API client methods are located in `frontend/src/api` and should never be called directly from UI components - they must always be wrapped with TanStack Query
   - Custom hooks are located in `frontend/src/hooks/query/` and `frontend/src/hooks/mutation/`
-  - Query hooks should follow the pattern use[Resource] (e.g., `useConversationMicroagents`)
+  - Query hooks should follow the pattern use[Resource] (e.g., `useConversationSkills`)
   - Mutation hooks should follow the pattern use[Action] (e.g., `useDeleteConversation`)
   - Architecture rule: UI components → TanStack Query hooks → Data Access Layer (`frontend/src/api`) → API endpoints
 

@@ -2,11 +2,11 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 
-interface MicroagentTriggersProps {
+interface SkillTriggersProps {
   triggers: string[];
 }
 
-export function MicroagentTriggers({ triggers }: MicroagentTriggersProps) {
+export function SkillTriggers({ triggers }: SkillTriggersProps) {
   const { t } = useTranslation();
 
   if (!triggers || triggers.length === 0) {
@@ -16,7 +16,7 @@ export function MicroagentTriggers({ triggers }: MicroagentTriggersProps) {
   return (
     <div className="mt-2 mb-3">
       <Typography.Text className="text-sm font-semibold text-gray-300 mb-2">
-        {t(I18nKey.MICROAGENTS_MODAL$TRIGGERS)}
+        {t(I18nKey.COMMON$TRIGGERS)}
       </Typography.Text>
       <div className="flex flex-wrap gap-1">
         {triggers.map((trigger) => (

@@ -54,7 +54,10 @@ export const isObservationEvent = (
 ): event is ObservationEvent =>
   event.source === "environment" &&
   "action_id" in event &&
-  "observation" in event;
+  "observation" in event &&
+  event.observation !== null &&
+  typeof event.observation === "object" &&
+  "kind" in event.observation;
 
 /**
  * Type guard function to check if an event is an agent error event
@@ -94,6 +97,9 @@ export const isUserMessageEvent = (
 export const isActionEvent = (event: OpenHandsEvent): event is ActionEvent =>
   event.source === "agent" &&
   "action" in event &&
+  event.action !== null &&
+  typeof event.action === "object" &&
+  "kind" in event.action &&
   "tool_name" in event &&
   "tool_call_id" in event &&
   typeof event.tool_name === "string" &&

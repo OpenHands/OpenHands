@@ -1,4 +1,4 @@
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { MicroagentManagementViewMicroagentHeader } from "./microagent-management-view-microagent-header";
 import { MicroagentManagementViewMicroagentContent } from "./microagent-management-view-microagent-content";
 

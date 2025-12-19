@@ -25,10 +25,12 @@ def api_key_store(mock_session_maker):
 
 
 def test_generate_api_key(api_key_store):
-    """Test that generate_api_key returns a string of the expected length."""
+    """Test that generate_api_key returns a string with sk-oh- prefix and expected length."""
     key = api_key_store.generate_api_key(length=32)
     assert isinstance(key, str)
-    assert len(key) == 32
+    assert key.startswith('sk-oh-')
+    # Total length should be prefix (6 chars) + random part (32 chars) = 38 chars
+    assert len(key) == len('sk-oh-') + 32
 
 
 def test_create_api_key(api_key_store, mock_session):
