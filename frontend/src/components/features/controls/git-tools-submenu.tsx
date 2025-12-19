@@ -10,7 +10,7 @@ import {
   getCreatePRPrompt,
   getCreateNewBranchPrompt,
 } from "#/utils/utils";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 
 import ArrowUpIcon from "#/icons/u-arrow-up.svg?react";
 import ArrowDownIcon from "#/icons/u-arrow-down.svg?react";

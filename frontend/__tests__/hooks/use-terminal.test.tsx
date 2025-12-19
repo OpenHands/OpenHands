@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useTerminal } from "#/hooks/use-terminal";
-import { Command, useCommandStore } from "#/state/command-store";
+import { Command, useCommandStore } from "#/stores/command-store";
 import { renderWithProviders } from "../../test-utils";
 
 // Mock the WsClient context
