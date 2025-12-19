@@ -916,7 +916,6 @@ describe("View persistence after saving advanced settings", () => {
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
-      enable_default_condenser: true, // Default value
     });
     const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
     saveSettingsSpy.mockResolvedValue(true);
@@ -967,7 +966,6 @@ describe("View persistence after saving advanced settings", () => {
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
-      condenser_max_size: 120, // Default value
     });
     const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
     saveSettingsSpy.mockResolvedValue(true);
