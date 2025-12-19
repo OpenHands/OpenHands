@@ -28,7 +28,6 @@ import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
-import { useLlmSettingsViewStore } from "#/stores/llm-settings-view-store";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -71,10 +70,7 @@ function LlmSettingsScreen() {
   const { data: settings, isLoading, isFetching } = useSettings();
   const { data: config } = useConfig();
 
-  const { view: storedView, setView: setStoredView } =
-    useLlmSettingsViewStore();
-  // Use stored view if available, otherwise default to "basic" (will be auto-determined)
-  const view = storedView ?? "basic";
+  const [view, setView] = React.useState<"basic" | "advanced">("basic");
 
   const [dirtyInputs, setDirtyInputs] = React.useState({
     model: false,
@@ -139,7 +135,6 @@ function LlmSettingsScreen() {
   // Determine if we should hide the agent dropdown when V1 conversation API is enabled
   const isV1Enabled = settings?.v1_enabled;
 
-  // Initialize view: use stored preference if available, otherwise auto-determine
   React.useEffect(() => {
     const determineWhetherToToggleAdvancedSettings = () => {
       if (resources && settings) {
@@ -154,18 +149,11 @@ function LlmSettingsScreen() {
       return false;
     };
 
-    // If user has a stored preference, no need to auto-determine
-    if (storedView !== null) {
-      return;
-    }
+    const userSettingsIsAdvanced = determineWhetherToToggleAdvancedSettings();
 
-    // No stored preference - auto-determine based on settings
-    if (resources && settings) {
-      const userSettingsIsAdvanced = determineWhetherToToggleAdvancedSettings();
-      const determinedView = userSettingsIsAdvanced ? "advanced" : "basic";
-      setStoredView(determinedView);
-    }
-  }, [settings, resources, storedView, setStoredView]);
+    if (userSettingsIsAdvanced) setView("advanced");
+    else setView("basic");
+  }, [settings, resources]);
 
   // Initialize currentSelectedModel with the current settings
   React.useEffect(() => {
@@ -315,9 +303,7 @@ function LlmSettingsScreen() {
   };
 
   const handleToggleAdvancedSettings = (isToggled: boolean) => {
-    const newView = isToggled ? "advanced" : "basic";
-    // Persist user's manual choice to store
-    setStoredView(newView);
+    setView(isToggled ? "advanced" : "basic");
     setDirtyInputs({
       model: false,
       apiKey: false,
