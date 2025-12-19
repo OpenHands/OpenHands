@@ -535,10 +535,14 @@ class RemoteSandboxService(SandboxService):
             '/list',
         )
         content = response.json()
-        running_session_ids = [runtime.get('session_id') for runtime in content['runtimes']]
+        running_session_ids = [
+            runtime.get('session_id') for runtime in content['runtimes']
+        ]
 
         query = await self._secure_select()
-        query = query.filter(StoredRemoteSandbox.id.in_(running_session_ids)).order_by(StoredRemoteSandbox.created_at.desc())
+        query = query.filter(StoredRemoteSandbox.id.in_(running_session_ids)).order_by(
+            StoredRemoteSandbox.created_at.desc()
+        )
         running_sandboxes = list(await self.db_session.execute(query))
 
         # If we're within the limit, no cleanup needed
