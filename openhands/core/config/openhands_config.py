@@ -113,6 +113,34 @@ class OpenHandsConfig(BaseModel):
         description='Max queued events before dropping (protects memory under backpressure).',
     )
 
+    # ============================================================
+    # Fleet session export (optional)
+    # ============================================================
+    fleet_session_export_enabled: bool = Field(
+        default=False,
+        description='If true, stream LLM-call traces to Fleet Sessions via fleet-sdk.',
+    )
+    fleet_session_export_base_url: str | None = Field(
+        default=None,
+        description='Optional Fleet API base URL override (otherwise uses fleet-sdk default/env).',
+    )
+    fleet_session_export_job_id: str | None = Field(
+        default=None,
+        description='Optional Fleet job id to associate with this session (defaults to FLEET_JOB_ID).',
+    )
+    fleet_session_export_task_key: str | None = Field(
+        default=None,
+        description='Optional Fleet task key (defaults to FLEET_TASK_KEY).',
+    )
+    fleet_session_export_instance_id: str | None = Field(
+        default=None,
+        description='Optional Fleet instance id (defaults to FLEET_INSTANCE_ID).',
+    )
+    fleet_session_export_model: str | None = Field(
+        default=None,
+        description='Optional model name to log to Fleet (defaults to LLM model / FLEET_MODEL).',
+    )
+
     workspace_base: str | None = Field(default=None)
     workspace_mount_path_in_sandbox: str = Field(
         default=DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX

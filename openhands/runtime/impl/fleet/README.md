@@ -114,6 +114,27 @@ OpenHands automatically captures LLM response metadata after each call:
 
 These are emitted as `LLMResponseObservation` events and flow through the same trace exporter.
 
+### Fleet Sessions (Fleet Dashboard Logging)
+
+If you want traces to appear in Fleet's dashboard sessions view, enable Fleet Session export. This logs each **LLM call** (input `history` + `response`) via `fleet.session(...).log(...)`.
+
+In `config.toml`:
+
+```toml
+fleet_session_export_enabled = true
+
+# Optional overrides (otherwise uses env vars like FLEET_JOB_ID / FLEET_TASK_KEY / FLEET_INSTANCE_ID)
+# fleet_session_export_job_id = "job_..."
+# fleet_session_export_task_key = "task_..."
+# fleet_session_export_instance_id = "inst_..."
+# fleet_session_export_base_url = "https://api.fleetai.com"
+# fleet_session_export_model = "anthropic/claude-sonnet-4"
+```
+
+Notes:
+- Requires `fleet-sdk` to be installed and importable as `fleet`.
+- Uses `sandbox.fleet_api_key` (or `FLEET_API_KEY`) to authenticate.
+
 ### Image Handling
 
 When MCP tools return images (e.g., `computer_screenshot`), they are automatically parsed and stored in `MCPObservation.images`:

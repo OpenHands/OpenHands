@@ -17,6 +17,10 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.events import EventStream
 from openhands.events.event import Event
 from openhands.events.trace_exporter import TraceExportConfig, TraceExporter
+from openhands.events.fleet_session_exporter import (
+    FleetSessionExporter,
+    build_fleet_session_export_config,
+)
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderToken,
@@ -263,6 +267,29 @@ def create_controller(
         replay_events=replay_events,
         security_analyzer=runtime.security_analyzer,
     )
+
+    # Optional: export LLM-call traces to Fleet Sessions (fleet-sdk).
+    # This attaches an exporter to the agent so it can log (history, response) at call-time.
+    try:
+        if config.fleet_session_export_enabled:
+            cfg = build_fleet_session_export_config(
+                enabled=True,
+                api_key=runtime.config.sandbox.fleet_api_key,
+                base_url=config.fleet_session_export_base_url,
+                job_id=config.fleet_session_export_job_id,
+                task_key=config.fleet_session_export_task_key,
+                instance_id=config.fleet_session_export_instance_id,
+                model=(
+                    config.fleet_session_export_model
+                    or runtime.llm_registry.get_llm_from_agent_config('agent', agent.config).config.model
+                ),
+            )
+            fleet_exporter = FleetSessionExporter(event_stream=event_stream, cfg=cfg)
+            fleet_exporter.start()
+            setattr(agent, 'fleet_session_exporter', fleet_exporter)
+    except Exception as e:
+        logger.warning(f'Failed to enable Fleet session exporter: {e}')
+
     return (controller, initial_state)
 
 

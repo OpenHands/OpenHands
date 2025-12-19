@@ -293,6 +293,14 @@ class CodeActAgent(Agent):
         latency_ms = int((time.monotonic() - start_time) * 1000)
         logger.debug(f'Response from LLM: {response}')
 
+        # Optional: Fleet session logging (streams LLM calls to Fleet dashboard).
+        try:
+            exporter = getattr(self, 'fleet_session_exporter', None)
+            if exporter is not None and getattr(exporter, 'enabled', False):
+                exporter.log_llm_call(history=messages, response=response)
+        except Exception as e:
+            logger.debug(f'Fleet session log skipped: {e}')
+
         # Capture LLM trace for observability
         self._capture_llm_trace(response, latency_ms)
 
