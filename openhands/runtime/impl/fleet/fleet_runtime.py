@@ -23,8 +23,10 @@ from openhands.events.observation import (
     FileEditObservation,
     BrowserOutputObservation,
     Observation,
-    ErrorObservation
+    ErrorObservation,
+    MCPObservation,
 )
+from openhands.events.observation.mcp import MCPImage
 from openhands.core.logger import openhands_logger as logger
 from openhands.runtime.impl.fleet.trace_manager import FleetTraceManager
 
@@ -180,7 +182,7 @@ class FleetRuntime(Runtime):
         return ErrorObservation("BrowseInteractiveAction not implemented. Use 'computer' tool via MCPAction instead.")
 
     async def call_tool_mcp(self, action: MCPAction) -> Observation:
-        """Directly pass MCP actions to Fleet."""
+        """Directly pass MCP actions to Fleet and parse results including images."""
         start = time.monotonic()
         args_preview: Dict[str, Any] = {}
         try:
@@ -201,15 +203,83 @@ class FleetRuntime(Runtime):
         try:
             result = await self.tools.call_tool(action.tool_name, action.tool_args)
             dur_ms = int((time.monotonic() - start) * 1000)
-            self.log('debug', f'MCP result <- {action.tool_name} ({dur_ms}ms)')
-            obs = Observation(content=str(result))  # Generic observation
-            self.trace_manager.trace_observation("mcp", obs)
+
+            # Parse MCP result to extract text and images
+            text_content, images, is_error = self._parse_mcp_result(result)
+
+            self.log(
+                'debug',
+                f'MCP result <- {action.tool_name} ({dur_ms}ms): '
+                f'{len(text_content)} chars, {len(images)} images',
+            )
+
+            obs = MCPObservation(
+                content=text_content,
+                name=action.tool_name,
+                arguments=action.tool_args or {},
+                images=images,
+                is_error=is_error,
+            )
+            self.trace_manager.trace_observation('mcp', obs)
             return obs
         except Exception as e:
             dur_ms = int((time.monotonic() - start) * 1000)
             self.log('warning', f'MCP error <- {action.tool_name} ({dur_ms}ms): {e}')
-            self.trace_manager.trace_error("mcp", str(e))
-            return ErrorObservation(f"MCP Tool call failed: {e}")
+            self.trace_manager.trace_error('mcp', str(e))
+            return ErrorObservation(f'MCP Tool call failed: {e}')
+
+    def _parse_mcp_result(self, result: Any) -> tuple[str, list[MCPImage], bool]:
+        """Parse an MCP CallToolResult to extract text content and images.
+
+        MCP results have a .content list with items like:
+        - TextContent(type="text", text="...")
+        - ImageContent(type="image", data="base64...", mimeType="image/png")
+
+        Returns:
+            (text_content, images, is_error)
+        """
+        text_parts: list[str] = []
+        images: list[MCPImage] = []
+        is_error = False
+
+        # Check for error flag
+        if hasattr(result, 'isError'):
+            is_error = bool(result.isError)
+
+        # Get content list
+        content_list = getattr(result, 'content', None)
+        if content_list is None:
+            # Fallback: result might be a dict
+            if isinstance(result, dict):
+                content_list = result.get('content', [])
+                is_error = result.get('isError', False)
+            else:
+                # Unknown format, stringify
+                return str(result), [], False
+
+        # Parse each content item
+        for item in content_list:
+            item_type = self._get_attr_or_key(item, 'type')
+
+            if item_type == 'text':
+                text = self._get_attr_or_key(item, 'text', '')
+                if text:
+                    text_parts.append(text)
+
+            elif item_type == 'image':
+                data = self._get_attr_or_key(item, 'data', '')
+                mime_type = self._get_attr_or_key(item, 'mimeType', 'image/png')
+                if data:
+                    images.append(MCPImage(data=data, mime_type=mime_type))
+
+        text_content = '\n'.join(text_parts) if text_parts else ''
+        return text_content, images, is_error
+
+    def _get_attr_or_key(self, obj: Any, key: str, default: Any = None) -> Any:
+        """Get attribute or dict key from an object."""
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
 
     # --- Required Abstract Methods (Stubs) ---
     # These might need actual implementation depending on how deep the integration goes

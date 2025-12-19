@@ -23,11 +23,12 @@ from openhands.events.observation.files import (
     FileWriteObservation,
 )
 from openhands.events.observation.loop_recovery import LoopDetectionObservation
-from openhands.events.observation.mcp import MCPObservation
+from openhands.events.observation.mcp import MCPImage, MCPObservation
 from openhands.events.observation.observation import Observation
 from openhands.events.observation.reject import UserRejectObservation
 from openhands.events.observation.success import SuccessObservation
 from openhands.events.observation.task_tracking import TaskTrackingObservation
+from openhands.events.observation.llm import LLMResponseObservation
 
 __all__ = [
     'Observation',
@@ -50,6 +51,8 @@ __all__ = [
     'RecallType',
     'LoopDetectionObservation',
     'MCPObservation',
+    'MCPImage',
     'FileDownloadObservation',
     'TaskTrackingObservation',
+    'LLMResponseObservation',
 ]

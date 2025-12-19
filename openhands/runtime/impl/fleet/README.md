@@ -98,6 +98,50 @@ If you set `trace_export_url`, OpenHands will stream redacted EventStream events
 - **POST body:** `{ "events": [ { "session_id": "...", "user_id": null, "event": {...} }, ... ] }`
 - **Auth:** optional `Authorization: Bearer <trace_export_api_key>`
 
+### LLM Traces (Reasoning Capture)
+
+OpenHands automatically captures LLM response metadata after each call:
+
+| Field | Description |
+|-------|-------------|
+| `model` | Model name used |
+| `prompt_tokens` | Input tokens |
+| `completion_tokens` | Output tokens |
+| `latency_ms` | Response time |
+| `response_content` | Raw text/reasoning from LLM |
+| `tool_calls` | List of tools called |
+| `cost` | Cost if provided by the API |
+
+These are emitted as `LLMResponseObservation` events and flow through the same trace exporter.
+
+### Image Handling
+
+When MCP tools return images (e.g., `computer_screenshot`), they are automatically parsed and stored in `MCPObservation.images`:
+
+```python
+obs = await runtime.call_tool_mcp(MCPAction(tool_name="computer_screenshot", tool_args={}))
+
+if obs.has_images:
+    for img in obs.images:
+        print(f"Image: {img.mime_type}, {len(img.data)} bytes base64")
+        # Use img.to_data_uri() for OpenAI-style image_url
+```
+
+The `LLMImageFormatter` can convert images to LLM-specific formats:
+
+```python
+from openhands.llm.image_formatter import LLMImageFormatter
+
+# For OpenAI/GPT-4V
+content_blocks = LLMImageFormatter.format_for_openai(obs.images)
+
+# For Claude
+content_blocks = LLMImageFormatter.format_for_claude(obs.images)
+
+# Auto-detect based on model name
+content_blocks = LLMImageFormatter.format_for_litellm(obs.images, model="claude-sonnet-4-20250514")
+```
+
 ### Troubleshooting
 
 | Issue | Solution |

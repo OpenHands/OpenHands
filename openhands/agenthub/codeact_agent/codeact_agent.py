@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from collections import deque
 from typing import TYPE_CHECKING
 
@@ -10,6 +11,8 @@ if TYPE_CHECKING:
 
     from openhands.events.action import Action
     from openhands.llm.llm import ModelResponse
+
+from openhands.events.observation import LLMResponseObservation
 
 import openhands.agenthub.codeact_agent.function_calling as codeact_function_calling
 from openhands.agenthub.codeact_agent.tools.bash import create_cmd_run_tool
@@ -83,6 +86,7 @@ class CodeActAgent(Agent):
         """
         super().__init__(config, llm_registry)
         self.pending_actions: deque['Action'] = deque()
+        self.last_llm_trace: LLMResponseObservation | None = None
         self.reset()
         self.tools = self._get_tools()
 
@@ -171,6 +175,57 @@ class CodeActAgent(Agent):
         super().reset()
         # Only clear pending actions, not LLM metrics
         self.pending_actions.clear()
+        self.last_llm_trace = None
+
+    def _capture_llm_trace(self, response: 'ModelResponse', latency_ms: int) -> None:
+        """Capture LLM response metadata for tracing/debugging."""
+        try:
+            # Extract token usage
+            usage = getattr(response, 'usage', None)
+            prompt_tokens = getattr(usage, 'prompt_tokens', 0) if usage else 0
+            completion_tokens = getattr(usage, 'completion_tokens', 0) if usage else 0
+            total_tokens = getattr(usage, 'total_tokens', 0) if usage else 0
+
+            # Extract model name
+            model = getattr(response, 'model', '') or ''
+
+            # Extract response content (reasoning/chain-of-thought)
+            response_content = ''
+            tool_calls_summary: list[str] = []
+            if hasattr(response, 'choices') and response.choices:
+                choice = response.choices[0]
+                message = getattr(choice, 'message', None)
+                if message:
+                    response_content = getattr(message, 'content', '') or ''
+                    # Extract tool call names
+                    tool_calls = getattr(message, 'tool_calls', None) or []
+                    for tc in tool_calls:
+                        fn = getattr(tc, 'function', None)
+                        if fn:
+                            tool_calls_summary.append(getattr(fn, 'name', 'unknown'))
+
+            # Extract cost if available (some providers include this)
+            cost = None
+            if hasattr(response, '_hidden_params'):
+                cost = response._hidden_params.get('response_cost', None)
+
+            self.last_llm_trace = LLMResponseObservation(
+                content=f'LLM call: {total_tokens} tokens, {latency_ms}ms',
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                response_content=response_content,
+                tool_calls=tool_calls_summary,
+                cost=cost,
+            )
+            logger.debug(
+                f'LLM trace: model={model}, tokens={total_tokens}, latency={latency_ms}ms, tools={tool_calls_summary}'
+            )
+        except Exception as e:
+            logger.warning(f'Failed to capture LLM trace: {e}')
+            self.last_llm_trace = None
 
     def step(self, state: State) -> 'Action':
         """Performs one step using the CodeAct Agent.
@@ -233,8 +288,14 @@ class CodeActAgent(Agent):
             )
         }
         logger.info(f'CodeActAgent querying LLM with {len(messages)} messages')
+        start_time = time.monotonic()
         response = self.llm.completion(**params)
+        latency_ms = int((time.monotonic() - start_time) * 1000)
         logger.debug(f'Response from LLM: {response}')
+
+        # Capture LLM trace for observability
+        self._capture_llm_trace(response, latency_ms)
+
         actions = self.response_to_actions(response)
         logger.info(f'CodeActAgent received {len(actions)} actions from LLM: {actions}')
         for action in actions:
