@@ -49,6 +49,7 @@ ActionExecutor server.
 There are currently four implementations:
 * Docker (runs locally in a Docker container)
 * Remote (runs via a custom HTTP API for creating, pausing, resuming, and stopping runtimes in a remote environment)
+* Fleet (runs in remote environments via the Fleet/OpenEnv platform)
 * Modal (uses the Modal API)
 * Runloop (uses the Runloop API)
 
@@ -151,6 +152,16 @@ Key features:
 - Potential for improved security through isolation
 
 At the time of this writing, this is mostly used in parallel evaluation, such as this example for [SWE-Bench](https://github.com/OpenHands/OpenHands/tree/main/evaluation/benchmarks/swe_bench#run-inference-on-remoteruntime-experimental).
+
+### Fleet Runtime
+
+The Fleet Runtime integrates with [Fleet](https://github.com/fleet-ai/OpenEnv) to run agents in secure, on-demand remote environments.
+
+- **Split-Plane Architecture**: Separates orchestration (HTTP) from action execution (MCP).
+- **Tool-First**: Agents interact with the environment primarily by discovering and calling MCP tools (e.g. `computer`, `bash`, `read_file`).
+- **Observability**: Includes built-in support for exporting action traces to external APIs.
+
+Ideal for scenarios requiring standardized tool interfaces and remote execution without managing Docker infrastructure directly.
 
 ## Related Components
 

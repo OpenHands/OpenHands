@@ -83,6 +83,36 @@ class OpenHandsConfig(BaseModel):
         description='API key for Tavily search engine (https://tavily.com/). Required for search functionality.',
     )
 
+    # ============================================================
+    # Trace export (optional)
+    # ============================================================
+    trace_export_url: str | None = Field(
+        default=None,
+        description='Optional HTTP endpoint to POST event stream traces (actions/observations) as they occur.',
+    )
+    trace_export_api_key: SecretStr | None = Field(
+        default=None,
+        description='Optional bearer token for trace_export_url.',
+    )
+    trace_export_headers: dict[str, str] = Field(
+        default_factory=dict,
+        description='Additional headers to include when exporting traces (e.g., {"X-Org": "acme"}).',
+    )
+    trace_export_batch_size: int = Field(
+        default=50, description='Max number of events to send per POST.'
+    )
+    trace_export_flush_interval_s: float = Field(
+        default=2.0,
+        description='Max time to wait before flushing a partially-filled batch.',
+    )
+    trace_export_timeout_s: float = Field(
+        default=5.0, description='HTTP request timeout when exporting traces.'
+    )
+    trace_export_max_queue_size: int = Field(
+        default=10_000,
+        description='Max queued events before dropping (protects memory under backpressure).',
+    )
+
     workspace_base: str | None = Field(default=None)
     workspace_mount_path_in_sandbox: str = Field(
         default=DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX
