@@ -903,13 +903,6 @@ class AgentController:
                     raise LLMNoActionError('No action was returned')
                 action._source = EventSource.AGENT  # type: ignore [attr-defined]
 
-                # Emit LLM trace observation if captured by the agent
-                if hasattr(self.agent, 'last_llm_trace') and self.agent.last_llm_trace is not None:
-                    self.event_stream.add_event(
-                        self.agent.last_llm_trace,
-                        EventSource.AGENT,
-                    )
-                    self.agent.last_llm_trace = None  # Clear after emitting
             except (
                 LLMMalformedActionError,
                 LLMNoActionError,

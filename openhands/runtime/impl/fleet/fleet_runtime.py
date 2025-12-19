@@ -28,7 +28,6 @@ from openhands.events.observation import (
 )
 from openhands.events.observation.mcp import MCPImage
 from openhands.core.logger import openhands_logger as logger
-from openhands.runtime.impl.fleet.trace_manager import FleetTraceManager
 
 # Placeholder imports for Fleet SDK - handling import errors gracefully
 try:
@@ -48,10 +47,6 @@ class FleetRuntime(Runtime):
         self.orch = None
         self.tools = None
         self.available_tools = []
-        self.trace_manager = FleetTraceManager(
-            api_url=self.config.sandbox.fleet_trace_api_url,
-            api_key=self.config.sandbox.fleet_trace_api_key
-        )
 
     async def connect(self):
         """Provision and connect to the Fleet environment."""
@@ -117,58 +112,23 @@ class FleetRuntime(Runtime):
 
     async def run(self, action: CmdRunAction) -> Observation:
         """Map CmdRunAction to Fleet's 'bash' or 'computer' tool."""
-        self.trace_manager.trace_action("run", {"command": action.command})
-        try:
-            # OpenHands CmdRunAction expects a shell.
-            # We look for a 'bash' or 'computer' tool in Fleet.
-            # This is a heuristic; actual tool name depends on the Fleet image.
-
-            tool_name = "bash"
-            args = {"command": action.command}
-
-            # Check if 'computer' is the preferred tool (e.g. Anthropic definition)
-            # which might handle shell commands differently or we might default to 'bash'
-            # For now, let's assume there is a bash-capable tool.
-
-            result = await self.tools.call_tool(tool_name, args)
-
-            # Assuming result structure has content/exit_code
-            # Adjust based on actual CallToolResult
-            obs = CmdOutputObservation(
-                content=str(result.content),
-                exit_code=getattr(result, 'exit_code', 0)
-            )
-            self.trace_manager.trace_observation("run", obs)
-            return obs
-        except Exception as e:
-            self.log('error', f"Error executing run: {e}")
-            self.trace_manager.trace_error("run", str(e))
-            return ErrorObservation(f"Failed to execute command: {e}")
+        return ErrorObservation(
+            "CmdRunAction is not supported in FleetRuntime. "
+            "Fleet environments expose a unified action space via MCP tools; use MCPAction."
+        )
 
     async def read(self, action: FileReadAction) -> Observation:
         """Map FileReadAction to Fleet's file reading tool."""
-        self.trace_manager.trace_action("read", {"path": action.path})
-        try:
-            # Assuming a 'read_file' tool exists
-            result = await self.tools.call_tool("read_file", {"path": action.path})
-            obs = FileReadObservation(content=str(result.content), path=action.path)
-            self.trace_manager.trace_observation("read", obs)
-            return obs
-        except Exception as e:
-            self.trace_manager.trace_error("read", str(e))
-            return ErrorObservation(f"Failed to read file: {e}")
+        return ErrorObservation(
+            "FileReadAction is not supported in FleetRuntime. "
+            "Use MCPAction with the environment's file tool (if exposed) or computer/browser tools."
+        )
 
     async def write(self, action: FileWriteAction) -> Observation:
-        self.trace_manager.trace_action("write", {"path": action.path})
-        try:
-            # Assuming 'write_file' tool
-            await self.tools.call_tool("write_file", {"path": action.path, "content": action.content})
-            obs = FileWriteObservation(content="", path=action.path)
-            self.trace_manager.trace_observation("write", obs)
-            return obs
-        except Exception as e:
-            self.trace_manager.trace_error("write", str(e))
-            return ErrorObservation(f"Failed to write file: {e}")
+        return ErrorObservation(
+            "FileWriteAction is not supported in FleetRuntime. "
+            "Use MCPAction with the environment's file tool (if exposed)."
+        )
 
     async def edit(self, action: FileEditAction) -> Observation:
         # For complex editing, we might use a specific tool or fallback to generic replacement
@@ -197,9 +157,6 @@ class FleetRuntime(Runtime):
             args_preview = {}
 
         self.log('debug', f'MCP call -> {action.tool_name} args={args_preview}')
-        self.trace_manager.trace_action(
-            'mcp', {'tool': action.tool_name, 'args_preview': args_preview}
-        )
         try:
             result = await self.tools.call_tool(action.tool_name, action.tool_args)
             dur_ms = int((time.monotonic() - start) * 1000)
@@ -220,12 +177,10 @@ class FleetRuntime(Runtime):
                 images=images,
                 is_error=is_error,
             )
-            self.trace_manager.trace_observation('mcp', obs)
             return obs
         except Exception as e:
             dur_ms = int((time.monotonic() - start) * 1000)
             self.log('warning', f'MCP error <- {action.tool_name} ({dur_ms}ms): {e}')
-            self.trace_manager.trace_error('mcp', str(e))
             return ErrorObservation(f'MCP Tool call failed: {e}')
 
     def _parse_mcp_result(self, result: Any) -> tuple[str, list[MCPImage], bool]:

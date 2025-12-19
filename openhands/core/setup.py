@@ -16,7 +16,6 @@ from openhands.core.config.config_utils import DEFAULT_WORKSPACE_MOUNT_PATH_IN_S
 from openhands.core.logger import openhands_logger as logger
 from openhands.events import EventStream
 from openhands.events.event import Event
-from openhands.events.trace_exporter import TraceExportConfig, TraceExporter
 from openhands.events.fleet_session_exporter import (
     FleetSessionExporter,
     build_fleet_session_export_config,
@@ -66,26 +65,6 @@ def create_runtime(
     # set up the event stream
     file_store = get_file_store(config.file_store, config.file_store_path)
     event_stream = EventStream(session_id, file_store)
-
-    # Optional: export traces (actions/observations) to an external API endpoint
-    if config.trace_export_url:
-        exporter = TraceExporter(
-            event_stream=event_stream,
-            cfg=TraceExportConfig(
-                url=config.trace_export_url,
-                api_key=(
-                    config.trace_export_api_key.get_secret_value()
-                    if config.trace_export_api_key
-                    else None
-                ),
-                headers=config.trace_export_headers,
-                batch_size=config.trace_export_batch_size,
-                flush_interval_s=config.trace_export_flush_interval_s,
-                timeout_s=config.trace_export_timeout_s,
-                max_queue_size=config.trace_export_max_queue_size,
-            ),
-        )
-        exporter.start()
 
     # agent class
     if agent:

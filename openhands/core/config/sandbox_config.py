@@ -103,14 +103,6 @@ class SandboxConfig(BaseModel):
         default=None,
         description='Fleet environment key to provision (passed to OpenEnv/Fleet).',
     )
-    fleet_trace_api_url: str | None = Field(
-        default=None,
-        description='(Optional) Legacy per-runtime trace endpoint for FleetRuntime (prefer trace_export_url).',
-    )
-    fleet_trace_api_key: str | None = Field(
-        default=None,
-        description='(Optional) API key for fleet_trace_api_url.',
-    )
 
     cuda_visible_devices: str | None = Field(default=None)
     model_config = ConfigDict(extra='forbid')

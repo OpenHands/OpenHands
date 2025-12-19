@@ -62,5 +62,3 @@ class ObservationType(str, Enum):
     LOOP_DETECTION = 'loop_detection'
     """Results of a dead-loop detection"""
 
-    LLM_RESPONSE = 'llm_response'
-    """LLM response metadata (tokens, latency, reasoning trace)"""
