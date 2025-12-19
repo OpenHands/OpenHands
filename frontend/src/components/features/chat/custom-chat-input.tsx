@@ -8,7 +8,7 @@ import { useChatSubmission } from "#/hooks/chat/use-chat-submission";
 import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 
 export interface CustomChatInputProps {
   disabled?: boolean;

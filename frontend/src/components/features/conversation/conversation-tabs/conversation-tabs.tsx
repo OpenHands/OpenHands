@@ -16,7 +16,7 @@ import { VSCodeTooltipContent } from "./vscode-tooltip-content";
 import {
   useConversationStore,
   type ConversationTab,
-} from "#/state/conversation-store";
+} from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
 import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useConversationId } from "#/hooks/use-conversation-id";

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { handleStatusMessage } from "#/services/actions";
 import { StatusMessage } from "#/types/message";
 import { queryClient } from "#/query-client-config";
-import { useStatusStore } from "#/state/status-store";
+import { useStatusStore } from "#/stores/status-store";
 import { trackError } from "#/utils/error-handler";
 
 // Mock dependencies
@@ -12,7 +12,7 @@ vi.mock("#/query-client-config", () => ({
   },
 }));
 
-vi.mock("#/state/status-store", () => ({
+vi.mock("#/stores/status-store", () => ({
   useStatusStore: {
     getState: vi.fn(() => ({
       setCurStatusMessage: vi.fn(),
