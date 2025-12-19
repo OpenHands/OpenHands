@@ -1,39 +1,52 @@
-### Fleet Runtime
+## Fleet Runtime (OpenEnv / Fleet)
 
-The Fleet Runtime allows OpenHands to execute actions within remote environments provisioned by [Fleet](https://github.com/fleet-ai/OpenEnv). It uses a split-plane architecture:
-- **Orchestration (HTTP)**: Resets and manages environment state.
-- **Actions (MCP)**: Discovers and calls tools (e.g., `bash`, `computer`, `str_replace_editor`) exposed by the Fleet environment via the Model Context Protocol.
+Run OpenHands against remote Fleet environments via OpenEnv, using the same **split-plane** model described in the OpenEnv Fleet README ([source](https://raw.githubusercontent.com/fleet-ai/OpenEnv/7c09d5b24a0394f760462a71095bb7721e91933c/src/envs/fleet_env/README.md)):
 
-#### Configuration
+- **Orchestration (HTTP)**: reset / step / state
+- **Agent actions (MCP)**: tools/list + tools/call
 
-To use the Fleet Runtime, update your `config.toml`:
+### Install
+
+```bash
+pip install "openenv-core[fleet]"
+```
+
+### Configure
+
+In `config.toml`:
 
 ```toml
 [core]
 runtime = "fleet"
 
 [sandbox]
-fleet_api_key = "fl_..."
-fleet_env_key = "ubuntu"  # or any other Fleet environment key
+fleet_api_key = "..."      # or set via env
+fleet_env_key = "amazon"   # any Fleet env key
+
+# Optional: export traces (actions/observations) to your API
+trace_export_url = "https://your-api.example.com/trace"
+# trace_export_api_key = "..."
 ```
 
-#### Architecture
+### Run
 
-Unlike `DockerRuntime` which spins up a local container with an `ActionExecutionServer`, `FleetRuntime` acts as a bridge:
-1.  **Connects** to Fleet using `FleetEnvClient`.
-2.  **Discovers** tools (capabilities) using `FleetMCPTools`.
-3.  **Maps** OpenHands actions (`CmdRunAction`, `FileReadAction`) to the corresponding Fleet MCP tools.
-4.  **Forwards** generic `MCPAction` calls directly to the Fleet environment.
+Run OpenHands normally (GUI/CLI/etc.) using this config. The key change is `runtime = "fleet"`.
 
-#### Observability
+### What you should see
 
-- **Local Logging**: `FleetRuntime` logs tool discovery and execution metrics (latency, success/failure) to the console.
-- **Remote Tracing**: You can export action/observation traces to an external API by configuring `trace_export_url` in `config.toml`.
+On startup, `FleetRuntime` will:
 
-#### Requirements
+- connect + reset
+- `list_tools()` over MCP and log the discovered tool names (e.g. `computer`)
 
-You must install the Fleet SDK integration:
-```bash
-pip install "openenv-core[fleet]"
-```
+Then your agent (e.g. `CodeActAgent`) can call MCP tools by name. For example, in an OpenEnv Fleet environment that exposes only `computer`, the agent will emit tool calls like:
+
+- `computer({action: "cursor_position"})`
+
+### Traces to an API
+
+If you set `trace_export_url`, OpenHands will stream redacted EventStream events to your endpoint in batches:
+
+- POST body: `{ "events": [ { "session_id": "...", "user_id": null, "event": {...} }, ... ] }`
+- Auth: optional `Authorization: Bearer <trace_export_api_key>`
 

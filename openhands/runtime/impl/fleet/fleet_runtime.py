@@ -1,3 +1,4 @@
+import inspect
 import time
 from typing import Any, Dict, List
 import copy
@@ -72,10 +73,8 @@ class FleetRuntime(Runtime):
             # 1. Initialize Fleet Clients
             # Note: This is based on the pseudocode in the README.
             # Adjust if the actual SDK signature differs.
-            self.orch, self.tools = await FleetEnvClient.from_fleet(
-                api_key=api_key,
-                env_key=env_key
-            )
+            maybe = FleetEnvClient.from_fleet(api_key=api_key, env_key=env_key)
+            self.orch, self.tools = await maybe if inspect.isawaitable(maybe) else maybe
 
             # 2. Reset the remote environment
             self.log('info', 'Resetting environment...')
@@ -83,7 +82,10 @@ class FleetRuntime(Runtime):
 
             # 3. Discover available tools
             self.log('info', 'Discovering tools...')
-            tool_list_action = await self.tools.list_tools()
+            maybe_tools = self.tools.list_tools()
+            tool_list_action = (
+                await maybe_tools if inspect.isawaitable(maybe_tools) else maybe_tools
+            )
             self.available_tools = tool_list_action.tools
             tool_names = []
             try:

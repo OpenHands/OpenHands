@@ -93,6 +93,25 @@ class SandboxConfig(BaseModel):
         description="Volume mounts in the format 'host_path:container_path[:mode]', e.g. '/my/host/dir:/workspace:rw'. Multiple mounts can be specified using commas, e.g. '/path1:/workspace/path1,/path2:/workspace/path2:ro'",
     )
 
+    # ============================================================
+    # Fleet / OpenEnv (optional)
+    # ============================================================
+    fleet_api_key: str | None = Field(
+        default=None, description='Fleet API key (e.g., "FLEET_API_KEY").'
+    )
+    fleet_env_key: str | None = Field(
+        default=None,
+        description='Fleet environment key to provision (passed to OpenEnv/Fleet).',
+    )
+    fleet_trace_api_url: str | None = Field(
+        default=None,
+        description='(Optional) Legacy per-runtime trace endpoint for FleetRuntime (prefer trace_export_url).',
+    )
+    fleet_trace_api_key: str | None = Field(
+        default=None,
+        description='(Optional) API key for fleet_trace_api_url.',
+    )
+
     cuda_visible_devices: str | None = Field(default=None)
     model_config = ConfigDict(extra='forbid')
 
