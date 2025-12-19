@@ -122,7 +122,9 @@ class RemoteSandboxService(SandboxService):
             _logger.error(f'HTTP error for URL {url}: {e}')
             raise
 
-    def _to_sandbox_info(self, stored: StoredRemoteSandbox, runtime: dict[str, Any] | None = None):
+    def _to_sandbox_info(
+        self, stored: StoredRemoteSandbox, runtime: dict[str, Any] | None = None
+    ):
         status = self._get_sandbox_status_from_runtime(runtime)
 
         # Get session_api_key and exposed urls
