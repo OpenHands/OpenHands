@@ -232,6 +232,41 @@ class RemoteSandboxService(SandboxService):
         runtime_data = response.json()
         return runtime_data
 
+    async def _get_runtimes_batch(
+        self, sandbox_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Get multiple runtimes in a single batch request.
+
+        Args:
+            sandbox_ids: List of sandbox IDs to fetch
+
+        Returns:
+            Dictionary mapping sandbox_id to runtime data
+        """
+        if not sandbox_ids:
+            return {}
+
+        # Build query parameters for the batch endpoint
+        params = [('ids', sandbox_id) for sandbox_id in sandbox_ids]
+
+        response = await self._send_runtime_api_request(
+            'GET',
+            '/sessions/batch',
+            params=params,
+        )
+        response.raise_for_status()
+        batch_data = response.json()
+
+        # The batch endpoint should return a list of runtimes
+        # Convert to a dictionary keyed by session_id for easy lookup
+        runtimes_by_id = {}
+        if batch_data and 'runtimes' in batch_data:
+            for runtime in batch_data['runtimes']:
+                if 'session_id' in runtime:
+                    runtimes_by_id[runtime['session_id']] = runtime
+
+        return runtimes_by_id
+
     async def _init_environment(
         self, sandbox_spec: SandboxSpecInfo, sandbox_id: str
     ) -> dict[str, str]:
@@ -282,10 +317,16 @@ class RemoteSandboxService(SandboxService):
         if has_more:
             next_page_id = str(offset + limit)
 
-        # Convert stored callbacks to domain models
+        # Batch fetch runtime data for all sandboxes
+        sandbox_ids = [stored_sandbox.id for stored_sandbox in stored_sandboxes]
+        runtimes_by_id = await self._get_runtimes_batch(sandbox_ids)
+
+        # Convert stored sandboxes to domain models with runtime data
         items = await asyncio.gather(
             *[
-                self._to_sandbox_info(stored_sandbox)
+                self._to_sandbox_info(
+                    stored_sandbox, runtime=runtimes_by_id.get(stored_sandbox.id)
+                )
                 for stored_sandbox in stored_sandboxes
             ]
         )

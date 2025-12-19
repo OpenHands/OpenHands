@@ -677,15 +677,18 @@ class TestSandboxSearch:
         mock_result = MagicMock()
         mock_result.scalars.return_value = mock_scalars
         remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
-        remote_sandbox_service._to_sandbox_info = AsyncMock(
-            side_effect=lambda stored: SandboxInfo(
-                id=stored.id,
-                created_by_user_id=stored.created_by_user_id,
-                sandbox_spec_id=stored.sandbox_spec_id,
-                status=SandboxStatus.RUNNING,
-                session_api_key='test-key',
-                created_at=stored.created_at,
-            )
+
+        # Mock the batch endpoint response
+        mock_batch_response = MagicMock()
+        mock_batch_response.raise_for_status.return_value = None
+        mock_batch_response.json.return_value = {
+            'runtimes': [
+                create_runtime_data('sb1'),
+                create_runtime_data('sb2'),
+            ]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_batch_response
         )
 
         # Execute
@@ -696,6 +699,14 @@ class TestSandboxSearch:
         assert result.next_page_id is None
         assert result.items[0].id == 'sb1'
         assert result.items[1].id == 'sb2'
+
+        # Verify that the batch endpoint was called
+        remote_sandbox_service.httpx_client.request.assert_called_once_with(
+            'GET',
+            'https://api.example.com/sessions/batch',
+            headers={'X-API-Key': 'test-api-key'},
+            params=[('ids', 'sb1'), ('ids', 'sb2')],
+        )
 
     @pytest.mark.asyncio
     async def test_search_sandboxes_with_pagination(self, remote_sandbox_service):
@@ -710,15 +721,15 @@ class TestSandboxSearch:
         mock_result = MagicMock()
         mock_result.scalars.return_value = mock_scalars
         remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
-        remote_sandbox_service._to_sandbox_info = AsyncMock(
-            side_effect=lambda stored: SandboxInfo(
-                id=stored.id,
-                created_by_user_id=stored.created_by_user_id,
-                sandbox_spec_id=stored.sandbox_spec_id,
-                status=SandboxStatus.RUNNING,
-                session_api_key='test-key',
-                created_at=stored.created_at,
-            )
+
+        # Mock the batch endpoint response
+        mock_batch_response = MagicMock()
+        mock_batch_response.raise_for_status.return_value = None
+        mock_batch_response.json.return_value = {
+            'runtimes': [create_runtime_data(f'sb{i}') for i in range(6)]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_batch_response
         )
 
         # Execute
@@ -739,15 +750,15 @@ class TestSandboxSearch:
         mock_result = MagicMock()
         mock_result.scalars.return_value = mock_scalars
         remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
-        remote_sandbox_service._to_sandbox_info = AsyncMock(
-            side_effect=lambda stored: SandboxInfo(
-                id=stored.id,
-                created_by_user_id=stored.created_by_user_id,
-                sandbox_spec_id=stored.sandbox_spec_id,
-                status=SandboxStatus.RUNNING,
-                session_api_key='test-key',
-                created_at=stored.created_at,
-            )
+
+        # Mock the batch endpoint response
+        mock_batch_response = MagicMock()
+        mock_batch_response.raise_for_status.return_value = None
+        mock_batch_response.json.return_value = {
+            'runtimes': [create_runtime_data('sb1')]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_batch_response
         )
 
         # Execute
@@ -756,6 +767,80 @@ class TestSandboxSearch:
         # Verify that offset was applied to the query
         # Note: We can't easily verify the exact SQL query, but we can verify the method was called
         remote_sandbox_service.db_session.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_runtimes_batch_success(self, remote_sandbox_service):
+        """Test successful batch runtime retrieval."""
+        # Setup
+        sandbox_ids = ['sb1', 'sb2', 'sb3']
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            'runtimes': [
+                create_runtime_data('sb1'),
+                create_runtime_data('sb2'),
+                create_runtime_data('sb3'),
+            ]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        # Execute
+        result = await remote_sandbox_service._get_runtimes_batch(sandbox_ids)
+
+        # Verify
+        assert len(result) == 3
+        assert 'sb1' in result
+        assert 'sb2' in result
+        assert 'sb3' in result
+        assert result['sb1']['session_id'] == 'sb1'
+
+        # Verify the correct API call was made
+        remote_sandbox_service.httpx_client.request.assert_called_once_with(
+            'GET',
+            'https://api.example.com/sessions/batch',
+            headers={'X-API-Key': 'test-api-key'},
+            params=[('ids', 'sb1'), ('ids', 'sb2'), ('ids', 'sb3')],
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_runtimes_batch_empty_list(self, remote_sandbox_service):
+        """Test batch runtime retrieval with empty sandbox list."""
+        # Execute
+        result = await remote_sandbox_service._get_runtimes_batch([])
+
+        # Verify
+        assert result == {}
+        # Verify no API call was made
+        remote_sandbox_service.httpx_client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_runtimes_batch_partial_results(self, remote_sandbox_service):
+        """Test batch runtime retrieval with partial results (some sandboxes not found)."""
+        # Setup
+        sandbox_ids = ['sb1', 'sb2', 'sb3']
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            'runtimes': [
+                create_runtime_data('sb1'),
+                create_runtime_data('sb3'),
+                # sb2 is missing from the response
+            ]
+        }
+        remote_sandbox_service.httpx_client.request = AsyncMock(
+            return_value=mock_response
+        )
+
+        # Execute
+        result = await remote_sandbox_service._get_runtimes_batch(sandbox_ids)
+
+        # Verify
+        assert len(result) == 2
+        assert 'sb1' in result
+        assert 'sb2' not in result  # Missing from response
+        assert 'sb3' in result
 
     @pytest.mark.asyncio
     async def test_get_sandbox_exists(self, remote_sandbox_service):
