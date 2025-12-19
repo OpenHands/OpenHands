@@ -4,28 +4,28 @@ import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/b
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "../settings/brand-button";
 
-interface MicroagentsModalHeaderProps {
+interface SkillsModalHeaderProps {
   isAgentReady: boolean;
   isLoading: boolean;
   isRefetching: boolean;
   onRefresh: () => void;
 }
 
-export function MicroagentsModalHeader({
+export function SkillsModalHeader({
   isAgentReady,
   isLoading,
   isRefetching,
   onRefresh,
-}: MicroagentsModalHeaderProps) {
+}: SkillsModalHeaderProps) {
   const { t } = useTranslation();
 
   return (
     <div className="flex flex-col gap-6 w-full">
       <div className="flex items-center justify-between w-full">
-        <BaseModalTitle title={t(I18nKey.MICROAGENTS_MODAL$TITLE)} />
+        <BaseModalTitle title={t(I18nKey.SKILLS_MODAL$TITLE)} />
         {isAgentReady && (
           <BrandButton
-            testId="refresh-microagents"
+            testId="refresh-skills"
             type="button"
             variant="primary"
             className="flex items-center gap-2"

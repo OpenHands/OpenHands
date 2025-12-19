@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseMaxBudgetPerTask, extractSettings } from "../settings-utils";
+import { parseMaxBudgetPerTask, extractSettings } from "#/utils/settings-utils";
 
 describe("parseMaxBudgetPerTask", () => {
   it("should return null for empty string", () => {

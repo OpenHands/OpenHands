@@ -1,6 +1,6 @@
 import { trackError } from "#/utils/error-handler";
 import useMetricsStore from "#/stores/metrics-store";
-import { useStatusStore } from "#/state/status-store";
+import { useStatusStore } from "#/stores/status-store";
 import ActionType from "#/types/action-type";
 import {
   ActionMessage,
@@ -8,7 +8,7 @@ import {
   StatusMessage,
 } from "#/types/message";
 import { handleObservationMessage } from "./observations";
-import { useCommandStore } from "#/state/command-store";
+import { useCommandStore } from "#/stores/command-store";
 import { queryClient } from "#/query-client-config";
 import {
   ActionSecurityRisk,

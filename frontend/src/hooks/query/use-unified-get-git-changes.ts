@@ -103,5 +103,6 @@ export const useUnifiedGetGitChanges = () => {
     isSuccess: result.isSuccess,
     isError: result.isError,
     error: result.error,
+    refetch: result.refetch,
   };
 };

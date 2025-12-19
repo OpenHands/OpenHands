@@ -31,6 +31,7 @@ from openhands.events.event_store import EventStore
 from openhands.events.serialization.event import event_to_dict
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
 from openhands.runtime.impl.remote.remote_runtime import RemoteRuntime
+from openhands.runtime.plugins.vscode import VSCodeRequirement
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.server.config.server_config import ServerConfig
 from openhands.server.constants import ROOM_KEY
@@ -71,9 +72,12 @@ RUNTIME_CONVERSATION_URL = RUNTIME_URL_PATTERN + (
 )
 
 RUNTIME_USERNAME = os.getenv('RUNTIME_USERNAME')
+
 SU_TO_USER = os.getenv('SU_TO_USER', 'false')
 truthy = {'1', 'true', 't', 'yes', 'y', 'on'}
 SU_TO_USER = str(SU_TO_USER.lower() in truthy).lower()
+
+DISABLE_VSCODE_PLUGIN = os.getenv('DISABLE_VSCODE_PLUGIN', 'false').lower() == 'true'
 
 # Time in seconds before a Redis entry is considered expired if not refreshed
 _REDIS_ENTRY_TIMEOUT_SECONDS = 300
@@ -799,6 +803,7 @@ class SaasNestedConversationManager(ConversationManager):
         env_vars['INIT_GIT_IN_EMPTY_WORKSPACE'] = '1'
         env_vars['ENABLE_V1'] = '0'
         env_vars['SU_TO_USER'] = SU_TO_USER
+        env_vars['DISABLE_VSCODE_PLUGIN'] = str(DISABLE_VSCODE_PLUGIN).lower()
 
         # We need this for LLM traces tracking to identify the source of the LLM calls
         env_vars['WEB_HOST'] = WEB_HOST
@@ -814,11 +819,18 @@ class SaasNestedConversationManager(ConversationManager):
         if self._runtime_container_image:
             config.sandbox.runtime_container_image = self._runtime_container_image
 
+        plugins = [
+            plugin
+            for plugin in agent.sandbox_plugins
+            if not (DISABLE_VSCODE_PLUGIN and isinstance(plugin, VSCodeRequirement))
+        ]
+        logger.info(f'Loaded plugins for runtime {sid}: {plugins}')
+
         runtime = RemoteRuntime(
             config=config,
             event_stream=None,  # type: ignore[arg-type]
             sid=sid,
-            plugins=agent.sandbox_plugins,
+            plugins=plugins,
             # env_vars=env_vars,
             # status_callback: Callable[..., None] | None = None,
             attach_to_existing=False,

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { GitRepository } from "#/types/git";
 
 interface MicroagentManagementAddMicroagentButtonProps {

@@ -4,7 +4,7 @@ import { CHAT_INPUT } from "#/utils/constants";
 import {
   IMessageToSend,
   useConversationStore,
-} from "#/state/conversation-store";
+} from "#/stores/conversation-store";
 
 /**
  * Hook for managing grip resize functionality

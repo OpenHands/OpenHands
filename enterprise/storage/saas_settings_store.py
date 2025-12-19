@@ -94,6 +94,7 @@ class SaasSettingsStore(SettingsStore):
             }
             self._decrypt_kwargs(kwargs)
             settings = Settings(**kwargs)
+
             return settings
 
     async def store(self, item: Settings):

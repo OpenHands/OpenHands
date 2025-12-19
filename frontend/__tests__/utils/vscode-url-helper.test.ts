@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { transformVSCodeUrl } from "../vscode-url-helper";
+import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 
 describe("transformVSCodeUrl", () => {
   const originalWindowLocation = window.location;
