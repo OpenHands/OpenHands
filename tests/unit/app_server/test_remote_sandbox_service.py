@@ -755,13 +755,11 @@ class TestSandboxSearch:
         sandbox_ids = ['sb1', 'sb2', 'sb3']
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {
-            'runtimes': [
-                create_runtime_data('sb1'),
-                create_runtime_data('sb2'),
-                create_runtime_data('sb3'),
-            ]
-        }
+        mock_response.json.return_value = [
+            create_runtime_data('sb1'),
+            create_runtime_data('sb2'),
+            create_runtime_data('sb3'),
+        ]
         remote_sandbox_service.httpx_client.request = AsyncMock(
             return_value=mock_response
         )
@@ -802,13 +800,11 @@ class TestSandboxSearch:
         sandbox_ids = ['sb1', 'sb2', 'sb3']
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {
-            'runtimes': [
-                create_runtime_data('sb1'),
-                create_runtime_data('sb3'),
-                # sb2 is missing from the response
-            ]
-        }
+        mock_response.json.return_value = [
+            create_runtime_data('sb1'),
+            create_runtime_data('sb3'),
+            # sb2 is missing from the response
+        ]
         remote_sandbox_service.httpx_client.request = AsyncMock(
             return_value=mock_response
         )
