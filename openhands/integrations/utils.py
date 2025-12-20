@@ -49,11 +49,10 @@ async def validate_provider_token(
     except Exception as e:
         gitlab_error = e
 
-    # Try Forgejo if base_domain suggests it
+    # Try Forgejo if a base_domain was provided (custom instances may not contain
+    # the substring 'forgejo' or 'codeberg')
     forgejo_error = None
-    if base_domain and (
-        'codeberg' in base_domain.lower() or 'forgejo' in base_domain.lower()
-    ):
+    if base_domain:
         try:
             forgejo_service = ForgejoService(token=token, base_domain=base_domain)
             await forgejo_service.get_user()
