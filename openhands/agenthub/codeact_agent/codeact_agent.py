@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
     from openhands.events.action import Action
     from openhands.llm.llm import ModelResponse
-import time
 
 import openhands.agenthub.codeact_agent.function_calling as codeact_function_calling
 from openhands.agenthub.codeact_agent.tools.bash import create_cmd_run_tool
@@ -234,9 +233,7 @@ class CodeActAgent(Agent):
             )
         }
         logger.info(f'CodeActAgent querying LLM with {len(messages)} messages')
-        start_time = time.monotonic()
         response = self.llm.completion(**params)
-        latency_ms = int((time.monotonic() - start_time) * 1000)
         logger.debug(f'Response from LLM: {response}')
 
         # Optional: Fleet session logging (streams LLM calls to Fleet dashboard).

@@ -302,6 +302,27 @@ async def add_mcp_tools_to_agent(
         'Runtime must be initialized before adding MCP tools'
     )
 
+    # FleetRuntime (and other MCP-native runtimes) may expose MCP tools directly on the runtime,
+    # without going through OpenHands MCP client connections. Prefer those if present.
+    runtime_tools = getattr(runtime, 'available_tools', None)
+    if isinstance(runtime_tools, list) and runtime_tools:
+        try:
+            tool_names = []
+            for tool in runtime_tools:
+                fn = tool.get('function', {}) if isinstance(tool, dict) else {}
+                name = fn.get('name')
+                if name:
+                    tool_names.append(name)
+            logger.info(
+                f'Loaded {len(runtime_tools)} runtime-provided MCP tools: {sorted(tool_names)}'
+            )
+        except Exception:
+            logger.info(f'Loaded {len(runtime_tools)} runtime-provided MCP tools')
+
+        agent.set_mcp_tools(runtime_tools)
+        # Return the runtime MCP config (may be empty for MCP-native runtimes)
+        return runtime.get_mcp_config([])
+
     extra_stdio_servers = []
 
     # Add microagent MCP tools if available

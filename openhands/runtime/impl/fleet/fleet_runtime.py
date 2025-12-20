@@ -1,13 +1,11 @@
 import inspect
 import time
 from typing import Any, Dict, List
-import copy
 from pathlib import Path
 
 from openhands.runtime.base import Runtime
 from openhands.core.config import OpenHandsConfig
 from openhands.events.action import (
-    Action,
     CmdRunAction,
     FileReadAction,
     FileWriteAction,
@@ -17,11 +15,6 @@ from openhands.events.action import (
     MCPAction
 )
 from openhands.events.observation import (
-    CmdOutputObservation,
-    FileReadObservation,
-    FileWriteObservation,
-    FileEditObservation,
-    BrowserOutputObservation,
     Observation,
     ErrorObservation,
     MCPObservation,
@@ -146,9 +139,9 @@ class FleetRuntime(Runtime):
         start = time.monotonic()
         args_preview: Dict[str, Any] = {}
         try:
-            if isinstance(action.tool_args, dict):
+            if isinstance(action.arguments, dict):
                 # Avoid logging huge payloads (e.g., screenshots); only log keys + small primitives.
-                for k, v in action.tool_args.items():
+                for k, v in action.arguments.items():
                     if isinstance(v, (str, int, float, bool)) and len(str(v)) <= 200:
                         args_preview[k] = v
                     else:
@@ -156,9 +149,9 @@ class FleetRuntime(Runtime):
         except Exception:
             args_preview = {}
 
-        self.log('debug', f'MCP call -> {action.tool_name} args={args_preview}')
+        self.log('debug', f'MCP call -> {action.name} args={args_preview}')
         try:
-            result = await self.tools.call_tool(action.tool_name, action.tool_args)
+            result = await self.tools.call_tool(action.name, action.arguments)
             dur_ms = int((time.monotonic() - start) * 1000)
 
             # Parse MCP result to extract text and images
@@ -166,21 +159,21 @@ class FleetRuntime(Runtime):
 
             self.log(
                 'debug',
-                f'MCP result <- {action.tool_name} ({dur_ms}ms): '
+                f'MCP result <- {action.name} ({dur_ms}ms): '
                 f'{len(text_content)} chars, {len(images)} images',
             )
 
             obs = MCPObservation(
                 content=text_content,
-                name=action.tool_name,
-                arguments=action.tool_args or {},
+                name=action.name,
+                arguments=action.arguments or {},
                 images=images,
                 is_error=is_error,
             )
             return obs
         except Exception as e:
             dur_ms = int((time.monotonic() - start) * 1000)
-            self.log('warning', f'MCP error <- {action.tool_name} ({dur_ms}ms): {e}')
+            self.log('warning', f'MCP error <- {action.name} ({dur_ms}ms): {e}')
             return ErrorObservation(f'MCP Tool call failed: {e}')
 
     def _parse_mcp_result(self, result: Any) -> tuple[str, list[MCPImage], bool]:

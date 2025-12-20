@@ -43,6 +43,22 @@ class AgentConfig(BaseModel):
     """Whether to enable prompt extensions"""
     enable_mcp: bool = Field(default=True)
     """Whether to enable MCP tools"""
+
+    # ============================================================
+    # MCP vision (multimodal) support
+    # ============================================================
+    enable_mcp_image_injection: bool = Field(
+        default=True,
+        description='If true, inject images returned by MCP tools (e.g. screenshots) into the next LLM prompt when vision is active.',
+    )
+    mcp_image_tool_allowlist: list[str] = Field(
+        default_factory=list,
+        description='Optional allowlist of MCP tool names whose returned images should be injected. Empty means allow all tools.',
+    )
+    mcp_max_images_per_observation: int = Field(
+        default=2,
+        description='Maximum number of images to include from a single MCPObservation.',
+    )
     disabled_microagents: list[str] = Field(default_factory=list)
     """A list of microagents to disable (by name, without .py extension, e.g. ["github", "lint"]). Default is None."""
     enable_history_truncation: bool = Field(default=True)

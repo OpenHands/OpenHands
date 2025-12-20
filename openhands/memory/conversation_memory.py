@@ -399,9 +399,34 @@ class ConversationMemory:
                 text = truncate_content(obs.to_agent_observation(), max_message_chars)
             message = Message(role='user', content=[TextContent(text=text)])
         elif isinstance(obs, MCPObservation):
-            # logger.warning(f'MCPObservation: {obs}')
             text = truncate_content(obs.content, max_message_chars)
-            message = Message(role='user', content=[TextContent(text=text)])
+            content: list[TextContent | ImageContent] = [TextContent(text=text)]
+
+            # Inject MCP-returned images (e.g., screenshots) when vision is active.
+            images = getattr(obs, 'images', None)
+            if (
+                vision_is_active
+                and self.agent_config.enable_mcp_image_injection
+                and images
+            ):
+                allowlist = self.agent_config.mcp_image_tool_allowlist or []
+                if not allowlist or obs.name in allowlist:
+                    # Add a short descriptor to the text so the model knows an image follows.
+                    # We know content[0] is TextContent.
+                    tc = content[0]
+                    assert isinstance(tc, TextContent)
+                    tc.text += '\n\nImage: MCP tool returned screenshot(s).\n'
+
+                    max_imgs = max(0, int(self.agent_config.mcp_max_images_per_observation))
+                    image_urls = [
+                        img.to_data_uri()
+                        for img in images[:max_imgs]
+                        if hasattr(img, 'to_data_uri')
+                    ]
+                    if image_urls:
+                        content.append(ImageContent(image_urls=image_urls))
+
+            message = Message(role='user', content=content)
         elif isinstance(obs, IPythonRunCellObservation):
             text = obs.content
             # Clean up any remaining base64 images in text content
