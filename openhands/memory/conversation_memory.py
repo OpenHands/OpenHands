@@ -409,22 +409,20 @@ class ConversationMemory:
                 and self.agent_config.enable_mcp_image_injection
                 and images
             ):
-                allowlist = self.agent_config.mcp_image_tool_allowlist or []
-                if not allowlist or obs.name in allowlist:
-                    # Add a short descriptor to the text so the model knows an image follows.
-                    # We know content[0] is TextContent.
-                    tc = content[0]
-                    assert isinstance(tc, TextContent)
-                    tc.text += '\n\nImage: MCP tool returned screenshot(s).\n'
+                # Add a short descriptor to the text so the model knows an image follows.
+                # We know content[0] is TextContent.
+                tc = content[0]
+                assert isinstance(tc, TextContent)
+                tc.text += '\n\nImage: MCP tool returned screenshot(s).\n'
 
-                    max_imgs = max(0, int(self.agent_config.mcp_max_images_per_observation))
-                    image_urls = [
-                        img.to_data_uri()
-                        for img in images[:max_imgs]
-                        if hasattr(img, 'to_data_uri')
-                    ]
-                    if image_urls:
-                        content.append(ImageContent(image_urls=image_urls))
+                max_imgs = max(0, int(self.agent_config.mcp_max_images_per_observation))
+                image_urls = [
+                    img.to_data_uri()
+                    for img in images[:max_imgs]
+                    if hasattr(img, 'to_data_uri')
+                ]
+                if image_urls:
+                    content.append(ImageContent(image_urls=image_urls))
 
             message = Message(role='user', content=content)
         elif isinstance(obs, IPythonRunCellObservation):

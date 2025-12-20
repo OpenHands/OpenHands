@@ -95,20 +95,6 @@ class CodeActAgent(Agent):
         # Override with router if needed
         self.llm = self.llm_registry.get_router(self.config)
 
-        # High-signal tool logging for debugging integrations (e.g., MCP-only runtimes like Fleet).
-        try:
-            tool_names = []
-            for tool in self.tools:
-                fn = tool.get('function', {}) if isinstance(tool, dict) else {}
-                name = fn.get('name')
-                if name:
-                    tool_names.append(name)
-            logger.info(
-                f'CodeActAgent initialized with {len(tool_names)} tools: {sorted(tool_names)}'
-            )
-        except Exception as e:
-            logger.debug(f'Failed to log tool list: {e}')
-
     @property
     def prompt_manager(self) -> PromptManager:
         if self._prompt_manager is None:
@@ -196,9 +182,7 @@ class CodeActAgent(Agent):
         """
         # Continue with pending actions if any
         if self.pending_actions:
-            action = self.pending_actions.popleft()
-            logger.info(f'CodeActAgent executing pending action: {action}')
-            return action
+            return self.pending_actions.popleft()
 
         # if we're done, go back
         latest_user_message = state.get_last_user_message()
@@ -232,7 +216,6 @@ class CodeActAgent(Agent):
                 model_name=self.llm.config.model, agent_name=self.name
             )
         }
-        logger.info(f'CodeActAgent querying LLM with {len(messages)} messages')
         response = self.llm.completion(**params)
         logger.debug(f'Response from LLM: {response}')
 
@@ -241,19 +224,14 @@ class CodeActAgent(Agent):
             exporter = getattr(self, 'fleet_session_exporter', None)
             if exporter is not None and getattr(exporter, 'enabled', False):
                 exporter.log_llm_call(history=messages, response=response)
-        except Exception as e:
-            logger.debug(f'Fleet session log skipped: {e}')
+        except Exception:
+            pass
 
         actions = self.response_to_actions(response)
-        logger.info(f'CodeActAgent received {len(actions)} actions from LLM: {actions}')
+        logger.debug(f'Actions after response_to_actions: {actions}')
         for action in actions:
             self.pending_actions.append(action)
-
-        if self.pending_actions:
-            action = self.pending_actions.popleft()
-            logger.info(f'CodeActAgent executing action: {action}')
-            return action
-        return AgentFinishAction() # Fallback if no actions generated
+        return self.pending_actions.popleft()
 
     def _get_initial_user_message(self, history: list[Event]) -> MessageAction:
         """Finds the initial user message action from the full history."""
@@ -325,20 +303,7 @@ class CodeActAgent(Agent):
         return messages
 
     def response_to_actions(self, response: 'ModelResponse') -> list['Action']:
-        actions = codeact_function_calling.response_to_actions(
+        return codeact_function_calling.response_to_actions(
             response,
             mcp_tool_names=list(self.mcp_tools.keys()),
         )
-        # Summarize actions without dumping full payloads (keeps logs readable and safer).
-        try:
-            summary = []
-            for a in actions:
-                action_type = getattr(a, 'action', type(a).__name__)
-                if action_type == 'call_tool_mcp':
-                    summary.append(f'mcp:{getattr(a, "tool_name", "")}')
-                else:
-                    summary.append(str(action_type))
-            logger.debug(f'LLM produced actions: {summary}')
-        except Exception as e:
-            logger.debug(f'Failed to summarize actions for logging: {e}')
-        return actions

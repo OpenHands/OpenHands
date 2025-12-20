@@ -51,10 +51,6 @@ class AgentConfig(BaseModel):
         default=True,
         description='If true, inject images returned by MCP tools (e.g. screenshots) into the next LLM prompt when vision is active.',
     )
-    mcp_image_tool_allowlist: list[str] = Field(
-        default_factory=list,
-        description='Optional allowlist of MCP tool names whose returned images should be injected. Empty means allow all tools.',
-    )
     mcp_max_images_per_observation: int = Field(
         default=2,
         description='Maximum number of images to include from a single MCPObservation.',

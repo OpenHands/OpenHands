@@ -53,8 +53,6 @@ fleet_env_key = "amazon"      # any Fleet env key (e.g., "ubuntu")
 # Inject MCP-returned images (e.g., screenshots) into the next LLM prompt when vision is active
 enable_mcp_image_injection = true
 mcp_max_images_per_observation = 2
-# Optional: only inject images from specific MCP tools (use aliased names if configured)
-# mcp_image_tool_allowlist = ["screenshot"]
 
 # Optional: Fleet Sessions (Fleet dashboard logging of LLM calls)
 fleet_session_export_enabled = true
