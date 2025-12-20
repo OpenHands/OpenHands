@@ -669,32 +669,11 @@ class ProviderHandler:
 
         domain = self.PROVIDER_DOMAINS[provider]
 
-        # Prefer per-provider resolved service domain (respects env like FORGEJO_BASE_URL)
-        resolved_service_domain: str | None = None
-        try:
-            service = self.get_service(provider)
-            base_domain = getattr(service, 'base_domain', None)
-            base_url = getattr(service, 'BASE_URL', None)
-            if base_domain:
-                resolved_service_domain = base_domain
-            elif base_url:
-                from urllib.parse import urlparse
-
-                parsed = urlparse(base_url)
-                if parsed.netloc:
-                    resolved_service_domain = parsed.netloc
-        except Exception:
-            resolved_service_domain = None
-
-        # If provider tokens are provided, prefer the host from tokens when set; otherwise
-        # fall back to resolved service domain, then the default domain.
-        if provider != ProviderType.AZURE_DEVOPS:
-            token_host = (
-                self.provider_tokens[provider].host
-                if (self.provider_tokens and provider in self.provider_tokens)
-                else None
-            )
-            domain = token_host or resolved_service_domain or domain
+        # If provider tokens are provided, use the host from the token if available
+        # Note: For Azure DevOps, don't use the host field as it may contain org/project path
+        if self.provider_tokens and provider in self.provider_tokens:
+            if provider != ProviderType.AZURE_DEVOPS:
+                domain = self.provider_tokens[provider].host or domain
 
         # Normalize domain to prevent double protocols or path segments
         if domain:
