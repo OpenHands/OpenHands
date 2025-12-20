@@ -578,7 +578,9 @@ class RemoteSandboxService(SandboxService):
             stored_remote_sandbox[0].id: stored_remote_sandbox[0]
             for stored_remote_sandbox in stored_remote_sandboxes
         }
-        runtimes_by_id = await self._get_runtimes_batch(list(stored_remote_sandboxes_by_id))
+        runtimes_by_id = await self._get_runtimes_batch(
+            list(stored_remote_sandboxes_by_id)
+        )
         results = []
         for sandbox_id in sandbox_ids:
             stored_remote_sandbox = stored_remote_sandboxes_by_id.get(sandbox_id)
