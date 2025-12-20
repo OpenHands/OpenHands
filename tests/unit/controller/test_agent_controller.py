@@ -24,6 +24,7 @@ from openhands.core.schema import AgentState
 from openhands.events import Event, EventSource, EventStream, EventStreamSubscriber
 from openhands.events.action import ChangeAgentStateAction, CmdRunAction, MessageAction
 from openhands.events.action.agent import CondensationAction, RecallAction
+from openhands.events.action.empty import NullAction
 from openhands.events.action.message import SystemMessageAction
 from openhands.events.event import RecallType
 from openhands.events.observation import (
@@ -319,13 +320,22 @@ async def test_tool_call_validation_error_handling(
 
     controller.state.agent_state = AgentState.RUNNING
 
-    # Mock the agent.step method to raise a BadRequestError with tool validation failure
+    # Track call count to only raise error on first call
+    # This prevents a feedback loop where ErrorObservation triggers another step
+    # which raises the same error again (since the mock always raises)
+    call_count = 0
+
     def mock_step(state):
-        raise BadRequestError(
-            message='litellm.BadRequestError: GroqException - {"error":{"message":"tool call validation failed: parameters for tool str_replace_editor did not match schema: errors: [missing properties: \'path\']","type":"invalid_request_error","code":"tool_use_failed"}}',
-            model='groq/llama3-8b-8192',
-            llm_provider='groq',
-        )
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise BadRequestError(
+                message='litellm.BadRequestError: GroqException - {"error":{"message":"tool call validation failed: parameters for tool str_replace_editor did not match schema: errors: [missing properties: \'path\']","type":"invalid_request_error","code":"tool_use_failed"}}',
+                model='groq/llama3-8b-8192',
+                llm_provider='groq',
+            )
+        # Return NullAction on subsequent calls to break the feedback loop
+        return NullAction()
 
     mock_agent.step = mock_step
 
