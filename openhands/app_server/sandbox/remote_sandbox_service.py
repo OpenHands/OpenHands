@@ -252,10 +252,9 @@ class RemoteSandboxService(SandboxService):
         # The batch endpoint should return a list of runtimes
         # Convert to a dictionary keyed by session_id for easy lookup
         runtimes_by_id = {}
-        if batch_data and 'runtimes' in batch_data:
-            for runtime in batch_data['runtimes']:
-                if 'session_id' in runtime:
-                    runtimes_by_id[runtime['session_id']] = runtime
+        for runtime in batch_data:
+            if runtime and 'session_id' in runtime:
+                runtimes_by_id[runtime['session_id']] = runtime
 
         return runtimes_by_id
 
@@ -565,6 +564,30 @@ class RemoteSandboxService(SandboxService):
                 pass
 
         return paused_sandbox_ids
+
+    async def batch_get_sandboxes(
+        self, sandbox_ids: list[str]
+    ) -> list[SandboxInfo | None]:
+        """Get a batch of sandboxes, returning None for any which were not found."""
+        if not sandbox_ids:
+            return []
+        query = await self._secure_select()
+        query = query.filter(StoredRemoteSandbox.id.in_(sandbox_ids))
+        stored_remote_sandboxes = await self.db_session.execute(query)
+        stored_remote_sandboxes_by_id = {
+            stored_remote_sandbox[0].id: stored_remote_sandbox[0]
+            for stored_remote_sandbox in stored_remote_sandboxes
+        }
+        runtimes_by_id = await self._get_runtimes_batch(list(stored_remote_sandboxes_by_id))
+        results = []
+        for sandbox_id in sandbox_ids:
+            stored_remote_sandbox = stored_remote_sandboxes_by_id.get(sandbox_id)
+            result = None
+            if stored_remote_sandbox:
+                runtime = runtimes_by_id.get(sandbox_id)
+                result = self._to_sandbox_info(stored_remote_sandbox, runtime)
+            results.append(result)
+        return results
 
 
 def _build_service_url(url: str, service_name: str):
