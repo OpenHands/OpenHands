@@ -72,7 +72,7 @@ class SandboxService(ABC):
         """
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
-        """Stop the oldest sandboxes if there are more than max_num_sandboxes running.
+        """Pause the oldest sandboxes if there are more than max_num_sandboxes running.
         In a multi user environment, this will pause sandboxes only for the current user.
 
         Args:
