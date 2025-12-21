@@ -128,7 +128,8 @@ optional = true
 
 [tool.poetry.group.fleet.dependencies]
 # Fleet / OpenEnv integration (remote envs + MCP tools + sessions/verifiers)
-openenv = { version = "*", extras = ["fleet"] }
+# Use local OpenEnv checkout during development (stable `openenv.fleet` import surface).
+openenv = { path = "../OpenEnv", develop = true, extras = ["fleet"] }
 # Used directly by the job runner for Fleet jobs/tasks/verifiers.
 fleet-python = "*"
 openhands-tools = "1.5.2"

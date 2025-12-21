@@ -19,10 +19,7 @@ _DEFAULT_RUNTIME_CLASSES: dict[str, type[Runtime]] = {
     'local': LocalRuntime,
     'kubernetes': KubernetesRuntime,
     'cli': CLIRuntime,
-    # Canonical name
     'openenv': OpenEnvRuntime,
-    # Backward-compatible alias (kept so existing configs don't break)
-    'fleet': OpenEnvRuntime,
 }
 
 # Try to import third-party runtimes if available

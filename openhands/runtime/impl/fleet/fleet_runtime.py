@@ -103,35 +103,35 @@ class OpenEnvRuntime(Runtime):
 
     # --- Action Mapping ---
 
-    async def run(self, action: CmdRunAction) -> Observation:
+    def run(self, action: CmdRunAction) -> Observation:
         """Map CmdRunAction to Fleet's 'bash' or 'computer' tool."""
         return ErrorObservation(
             "CmdRunAction is not supported in OpenEnvRuntime. "
             "Fleet environments expose a unified action space via MCP tools; use MCPAction."
         )
 
-    async def read(self, action: FileReadAction) -> Observation:
+    def read(self, action: FileReadAction) -> Observation:
         """Map FileReadAction to Fleet's file reading tool."""
         return ErrorObservation(
             "FileReadAction is not supported in OpenEnvRuntime. "
             "Use MCPAction with the environment's file tool (if exposed) or computer/browser tools."
         )
 
-    async def write(self, action: FileWriteAction) -> Observation:
+    def write(self, action: FileWriteAction) -> Observation:
         return ErrorObservation(
             "FileWriteAction is not supported in OpenEnvRuntime. "
             "Use MCPAction with the environment's file tool (if exposed)."
         )
 
-    async def edit(self, action: FileEditAction) -> Observation:
+    def edit(self, action: FileEditAction) -> Observation:
         # For complex editing, we might use a specific tool or fallback to generic replacement
         # if the Fleet env supports str_replace_editor
         return ErrorObservation("FileEditAction not yet fully implemented for OpenEnvRuntime")
 
-    async def browse(self, action: BrowseURLAction) -> Observation:
+    def browse(self, action: BrowseURLAction) -> Observation:
         return ErrorObservation("BrowseURLAction not implemented. Use 'computer' tool via MCPAction instead.")
 
-    async def browse_interactive(self, action: BrowseInteractiveAction) -> Observation:
+    def browse_interactive(self, action: BrowseInteractiveAction) -> Observation:
         return ErrorObservation("BrowseInteractiveAction not implemented. Use 'computer' tool via MCPAction instead.")
 
     async def call_tool_mcp(self, action: MCPAction) -> Observation:

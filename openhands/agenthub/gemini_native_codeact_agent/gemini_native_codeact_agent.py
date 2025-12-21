@@ -10,7 +10,9 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import AgentFinishAction
 from openhands.events.action.action import Action
 from openhands.events.action.mcp import MCPAction
+from openhands.events.action.message import SystemMessageAction
 from openhands.events.event import Event
+from openhands.events.event import EventSource
 from openhands.events.observation.mcp import MCPObservation
 from openhands.llm.llm_registry import LLMRegistry
 
@@ -98,6 +100,25 @@ class GeminiNativeCodeActAgent(Agent):
             "- When you are fully done, output only: DONE: <short summary>\n"
         )
 
+    def get_system_message(self) -> SystemMessageAction | None:
+        """Gemini-native system prompt (matches Fleet SDK style).
+
+        OpenHands' default Agent.get_system_message() relies on PromptManager templates.
+        For Gemini-native we keep this minimal and explicit: just a plain system prompt
+        plus the current tool list.
+        """
+        try:
+            msg = SystemMessageAction(
+                content=self._get_system_prompt(),
+                tools=getattr(self, 'tools', None),
+                agent_class=self.name,
+            )
+            msg._source = EventSource.AGENT  # type: ignore[attr-defined]
+            return msg
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f'[{self.name}] Failed to generate system message: {e}')
+            return None
+
     def _get_tools_as_function_declarations(self) -> list[Any]:
         """Convert MCP tools (OpenAI-style tool dicts) to Gemini FunctionDeclarations."""
         decls: list[Any] = []
@@ -128,6 +149,15 @@ class GeminiNativeCodeActAgent(Agent):
 
             tool_name = self._pending_fc_names.popleft()
             ok = not getattr(ev, 'is_error', False)
+            content = ev.content or ''
+            # Truncate content to avoid blowing up the context window if tool output is huge
+            if len(content) > 20000:
+                content = content[:20000] + '... [truncated]'
+
+            response_payload = {
+                'status': 'success' if ok else 'error',
+                'content': content,
+            }
 
             # Build Gemini function_response part, optionally including screenshots as inline_data
             if getattr(ev, 'images', None):
@@ -142,13 +172,13 @@ class GeminiNativeCodeActAgent(Agent):
                 ]
                 fr = self._types.FunctionResponse(
                     name=tool_name,
-                    response={'status': 'success' if ok else 'error'},
+                    response=response_payload,
                     parts=parts,
                 )
             else:
                 fr = self._types.FunctionResponse(
                     name=tool_name,
-                    response={'status': 'success' if ok else 'error'},
+                    response=response_payload,
                 )
 
             self._batch_response_parts.append(self._types.Part(function_response=fr))
@@ -196,6 +226,10 @@ class GeminiNativeCodeActAgent(Agent):
             max_output_tokens=4096,
             thinking_config=self._types.ThinkingConfig(include_thoughts=True),
         )
+
+        # DEBUG: Log what we are actually sending to Gemini
+        tool_names = [d.name for d in decls] if decls else []
+        logger.debug(f'Sending {len(tool_names)} tools to Gemini: {tool_names[:10]}...')
 
         # Call Gemini
         response = self._client.models.generate_content(
@@ -246,6 +280,7 @@ class GeminiNativeCodeActAgent(Agent):
                 args = dict(fc.args) if fc.args else {}
 
                 self._pending_fc_names.append(name)
+                # Thinking blog
                 self._pending_actions.append(MCPAction(name=name, arguments=args, thought=thought_text))
 
             action = self._pending_actions.popleft()

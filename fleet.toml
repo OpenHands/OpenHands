@@ -10,7 +10,7 @@
 ########################
 
 [core]
-runtime = "fleet"
+runtime = "openenv"
 default_agent = "GeminiNativeCodeActAgent"
 
 # Optional: stream LLM-call traces to Fleet Sessions (requires `fleet-python`)

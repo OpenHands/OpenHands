@@ -260,7 +260,7 @@ def create_controller(
                 instance_id=config.fleet_session_export_instance_id,
                 model=(
                     config.fleet_session_export_model
-                    or runtime.llm_registry.get_llm_from_agent_config('agent', agent.config).config.model
+                    or getattr(getattr(agent, 'llm', None), 'config', None).model  # type: ignore[union-attr]
                 ),
             )
             fleet_exporter = FleetSessionExporter(event_stream=event_stream, cfg=cfg)
