@@ -40,6 +40,7 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description='Run Fleet tasks under one Fleet trace job.')
     p.add_argument('--config', required=True, help='Path to OpenHands config.toml')
     p.add_argument('--project-key', default=None, help='Fleet project key to load tasks from')
+    p.add_argument('--env-key', default=None, help='Fleet environment key to load tasks from')
     p.add_argument(
         '--task-keys',
         default=None,
@@ -266,9 +267,11 @@ async def main() -> int:
     if args.task_keys:
         keys = [k.strip() for k in args.task_keys.split(',') if k.strip()]
         tasks = await load_tasks(keys=keys)
+    elif args.env_key:
+        tasks = await load_tasks(env_key=args.env_key)
     else:
         if not args.project_key:
-            raise ValueError('Provide --project-key or --task-keys')
+            raise ValueError('Provide --project-key or --env-key or --task-keys')
         tasks = await load_tasks(project_key=args.project_key)
 
     sem = asyncio.Semaphore(max(1, int(args.max_concurrent)))
