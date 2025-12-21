@@ -1,23 +1,32 @@
+version: "3.9"
 
 services:
-  openhands:
-    build:
-      context: ./
-      dockerfile: ./containers/app/Dockerfile
-    image: openhands:latest
-    container_name: openhands-app-${DATE:-}
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    runtime: nvidia
     environment:
-      - SANDBOX_RUNTIME_CONTAINER_IMAGE=${SANDBOX_RUNTIME_CONTAINER_IMAGE:-docker.openhands.dev/openhands/runtime:1.0-nikolaik}
-      #- SANDBOX_USER_ID=${SANDBOX_USER_ID:-1234} # enable this only if you want a specific non-root sandbox user but you will have to manually adjust permissions of ~/.openhands for this user
-      - WORKSPACE_MOUNT_PATH=${WORKSPACE_BASE:-$PWD/workspace}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ~/.ollama:/root/.ollama
+    restart: unless-stopped
+
+  openhands:
+    image: openhands:latest
+    container_name: openhands-app
+    depends_on:
+      - ollama
     ports:
-      - "3000:3000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "3004:3000"
+    environment:
+      - LLM_MODEL=ollama/qwen2.5:14b
+      - LLM_BASE_URL=http://ollama:11434
+      - LLM_API_KEY=ollama
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ~/.openhands:/.openhands
-      - ${WORKSPACE_BASE:-$PWD/workspace}:/opt/workspace_base
-    pull_policy: build
+      - ./workspace:/opt/workspace_base
+    restart: unless-stopped
     stdin_open: true
     tty: true
