@@ -1,25 +1,37 @@
-## Fleet Runtime (OpenEnv / Fleet)
+## Fleet Runtime (OpenEnv + Fleet)
 
-Run OpenHands against **remote Fleet environments** via OpenEnv, using the split-plane model:
+Run OpenHands against **remote Fleet environments** via **OpenEnv**, using the split-plane model:
 
-- **Orchestration (HTTP)**: reset / step / state
+- **Orchestration (HTTP)**: provision + reset lifecycle (OpenEnv `FleetEnvClient`)
 - **Agent actions (MCP)**: tools/list + tools/call
 
 ### Step-by-step: run OpenHands on Fleet
 
 #### 1) Install dependencies
 
-From your OpenHands environment:
+##### 1a) Install Poetry (via pipx)
+
+Poetry is the recommended way to manage OpenHands' Python dependencies. Install it with `pipx` (per Poetry docs):
 
 ```bash
-pip install "openenv-core[fleet]"
+pipx install poetry
 ```
 
-If you want Fleet dashboard sessions (LLM-call trace logging), also install Fleet SDK:
+If `poetry` isn't found after install, ensure your shell PATH is set:
 
 ```bash
-pip install fleet-python
+pipx ensurepath
 ```
+
+##### 1b) Install OpenHands (Poetry environment)
+
+From the OpenHands repo root:
+
+```bash
+poetry install --with fleet
+```
+
+This installs OpenHands plus the optional `fleet` dependency group (`openenv[fleet]` + `fleet-python`).
 
 #### 2) Get credentials
 
@@ -37,7 +49,7 @@ export FLEET_API_KEY="fl_..."
 
 ```toml
 [core]
-runtime = "fleet"
+runtime = "openenv" # (alias: "fleet")
 default_agent = "CodeActAgent"
 
 [llm]
@@ -69,7 +81,7 @@ fleet_session_export_enabled = true
 **CLI mode:**
 
 ```bash
-python -m openhands.core.main -c config.toml
+poetry run python -m openhands.core.main -c config.toml
 ```
 
 **GUI mode:**
@@ -84,20 +96,61 @@ make run
 On startup you should see logs like:
 
 ```
-[FleetRuntime ...] Connecting to Fleet environment: amazon
-[FleetRuntime ...] Resetting environment...
-[FleetRuntime ...] Discovering tools...
-[FleetRuntime ...] Discovered N tools: [...]
+[OpenEnvRuntime ...] Connecting to Fleet environment: amazon
+[OpenEnvRuntime ...] Resetting environment...
+[OpenEnvRuntime ...] Discovered N tools: [...]
 CodeActAgent initialized with N tools: [...]
 ```
 
 If your Fleet environment exposes browser/computer tools and you have a vision-capable model, MCP screenshots will be included in the prompt automatically when the MCP tool returns images.
 
+### Multi-task evals (single Fleet job)
+
+OpenHands itself runs **one task per session**. To evaluate **many tasks under a single Fleet job** (so they show up together in the Fleet dashboard), use the outer runner:
+
+```bash
+poetry run python -m openhands.evaluation.fleet_job_runner \
+  --config /path/to/config.toml \
+  --project-key <FLEET_PROJECT_KEY> \
+  --job-name "my-openhands-eval" \
+  --max-concurrent 4
+```
+
+Or run a fixed set of tasks:
+
+```bash
+poetry run python -m openhands.evaluation.fleet_job_runner \
+  --config /path/to/config.toml \
+  --task-keys task1,task2,task3 \
+  --job-name "my-openhands-eval" \
+  --max-concurrent 4
+```
+
+Concrete example (do **not** include `...`):
+
+```bash
+poetry run python -m openhands.evaluation.fleet_job_runner \
+  --config fleet.toml \
+  --task-keys validate_dissenter_biolabs_deal_stage_and_email,validate_julie_smith_contact_update,validate_deal_modification_and_contact_addition \
+  --job-name "test-eval" \
+  --max-concurrent 4
+```
+
+Notes:
+- The runner creates **one Fleet trace job** (`fleet.job_async(...)`) and logs **one session per task** (unique `task_key`).
+- Fleet session completion is **explicit** so verifiers can run first.
+
+### Verification (verifiers)
+
+The multi-task runner runs Fleet task verifiers (when present) after OpenHands finishes the task, then marks the Fleet session:
+- `complete(verifier_execution_id=...)` on success
+- `fail(verifier_execution_id=...)` on failure
+
 ### Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| `ImportError: openenv.fleet` | Run `pip install "openenv-core[fleet]"` |
+| Fleet/OpenEnv deps missing | Run `poetry install --with fleet` |
 | Fleet sessions not logging | Install `fleet-python` and set `fleet_session_export_enabled = true` |
 | `ValueError: fleet_api_key is required` | Set `sandbox.fleet_api_key` or `FLEET_API_KEY` |
 | `ErrorObservation: MCP Tool call failed` | Check your Fleet env exposes the tool name being called |

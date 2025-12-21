@@ -2,24 +2,22 @@
 
 This integrates OpenHands with Fleet's session logging API (via fleet-sdk).
 
-Key design points:
+Design:
 - Fleet session logging is a *client-side* concern: it needs access to the LLM
-  prompt history + raw model response.
-- Therefore, the primary hook is inside the agent step() where `messages` and
-  `response` exist.
-- We also optionally subscribe to the OpenHands EventStream to mark sessions as
-  completed when the agent finishes.
+  prompt history + raw model response. Therefore the main hook is in the agent
+  (where `history` and `response` exist).
+- Session completion (complete/fail) is intentionally *explicit* so outer harnesses
+  can run verifiers and complete with a verifier_execution_id.
 """
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.events.event import Event, EventSource
-from openhands.events.stream import EventStream, EventStreamSubscriber
+from openhands.events.stream import EventStream
 
 
 @dataclass(frozen=True)
@@ -44,8 +42,6 @@ class FleetSessionExporter:
         self._event_stream = event_stream
         self._cfg = cfg
         self._session: Any | None = None
-        self._subscriber_id = EventStreamSubscriber.MAIN
-        self._callback_id = f'fleet_session_exporter:{event_stream.sid}'
         self._enabled = bool(cfg.enabled)
         self._failed = False
 
@@ -60,8 +56,6 @@ class FleetSessionExporter:
     def start(self) -> None:
         if not self.enabled:
             return
-        # Subscribe to session lifecycle events (best-effort)
-        self._event_stream.subscribe(self._subscriber_id, self._on_event, self._callback_id)
         logger.info(
             'Fleet session exporter enabled',
             extra={
@@ -72,10 +66,8 @@ class FleetSessionExporter:
         )
 
     def stop(self) -> None:
-        try:
-            self._event_stream.unsubscribe(self._subscriber_id, self._callback_id)
-        except Exception:
-            pass
+        # No-op (explicit completion only; no event-stream subscription).
+        return
 
     def _ensure_session(self) -> Any:
         if self._session is not None:
@@ -133,19 +125,33 @@ class FleetSessionExporter:
                 extra={'openhands_session_id': self._event_stream.sid},
             )
 
-    def _on_event(self, event: Event) -> None:
-        """Watch for completion signals and mark Fleet session complete."""
-        if not self.enabled or self._session is None:
+    def complete(self, verifier_execution_id: str | None = None) -> None:
+        """Mark the Fleet session as completed successfully (best-effort)."""
+        if not self.enabled:
             return
         try:
-            # Avoid circular imports
-            from openhands.events.action.agent import AgentFinishAction
+            session = self._ensure_session()
+            session.complete(verifier_execution_id=verifier_execution_id)
+        except Exception as e:  # noqa: BLE001
+            self._failed = True
+            logger.warning(
+                f'Fleet session complete failed; disabling exporter: {type(e).__name__}: {e}',
+                extra={'openhands_session_id': self._event_stream.sid},
+            )
 
-            if isinstance(event, AgentFinishAction) and event.source == EventSource.AGENT:
-                self._session.complete()
-        except Exception:
-            # best-effort
+    def fail(self, verifier_execution_id: str | None = None) -> None:
+        """Mark the Fleet session as failed (best-effort)."""
+        if not self.enabled:
             return
+        try:
+            session = self._ensure_session()
+            session.fail(verifier_execution_id=verifier_execution_id)
+        except Exception as e:  # noqa: BLE001
+            self._failed = True
+            logger.warning(
+                f'Fleet session fail failed; disabling exporter: {type(e).__name__}: {e}',
+                extra={'openhands_session_id': self._event_stream.sid},
+            )
 
 
 def build_fleet_session_export_config(

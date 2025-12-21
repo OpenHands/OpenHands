@@ -22,17 +22,17 @@ from openhands.events.observation import (
 from openhands.events.observation.mcp import MCPImage
 from openhands.core.logger import openhands_logger as logger
 
-# Placeholder imports for Fleet SDK - handling import errors gracefully
+# Canonical OpenEnv import surface (no guessing / fallback imports).
 try:
     from openenv.fleet import FleetEnvClient, FleetMCPTools  # type: ignore[import-not-found]
-except ImportError:
-    FleetEnvClient = None
-    FleetMCPTools = None
+except Exception:  # noqa: BLE001
+    FleetEnvClient = None  # type: ignore[assignment]
+    FleetMCPTools = None  # type: ignore[assignment]
 
-class FleetRuntime(Runtime):
+class OpenEnvRuntime(Runtime):
     """
-    Runtime implementation that connects to a remote Fleet environment.
-    Uses FleetEnvClient for orchestration and FleetMCPTools for action execution.
+    Runtime implementation that connects to a remote Fleet environment via OpenEnv.
+    Uses OpenEnv's FleetEnvClient (orchestration) and FleetMCPTools (MCP actions).
     """
 
     def __init__(self, config: OpenHandsConfig, *args, **kwargs):
@@ -43,39 +43,39 @@ class FleetRuntime(Runtime):
 
     async def connect(self):
         """Provision and connect to the Fleet environment."""
-        if not FleetEnvClient:
+        if FleetEnvClient is None or FleetMCPTools is None:
             raise ImportError(
-                "openenv-core[fleet] is not installed. "
-                "Please install it with: pip install 'openenv-core[fleet]'"
+                "OpenEnv runtime requires OpenEnv Fleet support. "
+                "Install it (or use `poetry install --with fleet`): pip install 'openenv[fleet]'"
             )
 
         api_key = self.config.sandbox.fleet_api_key
         env_key = self.config.sandbox.fleet_env_key
 
         if not api_key:
-            raise ValueError("fleet_api_key is required for FleetRuntime")
+            raise ValueError("fleet_api_key is required for OpenEnvRuntime")
         if not env_key:
-            raise ValueError("fleet_env_key is required for FleetRuntime")
+            raise ValueError("fleet_env_key is required for OpenEnvRuntime")
 
         self.log('info', f'Connecting to Fleet environment: {env_key}')
 
         try:
-            # 1. Initialize Fleet Clients
-            # Note: This is based on the pseudocode in the README.
-            # Adjust if the actual SDK signature differs.
-            maybe = FleetEnvClient.from_fleet(api_key=api_key, env_key=env_key)
-            self.orch, self.tools = await maybe if inspect.isawaitable(maybe) else maybe
-
-            # 2. Reset the remote environment
-            self.log('info', 'Resetting environment...')
-            await self.orch.reset()
-
-            # 3. Discover available tools
-            self.log('info', 'Discovering tools...')
-            maybe_tools = self.tools.list_tools()
-            tool_list_action = (
-                await maybe_tools if inspect.isawaitable(maybe_tools) else maybe_tools
+            # 1) Provision remote instance + tool handle via OpenEnv.
+            # OpenEnv returns: (orchestrator HTTP client, MCP tools client).
+            self.orch, self.tools = FleetEnvClient.from_fleet(
+                api_key=api_key,
+                env_key=env_key,
+                image_type="mcp",
             )
+
+            self.log('info', 'Discovering tools...')
+            # 2) Reset the episode (orch is usually sync; tolerate async impls)
+            self.log('info', 'Resetting environment...')
+            maybe_reset = self.orch.reset()
+            if inspect.isawaitable(maybe_reset):
+                await maybe_reset
+
+            tool_list_action = await self.tools.list_tools()
             self.available_tools = tool_list_action.tools
             tool_names = []
             try:
@@ -98,7 +98,7 @@ class FleetRuntime(Runtime):
 
     def log(self, level: str, message: str) -> None:
         """Override log to ensure correct formatting"""
-        msg = f'[FleetRuntime {self.sid}] {message}'
+        msg = f'[OpenEnvRuntime {self.sid}] {message}'
         getattr(logger, level)(msg, stacklevel=2)
 
     # --- Action Mapping ---
@@ -106,27 +106,27 @@ class FleetRuntime(Runtime):
     async def run(self, action: CmdRunAction) -> Observation:
         """Map CmdRunAction to Fleet's 'bash' or 'computer' tool."""
         return ErrorObservation(
-            "CmdRunAction is not supported in FleetRuntime. "
+            "CmdRunAction is not supported in OpenEnvRuntime. "
             "Fleet environments expose a unified action space via MCP tools; use MCPAction."
         )
 
     async def read(self, action: FileReadAction) -> Observation:
         """Map FileReadAction to Fleet's file reading tool."""
         return ErrorObservation(
-            "FileReadAction is not supported in FleetRuntime. "
+            "FileReadAction is not supported in OpenEnvRuntime. "
             "Use MCPAction with the environment's file tool (if exposed) or computer/browser tools."
         )
 
     async def write(self, action: FileWriteAction) -> Observation:
         return ErrorObservation(
-            "FileWriteAction is not supported in FleetRuntime. "
+            "FileWriteAction is not supported in OpenEnvRuntime. "
             "Use MCPAction with the environment's file tool (if exposed)."
         )
 
     async def edit(self, action: FileEditAction) -> Observation:
         # For complex editing, we might use a specific tool or fallback to generic replacement
         # if the Fleet env supports str_replace_editor
-        return ErrorObservation("FileEditAction not yet fully implemented for FleetRuntime")
+        return ErrorObservation("FileEditAction not yet fully implemented for OpenEnvRuntime")
 
     async def browse(self, action: BrowseURLAction) -> Observation:
         return ErrorObservation("BrowseURLAction not implemented. Use 'computer' tool via MCPAction instead.")
@@ -233,14 +233,14 @@ class FleetRuntime(Runtime):
     # These might need actual implementation depending on how deep the integration goes
 
     def copy_to(self, host_src: str, sandbox_dest: str, recursive: bool = False):
-        raise NotImplementedError("copy_to not implemented for FleetRuntime")
+        raise NotImplementedError("copy_to not implemented for OpenEnvRuntime")
 
     def list_files(self, path: str | None = None) -> List[str]:
         # Could map to 'ls' or 'list_files' tool
         return []
 
     def copy_from(self, path: str) -> Path:
-        raise NotImplementedError("copy_from not implemented for FleetRuntime")
+        raise NotImplementedError("copy_from not implemented for OpenEnvRuntime")
 
     def run_ipython(self, action):
         return ErrorObservation("IPython not supported")

@@ -159,7 +159,7 @@ The Fleet Runtime integrates with [Fleet](https://github.com/fleet-ai/OpenEnv) t
 
 - **Split-Plane Architecture**: Separates orchestration (HTTP) from action execution (MCP).
 - **Tool-First**: Agents interact with the environment primarily by discovering and calling MCP tools (e.g. `computer`, `bash`, `read_file`).
-- **Observability**: Includes built-in support for exporting action traces to external APIs.
+- **Observability**: Supports streaming LLM-call traces to Fleet Sessions (via `fleet-python`) and running multi-task evals under a single Fleet job (see `openhands/runtime/impl/fleet/README.md`).
 
 Ideal for scenarios requiring standardized tool interfaces and remote execution without managing Docker infrastructure directly.
 

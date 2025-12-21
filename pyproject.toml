@@ -118,6 +118,19 @@ pybase62 = "^1.0.0"
 #openhands-tools = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-tools", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
 openhands-sdk = "1.5.2"
 openhands-agent-server = "1.5.2"
+
+# ============================================================
+# Optional dependency groups
+# ============================================================
+
+[tool.poetry.group.fleet]
+optional = true
+
+[tool.poetry.group.fleet.dependencies]
+# Fleet / OpenEnv integration (remote envs + MCP tools + sessions/verifiers)
+openenv = { version = "*", extras = ["fleet"] }
+# Used directly by the job runner for Fleet jobs/tasks/verifiers.
+fleet-python = "*"
 openhands-tools = "1.5.2"
 python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }

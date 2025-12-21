@@ -302,7 +302,7 @@ async def add_mcp_tools_to_agent(
         'Runtime must be initialized before adding MCP tools'
     )
 
-    # FleetRuntime (and other MCP-native runtimes) may expose MCP tools directly on the runtime,
+    # OpenEnvRuntime (and other MCP-native runtimes) may expose MCP tools directly on the runtime,
     # without going through OpenHands MCP client connections. Prefer those if present.
     runtime_tools = getattr(runtime, 'available_tools', None)
     if isinstance(runtime_tools, list) and runtime_tools:
