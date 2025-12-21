@@ -477,7 +477,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if sandbox.status in (None, SandboxStatus.ERROR):
             raise SandboxError(f'Sandbox status: {sandbox.status}')
         if sandbox.status == SandboxStatus.RUNNING:
-            return
+            # There are still bugs in the remote runtime - they report running while still just
+            # starting resulting in a race condition. Manually check that it is actually
+            # running.
+            if await self._check_agent_server_alive(sandbox):
+                return
         if sandbox.status != SandboxStatus.STARTING:
             raise SandboxError(f'Sandbox not startable: {sandbox.id}')
 
@@ -490,8 +494,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             if sandbox.status not in (SandboxStatus.STARTING, SandboxStatus.RUNNING):
                 raise SandboxError(f'Sandbox not startable: {sandbox.id}')
             if sandbox_info.status == SandboxStatus.RUNNING:
-                return
+                # There are still bugs in the remote runtime - they report running while still just
+                # starting resulting in a race condition. Manually check that it is actually
+                # running.
+                if await self._check_agent_server_alive(sandbox_info):
+                    return
         raise SandboxError(f'Sandbox failed to start: {sandbox.id}')
+
+    async def _check_agent_server_alive(self, sandbox_info: SandboxInfo) -> bool:
+        agent_server_url = self._get_agent_server_url(sandbox_info)
+        url = f'{agent_server_url.rstrip("/")}/alive'
+        response = await self.httpx_client.get(url)
+        return response.is_success
 
     def _get_agent_server_url(self, sandbox: SandboxInfo) -> str:
         """Get agent server url for running sandbox."""
