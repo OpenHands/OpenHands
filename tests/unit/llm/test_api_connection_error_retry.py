@@ -89,9 +89,7 @@ def test_completion_max_retries_api_connection_error(
 
 
 @patch('openhands.llm.llm.litellm_completion')
-def test_completion_retries_bad_gateway_error(
-    mock_litellm_completion, default_config
-):
+def test_completion_retries_bad_gateway_error(mock_litellm_completion, default_config):
     """Test that BadGatewayError is properly retried."""
     mock_litellm_completion.side_effect = [
         BadGatewayError(
