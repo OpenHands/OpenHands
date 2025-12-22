@@ -1,4 +1,3 @@
-import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
@@ -7,7 +6,7 @@ import { ModalBody } from "#/components/shared/modals/modal-body";
 import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-notice";
 
 interface EmailVerificationModalProps {
-  onClose?: () => void;
+  onClose: () => void;
 }
 
 export function EmailVerificationModal({

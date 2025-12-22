@@ -9,7 +9,7 @@ describe("EmailVerificationModal", () => {
 
   it("should render the email verification message", () => {
     // Arrange & Act
-    render(<EmailVerificationModal />);
+    render(<EmailVerificationModal onClose={vi.fn()} />);
 
     // Assert
     expect(
@@ -19,7 +19,7 @@ describe("EmailVerificationModal", () => {
 
   it("should render the TermsAndPrivacyNotice component", () => {
     // Arrange & Act
-    render(<EmailVerificationModal />);
+    render(<EmailVerificationModal onClose={vi.fn()} />);
 
     // Assert
     const termsSection = screen.getByTestId("terms-and-privacy-notice");

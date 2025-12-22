@@ -5,7 +5,6 @@ import {
   Outlet,
   useNavigate,
   useLocation,
-  useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -28,6 +27,7 @@ import { useAutoLogin } from "#/hooks/use-auto-login";
 import { useAuthCallback } from "#/hooks/use-auth-callback";
 import { useReoTracking } from "#/hooks/use-reo-tracking";
 import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
+import { useEmailVerification } from "#/hooks/use-email-verification";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { MaintenanceBanner } from "#/components/features/maintenance/maintenance-banner";
@@ -69,7 +69,6 @@ export function ErrorBoundary() {
 export default function MainApp() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
   const isOnTosPage = useIsOnTosPage();
   const { data: settings } = useSettings();
   const { error } = useBalance();
@@ -94,41 +93,17 @@ export default function MainApp() {
   const effectiveGitHubAuthUrl = isOnTosPage ? null : gitHubAuthUrl;
 
   const [consentFormIsOpen, setConsentFormIsOpen] = React.useState(false);
-  const [emailVerificationModalOpen, setEmailVerificationModalOpen] =
-    React.useState(false);
-  const [emailVerified, setEmailVerified] = React.useState(false);
+  const {
+    emailVerificationModalOpen,
+    setEmailVerificationModalOpen,
+    emailVerified,
+  } = useEmailVerification();
 
   // Auto-login if login method is stored in local storage
   useAutoLogin();
 
   // Handle authentication callback and set login method after successful authentication
   useAuthCallback();
-
-  // Check for email verification query parameters
-  React.useEffect(() => {
-    const emailVerificationRequired = searchParams.get(
-      "email_verification_required",
-    );
-    const emailVerifiedParam = searchParams.get("email_verified");
-    let shouldUpdate = false;
-
-    if (emailVerificationRequired === "true") {
-      setEmailVerificationModalOpen(true);
-      searchParams.delete("email_verification_required");
-      shouldUpdate = true;
-    }
-
-    if (emailVerifiedParam === "true") {
-      setEmailVerified(true);
-      searchParams.delete("email_verified");
-      shouldUpdate = true;
-    }
-
-    // Clean up the URL by removing parameters if any were found
-    if (shouldUpdate) {
-      setSearchParams(searchParams, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
 
   // Initialize Reo.dev tracking in SaaS mode
   useReoTracking();
