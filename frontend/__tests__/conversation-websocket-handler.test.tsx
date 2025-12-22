@@ -453,18 +453,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(expectedEventCount);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(expectedEventCount),
+        ),
         wsLink.addEventListener("connection", ({ client, server }) => {
           server.connect();
           // Send all history events
@@ -520,18 +512,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(0);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(0),
+        ),
         wsLink.addEventListener("connection", ({ server }) => {
           server.connect();
           // No events sent for empty history
@@ -577,18 +561,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(expectedEventCount);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(expectedEventCount),
+        ),
         wsLink.addEventListener("connection", ({ client, server }) => {
           server.connect();
           // Send all history events
