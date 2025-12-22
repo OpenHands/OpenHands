@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { RepositoryMicroagent } from "#/types/microagent-management";
 import { Conversation } from "#/api/open-hands.types";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { cn } from "#/utils/utils";
 import { GitRepository } from "#/types/git";
 

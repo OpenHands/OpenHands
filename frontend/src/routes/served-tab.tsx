@@ -65,6 +65,7 @@ function ServedApp() {
           type="button"
           onClick={() => window.open(fullUrl, "_blank")}
           className="text-sm"
+          aria-label={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
         >
           <FaExternalLinkAlt className="w-4 h-4" />
         </button>
@@ -72,11 +73,17 @@ function ServedApp() {
           type="button"
           onClick={() => setRefreshKey((prev) => prev + 1)}
           className="text-sm"
+          aria-label={t(I18nKey.BUTTON$REFRESH)}
         >
           <FaArrowRotateRight className="w-4 h-4" />
         </button>
 
-        <button type="button" onClick={() => resetUrl()} className="text-sm">
+        <button
+          type="button"
+          onClick={() => resetUrl()}
+          className="text-sm"
+          aria-label={t(I18nKey.BUTTON$HOME)}
+        >
           <FaHome className="w-4 h-4" />
         </button>
         <div className="w-full flex">

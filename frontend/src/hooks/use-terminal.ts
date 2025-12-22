@@ -1,7 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
-import { Command, useCommandStore } from "#/state/command-store";
+import { Command, useCommandStore } from "#/stores/command-store";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
 /*
@@ -29,6 +29,47 @@ const renderCommand = (
   }
 };
 
+/**
+ * Check if the terminal is ready for fit operations.
+ * This prevents the "Cannot read properties of undefined (reading 'dimensions')" error
+ * that occurs when fit() is called on a terminal that is hidden, disposed, or not fully initialized.
+ */
+const canFitTerminal = (
+  terminalInstance: Terminal | null,
+  fitAddonInstance: FitAddon | null,
+  containerElement: HTMLDivElement | null,
+): boolean => {
+  // Check terminal and fitAddon exist
+  if (!terminalInstance || !fitAddonInstance) {
+    return false;
+  }
+
+  // Check container element exists
+  if (!containerElement) {
+    return false;
+  }
+
+  // Check element is visible (not display: none)
+  // When display is none, offsetParent is null (except for fixed/body elements)
+  const computedStyle = window.getComputedStyle(containerElement);
+  if (computedStyle.display === "none") {
+    return false;
+  }
+
+  // Check element has dimensions
+  const { clientWidth, clientHeight } = containerElement;
+  if (clientWidth === 0 || clientHeight === 0) {
+    return false;
+  }
+
+  // Check terminal has been opened (element property is set after open())
+  if (!terminalInstance.element) {
+    return false;
+  }
+
+  return true;
+};
+
 // Create a persistent reference that survives component unmounts
 // This ensures terminal history is preserved when navigating away and back
 const persistentLastCommandIndex = { current: 0 };
@@ -39,6 +80,7 @@ export const useTerminal = () => {
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
   const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
+  const isDisposed = React.useRef(false);
 
   const createTerminal = () =>
     new Terminal({
@@ -55,6 +97,15 @@ export const useTerminal = () => {
       },
     });
 
+  const fitTerminalSafely = React.useCallback(() => {
+    if (isDisposed.current) {
+      return;
+    }
+    if (canFitTerminal(terminal.current, fitAddon.current, ref.current)) {
+      fitAddon.current!.fit();
+    }
+  }, []);
+
   const initializeTerminal = () => {
     if (terminal.current) {
       if (fitAddon.current) terminal.current.loadAddon(fitAddon.current);
@@ -62,13 +113,14 @@ export const useTerminal = () => {
         terminal.current.open(ref.current);
         // Hide cursor for read-only terminal using ANSI escape sequence
         terminal.current.write("\x1b[?25l");
-        fitAddon.current?.fit();
+        fitTerminalSafely();
       }
     }
   };
 
   // Initialize terminal and handle cleanup
   React.useEffect(() => {
+    isDisposed.current = false;
     terminal.current = createTerminal();
     fitAddon.current = new FitAddon();
 
@@ -91,6 +143,7 @@ export const useTerminal = () => {
     }
 
     return () => {
+      isDisposed.current = true;
       terminal.current?.dispose();
       lastCommandIndex.current = 0;
     };
@@ -118,7 +171,10 @@ export const useTerminal = () => {
     let resizeObserver: ResizeObserver | null = null;
 
     resizeObserver = new ResizeObserver(() => {
-      fitAddon.current?.fit();
+      // Use requestAnimationFrame to debounce resize events and ensure DOM is ready
+      requestAnimationFrame(() => {
+        fitTerminalSafely();
+      });
     });
 
     if (ref.current) {
@@ -128,7 +184,7 @@ export const useTerminal = () => {
     return () => {
       resizeObserver?.disconnect();
     };
-  }, []);
+  }, [fitTerminalSafely]);
 
   return ref;
 };

@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";

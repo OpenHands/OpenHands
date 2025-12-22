@@ -2,8 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from keycloak.exceptions import KeycloakConnectionError, KeycloakError
-from sqlalchemy.orm import Session
 from server.auth.token_manager import TokenManager
+from sqlalchemy.orm import Session
 from storage.offline_token_store import OfflineTokenStore
 from storage.stored_offline_token import StoredOfflineToken
 
@@ -128,8 +128,8 @@ class TestCheckDuplicateBaseEmail:
     async def test_check_duplicate_base_email_no_plus_modifier(self, token_manager):
         """Test that emails without + modifier return False."""
         # Arrange
-        email = "joe@example.com"
-        current_user_id = "user123"
+        email = 'joe@example.com'
+        current_user_id = 'user123'
 
         # Act
         result = await token_manager.check_duplicate_base_email(email, current_user_id)
@@ -141,8 +141,8 @@ class TestCheckDuplicateBaseEmail:
     async def test_check_duplicate_base_email_empty_email(self, token_manager):
         """Test that empty email returns False."""
         # Arrange
-        email = ""
-        current_user_id = "user123"
+        email = ''
+        current_user_id = 'user123'
 
         # Act
         result = await token_manager.check_duplicate_base_email(email, current_user_id)
@@ -154,8 +154,8 @@ class TestCheckDuplicateBaseEmail:
     async def test_check_duplicate_base_email_invalid_email(self, token_manager):
         """Test that invalid email returns False."""
         # Arrange
-        email = "invalid-email"
-        current_user_id = "user123"
+        email = 'invalid-email'
+        current_user_id = 'user123'
 
         # Act
         result = await token_manager.check_duplicate_base_email(email, current_user_id)
@@ -167,22 +167,21 @@ class TestCheckDuplicateBaseEmail:
     async def test_check_duplicate_base_email_duplicate_found(self, token_manager):
         """Test that duplicate email is detected when found."""
         # Arrange
-        email = "joe+test@example.com"
-        current_user_id = "user123"
+        email = 'joe+test@example.com'
+        current_user_id = 'user123'
         existing_user = {
-            "id": "existing_user_id",
-            "email": "joe@example.com",
+            'id': 'existing_user_id',
+            'email': 'joe@example.com',
         }
 
         with (
-            patch("server.auth.token_manager.get_keycloak_admin") as mock_get_admin,
             patch.object(
-                token_manager, "_query_users_by_wildcard_pattern"
+                token_manager, '_query_users_by_wildcard_pattern'
             ) as mock_query,
-            patch.object(token_manager, "_find_duplicate_in_users") as mock_find,
+            patch.object(token_manager, '_find_duplicate_in_users') as mock_find,
         ):
             mock_find.return_value = True
-            mock_query.return_value = {"existing_user_id": existing_user}
+            mock_query.return_value = {'existing_user_id': existing_user}
 
             # Act
             result = await token_manager.check_duplicate_base_email(
@@ -198,14 +197,14 @@ class TestCheckDuplicateBaseEmail:
     async def test_check_duplicate_base_email_no_duplicate(self, token_manager):
         """Test that no duplicate is found when none exists."""
         # Arrange
-        email = "joe+test@example.com"
-        current_user_id = "user123"
+        email = 'joe+test@example.com'
+        current_user_id = 'user123'
 
         with (
             patch.object(
-                token_manager, "_query_users_by_wildcard_pattern"
+                token_manager, '_query_users_by_wildcard_pattern'
             ) as mock_query,
-            patch.object(token_manager, "_find_duplicate_in_users") as mock_find,
+            patch.object(token_manager, '_find_duplicate_in_users') as mock_find,
         ):
             mock_find.return_value = False
             mock_query.return_value = {}
@@ -224,13 +223,13 @@ class TestCheckDuplicateBaseEmail:
     ):
         """Test that KeycloakConnectionError is handled gracefully."""
         # Arrange
-        email = "joe+test@example.com"
-        current_user_id = "user123"
+        email = 'joe+test@example.com'
+        current_user_id = 'user123'
 
         with patch.object(
-            token_manager, "_query_users_by_wildcard_pattern"
+            token_manager, '_query_users_by_wildcard_pattern'
         ) as mock_query:
-            mock_query.side_effect = KeycloakConnectionError("Connection failed")
+            mock_query.side_effect = KeycloakConnectionError('Connection failed')
 
             # Act
             result = await token_manager.check_duplicate_base_email(
@@ -244,13 +243,13 @@ class TestCheckDuplicateBaseEmail:
     async def test_check_duplicate_base_email_general_exception(self, token_manager):
         """Test that general exceptions are handled gracefully."""
         # Arrange
-        email = "joe+test@example.com"
-        current_user_id = "user123"
+        email = 'joe+test@example.com'
+        current_user_id = 'user123'
 
         with patch.object(
-            token_manager, "_query_users_by_wildcard_pattern"
+            token_manager, '_query_users_by_wildcard_pattern'
         ) as mock_query:
-            mock_query.side_effect = Exception("Unexpected error")
+            mock_query.side_effect = Exception('Unexpected error')
 
             # Act
             result = await token_manager.check_duplicate_base_email(
@@ -270,14 +269,14 @@ class TestQueryUsersByWildcardPattern:
     ):
         """Test successful query using search parameter."""
         # Arrange
-        local_part = "joe"
-        domain = "example.com"
+        local_part = 'joe'
+        domain = 'example.com'
         mock_users = [
-            {"id": "user1", "email": "joe@example.com"},
-            {"id": "user2", "email": "joe+test@example.com"},
+            {'id': 'user1', 'email': 'joe@example.com'},
+            {'id': 'user2', 'email': 'joe+test@example.com'},
         ]
 
-        with patch("server.auth.token_manager.get_keycloak_admin") as mock_get_admin:
+        with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
             mock_admin = MagicMock()
             mock_admin.a_get_users = AsyncMock(return_value=mock_users)
             mock_get_admin.return_value = mock_admin
@@ -289,25 +288,25 @@ class TestQueryUsersByWildcardPattern:
 
             # Assert
             assert len(result) == 2
-            assert "user1" in result
-            assert "user2" in result
+            assert 'user1' in result
+            assert 'user2' in result
             mock_admin.a_get_users.assert_called_once_with(
-                {"search": "joe*@example.com"}
+                {'search': 'joe*@example.com'}
             )
 
     @pytest.mark.asyncio
     async def test_query_users_by_wildcard_pattern_fallback_to_q(self, token_manager):
         """Test fallback to q parameter when search fails."""
         # Arrange
-        local_part = "joe"
-        domain = "example.com"
-        mock_users = [{"id": "user1", "email": "joe@example.com"}]
+        local_part = 'joe'
+        domain = 'example.com'
+        mock_users = [{'id': 'user1', 'email': 'joe@example.com'}]
 
-        with patch("server.auth.token_manager.get_keycloak_admin") as mock_get_admin:
+        with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
             mock_admin = MagicMock()
             # First call fails, second succeeds
             mock_admin.a_get_users = AsyncMock(
-                side_effect=[Exception("Search failed"), mock_users]
+                side_effect=[Exception('Search failed'), mock_users]
             )
             mock_get_admin.return_value = mock_admin
 
@@ -318,17 +317,17 @@ class TestQueryUsersByWildcardPattern:
 
             # Assert
             assert len(result) == 1
-            assert "user1" in result
+            assert 'user1' in result
             assert mock_admin.a_get_users.call_count == 2
 
     @pytest.mark.asyncio
     async def test_query_users_by_wildcard_pattern_empty_result(self, token_manager):
         """Test query returns empty dict when no users found."""
         # Arrange
-        local_part = "joe"
-        domain = "example.com"
+        local_part = 'joe'
+        domain = 'example.com'
 
-        with patch("server.auth.token_manager.get_keycloak_admin") as mock_get_admin:
+        with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
             mock_admin = MagicMock()
             mock_admin.a_get_users = AsyncMock(return_value=[])
             mock_get_admin.return_value = mock_admin
@@ -349,31 +348,31 @@ class TestFindDuplicateInUsers:
         """Test finding duplicate using regex pattern."""
         # Arrange
         users = {
-            "user1": {"id": "user1", "email": "joe@example.com"},
-            "user2": {"id": "user2", "email": "joe+test@example.com"},
+            'user1': {'id': 'user1', 'email': 'joe@example.com'},
+            'user2': {'id': 'user2', 'email': 'joe+test@example.com'},
         }
-        base_email = "joe@example.com"
-        current_user_id = "user3"
+        base_email = 'joe@example.com'
+        current_user_id = 'user3'
 
         # Act
-        result = token_manager._find_duplicate_in_users(users, base_email, current_user_id)
+        result = token_manager._find_duplicate_in_users(
+            users, base_email, current_user_id
+        )
 
         # Assert
         assert result is True
 
-    def test_find_duplicate_in_users_fallback_to_simple_matching(
-        self, token_manager
-    ):
+    def test_find_duplicate_in_users_fallback_to_simple_matching(self, token_manager):
         """Test fallback to simple matching when regex pattern is None."""
         # Arrange
         users = {
-            "user1": {"id": "user1", "email": "joe@example.com"},
+            'user1': {'id': 'user1', 'email': 'joe@example.com'},
         }
-        base_email = "invalid-email"  # Will cause regex pattern to be None
-        current_user_id = "user2"
+        base_email = 'invalid-email'  # Will cause regex pattern to be None
+        current_user_id = 'user2'
 
         with patch(
-            "server.auth.token_manager.get_base_email_regex_pattern", return_value=None
+            'server.auth.token_manager.get_base_email_regex_pattern', return_value=None
         ):
             # Act
             result = token_manager._find_duplicate_in_users(
@@ -388,13 +387,15 @@ class TestFindDuplicateInUsers:
         """Test that current user is excluded from duplicate check."""
         # Arrange
         users = {
-            "user1": {"id": "user1", "email": "joe@example.com"},
+            'user1': {'id': 'user1', 'email': 'joe@example.com'},
         }
-        base_email = "joe@example.com"
-        current_user_id = "user1"  # Same as user in users dict
+        base_email = 'joe@example.com'
+        current_user_id = 'user1'  # Same as user in users dict
 
         # Act
-        result = token_manager._find_duplicate_in_users(users, base_email, current_user_id)
+        result = token_manager._find_duplicate_in_users(
+            users, base_email, current_user_id
+        )
 
         # Assert
         assert result is False
@@ -403,13 +404,15 @@ class TestFindDuplicateInUsers:
         """Test that no duplicate is found when emails don't match."""
         # Arrange
         users = {
-            "user1": {"id": "user1", "email": "jane@example.com"},
+            'user1': {'id': 'user1', 'email': 'jane@example.com'},
         }
-        base_email = "joe@example.com"
-        current_user_id = "user2"
+        base_email = 'joe@example.com'
+        current_user_id = 'user2'
 
         # Act
-        result = token_manager._find_duplicate_in_users(users, base_email, current_user_id)
+        result = token_manager._find_duplicate_in_users(
+            users, base_email, current_user_id
+        )
 
         # Assert
         assert result is False
@@ -417,12 +420,14 @@ class TestFindDuplicateInUsers:
     def test_find_duplicate_in_users_empty_dict(self, token_manager):
         """Test that empty users dict returns False."""
         # Arrange
-        users = {}
-        base_email = "joe@example.com"
-        current_user_id = "user1"
+        users: dict[str, dict] = {}
+        base_email = 'joe@example.com'
+        current_user_id = 'user1'
 
         # Act
-        result = token_manager._find_duplicate_in_users(users, base_email, current_user_id)
+        result = token_manager._find_duplicate_in_users(
+            users, base_email, current_user_id
+        )
 
         # Assert
         assert result is False
@@ -435,11 +440,11 @@ class TestDeleteKeycloakUser:
     async def test_delete_keycloak_user_success(self, token_manager):
         """Test successful deletion of Keycloak user."""
         # Arrange
-        user_id = "test_user_id"
+        user_id = 'test_user_id'
 
         with (
-            patch("server.auth.token_manager.get_keycloak_admin") as mock_get_admin,
-            patch("asyncio.to_thread") as mock_to_thread,
+            patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin,
+            patch('asyncio.to_thread') as mock_to_thread,
         ):
             mock_admin = MagicMock()
             mock_admin.delete_user = MagicMock()
@@ -457,13 +462,12 @@ class TestDeleteKeycloakUser:
     async def test_delete_keycloak_user_connection_error(self, token_manager):
         """Test handling of KeycloakConnectionError."""
         # Arrange
-        user_id = "test_user_id"
+        user_id = 'test_user_id'
 
         with (
-            patch("server.auth.token_manager.get_keycloak_admin") as mock_get_admin,
-            patch("asyncio.to_thread") as mock_to_thread,
+            patch('asyncio.to_thread') as mock_to_thread,
         ):
-            mock_to_thread.side_effect = KeycloakConnectionError("Connection failed")
+            mock_to_thread.side_effect = KeycloakConnectionError('Connection failed')
 
             # Act
             result = await token_manager.delete_keycloak_user(user_id)
@@ -475,13 +479,12 @@ class TestDeleteKeycloakUser:
     async def test_delete_keycloak_user_keycloak_error(self, token_manager):
         """Test handling of KeycloakError (e.g., user not found)."""
         # Arrange
-        user_id = "test_user_id"
+        user_id = 'test_user_id'
 
         with (
-            patch("server.auth.token_manager.get_keycloak_admin") as mock_get_admin,
-            patch("asyncio.to_thread") as mock_to_thread,
+            patch('asyncio.to_thread') as mock_to_thread,
         ):
-            mock_to_thread.side_effect = KeycloakError("User not found")
+            mock_to_thread.side_effect = KeycloakError('User not found')
 
             # Act
             result = await token_manager.delete_keycloak_user(user_id)
@@ -493,13 +496,12 @@ class TestDeleteKeycloakUser:
     async def test_delete_keycloak_user_general_exception(self, token_manager):
         """Test handling of general exceptions."""
         # Arrange
-        user_id = "test_user_id"
+        user_id = 'test_user_id'
 
         with (
-            patch("server.auth.token_manager.get_keycloak_admin") as mock_get_admin,
-            patch("asyncio.to_thread") as mock_to_thread,
+            patch('asyncio.to_thread') as mock_to_thread,
         ):
-            mock_to_thread.side_effect = Exception("Unexpected error")
+            mock_to_thread.side_effect = Exception('Unexpected error')
 
             # Act
             result = await token_manager.delete_keycloak_user(user_id)
