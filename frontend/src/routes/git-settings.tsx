@@ -77,20 +77,36 @@ function GitSettingsScreen() {
       return;
     }
 
-    const githubToken = formData.get("github-token-input")?.toString() || "";
-    const gitlabToken = formData.get("gitlab-token-input")?.toString() || "";
-    const bitbucketToken =
-      formData.get("bitbucket-token-input")?.toString() || "";
-    const azureDevOpsToken =
-      formData.get("azure-devops-token-input")?.toString() || "";
-    const forgejoToken = formData.get("forgejo-token-input")?.toString() || "";
-    const githubHost = formData.get("github-host-input")?.toString() || "";
-    const gitlabHost = formData.get("gitlab-host-input")?.toString() || "";
-    const bitbucketHost =
-      formData.get("bitbucket-host-input")?.toString() || "";
-    const azureDevOpsHost =
-      formData.get("azure-devops-host-input")?.toString() || "";
-    const forgejoHost = formData.get("forgejo-host-input")?.toString() || "";
+    const githubToken = (
+      formData.get("github-token-input")?.toString() || ""
+    ).trim();
+    const gitlabToken = (
+      formData.get("gitlab-token-input")?.toString() || ""
+    ).trim();
+    const bitbucketToken = (
+      formData.get("bitbucket-token-input")?.toString() || ""
+    ).trim();
+    const azureDevOpsToken = (
+      formData.get("azure-devops-token-input")?.toString() || ""
+    ).trim();
+    const forgejoToken = (
+      formData.get("forgejo-token-input")?.toString() || ""
+    ).trim();
+    const githubHost = (
+      formData.get("github-host-input")?.toString() || ""
+    ).trim();
+    const gitlabHost = (
+      formData.get("gitlab-host-input")?.toString() || ""
+    ).trim();
+    const bitbucketHost = (
+      formData.get("bitbucket-host-input")?.toString() || ""
+    ).trim();
+    const azureDevOpsHost = (
+      formData.get("azure-devops-host-input")?.toString() || ""
+    ).trim();
+    const forgejoHost = (
+      formData.get("forgejo-host-input")?.toString() || ""
+    ).trim();
 
     // Create providers object with all tokens
     const providerTokens: Record<string, { token: string; host: string }> = {
