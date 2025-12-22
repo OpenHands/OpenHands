@@ -249,7 +249,22 @@ class LocalRuntime(ActionExecutionClient):
             )
         else:
             # Set up workspace directory
+            # For local runtime, prefer a stable host path over /workspace defaults.
+            if (
+                self.config.workspace_base is None
+                and self.config.runtime
+                and self.config.runtime.lower() == 'local'
+            ):
+                env_base = os.getenv('LOCAL_WORKSPACE_BASE')
+                if env_base:
+                    self.config.workspace_base = os.path.abspath(env_base)
+                else:
+                    self.config.workspace_base = os.path.abspath(
+                        os.path.join(os.getcwd(), 'workspace', 'local')
+                    )
+
             if self.config.workspace_base is not None:
+                os.makedirs(self.config.workspace_base, exist_ok=True)
                 logger.warning(
                     f'Workspace base path is set to {self.config.workspace_base}. '
                     'It will be used as the path for the agent to run in. '

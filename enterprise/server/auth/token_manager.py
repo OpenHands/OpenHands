@@ -527,6 +527,49 @@ class TokenManager:
         github_id = github_ids[0]
         return github_id
 
+    async def disable_keycloak_user(
+        self, user_id: str, email: str | None = None
+    ) -> None:
+        """Disable a Keycloak user account.
+
+        Args:
+            user_id: The Keycloak user ID to disable
+            email: Optional email address for logging purposes
+
+        This method attempts to disable the user account but will not raise exceptions.
+        Errors are logged but do not prevent the operation from completing.
+        """
+        try:
+            keycloak_admin = get_keycloak_admin(self.external)
+            # Get current user to preserve other fields
+            user = await keycloak_admin.a_get_user(user_id)
+            if user:
+                # Update user with enabled=False to disable the account
+                await keycloak_admin.a_update_user(
+                    user_id=user_id,
+                    payload={
+                        'enabled': False,
+                        'username': user.get('username', ''),
+                        'email': user.get('email', ''),
+                        'emailVerified': user.get('emailVerified', False),
+                    },
+                )
+                email_str = f', email: {email}' if email else ''
+                logger.info(
+                    f'Disabled Keycloak account for user_id: {user_id}{email_str}'
+                )
+            else:
+                logger.warning(
+                    f'User not found in Keycloak when attempting to disable: {user_id}'
+                )
+        except Exception as e:
+            # Log error but don't raise - the caller should handle the blocking regardless
+            email_str = f', email: {email}' if email else ''
+            logger.error(
+                f'Failed to disable Keycloak account for user_id: {user_id}{email_str}: {str(e)}',
+                exc_info=True,
+            )
+
     def store_org_token(self, installation_id: int, installation_token: str):
         """Store a GitHub App installation token.
 
