@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { AgentStatus } from "#/components/features/controls/agent-status";
 import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 
 vi.mock("#/hooks/use-agent-state");
 

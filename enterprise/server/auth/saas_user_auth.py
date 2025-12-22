@@ -13,6 +13,7 @@ from server.auth.auth_error import (
     ExpiredError,
     NoCredentialsError,
 )
+from server.auth.domain_blocker import domain_blocker
 from server.auth.token_manager import TokenManager
 from server.config import get_config
 from server.logger import logger
@@ -312,6 +313,16 @@ async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     user_id = access_token_payload['sub']
     email = access_token_payload['email']
     email_verified = access_token_payload['email_verified']
+
+    # Check if email domain is blocked
+    if email and domain_blocker.is_active() and domain_blocker.is_domain_blocked(email):
+        logger.warning(
+            f'Blocked authentication attempt for existing user with email: {email}'
+        )
+        raise AuthError(
+            'Access denied: Your email domain is not allowed to access this service'
+        )
+
     logger.debug('saas_user_auth_from_signed_token:return')
 
     return SaasUserAuth(
