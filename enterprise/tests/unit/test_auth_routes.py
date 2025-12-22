@@ -442,3 +442,227 @@ async def test_logout_without_refresh_token():
 
             mock_token_manager.logout.assert_not_called()
             assert 'set-cookie' in result.headers
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_duplicate_email_detected(mock_request):
+    """Test keycloak_callback when duplicate email is detected."""
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+    ):
+        # Arrange
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value={
+                'sub': 'test_user_id',
+                'preferred_username': 'test_user',
+                'email': 'joe+test@example.com',
+                'identity_provider': 'github',
+            }
+        )
+        mock_token_manager.check_duplicate_base_email = AsyncMock(return_value=True)
+        mock_token_manager.delete_keycloak_user = AsyncMock(return_value=True)
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        # Assert
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+        assert 'duplicated_email=true' in result.headers['location']
+        mock_token_manager.check_duplicate_base_email.assert_called_once_with(
+            'joe+test@example.com', 'test_user_id'
+        )
+        mock_token_manager.delete_keycloak_user.assert_called_once_with('test_user_id')
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_duplicate_email_deletion_fails(mock_request):
+    """Test keycloak_callback when duplicate is detected but deletion fails."""
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+    ):
+        # Arrange
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value={
+                'sub': 'test_user_id',
+                'preferred_username': 'test_user',
+                'email': 'joe+test@example.com',
+                'identity_provider': 'github',
+            }
+        )
+        mock_token_manager.check_duplicate_base_email = AsyncMock(return_value=True)
+        mock_token_manager.delete_keycloak_user = AsyncMock(return_value=False)
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        # Assert
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+        assert 'duplicated_email=true' in result.headers['location']
+        mock_token_manager.delete_keycloak_user.assert_called_once_with('test_user_id')
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_duplicate_check_exception(mock_request):
+    """Test keycloak_callback when duplicate check raises exception."""
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+        patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
+        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.posthog') as mock_posthog,
+    ):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session_maker.return_value.__enter__.return_value = mock_session
+        mock_query = MagicMock()
+        mock_session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_user_settings = MagicMock()
+        mock_user_settings.accepted_tos = '2025-01-01'
+        mock_query.first.return_value = mock_user_settings
+
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value={
+                'sub': 'test_user_id',
+                'preferred_username': 'test_user',
+                'email': 'joe+test@example.com',
+                'identity_provider': 'github',
+            }
+        )
+        mock_token_manager.check_duplicate_base_email = AsyncMock(
+            side_effect=Exception('Check failed')
+        )
+        mock_token_manager.store_idp_tokens = AsyncMock()
+        mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+
+        mock_verifier.is_active.return_value = True
+        mock_verifier.is_user_allowed.return_value = True
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        # Assert
+        # Should proceed with normal flow despite exception (fail open)
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_no_duplicate_email(mock_request):
+    """Test keycloak_callback when no duplicate email is found."""
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+        patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
+        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.posthog') as mock_posthog,
+    ):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session_maker.return_value.__enter__.return_value = mock_session
+        mock_query = MagicMock()
+        mock_session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_user_settings = MagicMock()
+        mock_user_settings.accepted_tos = '2025-01-01'
+        mock_query.first.return_value = mock_user_settings
+
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value={
+                'sub': 'test_user_id',
+                'preferred_username': 'test_user',
+                'email': 'joe+test@example.com',
+                'identity_provider': 'github',
+            }
+        )
+        mock_token_manager.check_duplicate_base_email = AsyncMock(return_value=False)
+        mock_token_manager.store_idp_tokens = AsyncMock()
+        mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+
+        mock_verifier.is_active.return_value = True
+        mock_verifier.is_user_allowed.return_value = True
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        # Assert
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+        mock_token_manager.check_duplicate_base_email.assert_called_once_with(
+            'joe+test@example.com', 'test_user_id'
+        )
+        # Should not delete user when no duplicate found
+        mock_token_manager.delete_keycloak_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_no_email_in_user_info(mock_request):
+    """Test keycloak_callback when email is not in user_info."""
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+        patch('server.routes.auth.set_response_cookie') as mock_set_cookie,
+        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.posthog') as mock_posthog,
+    ):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session_maker.return_value.__enter__.return_value = mock_session
+        mock_query = MagicMock()
+        mock_session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_user_settings = MagicMock()
+        mock_user_settings.accepted_tos = '2025-01-01'
+        mock_query.first.return_value = mock_user_settings
+
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value={
+                'sub': 'test_user_id',
+                'preferred_username': 'test_user',
+                # No email field
+                'identity_provider': 'github',
+            }
+        )
+        mock_token_manager.store_idp_tokens = AsyncMock()
+        mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+
+        mock_verifier.is_active.return_value = True
+        mock_verifier.is_user_allowed.return_value = True
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        # Assert
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+        # Should not check for duplicate when email is missing
+        mock_token_manager.check_duplicate_base_email.assert_not_called()
