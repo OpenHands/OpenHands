@@ -24,7 +24,7 @@ class FileSettingsStore(SettingsStore):
 
             # Turn on V1 in OpenHands
             # We can simplify / remove this as part of V0 removal
-            settings.v1_enabled = False
+            settings.v1_enabled = True
 
             return settings
         except FileNotFoundError:
