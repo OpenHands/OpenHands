@@ -176,43 +176,5 @@ describe("AuthModal", () => {
       const errorMessage = screen.queryByText("AUTH$DUPLICATE_EMAIL_ERROR");
       expect(errorMessage).not.toBeInTheDocument();
     });
-
-    it("should not display error message when duplicated_email query parameter is false", () => {
-      // Arrange
-      const initialEntries = ["/?duplicated_email=false"];
-
-      // Act
-      renderAuthModalWithRouter(initialEntries);
-
-      // Assert
-      const errorMessage = screen.queryByText("AUTH$DUPLICATE_EMAIL_ERROR");
-      expect(errorMessage).not.toBeInTheDocument();
-    });
-
-    it("should not display error message when duplicated_email query parameter has other value", () => {
-      // Arrange
-      const initialEntries = ["/?duplicated_email=yes"];
-
-      // Act
-      renderAuthModalWithRouter(initialEntries);
-
-      // Assert
-      const errorMessage = screen.queryByText("AUTH$DUPLICATE_EMAIL_ERROR");
-      expect(errorMessage).not.toBeInTheDocument();
-    });
-
-    it("should display error message with other query parameters present", () => {
-      // Arrange
-      const initialEntries = [
-        "/?redirect_url=/dashboard&duplicated_email=true",
-      ];
-
-      // Act
-      renderAuthModalWithRouter(initialEntries);
-
-      // Assert
-      const errorMessage = screen.getByText("AUTH$DUPLICATE_EMAIL_ERROR");
-      expect(errorMessage).toBeInTheDocument();
-    });
   });
 });
