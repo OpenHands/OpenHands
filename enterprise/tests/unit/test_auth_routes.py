@@ -136,6 +136,7 @@ async def test_keycloak_callback_user_not_allowed(mock_request):
                 'sub': 'test_user_id',
                 'preferred_username': 'test_user',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -325,6 +326,7 @@ async def test_keycloak_callback_success_without_offline_token(mock_request):
                 'sub': 'test_user_id',
                 'preferred_username': 'test_user',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -590,6 +592,7 @@ async def test_keycloak_callback_allowed_email_domain(mock_request):
                 'preferred_username': 'test_user',
                 'email': 'user@example.com',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -643,6 +646,7 @@ async def test_keycloak_callback_domain_blocking_inactive(mock_request):
                 'preferred_username': 'test_user',
                 'email': 'user@colsch.us',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -692,6 +696,7 @@ async def test_keycloak_callback_missing_email(mock_request):
                 'sub': 'test_user_id',
                 'preferred_username': 'test_user',
                 'identity_provider': 'github',
+                'email_verified': True,
                 # No email field
             }
         )
