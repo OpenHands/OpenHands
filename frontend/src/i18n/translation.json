@@ -6975,6 +6975,38 @@
     "es": "Copiar al portapapeles",
     "tr": "Panoya Kopyala"
   },
+  "BUTTON$HOME": {
+    "en": "Home",
+    "ja": "ホーム",
+    "zh-CN": "主页",
+    "zh-TW": "首頁",
+    "ko-KR": "홈",
+    "no": "Hjem",
+    "it": "Home",
+    "pt": "Início",
+    "es": "Inicio",
+    "ar": "الرئيسية",
+    "fr": "Accueil",
+    "tr": "Ana Sayfa",
+    "de": "Startseite",
+    "uk": "Головна"
+  },
+  "BUTTON$OPEN_IN_NEW_TAB": {
+    "en": "Open in New Tab",
+    "ja": "新しいタブで開く",
+    "zh-CN": "在新标签页中打开",
+    "zh-TW": "在新分頁中開啟",
+    "ko-KR": "새 탭에서 열기",
+    "no": "Åpne i ny fane",
+    "it": "Apri in una nuova scheda",
+    "pt": "Abrir em nova aba",
+    "es": "Abrir en nueva pestaña",
+    "ar": "فتح في علامة تبويب جديدة",
+    "fr": "Ouvrir dans un nouvel onglet",
+    "tr": "Yeni Sekmede Aç",
+    "de": "In neuem Tab öffnen",
+    "uk": "Відкрити в новій вкладці"
+  },
   "BUTTON$REFRESH": {
     "en": "Refresh",
     "ja": "更新",

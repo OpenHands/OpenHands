@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import MicroagentManagementService from "#/ui/microagent-management-service/microagent-management-service.api";
+import MicroagentManagementService from "#/api/microagent-management-service/microagent-management-service.api";
 
 export const useMicroagentManagementConversations = (
   selectedRepository: string,

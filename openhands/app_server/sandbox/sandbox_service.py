@@ -8,6 +8,7 @@ from openhands.app_server.sandbox.sandbox_models import (
 )
 from openhands.app_server.services.injector import Injector
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
+from openhands.sdk.utils.paging import page_iterator
 
 
 class SandboxService(ABC):
@@ -71,7 +72,7 @@ class SandboxService(ABC):
         """
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
-        """Stop the oldest sandboxes if there are more than max_num_sandboxes running.
+        """Pause the oldest sandboxes if there are more than max_num_sandboxes running.
         In a multi user environment, this will pause sandboxes only for the current user.
 
         Args:
@@ -83,24 +84,11 @@ class SandboxService(ABC):
         if max_num_sandboxes <= 0:
             raise ValueError('max_num_sandboxes must be greater than 0')
 
-        # Get all sandboxes (we'll search through all pages)
-        all_sandboxes = []
-        page_id = None
-
-        while True:
-            page = await self.search_sandboxes(page_id=page_id, limit=100)
-            all_sandboxes.extend(page.items)
-
-            if page.next_page_id is None:
-                break
-            page_id = page.next_page_id
-
-        # Filter to only running sandboxes
-        running_sandboxes = [
-            sandbox
-            for sandbox in all_sandboxes
-            if sandbox.status == SandboxStatus.RUNNING
-        ]
+        # Get all running sandboxes (iterate through all pages)
+        running_sandboxes = []
+        async for sandbox in page_iterator(self.search_sandboxes, limit=100):
+            if sandbox.status == SandboxStatus.RUNNING:
+                running_sandboxes.append(sandbox)
 
         # If we're within the limit, no cleanup needed
         if len(running_sandboxes) <= max_num_sandboxes:

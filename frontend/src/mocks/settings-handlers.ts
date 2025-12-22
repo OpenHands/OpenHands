@@ -49,9 +49,11 @@ export const SETTINGS_HANDLERS = [
       "anthropic/claude-sonnet-4-20250514",
       "anthropic/claude-sonnet-4-5-20250929",
       "anthropic/claude-haiku-4-5-20251001",
+      "anthropic/claude-opus-4-5-20251101",
       "openhands/claude-sonnet-4-20250514",
       "openhands/claude-sonnet-4-5-20250929",
       "openhands/claude-haiku-4-5-20251001",
+      "openhands/claude-opus-4-5-20251101",
       "sambanova/Meta-Llama-3.1-8B-Instruct",
     ]),
   ),
@@ -134,7 +136,7 @@ export const SETTINGS_HANDLERS = [
       const providerTokensSet: Partial<Record<Provider, string | null>> =
         Object.fromEntries(
           Object.entries(rawTokens)
-            .filter(([, val]) => val && val.token)
+            .filter(([, val]) => val?.token)
             .map(([provider]) => [provider as Provider, ""]),
         );
 
