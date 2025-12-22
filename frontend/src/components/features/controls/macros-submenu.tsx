@@ -8,7 +8,7 @@ import PrStatusIcon from "#/icons/pr-status.svg?react";
 import DocumentIcon from "#/icons/document.svg?react";
 import WaterIcon from "#/icons/u-water.svg?react";
 import { I18nKey } from "#/i18n/declaration";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { REPO_SUGGESTIONS } from "#/utils/suggestions/repo-suggestions";
 import { CONTEXT_MENU_ICON_TEXT_CLASSNAME } from "#/utils/constants";
 

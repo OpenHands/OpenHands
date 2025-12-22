@@ -15,7 +15,7 @@ import { useSettings } from "#/hooks/query/use-settings";
  */
 export const useStartTasks = (limit = 10) => {
   const { data: settings } = useSettings();
-  const isV1Enabled = settings?.V1_ENABLED;
+  const isV1Enabled = settings?.v1_enabled;
 
   return useQuery({
     queryKey: ["start-tasks", "search", limit],

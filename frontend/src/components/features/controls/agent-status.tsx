@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
-import { useStatusStore } from "#/state/status-store";
+import { useStatusStore } from "#/stores/status-store";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { getStatusCode } from "#/utils/status";
 import { ChatStopButton } from "../chat/chat-stop-button";
@@ -9,7 +9,7 @@ import ClockIcon from "#/icons/u-clock-three.svg?react";
 import { ChatResumeAgentButton } from "../chat/chat-play-button";
 import { cn, isTaskPolling } from "#/utils/utils";
 import { AgentLoading } from "./agent-loading";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import CircleErrorIcon from "#/icons/circle-error.svg?react";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
@@ -59,12 +59,14 @@ export function AgentStatus({
   );
 
   const shouldShownAgentLoading =
-    isPausing ||
     curAgentState === AgentState.INIT ||
     curAgentState === AgentState.LOADING ||
     (webSocketStatus === "CONNECTING" && taskStatus !== "ERROR") ||
     isTaskPolling(taskStatus) ||
     isTaskPolling(subConversationTaskStatus);
+
+  // For UI rendering - includes pause state
+  const isLoading = shouldShownAgentLoading || isPausing;
 
   const shouldShownAgentError =
     curAgentState === AgentState.ERROR ||
@@ -93,25 +95,28 @@ export function AgentStatus({
       <div
         className={cn(
           "bg-[#525252] box-border content-stretch flex flex-row gap-[3px] items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95",
-          !shouldShownAgentLoading &&
+          !isLoading &&
             (shouldShownAgentStop || shouldShownAgentResume) &&
             "hover:bg-[#737373] cursor-pointer",
         )}
       >
-        {shouldShownAgentLoading && <AgentLoading />}
-        {!shouldShownAgentLoading && shouldShownAgentStop && (
+        {isLoading && <AgentLoading />}
+        {!isLoading && shouldShownAgentStop && (
           <ChatStopButton handleStop={handleStop} />
         )}
-        {!shouldShownAgentLoading && shouldShownAgentResume && (
+        {!isLoading && shouldShownAgentResume && (
           <ChatResumeAgentButton
             onAgentResumed={handleResumeAgent}
             disabled={disabled}
           />
         )}
-        {!shouldShownAgentLoading && shouldShownAgentError && (
-          <CircleErrorIcon className="w-4 h-4" />
+        {!isLoading && shouldShownAgentError && (
+          <CircleErrorIcon
+            className="w-4 h-4"
+            data-testid="circle-error-icon"
+          />
         )}
-        {!shouldShownAgentLoading &&
+        {!isLoading &&
           !shouldShownAgentStop &&
           !shouldShownAgentResume &&
           !shouldShownAgentError && <ClockIcon className="w-4 h-4" />}

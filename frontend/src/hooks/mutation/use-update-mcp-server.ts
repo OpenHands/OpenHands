@@ -28,9 +28,9 @@ export function useUpdateMcpServer() {
       serverId: string;
       server: MCPServerConfig;
     }): Promise<void> => {
-      if (!settings?.MCP_CONFIG) return;
+      if (!settings?.mcp_config) return;
 
-      const newConfig = { ...settings.MCP_CONFIG };
+      const newConfig = { ...settings.mcp_config };
       const [serverType, indexStr] = serverId.split("-");
       const index = parseInt(indexStr, 10);
 
@@ -59,7 +59,7 @@ export function useUpdateMcpServer() {
 
       const apiSettings = {
         mcp_config: newConfig,
-        v1_enabled: settings.V1_ENABLED,
+        v1_enabled: settings.v1_enabled,
       };
 
       await SettingsService.saveSettings(apiSettings);

@@ -36,7 +36,7 @@ from openhands.server.shared import conversation_manager, server_config
 from openhands.server.types import AppMode
 from openhands.version import get_version
 
-mcp_app = mcp_server.http_app(path='/mcp')
+mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
 
 
 def combine_lifespans(*lifespans):
