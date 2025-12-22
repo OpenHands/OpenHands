@@ -14,6 +14,7 @@ from server.auth.constants import (
     KEYCLOAK_SERVER_URL_EXT,
     ROLE_CHECK_ENABLED,
 )
+from server.auth.domain_blocker import domain_blocker
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
@@ -145,7 +146,24 @@ async def keycloak_callback(
             content={'error': 'Missing user ID or username in response'},
         )
 
+    # Check if email domain is blocked
+    email = user_info.get('email')
     user_id = user_info['sub']
+    if email and domain_blocker.is_active() and domain_blocker.is_domain_blocked(email):
+        logger.warning(
+            f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
+        )
+
+        # Disable the Keycloak account
+        await token_manager.disable_keycloak_user(user_id, email)
+
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                'error': 'Access denied: Your email domain is not allowed to access this service'
+            },
+        )
+
     # default to github IDP for now.
     # TODO: remove default once Keycloak is updated universally with the new attribute.
     idp: str = user_info.get('identity_provider', ProviderType.GITHUB.value)
