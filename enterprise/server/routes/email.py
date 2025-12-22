@@ -124,10 +124,14 @@ async def verified_email(request: Request):
     return response
 
 
-async def _verify_email(request: Request, user_id: str):
+async def _verify_email(request: Request, user_id: str, is_auth_flow: bool = False):
     keycloak_admin = get_keycloak_admin()
     scheme = 'http' if request.url.hostname == 'localhost' else 'https'
-    redirect_uri = f'{scheme}://{request.url.netloc}/api/email/verified'
+    redirect_uri = (
+        f'{scheme}://{request.url.netloc}?email_verified=true'
+        if is_auth_flow
+        else f'{scheme}://{request.url.netloc}/api/email/verified'
+    )
     logger.info(f'Redirect URI: {redirect_uri}')
     await keycloak_admin.a_send_verify_email(
         user_id=user_id,

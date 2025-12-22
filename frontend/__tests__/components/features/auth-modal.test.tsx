@@ -68,7 +68,7 @@ describe("AuthModal", () => {
     render(<AuthModal githubAuthUrl="mock-url" appMode="saas" />);
 
     // Find the terms of service section using data-testid
-    const termsSection = screen.getByTestId("auth-modal-terms-of-service");
+    const termsSection = screen.getByTestId("terms-and-privacy-notice");
     expect(termsSection).toBeInTheDocument();
 
     // Check that all text content is present in the paragraph
@@ -103,6 +103,34 @@ describe("AuthModal", () => {
     // Verify that both links are within the terms section
     expect(termsSection).toContainElement(tosLink);
     expect(termsSection).toContainElement(privacyLink);
+  });
+
+  it("should display email verified message when emailVerified prop is true", () => {
+    render(
+      <AuthModal
+        githubAuthUrl="mock-url"
+        appMode="saas"
+        emailVerified={true}
+      />,
+    );
+
+    expect(
+      screen.getByText("AUTH$EMAIL_VERIFIED_PLEASE_LOGIN"),
+    ).toBeInTheDocument();
+  });
+
+  it("should not display email verified message when emailVerified prop is false", () => {
+    render(
+      <AuthModal
+        githubAuthUrl="mock-url"
+        appMode="saas"
+        emailVerified={false}
+      />,
+    );
+
+    expect(
+      screen.queryByText("AUTH$EMAIL_VERIFIED_PLEASE_LOGIN"),
+    ).not.toBeInTheDocument();
   });
 
   it("should open Terms of Service link in new tab", () => {

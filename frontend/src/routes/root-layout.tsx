@@ -5,6 +5,7 @@ import {
   Outlet,
   useNavigate,
   useLocation,
+  useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -15,6 +16,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { AuthModal } from "#/components/features/waitlist/auth-modal";
 import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
+import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
@@ -67,6 +69,7 @@ export function ErrorBoundary() {
 export default function MainApp() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isOnTosPage = useIsOnTosPage();
   const { data: settings } = useSettings();
   const { error } = useBalance();
@@ -91,12 +94,41 @@ export default function MainApp() {
   const effectiveGitHubAuthUrl = isOnTosPage ? null : gitHubAuthUrl;
 
   const [consentFormIsOpen, setConsentFormIsOpen] = React.useState(false);
+  const [emailVerificationModalOpen, setEmailVerificationModalOpen] =
+    React.useState(false);
+  const [emailVerified, setEmailVerified] = React.useState(false);
 
   // Auto-login if login method is stored in local storage
   useAutoLogin();
 
   // Handle authentication callback and set login method after successful authentication
   useAuthCallback();
+
+  // Check for email verification query parameters
+  React.useEffect(() => {
+    const emailVerificationRequired = searchParams.get(
+      "email_verification_required",
+    );
+    const emailVerifiedParam = searchParams.get("email_verified");
+    let shouldUpdate = false;
+
+    if (emailVerificationRequired === "true") {
+      setEmailVerificationModalOpen(true);
+      searchParams.delete("email_verification_required");
+      shouldUpdate = true;
+    }
+
+    if (emailVerifiedParam === "true") {
+      setEmailVerified(true);
+      searchParams.delete("email_verified");
+      shouldUpdate = true;
+    }
+
+    // Clean up the URL by removing parameters if any were found
+    if (shouldUpdate) {
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Initialize Reo.dev tracking in SaaS mode
   useReoTracking();
@@ -236,9 +268,17 @@ export default function MainApp() {
           appMode={config.data?.APP_MODE}
           providersConfigured={config.data?.PROVIDERS_CONFIGURED}
           authUrl={config.data?.AUTH_URL}
+          emailVerified={emailVerified}
         />
       )}
       {renderReAuthModal && <ReauthModal />}
+      {emailVerificationModalOpen && (
+        <EmailVerificationModal
+          onClose={() => {
+            setEmailVerificationModalOpen(false);
+          }}
+        />
+      )}
       {config.data?.APP_MODE === "oss" && consentFormIsOpen && (
         <AnalyticsConsentFormModal
           onClose={() => {

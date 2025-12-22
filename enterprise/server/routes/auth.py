@@ -159,6 +159,18 @@ async def keycloak_callback(
         ProviderType(idp), user_id, keycloak_access_token
     )
 
+    # Check email verification status
+    email_verified = user_info.get('email_verified', False)
+    if not email_verified:
+        # Send verification email
+        # Import locally to avoid circular import with email.py
+        from server.routes.email import _verify_email
+
+        await _verify_email(request=request, user_id=user_id, is_auth_flow=True)
+        redirect_url = f'{request.base_url}?email_verification_required=true'
+        response = RedirectResponse(redirect_url, status_code=302)
+        return response
+
     username = user_info['preferred_username']
     if user_verifier.is_active() and not user_verifier.is_user_allowed(username):
         return JSONResponse(
