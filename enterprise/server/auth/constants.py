@@ -38,3 +38,8 @@ ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
     'y',
     'on',
 )
+BLOCKED_EMAIL_DOMAINS = [
+    domain.strip().lower()
+    for domain in os.getenv('BLOCKED_EMAIL_DOMAINS', '').split(',')
+    if domain.strip()
+]

@@ -55,10 +55,10 @@ function GitSettingsScreen() {
   const [forgejoHostInputHasValue, setForgejoHostInputHasValue] =
     React.useState(false);
 
-  const existingGithubHost = settings?.PROVIDER_TOKENS_SET.github;
-  const existingGitlabHost = settings?.PROVIDER_TOKENS_SET.gitlab;
-  const existingBitbucketHost = settings?.PROVIDER_TOKENS_SET.bitbucket;
-  const existingAzureDevOpsHost = settings?.PROVIDER_TOKENS_SET.azure_devops;
+  const existingGithubHost = settings?.provider_tokens_set.github;
+  const existingGitlabHost = settings?.provider_tokens_set.gitlab;
+  const existingBitbucketHost = settings?.provider_tokens_set.bitbucket;
+  const existingAzureDevOpsHost = settings?.provider_tokens_set.azure_devops;
   const existingForgejoHost = settings?.PROVIDER_TOKENS_SET.forgejo;
 
   const isSaas = config?.APP_MODE === "saas";

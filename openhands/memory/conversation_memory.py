@@ -76,6 +76,7 @@ class ConversationMemory:
         self,
         condensed_history: list[Event],
         initial_user_action: MessageAction,
+        forgotten_event_ids: set[int] | None = None,
         max_message_chars: int | None = None,
         vision_is_active: bool = False,
     ) -> list[Message]:
@@ -85,16 +86,23 @@ class ConversationMemory:
 
         Args:
             condensed_history: The condensed history of events to convert
+            initial_user_action: The initial user message action, if available. Used to ensure the conversation starts correctly.
+            forgotten_event_ids: Set of event IDs that have been forgotten/condensed. If the initial user action's ID
+                is in this set, it will not be re-inserted to prevent re-execution of old instructions.
             max_message_chars: The maximum number of characters in the content of an event included
                 in the prompt to the LLM. Larger observations are truncated.
             vision_is_active: Whether vision is active in the LLM. If True, image URLs will be included.
-            initial_user_action: The initial user message action, if available. Used to ensure the conversation starts correctly.
         """
         events = condensed_history
+        # Default to empty set if not provided
+        if forgotten_event_ids is None:
+            forgotten_event_ids = set()
 
         # Ensure the event list starts with SystemMessageAction, then MessageAction(source='user')
         self._ensure_system_message(events)
-        self._ensure_initial_user_message(events, initial_user_action)
+        self._ensure_initial_user_message(
+            events, initial_user_action, forgotten_event_ids
+        )
 
         # log visual browsing status
         logger.debug(f'Visual browsing: {self.agent_config.enable_som_visual_browsing}')
@@ -827,14 +835,39 @@ class ConversationMemory:
                 )
 
     def _ensure_initial_user_message(
-        self, events: list[Event], initial_user_action: MessageAction
+        self,
+        events: list[Event],
+        initial_user_action: MessageAction,
+        forgotten_event_ids: set[int],
     ) -> None:
-        """Checks if the second event is a user MessageAction and inserts the provided one if needed."""
+        """Checks if the second event is a user MessageAction and inserts the provided one if needed.
+
+        IMPORTANT: If the initial user action has been condensed (its ID is in forgotten_event_ids),
+        we do NOT re-insert it. This prevents old instructions from being re-executed after
+        conversation condensation. The condensation summary already contains the context of
+        what was requested and completed.
+
+        Args:
+            events: The list of events to modify in-place
+            initial_user_action: The initial user message action from the full history
+            forgotten_event_ids: Set of event IDs that have been forgotten/condensed
+        """
         if (
             not events
         ):  # Should have system message from previous step, but safety check
             logger.error('Cannot ensure initial user message: event list is empty.')
             # Or raise? Let's log for now, _ensure_system_message should handle this.
+            return
+
+        # Check if the initial user action has been condensed/forgotten.
+        # If so, we should NOT re-insert it to prevent re-execution of old instructions.
+        # The condensation summary already contains the context of what was requested.
+        initial_user_action_id = initial_user_action.id
+        if initial_user_action_id in forgotten_event_ids:
+            logger.info(
+                f'Initial user action (id={initial_user_action_id}) has been condensed. '
+                'Not re-inserting to prevent re-execution of old instructions.'
+            )
             return
 
         # We expect events[0] to be SystemMessageAction after _ensure_system_message
