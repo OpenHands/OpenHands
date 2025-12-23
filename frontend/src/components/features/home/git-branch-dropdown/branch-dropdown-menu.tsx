@@ -79,7 +79,7 @@ export function BranchDropdownMenu({
         menuRef={menuRef}
         renderItem={renderItem}
         renderEmptyState={renderEmptyState}
-        itemKey="name"
+        itemKey={(branch) => branch.name}
       />
     </div>
   );

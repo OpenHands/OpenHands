@@ -369,7 +369,7 @@ export function GitRepoDropdown({
         stickyFooterItem={stickyFooterItem}
         testId="git-repo-dropdown-menu"
         numberOfRecentItems={recentRepositories.length}
-        itemKey="id"
+        itemKey={(repo) => repo.id}
       />
 
       <ErrorMessage isError={isError} />

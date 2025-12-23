@@ -36,7 +36,7 @@ describe("useWebSocket", () => {
 
   beforeAll(() =>
     mswServer.listen({
-      onUnhandledRequest: "bypass", // Suppress warnings for unhandled requests
+      onUnhandledRequest: "warn",
     }),
   );
   afterEach(() => mswServer.resetHandlers());

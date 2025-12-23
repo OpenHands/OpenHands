@@ -33,7 +33,7 @@ export interface GenericDropdownMenuProps<T> {
   stickyFooterItem?: React.ReactNode;
   testId?: string;
   numberOfRecentItems?: number;
-  itemKey: keyof T | "self";
+  itemKey: (item: T) => string | number;
 }
 
 export function GenericDropdownMenu<T>({
@@ -103,10 +103,7 @@ export function GenericDropdownMenu<T>({
             <>
               {stickyTopItem}
               {filteredItems.map((item, index) => {
-                const key =
-                  itemKey === "self"
-                    ? String(item)
-                    : String(item[itemKey as keyof T]);
+                const key = itemKey(item);
                 return (
                   <React.Fragment key={key}>
                     {renderItem(
