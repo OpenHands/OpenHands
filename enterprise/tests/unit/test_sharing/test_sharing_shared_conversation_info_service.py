@@ -59,7 +59,7 @@ async def async_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
-async def public_conversation_service(async_session):
+async def shared_conversation_info_service(async_session):
     """Create a SharedConversationInfoService for testing."""
     return SQLSharedConversationInfoService(db_session=async_session)
 
@@ -145,20 +145,20 @@ class TestSharedConversationInfoService:
 
     @pytest.mark.asyncio
     @pytest.mark.asyncio
-    async def test_get_public_conversation_info_returns_public_conversation(
+    async def test_get_shared_conversation_info_returns_public_conversation(
         self,
-        public_conversation_service,
+        shared_conversation_info_service,
         app_conversation_service,
         sample_conversation_info,
     ):
-        """Test that get_public_conversation_info returns a public conversation."""
+        """Test that get_shared_conversation_info returns a public conversation."""
         # Create a public conversation
         await app_conversation_service.save_app_conversation_info(
             sample_conversation_info
         )
 
         # Retrieve it via public service
-        result = await public_conversation_service.get_public_conversation_info(
+        result = await shared_conversation_info_service.get_shared_conversation_info(
             sample_conversation_info.id
         )
 
@@ -168,32 +168,32 @@ class TestSharedConversationInfoService:
         assert result.created_by_user_id == sample_conversation_info.created_by_user_id
 
     @pytest.mark.asyncio
-    async def test_get_public_conversation_info_returns_none_for_private_conversation(
+    async def test_get_shared_conversation_info_returns_none_for_private_conversation(
         self,
-        public_conversation_service,
+        shared_conversation_info_service,
         app_conversation_service,
         sample_private_conversation_info,
     ):
-        """Test that get_public_conversation_info returns None for private conversations."""
+        """Test that get_shared_conversation_info returns None for private conversations."""
         # Create a private conversation
         await app_conversation_service.save_app_conversation_info(
             sample_private_conversation_info
         )
 
         # Try to retrieve it via public service
-        result = await public_conversation_service.get_public_conversation_info(
+        result = await shared_conversation_info_service.get_shared_conversation_info(
             sample_private_conversation_info.id
         )
 
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_get_public_conversation_info_returns_none_for_nonexistent_conversation(
-        self, public_conversation_service
+    async def test_get_shared_conversation_info_returns_none_for_nonexistent_conversation(
+        self, shared_conversation_info_service
     ):
-        """Test that get_public_conversation_info returns None for nonexistent conversations."""
+        """Test that get_shared_conversation_info returns None for nonexistent conversations."""
         nonexistent_id = uuid4()
-        result = await public_conversation_service.get_public_conversation_info(
+        result = await shared_conversation_info_service.get_shared_conversation_info(
             nonexistent_id
         )
         assert result is None
@@ -201,7 +201,7 @@ class TestSharedConversationInfoService:
     @pytest.mark.asyncio
     async def test_search_public_conversation_info_returns_only_public_conversations(
         self,
-        public_conversation_service,
+        shared_conversation_info_service,
         app_conversation_service,
         sample_conversation_info,
         sample_private_conversation_info,
@@ -216,7 +216,7 @@ class TestSharedConversationInfoService:
         )
 
         # Search for all conversations
-        result = await public_conversation_service.search_public_conversation_info()
+        result = await shared_conversation_info_service.search_public_conversation_info()
 
         # Should only return the public conversation
         assert len(result.items) == 1
@@ -226,7 +226,7 @@ class TestSharedConversationInfoService:
     @pytest.mark.asyncio
     async def test_search_public_conversation_info_with_title_filter(
         self,
-        public_conversation_service,
+        shared_conversation_info_service,
         app_conversation_service,
         sample_conversation_info,
     ):
@@ -237,13 +237,13 @@ class TestSharedConversationInfoService:
         )
 
         # Search with matching title
-        result = await public_conversation_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_public_conversation_info(
             title__contains='Test'
         )
         assert len(result.items) == 1
 
         # Search with non-matching title
-        result = await public_conversation_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_public_conversation_info(
             title__contains='NonExistent'
         )
         assert len(result.items) == 0
@@ -251,7 +251,7 @@ class TestSharedConversationInfoService:
     @pytest.mark.asyncio
     async def test_search_public_conversation_info_with_sort_order(
         self,
-        public_conversation_service,
+        shared_conversation_info_service,
         app_conversation_service,
     ):
         """Test searching with different sort orders."""
@@ -289,7 +289,7 @@ class TestSharedConversationInfoService:
         await app_conversation_service.save_app_conversation_info(conv2)
 
         # Test sort by title ascending
-        result = await public_conversation_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_public_conversation_info(
             sort_order=SharedConversationSortOrder.TITLE
         )
         assert len(result.items) == 2
@@ -297,7 +297,7 @@ class TestSharedConversationInfoService:
         assert result.items[1].title == 'B Second Conversation'
 
         # Test sort by title descending
-        result = await public_conversation_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_public_conversation_info(
             sort_order=SharedConversationSortOrder.TITLE_DESC
         )
         assert len(result.items) == 2
@@ -305,7 +305,7 @@ class TestSharedConversationInfoService:
         assert result.items[1].title == 'A First Conversation'
 
         # Test sort by created_at ascending
-        result = await public_conversation_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_public_conversation_info(
             sort_order=SharedConversationSortOrder.CREATED_AT
         )
         assert len(result.items) == 2
@@ -313,7 +313,7 @@ class TestSharedConversationInfoService:
         assert result.items[1].id == conv2.id
 
         # Test sort by created_at descending (default)
-        result = await public_conversation_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_public_conversation_info(
             sort_order=SharedConversationSortOrder.CREATED_AT_DESC
         )
         assert len(result.items) == 2
@@ -323,34 +323,34 @@ class TestSharedConversationInfoService:
     @pytest.mark.asyncio
     async def test_count_public_conversation_info(
         self,
-        public_conversation_service,
+        shared_conversation_info_service,
         app_conversation_service,
         sample_conversation_info,
         sample_private_conversation_info,
     ):
         """Test counting public conversations."""
         # Initially should be 0
-        count = await public_conversation_service.count_public_conversation_info()
+        count = await shared_conversation_info_service.count_public_conversation_info()
         assert count == 0
 
         # Create a public conversation
         await app_conversation_service.save_app_conversation_info(
             sample_conversation_info
         )
-        count = await public_conversation_service.count_public_conversation_info()
+        count = await shared_conversation_info_service.count_public_conversation_info()
         assert count == 1
 
         # Create a private conversation - count should remain 1
         await app_conversation_service.save_app_conversation_info(
             sample_private_conversation_info
         )
-        count = await public_conversation_service.count_public_conversation_info()
+        count = await shared_conversation_info_service.count_public_conversation_info()
         assert count == 1
 
     @pytest.mark.asyncio
-    async def test_batch_get_public_conversation_info(
+    async def test_batch_get_shared_conversation_info(
         self,
-        public_conversation_service,
+        shared_conversation_info_service,
         app_conversation_service,
         sample_conversation_info,
         sample_private_conversation_info,
@@ -365,7 +365,7 @@ class TestSharedConversationInfoService:
         )
 
         # Batch get both conversations
-        result = await public_conversation_service.batch_get_public_conversation_info(
+        result = await shared_conversation_info_service.batch_get_shared_conversation_info(
             [sample_conversation_info.id, sample_private_conversation_info.id]
         )
 
@@ -378,7 +378,7 @@ class TestSharedConversationInfoService:
     @pytest.mark.asyncio
     async def test_search_with_pagination(
         self,
-        public_conversation_service,
+        shared_conversation_info_service,
         app_conversation_service,
     ):
         """Test search with pagination."""
@@ -403,14 +403,14 @@ class TestSharedConversationInfoService:
             await app_conversation_service.save_app_conversation_info(conv)
 
         # Get first page with limit 2
-        result = await public_conversation_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_public_conversation_info(
             limit=2, sort_order=SharedConversationSortOrder.CREATED_AT
         )
         assert len(result.items) == 2
         assert result.next_page_id is not None
 
         # Get next page
-        result2 = await public_conversation_service.search_public_conversation_info(
+        result2 = await shared_conversation_info_service.search_public_conversation_info(
             limit=2,
             page_id=result.next_page_id,
             sort_order=SharedConversationSortOrder.CREATED_AT,
