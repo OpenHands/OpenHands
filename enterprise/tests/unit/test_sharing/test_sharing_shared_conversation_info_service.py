@@ -5,6 +5,12 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 import pytest
+from server.sharing.shared_conversation_models import (
+    SharedConversationSortOrder,
+)
+from server.sharing.sql_shared_conversation_info_service import (
+    SQLSharedConversationInfoService,
+)
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -13,12 +19,6 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
-)
-from server.sharing.shared_conversation_models import (
-    SharedConversationSortOrder,
-)
-from server.sharing.sql_shared_conversation_info_service import (
-    SQLSharedConversationInfoService,
 )
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
