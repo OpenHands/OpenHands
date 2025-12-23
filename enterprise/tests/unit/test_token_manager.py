@@ -126,16 +126,29 @@ class TestCheckDuplicateBaseEmail:
 
     @pytest.mark.asyncio
     async def test_check_duplicate_base_email_no_plus_modifier(self, token_manager):
-        """Test that emails without + modifier return False."""
+        """Test that emails without + modifier are still checked for duplicates."""
         # Arrange
         email = 'joe@example.com'
         current_user_id = 'user123'
 
-        # Act
-        result = await token_manager.check_duplicate_base_email(email, current_user_id)
+        with (
+            patch.object(
+                token_manager, '_query_users_by_wildcard_pattern'
+            ) as mock_query,
+            patch.object(token_manager, '_find_duplicate_in_users') as mock_find,
+        ):
+            mock_find.return_value = False
+            mock_query.return_value = {}
 
-        # Assert
-        assert result is False
+            # Act
+            result = await token_manager.check_duplicate_base_email(
+                email, current_user_id
+            )
+
+            # Assert
+            assert result is False
+            mock_query.assert_called_once()
+            mock_find.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_check_duplicate_base_email_empty_email(self, token_manager):
@@ -221,7 +234,7 @@ class TestCheckDuplicateBaseEmail:
     async def test_check_duplicate_base_email_keycloak_connection_error(
         self, token_manager
     ):
-        """Test that KeycloakConnectionError is handled gracefully."""
+        """Test that KeycloakConnectionError triggers retry and raises RetryError."""
         # Arrange
         email = 'joe+test@example.com'
         current_user_id = 'user123'
@@ -231,13 +244,13 @@ class TestCheckDuplicateBaseEmail:
         ) as mock_query:
             mock_query.side_effect = KeycloakConnectionError('Connection failed')
 
-            # Act
-            result = await token_manager.check_duplicate_base_email(
-                email, current_user_id
-            )
+            # Act & Assert
+            # KeycloakConnectionError is re-raised, which triggers retry decorator
+            # After retries exhaust (2 attempts), it raises RetryError
+            from tenacity import RetryError
 
-            # Assert
-            assert result is False
+            with pytest.raises(RetryError):
+                await token_manager.check_duplicate_base_email(email, current_user_id)
 
     @pytest.mark.asyncio
     async def test_check_duplicate_base_email_general_exception(self, token_manager):
@@ -460,20 +473,26 @@ class TestDeleteKeycloakUser:
 
     @pytest.mark.asyncio
     async def test_delete_keycloak_user_connection_error(self, token_manager):
-        """Test handling of KeycloakConnectionError."""
+        """Test handling of KeycloakConnectionError triggers retry and raises RetryError."""
         # Arrange
         user_id = 'test_user_id'
 
         with (
+            patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin,
             patch('asyncio.to_thread') as mock_to_thread,
         ):
+            mock_admin = MagicMock()
+            mock_admin.delete_user = MagicMock()
+            mock_get_admin.return_value = mock_admin
             mock_to_thread.side_effect = KeycloakConnectionError('Connection failed')
 
-            # Act
-            result = await token_manager.delete_keycloak_user(user_id)
+            # Act & Assert
+            # KeycloakConnectionError triggers retry decorator
+            # After retries exhaust (2 attempts), it raises RetryError
+            from tenacity import RetryError
 
-            # Assert
-            assert result is False
+            with pytest.raises(RetryError):
+                await token_manager.delete_keycloak_user(user_id)
 
     @pytest.mark.asyncio
     async def test_delete_keycloak_user_keycloak_error(self, token_manager):
@@ -482,8 +501,12 @@ class TestDeleteKeycloakUser:
         user_id = 'test_user_id'
 
         with (
+            patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin,
             patch('asyncio.to_thread') as mock_to_thread,
         ):
+            mock_admin = MagicMock()
+            mock_admin.delete_user = MagicMock()
+            mock_get_admin.return_value = mock_admin
             mock_to_thread.side_effect = KeycloakError('User not found')
 
             # Act
@@ -499,8 +522,12 @@ class TestDeleteKeycloakUser:
         user_id = 'test_user_id'
 
         with (
+            patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin,
             patch('asyncio.to_thread') as mock_to_thread,
         ):
+            mock_admin = MagicMock()
+            mock_admin.delete_user = MagicMock()
+            mock_get_admin.return_value = mock_admin
             mock_to_thread.side_effect = Exception('Unexpected error')
 
             # Act

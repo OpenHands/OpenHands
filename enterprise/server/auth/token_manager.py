@@ -29,7 +29,6 @@ from server.auth.constants import (
 from server.auth.email_validation import (
     extract_base_email,
     get_base_email_regex_pattern,
-    has_plus_modifier,
     matches_base_email,
 )
 from server.auth.keycloak_manager import get_keycloak_admin, get_keycloak_openid
@@ -618,19 +617,23 @@ class TokenManager:
         """Check if a user with the same base email already exists.
 
         This method checks for duplicate signups using email + modifier.
-        If the provided email has a + modifier, it checks if any user exists
-        with the same base email (either the base email itself or another
-        email with the same base and a different + modifier).
+        It checks if any user exists with the same base email, regardless of whether
+        the provided email has a + modifier or not.
+
+        Examples:
+            - If email is "joe+test@example.com", it checks for existing users with
+              base email "joe@example.com" (e.g., "joe@example.com", "joe+1@example.com")
+            - If email is "joe@example.com", it checks for existing users with
+              base email "joe@example.com" (e.g., "joe+1@example.com", "joe+test@example.com")
 
         Args:
-            email: The email address to check (may contain + modifier)
+            email: The email address to check (may or may not contain + modifier)
             current_user_id: The user ID of the current user (to exclude from check)
 
         Returns:
             True if a duplicate is found (excluding current user), False otherwise
         """
-        if not email or not has_plus_modifier(email):
-            # Only check emails with + modifier
+        if not email:
             return False
 
         base_email = extract_base_email(email)
