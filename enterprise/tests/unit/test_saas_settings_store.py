@@ -6,6 +6,7 @@ from server.constants import (
     CURRENT_USER_SETTINGS_VERSION,
     LITE_LLM_API_URL,
     LITE_LLM_TEAM_ID,
+    get_default_litellm_model,
 )
 from storage.saas_settings_store import SaasSettingsStore
 from storage.user_settings import UserSettings
@@ -393,10 +394,11 @@ async def test_create_user_in_lite_llm(settings_store):
     mock_response = AsyncMock()
     mock_response.is_success = True
     mock_client.post.return_value = mock_response
+    test_model = 'custom-model/test-model'
 
     # Test with email
     await settings_store._create_user_in_lite_llm(
-        mock_client, 'test@example.com', 50, 10
+        mock_client, 'test@example.com', 50, 10, test_model
     )
 
     # Get the actual call arguments
@@ -412,11 +414,11 @@ async def test_create_user_in_lite_llm(settings_store):
     assert call_args['json']['auto_create_key'] is True
     assert call_args['json']['send_invite_email'] is False
     assert call_args['json']['metadata']['version'] == CURRENT_USER_SETTINGS_VERSION
-    assert 'model' in call_args['json']['metadata']
+    assert call_args['json']['metadata']['model'] == test_model
 
     # Test with None email
     mock_client.post.reset_mock()
-    await settings_store._create_user_in_lite_llm(mock_client, None, 25, 15)
+    await settings_store._create_user_in_lite_llm(mock_client, None, 25, 15, test_model)
 
     # Get the actual call arguments
     call_args = mock_client.post.call_args[1]
@@ -431,12 +433,12 @@ async def test_create_user_in_lite_llm(settings_store):
     assert call_args['json']['auto_create_key'] is True
     assert call_args['json']['send_invite_email'] is False
     assert call_args['json']['metadata']['version'] == CURRENT_USER_SETTINGS_VERSION
-    assert 'model' in call_args['json']['metadata']
+    assert call_args['json']['metadata']['model'] == test_model
 
     # Verify response is returned correctly
     assert (
         await settings_store._create_user_in_lite_llm(
-            mock_client, 'email@test.com', 30, 7
+            mock_client, 'email@test.com', 30, 7, test_model
         )
         == mock_response
     )
@@ -464,3 +466,347 @@ async def test_encryption(settings_store):
         # But we should be able to decrypt it when loading
         loaded_settings = await settings_store.load()
         assert loaded_settings.llm_api_key.get_secret_value() == 'secret_key'
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_preserves_custom_model(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has a custom LLM model set
+    custom_model = 'anthropic/claude-3-5-sonnet-20241022'
+    settings = Settings(llm_model=custom_model)
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Custom model is preserved
+    assert updated_settings is not None
+    assert updated_settings.llm_model == custom_model
+    assert updated_settings.agent == 'CodeActAgent'
+    assert updated_settings.llm_api_key is not None
+
+    # Assert: LiteLLM metadata contains user's custom model
+    call_args = mock_litellm_api.return_value.__aenter__.return_value.post.call_args[1]
+    assert call_args['json']['metadata']['model'] == custom_model
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_uses_default_when_no_model(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has no model set (new user scenario)
+    settings = Settings()
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'newuser@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default model is assigned
+    assert updated_settings is not None
+    expected_default = get_default_litellm_model()
+    assert updated_settings.llm_model == expected_default
+    assert updated_settings.agent == 'CodeActAgent'
+
+    # Assert: LiteLLM metadata contains default model
+    call_args = mock_litellm_api.return_value.__aenter__.return_value.post.call_args[1]
+    assert call_args['json']['metadata']['model'] == expected_default
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_handles_empty_string_model(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has empty string as model (edge case)
+    settings = Settings(llm_model='')
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default model is used (empty string treated as no model)
+    assert updated_settings is not None
+    expected_default = get_default_litellm_model()
+    assert updated_settings.llm_model == expected_default
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_handles_whitespace_model(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has whitespace-only model (edge case)
+    settings = Settings(llm_model='   ')
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default model is used (whitespace treated as no model)
+    assert updated_settings is not None
+    expected_default = get_default_litellm_model()
+    assert updated_settings.llm_model == expected_default
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_preserves_custom_api_key(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has a custom API key
+    custom_api_key = 'sk-custom-user-api-key-12345'
+    settings = Settings(llm_api_key=SecretStr(custom_api_key))
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Custom API key is preserved
+    assert updated_settings is not None
+    assert updated_settings.llm_api_key.get_secret_value() == custom_api_key
+    assert updated_settings.llm_api_key.get_secret_value() != 'test_api_key'
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_preserves_custom_base_url(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has a custom base URL
+    custom_base_url = 'https://api.custom-llm-provider.com/v1'
+    settings = Settings(llm_base_url=custom_base_url)
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Custom base URL is preserved
+    assert updated_settings is not None
+    assert updated_settings.llm_base_url == custom_base_url
+    assert updated_settings.llm_base_url != LITE_LLM_API_URL
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_preserves_custom_api_key_and_base_url(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has both custom API key and base URL
+    custom_api_key = 'sk-custom-user-api-key-67890'
+    custom_base_url = 'https://api.another-llm-provider.com/v1'
+    custom_model = 'openai/gpt-4'
+    settings = Settings(
+        llm_model=custom_model,
+        llm_api_key=SecretStr(custom_api_key),
+        llm_base_url=custom_base_url,
+    )
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: All custom settings are preserved
+    assert updated_settings is not None
+    assert updated_settings.llm_model == custom_model
+    assert updated_settings.llm_api_key.get_secret_value() == custom_api_key
+    assert updated_settings.llm_base_url == custom_base_url
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_uses_default_api_key_when_none(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has no API key set
+    settings = Settings(llm_api_key=None)
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default LiteLLM API key is assigned
+    assert updated_settings is not None
+    assert updated_settings.llm_api_key is not None
+    assert updated_settings.llm_api_key.get_secret_value() == 'test_api_key'
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_uses_default_base_url_when_none(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has no base URL set
+    settings = Settings(llm_base_url=None)
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default LiteLLM base URL is assigned (using mocked value)
+    assert updated_settings is not None
+    assert updated_settings.llm_base_url == 'http://test.url'
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_handles_empty_api_key(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has empty string as API key (edge case)
+    settings = Settings(llm_api_key=SecretStr(''))
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default API key is used (empty string treated as no key)
+    assert updated_settings is not None
+    assert updated_settings.llm_api_key.get_secret_value() == 'test_api_key'
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_handles_empty_base_url(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has empty string as base URL (edge case)
+    settings = Settings(llm_base_url='')
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default base URL is used (empty string treated as no URL)
+    assert updated_settings is not None
+    assert updated_settings.llm_base_url == 'http://test.url'
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_handles_whitespace_api_key(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has whitespace-only API key (edge case)
+    settings = Settings(llm_api_key=SecretStr('   '))
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default API key is used (whitespace treated as no key)
+    assert updated_settings is not None
+    assert updated_settings.llm_api_key.get_secret_value() == 'test_api_key'
+
+
+@pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_handles_whitespace_base_url(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User has whitespace-only base URL (edge case)
+    settings = Settings(llm_base_url='   ')
+
+    with (
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'),
+    ):
+        # Act: Update settings with LiteLLM defaults
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
+
+    # Assert: Default base URL is used (whitespace treated as no URL)
+    assert updated_settings is not None
+    assert updated_settings.llm_base_url == 'http://test.url'
