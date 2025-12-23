@@ -199,7 +199,7 @@ class TestSharedConversationInfoService:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_search_public_conversation_info_returns_only_public_conversations(
+    async def test_search_shared_conversation_info_returns_only_public_conversations(
         self,
         shared_conversation_info_service,
         app_conversation_service,
@@ -217,7 +217,7 @@ class TestSharedConversationInfoService:
 
         # Search for all conversations
         result = (
-            await shared_conversation_info_service.search_public_conversation_info()
+            await shared_conversation_info_service.search_shared_conversation_info()
         )
 
         # Should only return the public conversation
@@ -226,7 +226,7 @@ class TestSharedConversationInfoService:
         assert result.items[0].title == sample_conversation_info.title
 
     @pytest.mark.asyncio
-    async def test_search_public_conversation_info_with_title_filter(
+    async def test_search_shared_conversation_info_with_title_filter(
         self,
         shared_conversation_info_service,
         app_conversation_service,
@@ -239,19 +239,19 @@ class TestSharedConversationInfoService:
         )
 
         # Search with matching title
-        result = await shared_conversation_info_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_shared_conversation_info(
             title__contains='Test'
         )
         assert len(result.items) == 1
 
         # Search with non-matching title
-        result = await shared_conversation_info_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_shared_conversation_info(
             title__contains='NonExistent'
         )
         assert len(result.items) == 0
 
     @pytest.mark.asyncio
-    async def test_search_public_conversation_info_with_sort_order(
+    async def test_search_shared_conversation_info_with_sort_order(
         self,
         shared_conversation_info_service,
         app_conversation_service,
@@ -291,7 +291,7 @@ class TestSharedConversationInfoService:
         await app_conversation_service.save_app_conversation_info(conv2)
 
         # Test sort by title ascending
-        result = await shared_conversation_info_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_shared_conversation_info(
             sort_order=SharedConversationSortOrder.TITLE
         )
         assert len(result.items) == 2
@@ -299,7 +299,7 @@ class TestSharedConversationInfoService:
         assert result.items[1].title == 'B Second Conversation'
 
         # Test sort by title descending
-        result = await shared_conversation_info_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_shared_conversation_info(
             sort_order=SharedConversationSortOrder.TITLE_DESC
         )
         assert len(result.items) == 2
@@ -307,7 +307,7 @@ class TestSharedConversationInfoService:
         assert result.items[1].title == 'A First Conversation'
 
         # Test sort by created_at ascending
-        result = await shared_conversation_info_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_shared_conversation_info(
             sort_order=SharedConversationSortOrder.CREATED_AT
         )
         assert len(result.items) == 2
@@ -315,7 +315,7 @@ class TestSharedConversationInfoService:
         assert result.items[1].id == conv2.id
 
         # Test sort by created_at descending (default)
-        result = await shared_conversation_info_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_shared_conversation_info(
             sort_order=SharedConversationSortOrder.CREATED_AT_DESC
         )
         assert len(result.items) == 2
@@ -407,7 +407,7 @@ class TestSharedConversationInfoService:
             await app_conversation_service.save_app_conversation_info(conv)
 
         # Get first page with limit 2
-        result = await shared_conversation_info_service.search_public_conversation_info(
+        result = await shared_conversation_info_service.search_shared_conversation_info(
             limit=2, sort_order=SharedConversationSortOrder.CREATED_AT
         )
         assert len(result.items) == 2
@@ -415,7 +415,7 @@ class TestSharedConversationInfoService:
 
         # Get next page
         result2 = (
-            await shared_conversation_info_service.search_public_conversation_info(
+            await shared_conversation_info_service.search_shared_conversation_info(
                 limit=2,
                 page_id=result.next_page_id,
                 sort_order=SharedConversationSortOrder.CREATED_AT,
