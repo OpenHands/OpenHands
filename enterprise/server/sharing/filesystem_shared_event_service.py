@@ -22,10 +22,10 @@ from server.sharing.shared_event_service import (
     SharedEventService,
     SharedEventServiceInjector,
 )
-
 from server.sharing.sql_shared_conversation_info_service import (
     SQLSharedConversationInfoService,
 )
+
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
