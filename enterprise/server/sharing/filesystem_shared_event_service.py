@@ -15,11 +15,7 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-
-from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.app_server.event.event_service import EventService
-from openhands.app_server.event_callback.event_callback_models import EventKind
-from openhands.app_server.services.injector import InjectorState
+from enterprise.server.sharing.sql_shared_conversation_info_service import SQLSharedConversationInfoService
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
@@ -27,6 +23,11 @@ from server.sharing.shared_event_service import (
     SharedEventService,
     SharedEventServiceInjector,
 )
+
+from openhands.agent_server.models import EventPage, EventSortOrder
+from openhands.app_server.event.event_service import EventService
+from openhands.app_server.event_callback.event_callback_models import EventKind
+from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
 
 logger = logging.getLogger(__name__)
@@ -122,15 +123,14 @@ class SharedEventServiceImplInjector(SharedEventServiceInjector):
         # Define inline to prevent circular lookup
         from openhands.app_server.config import (
             get_event_service,
-            get_shared_conversation_info_service,
+            get_db_session,
         )
 
         async with (
-            get_shared_conversation_info_service(
-                state, request
-            ) as shared_conversation_info_service,
+            get_db_session(state, request) as db_session,
             get_event_service(state, request) as event_service,
         ):
+            shared_conversation_info_service = SQLSharedConversationInfoService(db_session=db_session)
             service = SharedEventServiceImpl(
                 shared_conversation_info_service=shared_conversation_info_service,
                 event_service=event_service,

@@ -37,8 +37,12 @@ from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
-from server.sharing.shared_conversation_router import router as shared_conversation_router  # noqa: E402
-from server.sharing.shared_event_router import router as shared_event_router  # noqa: E402
+from server.sharing.shared_conversation_router import (  # noqa: E402
+    router as shared_conversation_router,
+)
+from server.sharing.shared_event_router import (  # noqa: E402
+    router as shared_event_router,
+)
 
 from openhands.server.app import app as base_app  # noqa: E402
 from openhands.server.listen_socket import sio  # noqa: E402

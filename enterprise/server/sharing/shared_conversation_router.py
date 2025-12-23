@@ -5,8 +5,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-
-from enterprise.server.sharing.sql_shared_conversation_info_service import SQLSharedConversationInfoServiceInjector
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
@@ -14,6 +12,10 @@ from server.sharing.shared_conversation_models import (
     SharedConversation,
     SharedConversationPage,
     SharedConversationSortOrder,
+)
+
+from enterprise.server.sharing.sql_shared_conversation_info_service import (
+    SQLSharedConversationInfoServiceInjector,
 )
 
 router = APIRouter(prefix='/api/shared-conversations', tags=['Sharing'])

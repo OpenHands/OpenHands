@@ -1,25 +1,21 @@
 """Filesystem-based EventService implementation."""
 
-import asyncio
-import glob
 import json
-import logging
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
 
-from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
 from openhands.app_server.errors import OpenHandsError
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
-from openhands.app_server.event.filesystem_event_service_base import FilesystemEventServiceBase
-from openhands.app_server.event_callback.event_callback_models import EventKind
+from openhands.app_server.event.filesystem_event_service_base import (
+    FilesystemEventServiceBase,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
 
