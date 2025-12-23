@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -29,6 +30,8 @@ export function AuthModal({
 }: AuthModalProps) {
   const { t } = useTranslation();
   const { trackLoginButtonClick } = useTracking();
+  const [searchParams] = useSearchParams();
+  const hasDuplicatedEmail = searchParams.get("duplicated_email") === "true";
 
   const gitlabAuthUrl = useAuthUrl({
     appMode: appMode || null,
@@ -123,6 +126,11 @@ export function AuthModal({
     <ModalBackdrop>
       <ModalBody className="border border-tertiary">
         <OpenHandsLogo width={68} height={46} />
+        {hasDuplicatedEmail && (
+          <div className="text-center text-danger text-sm mt-2 mb-2">
+            {t(I18nKey.AUTH$DUPLICATE_EMAIL_ERROR)}
+          </div>
+        )}
         <div className="flex flex-col gap-2 w-full items-center text-center">
           <h1 className="text-2xl font-bold">
             {t(I18nKey.AUTH$SIGN_IN_WITH_IDENTITY_PROVIDER)}
