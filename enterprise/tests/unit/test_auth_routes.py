@@ -224,7 +224,7 @@ async def test_keycloak_callback_email_not_verified(mock_request):
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
-        patch('server.routes.email._verify_email', mock_verify_email),
+        patch('server.routes.email.verify_email', mock_verify_email),
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
             return_value=('test_access_token', 'test_refresh_token')
@@ -262,7 +262,7 @@ async def test_keycloak_callback_email_not_verified_missing_field(mock_request):
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
-        patch('server.routes.email._verify_email', mock_verify_email),
+        patch('server.routes.email.verify_email', mock_verify_email),
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
             return_value=('test_access_token', 'test_refresh_token')

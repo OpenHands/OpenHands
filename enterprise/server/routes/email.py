@@ -74,7 +74,7 @@ async def update_email(
             accepted_tos=user_auth.accepted_tos,
         )
 
-        await _verify_email(request=request, user_id=user_id)
+        await verify_email(request=request, user_id=user_id)
 
         logger.info(f'Updating email address for {user_id} to {email}')
         return response
@@ -91,8 +91,10 @@ async def update_email(
 
 
 @api_router.put('/verify')
-async def verify_email(request: Request, user_id: str = Depends(get_user_id)):
-    await _verify_email(request=request, user_id=user_id)
+async def resend_email_verification(
+    request: Request, user_id: str = Depends(get_user_id)
+):
+    await verify_email(request=request, user_id=user_id)
 
     logger.info(f'Resending verification email for {user_id}')
     return JSONResponse(
@@ -124,7 +126,7 @@ async def verified_email(request: Request):
     return response
 
 
-async def _verify_email(request: Request, user_id: str, is_auth_flow: bool = False):
+async def verify_email(request: Request, user_id: str, is_auth_flow: bool = False):
     keycloak_admin = get_keycloak_admin()
     scheme = 'http' if request.url.hostname == 'localhost' else 'https'
     redirect_uri = (

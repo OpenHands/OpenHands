@@ -182,9 +182,9 @@ async def keycloak_callback(
     if not email_verified:
         # Send verification email
         # Import locally to avoid circular import with email.py
-        from server.routes.email import _verify_email
+        from server.routes.email import verify_email
 
-        await _verify_email(request=request, user_id=user_id, is_auth_flow=True)
+        await verify_email(request=request, user_id=user_id, is_auth_flow=True)
         redirect_url = f'{request.base_url}?email_verification_required=true'
         response = RedirectResponse(redirect_url, status_code=302)
         return response

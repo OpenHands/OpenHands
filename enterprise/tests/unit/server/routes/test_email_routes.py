@@ -5,7 +5,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse
 from pydantic import SecretStr
 from server.auth.saas_user_auth import SaasUserAuth
-from server.routes.email import _verify_email, verified_email
+from server.routes.email import verified_email, verify_email
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ def mock_user_auth():
 
 @pytest.mark.asyncio
 async def test_verify_email_default_behavior(mock_request):
-    """Test _verify_email with default is_auth_flow=False."""
+    """Test verify_email with default is_auth_flow=False."""
     # Arrange
     user_id = 'test_user_id'
     mock_keycloak_admin = AsyncMock()
@@ -48,7 +48,7 @@ async def test_verify_email_default_behavior(mock_request):
     with patch(
         'server.routes.email.get_keycloak_admin', return_value=mock_keycloak_admin
     ):
-        await _verify_email(request=mock_request, user_id=user_id)
+        await verify_email(request=mock_request, user_id=user_id)
 
     # Assert
     mock_keycloak_admin.a_send_verify_email.assert_called_once()
@@ -62,7 +62,7 @@ async def test_verify_email_default_behavior(mock_request):
 
 @pytest.mark.asyncio
 async def test_verify_email_with_auth_flow(mock_request):
-    """Test _verify_email with is_auth_flow=True."""
+    """Test verify_email with is_auth_flow=True."""
     # Arrange
     user_id = 'test_user_id'
     mock_keycloak_admin = AsyncMock()
@@ -72,7 +72,7 @@ async def test_verify_email_with_auth_flow(mock_request):
     with patch(
         'server.routes.email.get_keycloak_admin', return_value=mock_keycloak_admin
     ):
-        await _verify_email(request=mock_request, user_id=user_id, is_auth_flow=True)
+        await verify_email(request=mock_request, user_id=user_id, is_auth_flow=True)
 
     # Assert
     mock_keycloak_admin.a_send_verify_email.assert_called_once()
@@ -86,7 +86,7 @@ async def test_verify_email_with_auth_flow(mock_request):
 
 @pytest.mark.asyncio
 async def test_verify_email_https_scheme(mock_request):
-    """Test _verify_email uses https scheme for non-localhost hosts."""
+    """Test verify_email uses https scheme for non-localhost hosts."""
     # Arrange
     user_id = 'test_user_id'
     mock_request.url.hostname = 'example.com'
@@ -98,7 +98,7 @@ async def test_verify_email_https_scheme(mock_request):
     with patch(
         'server.routes.email.get_keycloak_admin', return_value=mock_keycloak_admin
     ):
-        await _verify_email(request=mock_request, user_id=user_id, is_auth_flow=True)
+        await verify_email(request=mock_request, user_id=user_id, is_auth_flow=True)
 
     # Assert
     call_args = mock_keycloak_admin.a_send_verify_email.call_args
