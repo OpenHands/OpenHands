@@ -323,7 +323,7 @@ class TestSharedConversationInfoService:
         assert result.items[1].id == conv1.id
 
     @pytest.mark.asyncio
-    async def test_count_public_conversation_info(
+    async def test_count_shared_conversation_info(
         self,
         shared_conversation_info_service,
         app_conversation_service,
@@ -332,21 +332,21 @@ class TestSharedConversationInfoService:
     ):
         """Test counting public conversations."""
         # Initially should be 0
-        count = await shared_conversation_info_service.count_public_conversation_info()
+        count = await shared_conversation_info_service.count_shared_conversation_info()
         assert count == 0
 
         # Create a public conversation
         await app_conversation_service.save_app_conversation_info(
             sample_conversation_info
         )
-        count = await shared_conversation_info_service.count_public_conversation_info()
+        count = await shared_conversation_info_service.count_shared_conversation_info()
         assert count == 1
 
         # Create a private conversation - count should remain 1
         await app_conversation_service.save_app_conversation_info(
             sample_private_conversation_info
         )
-        count = await shared_conversation_info_service.count_public_conversation_info()
+        count = await shared_conversation_info_service.count_shared_conversation_info()
         assert count == 1
 
     @pytest.mark.asyncio
