@@ -14,10 +14,10 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
-from openhands.app_server.sharing.shared_conversation_models import (
+from server.sharing.shared_conversation_models import (
     SharedConversationSortOrder,
 )
-from openhands.app_server.sharing.sql_shared_conversation_info_service import (
+from server.sharing.sql_shared_conversation_info_service import (
     SQLSharedConversationInfoService,
 )
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext

@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from openhands.app_server.sharing.shared_conversation_models import (
+from server.sharing.shared_conversation_models import (
     SharedConversation,
     SharedConversationPage,
     SharedConversationSortOrder,
