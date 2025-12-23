@@ -77,7 +77,7 @@ class TestSharedEventService:
         sample_public_conversation,
         sample_event,
     ):
-        """Test that get_public_event returns an event for a public conversation."""
+        """Test that get_shared_event returns an event for a public conversation."""
         conversation_id = sample_public_conversation.id
         event_id = 'test_event_id'
 
@@ -90,7 +90,7 @@ class TestSharedEventService:
         mock_event_service.get_event.return_value = sample_event
 
         # Call the method
-        result = await shared_event_service.get_public_event(conversation_id, event_id)
+        result = await shared_event_service.get_shared_event(conversation_id, event_id)
 
         # Verify the result
         assert result == sample_event
@@ -99,13 +99,13 @@ class TestSharedEventService:
         )
         mock_event_service.get_event.assert_called_once_with(event_id)
 
-    async def test_get_public_event_returns_none_for_private_conversation(
+    async def test_get_shared_event_returns_none_for_private_conversation(
         self,
         shared_event_service,
         mock_shared_conversation_info_service,
         mock_event_service,
     ):
-        """Test that get_public_event returns None for a private conversation."""
+        """Test that get_shared_event returns None for a private conversation."""
         conversation_id = uuid4()
         event_id = 'test_event_id'
 
@@ -115,7 +115,7 @@ class TestSharedEventService:
         )
 
         # Call the method
-        result = await shared_event_service.get_public_event(conversation_id, event_id)
+        result = await shared_event_service.get_shared_event(conversation_id, event_id)
 
         # Verify the result
         assert result is None
@@ -125,7 +125,7 @@ class TestSharedEventService:
         # Event service should not be called
         mock_event_service.get_event.assert_not_called()
 
-    async def test_search_public_events_returns_events_for_public_conversation(
+    async def test_search_shared_events_returns_events_for_public_conversation(
         self,
         shared_event_service,
         mock_shared_conversation_info_service,
@@ -133,7 +133,7 @@ class TestSharedEventService:
         sample_public_conversation,
         sample_event,
     ):
-        """Test that search_public_events returns events for a public conversation."""
+        """Test that search_shared_events returns events for a public conversation."""
         conversation_id = sample_public_conversation.id
 
         # Mock the public conversation service to return a public conversation
@@ -146,7 +146,7 @@ class TestSharedEventService:
         mock_event_service.search_events.return_value = mock_event_page
 
         # Call the method
-        result = await shared_event_service.search_public_events(
+        result = await shared_event_service.search_shared_events(
             conversation_id=conversation_id,
             kind__eq='ActionEvent',
             limit=10,
@@ -169,13 +169,13 @@ class TestSharedEventService:
             limit=10,
         )
 
-    async def test_search_public_events_returns_empty_for_private_conversation(
+    async def test_search_shared_events_returns_empty_for_private_conversation(
         self,
         shared_event_service,
         mock_shared_conversation_info_service,
         mock_event_service,
     ):
-        """Test that search_public_events returns empty page for a private conversation."""
+        """Test that search_shared_events returns empty page for a private conversation."""
         conversation_id = uuid4()
 
         # Mock the public conversation service to return None (private conversation)
@@ -184,7 +184,7 @@ class TestSharedEventService:
         )
 
         # Call the method
-        result = await shared_event_service.search_public_events(
+        result = await shared_event_service.search_shared_events(
             conversation_id=conversation_id,
             limit=10,
         )
@@ -200,14 +200,14 @@ class TestSharedEventService:
         # Event service should not be called
         mock_event_service.search_events.assert_not_called()
 
-    async def test_count_public_events_returns_count_for_public_conversation(
+    async def test_count_shared_events_returns_count_for_public_conversation(
         self,
         shared_event_service,
         mock_shared_conversation_info_service,
         mock_event_service,
         sample_public_conversation,
     ):
-        """Test that count_public_events returns count for a public conversation."""
+        """Test that count_shared_events returns count for a public conversation."""
         conversation_id = sample_public_conversation.id
 
         # Mock the public conversation service to return a public conversation
@@ -219,7 +219,7 @@ class TestSharedEventService:
         mock_event_service.count_events.return_value = 5
 
         # Call the method
-        result = await shared_event_service.count_public_events(
+        result = await shared_event_service.count_shared_events(
             conversation_id=conversation_id,
             kind__eq='ActionEvent',
         )
@@ -238,13 +238,13 @@ class TestSharedEventService:
             sort_order=EventSortOrder.TIMESTAMP,
         )
 
-    async def test_count_public_events_returns_zero_for_private_conversation(
+    async def test_count_shared_events_returns_zero_for_private_conversation(
         self,
         shared_event_service,
         mock_shared_conversation_info_service,
         mock_event_service,
     ):
-        """Test that count_public_events returns 0 for a private conversation."""
+        """Test that count_shared_events returns 0 for a private conversation."""
         conversation_id = uuid4()
 
         # Mock the public conversation service to return None (private conversation)
@@ -253,7 +253,7 @@ class TestSharedEventService:
         )
 
         # Call the method
-        result = await shared_event_service.count_public_events(
+        result = await shared_event_service.count_shared_events(
             conversation_id=conversation_id,
         )
 
@@ -266,7 +266,7 @@ class TestSharedEventService:
         # Event service should not be called
         mock_event_service.count_events.assert_not_called()
 
-    async def test_batch_get_public_events_returns_events_for_public_conversation(
+    async def test_batch_get_shared_events_returns_events_for_public_conversation(
         self,
         shared_event_service,
         mock_shared_conversation_info_service,
@@ -274,7 +274,7 @@ class TestSharedEventService:
         sample_public_conversation,
         sample_event,
     ):
-        """Test that batch_get_public_events returns events for a public conversation."""
+        """Test that batch_get_shared_events returns events for a public conversation."""
         conversation_id = sample_public_conversation.id
         event_ids = ['event1', 'event2']
 
@@ -287,7 +287,7 @@ class TestSharedEventService:
         mock_event_service.get_event.side_effect = [sample_event, None]
 
         # Call the method
-        result = await shared_event_service.batch_get_public_events(
+        result = await shared_event_service.batch_get_shared_events(
             conversation_id, event_ids
         )
 
@@ -304,13 +304,13 @@ class TestSharedEventService:
         # Verify that get_event was called for each event
         assert mock_event_service.get_event.call_count == 2
 
-    async def test_batch_get_public_events_returns_none_for_private_conversation(
+    async def test_batch_get_shared_events_returns_none_for_private_conversation(
         self,
         shared_event_service,
         mock_shared_conversation_info_service,
         mock_event_service,
     ):
-        """Test that batch_get_public_events returns None for a private conversation."""
+        """Test that batch_get_shared_events returns None for a private conversation."""
         conversation_id = uuid4()
         event_ids = ['event1', 'event2']
 
@@ -320,7 +320,7 @@ class TestSharedEventService:
         )
 
         # Call the method
-        result = await shared_event_service.batch_get_public_events(
+        result = await shared_event_service.batch_get_shared_events(
             conversation_id, event_ids
         )
 
@@ -337,14 +337,14 @@ class TestSharedEventService:
         # Event service should not be called
         mock_event_service.get_event.assert_not_called()
 
-    async def test_search_public_events_with_all_parameters(
+    async def test_search_shared_events_with_all_parameters(
         self,
         shared_event_service,
         mock_shared_conversation_info_service,
         mock_event_service,
         sample_public_conversation,
     ):
-        """Test search_public_events with all parameters."""
+        """Test search_shared_events with all parameters."""
         conversation_id = sample_public_conversation.id
         timestamp_gte = datetime(2023, 1, 1, tzinfo=UTC)
         timestamp_lt = datetime(2023, 12, 31, tzinfo=UTC)
@@ -359,7 +359,7 @@ class TestSharedEventService:
         mock_event_service.search_events.return_value = mock_event_page
 
         # Call the method with all parameters
-        result = await shared_event_service.search_public_events(
+        result = await shared_event_service.search_shared_events(
             conversation_id=conversation_id,
             kind__eq='ObservationEvent',
             timestamp__gte=timestamp_gte,
