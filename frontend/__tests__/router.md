@@ -17,10 +17,12 @@ Choose your approach based on what your component actually needs from the router
 
 Use `createRoutesStub` when your component:
 - Relies on route parameters (`useParams`)
-- Uses route loaders or `clientLoader`
+- Uses loader data (`useLoaderData`) or `clientLoader`
 - Has nested routes or uses `<Outlet />`
 - Needs to test navigation between routes
-- Is a route component itself
+
+> [!NOTE]
+> `createRoutesStub` is intended for unit testing **reusable components** that depend on router context. For testing full route/page components, consider E2E tests (Playwright, Cypress) instead.
 
 ```typescript
 import { createRoutesStub } from "react-router";
@@ -58,6 +60,22 @@ const RouterStub = createRoutesStub([
 ]);
 
 render(<RouterStub initialEntries={["/settings/integrations"]} />);
+```
+
+> [!TIP]
+> When using `clientLoader` from a Route module, you may encounter type mismatches. Use `@ts-expect-error` as a workaround:
+
+```typescript
+import { clientLoader } from "@/routes/settings";
+
+const RouterStub = createRoutesStub([
+  {
+    path: "/settings",
+    Component: SettingsScreen,
+    // @ts-expect-error: loader types won't align between test and app code
+    loader: clientLoader,
+  },
+]);
 ```
 
 ### `MemoryRouter`
@@ -195,3 +213,15 @@ await user.click(screen.getByRole("link", { name: /settings/i }));
 expect(screen.getByTestId("settings-screen")).toBeInTheDocument();
 ```
 
+## See Also
+
+### Codebase Examples
+
+- [settings.test.tsx](__tests__/routes/settings.test.tsx) - `createRoutesStub` with nested routes and loaders
+- [home-screen.test.tsx](__tests__/routes/home-screen.test.tsx) - `createRoutesStub` with navigation testing
+- [chat-interface.test.tsx](__tests__/components/chat/chat-interface.test.tsx) - `MemoryRouter` usage
+
+### Official Documentation
+
+- [React Router Testing Guide](https://reactrouter.com/start/framework/testing) - Official guide on testing with `createRoutesStub`
+- [MemoryRouter API](https://reactrouter.com/api/declarative-routers/MemoryRouter) - API reference for `MemoryRouter`
