@@ -28,7 +28,7 @@ export function SettingsNavigation({
 
   const { t } = useTranslation();
 
-  const isUser = me?.role === "user";
+  const isUser = me?.role === "member";
 
   return (
     <>

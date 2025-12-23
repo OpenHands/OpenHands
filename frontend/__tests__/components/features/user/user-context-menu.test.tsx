@@ -54,7 +54,7 @@ describe("UserContextMenu", () => {
   });
 
   it("should render the default context items for a user", () => {
-    renderUserContextMenu({ type: "user", onClose: vi.fn });
+    renderUserContextMenu({ type: "member", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
     screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
@@ -83,7 +83,7 @@ describe("UserContextMenu", () => {
       },
     });
 
-    renderUserContextMenu({ type: "user", onClose: vi.fn });
+    renderUserContextMenu({ type: "member", onClose: vi.fn });
 
     // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
     const expectedItems = SAAS_NAV_ITEMS.filter(
@@ -99,14 +99,14 @@ describe("UserContextMenu", () => {
   });
 
   it("should not display Organization Members menu item for regular users (filtered out)", () => {
-    renderUserContextMenu({ type: "user", onClose: vi.fn });
+    renderUserContextMenu({ type: "member", onClose: vi.fn });
 
     // Organization Members is filtered out from nav items for all users
     expect(screen.queryByText("Organization Members")).not.toBeInTheDocument();
   });
 
   it("should render a documentation link", () => {
-    renderUserContextMenu({ type: "user", onClose: vi.fn });
+    renderUserContextMenu({ type: "member", onClose: vi.fn });
 
     const docsLink = screen.getByText("SIDEBAR$DOCS").closest("a");
     expect(docsLink).toHaveAttribute("href", "https://docs.openhands.dev");
@@ -131,7 +131,7 @@ describe("UserContextMenu", () => {
     });
 
     it("should render OSS_NAV_ITEMS when in OSS mode", async () => {
-      renderUserContextMenu({ type: "user", onClose: vi.fn });
+      renderUserContextMenu({ type: "member", onClose: vi.fn });
 
       // Wait for the config to load and OSS nav items to appear
       await waitFor(() => {
@@ -147,7 +147,7 @@ describe("UserContextMenu", () => {
     });
 
     it("should not display Organization Members menu item in OSS mode", async () => {
-      renderUserContextMenu({ type: "user", onClose: vi.fn });
+      renderUserContextMenu({ type: "member", onClose: vi.fn });
 
       // Wait for the config to load
       await waitFor(() => {
@@ -177,7 +177,7 @@ describe("UserContextMenu", () => {
         },
       });
 
-      renderUserContextMenu({ type: "user", onClose: vi.fn });
+      renderUserContextMenu({ type: "member", onClose: vi.fn });
 
       await waitFor(() => {
         // Other nav items should still be visible
@@ -204,7 +204,7 @@ describe("UserContextMenu", () => {
         },
       });
 
-      renderUserContextMenu({ type: "user", onClose: vi.fn });
+      renderUserContextMenu({ type: "member", onClose: vi.fn });
 
       await waitFor(() => {
         expect(
@@ -234,7 +234,7 @@ describe("UserContextMenu", () => {
 
   it("should call the logout handler when Logout is clicked", async () => {
     const logoutSpy = vi.spyOn(AuthService, "logout");
-    renderUserContextMenu({ type: "user", onClose: vi.fn });
+    renderUserContextMenu({ type: "member", onClose: vi.fn });
 
     const logoutButton = screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
     await userEvent.click(logoutButton);
@@ -257,7 +257,7 @@ describe("UserContextMenu", () => {
       },
     });
 
-    renderUserContextMenu({ type: "user", onClose: vi.fn });
+    renderUserContextMenu({ type: "member", onClose: vi.fn });
 
     // Wait for config to load and test a few representative nav items have the correct href
     await waitFor(() => {
@@ -298,7 +298,7 @@ describe("UserContextMenu", () => {
 
   it("should call the onClose handler when clicking outside the context menu", async () => {
     const onCloseMock = vi.fn();
-    renderUserContextMenu({ type: "user", onClose: onCloseMock });
+    renderUserContextMenu({ type: "member", onClose: onCloseMock });
 
     const contextMenu = screen.getByTestId("user-context-menu");
     await userEvent.click(contextMenu);
@@ -350,7 +350,7 @@ describe("UserContextMenu", () => {
 
   test("the user can change orgs", async () => {
     const onCloseMock = vi.fn();
-    renderUserContextMenu({ type: "user", onClose: onCloseMock });
+    renderUserContextMenu({ type: "member", onClose: onCloseMock });
 
     const orgSelector = screen.getByTestId("org-selector");
     expect(orgSelector).toBeInTheDocument();
@@ -369,7 +369,7 @@ describe("UserContextMenu", () => {
 
   it("should have Personal Account as the default selected option with null value", async () => {
     const onCloseMock = vi.fn();
-    renderUserContextMenu({ type: "user", onClose: onCloseMock });
+    renderUserContextMenu({ type: "member", onClose: onCloseMock });
 
     const orgSelector = screen.getByTestId("org-selector");
 

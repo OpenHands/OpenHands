@@ -52,7 +52,7 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
           )}
         >
           <UserContextMenu
-            type={me?.role || "user"}
+            type={me?.role || "member"}
             onClose={closeAccountMenu}
           />
         </div>

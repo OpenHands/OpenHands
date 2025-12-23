@@ -29,7 +29,7 @@ export const clientLoader = async () => {
     queryClient.setQueryData(["organizations", selectedOrgId, "me"], me);
   }
 
-  if (!me || me.role === "user") {
+  if (!me || me.role === "member") {
     // if user is USER role, redirect to user settings
     return redirect("/settings/user");
   }
@@ -46,7 +46,7 @@ function ManageOrganizationMembers() {
 
   const [inviteModalOpen, setInviteModalOpen] = React.useState(false);
 
-  const currentUserRole = user?.role || "user";
+  const currentUserRole = user?.role || "member";
   const hasPermissionToInvite = rolePermissions[currentUserRole].includes(
     "invite_user_to_organization",
   );
@@ -89,8 +89,8 @@ function ManageOrganizationMembers() {
     if (userPermissions.includes("change_user_role:admin")) {
       availableRoles.push("admin");
     }
-    if (userPermissions.includes("change_user_role:user")) {
-      availableRoles.push("user");
+    if (userPermissions.includes("change_user_role:member")) {
+      availableRoles.push("member");
     }
 
     return availableRoles;

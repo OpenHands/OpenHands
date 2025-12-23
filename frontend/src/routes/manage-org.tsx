@@ -271,7 +271,7 @@ export const clientLoader = async () => {
     queryClient.setQueryData(["organizations", selectedOrgId, "me"], me);
   }
 
-  if (!me || me.role === "user") {
+  if (!me || me.role === "member") {
     // if user is USER role, redirect to user settings
     return redirect("/settings/user");
   }

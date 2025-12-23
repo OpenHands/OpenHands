@@ -51,12 +51,14 @@ export function OrganizationMemberListItem({
         >
           {email}
         </span>
+
         {status === "invited" && (
           <span className="text-xs text-tertiary-light border border-tertiary px-2 py-1 rounded-lg">
             {t(I18nKey.ORG$STATUS_INVITED)}
           </span>
         )}
       </div>
+
       <div className="relative">
         <span
           onClick={handleRoleClick}
@@ -68,6 +70,7 @@ export function OrganizationMemberListItem({
           {role}
           {hasPermissionToChangeRole && <ChevronDown size={14} />}
         </span>
+
         {roleSelectionIsPermitted && contextMenuOpen && (
           <OrganizationMemberRoleContextMenu
             onClose={() => setContextMenuOpen(false)}

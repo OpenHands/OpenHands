@@ -94,10 +94,10 @@ export function OrganizationMemberRoleContextMenu({
           />
         </ContextMenuListItem>
       )}
-      {availableRolesToChangeTo.includes("user") && (
+      {availableRolesToChangeTo.includes("member") && (
         <ContextMenuListItem
-          testId="user-option"
-          onClick={(event) => handleRoleChangeClick(event, "user")}
+          testId="member-option"
+          onClick={(event) => handleRoleChangeClick(event, "member")}
           className={contextMenuListItemClassName}
         >
           <ContextMenuIconText

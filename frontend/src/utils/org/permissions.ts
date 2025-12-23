@@ -24,18 +24,18 @@ const ownerPerms: UserPermission[] = [
   "add_credits",
   "change_user_role:owner",
   "change_user_role:admin",
-  "change_user_role:user",
+  "change_user_role:member",
 ];
 const adminPerms: UserPermission[] = [
   "invite_user_to_organization",
   "add_credits",
   "change_user_role:admin",
-  "change_user_role:user",
+  "change_user_role:member",
 ];
 const userPerms: UserPermission[] = [];
 
 export const rolePermissions: Record<OrganizationUserRole, UserPermission[]> = {
   owner: ownerPerms,
   admin: adminPerms,
-  user: userPerms,
+  member: userPerms,
 };
