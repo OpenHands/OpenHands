@@ -70,6 +70,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         if gcp_connector is None:
             # Lazy import because lib does not import if user does not have posgres installed
             from google.cloud.sql.connector import Connector
+
             gcp_connector = Connector()
             self._gcp_connector = gcp_connector
 
@@ -89,6 +90,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         if gcp_connector is None:
             # Lazy import because lib does not import if user does not have posgres installed
             from google.cloud.sql.connector import Connector
+
             loop = asyncio.get_running_loop()
             gcp_connector = Connector(loop=loop)
             self._gcp_connector = gcp_connector
