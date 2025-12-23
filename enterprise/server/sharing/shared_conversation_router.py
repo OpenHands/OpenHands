@@ -4,21 +4,22 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from openhands.app_server.config import depends_shared_conversation_info_service
-from openhands.app_server.sharing.shared_conversation_info_service import (
+from enterprise.server.sharing.sql_shared_conversation_info_service import SQLSharedConversationInfoServiceInjector
+from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
-from openhands.app_server.sharing.shared_conversation_models import (
+from server.sharing.shared_conversation_models import (
     SharedConversation,
     SharedConversationPage,
     SharedConversationSortOrder,
 )
 
-router = APIRouter(prefix='/shared-conversations', tags=['Sharing'])
-shared_conversation_service_dependency = depends_shared_conversation_info_service()
-
+router = APIRouter(prefix='/api/shared-conversations', tags=['Sharing'])
+shared_conversation_info_service_dependency = Depends(
+    SQLSharedConversationInfoServiceInjector().depends
+)
 
 # Read methods
 
@@ -67,7 +68,7 @@ async def search_shared_conversations(
             title='If True, include sub-conversations in the results. If False (default), exclude all sub-conversations.'
         ),
     ] = False,
-    shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
+    shared_conversation_service: SharedConversationInfoService = shared_conversation_info_service_dependency,
 ) -> SharedConversationPage:
     """Search / List shared conversations."""
     assert limit > 0
@@ -107,7 +108,7 @@ async def count_shared_conversations(
         datetime | None,
         Query(title='Filter by updated_at less than this datetime'),
     ] = None,
-    shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
+    shared_conversation_service: SharedConversationInfoService = shared_conversation_info_service_dependency,
 ) -> int:
     """Count shared conversations matching the given filters."""
     return await shared_conversation_service.count_shared_conversation_info(
@@ -122,7 +123,7 @@ async def count_shared_conversations(
 @router.get('')
 async def batch_get_shared_conversations(
     ids: Annotated[list[str], Query()],
-    shared_conversation_service: SharedConversationInfoService = shared_conversation_service_dependency,
+    shared_conversation_service: SharedConversationInfoService = shared_conversation_info_service_dependency,
 ) -> list[SharedConversation | None]:
     """Get a batch of shared conversations given their ids. Return None for any missing or non-shared."""
     assert len(ids) <= 100

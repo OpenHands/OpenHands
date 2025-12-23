@@ -20,10 +20,10 @@ from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.sharing.shared_conversation_info_service import (
+from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
-from openhands.app_server.sharing.shared_event_service import (
+from server.sharing.shared_event_service import (
     SharedEventService,
     SharedEventServiceInjector,
 )

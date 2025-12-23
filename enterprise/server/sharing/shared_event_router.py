@@ -4,16 +4,18 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.app_server.config import depends_shared_event_service
+from enterprise.server.sharing.filesystem_shared_event_service import SharedEventServiceImplInjector
 from openhands.app_server.event_callback.event_callback_models import EventKind
-from openhands.app_server.sharing.shared_event_service import SharedEventService
+from server.sharing.shared_event_service import SharedEventService
 from openhands.sdk import Event
 
-router = APIRouter(prefix='/shared-events', tags=['Sharing'])
-shared_event_service_dependency = depends_shared_event_service()
+router = APIRouter(prefix='/api/shared-events', tags=['Sharing'])
+shared_event_service_dependency = Depends(
+    SharedEventServiceImplInjector().depends
+)
 
 
 # Read methods

@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from openhands.app_server.services.injector import Injector
-from openhands.app_server.sharing.shared_conversation_models import (
+from server.sharing.shared_conversation_models import (
     SharedConversation,
     SharedConversationPage,
     SharedConversationSortOrder,

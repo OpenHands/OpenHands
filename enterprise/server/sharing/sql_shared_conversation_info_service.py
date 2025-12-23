@@ -22,11 +22,11 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
     StoredConversationMetadata,
 )
 from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.sharing.shared_conversation_info_service import (
+from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
     SharedConversationInfoServiceInjector,
 )
-from openhands.app_server.sharing.shared_conversation_models import (
+from server.sharing.shared_conversation_models import (
     SharedConversation,
     SharedConversationPage,
     SharedConversationSortOrder,

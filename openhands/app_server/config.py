@@ -47,14 +47,6 @@ from openhands.app_server.services.db_session_injector import (
 from openhands.app_server.services.httpx_client_injector import HttpxClientInjector
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService, JwtServiceInjector
-from openhands.app_server.sharing.shared_conversation_info_service import (
-    SharedConversationInfoService,
-    SharedConversationInfoServiceInjector,
-)
-from openhands.app_server.sharing.shared_event_service import (
-    SharedEventService,
-    SharedEventServiceInjector,
-)
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
 from openhands.sdk.utils.models import OpenHandsModel
 
@@ -113,8 +105,6 @@ class AppServerConfig(OpenHandsModel):
     app_conversation_info: AppConversationInfoServiceInjector | None = None
     app_conversation_start_task: AppConversationStartTaskServiceInjector | None = None
     app_conversation: AppConversationServiceInjector | None = None
-    shared_conversation_info: SharedConversationInfoServiceInjector | None = None
-    shared_event: SharedEventServiceInjector | None = None
     user: UserContextInjector | None = None
     jwt: JwtServiceInjector | None = None
     httpx: HttpxClientInjector = Field(default_factory=HttpxClientInjector)
@@ -211,20 +201,6 @@ def config_from_env() -> AppServerConfig:
         config.app_conversation = LiveStatusAppConversationServiceInjector(
             tavily_api_key=tavily_api_key
         )
-
-    if config.shared_conversation_info is None:
-        from openhands.app_server.sharing.sql_shared_conversation_info_service import (
-            SQLSharedConversationInfoServiceInjector,
-        )
-
-        config.shared_conversation_info = SQLSharedConversationInfoServiceInjector()
-
-    if config.shared_event is None:
-        from openhands.app_server.sharing.filesystem_shared_event_service import (
-            SharedEventServiceImplInjector,
-        )
-
-        config.shared_event = SharedEventServiceImplInjector()
 
     if config.user is None:
         config.user = AuthUserContextInjector()
@@ -397,31 +373,3 @@ def depends_jwt_service():
 
 def depends_db_session():
     return Depends(get_global_config().db_session.depends)
-
-
-def depends_shared_conversation_info_service():
-    injector = get_global_config().shared_conversation_info
-    assert injector is not None
-    return Depends(injector.depends)
-
-
-def depends_shared_event_service():
-    injector = get_global_config().shared_event
-    assert injector is not None
-    return Depends(injector.depends)
-
-
-def get_shared_conversation_info_service(
-    state: InjectorState, request: Request | None = None
-) -> AsyncContextManager[SharedConversationInfoService]:
-    injector = get_global_config().shared_conversation_info
-    assert injector is not None
-    return injector.context(state, request)
-
-
-def get_shared_event_service(
-    state: InjectorState, request: Request | None = None
-) -> AsyncContextManager[SharedEventService]:
-    injector = get_global_config().shared_event
-    assert injector is not None
-    return injector.context(state, request)
