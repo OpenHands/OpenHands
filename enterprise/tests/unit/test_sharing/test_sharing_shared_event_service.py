@@ -82,9 +82,7 @@ class TestSharedEventService:
         event_id = 'test_event_id'
 
         # Mock the public conversation service to return a public conversation
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            sample_public_conversation
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = sample_public_conversation
 
         # Mock the event service to return an event
         mock_event_service.get_event.return_value = sample_event
@@ -110,9 +108,7 @@ class TestSharedEventService:
         event_id = 'test_event_id'
 
         # Mock the public conversation service to return None (private conversation)
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            None
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = None
 
         # Call the method
         result = await shared_event_service.get_shared_event(conversation_id, event_id)
@@ -137,9 +133,7 @@ class TestSharedEventService:
         conversation_id = sample_public_conversation.id
 
         # Mock the public conversation service to return a public conversation
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            sample_public_conversation
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = sample_public_conversation
 
         # Mock the event service to return events
         mock_event_page = EventPage(items=[], next_page_id=None)
@@ -179,9 +173,7 @@ class TestSharedEventService:
         conversation_id = uuid4()
 
         # Mock the public conversation service to return None (private conversation)
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            None
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = None
 
         # Call the method
         result = await shared_event_service.search_shared_events(
@@ -211,9 +203,7 @@ class TestSharedEventService:
         conversation_id = sample_public_conversation.id
 
         # Mock the public conversation service to return a public conversation
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            sample_public_conversation
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = sample_public_conversation
 
         # Mock the event service to return a count
         mock_event_service.count_events.return_value = 5
@@ -248,9 +238,7 @@ class TestSharedEventService:
         conversation_id = uuid4()
 
         # Mock the public conversation service to return None (private conversation)
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            None
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = None
 
         # Call the method
         result = await shared_event_service.count_shared_events(
@@ -279,9 +267,7 @@ class TestSharedEventService:
         event_ids = ['event1', 'event2']
 
         # Mock the public conversation service to return a public conversation
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            sample_public_conversation
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = sample_public_conversation
 
         # Mock the event service to return events
         mock_event_service.get_event.side_effect = [sample_event, None]
@@ -315,9 +301,7 @@ class TestSharedEventService:
         event_ids = ['event1', 'event2']
 
         # Mock the public conversation service to return None (private conversation)
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            None
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = None
 
         # Call the method
         result = await shared_event_service.batch_get_shared_events(
@@ -350,9 +334,7 @@ class TestSharedEventService:
         timestamp_lt = datetime(2023, 12, 31, tzinfo=UTC)
 
         # Mock the public conversation service to return a public conversation
-        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = (
-            sample_public_conversation
-        )
+        mock_shared_conversation_info_service.get_shared_conversation_info.return_value = sample_public_conversation
 
         # Mock the event service to return events
         mock_event_page = EventPage(items=[], next_page_id='next_page')

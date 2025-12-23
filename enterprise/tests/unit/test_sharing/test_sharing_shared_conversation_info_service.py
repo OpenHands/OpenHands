@@ -216,7 +216,9 @@ class TestSharedConversationInfoService:
         )
 
         # Search for all conversations
-        result = await shared_conversation_info_service.search_public_conversation_info()
+        result = (
+            await shared_conversation_info_service.search_public_conversation_info()
+        )
 
         # Should only return the public conversation
         assert len(result.items) == 1
@@ -365,8 +367,10 @@ class TestSharedConversationInfoService:
         )
 
         # Batch get both conversations
-        result = await shared_conversation_info_service.batch_get_shared_conversation_info(
-            [sample_conversation_info.id, sample_private_conversation_info.id]
+        result = (
+            await shared_conversation_info_service.batch_get_shared_conversation_info(
+                [sample_conversation_info.id, sample_private_conversation_info.id]
+            )
         )
 
         # Should return the public one and None for the private one
@@ -410,10 +414,12 @@ class TestSharedConversationInfoService:
         assert result.next_page_id is not None
 
         # Get next page
-        result2 = await shared_conversation_info_service.search_public_conversation_info(
-            limit=2,
-            page_id=result.next_page_id,
-            sort_order=SharedConversationSortOrder.CREATED_AT,
+        result2 = (
+            await shared_conversation_info_service.search_public_conversation_info(
+                limit=2,
+                page_id=result.next_page_id,
+                sort_order=SharedConversationSortOrder.CREATED_AT,
+            )
         )
         assert len(result2.items) == 2
         assert result2.next_page_id is not None
