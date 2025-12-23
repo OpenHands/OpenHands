@@ -1,10 +1,9 @@
 """Email validation utilities for preventing duplicate signups with + modifier."""
 
 import re
-from typing import Optional
 
 
-def extract_base_email(email: str) -> Optional[str]:
+def extract_base_email(email: str) -> str | None:
     """Extract base email from an email address.
 
     For emails with + modifier, extracts the base email (local part before + and @, plus domain).
@@ -81,7 +80,7 @@ def matches_base_email(email: str, base_email: str) -> bool:
     return email_base.lower() == base_email_normalized.lower()
 
 
-def get_base_email_regex_pattern(base_email: str) -> Optional[re.Pattern]:
+def get_base_email_regex_pattern(base_email: str) -> re.Pattern | None:
     """Generate a regex pattern to match emails with the same base.
 
     For base_email "joe@example.com", the pattern will match:

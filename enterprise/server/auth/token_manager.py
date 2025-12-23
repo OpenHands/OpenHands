@@ -645,8 +645,7 @@ class TokenManager:
 
         except KeycloakConnectionError:
             logger.exception('KeycloakConnectionError when checking duplicate email')
-            # On connection error, allow signup to proceed (fail open)
-            return False
+            raise
         except Exception as e:
             logger.exception(f'Unexpected error checking duplicate email: {e}')
             # On any error, allow signup to proceed (fail open)
@@ -678,7 +677,7 @@ class TokenManager:
             return True
         except KeycloakConnectionError:
             logger.exception(f'KeycloakConnectionError when deleting user {user_id}')
-            return False
+            raise
         except KeycloakError as e:
             # User might not exist or already deleted
             logger.warning(
