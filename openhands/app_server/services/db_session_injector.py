@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from fastapi import Request
 from pydantic import BaseModel, PrivateAttr, SecretStr, model_validator
@@ -42,6 +42,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
     _async_engine: AsyncEngine | None = PrivateAttr(default=None)
     _session_maker: sessionmaker | None = PrivateAttr(default=None)
     _async_session_maker: async_sessionmaker | None = PrivateAttr(default=None)
+    _gcp_connector: Any = PrivateAttr(default=None)
 
     @model_validator(mode='after')
     def fill_empty_fields(self):
@@ -65,14 +66,17 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         return self
 
     def _create_gcp_db_connection(self):
-        # Lazy import because lib does not import if user does not have posgres installed
-        from google.cloud.sql.connector import Connector
+        gcp_connector = self._gcp_connector
+        if gcp_connector is None:
+            # Lazy import because lib does not import if user does not have posgres installed
+            from google.cloud.sql.connector import Connector
+            gcp_connector = Connector()
+            self._gcp_connector = gcp_connector
 
-        connector = Connector()
         instance_string = f'{self.gcp_project}:{self.gcp_region}:{self.gcp_db_instance}'
         password = self.password
         assert password is not None
-        return connector.connect(
+        return gcp_connector.connect(
             instance_string,
             'pg8000',
             user=self.user,
@@ -81,21 +85,24 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         )
 
     async def _create_async_gcp_db_connection(self):
-        # Lazy import because lib does not import if user does not have posgres installed
-        from google.cloud.sql.connector import Connector
+        gcp_connector = self._gcp_connector
+        if gcp_connector is None:
+            # Lazy import because lib does not import if user does not have posgres installed
+            from google.cloud.sql.connector import Connector
+            loop = asyncio.get_running_loop()
+            gcp_connector = Connector(loop=loop)
+            self._gcp_connector = gcp_connector
 
-        loop = asyncio.get_running_loop()
-        async with Connector(loop=loop) as connector:
-            password = self.password
-            assert password is not None
-            conn = await connector.connect_async(
-                f'{self.gcp_project}:{self.gcp_region}:{self.gcp_db_instance}',
-                'asyncpg',
-                user=self.user,
-                password=password.get_secret_value(),
-                db=self.name,
-            )
-            return conn
+        password = self.password
+        assert password is not None
+        conn = await gcp_connector.connect_async(
+            f'{self.gcp_project}:{self.gcp_region}:{self.gcp_db_instance}',
+            'asyncpg',
+            user=self.user,
+            password=password.get_secret_value(),
+            db=self.name,
+        )
+        return conn
 
     def _create_gcp_engine(self):
         engine = create_engine(
