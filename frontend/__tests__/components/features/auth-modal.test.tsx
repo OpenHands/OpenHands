@@ -116,11 +116,13 @@ describe("AuthModal", () => {
 
   it("should display email verified message when emailVerified prop is true", () => {
     render(
-      <AuthModal
-        githubAuthUrl="mock-url"
-        appMode="saas"
-        emailVerified={true}
-      />,
+      <MemoryRouter>
+        <AuthModal
+          githubAuthUrl="mock-url"
+          appMode="saas"
+          emailVerified={true}
+        />
+      </MemoryRouter>,
     );
 
     expect(
@@ -130,11 +132,13 @@ describe("AuthModal", () => {
 
   it("should not display email verified message when emailVerified prop is false", () => {
     render(
-      <AuthModal
-        githubAuthUrl="mock-url"
-        appMode="saas"
-        emailVerified={false}
-      />,
+      <MemoryRouter>
+        <AuthModal
+          githubAuthUrl="mock-url"
+          appMode="saas"
+          emailVerified={false}
+        />
+      </MemoryRouter>,
     );
 
     expect(

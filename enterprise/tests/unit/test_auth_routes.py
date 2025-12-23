@@ -815,6 +815,7 @@ async def test_keycloak_callback_duplicate_check_exception(mock_request):
                 'preferred_username': 'test_user',
                 'email': 'joe+test@example.com',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.check_duplicate_base_email = AsyncMock(
@@ -864,6 +865,7 @@ async def test_keycloak_callback_no_duplicate_email(mock_request):
                 'preferred_username': 'test_user',
                 'email': 'joe+test@example.com',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.check_duplicate_base_email = AsyncMock(return_value=False)
@@ -915,6 +917,7 @@ async def test_keycloak_callback_no_email_in_user_info(mock_request):
                 'preferred_username': 'test_user',
                 # No email field
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
