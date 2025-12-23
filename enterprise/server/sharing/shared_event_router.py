@@ -5,11 +5,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from server.sharing.shared_event_service import SharedEventService
-
-from enterprise.server.sharing.filesystem_shared_event_service import (
+from server.sharing.filesystem_shared_event_service import (
     SharedEventServiceImplInjector,
 )
+from server.sharing.shared_event_service import SharedEventService
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event

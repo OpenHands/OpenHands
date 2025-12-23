@@ -23,7 +23,7 @@ from server.sharing.shared_event_service import (
     SharedEventServiceInjector,
 )
 
-from enterprise.server.sharing.sql_shared_conversation_info_service import (
+from server.sharing.sql_shared_conversation_info_service import (
     SQLSharedConversationInfoService,
 )
 from openhands.agent_server.models import EventPage, EventSortOrder

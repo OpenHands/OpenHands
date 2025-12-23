@@ -13,8 +13,7 @@ from server.sharing.shared_conversation_models import (
     SharedConversationPage,
     SharedConversationSortOrder,
 )
-
-from enterprise.server.sharing.sql_shared_conversation_info_service import (
+from server.sharing.sql_shared_conversation_info_service import (
     SQLSharedConversationInfoServiceInjector,
 )
 
