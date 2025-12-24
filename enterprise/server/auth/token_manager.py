@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import json
@@ -24,6 +25,11 @@ from server.auth.constants import (
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL,
     KEYCLOAK_SERVER_URL_EXT,
+)
+from server.auth.email_validation import (
+    extract_base_email,
+    get_base_email_regex_pattern,
+    matches_base_email,
 )
 from server.auth.keycloak_manager import get_keycloak_admin, get_keycloak_openid
 from server.config import get_config
@@ -508,6 +514,183 @@ class TokenManager:
         keycloak_user_id = users[0]['id']
         logger.info(f'Got user ID {keycloak_user_id} from email: {email}')
         return keycloak_user_id
+
+    async def _query_users_by_wildcard_pattern(
+        self, local_part: str, domain: str
+    ) -> dict[str, dict]:
+        """Query Keycloak for users matching a wildcard email pattern.
+
+        Tries multiple query methods to find users with emails matching
+        the pattern {local_part}*@{domain}. This catches the base email
+        and all + modifier variants.
+
+        Args:
+            local_part: The local part of the email (before @)
+            domain: The domain part of the email (after @)
+
+        Returns:
+            Dictionary mapping user IDs to user objects
+        """
+        keycloak_admin = get_keycloak_admin(self.external)
+        all_users = {}
+
+        # Query for users with emails matching the base pattern using wildcard
+        # Pattern: {local_part}*@{domain} - catches base email and all + variants
+        # This may also catch unintended matches (e.g., joesmith@example.com), but
+        # they will be filtered out by the regex pattern check later
+        # Use 'search' parameter for Keycloak 26+ (better wildcard support)
+        wildcard_queries = [
+            {'search': f'{local_part}*@{domain}'},  # Try 'search' parameter first
+            {'q': f'email:{local_part}*@{domain}'},  # Fallback to 'q' parameter
+        ]
+
+        for query_params in wildcard_queries:
+            try:
+                users = await keycloak_admin.a_get_users(query_params)
+                for user in users:
+                    all_users[user.get('id')] = user
+                break  # Success, no need to try fallback
+            except Exception as e:
+                logger.debug(
+                    f'Wildcard query failed with {list(query_params.keys())[0]}: {e}'
+                )
+                continue  # Try next query method
+
+        return all_users
+
+    def _find_duplicate_in_users(
+        self, users: dict[str, dict], base_email: str, current_user_id: str
+    ) -> bool:
+        """Check if any user in the provided list matches the base email pattern.
+
+        Filters users to find duplicates that match the base email pattern,
+        excluding the current user.
+
+        Args:
+            users: Dictionary mapping user IDs to user objects
+            base_email: The base email to match against
+            current_user_id: The user ID to exclude from the check
+
+        Returns:
+            True if a duplicate is found, False otherwise
+        """
+        regex_pattern = get_base_email_regex_pattern(base_email)
+        if not regex_pattern:
+            logger.warning(
+                f'Could not generate regex pattern for base email: {base_email}'
+            )
+            # Fallback to simple matching
+            for user in users.values():
+                user_email = user.get('email', '').lower()
+                if (
+                    user_email
+                    and user.get('id') != current_user_id
+                    and matches_base_email(user_email, base_email)
+                ):
+                    logger.info(
+                        f'Found duplicate email: {user_email} matches base {base_email}'
+                    )
+                    return True
+        else:
+            for user in users.values():
+                user_email = user.get('email', '')
+                if (
+                    user_email
+                    and user.get('id') != current_user_id
+                    and regex_pattern.match(user_email)
+                ):
+                    logger.info(
+                        f'Found duplicate email: {user_email} matches base {base_email}'
+                    )
+                    return True
+
+        return False
+
+    @retry(
+        stop=stop_after_attempt(2),
+        retry=retry_if_exception_type(KeycloakConnectionError),
+        before_sleep=_before_sleep_callback,
+    )
+    async def check_duplicate_base_email(
+        self, email: str, current_user_id: str
+    ) -> bool:
+        """Check if a user with the same base email already exists.
+
+        This method checks for duplicate signups using email + modifier.
+        It checks if any user exists with the same base email, regardless of whether
+        the provided email has a + modifier or not.
+
+        Examples:
+            - If email is "joe+test@example.com", it checks for existing users with
+              base email "joe@example.com" (e.g., "joe@example.com", "joe+1@example.com")
+            - If email is "joe@example.com", it checks for existing users with
+              base email "joe@example.com" (e.g., "joe+1@example.com", "joe+test@example.com")
+
+        Args:
+            email: The email address to check (may or may not contain + modifier)
+            current_user_id: The user ID of the current user (to exclude from check)
+
+        Returns:
+            True if a duplicate is found (excluding current user), False otherwise
+        """
+        if not email:
+            return False
+
+        base_email = extract_base_email(email)
+        if not base_email:
+            logger.warning(f'Could not extract base email from: {email}')
+            return False
+
+        try:
+            local_part, domain = base_email.rsplit('@', 1)
+            users = await self._query_users_by_wildcard_pattern(local_part, domain)
+            return self._find_duplicate_in_users(users, base_email, current_user_id)
+
+        except KeycloakConnectionError:
+            logger.exception('KeycloakConnectionError when checking duplicate email')
+            raise
+        except Exception as e:
+            logger.exception(f'Unexpected error checking duplicate email: {e}')
+            # On any error, allow signup to proceed (fail open)
+            return False
+
+    @retry(
+        stop=stop_after_attempt(2),
+        retry=retry_if_exception_type(KeycloakConnectionError),
+        before_sleep=_before_sleep_callback,
+    )
+    async def delete_keycloak_user(self, user_id: str) -> bool:
+        """Delete a user from Keycloak.
+
+        This method is used to clean up user accounts that were created
+        but should not exist (e.g., duplicate email signups).
+
+        Args:
+            user_id: The Keycloak user ID to delete
+
+        Returns:
+            True if deletion was successful, False otherwise
+        """
+        try:
+            keycloak_admin = get_keycloak_admin(self.external)
+            # Use the sync method (python-keycloak doesn't have async delete_user)
+            # Run it in a thread executor to avoid blocking the event loop
+            await asyncio.to_thread(keycloak_admin.delete_user, user_id)
+            logger.info(f'Successfully deleted Keycloak user {user_id}')
+            return True
+        except KeycloakConnectionError:
+            logger.exception(f'KeycloakConnectionError when deleting user {user_id}')
+            raise
+        except KeycloakError as e:
+            # User might not exist or already deleted
+            logger.warning(
+                f'KeycloakError when deleting user {user_id}: {e}',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            return False
+        except Exception as e:
+            logger.exception(f'Unexpected error deleting Keycloak user {user_id}: {e}')
+            return False
 
     async def get_user_info_from_user_id(self, user_id: str) -> dict | None:
         keycloak_admin = get_keycloak_admin(self.external)
