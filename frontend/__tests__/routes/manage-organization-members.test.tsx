@@ -163,9 +163,9 @@ describe("Manage Organization Members Route", () => {
     await selectOrganization({ orgIndex });
   };
 
-  // Helper function to create updateMemberRole spy
+  // Helper function to create updateMember spy
   const createUpdateMemberRoleSpy = () =>
-    vi.spyOn(organizationService, "updateMemberRole");
+    vi.spyOn(organizationService, "updateMember");
 
   // Helper function to verify role change is not permitted
   const verifyRoleChangeNotPermitted = async (

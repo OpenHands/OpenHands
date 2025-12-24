@@ -18,7 +18,7 @@ export const useUpdateMemberRole = () => {
       if (!orgId) {
         throw new Error("Organization ID is required to update member role");
       }
-      return organizationService.updateMemberRole({
+      return organizationService.updateMember({
         orgId,
         userId,
         role,

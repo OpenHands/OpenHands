@@ -205,7 +205,7 @@ export const resetOrgMockData = () => {
 
 export const resetOrgsAndMembersMockData = () => {
   // Reset ORGS_AND_MEMBERS to initial state
-  // Note: This is needed since ORGS_AND_MEMBERS is mutated by updateMemberRole
+  // Note: This is needed since ORGS_AND_MEMBERS is mutated by updateMember
   Object.keys(INITIAL_MOCK_MEMBERS).forEach((orgId) => {
     ORGS_AND_MEMBERS[orgId] = INITIAL_MOCK_MEMBERS[orgId].map((member) => ({
       ...member,
@@ -348,13 +348,13 @@ export const ORG_HANDLERS = [
   }),
 
   http.patch(
-    "/api/organizations/:orgId/members",
+    "/api/organizations/:orgId/members/:userId",
     async ({ request, params }) => {
-      const { userId, role } = (await request.json()) as {
-        userId: string;
-        role: OrganizationUserRole;
-      };
+      const updateData = (await request.json()) as Partial<
+        Omit<OrganizationMember, "org_id" | "user_id">
+      >;
       const orgId = params.orgId?.toString();
+      const userId = params.userId?.toString();
 
       if (!orgId || !ORGS_AND_MEMBERS[orgId]) {
         return HttpResponse.json(
@@ -371,17 +371,17 @@ export const ORG_HANDLERS = [
         );
       }
 
-      // replace
+      // Update member with any provided fields
       const newMember: OrganizationMember = {
         ...member,
-        role,
+        ...updateData,
       };
       const newMembers = ORGS_AND_MEMBERS[orgId].map((m) =>
         m.user_id === userId ? newMember : m,
       );
       ORGS_AND_MEMBERS[orgId] = newMembers;
 
-      return HttpResponse.json(member, { status: 200 });
+      return HttpResponse.json(newMember, { status: 200 });
     },
   ),
 

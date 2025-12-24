@@ -1,7 +1,7 @@
 import {
   Organization,
   OrganizationMember,
-  OrganizationUserRole,
+  UpdateMemberParams,
 } from "#/types/org";
 import { openHands } from "../open-hands-axios";
 
@@ -58,22 +58,17 @@ export const organizationService = {
     return data;
   },
 
-  updateMemberRole: async ({
+  updateMember: async ({
     orgId,
     userId,
-    role,
+    ...updateData
   }: {
     orgId: string;
     userId: string;
-    role: OrganizationUserRole;
-  }) => {
+  } & UpdateMemberParams) => {
     const { data } = await openHands.patch(
-      `/api/organizations/${orgId}/members`,
-      {
-        orgId,
-        userId,
-        role,
-      },
+      `/api/organizations/${orgId}/members/${userId}`,
+      updateData,
     );
 
     return data;
