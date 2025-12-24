@@ -202,6 +202,18 @@ async def keycloak_callback(
                 extra={'user_id': user_id, 'email': email},
             )
 
+    # Check email verification status
+    email_verified = user_info.get('email_verified', False)
+    if not email_verified:
+        # Send verification email
+        # Import locally to avoid circular import with email.py
+        from server.routes.email import verify_email
+
+        await verify_email(request=request, user_id=user_id, is_auth_flow=True)
+        redirect_url = f'{request.base_url}?email_verification_required=true'
+        response = RedirectResponse(redirect_url, status_code=302)
+        return response
+
     # default to github IDP for now.
     # TODO: remove default once Keycloak is updated universally with the new attribute.
     idp: str = user_info.get('identity_provider', ProviderType.GITHUB.value)
