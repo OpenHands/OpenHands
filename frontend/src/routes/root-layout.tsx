@@ -97,6 +97,7 @@ export default function MainApp() {
     emailVerificationModalOpen,
     setEmailVerificationModalOpen,
     emailVerified,
+    hasDuplicatedEmail,
   } = useEmailVerification();
 
   // Auto-login if login method is stored in local storage
@@ -244,6 +245,7 @@ export default function MainApp() {
           providersConfigured={config.data?.PROVIDERS_CONFIGURED}
           authUrl={config.data?.AUTH_URL}
           emailVerified={emailVerified}
+          hasDuplicatedEmail={hasDuplicatedEmail}
         />
       )}
       {renderReAuthModal && <ReauthModal />}

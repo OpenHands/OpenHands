@@ -174,12 +174,17 @@ describe("AuthModal", () => {
 
   describe("Duplicate email error message", () => {
     const renderAuthModalWithRouter = (initialEntries: string[]) => {
+      const hasDuplicatedEmail = initialEntries.includes(
+        "/?duplicated_email=true",
+      );
+
       return render(
         <MemoryRouter initialEntries={initialEntries}>
           <AuthModal
             githubAuthUrl="mock-url"
             appMode="saas"
             providersConfigured={["github"]}
+            hasDuplicatedEmail={hasDuplicatedEmail}
           />
         </MemoryRouter>,
       );
