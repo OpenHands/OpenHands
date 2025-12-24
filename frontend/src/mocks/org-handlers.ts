@@ -3,6 +3,7 @@ import {
   Organization,
   OrganizationMember,
   OrganizationUserRole,
+  UpdateOrganizationMemberParams,
 } from "#/types/org";
 
 const MOCK_ME: Omit<OrganizationMember, "role" | "org_id"> = {
@@ -350,9 +351,8 @@ export const ORG_HANDLERS = [
   http.patch(
     "/api/organizations/:orgId/members/:userId",
     async ({ request, params }) => {
-      const updateData = (await request.json()) as Partial<
-        Omit<OrganizationMember, "org_id" | "user_id">
-      >;
+      const updateData =
+        (await request.json()) as UpdateOrganizationMemberParams;
       const orgId = params.orgId?.toString();
       const userId = params.userId?.toString();
 

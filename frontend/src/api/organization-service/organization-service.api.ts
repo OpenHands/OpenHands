@@ -1,7 +1,7 @@
 import {
   Organization,
   OrganizationMember,
-  UpdateMemberParams,
+  UpdateOrganizationMemberParams,
 } from "#/types/org";
 import { openHands } from "../open-hands-axios";
 
@@ -65,7 +65,7 @@ export const organizationService = {
   }: {
     orgId: string;
     userId: string;
-  } & UpdateMemberParams) => {
+  } & UpdateOrganizationMemberParams) => {
     const { data } = await openHands.patch(
       `/api/organizations/${orgId}/members/${userId}`,
       updateData,

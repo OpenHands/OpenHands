@@ -45,14 +45,7 @@ export interface OrganizationMember {
   status: "active" | "invited" | "inactive";
 }
 
-export interface UpdateMemberParams {
-  role: OrganizationUserRole;
-  // Future: Add other updatable fields as backend supports them
-  // email?: string;
-  // llm_api_key?: string;
-  // max_iterations?: number;
-  // llm_model?: string;
-  // llm_api_key_for_byor?: string | null;
-  // llm_base_url?: string;
-  // status?: "active" | "invited" | "inactive";
-}
+/** org_id and user_id are provided via URL params */
+export type UpdateOrganizationMemberParams = Partial<
+  Omit<OrganizationMember, "org_id" | "user_id">
+>;
