@@ -154,8 +154,10 @@ class SaasUserAuth(UserAuth):
         try:
             # TODO: I think we can do this in a single request if we refactor
             with session_maker() as session:
-                tokens = session.query(AuthTokens).where(
-                    AuthTokens.keycloak_user_id == self.user_id
+                tokens = (
+                    session.query(AuthTokens)
+                    .where(AuthTokens.keycloak_user_id == self.user_id)
+                    .all()
                 )
 
             for token in tokens:
