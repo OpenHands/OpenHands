@@ -14,14 +14,12 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { rolePermissions } from "#/utils/org/permissions";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { queryClient } from "#/query-client-config";
-import {
-  getSelectedOrgFromQueryClient,
-  getMeFromQueryClient,
-} from "#/utils/query-client-getters";
+import { getSelectedOrgIdFromStore } from "#/stores/selected-organization-store";
+import { getMeFromQueryClient } from "#/utils/query-client-getters";
 import { I18nKey } from "#/i18n/declaration";
 
 export const clientLoader = async () => {
-  const selectedOrgId = getSelectedOrgFromQueryClient();
+  const selectedOrgId = getSelectedOrgIdFromStore();
   let me = getMeFromQueryClient(selectedOrgId);
 
   if (!me && selectedOrgId) {

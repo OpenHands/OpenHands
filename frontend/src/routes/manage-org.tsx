@@ -12,10 +12,8 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { useMe } from "#/hooks/query/use-me";
 import { useConfig } from "#/hooks/query/use-config";
 import { rolePermissions } from "#/utils/org/permissions";
-import {
-  getSelectedOrgFromQueryClient,
-  getMeFromQueryClient,
-} from "#/utils/query-client-getters";
+import { getSelectedOrgIdFromStore } from "#/stores/selected-organization-store";
+import { getMeFromQueryClient } from "#/utils/query-client-getters";
 import { queryClient } from "#/query-client-config";
 import { I18nKey } from "#/i18n/declaration";
 import { amountIsValid } from "#/utils/amount-is-valid";
@@ -263,7 +261,7 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
 }
 
 export const clientLoader = async () => {
-  const selectedOrgId = getSelectedOrgFromQueryClient();
+  const selectedOrgId = getSelectedOrgIdFromStore();
   let me = getMeFromQueryClient(selectedOrgId);
 
   if (!me && selectedOrgId) {
