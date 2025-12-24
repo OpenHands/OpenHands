@@ -147,7 +147,7 @@ describe("Manage Organization Members Route", () => {
       org_id: string;
       user_id: string;
       email: string;
-      role: "owner" | "admin" | "user";
+      role: "owner" | "admin" | "member";
       llm_api_key: string;
       max_iterations: number;
       llm_model: string;
@@ -173,7 +173,7 @@ describe("Manage Organization Members Route", () => {
       org_id: string;
       user_id: string;
       email: string;
-      role: "owner" | "admin" | "user";
+      role: "owner" | "admin" | "member";
       llm_api_key: string;
       max_iterations: number;
       llm_model: string;
@@ -222,7 +222,7 @@ describe("Manage Organization Members Route", () => {
   const expectAllRoleOptionsPresent = (dropdown: HTMLElement) => {
     expect(within(dropdown).getByText(/owner/i)).toBeInTheDocument();
     expect(within(dropdown).getByText(/admin/i)).toBeInTheDocument();
-    expect(within(dropdown).getByText(/user/i)).toBeInTheDocument();
+    expect(within(dropdown).getByText(/member/i)).toBeInTheDocument();
   };
 
   // Helper function to close dropdown by clicking outside
@@ -303,37 +303,37 @@ describe("Manage Organization Members Route", () => {
     const updateMemberRoleSpy = createUpdateMemberRoleSpy();
 
     const memberListItems = await screen.findAllByTestId("member-item");
-    const userRoleMember = memberListItems[2]; // third member is "user"
+    const memberRoleMember = memberListItems[2]; // third member is "member"
 
-    let userCombobox = within(userRoleMember).getByText(/^User$/i);
-    expect(userCombobox).toBeInTheDocument();
+    let memberCombobox = within(memberRoleMember).getByText(/^Member$/i);
+    expect(memberCombobox).toBeInTheDocument();
 
-    // Change role from user to admin
-    await changeMemberRole(userRoleMember, "user", "admin");
+    // Change role from member to admin
+    await changeMemberRole(memberRoleMember, "member", "admin");
 
     expect(updateMemberRoleSpy).toHaveBeenCalledExactlyOnceWith({
       userId: "3", // assuming the third member is the one being updated
       orgId: "1",
       role: "admin",
     });
-    expectDropdownNotVisible(userRoleMember);
+    expectDropdownNotVisible(memberRoleMember);
 
     // Verify the role has been updated in the UI
-    userCombobox = within(userRoleMember).getByText(/^Admin$/i);
-    expect(userCombobox).toBeInTheDocument();
+    memberCombobox = within(memberRoleMember).getByText(/^Admin$/i);
+    expect(memberCombobox).toBeInTheDocument();
 
-    // Revert the role back to user
-    await changeMemberRole(userRoleMember, "admin", "user");
+    // Revert the role back to member
+    await changeMemberRole(memberRoleMember, "admin", "member");
 
     expect(updateMemberRoleSpy).toHaveBeenNthCalledWith(2, {
       userId: "3",
       orgId: "1",
-      role: "user",
+      role: "member",
     });
 
     // Verify the role has been reverted in the UI
-    userCombobox = within(userRoleMember).getByText(/^User$/i);
-    expect(userCombobox).toBeInTheDocument();
+    memberCombobox = within(memberRoleMember).getByText(/^Member$/i);
+    expect(memberCombobox).toBeInTheDocument();
   });
 
   it("should not allow an admin to change the owner's role", async () => {
@@ -406,14 +406,14 @@ describe("Manage Organization Members Route", () => {
     const memberListItems = await screen.findAllByTestId("member-item");
     const initialMemberCount = memberListItems.length;
 
-    const userRoleMember = memberListItems[2]; // third member is "user"
-    const userEmail = within(userRoleMember).getByText("charlie@acme.org");
-    expect(userEmail).toBeInTheDocument();
+    const memberRoleMember = memberListItems[2]; // third member is "member"
+    const memberEmail = within(memberRoleMember).getByText("charlie@acme.org");
+    expect(memberEmail).toBeInTheDocument();
 
-    const userCombobox = within(userRoleMember).getByText(/^User$/i);
-    await userEvent.click(userCombobox);
+    const memberCombobox = within(memberRoleMember).getByText(/^Member$/i);
+    await userEvent.click(memberCombobox);
 
-    const dropdown = within(userRoleMember).getByTestId(
+    const dropdown = within(memberRoleMember).getByTestId(
       "organization-member-role-context-menu",
     );
 
@@ -487,7 +487,7 @@ describe("Manage Organization Members Route", () => {
           org_id: "1",
           user_id: "4",
           email: "tom@acme.org",
-          role: "user",
+          role: "member",
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
@@ -510,7 +510,7 @@ describe("Manage Organization Members Route", () => {
       expect(invitedBadge).toBeInTheDocument();
 
       // should not have a role combobox
-      await userEvent.click(within(invitedMember).getByText(/^User$/i));
+      await userEvent.click(within(invitedMember).getByText(/^Member$/i));
       expect(
         within(invitedMember).queryByTestId(
           "organization-member-role-context-menu",
@@ -548,12 +548,12 @@ describe("Manage Organization Members Route", () => {
       },
     );
 
-    it("should not show invite button when user lacks canInviteUsers permission (User role)", async () => {
+    it("should not show invite button when user lacks canInviteUsers permission (Member role)", async () => {
       const userData = {
         org_id: "1",
         user_id: "1",
         email: "test@example.com",
-        role: "user" as const,
+        role: "member" as const,
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
@@ -569,8 +569,8 @@ describe("Manage Organization Members Route", () => {
 
       await setupTestWithOrg(0);
 
-      // Directly set the query data to force component re-render with user role
-      // This ensures the component uses the user role data instead of cached admin data
+      // Directly set the query data to force component re-render with member role
+      // This ensures the component uses the member role data instead of cached admin data
       queryClient.setQueryData(["organizations", "1", "me"], userData);
 
       // Wait for the component to update with the new query data
@@ -636,12 +636,12 @@ describe("Manage Organization Members Route", () => {
       // Close dropdown by clicking outside
       await closeDropdown();
 
-      // Test with user member
-      const userMember = await findMemberByEmail("charlie@acme.org");
-      const userDropdown = await openRoleDropdown(userMember, "user");
+      // Test with member role
+      const memberRoleMember = await findMemberByEmail("charlie@acme.org");
+      const memberDropdown = await openRoleDropdown(memberRoleMember, "member");
 
-      // Verify all three role options are present for user member
-      expectAllRoleOptionsPresent(userDropdown);
+      // Verify all three role options are present for member role
+      expectAllRoleOptionsPresent(memberDropdown);
     });
 
     it("Admin should not see owner option in role dropdown for any member", async () => {
@@ -663,20 +663,20 @@ describe("Manage Organization Members Route", () => {
 
       const memberListItems = await screen.findAllByTestId("member-item");
 
-      // Check user member dropdown
-      const userMember = memberListItems[2]; // user member
-      const userDropdown = await openRoleDropdown(userMember, "user");
-      expectOwnerOptionNotPresent(userDropdown);
+      // Check member role dropdown
+      const memberRoleMember = memberListItems[2]; // member role
+      const memberDropdown = await openRoleDropdown(memberRoleMember, "member");
+      expectOwnerOptionNotPresent(memberDropdown);
       await closeDropdown();
 
-      // Check another user member dropdown if exists
+      // Check another member role dropdown if exists
       if (memberListItems.length > 3) {
-        const anotherUserMember = memberListItems[3]; // another user member
-        const anotherUserDropdown = await openRoleDropdown(
-          anotherUserMember,
-          "user",
+        const anotherMemberRoleMember = memberListItems[3]; // another member role
+        const anotherMemberDropdown = await openRoleDropdown(
+          anotherMemberRoleMember,
+          "member",
         );
-        expectOwnerOptionNotPresent(anotherUserDropdown);
+        expectOwnerOptionNotPresent(anotherMemberDropdown);
       }
     });
 
@@ -711,9 +711,9 @@ describe("Manage Organization Members Route", () => {
         role: "owner",
       });
 
-      // Test changing user to owner
-      const userMember = await findMemberByEmail("charlie@acme.org");
-      await changeMemberRole(userMember, "user", "owner");
+      // Test changing member to owner
+      const memberRoleMember = await findMemberByEmail("charlie@acme.org");
+      await changeMemberRole(memberRoleMember, "member", "owner");
 
       expect(updateMemberRoleSpy).toHaveBeenNthCalledWith(2, {
         userId: "3",
@@ -750,7 +750,7 @@ describe("Manage Organization Members Route", () => {
       },
       {
         description:
-          "Admin should be able to change user's role to user (no change)",
+          "Admin should be able to change member's role to member (no change)",
         userData: {
           org_id: "3",
           user_id: "7", // Ray is admin in org 3
@@ -765,16 +765,16 @@ describe("Manage Organization Members Route", () => {
         },
         orgIndex: 2, // org 3
         memberEmail: "stephan@all-hands.dev",
-        currentRole: "user",
-        newRole: "user",
+        currentRole: "member",
+        newRole: "member",
         expectedApiCall: {
           userId: "9",
           orgId: "3",
-          role: "user" as const,
+          role: "member" as const,
         },
       },
       {
-        description: "Admin should be able to change user's role to admin",
+        description: "Admin should be able to change member's role to admin",
         userData: {
           org_id: "3",
           user_id: "7", // Ray is admin in org 3
@@ -789,7 +789,7 @@ describe("Manage Organization Members Route", () => {
         },
         orgIndex: 2, // org 3
         memberEmail: "stephan@all-hands.dev",
-        currentRole: "user",
+        currentRole: "member",
         newRole: "admin",
         expectedApiCall: {
           userId: "9",

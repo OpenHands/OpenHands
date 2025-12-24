@@ -28,7 +28,7 @@ export function SettingsNavigation({
 
   const { t } = useTranslation();
 
-  const isUser = me?.role === "user";
+  const isMember = me?.role === "member";
 
   return (
     <>
@@ -92,11 +92,11 @@ export function SettingsNavigation({
         <div className="flex flex-col gap-2">
           {navigationItems
             .filter((navItem) => {
-              // if user is not an admin or no org is selected, do not show organization members/org settings
+              // if member is not an admin or no org is selected, do not show organization members/org settings
               if (
                 (navItem.to === "/settings/org-members" ||
                   navItem.to === "/settings/org") &&
-                (isUser || !orgId)
+                (isMember || !orgId)
               ) {
                 return false;
               }

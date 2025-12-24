@@ -95,7 +95,7 @@ describe("Manage Org Route", () => {
     org_id: string;
     user_id: string;
     email: string;
-    role: "owner" | "admin" | "user";
+    role: "owner" | "admin" | "member";
     llm_api_key: string;
     max_iterations: number;
     llm_model: string;
@@ -680,9 +680,9 @@ describe("Manage Org Route", () => {
       expect(deleteButton).not.toBeDisabled();
     });
 
-    it.each<{ role: "admin" | "user"; roleName: string }>([
+    it.each<{ role: "admin" | "member"; roleName: string }>([
       { role: "admin", roleName: "Admin" },
-      { role: "user", roleName: "User" },
+      { role: "member", roleName: "Member" },
     ])(
       "should not show delete organization button when user lacks canDeleteOrganization permission ($roleName role)",
       async ({ role }) => {
