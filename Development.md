@@ -68,8 +68,12 @@ make setup-config
 ```
 
 This command will prompt you to enter the LLM API key, model name, and other variables ensuring that OpenHands is
-tailored to your specific needs. Note that the model name will apply only when you run headless. If you use the UI,
-please set the model in the UI.
+tailored to your specific needs.
+
+**Auto-Configuration for Containerized Environments:**
+The setup process automatically detects if you're running in a containerized environment (Dev Container, docker-compose, etc.) and configures the sandbox with `use_host_network = true` for proper connectivity. You'll see a confirmation message during setup.
+
+**Note:** The model name configured here applies only when you run headless. If you use the UI, please set the model in the UI.
 
 Note: If you have previously run OpenHands using the docker command, you may have already set some environment
 variables in your terminal. The final configurations are set from highest to lowest priority:
@@ -87,6 +91,8 @@ Once the setup is complete, this command starts both the backend and frontend se
 ```bash
 make run
 ```
+
+> **⚠️ Dev Container Users:** If you encounter "Sandbox failed to start" errors, see the [Troubleshooting Guide](TROUBLESHOOTING.md#sandbox-connection-errors) for Dev Container-specific configuration.
 
 #### Option B: Individual Server Startup
 

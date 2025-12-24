@@ -324,6 +324,19 @@ setup-config-prompts:
 	@read -p "Enter your LLM base URL [mostly used for local LLMs, leave blank if not needed - example: http://localhost:5001/v1/]: " llm_base_url; \
 	 if [[ ! -z "$$llm_base_url" ]]; then echo "base_url=\"$$llm_base_url\"" >> $(CONFIG_FILE).tmp; fi
 
+	@echo "" >> $(CONFIG_FILE).tmp
+	@# Auto-detect if running in containerized environment and configure sandbox accordingly
+	@if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || [ "$${DOCKER_CONTAINER}" = "true" ] || grep -q 'docker\|containerd\|kubepods' /proc/self/cgroup 2>/dev/null; then \
+		echo "$(YELLOW)⚠️  Detected containerized environment (Dev Container/docker-compose)$(RESET)"; \
+		echo "$(YELLOW)   Configuring sandbox with use_host_network=true for proper connectivity$(RESET)"; \
+		echo "[sandbox]" >> $(CONFIG_FILE).tmp; \
+		echo "use_host_network = true" >> $(CONFIG_FILE).tmp; \
+		echo "" >> $(CONFIG_FILE).tmp; \
+		echo "$(GREEN)✓ Sandbox configured for containerized deployment$(RESET)"; \
+	else \
+		echo "$(GREEN)✓ Native environment detected, using default sandbox configuration$(RESET)"; \
+	fi
+
 setup-config-basic:
 	@printf '%s\n' \
 	'[core]' \

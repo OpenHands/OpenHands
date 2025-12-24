@@ -298,7 +298,19 @@ classpath = "my_package.my_module.MyCustomAgent"
 # Container image to use for the sandbox
 #base_container_image = "nikolaik/python-nodejs:python3.12-nodejs22"
 
-# Use host network
+# Use host network mode for sandbox containers
+# IMPORTANT: Set this to 'true' in the following scenarios:
+#   - Running in a Dev Container (VSCode Remote Containers, GitHub Codespaces)
+#   - Backend running inside a Docker container (docker-compose, containerized deployments)
+#   - When experiencing "Server disconnected" or "host.docker.internal" connection failures
+#
+# When 'true': Sandbox shares the host's network stack (required for container-to-container communication)
+# When 'false': Sandbox uses Docker's bridge network (default, more isolated but requires proper network setup)
+#
+# Examples:
+#   Dev Container / Codespaces: use_host_network = true
+#   Docker Compose with containerized backend: use_host_network = true
+#   Native Python (no Docker backend): use_host_network = false
 #use_host_network = false
 
 # Runtime extra build args

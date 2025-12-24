@@ -245,6 +245,8 @@ cache
 config.toml
 config.toml_
 config.toml.bak
+config.production.toml
+config.*.toml
 
 # swe-bench-eval
 image_build_logs
