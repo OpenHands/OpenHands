@@ -19,7 +19,7 @@ GCP_REGION = os.environ.get('GCP_REGION')
 
 POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', '25'))
 MAX_OVERFLOW = int(os.environ.get('DB_MAX_OVERFLOW', '10'))
-POOL_RECYCLE = int(os.environ.get('DB_MAX_OVERFLOW', '1800'))
+POOL_RECYCLE = int(os.environ.get('DB_POOL_RECYCLE', '1800'))
 
 
 def _get_db_engine():
@@ -50,6 +50,7 @@ def _get_db_engine():
             host_string,
             pool_size=POOL_SIZE,
             max_overflow=MAX_OVERFLOW,
+            pool_recycle=POOL_RECYCLE,
             pool_pre_ping=True,
         )
 

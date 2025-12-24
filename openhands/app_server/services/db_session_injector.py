@@ -176,6 +176,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                     url,
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
+                    pool_recycle=self.pool_recycle,
                     pool_pre_ping=True,
                 )
             else:
@@ -216,6 +217,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                 url,
                 pool_size=self.pool_size,
                 max_overflow=self.max_overflow,
+                pool_recycle=self.pool_recycle,
                 pool_pre_ping=True,
             )
         self._engine = engine
