@@ -99,3 +99,14 @@ export interface V1AppConversation {
   conversation_url: string | null;
   session_api_key: string | null;
 }
+
+export interface Skill {
+  name: string;
+  type: "repo" | "knowledge";
+  content: string;
+  triggers: string[];
+}
+
+export interface GetSkillsResponse {
+  skills: Skill[];
+}

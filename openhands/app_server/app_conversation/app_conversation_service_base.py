@@ -58,7 +58,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
     init_git_in_empty_workspace: bool
     user_context: UserContext
 
-    async def _load_and_merge_all_skills(
+    async def load_and_merge_all_skills(
         self,
         sandbox: SandboxInfo,
         remote_workspace: AsyncRemoteWorkspace,
@@ -169,7 +169,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             Updated agent with skills loaded into context
         """
         # Load and merge all skills
-        all_skills = await self._load_and_merge_all_skills(
+        all_skills = await self.load_and_merge_all_skills(
             sandbox, remote_workspace, selected_repository, working_dir
         )
 
@@ -198,7 +198,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         task.status = AppConversationStartTaskStatus.SETTING_UP_SKILLS
         yield task
-        await self._load_and_merge_all_skills(
+        await self.load_and_merge_all_skills(
             sandbox,
             workspace,
             task.request.selected_repository,
