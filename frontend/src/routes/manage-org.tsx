@@ -21,66 +21,8 @@ import { I18nKey } from "#/i18n/declaration";
 import { amountIsValid } from "#/utils/amount-is-valid";
 import { useUpdateOrganization } from "#/hooks/mutation/use-update-organization";
 import { useDeleteOrganization } from "#/hooks/mutation/use-delete-organization";
-
-function TempChip({
-  children,
-  ...props
-}: React.PropsWithChildren<{ "data-testid": string }>) {
-  return (
-    <div
-      // eslint-disable-next-line react/jsx-props-no-spreading
-      {...props}
-      style={{ minWidth: "100px" }}
-      data-openhands-chip
-      className="bg-[#FFE165] px-4 rounded-[100px] text-black text-lg text-center font-semibold"
-    >
-      {children}
-    </div>
-  );
-}
-
-interface TempInteractiveChipProps {
-  onClick: () => void;
-}
-
-function TempInteractiveChip({
-  children,
-  onClick,
-}: React.PropsWithChildren<TempInteractiveChipProps>) {
-  return (
-    <div
-      onClick={onClick}
-      className="bg-[#E4E4E4] px-2 rounded-[100px] text-black text-sm text-center font-semibold cursor-pointer"
-    >
-      {children}
-    </div>
-  );
-}
-
-function TempButton({
-  children,
-  onClick,
-  type,
-  variant = "primary",
-}: React.PropsWithChildren<{
-  onClick?: () => void;
-  type: "button" | "submit";
-  variant?: "primary" | "secondary";
-}>) {
-  return (
-    <button
-      className={cn(
-        "flex-1 py-3 rounded text-sm text-center font-semibold cursor-pointer",
-        variant === "primary" && "bg-[#F3CE49] text-black",
-        variant === "secondary" && "bg-[#737373] text-white",
-      )}
-      type={type === "submit" ? "submit" : "button"}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
+import { CreditsChip } from "#/ui/credits-chip";
+import { InteractiveChip } from "#/ui/interactive-chip";
 
 interface ChangeOrgNameModalProps {
   onClose: () => void;
@@ -252,10 +194,17 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
         </div>
 
         <div className="flex gap-2">
-          <TempButton type="submit">{t(I18nKey.ORG$NEXT)}</TempButton>
-          <TempButton type="button" onClick={onClose} variant="secondary">
+          <BrandButton type="submit" variant="primary" className="flex-1 py-3">
+            {t(I18nKey.ORG$NEXT)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            onClick={onClose}
+            variant="secondary"
+            className="flex-1 py-3"
+          >
             {t(I18nKey.BUTTON$CANCEL)}
-          </TempButton>
+          </BrandButton>
         </div>
       </form>
     </ModalBackdrop>
@@ -323,15 +272,13 @@ function ManageOrg() {
             {t(I18nKey.ORG$CREDITS)}
           </span>
           <div className="flex items-center gap-2">
-            <TempChip data-testid="available-credits">
+            <CreditsChip testId="available-credits">
               {organization?.credits}
-            </TempChip>
+            </CreditsChip>
             {canAddCredits && (
-              <TempInteractiveChip
-                onClick={() => setAddCreditsFormVisible(true)}
-              >
+              <InteractiveChip onClick={() => setAddCreditsFormVisible(true)}>
                 {t(I18nKey.ORG$ADD)}
-              </TempInteractiveChip>
+              </InteractiveChip>
             )}
           </div>
         </div>
