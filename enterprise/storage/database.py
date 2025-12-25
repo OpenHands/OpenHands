@@ -21,16 +21,21 @@ POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', '25'))
 MAX_OVERFLOW = int(os.environ.get('DB_MAX_OVERFLOW', '10'))
 POOL_RECYCLE = int(os.environ.get('DB_POOL_RECYCLE', '1800'))
 
+# Initialize Cloud SQL Connector once at module level for GCP environments.
+_connector = None
+
 
 def _get_db_engine():
     if GCP_DB_INSTANCE:  # GCP environments
 
         def get_db_connection():
+            global _connector
             from google.cloud.sql.connector import Connector
 
-            connector = Connector()
+            if not _connector:
+                _connector = Connector()
             instance_string = f'{GCP_PROJECT}:{GCP_REGION}:{GCP_DB_INSTANCE}'
-            return connector.connect(
+            return _connector.connect(
                 instance_string, 'pg8000', user=DB_USER, password=DB_PASS, db=DB_NAME
             )
 
