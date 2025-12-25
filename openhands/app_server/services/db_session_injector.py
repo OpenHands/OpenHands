@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import AsyncGenerator
 
+import asyncpg
 from fastapi import Request
 from pydantic import BaseModel, PrivateAttr, SecretStr, model_validator
 from sqlalchemy import Engine, create_engine
@@ -108,7 +109,6 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         return engine
 
     async def _create_async_gcp_creator(self):
-        import asyncpg
         from sqlalchemy.dialects.postgresql.asyncpg import (
             AsyncAdapt_asyncpg_connection,
         )
@@ -120,7 +120,6 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         )
 
     async def _create_async_gcp_engine(self):
-        import asyncpg
         from sqlalchemy.dialects.postgresql.asyncpg import (
             AsyncAdapt_asyncpg_connection,
         )
