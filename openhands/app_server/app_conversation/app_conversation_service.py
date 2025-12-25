@@ -113,6 +113,23 @@ class AppConversationService(ABC):
         Returns True if the conversation was deleted successfully, False otherwise.
         """
 
+    @abstractmethod
+    async def export_conversation(self, conversation_id: UUID) -> bytes:
+        """Download a conversation trajectory as a zip file.
+
+        Args:
+            conversation_id: The UUID of the conversation to download.
+
+        This method should:
+        1. Get all events for the conversation
+        2. Create a temporary directory
+        3. Save each event as a JSON file
+        4. Save conversation metadata as meta.json
+        5. Create and return a zip file containing all the data
+
+        Returns the zip file as bytes.
+        """
+
 
 class AppConversationServiceInjector(
     DiscriminatedUnionMixin, Injector[AppConversationService], ABC

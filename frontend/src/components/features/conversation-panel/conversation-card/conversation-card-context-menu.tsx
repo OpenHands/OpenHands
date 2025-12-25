@@ -24,6 +24,7 @@ interface ConversationCardContextMenuProps {
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
 }
 
@@ -39,6 +40,7 @@ export function ConversationCardContextMenu({
   onShowAgentTools,
   onShowSkills,
   onDownloadViaVSCode,
+  onDownloadConversation,
   position = "bottom",
 }: ConversationCardContextMenuProps) {
   const { t } = useTranslation();
@@ -131,6 +133,18 @@ export function ConversationCardContextMenu({
             <ConversationNameContextMenuIconText
               icon={<DownloadIcon width={16} height={16} />}
               text={t(I18nKey.BUTTON$DOWNLOAD_VIA_VSCODE)}
+            />
+          </ContextMenuListItem>
+        ),
+        onDownloadConversation && (
+          <ContextMenuListItem
+            testId="download-trajectory-button"
+            onClick={onDownloadConversation}
+            className={contextMenuListItemClassName}
+          >
+            <ConversationNameContextMenuIconText
+              icon={<DownloadIcon width={16} height={16} />}
+              text={t(I18nKey.BUTTON$EXPORT_CONVERSATION)}
             />
           </ContextMenuListItem>
         ),

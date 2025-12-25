@@ -946,6 +946,10 @@ async def test_delete_conversation():
             # Create a mock sandbox service
             mock_sandbox_service = MagicMock()
 
+            # Create mock db_session and httpx_client
+            mock_db_session = AsyncMock()
+            mock_httpx_client = AsyncMock()
+
             # Mock the conversation manager
             with patch(
                 'openhands.server.routes.manage_conversations.conversation_manager'
@@ -969,6 +973,8 @@ async def test_delete_conversation():
                         app_conversation_service=mock_app_conversation_service,
                         app_conversation_info_service=mock_app_conversation_info_service,
                         sandbox_service=mock_sandbox_service,
+                        db_session=mock_db_session,
+                        httpx_client=mock_httpx_client,
                     )
 
                     # Verify the result
@@ -1090,6 +1096,10 @@ async def test_delete_v1_conversation_not_found():
                 )
                 mock_service.delete_app_conversation = AsyncMock(return_value=False)
 
+                # Create mock db_session and httpx_client
+                mock_db_session = AsyncMock()
+                mock_httpx_client = AsyncMock()
+
                 # Call delete_conversation with V1 conversation ID
                 result = await delete_conversation(
                     request=MagicMock(),
@@ -1098,6 +1108,8 @@ async def test_delete_v1_conversation_not_found():
                     app_conversation_service=mock_service,
                     app_conversation_info_service=mock_info_service,
                     sandbox_service=mock_sandbox_service,
+                    db_session=mock_db_session,
+                    httpx_client=mock_httpx_client,
                 )
 
                 # Verify the result
@@ -1171,6 +1183,10 @@ async def test_delete_v1_conversation_invalid_uuid():
                             mock_sandbox_service = MagicMock()
                             mock_sandbox_service_dep.return_value = mock_sandbox_service
 
+                            # Create mock db_session and httpx_client
+                            mock_db_session = AsyncMock()
+                            mock_httpx_client = AsyncMock()
+
                             # Call delete_conversation
                             result = await delete_conversation(
                                 request=MagicMock(),
@@ -1179,6 +1195,8 @@ async def test_delete_v1_conversation_invalid_uuid():
                                 app_conversation_service=mock_service,
                                 app_conversation_info_service=mock_info_service,
                                 sandbox_service=mock_sandbox_service,
+                                db_session=mock_db_session,
+                                httpx_client=mock_httpx_client,
                             )
 
                             # Verify the result
@@ -1264,6 +1282,10 @@ async def test_delete_v1_conversation_service_error():
                             mock_runtime_cls.delete = AsyncMock()
                             mock_get_runtime_cls.return_value = mock_runtime_cls
 
+                            # Create mock db_session and httpx_client
+                            mock_db_session = AsyncMock()
+                            mock_httpx_client = AsyncMock()
+
                             # Call delete_conversation
                             result = await delete_conversation(
                                 request=MagicMock(),
@@ -1272,6 +1294,8 @@ async def test_delete_v1_conversation_service_error():
                                 app_conversation_service=mock_service,
                                 app_conversation_info_service=mock_info_service,
                                 sandbox_service=mock_sandbox_service,
+                                db_session=mock_db_session,
+                                httpx_client=mock_httpx_client,
                             )
 
                             # Verify the result (should fallback to V0)
@@ -2159,6 +2183,7 @@ async def test_delete_v1_conversation_with_sub_conversations():
         app_conversation_info_service=mock_info_service,
         app_conversation_start_task_service=mock_start_task_service,
         event_callback_service=MagicMock(),
+        event_service=MagicMock(),
         sandbox_service=mock_sandbox_service,
         sandbox_spec_service=MagicMock(),
         jwt_service=MagicMock(),
@@ -2281,6 +2306,7 @@ async def test_delete_v1_conversation_with_no_sub_conversations():
         app_conversation_info_service=mock_info_service,
         app_conversation_start_task_service=mock_start_task_service,
         event_callback_service=MagicMock(),
+        event_service=MagicMock(),
         sandbox_service=mock_sandbox_service,
         sandbox_spec_service=MagicMock(),
         jwt_service=MagicMock(),
@@ -2433,6 +2459,7 @@ async def test_delete_v1_conversation_sub_conversation_deletion_error():
         app_conversation_info_service=mock_info_service,
         app_conversation_start_task_service=mock_start_task_service,
         event_callback_service=MagicMock(),
+        event_service=MagicMock(),
         sandbox_service=mock_sandbox_service,
         sandbox_spec_service=MagicMock(),
         jwt_service=MagicMock(),

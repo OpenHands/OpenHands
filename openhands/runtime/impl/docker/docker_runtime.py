@@ -472,6 +472,9 @@ class DockerRuntime(ActionExecutionClient):
         )
         if self.config.debug or DEBUG:
             environment['DEBUG'] = 'true'
+        # Pass DOCKER_HOST_ADDR to spawned containers if it exists
+        if os.environ.get('DOCKER_HOST_ADDR'):
+            environment['DOCKER_HOST_ADDR'] = os.environ['DOCKER_HOST_ADDR']
         # also update with runtime_startup_env_vars
         environment.update(self.config.sandbox.runtime_startup_env_vars)
 
