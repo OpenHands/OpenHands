@@ -15,6 +15,8 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV0Event } from "#/types/v1/type-guards";
+import { useActiveConversation } from "./query/use-active-conversation";
+import { useDownloadConversation } from "./use-download-conversation";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -34,6 +36,7 @@ export function useConversationNameContextMenu({
   const { conversationId: currentConversationId } = useParams();
   const navigate = useNavigate();
   const events = useEventStore((state) => state.events);
+  const { data: conversation } = useActiveConversation();
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: stopConversation } = useUnifiedPauseConversationSandbox();
   const { mutate: getTrajectory } = useGetTrajectory();
@@ -46,6 +49,7 @@ export function useConversationNameContextMenu({
     React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
+  const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const systemMessage = events
     .filter(isV0Event)
@@ -148,6 +152,17 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
+  const handleDownloadConversation = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (conversationId && conversation?.conversation_version === "V1") {
+      await downloadConversation(conversationId);
+    }
+    onContextMenuToggle?.(false);
+  };
+
   const handleDisplayCost = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setMetricsModalVisible(true);
@@ -173,6 +188,7 @@ export function useConversationNameContextMenu({
     handleEdit,
     handleExportConversation,
     handleDownloadViaVSCode,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
     handleShowSkills,
@@ -199,6 +215,11 @@ export function useConversationNameContextMenu({
     shouldShowStop: conversationStatus !== "STOPPED",
     shouldShowDownload: Boolean(conversationId && showOptions),
     shouldShowExport: Boolean(conversationId && showOptions),
+    shouldShowDownloadConversation: Boolean(
+      conversationId &&
+      showOptions &&
+      conversation?.conversation_version === "V1",
+    ),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
     shouldShowSkills: Boolean(showOptions && conversationId),

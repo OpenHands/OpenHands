@@ -8768,7 +8768,7 @@
     "uk": "Позначити це рішення як некорисне"
   },
   "BUTTON$EXPORT_CONVERSATION": {
-    "en": "Export conversation",
+    "en": "Export Conversation",
     "zh-CN": "导出对话",
     "zh-TW": "導出對話",
     "de": "Konversation exportieren",
@@ -11678,6 +11678,54 @@
     "tr": "En az bir kimlik sağlayıcı yapılandırılmalıdır (örn. GitHub)",
     "de": "Mindestens ein Identitätsanbieter muss konfiguriert werden (z.B. GitHub)",
     "uk": "Принаймні один постачальник ідентифікації має бути налаштований (наприклад, GitHub)"
+  },
+  "AUTH$PLEASE_CHECK_EMAIL_TO_VERIFY": {
+    "en": "Please check your email to verify your account.",
+    "ja": "アカウントを確認するためにメールを確認してください。",
+    "zh-CN": "请检查您的电子邮件以验证您的账户。",
+    "zh-TW": "請檢查您的電子郵件以驗證您的帳戶。",
+    "ko-KR": "계정을 확인하려면 이메일을 확인하세요.",
+    "no": "Vennligst sjekk e-posten din for å bekrefte kontoen din.",
+    "it": "Controlla la tua email per verificare il tuo account.",
+    "pt": "Por favor, verifique seu e-mail para verificar sua conta.",
+    "es": "Por favor, verifica tu correo electrónico para verificar tu cuenta.",
+    "ar": "يرجى التحقق من بريدك الإلكتروني للتحقق من حسابك.",
+    "fr": "Veuillez vérifier votre e-mail pour vérifier votre compte.",
+    "tr": "Hesabınızı doğrulamak için lütfen e-postanızı kontrol edin.",
+    "de": "Bitte überprüfen Sie Ihre E-Mail, um Ihr Konto zu verifizieren.",
+    "uk": "Будь ласка, перевірте свою електронну пошту, щоб підтвердити свій обліковий запис."
+  },
+  "AUTH$EMAIL_VERIFIED_PLEASE_LOGIN": {
+    "en": "Your email has been verified. Please login below.",
+    "ja": "メールアドレスが確認されました。下記からログインしてください。",
+    "zh-CN": "您的电子邮件已验证。请在下方登录。",
+    "zh-TW": "您的電子郵件已驗證。請在下方登錄。",
+    "ko-KR": "이메일이 확인되었습니다. 아래에서 로그인하세요.",
+    "no": "E-posten din er bekreftet. Vennligst logg inn nedenfor.",
+    "it": "La tua email è stata verificata. Effettua il login qui sotto.",
+    "pt": "Seu e-mail foi verificado. Por favor, faça login abaixo.",
+    "es": "Tu correo electrónico ha sido verificado. Por favor, inicia sesión a continuación.",
+    "ar": "تم التحقق من بريدك الإلكتروني. يرجى تسجيل الدخول أدناه.",
+    "fr": "Votre e-mail a été vérifié. Veuillez vous connecter ci-dessous.",
+    "tr": "E-postanız doğrulandı. Lütfen aşağıdan giriş yapın.",
+    "de": "Ihre E-Mail wurde verifiziert. Bitte melden Sie sich unten an.",
+    "uk": "Вашу електронну пошту підтверджено. Будь ласка, увійдіть нижче."
+  },
+  "AUTH$DUPLICATE_EMAIL_ERROR": {
+    "en": "Your account is unable to be created. Please use a different login or try again.",
+    "ja": "アカウントを作成できません。別のログインを使用するか、もう一度お試しください。",
+    "zh-CN": "无法创建您的账户。请使用其他登录方式或重试。",
+    "zh-TW": "無法建立您的帳戶。請使用其他登入方式或重試。",
+    "ko-KR": "계정을 생성할 수 없습니다. 다른 로그인을 사용하거나 다시 시도해 주세요.",
+    "no": "Kontoen din kan ikke opprettes. Vennligst bruk en annen innlogging eller prøv igjen.",
+    "it": "Impossibile creare il tuo account. Utilizza un altro accesso o riprova.",
+    "pt": "Não foi possível criar sua conta. Use um login diferente ou tente novamente.",
+    "es": "No se puede crear su cuenta. Utilice un inicio de sesión diferente o inténtelo de nuevo.",
+    "ar": "لا يمكن إنشاء حسابك. يرجى استخدام تسجيل دخول مختلف أو المحاولة مرة أخرى.",
+    "fr": "Votre compte ne peut pas être créé. Veuillez utiliser une autre connexion ou réessayer.",
+    "tr": "Hesabınız oluşturulamadı. Lütfen farklı bir giriş kullanın veya tekrar deneyin.",
+    "de": "Ihr Konto kann nicht erstellt werden. Bitte verwenden Sie eine andere Anmeldung oder versuchen Sie es erneut.",
+    "uk": "Ваш обліковий запис не може бути створений. Будь ласка, використовуйте інший спосіб входу або спробуйте ще раз."
   },
   "COMMON$TERMS_OF_SERVICE": {
     "en": "Terms of Service",

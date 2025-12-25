@@ -5,7 +5,12 @@ import jwt
 import pytest
 from fastapi import Request
 from pydantic import SecretStr
-from server.auth.auth_error import BearerTokenError, CookieError, NoCredentialsError
+from server.auth.auth_error import (
+    AuthError,
+    BearerTokenError,
+    CookieError,
+    NoCredentialsError,
+)
 from server.auth.saas_user_auth import (
     SaasUserAuth,
     get_api_key_from_header,
@@ -647,3 +652,97 @@ def test_get_api_key_from_header_bearer_with_empty_token():
     # Assert that empty string from Bearer is returned (current behavior)
     # This tests the current implementation behavior
     assert api_key == ''
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_signed_token_blocked_domain(mock_config):
+    """Test that saas_user_auth_from_signed_token raises AuthError when email domain is blocked."""
+    # Arrange
+    access_payload = {
+        'sub': 'test_user_id',
+        'exp': int(time.time()) + 3600,
+        'email': 'user@colsch.us',
+        'email_verified': True,
+    }
+    access_token = jwt.encode(access_payload, 'access_secret', algorithm='HS256')
+
+    token_payload = {
+        'access_token': access_token,
+        'refresh_token': 'test_refresh_token',
+    }
+    signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
+
+    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
+        mock_domain_blocker.is_active.return_value = True
+        mock_domain_blocker.is_domain_blocked.return_value = True
+
+        # Act & Assert
+        with pytest.raises(AuthError) as exc_info:
+            await saas_user_auth_from_signed_token(signed_token)
+
+        assert 'email domain is not allowed' in str(exc_info.value)
+        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
+    """Test that saas_user_auth_from_signed_token succeeds when email domain is not blocked."""
+    # Arrange
+    access_payload = {
+        'sub': 'test_user_id',
+        'exp': int(time.time()) + 3600,
+        'email': 'user@example.com',
+        'email_verified': True,
+    }
+    access_token = jwt.encode(access_payload, 'access_secret', algorithm='HS256')
+
+    token_payload = {
+        'access_token': access_token,
+        'refresh_token': 'test_refresh_token',
+    }
+    signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
+
+    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
+        mock_domain_blocker.is_active.return_value = True
+        mock_domain_blocker.is_domain_blocked.return_value = False
+
+        # Act
+        result = await saas_user_auth_from_signed_token(signed_token)
+
+        # Assert
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        assert result.email == 'user@example.com'
+        mock_domain_blocker.is_domain_blocked.assert_called_once_with(
+            'user@example.com'
+        )
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_config):
+    """Test that saas_user_auth_from_signed_token succeeds when domain blocking is not active."""
+    # Arrange
+    access_payload = {
+        'sub': 'test_user_id',
+        'exp': int(time.time()) + 3600,
+        'email': 'user@colsch.us',
+        'email_verified': True,
+    }
+    access_token = jwt.encode(access_payload, 'access_secret', algorithm='HS256')
+
+    token_payload = {
+        'access_token': access_token,
+        'refresh_token': 'test_refresh_token',
+    }
+    signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
+
+    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
+        mock_domain_blocker.is_active.return_value = False
+
+        # Act
+        result = await saas_user_auth_from_signed_token(signed_token)
+
+        # Assert
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        mock_domain_blocker.is_domain_blocked.assert_not_called()
