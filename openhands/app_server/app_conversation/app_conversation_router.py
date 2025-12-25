@@ -222,7 +222,6 @@ async def start_app_conversation(
         raise
 
 
-
 @router.post('/stream-start')
 async def stream_app_conversation_start(
     request: AppConversationStartRequest,
