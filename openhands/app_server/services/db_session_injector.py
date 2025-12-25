@@ -34,6 +34,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
     echo: bool = False
     pool_size: int = 25
     max_overflow: int = 10
+    pool_recycle: int = 1800
     gcp_db_instance: str | None = None
     gcp_project: str | None = None
     gcp_region: str | None = None
@@ -137,6 +138,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
             pool_size=self.pool_size,
             max_overflow=self.max_overflow,
             pool_pre_ping=True,
+            pool_recycle=self.pool_recycle,
         )
 
     async def get_async_db_engine(self) -> AsyncEngine:
@@ -170,6 +172,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                     url,
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
+                    pool_recycle=self.pool_recycle,
                     pool_pre_ping=True,
                 )
             else:
@@ -210,6 +213,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                 url,
                 pool_size=self.pool_size,
                 max_overflow=self.max_overflow,
+                pool_recycle=self.pool_recycle,
                 pool_pre_ping=True,
             )
         self._engine = engine
