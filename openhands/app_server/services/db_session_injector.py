@@ -108,29 +108,26 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         return engine
 
     async def _create_async_gcp_creator(self):
+        import asyncpg
         from sqlalchemy.dialects.postgresql.asyncpg import (
             AsyncAdapt_asyncpg_connection,
         )
 
-        engine = self._create_gcp_engine()
-
         return AsyncAdapt_asyncpg_connection(
-            engine.dialect.dbapi,
+            asyncpg,
             await self._create_async_gcp_db_connection(),
             prepared_statement_cache_size=100,
         )
 
     async def _create_async_gcp_engine(self):
+        import asyncpg
         from sqlalchemy.dialects.postgresql.asyncpg import (
             AsyncAdapt_asyncpg_connection,
         )
 
-        base_engine = self._create_gcp_engine()
-        dbapi = base_engine.dialect.dbapi
-
         def adapted_creator():
             return AsyncAdapt_asyncpg_connection(
-                dbapi,
+                asyncpg,
                 await_only(self._create_async_gcp_db_connection()),
                 prepared_statement_cache_size=100,
             )
