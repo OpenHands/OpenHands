@@ -98,14 +98,16 @@ const getBrowserObservationContent = (
           .filter((c) => c.type === "text")
           .map((c) => c.text)
           .join("\n")
-      : "";
+      : observation.output || "";
 
   let contentDetails = "";
 
-  if ("is_error" in observation && observation.is_error) {
-    contentDetails += `**Error:**\n${textContent}`;
-  } else {
+  if (observation.error) {
+    contentDetails += `**Error:**\n${observation.error}`;
+  } else if (textContent) {
     contentDetails += `**Output:**\n${textContent}`;
+  } else {
+    contentDetails += "Browser action completed successfully.";
   }
 
   if (contentDetails.length > MAX_CONTENT_LENGTH) {
@@ -188,7 +190,13 @@ const getThinkObservationContent = (
   event: ObservationEvent<ThinkObservation>,
 ): string => {
   const { observation } = event;
-  return observation.content || "";
+
+  const textContent = observation.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+
+  return textContent || "";
 };
 
 const getFinishObservationContent = (

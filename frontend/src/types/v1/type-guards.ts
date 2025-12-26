@@ -7,6 +7,8 @@ import {
   ExecuteBashObservation,
   PlanningFileEditorObservation,
   TerminalObservation,
+  BrowserObservation,
+  BrowserNavigateAction,
 } from "./core";
 import { AgentErrorEvent } from "./core/events/observation-event";
 import { MessageEvent } from "./core/events/message-event";
@@ -52,7 +54,10 @@ export const isObservationEvent = (
 ): event is ObservationEvent =>
   event.source === "environment" &&
   "action_id" in event &&
-  "observation" in event;
+  "observation" in event &&
+  event.observation !== null &&
+  typeof event.observation === "object" &&
+  "kind" in event.observation;
 
 /**
  * Type guard function to check if an event is an agent error event
@@ -92,6 +97,9 @@ export const isUserMessageEvent = (
 export const isActionEvent = (event: OpenHandsEvent): event is ActionEvent =>
   event.source === "agent" &&
   "action" in event &&
+  event.action !== null &&
+  typeof event.action === "object" &&
+  "kind" in event.action &&
   "tool_name" in event &&
   "tool_call_id" in event &&
   typeof event.tool_name === "string" &&
@@ -125,6 +133,22 @@ export const isPlanningFileEditorObservationEvent = (
 ): event is ObservationEvent<PlanningFileEditorObservation> =>
   isObservationEvent(event) &&
   event.observation.kind === "PlanningFileEditorObservation";
+
+/**
+ * Type guard function to check if an observation event is a BrowserObservation
+ */
+export const isBrowserObservationEvent = (
+  event: OpenHandsEvent,
+): event is ObservationEvent<BrowserObservation> =>
+  isObservationEvent(event) && event.observation.kind === "BrowserObservation";
+
+/**
+ * Type guard function to check if an action event is a BrowserNavigateAction
+ */
+export const isBrowserNavigateActionEvent = (
+  event: OpenHandsEvent,
+): event is ActionEvent<BrowserNavigateAction> =>
+  isActionEvent(event) && event.action.kind === "BrowserNavigateAction";
 
 /**
  * Type guard function to check if an event is a system prompt event

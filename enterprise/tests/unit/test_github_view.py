@@ -1,6 +1,7 @@
 from unittest import TestCase, mock
 from unittest.mock import MagicMock, patch
 
+import pytest
 from integrations.github.github_view import GithubFactory, GithubIssue, get_oh_labels
 from integrations.models import Message, SourceType
 from integrations.types import UserData
@@ -114,8 +115,10 @@ class TestGithubV1ConversationRouting(TestCase):
             title='Test Issue',
             description='Test issue description',
             previous_comments=[],
+            v1=False,
         )
 
+    @pytest.mark.asyncio
     @patch('integrations.github.github_view.get_user_v1_enabled_setting')
     @patch.object(GithubIssue, '_create_v0_conversation')
     @patch.object(GithubIssue, '_create_v1_conversation')
@@ -144,6 +147,7 @@ class TestGithubV1ConversationRouting(TestCase):
         )
         mock_create_v1.assert_not_called()
 
+    @pytest.mark.asyncio
     @patch('integrations.github.github_view.get_user_v1_enabled_setting')
     @patch.object(GithubIssue, '_create_v0_conversation')
     @patch.object(GithubIssue, '_create_v1_conversation')
@@ -172,6 +176,7 @@ class TestGithubV1ConversationRouting(TestCase):
         )
         mock_create_v0.assert_not_called()
 
+    @pytest.mark.asyncio
     @patch('integrations.github.github_view.get_user_v1_enabled_setting')
     @patch.object(GithubIssue, '_create_v0_conversation')
     @patch.object(GithubIssue, '_create_v1_conversation')

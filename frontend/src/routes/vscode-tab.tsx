@@ -51,7 +51,7 @@ function VSCodeTab() {
     );
   }
 
-  if (error || (data && data.error) || !data?.url || iframeError) {
+  if (error || data?.error || !data?.url || iframeError) {
     return (
       <div className="w-full h-full flex items-center text-center justify-center text-2xl text-tertiary-light">
         {iframeError ||

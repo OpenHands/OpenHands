@@ -13,6 +13,20 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Trigger a download for a provided Blob with the given filename
+ */
+export const downloadBlob = (blob: Blob, filename: string): void => {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+
+/**
  * Get the numeric height value from an element's style property
  * @param el The HTML element to get the height from
  * @param fallback The fallback value to return if style height is invalid

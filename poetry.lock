@@ -5675,14 +5675,14 @@ utils = ["numpydoc"]
 
 [[package]]
 name = "lmnr"
-version = "0.7.20"
+version = "0.7.24"
 description = "Python SDK for Laminar"
 optional = false
 python-versions = "<4,>=3.10"
 groups = ["main"]
 files = [
-    {file = "lmnr-0.7.20-py3-none-any.whl", hash = "sha256:5f9fa7444e6f96c25e097f66484ff29e632bdd1de0e9346948bf5595f4a8af38"},
-    {file = "lmnr-0.7.20.tar.gz", hash = "sha256:1f484cd618db2d71af65f90a0b8b36d20d80dc91a5138b811575c8677bf7c4fd"},
+    {file = "lmnr-0.7.24-py3-none-any.whl", hash = "sha256:ad780d4a62ece897048811f3368639c240a9329ab31027da8c96545137a3a08a"},
+    {file = "lmnr-0.7.24.tar.gz", hash = "sha256:aa6973f46fc4ba95c9061c1feceb58afc02eb43c9376c21e32545371ff6123d7"},
 ]
 
 [package.dependencies]
@@ -5705,14 +5705,15 @@ tqdm = ">=4.0"
 
 [package.extras]
 alephalpha = ["opentelemetry-instrumentation-alephalpha (>=0.47.1)"]
-all = ["opentelemetry-instrumentation-alephalpha (>=0.47.1)", "opentelemetry-instrumentation-bedrock (>=0.47.1)", "opentelemetry-instrumentation-chromadb (>=0.47.1)", "opentelemetry-instrumentation-cohere (>=0.47.1)", "opentelemetry-instrumentation-crewai (>=0.47.1)", "opentelemetry-instrumentation-haystack (>=0.47.1)", "opentelemetry-instrumentation-lancedb (>=0.47.1)", "opentelemetry-instrumentation-langchain (>=0.47.1)", "opentelemetry-instrumentation-llamaindex (>=0.47.1)", "opentelemetry-instrumentation-marqo (>=0.47.1)", "opentelemetry-instrumentation-mcp (>=0.47.1)", "opentelemetry-instrumentation-milvus (>=0.47.1)", "opentelemetry-instrumentation-mistralai (>=0.47.1)", "opentelemetry-instrumentation-ollama (>=0.47.1)", "opentelemetry-instrumentation-pinecone (>=0.47.1)", "opentelemetry-instrumentation-qdrant (>=0.47.1)", "opentelemetry-instrumentation-replicate (>=0.47.1)", "opentelemetry-instrumentation-sagemaker (>=0.47.1)", "opentelemetry-instrumentation-together (>=0.47.1)", "opentelemetry-instrumentation-transformers (>=0.47.1)", "opentelemetry-instrumentation-vertexai (>=0.47.1)", "opentelemetry-instrumentation-watsonx (>=0.47.1)", "opentelemetry-instrumentation-weaviate (>=0.47.1)"]
+all = ["opentelemetry-instrumentation-alephalpha (>=0.47.1)", "opentelemetry-instrumentation-bedrock (>=0.47.1)", "opentelemetry-instrumentation-chromadb (>=0.47.1)", "opentelemetry-instrumentation-cohere (>=0.47.1)", "opentelemetry-instrumentation-crewai (>=0.47.1)", "opentelemetry-instrumentation-haystack (>=0.47.1)", "opentelemetry-instrumentation-lancedb (>=0.47.1)", "opentelemetry-instrumentation-langchain (>=0.47.1,<0.48.0)", "opentelemetry-instrumentation-llamaindex (>=0.47.1)", "opentelemetry-instrumentation-marqo (>=0.47.1)", "opentelemetry-instrumentation-mcp (>=0.47.1)", "opentelemetry-instrumentation-milvus (>=0.47.1)", "opentelemetry-instrumentation-mistralai (>=0.47.1)", "opentelemetry-instrumentation-ollama (>=0.47.1)", "opentelemetry-instrumentation-pinecone (>=0.47.1)", "opentelemetry-instrumentation-qdrant (>=0.47.1)", "opentelemetry-instrumentation-replicate (>=0.47.1)", "opentelemetry-instrumentation-sagemaker (>=0.47.1)", "opentelemetry-instrumentation-together (>=0.47.1)", "opentelemetry-instrumentation-transformers (>=0.47.1)", "opentelemetry-instrumentation-vertexai (>=0.47.1)", "opentelemetry-instrumentation-watsonx (>=0.47.1)", "opentelemetry-instrumentation-weaviate (>=0.47.1)"]
 bedrock = ["opentelemetry-instrumentation-bedrock (>=0.47.1)"]
 chromadb = ["opentelemetry-instrumentation-chromadb (>=0.47.1)"]
+claude-agent-sdk = ["lmnr-claude-code-proxy (>=0.1.0a5)"]
 cohere = ["opentelemetry-instrumentation-cohere (>=0.47.1)"]
 crewai = ["opentelemetry-instrumentation-crewai (>=0.47.1)"]
 haystack = ["opentelemetry-instrumentation-haystack (>=0.47.1)"]
 lancedb = ["opentelemetry-instrumentation-lancedb (>=0.47.1)"]
-langchain = ["opentelemetry-instrumentation-langchain (>=0.47.1)"]
+langchain = ["opentelemetry-instrumentation-langchain (>=0.47.1,<0.48.0)"]
 llamaindex = ["opentelemetry-instrumentation-llamaindex (>=0.47.1)"]
 marqo = ["opentelemetry-instrumentation-marqo (>=0.47.1)"]
 mcp = ["opentelemetry-instrumentation-mcp (>=0.47.1)"]
@@ -7379,14 +7380,14 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.4.1"
+version = "1.6.0"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.4.1-py3-none-any.whl", hash = "sha256:1e621d15215a48e2398e23c58a791347f06c215c2344053aeb26b562c34a44ee"},
-    {file = "openhands_agent_server-1.4.1.tar.gz", hash = "sha256:03010a5c8d63bbd5b088458eb75308ef16559018140d75a3644ae5bbc3531bbf"},
+    {file = "openhands_agent_server-1.6.0-py3-none-any.whl", hash = "sha256:e6ae865ac3e7a96b234e10a0faad23f6210e025bbf7721cb66bc7a71d160848c"},
+    {file = "openhands_agent_server-1.6.0.tar.gz", hash = "sha256:44ce7694ae2d4bb0666d318ef13e6618bd4dc73022c60354839fe6130e67d02a"},
 ]
 
 [package.dependencies]
@@ -7403,14 +7404,14 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-sdk"
-version = "1.4.1"
+version = "1.6.0"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.4.1-py3-none-any.whl", hash = "sha256:70e453eab7f9ab6b705198c2615fdd844b21e14b29d78afaf62724f4a440bcdc"},
-    {file = "openhands_sdk-1.4.1.tar.gz", hash = "sha256:37365de25ed57cf8cc2a8003ab4d7a1fe2a40b49c8e8da84a3f1ea2b522eddf2"},
+    {file = "openhands_sdk-1.6.0-py3-none-any.whl", hash = "sha256:94d2f87fb35406373da6728ae2d88584137f9e9b67fa0e940444c72f2e44e7d3"},
+    {file = "openhands_sdk-1.6.0.tar.gz", hash = "sha256:f45742350e3874a7f5b08befc4a9d5adc7e4454f7ab5f8391c519eee3116090f"},
 ]
 
 [package.dependencies]
@@ -7418,7 +7419,7 @@ deprecation = ">=2.1.0"
 fastmcp = ">=2.11.3"
 httpx = ">=0.27.0"
 litellm = ">=1.80.7"
-lmnr = ">=0.7.20"
+lmnr = ">=0.7.24"
 pydantic = ">=2.11.7"
 python-frontmatter = ">=1.1.0"
 python-json-logger = ">=3.3.0"
@@ -7430,14 +7431,14 @@ boto3 = ["boto3 (>=1.35.0)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.4.1"
+version = "1.6.0"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.4.1-py3-none-any.whl", hash = "sha256:8f40189a08bf80eb4a33219ee9ccc528f9c6c4f2d5c9ab807b06c3f3fe21a612"},
-    {file = "openhands_tools-1.4.1.tar.gz", hash = "sha256:4c0caf87f520a207d9035191c77b7b5c53eeec996350a24ffaf7f740a6566b22"},
+    {file = "openhands_tools-1.6.0-py3-none-any.whl", hash = "sha256:176556d44186536751b23fe052d3505492cc2afb8d52db20fb7a2cc0169cd57a"},
+    {file = "openhands_tools-1.6.0.tar.gz", hash = "sha256:d07ba31050fd4a7891a4c48388aa53ce9f703e17064ddbd59146d6c77e5980b3"},
 ]
 
 [package.dependencies]
@@ -16822,4 +16823,4 @@ third-party-runtimes = ["daytona", "e2b-code-interpreter", "modal", "runloop-api
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "c208fcc692f74540f7b6e822136002dd0f079a3d8d1b93227a5bb07a7f4432cb"
+content-hash = "9764f3b69ec8ed35feebd78a826bbc6bfa4ac6d5b56bc999be8bc738b644e538"
