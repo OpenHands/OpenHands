@@ -21,6 +21,7 @@ export default [
     ]),
     route("conversations/:conversationId", "routes/conversation.tsx"),
     route("microagent-management", "routes/microagent-management.tsx"),
+    route("oauth/device/verify", "routes/device-verify.tsx"),
   ]),
   // Public routes that don't require authentication
   route(

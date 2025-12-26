@@ -7,7 +7,7 @@ import { TabContainer } from "./tab-container";
 import { TabContentArea } from "./tab-content-area";
 import { ConversationTabTitle } from "../conversation-tab-title";
 import Terminal from "#/components/features/terminal/terminal";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { useConversationId } from "#/hooks/use-conversation-id";
 
 // Lazy load all tab components
@@ -82,13 +82,45 @@ export function ConversationTabContent() {
     isPlannerActive,
   ]);
 
+  const conversationKey = useMemo(() => {
+    if (isEditorActive) {
+      return "editor";
+    }
+    if (isBrowserActive) {
+      return "browser";
+    }
+    if (isServedActive) {
+      return "served";
+    }
+    if (isVSCodeActive) {
+      return "vscode";
+    }
+    if (isTerminalActive) {
+      return "terminal";
+    }
+    if (isPlannerActive) {
+      return "planner";
+    }
+    return "";
+  }, [
+    isEditorActive,
+    isBrowserActive,
+    isServedActive,
+    isVSCodeActive,
+    isTerminalActive,
+    isPlannerActive,
+  ]);
+
   if (shouldShownAgentLoading) {
     return <ConversationLoading />;
   }
 
   return (
     <TabContainer>
-      <ConversationTabTitle title={conversationTabTitle} />
+      <ConversationTabTitle
+        title={conversationTabTitle}
+        conversationKey={conversationKey}
+      />
       <TabContentArea>
         {tabs.map(({ key, component: Component, isActive }) => (
           <TabWrapper

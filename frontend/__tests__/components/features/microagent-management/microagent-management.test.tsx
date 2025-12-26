@@ -12,7 +12,7 @@ import GitService from "#/api/git-service/git-service.api";
 import { GitRepository } from "#/types/git";
 import { RepositoryMicroagent } from "#/types/microagent-management";
 import { Conversation } from "#/api/open-hands.types";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 
 // Mock hooks
 const mockUseUserProviders = vi.fn();

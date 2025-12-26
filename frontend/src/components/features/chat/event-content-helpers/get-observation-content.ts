@@ -140,7 +140,7 @@ const getTaskTrackingObservationContent = (
     content += "\n\n**Task List:** Empty";
   }
 
-  if (event.content && event.content.trim()) {
+  if (event.content?.trim()) {
     content += `\n\n**Result:** ${event.content.trim()}`;
   }
 

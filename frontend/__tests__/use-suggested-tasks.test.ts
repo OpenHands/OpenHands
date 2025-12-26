@@ -9,7 +9,7 @@ import { useShouldShowUserFeatures } from "../src/hooks/use-should-show-user-fea
 vi.mock("../src/hooks/use-should-show-user-features");
 vi.mock("#/api/suggestions-service/suggestions-service.api", () => ({
   SuggestionsService: {
-    getSuggestedTasks: vi.fn(),
+    getSuggestedTasks: vi.fn().mockResolvedValue([]),
   },
 }));
 

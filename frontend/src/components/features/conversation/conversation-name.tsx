@@ -9,7 +9,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
-import { MicroagentsModal } from "../conversation-panel/microagents-modal";
+import { SkillsModal } from "../conversation-panel/skills-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { MetricsModal } from "./metrics-modal/metrics-modal";
@@ -30,9 +30,10 @@ export function ConversationName() {
     handleDelete,
     handleStop,
     handleDownloadViaVSCode,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
-    handleShowMicroagents,
+    handleShowSkills,
     handleExportConversation,
     handleTogglePublic,
     handleConfirmDelete,
@@ -41,8 +42,8 @@ export function ConversationName() {
     setMetricsModalVisible,
     systemModalVisible,
     setSystemModalVisible,
-    microagentsModalVisible,
-    setMicroagentsModalVisible,
+    skillsModalVisible,
+    setSkillsModalVisible,
     confirmDeleteModalVisible,
     setConfirmDeleteModalVisible,
     confirmStopModalVisible,
@@ -51,9 +52,10 @@ export function ConversationName() {
     shouldShowStop,
     shouldShowDownload,
     shouldShowExport,
+    shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
-    shouldShowMicroagents,
+    shouldShowSkills,
   } = useConversationNameContextMenu({
     conversationId,
     conversationStatus: conversation?.status,
@@ -171,9 +173,7 @@ export function ConversationName() {
                 onShowAgentTools={
                   shouldShowAgentTools ? handleShowAgentTools : undefined
                 }
-                onShowMicroagents={
-                  shouldShowMicroagents ? handleShowMicroagents : undefined
-                }
+                onShowSkills={shouldShowSkills ? handleShowSkills : undefined}
                 onExportConversation={
                   shouldShowExport ? handleExportConversation : undefined
                 }
@@ -181,6 +181,11 @@ export function ConversationName() {
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
                 onTogglePublic={handleTogglePublic}
+                onDownloadConversation={
+                  shouldShowDownloadConversation
+                    ? handleDownloadConversation
+                    : undefined
+                }
                 position="bottom"
               />
             )}
@@ -201,9 +206,9 @@ export function ConversationName() {
         systemMessage={systemMessage ? systemMessage.args : null}
       />
 
-      {/* Microagents Modal */}
-      {microagentsModalVisible && (
-        <MicroagentsModal onClose={() => setMicroagentsModalVisible(false)} />
+      {/* Skills Modal */}
+      {skillsModalVisible && (
+        <SkillsModal onClose={() => setSkillsModalVisible(false)} />
       )}
 
       {/* Confirm Delete Modal */}

@@ -190,7 +190,13 @@ const getThinkObservationContent = (
   event: ObservationEvent<ThinkObservation>,
 ): string => {
   const { observation } = event;
-  return observation.content || "";
+
+  const textContent = observation.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+
+  return textContent || "";
 };
 
 const getFinishObservationContent = (

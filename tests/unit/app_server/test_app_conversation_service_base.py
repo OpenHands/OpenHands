@@ -920,12 +920,12 @@ async def test_configure_git_user_settings_special_characters_in_name(mock_works
 
 
 # =============================================================================
-# Tests for _load_and_merge_all_skills with org skills
+# Tests for load_and_merge_all_skills with org skills
 # =============================================================================
 
 
 class TestLoadAndMergeAllSkillsWithOrgSkills:
-    """Test _load_and_merge_all_skills includes organization skills."""
+    """Test load_and_merge_all_skills includes organization skills."""
 
     @pytest.mark.asyncio
     @patch(
@@ -951,7 +951,7 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
         mock_load_global,
         mock_load_sandbox,
     ):
-        """Test that _load_and_merge_all_skills loads and merges org skills."""
+        """Test that load_and_merge_all_skills loads and merges org skills."""
         # Arrange
         mock_user_context = Mock(spec=UserContext)
         with patch.object(
@@ -987,7 +987,7 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             mock_load_repo.return_value = [repo_skill]
 
             # Act
-            result = await service._load_and_merge_all_skills(
+            result = await service.load_and_merge_all_skills(
                 sandbox, remote_workspace, 'owner/repo', '/workspace'
             )
 
@@ -1066,7 +1066,7 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             mock_load_repo.return_value = [repo_skill]
 
             # Act
-            result = await service._load_and_merge_all_skills(
+            result = await service.load_and_merge_all_skills(
                 sandbox, remote_workspace, 'owner/repo', '/workspace'
             )
 
@@ -1132,7 +1132,7 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             mock_load_repo.return_value = []
 
             # Act
-            result = await service._load_and_merge_all_skills(
+            result = await service.load_and_merge_all_skills(
                 sandbox, remote_workspace, 'owner/repo', '/workspace'
             )
 
@@ -1193,7 +1193,7 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             mock_load_repo.return_value = [repo_skill]
 
             # Act
-            result = await service._load_and_merge_all_skills(
+            result = await service.load_and_merge_all_skills(
                 sandbox, remote_workspace, 'owner/repo', '/workspace'
             )
 
@@ -1254,7 +1254,7 @@ class TestLoadAndMergeAllSkillsWithOrgSkills:
             mock_load_repo.return_value = []
 
             # Act
-            result = await service._load_and_merge_all_skills(
+            result = await service.load_and_merge_all_skills(
                 sandbox, remote_workspace, None, '/workspace'
             )
 
