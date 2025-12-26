@@ -77,7 +77,7 @@ describe("AuthModal", () => {
     );
 
     // Find the terms of service section using data-testid
-    const termsSection = screen.getByTestId("auth-modal-terms-of-service");
+    const termsSection = screen.getByTestId("terms-and-privacy-notice");
     expect(termsSection).toBeInTheDocument();
 
     // Check that all text content is present in the paragraph
@@ -114,6 +114,38 @@ describe("AuthModal", () => {
     expect(termsSection).toContainElement(privacyLink);
   });
 
+  it("should display email verified message when emailVerified prop is true", () => {
+    render(
+      <MemoryRouter>
+        <AuthModal
+          githubAuthUrl="mock-url"
+          appMode="saas"
+          emailVerified={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("AUTH$EMAIL_VERIFIED_PLEASE_LOGIN"),
+    ).toBeInTheDocument();
+  });
+
+  it("should not display email verified message when emailVerified prop is false", () => {
+    render(
+      <MemoryRouter>
+        <AuthModal
+          githubAuthUrl="mock-url"
+          appMode="saas"
+          emailVerified={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByText("AUTH$EMAIL_VERIFIED_PLEASE_LOGIN"),
+    ).not.toBeInTheDocument();
+  });
+
   it("should open Terms of Service link in new tab", () => {
     render(
       <MemoryRouter>
@@ -142,12 +174,17 @@ describe("AuthModal", () => {
 
   describe("Duplicate email error message", () => {
     const renderAuthModalWithRouter = (initialEntries: string[]) => {
+      const hasDuplicatedEmail = initialEntries.includes(
+        "/?duplicated_email=true",
+      );
+
       return render(
         <MemoryRouter initialEntries={initialEntries}>
           <AuthModal
             githubAuthUrl="mock-url"
             appMode="saas"
             providersConfigured={["github"]}
+            hasDuplicatedEmail={hasDuplicatedEmail}
           />
         </MemoryRouter>,
       );

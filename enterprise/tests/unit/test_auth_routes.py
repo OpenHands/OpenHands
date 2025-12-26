@@ -136,6 +136,7 @@ async def test_keycloak_callback_user_not_allowed(mock_request):
                 'sub': 'test_user_id',
                 'preferred_username': 'test_user',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -184,6 +185,7 @@ async def test_keycloak_callback_success_with_valid_offline_token(mock_request):
                 'sub': 'test_user_id',
                 'preferred_username': 'test_user',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -212,6 +214,82 @@ async def test_keycloak_callback_success_with_valid_offline_token(mock_request):
             accepted_tos=True,
         )
         mock_posthog.set.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_email_not_verified(mock_request):
+    """Test keycloak_callback when email is not verified."""
+    # Arrange
+    mock_verify_email = AsyncMock()
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+        patch('server.routes.email.verify_email', mock_verify_email),
+    ):
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value={
+                'sub': 'test_user_id',
+                'preferred_username': 'test_user',
+                'identity_provider': 'github',
+                'email_verified': False,
+            }
+        )
+        mock_token_manager.store_idp_tokens = AsyncMock()
+        mock_verifier.is_active.return_value = False
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        # Assert
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+        assert 'email_verification_required=true' in result.headers['location']
+        mock_verify_email.assert_called_once_with(
+            request=mock_request, user_id='test_user_id', is_auth_flow=True
+        )
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_email_not_verified_missing_field(mock_request):
+    """Test keycloak_callback when email_verified field is missing (defaults to False)."""
+    # Arrange
+    mock_verify_email = AsyncMock()
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+        patch('server.routes.email.verify_email', mock_verify_email),
+    ):
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value={
+                'sub': 'test_user_id',
+                'preferred_username': 'test_user',
+                'identity_provider': 'github',
+                # email_verified field is missing
+            }
+        )
+        mock_token_manager.store_idp_tokens = AsyncMock()
+        mock_verifier.is_active.return_value = False
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        # Assert
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+        assert 'email_verification_required=true' in result.headers['location']
+        mock_verify_email.assert_called_once_with(
+            request=mock_request, user_id='test_user_id', is_auth_flow=True
+        )
 
 
 @pytest.mark.asyncio
@@ -248,6 +326,7 @@ async def test_keycloak_callback_success_without_offline_token(mock_request):
                 'sub': 'test_user_id',
                 'preferred_username': 'test_user',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -513,6 +592,7 @@ async def test_keycloak_callback_allowed_email_domain(mock_request):
                 'preferred_username': 'test_user',
                 'email': 'user@example.com',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -566,6 +646,7 @@ async def test_keycloak_callback_domain_blocking_inactive(mock_request):
                 'preferred_username': 'test_user',
                 'email': 'user@colsch.us',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
@@ -615,6 +696,7 @@ async def test_keycloak_callback_missing_email(mock_request):
                 'sub': 'test_user_id',
                 'preferred_username': 'test_user',
                 'identity_provider': 'github',
+                'email_verified': True,
                 # No email field
             }
         )
@@ -733,6 +815,7 @@ async def test_keycloak_callback_duplicate_check_exception(mock_request):
                 'preferred_username': 'test_user',
                 'email': 'joe+test@example.com',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.check_duplicate_base_email = AsyncMock(
@@ -782,6 +865,7 @@ async def test_keycloak_callback_no_duplicate_email(mock_request):
                 'preferred_username': 'test_user',
                 'email': 'joe+test@example.com',
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.check_duplicate_base_email = AsyncMock(return_value=False)
@@ -833,6 +917,7 @@ async def test_keycloak_callback_no_email_in_user_info(mock_request):
                 'preferred_username': 'test_user',
                 # No email field
                 'identity_provider': 'github',
+                'email_verified': True,
             }
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
