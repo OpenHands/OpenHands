@@ -5,13 +5,13 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 export const useMe = () => {
   const { data: config } = useConfig();
-  const { orgId } = useSelectedOrganizationId();
+  const { organizationId } = useSelectedOrganizationId();
 
   const isSaas = config?.APP_MODE === "saas";
 
   return useQuery({
-    queryKey: ["organizations", orgId, "me"],
-    queryFn: () => organizationService.getMe({ orgId: orgId! }),
-    enabled: isSaas && !!orgId,
+    queryKey: ["organizations", organizationId, "me"],
+    queryFn: () => organizationService.getMe({ orgId: organizationId! }),
+    enabled: isSaas && !!organizationId,
   });
 };

@@ -6,16 +6,16 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 export const useDeleteOrganization = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { orgId, setOrgId } = useSelectedOrganizationId();
+  const { organizationId, setOrganizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: () => {
-      if (!orgId) throw new Error("Organization ID is required");
-      return organizationService.deleteOrganization({ orgId });
+      if (!organizationId) throw new Error("Organization ID is required");
+      return organizationService.deleteOrganization({ orgId: organizationId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["organizations"] });
-      setOrgId(null);
+      setOrganizationId(null);
       navigate("/");
     },
   });

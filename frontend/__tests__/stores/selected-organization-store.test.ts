@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 describe("useSelectedOrganizationStore", () => {
-  it("should have null as initial orgId", () => {
+  it("should have null as initial organizationId", () => {
     const { result } = renderHook(() => useSelectedOrganizationStore());
     expect(result.current.organizationId).toBeNull();
   });
 
-  it("should update orgId when setOrgId is called", () => {
+  it("should update organizationId when setOrganizationId is called", () => {
     const { result } = renderHook(() => useSelectedOrganizationStore());
 
     act(() => {
@@ -18,7 +18,7 @@ describe("useSelectedOrganizationStore", () => {
     expect(result.current.organizationId).toBe("org-123");
   });
 
-  it("should allow setting orgId to null", () => {
+  it("should allow setting organizationId to null", () => {
     const { result } = renderHook(() => useSelectedOrganizationStore());
 
     act(() => {
@@ -43,9 +43,9 @@ describe("useSelectedOrganizationStore", () => {
     );
 
     act(() => {
-      result1.current.setOrganizationId("shared-org");
+      result1.current.setOrganizationId("shared-organization");
     });
 
-    expect(result2.current.organizationId).toBe("shared-org");
+    expect(result2.current.organizationId).toBe("shared-organization");
   });
 });

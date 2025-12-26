@@ -5,7 +5,7 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 export const useUpdateMemberRole = () => {
   const queryClient = useQueryClient();
-  const { orgId } = useSelectedOrganizationId();
+  const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: async ({
@@ -15,11 +15,11 @@ export const useUpdateMemberRole = () => {
       userId: string;
       role: OrganizationUserRole;
     }) => {
-      if (!orgId) {
+      if (!organizationId) {
         throw new Error("Organization ID is required to update member role");
       }
       return organizationService.updateMember({
-        orgId,
+        orgId: organizationId,
         userId,
         role,
       });

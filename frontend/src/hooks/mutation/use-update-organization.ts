@@ -4,15 +4,20 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 export const useUpdateOrganization = () => {
   const queryClient = useQueryClient();
-  const { orgId } = useSelectedOrganizationId();
+  const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: (name: string) => {
-      if (!orgId) throw new Error("Organization ID is required");
-      return organizationService.updateOrganization({ orgId, name });
+      if (!organizationId) throw new Error("Organization ID is required");
+      return organizationService.updateOrganization({
+        orgId: organizationId,
+        name,
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["organizations", orgId] });
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId],
+      });
     },
   });
 };

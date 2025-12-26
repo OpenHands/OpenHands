@@ -22,7 +22,7 @@ export function SettingsNavigation({
   onCloseMobileMenu,
   navigationItems,
 }: SettingsNavigationProps) {
-  const { orgId, setOrgId } = useSelectedOrganizationId();
+  const { organizationId, setOrganizationId } = useSelectedOrganizationId();
   const { data: organizations } = useOrganizations();
   const { data: me } = useMe();
 
@@ -56,7 +56,7 @@ export function SettingsNavigation({
             testId="org-select"
             name="organization"
             placeholder="Please select an organization"
-            selectedKey={orgId || ""}
+            selectedKey={organizationId || ""}
             items={
               organizations?.map((org) => ({
                 key: org.id,
@@ -65,9 +65,9 @@ export function SettingsNavigation({
             }
             onSelectionChange={(org) => {
               if (org) {
-                setOrgId(org.toString());
+                setOrganizationId(org.toString());
               } else {
-                setOrgId(null);
+                setOrganizationId(null);
               }
             }}
           />
@@ -96,7 +96,7 @@ export function SettingsNavigation({
               if (
                 (navItem.to === "/settings/org-members" ||
                   navItem.to === "/settings/org") &&
-                (isUser || !orgId)
+                (isUser || !organizationId)
               ) {
                 return false;
               }

@@ -4,14 +4,14 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 export const useRemoveMember = () => {
   const queryClient = useQueryClient();
-  const { orgId } = useSelectedOrganizationId();
+  const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: ({ userId }: { userId: string }) =>
-      organizationService.removeMember({ orgId: orgId!, userId }),
+      organizationService.removeMember({ orgId: organizationId!, userId }),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["organizations", "members", orgId],
+        queryKey: ["organizations", "members", organizationId],
       });
     },
   });

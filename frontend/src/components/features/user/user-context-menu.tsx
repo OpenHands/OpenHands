@@ -36,7 +36,7 @@ interface UserContextMenuProps {
 export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { orgId, setOrgId } = useSelectedOrganizationId();
+  const { organizationId, setOrganizationId } = useSelectedOrganizationId();
   const { data: organizations } = useOrganizations();
   const { mutate: logout } = useLogout();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
@@ -100,7 +100,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
             testId="org-selector"
             name="organization"
             placeholder="Please select an organization"
-            selectedKey={orgId || "personal"}
+            selectedKey={organizationId || "personal"}
             items={[
               { key: "personal", label: "Personal Account" },
               ...(organizations?.map((org) => ({
@@ -110,11 +110,11 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
             ]}
             onSelectionChange={(org) => {
               if (org === "personal") {
-                setOrgId(null);
+                setOrganizationId(null);
               } else if (org) {
-                setOrgId(org.toString());
+                setOrganizationId(org.toString());
               } else {
-                setOrgId(null);
+                setOrganizationId(null);
               }
             }}
           />

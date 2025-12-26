@@ -3,15 +3,15 @@ import { useSelectedOrganizationStore } from "#/stores/selected-organization-sto
 
 export const useSelectedOrganizationId = () => {
   const revalidator = useRevalidator();
-  const { organizationId: orgId, setOrganizationId: setOrgIdStore } =
+  const { organizationId, setOrganizationId: setOrganizationIdStore } =
     useSelectedOrganizationStore();
 
-  const setOrgId = (newOrgId: string | null) => {
-    setOrgIdStore(newOrgId);
+  const setOrganizationId = (newOrganizationId: string | null) => {
+    setOrganizationIdStore(newOrganizationId);
     // Revalidate route to ensure the latest orgId is used.
     // This is useful for redirecting the user away from admin-only org pages.
     revalidator.revalidate();
   };
 
-  return { orgId, setOrgId };
+  return { organizationId, setOrganizationId };
 };

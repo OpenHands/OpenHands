@@ -4,14 +4,14 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 export const useInviteMembersBatch = () => {
   const queryClient = useQueryClient();
-  const { orgId } = useSelectedOrganizationId();
+  const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
     mutationFn: ({ emails }: { emails: string[] }) =>
-      organizationService.inviteMembers({ orgId: orgId!, emails }),
+      organizationService.inviteMembers({ orgId: organizationId!, emails }),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["organizations", "members", orgId],
+        queryKey: ["organizations", "members", organizationId],
       });
     },
   });

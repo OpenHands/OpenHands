@@ -3,12 +3,12 @@ import { organizationService } from "#/api/organization-service/organization-ser
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 
 export const useOrganizationMembers = () => {
-  const { orgId } = useSelectedOrganizationId();
+  const { organizationId } = useSelectedOrganizationId();
 
   return useQuery({
-    queryKey: ["organizations", "members", orgId],
+    queryKey: ["organizations", "members", organizationId],
     queryFn: () =>
-      organizationService.getOrganizationMembers({ orgId: orgId! }),
-    enabled: !!orgId,
+      organizationService.getOrganizationMembers({ orgId: organizationId! }),
+    enabled: !!organizationId,
   });
 };
