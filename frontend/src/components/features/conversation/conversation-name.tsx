@@ -30,6 +30,7 @@ export function ConversationName() {
     handleDelete,
     handleStop,
     handleDownloadViaVSCode,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
     handleShowSkills,
@@ -50,6 +51,7 @@ export function ConversationName() {
     shouldShowStop,
     shouldShowDownload,
     shouldShowExport,
+    shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
     shouldShowSkills,
@@ -176,6 +178,11 @@ export function ConversationName() {
                 }
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
+                }
+                onDownloadConversation={
+                  shouldShowDownloadConversation
+                    ? handleDownloadConversation
+                    : undefined
                 }
                 position="bottom"
               />

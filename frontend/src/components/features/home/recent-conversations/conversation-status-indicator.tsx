@@ -39,6 +39,7 @@ export function ConversationStatusIndicator({
       ariaLabel={statusLabel}
       placement="right"
       showArrow
+      asSpan
       className="p-0 border-0 bg-transparent hover:opacity-100"
       tooltipClassName="bg-[#1a1a1a] text-white text-xs shadow-lg"
     >
