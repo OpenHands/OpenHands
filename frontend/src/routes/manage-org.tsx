@@ -12,7 +12,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { useMe } from "#/hooks/query/use-me";
 import { useConfig } from "#/hooks/query/use-config";
 import { rolePermissions } from "#/utils/org/permissions";
-import { getSelectedOrgIdFromStore } from "#/stores/selected-organization-store";
+import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organization-store";
 import { getMeFromQueryClient } from "#/utils/query-client-getters";
 import { queryClient } from "#/query-client-config";
 import { I18nKey } from "#/i18n/declaration";
@@ -261,7 +261,7 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
 }
 
 export const clientLoader = async () => {
-  const selectedOrgId = getSelectedOrgIdFromStore();
+  const selectedOrgId = getSelectedOrganizationIdFromStore();
   let me = getMeFromQueryClient(selectedOrgId);
 
   if (!me && selectedOrgId) {

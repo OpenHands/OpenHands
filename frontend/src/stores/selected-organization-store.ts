@@ -26,5 +26,5 @@ export const useSelectedOrganizationStore = create<SelectedOrganizationStore>()(
   ),
 );
 
-export const getSelectedOrgIdFromStore = (): string | null =>
+export const getSelectedOrganizationIdFromStore = (): string | null =>
   useSelectedOrganizationStore.getState().orgId;
