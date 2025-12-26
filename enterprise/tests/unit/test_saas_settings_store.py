@@ -898,7 +898,8 @@ async def test_get_old_default_model_returns_correct_model_for_version(settings_
 async def test_get_old_default_model_returns_none_for_invalid_version(settings_store):
     # Arrange: Invalid version
     with patch(
-        'server.constants.USER_SETTINGS_VERSION_TO_MODEL', {1: 'claude-3-5-sonnet-20241022'}
+        'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+        {1: 'claude-3-5-sonnet-20241022'},
     ):
         # Act: Get old default model for invalid version
         model = settings_store._get_old_default_model(99)
@@ -1023,7 +1024,9 @@ async def test_base_url_matches_default_with_different_url(settings_store):
 
 
 @pytest.mark.asyncio
-async def test_is_using_old_defaults_with_matching_settings(settings_store, session_maker):
+async def test_is_using_old_defaults_with_matching_settings(
+    settings_store, session_maker
+):
     # Arrange: User with old version and matching defaults
     with (
         patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'),
@@ -1080,9 +1083,9 @@ async def test_is_using_old_defaults_with_custom_settings(settings_store):
 @pytest.mark.asyncio
 async def test_is_using_old_defaults_with_current_version(settings_store):
     # Arrange: User with current version
-    with patch(
-        'server.constants.CURRENT_USER_SETTINGS_VERSION', 5
-    ), patch('server.constants.USER_SETTINGS_VERSION_TO_MODEL', {1: 'model1', 5: 'model5'}):
+    with patch('server.constants.CURRENT_USER_SETTINGS_VERSION', 5), patch(
+        'server.constants.USER_SETTINGS_VERSION_TO_MODEL', {1: 'model1', 5: 'model5'}
+    ):
         user_model = 'model1'
         user_base_url = 'http://test.url'
         old_user_version = 5
@@ -1276,11 +1279,15 @@ async def test_update_settings_upgrades_user_from_old_defaults(
         settings = Settings(llm_model=old_model, llm_base_url=test_base_url)
 
         # Act: Update settings
-        updated_settings = await settings_store.update_settings_with_litellm_default(settings)
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
 
         # Assert: Settings upgraded to new defaults
         assert updated_settings is not None
-        assert updated_settings.llm_model == 'litellm_proxy/prod/claude-opus-4-5-20251101'
+        assert (
+            updated_settings.llm_model == 'litellm_proxy/prod/claude-opus-4-5-20251101'
+        )
         assert updated_settings.llm_base_url == test_base_url
 
 
@@ -1321,7 +1328,9 @@ async def test_update_settings_preserves_custom_settings_during_upgrade(
             session.commit()
 
         # Act: Update settings
-        updated_settings = await settings_store.update_settings_with_litellm_default(settings)
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
 
         # Assert: Custom settings preserved
         assert updated_settings is not None
@@ -1377,7 +1386,9 @@ async def test_update_settings_migrates_billing_margin_v3_to_v4(
             session.commit()
 
         # Act: Update settings
-        updated_settings = await settings_store.update_settings_with_litellm_default(settings)
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
 
         # Assert: Settings updated
         assert updated_settings is not None
@@ -1445,7 +1456,9 @@ async def test_update_settings_skips_billing_margin_migration_when_already_v4(
             session.commit()
 
         # Act: Update settings
-        updated_settings = await settings_store.update_settings_with_litellm_default(settings)
+        updated_settings = await settings_store.update_settings_with_litellm_default(
+            settings
+        )
 
         # Assert: Settings updated
         assert updated_settings is not None

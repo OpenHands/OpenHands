@@ -403,6 +403,7 @@ class SaasSettingsStore(SettingsStore):
         )
 
         if is_using_old_defaults:
+            assert old_user_version is not None
             old_default_model = self._get_old_default_model(old_user_version)
             logger.info(
                 'saas_settings_store:update_settings_with_litellm_default:detected_old_defaults',
