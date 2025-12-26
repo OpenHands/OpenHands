@@ -210,11 +210,16 @@ async def start_app_conversation(
     set_db_session_keep_open(request.state, True)
     set_httpx_client_keep_open(request.state, True)
 
-    """Start an app conversation start task and return it."""
-    async_iter = app_conversation_service.start_app_conversation(start_request)
-    result = await anext(async_iter)
-    asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
-    return result
+    try:
+        """Start an app conversation start task and return it."""
+        async_iter = app_conversation_service.start_app_conversation(start_request)
+        result = await anext(async_iter)
+        asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
+        return result
+    except Exception:
+        await db_session.close()
+        await httpx_client.aclose()
+        raise
 
 
 @router.post('/stream-start')
