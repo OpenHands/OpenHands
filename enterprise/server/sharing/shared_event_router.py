@@ -1,30 +1,32 @@
-"""Event router for OpenHands Server."""
+"""Shared Event router for OpenHands Server."""
 
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from server.sharing.filesystem_shared_event_service import (
+    SharedEventServiceImplInjector,
+)
+from server.sharing.shared_event_service import SharedEventService
 
 from openhands.agent_server.models import EventPage, EventSortOrder
-from openhands.app_server.config import depends_event_service
-from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
 
-router = APIRouter(prefix='/events', tags=['Events'])
-event_service_dependency = depends_event_service()
+router = APIRouter(prefix='/api/shared-events', tags=['Sharing'])
+shared_event_service_dependency = Depends(SharedEventServiceImplInjector().depends)
 
 
 # Read methods
 
 
 @router.get('/search')
-async def search_events(
-    conversation_id__eq: Annotated[
-        str | None,
-        Query(title='Optional filter by conversation ID'),
-    ] = None,
+async def search_shared_events(
+    conversation_id: Annotated[
+        str,
+        Query(title='Conversation ID to search events for'),
+    ],
     kind__eq: Annotated[
         EventKind | None,
         Query(title='Optional filter by event kind'),
@@ -49,13 +51,13 @@ async def search_events(
         int,
         Query(title='The max number of results in the page', gt=0, lte=100),
     ] = 100,
-    event_service: EventService = event_service_dependency,
+    shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> EventPage:
-    """Search / List events."""
+    """Search / List events for a shared conversation."""
     assert limit > 0
     assert limit <= 100
-    return await event_service.search_events(
-        conversation_id__eq=UUID(conversation_id__eq) if conversation_id__eq else None,
+    return await shared_event_service.search_shared_events(
+        conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
@@ -66,11 +68,11 @@ async def search_events(
 
 
 @router.get('/count')
-async def count_events(
-    conversation_id__eq: Annotated[
-        str | None,
-        Query(title='Optional filter by conversation ID'),
-    ] = None,
+async def count_shared_events(
+    conversation_id: Annotated[
+        str,
+        Query(title='Conversation ID to count events for'),
+    ],
     kind__eq: Annotated[
         EventKind | None,
         Query(title='Optional filter by event kind'),
@@ -87,11 +89,11 @@ async def count_events(
         EventSortOrder,
         Query(title='Sort order for results'),
     ] = EventSortOrder.TIMESTAMP,
-    event_service: EventService = event_service_dependency,
+    shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> int:
-    """Count events matching the given filters."""
-    return await event_service.count_events(
-        conversation_id__eq=UUID(conversation_id__eq) if conversation_id__eq else None,
+    """Count events for a shared conversation matching the given filters."""
+    return await shared_event_service.count_shared_events(
+        conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
@@ -100,11 +102,25 @@ async def count_events(
 
 
 @router.get('')
-async def batch_get_events(
+async def batch_get_shared_events(
+    conversation_id: Annotated[
+        UUID,
+        Query(title='Conversation ID to get events for'),
+    ],
     id: Annotated[list[str], Query()],
-    event_service: EventService = event_service_dependency,
+    shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> list[Event | None]:
-    """Get a batch of events given their ids, returning null for any missing event."""
+    """Get a batch of events for a shared conversation given their ids, returning null for any missing event."""
     assert len(id) <= 100
-    events = await event_service.batch_get_events(id)
+    events = await shared_event_service.batch_get_shared_events(conversation_id, id)
     return events
+
+
+@router.get('/{conversation_id}/{event_id}')
+async def get_shared_event(
+    conversation_id: UUID,
+    event_id: str,
+    shared_event_service: SharedEventService = shared_event_service_dependency,
+) -> Event | None:
+    """Get a single event from a shared conversation by conversation_id and event_id."""
+    return await shared_event_service.get_shared_event(conversation_id, event_id)

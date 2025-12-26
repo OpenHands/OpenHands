@@ -32,6 +32,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTask,
     AppConversationStartTaskStatus,
+    AppConversationUpdateRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
@@ -1048,6 +1049,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         _logger.info(
             f'Successfully updated agent-server conversation {conversation_id} title to "{new_title}"'
         )
+
+    async def update_app_conversation(
+        self, conversation_id: UUID, request: AppConversationUpdateRequest
+    ) -> AppConversation | None:
+        """Update an app conversation and return it. Return None if the conversation
+        did not exist."""
+        info = await self.app_conversation_info_service.get_app_conversation_info(
+            conversation_id
+        )
+        if info is None:
+            return None
+        for field_name in request.model_fields:
+            value = getattr(request, field_name)
+            setattr(info, field_name, value)
+        info = await self.app_conversation_info_service.save_app_conversation_info(info)
+        conversations = await self._build_app_conversations([info])
+        return conversations[0]
 
     async def delete_app_conversation(self, conversation_id: UUID) -> bool:
         """Delete a V1 conversation and all its associated data.

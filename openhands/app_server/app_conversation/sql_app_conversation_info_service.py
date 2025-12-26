@@ -25,7 +25,17 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import Column, DateTime, Float, Integer, Select, String, func, select
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    Select,
+    String,
+    func,
+    select,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.utils import utc_now
@@ -91,6 +101,7 @@ class StoredConversationMetadata(Base):  # type: ignore
     conversation_version = Column(String, nullable=False, default='V0', index=True)
     sandbox_id = Column(String, nullable=True, index=True)
     parent_conversation_id = Column(String, nullable=True, index=True)
+    public = Column(Boolean, nullable=True, index=True)
 
 
 @dataclass
@@ -350,6 +361,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 if info.parent_conversation_id
                 else None
             ),
+            public=info.public,
         )
 
         await self.db_session.merge(stored)
@@ -541,6 +553,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 else None
             ),
             sub_conversation_ids=sub_conversation_ids or [],
+            public=stored.public,
             created_at=created_at,
             updated_at=updated_at,
         )

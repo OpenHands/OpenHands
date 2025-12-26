@@ -39,3 +39,4 @@ class ConversationMetadata:
     # V1 compatibility
     sandbox_id: str | None = None
     conversation_version: str | None = None
+    public: bool | None = None
