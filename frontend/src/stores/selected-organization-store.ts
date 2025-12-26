@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, createJSONStorage, devtools } from "zustand/middleware";
+import { devtools } from "zustand/middleware";
 
 interface SelectedOrganizationState {
   orgId: string | null;
@@ -18,16 +18,10 @@ const initialState: SelectedOrganizationState = {
 
 export const useSelectedOrganizationStore = create<SelectedOrganizationStore>()(
   devtools(
-    persist(
-      (set) => ({
-        ...initialState,
-        setOrgId: (orgId) => set({ orgId }),
-      }),
-      {
-        name: "selected-organization-id",
-        storage: createJSONStorage(() => localStorage),
-      },
-    ),
+    (set) => ({
+      ...initialState,
+      setOrgId: (orgId) => set({ orgId }),
+    }),
     { name: "SelectedOrganizationStore" },
   ),
 );
