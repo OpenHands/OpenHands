@@ -2,29 +2,29 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
 interface SelectedOrganizationState {
-  orgId: string | null;
+  organizationId: string | null;
 }
 
 interface SelectedOrganizationActions {
-  setOrgId: (orgId: string | null) => void;
+  setOrganizationId: (orgId: string | null) => void;
 }
 
 type SelectedOrganizationStore = SelectedOrganizationState &
   SelectedOrganizationActions;
 
 const initialState: SelectedOrganizationState = {
-  orgId: null,
+  organizationId: null,
 };
 
 export const useSelectedOrganizationStore = create<SelectedOrganizationStore>()(
   devtools(
     (set) => ({
       ...initialState,
-      setOrgId: (orgId) => set({ orgId }),
+      setOrganizationId: (organizationId) => set({ organizationId }),
     }),
     { name: "SelectedOrganizationStore" },
   ),
 );
 
 export const getSelectedOrganizationIdFromStore = (): string | null =>
-  useSelectedOrganizationStore.getState().orgId;
+  useSelectedOrganizationStore.getState().organizationId;

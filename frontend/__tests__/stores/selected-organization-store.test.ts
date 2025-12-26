@@ -5,33 +5,33 @@ import { useSelectedOrganizationStore } from "#/stores/selected-organization-sto
 describe("useSelectedOrganizationStore", () => {
   it("should have null as initial orgId", () => {
     const { result } = renderHook(() => useSelectedOrganizationStore());
-    expect(result.current.orgId).toBeNull();
+    expect(result.current.organizationId).toBeNull();
   });
 
   it("should update orgId when setOrgId is called", () => {
     const { result } = renderHook(() => useSelectedOrganizationStore());
 
     act(() => {
-      result.current.setOrgId("org-123");
+      result.current.setOrganizationId("org-123");
     });
 
-    expect(result.current.orgId).toBe("org-123");
+    expect(result.current.organizationId).toBe("org-123");
   });
 
   it("should allow setting orgId to null", () => {
     const { result } = renderHook(() => useSelectedOrganizationStore());
 
     act(() => {
-      result.current.setOrgId("org-123");
+      result.current.setOrganizationId("org-123");
     });
 
-    expect(result.current.orgId).toBe("org-123");
+    expect(result.current.organizationId).toBe("org-123");
 
     act(() => {
-      result.current.setOrgId(null);
+      result.current.setOrganizationId(null);
     });
 
-    expect(result.current.orgId).toBeNull();
+    expect(result.current.organizationId).toBeNull();
   });
 
   it("should share state across multiple hook instances", () => {
@@ -43,9 +43,9 @@ describe("useSelectedOrganizationStore", () => {
     );
 
     act(() => {
-      result1.current.setOrgId("shared-org");
+      result1.current.setOrganizationId("shared-org");
     });
 
-    expect(result2.current.orgId).toBe("shared-org");
+    expect(result2.current.organizationId).toBe("shared-org");
   });
 });

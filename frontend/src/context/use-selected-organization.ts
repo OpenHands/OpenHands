@@ -3,7 +3,8 @@ import { useSelectedOrganizationStore } from "#/stores/selected-organization-sto
 
 export const useSelectedOrganizationId = () => {
   const revalidator = useRevalidator();
-  const { orgId, setOrgId: setOrgIdStore } = useSelectedOrganizationStore();
+  const { organizationId: orgId, setOrganizationId: setOrgIdStore } =
+    useSelectedOrganizationStore();
 
   const setOrgId = (newOrgId: string | null) => {
     setOrgIdStore(newOrgId);
