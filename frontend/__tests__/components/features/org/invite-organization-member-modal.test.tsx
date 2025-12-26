@@ -1,9 +1,14 @@
 import { within, screen, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { InviteOrganizationMemberModal } from "#/components/features/org/invite-organization-member-modal";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+
+vi.mock("react-router", () => ({
+  useRevalidator: vi.fn(() => ({ revalidate: vi.fn() })),
+}));
 
 const renderInviteOrganizationMemberModal = (config?: {
   onClose: () => void;
@@ -19,16 +24,14 @@ const renderInviteOrganizationMemberModal = (config?: {
     },
   );
 
-vi.mock("#/context/use-selected-organization", () => ({
-  useSelectedOrganizationId: vi.fn(() => ({
-    orgId: "1",
-    setOrgId: vi.fn(),
-  })),
-}));
-
 describe("InviteOrganizationMemberModal", () => {
+  beforeEach(() => {
+    useSelectedOrganizationStore.setState({ organizationId: "1" });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
+    useSelectedOrganizationStore.setState({ organizationId: null });
   });
 
   it("should call onClose the modal when the close button is clicked", async () => {
