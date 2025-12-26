@@ -19,6 +19,8 @@ from server.constants import (
     LITE_LLM_API_URL,
     LITE_LLM_TEAM_ID,
     REQUIRE_PAYMENT,
+    USER_SETTINGS_VERSION_TO_MODEL,
+    build_litellm_proxy_model_path,
     get_default_litellm_model,
 )
 from server.logger import logger
@@ -202,6 +204,175 @@ class SaasSettingsStore(SettingsStore):
             )
             return None
 
+    def _extract_user_settings_values(
+        self, settings: Settings
+    ) -> tuple[str | None, str | None, SecretStr | None]:
+        """
+        Extract and normalize user's current settings values.
+
+        Returns:
+            Tuple of (user_model, user_base_url, user_api_key)
+        """
+        user_model = (
+            settings.llm_model.strip()
+            if settings.llm_model and settings.llm_model.strip()
+            else None
+        )
+        user_base_url = (
+            settings.llm_base_url.strip()
+            if settings.llm_base_url and settings.llm_base_url.strip()
+            else None
+        )
+        user_api_key = (
+            settings.llm_api_key
+            if settings.llm_api_key and settings.llm_api_key.get_secret_value().strip()
+            else None
+        )
+        return user_model, user_base_url, user_api_key
+
+    def _get_old_default_model(self, old_user_version: int) -> str | None:
+        """
+        Get the default model for an old user settings version.
+
+        Args:
+            old_user_version: The old user settings version
+
+        Returns:
+            The full default model path for that version, or None if invalid
+        """
+        if old_user_version not in USER_SETTINGS_VERSION_TO_MODEL:
+            return None
+        old_default_base = USER_SETTINGS_VERSION_TO_MODEL[old_user_version]
+        return build_litellm_proxy_model_path(old_default_base)
+
+    def _model_matches_old_default(
+        self, user_model: str | None, old_user_version: int
+    ) -> bool:
+        """
+        Check if user's model matches the old version's default.
+
+        Args:
+            user_model: User's current model (may be None)
+            old_user_version: The old user settings version
+
+        Returns:
+            True if model matches old default, False otherwise
+        """
+        old_default_full = self._get_old_default_model(old_user_version)
+        if not old_default_full:
+            return False
+
+        if not user_model:
+            # No model set means it would have used the old default
+            return True
+
+        # Extract base model names for comparison (handles different prefixes)
+        # User's model might be: "litellm_proxy/prod/claude-3-5-sonnet-20241022"
+        # or "claude-3-5-sonnet-20241022" or "anthropic/claude-3-5-sonnet-20241022"
+        user_model_base = user_model.split('/')[-1]
+        old_default_base_name = old_default_full.split('/')[-1]
+        return user_model_base == old_default_base_name
+
+    def _base_url_matches_default(self, user_base_url: str | None) -> bool:
+        """
+        Check if user's base_url matches the default.
+
+        Args:
+            user_base_url: User's current base_url (may be None)
+
+        Returns:
+            True if base_url matches default or is None, False otherwise
+        """
+        if not user_base_url:
+            # No base_url set means it would have used the default
+            return True
+        return user_base_url == LITE_LLM_API_URL
+
+    def _is_using_old_defaults(
+        self,
+        user_model: str | None,
+        user_base_url: str | None,
+        old_user_version: int | None,
+    ) -> bool:
+        """
+        Determine if user is using old version's defaults for model and base_url.
+
+        Args:
+            user_model: User's current model
+            user_base_url: User's current base_url
+            old_user_version: User's old settings version
+
+        Returns:
+            True if user is using old defaults, False otherwise
+        """
+        if not old_user_version:
+            return False
+
+        if (
+            old_user_version >= CURRENT_USER_SETTINGS_VERSION
+            or old_user_version not in USER_SETTINGS_VERSION_TO_MODEL
+        ):
+            return False
+
+        model_matches = self._model_matches_old_default(user_model, old_user_version)
+        base_url_matches = self._base_url_matches_default(user_base_url)
+
+        return model_matches and base_url_matches
+
+    def _determine_model_and_base_url(
+        self,
+        user_model: str | None,
+        user_base_url: str | None,
+        is_using_old_defaults: bool,
+    ) -> tuple[str, str]:
+        """
+        Determine what model and base_url values to use.
+
+        Args:
+            user_model: User's current model
+            user_base_url: User's current base_url
+            is_using_old_defaults: Whether user is using old defaults
+
+        Returns:
+            Tuple of (llm_model_to_use, llm_base_url_to_use)
+        """
+        if is_using_old_defaults:
+            # User is using old defaults, update to current defaults
+            return (
+                get_default_litellm_model(),
+                LITE_LLM_API_URL,
+            )
+        else:
+            # User has custom settings, preserve them or use defaults if None
+            return (
+                user_model if user_model else get_default_litellm_model(),
+                user_base_url if user_base_url else LITE_LLM_API_URL,
+            )
+
+    def _determine_api_key(
+        self,
+        user_api_key: SecretStr | None,
+        is_using_old_defaults: bool,
+        litellm_generated_key: str,
+    ) -> SecretStr:
+        """
+        Determine what api_key value to use.
+
+        Args:
+            user_api_key: User's current api_key
+            is_using_old_defaults: Whether user is using old defaults
+            litellm_generated_key: The API key generated by LiteLLM
+
+        Returns:
+            The api_key to use
+        """
+        if is_using_old_defaults:
+            # User is using old defaults, update to new default (LiteLLM-generated key)
+            return SecretStr(litellm_generated_key)
+        else:
+            # User has custom settings, preserve them or use default if None
+            return user_api_key if user_api_key else SecretStr(litellm_generated_key)
+
     async def update_settings_with_litellm_default(
         self, settings: Settings
     ) -> Settings | None:
@@ -214,10 +385,43 @@ class SaasSettingsStore(SettingsStore):
         local_deploy = os.environ.get('LOCAL_DEPLOYMENT', None)
         key = LITE_LLM_API_KEY
 
-        llm_model_to_use = (
-            settings.llm_model.strip()
-            if settings.llm_model and settings.llm_model.strip()
-            else get_default_litellm_model()
+        # Get user's old version to check if they're using the old default
+        old_user_version = None
+        with session_maker() as session:
+            user_settings = self.get_user_settings_by_keycloak_id(self.user_id, session)
+            if user_settings:
+                old_user_version = user_settings.user_version
+
+        # Extract user's current settings values
+        user_model, user_base_url, user_api_key = self._extract_user_settings_values(
+            settings
+        )
+
+        # Check if user is using old version's defaults
+        is_using_old_defaults = self._is_using_old_defaults(
+            user_model, user_base_url, old_user_version
+        )
+
+        if is_using_old_defaults:
+            old_default_model = self._get_old_default_model(old_user_version)
+            logger.info(
+                'saas_settings_store:update_settings_with_litellm_default:detected_old_defaults',
+                extra={
+                    'user_id': self.user_id,
+                    'old_version': old_user_version,
+                    'old_default_model': old_default_model,
+                    'old_default_base_url': LITE_LLM_API_URL,
+                    'user_model': user_model,
+                    'user_base_url': user_base_url,
+                    'user_api_key_set': user_api_key is not None,
+                },
+            )
+
+        # Determine model and base_url to use (needed before LiteLLM user creation)
+        llm_model_to_use, llm_base_url_to_use = self._determine_model_and_base_url(
+            user_model,
+            user_base_url,
+            is_using_old_defaults,
         )
 
         if not local_deploy:
@@ -318,24 +522,18 @@ class SaasSettingsStore(SettingsStore):
                     extra={'user_id': self.user_id},
                 )
 
+        # Determine API key to use (after getting LiteLLM-generated key)
+        llm_api_key_to_use = self._determine_api_key(
+            user_api_key,
+            is_using_old_defaults,
+            key,
+        )
+
         settings.agent = 'CodeActAgent'
 
         settings.llm_model = llm_model_to_use
-
-        has_custom_api_key = (
-            settings.llm_api_key is not None
-            and settings.llm_api_key.get_secret_value().strip()
-        )
-
-        if not has_custom_api_key:
-            settings.llm_api_key = SecretStr(key)
-
-        has_custom_base_url = (
-            settings.llm_base_url is not None and settings.llm_base_url.strip()
-        )
-
-        if not has_custom_base_url:
-            settings.llm_base_url = LITE_LLM_API_URL
+        settings.llm_base_url = llm_base_url_to_use
+        settings.llm_api_key = llm_api_key_to_use
 
         return settings
 

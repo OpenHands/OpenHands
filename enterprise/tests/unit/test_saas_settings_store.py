@@ -810,3 +810,647 @@ async def test_update_settings_with_litellm_default_handles_whitespace_base_url(
     # Assert: Default base URL is used (whitespace treated as no URL)
     assert updated_settings is not None
     assert updated_settings.llm_base_url == 'http://test.url'
+
+
+# Tests for version migration and helper methods
+
+
+@pytest.mark.asyncio
+async def test_extract_user_settings_values_normalizes_whitespace(settings_store):
+    # Arrange: Settings with whitespace in values
+    settings = Settings(
+        llm_model='  claude-3-5-sonnet-20241022  ',
+        llm_base_url='  http://test.url  ',
+        llm_api_key=SecretStr('  test_key  '),
+    )
+
+    # Act: Extract values
+    user_model, user_base_url, user_api_key = (
+        settings_store._extract_user_settings_values(settings)
+    )
+
+    # Assert: Whitespace is stripped for model and base_url
+    assert user_model == 'claude-3-5-sonnet-20241022'
+    assert user_base_url == 'http://test.url'
+    # API key is preserved with whitespace (implementation checks stripped value but returns original)
+    assert user_api_key is not None
+    assert user_api_key.get_secret_value() == '  test_key  '
+
+
+@pytest.mark.asyncio
+async def test_extract_user_settings_values_handles_empty_strings(settings_store):
+    # Arrange: Settings with empty strings
+    settings = Settings(
+        llm_model='',
+        llm_base_url='',
+        llm_api_key=SecretStr(''),
+    )
+
+    # Act: Extract values
+    user_model, user_base_url, user_api_key = (
+        settings_store._extract_user_settings_values(settings)
+    )
+
+    # Assert: Empty strings are converted to None
+    assert user_model is None
+    assert user_base_url is None
+    assert user_api_key is None
+
+
+@pytest.mark.asyncio
+async def test_extract_user_settings_values_handles_none_values(settings_store):
+    # Arrange: Settings with None values
+    settings = Settings(
+        llm_model=None,
+        llm_base_url=None,
+        llm_api_key=None,
+    )
+
+    # Act: Extract values
+    user_model, user_base_url, user_api_key = (
+        settings_store._extract_user_settings_values(settings)
+    )
+
+    # Assert: None values remain None
+    assert user_model is None
+    assert user_base_url is None
+    assert user_api_key is None
+
+
+@pytest.mark.asyncio
+async def test_get_old_default_model_returns_correct_model_for_version(settings_store):
+    # Arrange: Known version mappings
+    with patch(
+        'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+        {1: 'claude-3-5-sonnet-20241022', 2: 'claude-3-7-sonnet-20250219'},
+    ), patch(
+        'storage.saas_settings_store.build_litellm_proxy_model_path',
+        lambda x: f'litellm_proxy/prod/{x}',
+    ):
+        # Act: Get old default model for version 1
+        model = settings_store._get_old_default_model(1)
+
+        # Assert: Returns correct model path
+        assert model == 'litellm_proxy/prod/claude-3-5-sonnet-20241022'
+
+
+@pytest.mark.asyncio
+async def test_get_old_default_model_returns_none_for_invalid_version(settings_store):
+    # Arrange: Invalid version
+    with patch(
+        'server.constants.USER_SETTINGS_VERSION_TO_MODEL', {1: 'claude-3-5-sonnet-20241022'}
+    ):
+        # Act: Get old default model for invalid version
+        model = settings_store._get_old_default_model(99)
+
+        # Assert: Returns None
+        assert model is None
+
+
+@pytest.mark.asyncio
+async def test_model_matches_old_default_with_exact_match(settings_store):
+    # Arrange: User model matches old default exactly
+    with patch(
+        'storage.saas_settings_store.build_litellm_proxy_model_path',
+        lambda x: f'litellm_proxy/prod/{x}',
+    ), patch(
+        'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+        {1: 'claude-3-5-sonnet-20241022'},
+    ):
+        user_model = 'litellm_proxy/prod/claude-3-5-sonnet-20241022'
+
+        # Act: Check if model matches old default
+        matches = settings_store._model_matches_old_default(user_model, 1)
+
+        # Assert: Matches
+        assert matches is True
+
+
+@pytest.mark.asyncio
+async def test_model_matches_old_default_with_base_name_match(settings_store):
+    # Arrange: User model has different prefix but same base name
+    with patch(
+        'storage.saas_settings_store.build_litellm_proxy_model_path',
+        lambda x: f'litellm_proxy/prod/{x}',
+    ), patch(
+        'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+        {1: 'claude-3-5-sonnet-20241022'},
+    ):
+        user_model = 'anthropic/claude-3-5-sonnet-20241022'
+
+        # Act: Check if model matches old default
+        matches = settings_store._model_matches_old_default(user_model, 1)
+
+        # Assert: Matches by base name
+        assert matches is True
+
+
+@pytest.mark.asyncio
+async def test_model_matches_old_default_with_none_model(settings_store):
+    # Arrange: User has no model set
+    with patch(
+        'storage.saas_settings_store.build_litellm_proxy_model_path',
+        lambda x: f'litellm_proxy/prod/{x}',
+    ), patch(
+        'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+        {1: 'claude-3-5-sonnet-20241022'},
+    ):
+        user_model = None
+
+        # Act: Check if model matches old default
+        matches = settings_store._model_matches_old_default(user_model, 1)
+
+        # Assert: None model is treated as using old default
+        assert matches is True
+
+
+@pytest.mark.asyncio
+async def test_model_matches_old_default_with_different_model(settings_store):
+    # Arrange: User has different model
+    with patch(
+        'storage.saas_settings_store.build_litellm_proxy_model_path',
+        lambda x: f'litellm_proxy/prod/{x}',
+    ), patch(
+        'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+        {1: 'claude-3-5-sonnet-20241022'},
+    ):
+        user_model = 'gpt-4'
+
+        # Act: Check if model matches old default
+        matches = settings_store._model_matches_old_default(user_model, 1)
+
+        # Assert: Does not match
+        assert matches is False
+
+
+@pytest.mark.asyncio
+async def test_base_url_matches_default_with_none(settings_store):
+    # Arrange: User has no base URL
+    with patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'):
+        user_base_url = None
+
+        # Act: Check if base URL matches default
+        matches = settings_store._base_url_matches_default(user_base_url)
+
+        # Assert: None is treated as matching default
+        assert matches is True
+
+
+@pytest.mark.asyncio
+async def test_base_url_matches_default_with_exact_match(settings_store):
+    # Arrange: User base URL matches default exactly
+    with patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'):
+        user_base_url = 'http://test.url'
+
+        # Act: Check if base URL matches default
+        matches = settings_store._base_url_matches_default(user_base_url)
+
+        # Assert: Matches
+        assert matches is True
+
+
+@pytest.mark.asyncio
+async def test_base_url_matches_default_with_different_url(settings_store):
+    # Arrange: User has different base URL
+    with patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'):
+        user_base_url = 'http://custom.url'
+
+        # Act: Check if base URL matches default
+        matches = settings_store._base_url_matches_default(user_base_url)
+
+        # Assert: Does not match
+        assert matches is False
+
+
+@pytest.mark.asyncio
+async def test_is_using_old_defaults_with_matching_settings(settings_store, session_maker):
+    # Arrange: User with old version and matching defaults
+    with (
+        patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'),
+        patch(
+            'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+            {1: 'claude-3-5-sonnet-20241022'},
+        ),
+        patch(
+            'storage.saas_settings_store.build_litellm_proxy_model_path',
+            lambda x: f'litellm_proxy/prod/{x}',
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        user_model = 'litellm_proxy/prod/claude-3-5-sonnet-20241022'
+        user_base_url = 'http://test.url'
+        old_user_version = 1
+
+        # Act: Check if using old defaults
+        is_using_old_defaults = settings_store._is_using_old_defaults(
+            user_model, user_base_url, old_user_version
+        )
+
+        # Assert: Detected as using old defaults
+        assert is_using_old_defaults is True
+
+
+@pytest.mark.asyncio
+async def test_is_using_old_defaults_with_custom_settings(settings_store):
+    # Arrange: User with old version but custom settings
+    with (
+        patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'),
+        patch(
+            'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+            {1: 'claude-3-5-sonnet-20241022'},
+        ),
+        patch(
+            'storage.saas_settings_store.build_litellm_proxy_model_path',
+            lambda x: f'litellm_proxy/prod/{x}',
+        ),
+    ):
+        user_model = 'gpt-4'
+        user_base_url = 'http://test.url'
+        old_user_version = 1
+
+        # Act: Check if using old defaults
+        is_using_old_defaults = settings_store._is_using_old_defaults(
+            user_model, user_base_url, old_user_version
+        )
+
+        # Assert: Not using old defaults (custom model)
+        assert is_using_old_defaults is False
+
+
+@pytest.mark.asyncio
+async def test_is_using_old_defaults_with_current_version(settings_store):
+    # Arrange: User with current version
+    with patch(
+        'server.constants.CURRENT_USER_SETTINGS_VERSION', 5
+    ), patch('server.constants.USER_SETTINGS_VERSION_TO_MODEL', {1: 'model1', 5: 'model5'}):
+        user_model = 'model1'
+        user_base_url = 'http://test.url'
+        old_user_version = 5
+
+        # Act: Check if using old defaults
+        is_using_old_defaults = settings_store._is_using_old_defaults(
+            user_model, user_base_url, old_user_version
+        )
+
+        # Assert: Not using old defaults (current version)
+        assert is_using_old_defaults is False
+
+
+@pytest.mark.asyncio
+async def test_is_using_old_defaults_with_none_version(settings_store):
+    # Arrange: User with no version
+    user_model = 'model1'
+    user_base_url = 'http://test.url'
+    old_user_version = None
+
+    # Act: Check if using old defaults
+    is_using_old_defaults = settings_store._is_using_old_defaults(
+        user_model, user_base_url, old_user_version
+    )
+
+    # Assert: Not using old defaults (no version)
+    assert is_using_old_defaults is False
+
+
+@pytest.mark.asyncio
+async def test_determine_model_and_base_url_upgrades_old_defaults(settings_store):
+    # Arrange: User using old defaults
+    with patch(
+        'storage.saas_settings_store.get_default_litellm_model',
+        return_value='new-default-model',
+    ), patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://new.url'):
+        user_model = 'old-model'
+        user_base_url = 'http://old.url'
+        is_using_old_defaults = True
+
+        # Act: Determine model and base URL
+        model, base_url = settings_store._determine_model_and_base_url(
+            user_model, user_base_url, is_using_old_defaults
+        )
+
+        # Assert: Upgraded to new defaults
+        assert model == 'new-default-model'
+        assert base_url == 'http://new.url'
+
+
+@pytest.mark.asyncio
+async def test_determine_model_and_base_url_preserves_custom_settings(settings_store):
+    # Arrange: User with custom settings
+    with patch(
+        'storage.saas_settings_store.get_default_litellm_model',
+        return_value='default-model',
+    ), patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://default.url'):
+        user_model = 'custom-model'
+        user_base_url = 'http://custom.url'
+        is_using_old_defaults = False
+
+        # Act: Determine model and base URL
+        model, base_url = settings_store._determine_model_and_base_url(
+            user_model, user_base_url, is_using_old_defaults
+        )
+
+        # Assert: Custom settings preserved
+        assert model == 'custom-model'
+        assert base_url == 'http://custom.url'
+
+
+@pytest.mark.asyncio
+async def test_determine_model_and_base_url_uses_defaults_when_none(settings_store):
+    # Arrange: User with None values
+    with patch(
+        'storage.saas_settings_store.get_default_litellm_model',
+        return_value='default-model',
+    ), patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://default.url'):
+        user_model = None
+        user_base_url = None
+        is_using_old_defaults = False
+
+        # Act: Determine model and base URL
+        model, base_url = settings_store._determine_model_and_base_url(
+            user_model, user_base_url, is_using_old_defaults
+        )
+
+        # Assert: Uses defaults
+        assert model == 'default-model'
+        assert base_url == 'http://default.url'
+
+
+@pytest.mark.asyncio
+async def test_determine_api_key_upgrades_old_defaults(settings_store):
+    # Arrange: User using old defaults
+    user_api_key = SecretStr('old-key')
+    is_using_old_defaults = True
+    litellm_generated_key = 'new-generated-key'
+
+    # Act: Determine API key
+    api_key = settings_store._determine_api_key(
+        user_api_key, is_using_old_defaults, litellm_generated_key
+    )
+
+    # Assert: Upgraded to new key
+    assert api_key.get_secret_value() == 'new-generated-key'
+
+
+@pytest.mark.asyncio
+async def test_determine_api_key_preserves_custom_key(settings_store):
+    # Arrange: User with custom API key
+    user_api_key = SecretStr('custom-key')
+    is_using_old_defaults = False
+    litellm_generated_key = 'generated-key'
+
+    # Act: Determine API key
+    api_key = settings_store._determine_api_key(
+        user_api_key, is_using_old_defaults, litellm_generated_key
+    )
+
+    # Assert: Custom key preserved
+    assert api_key.get_secret_value() == 'custom-key'
+
+
+@pytest.mark.asyncio
+async def test_determine_api_key_uses_default_when_none(settings_store):
+    # Arrange: User with no API key
+    user_api_key = None
+    is_using_old_defaults = False
+    litellm_generated_key = 'generated-key'
+
+    # Act: Determine API key
+    api_key = settings_store._determine_api_key(
+        user_api_key, is_using_old_defaults, litellm_generated_key
+    )
+
+    # Assert: Uses generated key
+    assert api_key.get_secret_value() == 'generated-key'
+
+
+@pytest.mark.asyncio
+async def test_update_settings_upgrades_user_from_old_defaults(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User with old version using old defaults
+    old_version = 1
+    old_model = 'litellm_proxy/prod/claude-3-5-sonnet-20241022'
+    settings = Settings(llm_model=old_model, llm_base_url=LITE_LLM_API_URL)
+
+    # Use a consistent test URL
+    test_base_url = 'http://test.url'
+
+    with (
+        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch(
+            'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+            {1: 'claude-3-5-sonnet-20241022', 5: 'claude-opus-4-5-20251101'},
+        ),
+        patch(
+            'storage.saas_settings_store.USER_SETTINGS_VERSION_TO_MODEL',
+            {1: 'claude-3-5-sonnet-20241022', 5: 'claude-opus-4-5-20251101'},
+        ),
+        patch('server.constants.CURRENT_USER_SETTINGS_VERSION', 5),
+        patch('storage.saas_settings_store.CURRENT_USER_SETTINGS_VERSION', 5),
+        patch('storage.saas_settings_store.LITE_LLM_API_URL', test_base_url),
+        patch(
+            'storage.saas_settings_store.build_litellm_proxy_model_path',
+            lambda x: f'litellm_proxy/prod/{x}',
+        ),
+        patch(
+            'storage.saas_settings_store.get_default_litellm_model',
+            return_value='litellm_proxy/prod/claude-opus-4-5-20251101',
+        ),
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+    ):
+        # Create existing user settings with old version
+        with session_maker() as session:
+            existing_settings = UserSettings(
+                keycloak_user_id=settings_store.user_id,
+                user_version=old_version,
+                llm_model=old_model,
+                llm_base_url=test_base_url,
+            )
+            session.add(existing_settings)
+            session.commit()
+
+        # Update settings to use test_base_url
+        settings = Settings(llm_model=old_model, llm_base_url=test_base_url)
+
+        # Act: Update settings
+        updated_settings = await settings_store.update_settings_with_litellm_default(settings)
+
+        # Assert: Settings upgraded to new defaults
+        assert updated_settings is not None
+        assert updated_settings.llm_model == 'litellm_proxy/prod/claude-opus-4-5-20251101'
+        assert updated_settings.llm_base_url == test_base_url
+
+
+@pytest.mark.asyncio
+async def test_update_settings_preserves_custom_settings_during_upgrade(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User with old version but custom settings
+    old_version = 1
+    custom_model = 'gpt-4'
+    custom_base_url = 'http://custom.url'
+    settings = Settings(llm_model=custom_model, llm_base_url=custom_base_url)
+
+    with (
+        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch(
+            'server.constants.USER_SETTINGS_VERSION_TO_MODEL',
+            {1: 'claude-3-5-sonnet-20241022'},
+        ),
+        patch(
+            'storage.saas_settings_store.build_litellm_proxy_model_path',
+            lambda x: f'litellm_proxy/prod/{x}',
+        ),
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+    ):
+        # Create existing user settings with old version
+        with session_maker() as session:
+            existing_settings = UserSettings(
+                keycloak_user_id=settings_store.user_id,
+                user_version=old_version,
+                llm_model=custom_model,
+                llm_base_url=custom_base_url,
+            )
+            session.add(existing_settings)
+            session.commit()
+
+        # Act: Update settings
+        updated_settings = await settings_store.update_settings_with_litellm_default(settings)
+
+        # Assert: Custom settings preserved
+        assert updated_settings is not None
+        assert updated_settings.llm_model == custom_model
+        assert updated_settings.llm_base_url == custom_base_url
+
+
+@pytest.mark.asyncio
+async def test_update_settings_migrates_billing_margin_v3_to_v4(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User with version 3 and billing margin
+    old_version = 3
+    billing_margin = 2.0
+    max_budget = 10.0
+    spend = 5.0
+
+    settings = Settings()
+
+    mock_get_response = AsyncMock()
+    mock_get_response.is_success = True
+    mock_get_response.json = MagicMock(
+        return_value={'user_info': {'max_budget': max_budget, 'spend': spend}}
+    )
+
+    mock_post_response = AsyncMock()
+    mock_post_response.is_success = True
+    mock_post_response.json = MagicMock(return_value={'key': 'test_api_key'})
+
+    with (
+        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('httpx.AsyncClient') as mock_client,
+    ):
+        mock_client.return_value.__aenter__.return_value.get.return_value = (
+            mock_get_response
+        )
+        mock_client.return_value.__aenter__.return_value.post.return_value = (
+            mock_post_response
+        )
+
+        # Create existing user settings with version 3 and billing margin
+        with session_maker() as session:
+            existing_settings = UserSettings(
+                keycloak_user_id=settings_store.user_id,
+                user_version=old_version,
+                billing_margin=billing_margin,
+            )
+            session.add(existing_settings)
+            session.commit()
+
+        # Act: Update settings
+        updated_settings = await settings_store.update_settings_with_litellm_default(settings)
+
+        # Assert: Settings updated
+        assert updated_settings is not None
+
+        # Assert: Billing margin applied to budget
+        call_args = mock_client.return_value.__aenter__.return_value.post.call_args[1]
+        assert call_args['json']['max_budget'] == max_budget * billing_margin
+        assert call_args['json']['spend'] == spend * billing_margin
+
+        # Assert: Billing margin reset to 1.0
+        with session_maker() as session:
+            updated_user_settings = (
+                session.query(UserSettings)
+                .filter(UserSettings.keycloak_user_id == settings_store.user_id)
+                .first()
+            )
+            assert updated_user_settings.billing_margin == 1.0
+
+
+@pytest.mark.asyncio
+async def test_update_settings_skips_billing_margin_migration_when_already_v4(
+    settings_store, mock_litellm_api, session_maker
+):
+    # Arrange: User with version 4
+    version = 4
+    billing_margin = 2.0
+    max_budget = 10.0
+    spend = 5.0
+
+    settings = Settings()
+
+    mock_get_response = AsyncMock()
+    mock_get_response.is_success = True
+    mock_get_response.json = MagicMock(
+        return_value={'user_info': {'max_budget': max_budget, 'spend': spend}}
+    )
+
+    mock_post_response = AsyncMock()
+    mock_post_response.is_success = True
+    mock_post_response.json = MagicMock(return_value={'key': 'test_api_key'})
+
+    with (
+        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'user@example.com'}),
+        ),
+        patch('httpx.AsyncClient') as mock_client,
+    ):
+        mock_client.return_value.__aenter__.return_value.get.return_value = (
+            mock_get_response
+        )
+        mock_client.return_value.__aenter__.return_value.post.return_value = (
+            mock_post_response
+        )
+
+        # Create existing user settings with version 4
+        with session_maker() as session:
+            existing_settings = UserSettings(
+                keycloak_user_id=settings_store.user_id,
+                user_version=version,
+                billing_margin=billing_margin,
+            )
+            session.add(existing_settings)
+            session.commit()
+
+        # Act: Update settings
+        updated_settings = await settings_store.update_settings_with_litellm_default(settings)
+
+        # Assert: Settings updated
+        assert updated_settings is not None
+
+        # Assert: Billing margin NOT applied (version >= 4)
+        call_args = mock_client.return_value.__aenter__.return_value.post.call_args[1]
+        assert call_args['json']['max_budget'] == max_budget
+        assert call_args['json']['spend'] == spend
