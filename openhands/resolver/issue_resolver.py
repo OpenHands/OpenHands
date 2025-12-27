@@ -83,6 +83,7 @@ class IssueResolver:
             or os.getenv('GITLAB_TOKEN')
             or os.getenv('BITBUCKET_TOKEN')
             or os.getenv('AZURE_DEVOPS_TOKEN')
+            or os.getenv('FORGEJO_TOKEN')
         )
         username = args.username if args.username else os.getenv('GIT_USERNAME')
         if not username:

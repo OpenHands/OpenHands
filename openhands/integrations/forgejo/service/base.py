@@ -46,6 +46,10 @@ class ForgejoMixinBase(BaseGitService, HTTPClient):
 
         if token:
             self.token = token
+        else:
+            env_token = os.environ.get('FORGEJO_TOKEN')
+            if env_token:
+                self.token = SecretStr(env_token)
 
         env_base_url = os.environ.get('FORGEJO_BASE_URL')
         self.BASE_URL = self._resolve_base_url(base_url, base_domain, env_base_url)
