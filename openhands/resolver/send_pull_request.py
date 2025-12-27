@@ -409,7 +409,7 @@ def send_pull_request(
                 'target_branch': base_branch,
                 'draft': pr_type == 'draft',
             }
-        else:  # ProviderType.FORGEJO
+        elif platform == ProviderType.FORGEJO:
             data = {
                 'title': final_pr_title,
                 'body': pr_body,
@@ -417,6 +417,8 @@ def send_pull_request(
                 'base': base_branch,
                 'draft': pr_type == 'draft',
             }
+        else:
+            raise ValueError(f'Unsupported platform for PR creation: {platform}')
 
         pr_data = handler.create_pull_request(data)
         url = pr_data['html_url']
@@ -461,18 +463,23 @@ def update_existing_pull_request(
 
     # Determine default base_domain based on platform
     if base_domain is None:
-        base_domain = (
-            'github.com'
-            if platform == ProviderType.GITHUB
-            else 'gitlab.com'
-            if platform == ProviderType.GITLAB
-            else 'dev.azure.com'
-        )
+        base_domain = {
+            ProviderType.GITHUB: 'github.com',
+            ProviderType.GITLAB: 'gitlab.com',
+            ProviderType.AZURE_DEVOPS: 'dev.azure.com',
+            ProviderType.BITBUCKET: 'bitbucket.org',
+            ProviderType.FORGEJO: 'codeberg.org',
+        }.get(platform, 'github.com')
 
     handler = None
     if platform == ProviderType.GITHUB:
         handler = ServiceContextIssue(
             GithubIssueHandler(issue.owner, issue.repo, token, username, base_domain),
+            llm_config,
+        )
+    elif platform == ProviderType.GITLAB:
+        handler = ServiceContextIssue(
+            GitlabIssueHandler(issue.owner, issue.repo, token, username, base_domain),
             llm_config,
         )
     elif platform == ProviderType.AZURE_DEVOPS:
@@ -482,11 +489,20 @@ def update_existing_pull_request(
             AzureDevOpsIssueHandler(token, organization, project, issue.repo),
             llm_config,
         )
-    else:  # platform == ProviderType.GITLAB
+    elif platform == ProviderType.BITBUCKET:
         handler = ServiceContextIssue(
-            GitlabIssueHandler(issue.owner, issue.repo, token, username, base_domain),
+            BitbucketIssueHandler(
+                issue.owner, issue.repo, token, username, base_domain
+            ),
             llm_config,
         )
+    elif platform == ProviderType.FORGEJO:
+        handler = ServiceContextIssue(
+            ForgejoIssueHandler(issue.owner, issue.repo, token, username, base_domain),
+            llm_config,
+        )
+    else:
+        raise ValueError(f'Unsupported platform: {platform}')
 
     branch_name = issue.head_branch
 
