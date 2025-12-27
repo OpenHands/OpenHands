@@ -59,7 +59,7 @@ function GitSettingsScreen() {
   const existingGitlabHost = settings?.provider_tokens_set.gitlab;
   const existingBitbucketHost = settings?.provider_tokens_set.bitbucket;
   const existingAzureDevOpsHost = settings?.provider_tokens_set.azure_devops;
-  const existingForgejoHost = settings?.PROVIDER_TOKENS_SET.forgejo;
+  const existingForgejoHost = settings?.provider_tokens_set.forgejo;
 
   const isSaas = config?.APP_MODE === "saas";
   const isGitHubTokenSet = providers.includes("github");

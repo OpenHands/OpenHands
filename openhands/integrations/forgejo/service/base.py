@@ -18,6 +18,7 @@ from openhands.integrations.service_types import (
     UnknownException,
     User,
 )
+from openhands.utils.http_session import httpx_verify_option
 
 
 class ForgejoMixinBase(BaseGitService, HTTPClient):
@@ -83,7 +84,7 @@ class ForgejoMixinBase(BaseGitService, HTTPClient):
         method: RequestMethod = RequestMethod.GET,
     ) -> tuple[Any, dict]:
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
                 headers = await self._get_headers()
                 response = await self.execute_request(
                     client=client,
