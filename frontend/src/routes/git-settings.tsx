@@ -256,20 +256,21 @@ function GitSettingsScreen() {
                 azureDevOpsHostSet={existingAzureDevOpsHost}
               />
             )}
+
+            {!isSaas && (
+              <ForgejoTokenInput
+                name="forgejo-token-input"
+                isForgejoTokenSet={isForgejoTokenSet}
+                onChange={(value) => {
+                  setForgejoTokenInputHasValue(!!value);
+                }}
+                onForgejoHostChange={(value) => {
+                  setForgejoHostInputHasValue(!!value);
+                }}
+                forgejoHostSet={existingForgejoHost}
+              />
+            )}
           </div>
-          {!isSaas && (
-            <ForgejoTokenInput
-              name="forgejo-token-input"
-              isForgejoTokenSet={isForgejoTokenSet}
-              onChange={(value) => {
-                setForgejoTokenInputHasValue(!!value);
-              }}
-              onForgejoHostChange={(value) => {
-                setForgejoHostInputHasValue(!!value);
-              }}
-              forgejoHostSet={existingForgejoHost}
-            />
-          )}
         </div>
       )}
 
