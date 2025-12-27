@@ -1,7 +1,7 @@
 import { OpenHandsEvent } from "#/types/v1/core";
 import { openHands } from "./open-hands-axios";
 
-export interface PublicConversation {
+export interface SharedConversation {
   id: string;
   created_by_user_id: string | null;
   sandbox_id: string;
@@ -23,24 +23,24 @@ export interface EventPage {
   next_page_id: string | null;
 }
 
-export const publicConversationService = {
+export const sharedConversationService = {
   /**
-   * Get a single public conversation by ID
+   * Get a single shared conversation by ID
    */
-  async getPublicConversation(
+  async getSharedConversation(
     conversationId: string,
-  ): Promise<PublicConversation | null> {
+  ): Promise<SharedConversation | null> {
     const response = await openHands.get(
-      `/api/v1/public-conversations?ids=${conversationId}`,
+      `/api/shared-conversations?ids=${conversationId}`,
     );
-    const conversations = response.data as (PublicConversation | null)[];
+    const conversations = response.data as (SharedConversation | null)[];
     return conversations[0] || null;
   },
 
   /**
-   * Get events for a public conversation
+   * Get events for a shared conversation
    */
-  async getPublicConversationEvents(
+  async getSharedConversationEvents(
     conversationId: string,
     limit: number = 100,
     pageId?: string,
@@ -55,7 +55,7 @@ export const publicConversationService = {
     }
 
     const response = await openHands.get(
-      `/api/v1/public-events/search?${params.toString()}`,
+      `/api/shared-events/search?${params.toString()}`,
     );
     return response.data as EventPage;
   },

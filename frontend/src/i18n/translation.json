@@ -15487,8 +15487,8 @@
     "de": "Keine Unterhaltungshistorie verfügbar",
     "uk": "Історія розмов недоступна"
   },
-  "CONVERSATION$PUBLIC_CONVERSATION": {
-    "en": "Public Conversation",
+  "CONVERSATION$SHARED_CONVERSATION": {
+    "en": "Shared Conversation",
     "ja": "公開会話",
     "zh-CN": "公开对话",
     "zh-TW": "公開對話",

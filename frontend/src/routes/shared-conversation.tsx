@@ -2,13 +2,13 @@ import React from "react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { usePublicConversation } from "#/hooks/query/use-public-conversation";
-import { usePublicConversationEvents } from "#/hooks/query/use-public-conversation-events";
+import { useSharedConversation } from "#/hooks/query/use-shared-conversation";
+import { useSharedConversationEvents } from "#/hooks/query/use-shared-conversation-events";
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
-export default function PublicConversation() {
+export default function SharedConversation() {
   const { t } = useTranslation();
   const { conversationId } = useParams<{ conversationId: string }>();
 
@@ -16,17 +16,17 @@ export default function PublicConversation() {
     data: conversation,
     isLoading: isLoadingConversation,
     error: conversationError,
-  } = usePublicConversation(conversationId);
+  } = useSharedConversation(conversationId);
   const {
     data: eventsData,
     isLoading: isLoadingEvents,
     error: eventsError,
-  } = usePublicConversationEvents(conversationId);
+  } = useSharedConversationEvents(conversationId);
 
   const isLoading = isLoadingConversation || isLoadingEvents;
   const error = conversationError || eventsError;
 
-  // Transform public events to V1 format
+  // Transform shared events to V1 format
   const v1Events = eventsData?.items || [];
 
   // Filter events that should be rendered
@@ -57,7 +57,7 @@ export default function PublicConversation() {
       <div className="border-b border-neutral-700 p-4 flex-shrink-0">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-xl font-semibold mb-2">
-            {conversation?.title || t(I18nKey.CONVERSATION$PUBLIC_CONVERSATION)}
+            {conversation?.title || t(I18nKey.CONVERSATION$SHARED_CONVERSATION)}
           </h1>
           {conversation?.selected_branch && (
             <div className="text-sm text-neutral-400">

@@ -23,9 +23,9 @@ export default [
     route("microagent-management", "routes/microagent-management.tsx"),
     route("oauth/device/verify", "routes/device-verify.tsx"),
   ]),
-  // Public routes that don't require authentication
+  // Shared routes that don't require authentication
   route(
-    "public/conversations/:conversationId",
-    "routes/public-conversation.tsx",
+    "shared/conversations/:conversationId",
+    "routes/shared-conversation.tsx",
   ),
 ] satisfies RouteConfig;
