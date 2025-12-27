@@ -15502,5 +15502,21 @@
     "tr": "Herkese açık konuşma",
     "de": "Öffentliche Unterhaltung",
     "uk": "Публічна розмова"
+  },
+  "CONVERSATION$LINK_COPIED": {
+    "en": "Link copied to clipboard",
+    "ja": "リンクをクリップボードにコピーしました",
+    "zh-CN": "链接已复制到剪贴板",
+    "zh-TW": "連結已複製到剪貼簿",
+    "ko-KR": "링크가 클립보드에 복사되었습니다",
+    "no": "Lenke kopiert til utklippstavle",
+    "it": "Link copiato negli appunti",
+    "pt": "Link copiado para a área de transferência",
+    "es": "Enlace copiado al portapapeles",
+    "ar": "تم نسخ الرابط إلى الحافظة",
+    "fr": "Lien copié dans le presse-papiers",
+    "tr": "Bağlantı panoya kopyalandı",
+    "de": "Link in die Zwischenablage kopiert",
+    "uk": "Посилання скопійовано в буфер обміну"
   }
 }

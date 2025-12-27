@@ -12,7 +12,10 @@ import { useUnifiedPauseConversationSandbox } from "./mutation/use-unified-stop-
 import { useGetTrajectory } from "./mutation/use-get-trajectory";
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { downloadTrajectory } from "#/utils/download-trajectory";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV0Event } from "#/types/v1/type-guards";
@@ -199,6 +202,19 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
+  const handleCopyShareLink = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (conversationId) {
+      const shareUrl = `${window.location.origin}/shared/conversations/${conversationId}`;
+      navigator.clipboard.writeText(shareUrl);
+      displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+    }
+
+    onContextMenuToggle?.(false);
+  };
+
   return {
     // Handlers
     handleDelete,
@@ -211,6 +227,7 @@ export function useConversationNameContextMenu({
     handleShowAgentTools,
     handleShowSkills,
     handleTogglePublic,
+    handleCopyShareLink,
     handleConfirmDelete,
     handleConfirmStop,
 

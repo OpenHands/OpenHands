@@ -17,6 +17,7 @@ import DownloadIcon from "#/icons/u-download.svg?react";
 import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
+import LinkIcon from "#/icons/link-external.svg?react";
 import { ConversationNameContextMenuIconText } from "./conversation-name-context-menu-icon-text";
 import { CONTEXT_MENU_ICON_TEXT_CLASSNAME } from "#/utils/constants";
 
@@ -37,6 +38,7 @@ interface ConversationNameContextMenuProps {
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onTogglePublic?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onCopyShareLink?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
 }
 
@@ -52,6 +54,7 @@ export function ConversationNameContextMenu({
   onDownloadViaVSCode,
   onTogglePublic,
   onDownloadConversation,
+  onCopyShareLink,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
   const { width } = useWindowSize();
@@ -197,14 +200,27 @@ export function ConversationNameContextMenu({
           onClick={onTogglePublic}
           className={contextMenuListItemClassName}
         >
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={conversation?.public || false}
-              onChange={() => {}} // Handled by parent onClick
-              className="w-4 h-4 ml-2"
-            />
-            <span>{t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}</span>
+          <div className="flex items-center gap-2 justify-between w-full">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={conversation?.public || false}
+                onChange={() => {}} // Handled by parent onClick
+                className="w-4 h-4 ml-2"
+              />
+              <span>{t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}</span>
+            </div>
+            {conversation?.public && onCopyShareLink && (
+              <button
+                type="button"
+                data-testid="copy-share-link-button"
+                onClick={onCopyShareLink}
+                className="p-1 hover:bg-[#717888] rounded"
+                title={t(I18nKey.BUTTON$COPY_TO_CLIPBOARD)}
+              >
+                <LinkIcon width={16} height={16} />
+              </button>
+            )}
           </div>
         </ContextMenuListItem>
       )}

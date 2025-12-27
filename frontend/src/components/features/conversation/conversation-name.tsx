@@ -36,6 +36,7 @@ export function ConversationName() {
     handleShowSkills,
     handleExportConversation,
     handleTogglePublic,
+    handleCopyShareLink,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -181,6 +182,7 @@ export function ConversationName() {
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
                 onTogglePublic={handleTogglePublic}
+                onCopyShareLink={handleCopyShareLink}
                 onDownloadConversation={
                   shouldShowDownloadConversation
                     ? handleDownloadConversation
