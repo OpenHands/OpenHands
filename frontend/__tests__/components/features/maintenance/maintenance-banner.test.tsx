@@ -48,9 +48,12 @@ describe("MaintenanceBanner", () => {
     expect(button).toBeInTheDocument();
   });
 
-  // maintenance-banner
-
   it("handles invalid date gracefully", () => {
+    // Suppress expected console.warn for invalid date parsing
+    const consoleWarnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => {});
+
     const invalidTime = "invalid-date";
 
     render(
@@ -62,6 +65,9 @@ describe("MaintenanceBanner", () => {
     // Check if the banner is rendered
     const banner = screen.queryByTestId("maintenance-banner");
     expect(banner).not.toBeInTheDocument();
+
+    // Restore console.warn
+    consoleWarnSpy.mockRestore();
   });
 
   it("click on dismiss button removes banner", () => {

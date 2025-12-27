@@ -29,7 +29,7 @@ else:
         return await async_iterator.__anext__()
 
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +40,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
+    AppConversationUpdateRequest,
     SkillResponse,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
@@ -210,11 +211,32 @@ async def start_app_conversation(
     set_db_session_keep_open(request.state, True)
     set_httpx_client_keep_open(request.state, True)
 
-    """Start an app conversation start task and return it."""
-    async_iter = app_conversation_service.start_app_conversation(start_request)
-    result = await anext(async_iter)
-    asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
-    return result
+    try:
+        """Start an app conversation start task and return it."""
+        async_iter = app_conversation_service.start_app_conversation(start_request)
+        result = await anext(async_iter)
+        asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
+        return result
+    except Exception:
+        await db_session.close()
+        await httpx_client.aclose()
+        raise
+
+
+@router.patch('/{conversation_id}')
+async def update_app_conversation(
+    conversation_id: str,
+    update_request: AppConversationUpdateRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+) -> AppConversation:
+    info = await app_conversation_service.update_app_conversation(
+        UUID(conversation_id), update_request
+    )
+    if info is None:
+        raise HTTPException(404, 'unknown_app_conversation')
+    return info
 
 
 @router.post('/stream-start')
@@ -543,6 +565,45 @@ async def get_conversation_skills(
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': f'Error getting skills: {str(e)}'},
+        )
+
+
+@router.get('/{conversation_id}/download')
+async def export_conversation(
+    conversation_id: UUID,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+):
+    """Download a conversation trajectory as a zip file.
+
+    Returns a zip file containing all events and metadata for the conversation.
+
+    Args:
+        conversation_id: The UUID of the conversation to download
+
+    Returns:
+        A zip file containing the conversation trajectory
+    """
+    try:
+        # Get the zip file content
+        zip_content = await app_conversation_service.export_conversation(
+            conversation_id
+        )
+
+        # Return as a downloadable zip file
+        return Response(
+            content=zip_content,
+            media_type='application/zip',
+            headers={
+                'Content-Disposition': f'attachment; filename="conversation_{conversation_id}.zip"'
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f'Failed to download trajectory: {str(e)}'
         )
 
 

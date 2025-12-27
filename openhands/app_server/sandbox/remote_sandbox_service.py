@@ -187,7 +187,7 @@ class RemoteSandboxService(SandboxService):
             return SandboxStatus.MISSING
 
         status = None
-        pod_status = runtime['pod_status'].lower()
+        pod_status = (runtime.get('pod_status') or '').lower()
         if pod_status:
             status = POD_STATUS_MAPPING.get(pod_status, None)
 
@@ -356,7 +356,7 @@ class RemoteSandboxService(SandboxService):
                         StoredRemoteSandbox.id == runtime.get('session_id')
                     )
                     result = await self.db_session.execute(query)
-                    sandbox = result.first()
+                    sandbox = result.scalar_one_or_none()
                     if sandbox is None:
                         raise ValueError('sandbox_not_found')
                     return self._to_sandbox_info(sandbox, runtime)

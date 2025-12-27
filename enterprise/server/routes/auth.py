@@ -146,9 +146,11 @@ async def keycloak_callback(
             content={'error': 'Missing user ID or username in response'},
         )
 
-    # Check if email domain is blocked
     email = user_info.get('email')
     user_id = user_info['sub']
+
+    # Check if email domain is blocked
+    email = user_info.get('email')
     if email and domain_blocker.is_active() and domain_blocker.is_domain_blocked(email):
         logger.warning(
             f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
@@ -163,6 +165,54 @@ async def keycloak_callback(
                 'error': 'Access denied: Your email domain is not allowed to access this service'
             },
         )
+
+    # Check for duplicate email with + modifier
+    if email:
+        try:
+            has_duplicate = await token_manager.check_duplicate_base_email(
+                email, user_id
+            )
+            if has_duplicate:
+                logger.warning(
+                    f'Blocked signup attempt for email {email} - duplicate base email found',
+                    extra={'user_id': user_id, 'email': email},
+                )
+
+                # Delete the Keycloak user that was automatically created during OAuth
+                # This prevents orphaned accounts in Keycloak
+                # The delete_keycloak_user method already handles all errors internally
+                deletion_success = await token_manager.delete_keycloak_user(user_id)
+                if deletion_success:
+                    logger.info(
+                        f'Deleted Keycloak user {user_id} after detecting duplicate email {email}'
+                    )
+                else:
+                    logger.warning(
+                        f'Failed to delete Keycloak user {user_id} after detecting duplicate email {email}. '
+                        f'User may need to be manually cleaned up.'
+                    )
+
+                # Redirect to home page with query parameter indicating the issue
+                home_url = f'{request.base_url}?duplicated_email=true'
+                return RedirectResponse(home_url, status_code=302)
+        except Exception as e:
+            # Log error but allow signup to proceed (fail open)
+            logger.error(
+                f'Error checking duplicate email for {email}: {e}',
+                extra={'user_id': user_id, 'email': email},
+            )
+
+    # Check email verification status
+    email_verified = user_info.get('email_verified', False)
+    if not email_verified:
+        # Send verification email
+        # Import locally to avoid circular import with email.py
+        from server.routes.email import verify_email
+
+        await verify_email(request=request, user_id=user_id, is_auth_flow=True)
+        redirect_url = f'{request.base_url}?email_verification_required=true'
+        response = RedirectResponse(redirect_url, status_code=302)
+        return response
 
     # default to github IDP for now.
     # TODO: remove default once Keycloak is updated universally with the new attribute.

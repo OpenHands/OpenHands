@@ -21,6 +21,7 @@ from litellm import completion as litellm_completion
 from litellm import completion_cost as litellm_completion_cost
 from litellm.exceptions import (
     APIConnectionError,
+    BadGatewayError,
     RateLimitError,
     ServiceUnavailableError,
 )
@@ -45,6 +46,7 @@ LLM_RETRY_EXCEPTIONS: tuple[type[Exception], ...] = (
     APIConnectionError,
     RateLimitError,
     ServiceUnavailableError,
+    BadGatewayError,
     litellm.Timeout,
     litellm.InternalServerError,
     LLMNoResponseError,

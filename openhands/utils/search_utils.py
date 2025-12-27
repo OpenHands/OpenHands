@@ -22,7 +22,10 @@ async def iterate(fn: Callable, **kwargs) -> AsyncIterator:
     kwargs['page_id'] = None
     while True:
         result_set = await fn(**kwargs)
-        for result in result_set.results:
+        items = getattr(result_set, 'items', None)
+        if items is None:
+            items = getattr(result_set, 'results')
+        for result in items:
             yield result
         if result_set.next_page_id is None:
             return

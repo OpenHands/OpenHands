@@ -5860,7 +5860,7 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-ai"
-version = "0.0.0-post.5687+7853b41ad"
+version = "0.0.0-post.5750+f19fb1043"
 description = "OpenHands: Code Less, Make More"
 optional = false
 python-versions = "^3.12,<3.14"
