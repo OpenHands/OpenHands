@@ -23,7 +23,7 @@ class IssueHandlerFactory:
         owner: str,
         repo: str,
         token: str,
-        username: str | None,
+        username: str,
         platform: ProviderType,
         base_domain: str,
         issue_type: str,
