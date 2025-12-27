@@ -1,13 +1,7 @@
-version: "3.9"
-
 services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       - ~/.ollama:/root/.ollama
     restart: unless-stopped
@@ -20,13 +14,14 @@ services:
     ports:
       - "3004:3000"
     environment:
-      - LLM_MODEL=ollama/qwen2.5:14b
-      - LLM_BASE_URL=http://ollama:11434
-      - LLM_API_KEY=ollama
+      # LLM
+      LLM_MODEL: "ollama/qwen2.5:14b"
+      LLM_BASE_URL: "http://ollama:11434"
+      LLM_API_KEY: "ollama"
+
+      # 🔴 זה הקריטי
+      EXECUTION_MODE: "local"
+      RUNTIME: "local"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.openhands:/.openhands
-      - ./workspace:/opt/workspace_base
+      - ./workspace:/workspace
     restart: unless-stopped
-    stdin_open: true
-    tty: true
