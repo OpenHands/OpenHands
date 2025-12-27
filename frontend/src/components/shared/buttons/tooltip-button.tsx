@@ -1,7 +1,8 @@
-import { Tooltip, TooltipProps } from "@heroui/react";
 import React, { ReactNode } from "react";
 import { NavLink } from "react-router";
+import { TooltipProps } from "@heroui/react";
 import { cn } from "#/utils/utils";
+import { StyledTooltip } from "./styled-tooltip";
 
 export interface TooltipButtonProps {
   children: ReactNode;
@@ -39,24 +40,7 @@ export function TooltipButton({
     }
   };
 
-  const buttonContent = (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      data-testid={testId}
-      onClick={handleClick}
-      className={cn(
-        "hover:opacity-80",
-        disabled && "opacity-50 cursor-not-allowed",
-        className,
-      )}
-      disabled={disabled}
-    >
-      {children}
-    </button>
-  );
-
-  let content;
+  let content: ReactNode;
 
   if (navLinkTo && !disabled) {
     content = (
@@ -77,7 +61,6 @@ export function TooltipButton({
       </NavLink>
     );
   } else if (navLinkTo && disabled) {
-    // If disabled and has navLinkTo, render a button that looks like a NavLink but doesn't navigate
     content = (
       <button
         type="button"
@@ -107,7 +90,6 @@ export function TooltipButton({
       </a>
     );
   } else if (href && disabled) {
-    // If disabled and has href, render a button that looks like a link but doesn't navigate
     content = (
       <button
         type="button"
@@ -120,18 +102,32 @@ export function TooltipButton({
       </button>
     );
   } else {
-    content = buttonContent;
+    content = (
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        data-testid={testId}
+        onClick={handleClick}
+        className={cn(
+          "hover:opacity-80",
+          disabled && "opacity-50 cursor-not-allowed",
+          className,
+        )}
+        disabled={disabled}
+      >
+        {children}
+      </button>
+    );
   }
 
   return (
-    <Tooltip
+    <StyledTooltip
       content={tooltip}
-      closeDelay={100}
+      tooltipClassName={tooltipClassName}
       placement={placement}
-      className={tooltipClassName}
       showArrow={showArrow}
     >
       {content}
-    </Tooltip>
+    </StyledTooltip>
   );
 }
