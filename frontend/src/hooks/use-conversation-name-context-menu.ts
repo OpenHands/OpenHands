@@ -14,9 +14,21 @@ import { downloadTrajectory } from "#/utils/download-trajectory";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
-import { isV0Event } from "#/types/v1/type-guards";
+import {
+  isSystemPromptEvent,
+  isV0Event,
+  isV1Event,
+} from "#/types/v1/type-guards";
 import { useActiveConversation } from "./query/use-active-conversation";
 import { useDownloadConversation } from "./use-download-conversation";
+import { ChatCompletionToolParam } from "#/types/v1/core";
+
+export interface SystemMessageForModal {
+  content: string;
+  tools: ChatCompletionToolParam[] | Record<string, unknown>[] | null;
+  openhands_version: string | null;
+  agent_class: string | null;
+}
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -51,10 +63,35 @@ export function useConversationNameContextMenu({
     React.useState(false);
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
-  const systemMessage = events
+  /**
+   * ============================
+   * System Message (V0 / V1)
+   * ============================
+   */
+
+  // V0 System Message (legacy)
+  const v0SystemMessage = events
     .filter(isV0Event)
     .filter(isActionOrObservation)
     .find(isSystemMessage);
+
+  // V1 System Prompt Event
+  const v1SystemPromptEvent = events
+    .filter(isV1Event)
+    .find(isSystemPromptEvent);
+
+  let systemMessage: SystemMessageForModal | null = null;
+
+  if (v0SystemMessage) {
+    systemMessage = v0SystemMessage.args;
+  } else if (v1SystemPromptEvent) {
+    systemMessage = {
+      content: v1SystemPromptEvent.system_prompt.text,
+      tools: v1SystemPromptEvent.tools ?? null,
+      openhands_version: null,
+      agent_class: null,
+    };
+  }
 
   const handleDelete = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
