@@ -75,7 +75,7 @@ async def test_search_repositories(forgejo_service):
 
     # Call the method
     repos = await forgejo_service.search_repositories(
-        'test', 10, 'updated', 'desc', public=False
+        'test', 10, 'updated', 'desc', public=False, app_mode=AppMode.OSS
     )
 
     # Verify the result
