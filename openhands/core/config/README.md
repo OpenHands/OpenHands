@@ -32,6 +32,7 @@ The `load_from_env` function in the config package is responsible for loading co
 export LLM_API_KEY='your_api_key_here'
 export LLM_MODEL='gpt-4'
 export AGENT_MEMORY_ENABLED='true'
+export AGENT_ENABLE_STUCK_DETECTION='false'  # Disable loop detection
 export SANDBOX_TIMEOUT='300'
 ```
 

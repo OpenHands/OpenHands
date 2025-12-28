@@ -4,6 +4,7 @@ import i18n from "#/i18n";
 import { SecurityRisk } from "#/types/v1/core/base/common";
 import {
   ExecuteBashAction,
+  TerminalAction,
   FileEditorAction,
   StrReplaceEditorAction,
   MCPToolAction,
@@ -58,7 +59,7 @@ const getFileEditorActionContent = (
 
 // Command Actions
 const getExecuteBashActionContent = (
-  event: ActionEvent<ExecuteBashAction>,
+  event: ActionEvent<ExecuteBashAction | TerminalAction>,
 ): string => {
   let content = `Command:\n\`${event.action.command}\``;
 
@@ -131,27 +132,61 @@ type BrowserAction =
 
 const getBrowserActionContent = (action: BrowserAction): string => {
   switch (action.kind) {
-    case "BrowserNavigateAction":
-      if ("url" in action) {
-        return `Browsing ${action.url}`;
+    case "BrowserNavigateAction": {
+      let content = `Browsing ${action.url}`;
+      if (action.new_tab) {
+        content += `\n**New Tab:** Yes`;
       }
-      break;
-    case "BrowserClickAction":
-    case "BrowserTypeAction":
-    case "BrowserGetStateAction":
-    case "BrowserGetContentAction":
-    case "BrowserScrollAction":
-    case "BrowserGoBackAction":
-    case "BrowserListTabsAction":
-    case "BrowserSwitchTabAction":
-    case "BrowserCloseTabAction":
-      // These browser actions typically don't need detailed content display
+      return content;
+    }
+    case "BrowserClickAction": {
+      let content = `**Element Index:** ${action.index}`;
+      if (action.new_tab) {
+        content += `\n**New Tab:** Yes`;
+      }
+      return content;
+    }
+    case "BrowserTypeAction": {
+      const textPreview =
+        action.text.length > 50
+          ? `${action.text.slice(0, 50)}...`
+          : action.text;
+      return `**Element Index:** ${action.index}\n**Text:** ${textPreview}`;
+    }
+    case "BrowserGetStateAction": {
+      if (action.include_screenshot) {
+        return `**Include Screenshot:** Yes`;
+      }
       return getNoContentActionContent();
+    }
+    case "BrowserGetContentAction": {
+      const parts: string[] = [];
+      if (action.extract_links) {
+        parts.push(`**Extract Links:** Yes`);
+      }
+      if (action.start_from_char > 0) {
+        parts.push(`**Start From Character:** ${action.start_from_char}`);
+      }
+      return parts.length > 0 ? parts.join("\n") : getNoContentActionContent();
+    }
+    case "BrowserScrollAction": {
+      return `**Direction:** ${action.direction}`;
+    }
+    case "BrowserGoBackAction": {
+      return getNoContentActionContent();
+    }
+    case "BrowserListTabsAction": {
+      return getNoContentActionContent();
+    }
+    case "BrowserSwitchTabAction": {
+      return `**Tab ID:** ${action.tab_id}`;
+    }
+    case "BrowserCloseTabAction": {
+      return `**Tab ID:** ${action.tab_id}`;
+    }
     default:
       return getNoContentActionContent();
   }
-
-  return getNoContentActionContent();
 };
 
 export const getActionContent = (event: ActionEvent): string => {
@@ -164,8 +199,9 @@ export const getActionContent = (event: ActionEvent): string => {
       return getFileEditorActionContent(action);
 
     case "ExecuteBashAction":
+    case "TerminalAction":
       return getExecuteBashActionContent(
-        event as ActionEvent<ExecuteBashAction>,
+        event as ActionEvent<ExecuteBashAction | TerminalAction>,
       );
 
     case "MCPToolAction":

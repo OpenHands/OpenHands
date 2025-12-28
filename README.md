@@ -1,14 +1,14 @@
 <a name="readme-top"></a>
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/All-Hands-AI/docs/main/openhands/static/img/logo.png" alt="Logo" width="200">
+  <img src="https://raw.githubusercontent.com/OpenHands/docs/main/openhands/static/img/logo.png" alt="Logo" width="200">
   <h1 align="center" style="border-bottom: none">OpenHands: AI-Driven Development</h1>
 </div>
 
 
 <div align="center">
   <a href="https://github.com/OpenHands/OpenHands/blob/main/LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-20B2AA?style=for-the-badge" alt="MIT License"></a>
-  <a href="https://docs.google.com/spreadsheets/d/1wOUdFCMyY6Nt0AIqF705KN4JKOWgeI4wUGUP60krXXs/edit?gid=811504672#gid=811504672"><img src="https://img.shields.io/badge/SWEBench-72.8-00cc00?logoColor=FFE165&style=for-the-badge" alt="Benchmark Score"></a>
+  <a href="https://docs.google.com/spreadsheets/d/1wOUdFCMyY6Nt0AIqF705KN4JKOWgeI4wUGUP60krXXs/edit?gid=811504672#gid=811504672"><img src="https://img.shields.io/badge/SWEBench-77.6-00cc00?logoColor=FFE165&style=for-the-badge" alt="Benchmark Score"></a>
   <br/>
   <a href="https://docs.openhands.dev/sdk"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Check out the documentation"></a>
   <a href="https://arxiv.org/abs/2511.03690"><img src="https://img.shields.io/badge/Paper-000?logoColor=FFE165&logo=arxiv&style=for-the-badge" alt="Tech Report"></a>
@@ -35,9 +35,9 @@ There are a few ways to work with OpenHands:
 ### OpenHands Software Agent SDK
 The SDK is a composable Python library that contains all of our agentic tech. It's the engine that powers everything else below.
 
-Define agents in code, then run them locally, or scale to 1000s of agents in the cloud
+Define agents in code, then run them locally, or scale to 1000s of agents in the cloud.
 
-[Check out the docs](https://docs.openhands.dev/sdk) or [view the source](https://github.com/All-Hands-AI/agent-sdk/)
+[Check out the docs](https://docs.openhands.dev/sdk) or [view the source](https://github.com/OpenHands/software-agent-sdk/)
 
 ### OpenHands CLI
 The CLI is the easiest way to start using OpenHands. The experience will be familiar to anyone who has worked
@@ -52,18 +52,15 @@ The experience will be familiar to anyone who has used Devin or Jules.
 [Check out the docs](https://docs.openhands.dev/openhands/usage/run-openhands/local-setup) or view the source in this repo.
 
 ### OpenHands Cloud
-This is a commercial deployment of OpenHands GUI, running on hosted infrastructure.
+This is a deployment of OpenHands GUI, running on hosted infrastructure.
 
 You can try it with a free $10 credit by [signing in with your GitHub account](https://app.all-hands.dev).
 
 OpenHands Cloud comes with source-available features and integrations:
-- Deeper integrations with GitHub, GitLab, and Bitbucket
 - Integrations with Slack, Jira, and Linear
 - Multi-user support
 - RBAC and permissions
 - Collaboration features (e.g., conversation sharing)
-- Usage reporting
-- Budgeting enforcement
 
 ### OpenHands Enterprise
 Large enterprises can work with us to self-host OpenHands Cloud in their own VPC, via Kubernetes.

@@ -20,9 +20,7 @@ export function TaskItem({ task }: TaskItemProps) {
       case "todo":
         return <CircleIcon className="w-4 h-4 text-[#ffffff]" />;
       case "in_progress":
-        return (
-          <LoadingIcon className="w-4 h-4 text-[#ffffff]" strokeWidth={0.5} />
-        );
+        return <LoadingIcon className="w-4 h-4 text-[#ffffff] animate-spin" />;
       case "done":
         return <CheckCircleIcon className="w-4 h-4 text-[#A3A3A3]" />;
       default:

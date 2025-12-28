@@ -23,6 +23,11 @@ describe("ConversationPanel", () => {
       Component: () => <ConversationPanel onClose={onCloseMock} />,
       path: "/",
     },
+    {
+      // Add route to prevent "No routes matched location" warning
+      Component: () => null,
+      path: "/conversations/:conversationId",
+    },
   ]);
 
   const renderConversationPanel = () => renderWithProviders(<RouterStub />);

@@ -393,7 +393,7 @@ def test_mismatched_tool_call_events_and_auto_add_system_message(
     # 2. The action message
     # 3. The observation message
     mock_state.history = [initial_user_message, action, observation]
-    messages = agent._get_messages(mock_state.history, initial_user_message)
+    messages = agent._get_messages(mock_state.history, initial_user_message, set())
     assert len(messages) == 4  # System + initial user + action + observation
     assert messages[0].role == 'system'  # First message should be the system message
     assert (
@@ -404,7 +404,7 @@ def test_mismatched_tool_call_events_and_auto_add_system_message(
 
     # The same should hold if the events are presented out-of-order
     mock_state.history = [initial_user_message, observation, action]
-    messages = agent._get_messages(mock_state.history, initial_user_message)
+    messages = agent._get_messages(mock_state.history, initial_user_message, set())
     assert len(messages) == 4
     assert messages[0].role == 'system'  # First message should be the system message
     assert (
@@ -414,7 +414,7 @@ def test_mismatched_tool_call_events_and_auto_add_system_message(
     # If only one of the two events is present, then we should just get the system message
     # plus any valid message from the event
     mock_state.history = [initial_user_message, action]
-    messages = agent._get_messages(mock_state.history, initial_user_message)
+    messages = agent._get_messages(mock_state.history, initial_user_message, set())
     assert (
         len(messages) == 2
     )  # System + initial user message, action is waiting for its observation
@@ -422,7 +422,7 @@ def test_mismatched_tool_call_events_and_auto_add_system_message(
     assert messages[1].role == 'user'
 
     mock_state.history = [initial_user_message, observation]
-    messages = agent._get_messages(mock_state.history, initial_user_message)
+    messages = agent._get_messages(mock_state.history, initial_user_message, set())
     assert (
         len(messages) == 2
     )  # System + initial user message, observation has no matching action

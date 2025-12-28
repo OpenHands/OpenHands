@@ -46,6 +46,9 @@ class MockUserAuth(UserAuth):
     async def get_secrets(self) -> Secrets | None:
         return None
 
+    async def get_mcp_api_key(self) -> str | None:
+        return None
+
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         return MockUserAuth()

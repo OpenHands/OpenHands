@@ -5,17 +5,12 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-
-interface NavigationItem {
-  to: string;
-  icon: React.ReactNode;
-  text: string;
-}
+import { SettingsNavItem } from "#/constants/settings-nav";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
   onCloseMobileMenu: () => void;
-  navigationItems: NavigationItem[];
+  navigationItems: SettingsNavItem[];
 }
 
 export function SettingsNavigation({
@@ -34,7 +29,6 @@ export function SettingsNavigation({
           onClick={onCloseMobileMenu}
         />
       )}
-
       {/* Navigation sidebar */}
       <nav
         data-testid="settings-navbar"

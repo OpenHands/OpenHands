@@ -60,6 +60,7 @@ def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
         'openhands/gpt-5-2025-08-07',
         'openhands/gpt-5-mini-2025-08-07',
         'openhands/claude-opus-4-20250514',
+        'openhands/claude-opus-4-5-20251101',
         'openhands/gemini-2.5-pro',
         'openhands/o3',
         'openhands/o4-mini',
@@ -90,4 +91,4 @@ def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
     ]
     model_list = clarifai_models + model_list
 
-    return list(sorted(set(model_list)))
+    return sorted(set(model_list))

@@ -57,6 +57,7 @@ OpenHands provides several components that can be extended:
 3. Service Integrations:
    - GitHub service
    - GitLab service
+   - Azure DevOps service
 
 ### Implementation Details
 
