@@ -265,3 +265,4 @@ test-results
 
 # logs
 *.log
+fleet.toml
