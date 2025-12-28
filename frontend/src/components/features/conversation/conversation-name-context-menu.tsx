@@ -31,9 +31,10 @@ interface ConversationNameContextMenuProps {
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onShowMicroagents?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onExportConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
 }
 
@@ -44,9 +45,10 @@ export function ConversationNameContextMenu({
   onStop,
   onDisplayCost,
   onShowAgentTools,
-  onShowMicroagents,
+  onShowSkills,
   onExportConversation,
   onDownloadViaVSCode,
+  onDownloadConversation,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
   const { width } = useWindowSize();
@@ -55,13 +57,12 @@ export function ConversationNameContextMenu({
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { data: conversation } = useActiveConversation();
 
-  // TODO: Hide microagent menu items for V1 conversations
   // This is a temporary measure and may be re-enabled in the future
   const isV1Conversation = conversation?.conversation_version === "V1";
 
-  const hasDownload = Boolean(onDownloadViaVSCode);
+  const hasDownload = Boolean(onDownloadViaVSCode || onDownloadConversation);
   const hasExport = Boolean(onExportConversation);
-  const hasTools = Boolean(onShowAgentTools || onShowMicroagents);
+  const hasTools = Boolean(onShowAgentTools || onShowSkills);
   const hasInfo = Boolean(onDisplayCost);
   const hasControl = Boolean(onStop || onDelete);
 
@@ -91,15 +92,15 @@ export function ConversationNameContextMenu({
 
       {hasTools && <Divider testId="separator-tools" />}
 
-      {onShowMicroagents && !isV1Conversation && (
+      {onShowSkills && (
         <ContextMenuListItem
-          testId="show-microagents-button"
-          onClick={onShowMicroagents}
+          testId="show-skills-button"
+          onClick={onShowSkills}
           className={contextMenuListItemClassName}
         >
           <ConversationNameContextMenuIconText
             icon={<RobotIcon width={16} height={16} />}
-            text={t(I18nKey.CONVERSATION$SHOW_MICROAGENTS)}
+            text={t(I18nKey.CONVERSATION$SHOW_SKILLS)}
             className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
           />
         </ContextMenuListItem>
@@ -119,9 +120,9 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {(hasExport || hasDownload) && !isV1Conversation && (
+      {(hasExport || hasDownload) && !isV1Conversation ? (
         <Divider testId="separator-export" />
-      )}
+      ) : null}
 
       {onExportConversation && !isV1Conversation && (
         <ContextMenuListItem
@@ -151,9 +152,21 @@ export function ConversationNameContextMenu({
         </ContextMenuListItem>
       )}
 
-      {(hasInfo || hasControl) && !isV1Conversation && (
-        <Divider testId="separator-info-control" />
+      {onDownloadConversation && isV1Conversation && (
+        <ContextMenuListItem
+          testId="download-trajectory-button"
+          onClick={onDownloadConversation}
+          className={contextMenuListItemClassName}
+        >
+          <ConversationNameContextMenuIconText
+            icon={<DownloadIcon width={16} height={16} />}
+            text={t(I18nKey.BUTTON$EXPORT_CONVERSATION)}
+            className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
+          />
+        </ContextMenuListItem>
       )}
+
+      {(hasInfo || hasControl) && <Divider testId="separator-info-control" />}
 
       {onDisplayCost && (
         <ContextMenuListItem

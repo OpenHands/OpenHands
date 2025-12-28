@@ -6,7 +6,7 @@ import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-
 import { renderWithProviders } from "../../test-utils";
 import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(),
