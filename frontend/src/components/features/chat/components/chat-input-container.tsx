@@ -1,9 +1,10 @@
 import React from "react";
-import { ConversationStatus } from "#/types/conversation-status";
 import { DragOver } from "../drag-over";
 import { UploadedFiles } from "../uploaded-files";
 import { ChatInputRow } from "./chat-input-row";
 import { ChatInputActions } from "./chat-input-actions";
+import { useConversationStore } from "#/stores/conversation-store";
+import { cn } from "#/utils/utils";
 
 interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -11,11 +12,9 @@ interface ChatInputContainerProps {
   disabled: boolean;
   showButton: boolean;
   buttonClassName: string;
-  conversationStatus: ConversationStatus | null;
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   handleFileIconClick: (isDisabled: boolean) => void;
   handleSubmit: () => void;
-  handleStop: (onStop?: () => void) => void;
   handleResumeAgent: () => void;
   onDragOver: (e: React.DragEvent, isDisabled: boolean) => void;
   onDragLeave: (e: React.DragEvent, isDisabled: boolean) => void;
@@ -25,7 +24,6 @@ interface ChatInputContainerProps {
   onKeyDown: (e: React.KeyboardEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
-  onStop?: () => void;
 }
 
 export function ChatInputContainer({
@@ -34,11 +32,9 @@ export function ChatInputContainer({
   disabled,
   showButton,
   buttonClassName,
-  conversationStatus,
   chatInputRef,
   handleFileIconClick,
   handleSubmit,
-  handleStop,
   handleResumeAgent,
   onDragOver,
   onDragLeave,
@@ -48,12 +44,18 @@ export function ChatInputContainer({
   onKeyDown,
   onFocus,
   onBlur,
-  onStop,
 }: ChatInputContainerProps) {
+  const conversationMode = useConversationStore(
+    (state) => state.conversationMode,
+  );
+
   return (
     <div
       ref={chatContainerRef}
-      className="bg-[#25272D] box-border content-stretch flex flex-col items-start justify-center p-4 pt-3 relative rounded-[15px] w-full"
+      className={cn(
+        "bg-[#25272D] box-border content-stretch flex flex-col items-start justify-center p-4 pt-3 relative rounded-[15px] w-full",
+        conversationMode === "plan" && "border border-[#597FF4]",
+      )}
       onDragOver={(e) => onDragOver(e, disabled)}
       onDragLeave={(e) => onDragLeave(e, disabled)}
       onDrop={(e) => onDrop(e, disabled)}
@@ -78,11 +80,8 @@ export function ChatInputContainer({
       />
 
       <ChatInputActions
-        conversationStatus={conversationStatus}
         disabled={disabled}
-        handleStop={handleStop}
         handleResumeAgent={handleResumeAgent}
-        onStop={onStop}
       />
     </div>
   );

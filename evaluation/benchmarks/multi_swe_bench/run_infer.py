@@ -316,7 +316,7 @@ def get_config(
     logger.info(
         f'Using instance container image: {base_container_image}. '
         f'Please make sure this image exists. '
-        f'Submit an issue on https://github.com/All-Hands-AI/OpenHands if you run into any issues.'
+        f'Submit an issue on https://github.com/OpenHands/OpenHands if you run into any issues.'
     )
 
     sandbox_config = get_default_sandbox_config_for_eval()
@@ -747,10 +747,14 @@ def filter_dataset(dataset: pd.DataFrame, filter_column: str) -> pd.DataFrame:
                 subset = dataset[dataset[filter_column].isin(selected_ids)]
                 logger.info(f'Retained {subset.shape[0]} tasks after filtering')
                 return subset
-    skip_ids = os.environ.get('SKIP_IDS', '').split(',')
+    skip_ids = [id for id in os.environ.get('SKIP_IDS', '').split(',') if id]
     if len(skip_ids) > 0:
+        logger.info(f'Dataset size before filtering: {dataset.shape[0]} tasks')
         logger.info(f'Filtering {len(skip_ids)} tasks from "SKIP_IDS"...')
-        return dataset[~dataset[filter_column].isin(skip_ids)]
+        logger.info(f'SKIP_IDS:\n{skip_ids}')
+        filtered_dataset = dataset[~dataset[filter_column].isin(skip_ids)]
+        logger.info(f'Dataset size after filtering: {filtered_dataset.shape[0]} tasks')
+        return filtered_dataset
     return dataset
 
 
@@ -768,6 +772,11 @@ if __name__ == '__main__':
         default='test',
         help='split to evaluate on',
     )
+    parser.add_argument(
+        '--filter_dataset_after_sampling',
+        action='store_true',
+        help='if provided, filter dataset after sampling instead of before',
+    )
     args, _ = parser.parse_known_args()
 
     # NOTE: It is preferable to load datasets from huggingface datasets and perform post-processing
@@ -777,10 +786,24 @@ if __name__ == '__main__':
     logger.info(f'Loading dataset {args.dataset} with split {args.split} ')
     dataset = load_dataset('json', data_files=args.dataset)
     dataset = dataset[args.split]
-    swe_bench_tests = filter_dataset(dataset.to_pandas(), 'instance_id')
-    logger.info(
-        f'Loaded dataset {args.dataset} with split {args.split}: {len(swe_bench_tests)} tasks'
-    )
+    swe_bench_tests = dataset.to_pandas()
+
+    # Determine filter strategy based on flag
+    filter_func = None
+    if args.filter_dataset_after_sampling:
+        # Pass filter as callback to apply after sampling
+        def filter_func(df):
+            return filter_dataset(df, 'instance_id')
+
+        logger.info(
+            f'Loaded dataset {args.dataset} with split {args.split}: {len(swe_bench_tests)} tasks (filtering will occur after sampling)'
+        )
+    else:
+        # Apply filter before sampling
+        swe_bench_tests = filter_dataset(swe_bench_tests, 'instance_id')
+        logger.info(
+            f'Loaded dataset {args.dataset} with split {args.split}: {len(swe_bench_tests)} tasks'
+        )
 
     llm_config = None
     if args.llm_config:
@@ -810,7 +833,9 @@ if __name__ == '__main__':
 
     output_file = os.path.join(metadata.eval_output_dir, 'output.jsonl')
     print(f'### OUTPUT FILE: {output_file} ###')
-    instances = prepare_dataset(swe_bench_tests, output_file, args.eval_n_limit)
+    instances = prepare_dataset(
+        swe_bench_tests, output_file, args.eval_n_limit, filter_func=filter_func
+    )
 
     if len(instances) > 0 and not isinstance(
         instances['FAIL_TO_PASS'][instances['FAIL_TO_PASS'].index[0]], str

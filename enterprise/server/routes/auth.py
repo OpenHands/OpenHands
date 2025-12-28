@@ -12,14 +12,17 @@ from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL_EXT,
+    ROLE_CHECK_ENABLED,
 )
+from server.auth.domain_blocker import domain_blocker
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
-from server.config import sign_token
+from server.config import get_config, sign_token
 from server.constants import IS_FEATURE_ENV
 from server.routes.event_webhook import _get_session_api_key, _get_user_id
 from storage.database import session_maker
+from storage.saas_settings_store import SaasSettingsStore
 from storage.user_settings import UserSettings
 
 from openhands.core.logger import openhands_logger as logger
@@ -131,13 +134,86 @@ async def keycloak_callback(
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
     logger.debug(f'user_info: {user_info}')
+    if ROLE_CHECK_ENABLED and 'roles' not in user_info:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={'error': 'Missing required role'},
+        )
+
     if 'sub' not in user_info or 'preferred_username' not in user_info:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={'error': 'Missing user ID or username in response'},
         )
 
+    email = user_info.get('email')
     user_id = user_info['sub']
+
+    # Check if email domain is blocked
+    email = user_info.get('email')
+    if email and domain_blocker.is_active() and domain_blocker.is_domain_blocked(email):
+        logger.warning(
+            f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
+        )
+
+        # Disable the Keycloak account
+        await token_manager.disable_keycloak_user(user_id, email)
+
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                'error': 'Access denied: Your email domain is not allowed to access this service'
+            },
+        )
+
+    # Check for duplicate email with + modifier
+    if email:
+        try:
+            has_duplicate = await token_manager.check_duplicate_base_email(
+                email, user_id
+            )
+            if has_duplicate:
+                logger.warning(
+                    f'Blocked signup attempt for email {email} - duplicate base email found',
+                    extra={'user_id': user_id, 'email': email},
+                )
+
+                # Delete the Keycloak user that was automatically created during OAuth
+                # This prevents orphaned accounts in Keycloak
+                # The delete_keycloak_user method already handles all errors internally
+                deletion_success = await token_manager.delete_keycloak_user(user_id)
+                if deletion_success:
+                    logger.info(
+                        f'Deleted Keycloak user {user_id} after detecting duplicate email {email}'
+                    )
+                else:
+                    logger.warning(
+                        f'Failed to delete Keycloak user {user_id} after detecting duplicate email {email}. '
+                        f'User may need to be manually cleaned up.'
+                    )
+
+                # Redirect to home page with query parameter indicating the issue
+                home_url = f'{request.base_url}?duplicated_email=true'
+                return RedirectResponse(home_url, status_code=302)
+        except Exception as e:
+            # Log error but allow signup to proceed (fail open)
+            logger.error(
+                f'Error checking duplicate email for {email}: {e}',
+                extra={'user_id': user_id, 'email': email},
+            )
+
+    # Check email verification status
+    email_verified = user_info.get('email_verified', False)
+    if not email_verified:
+        # Send verification email
+        # Import locally to avoid circular import with email.py
+        from server.routes.email import verify_email
+
+        await verify_email(request=request, user_id=user_id, is_auth_flow=True)
+        redirect_url = f'{request.base_url}?email_verification_required=true'
+        response = RedirectResponse(redirect_url, status_code=302)
+        return response
+
     # default to github IDP for now.
     # TODO: remove default once Keycloak is updated universally with the new attribute.
     idp: str = user_info.get('identity_provider', ProviderType.GITHUB.value)
@@ -212,16 +288,14 @@ async def keycloak_callback(
             f'&state={state}'
         )
 
-    has_accepted_tos = False
-    with session_maker() as session:
-        user_settings = (
-            session.query(UserSettings)
-            .filter(UserSettings.keycloak_user_id == user_id)
-            .first()
-        )
-        has_accepted_tos = (
-            user_settings is not None and user_settings.accepted_tos is not None
-        )
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
+    user_settings = settings_store.get_user_settings_by_keycloak_id(user_id)
+    has_accepted_tos = (
+        user_settings is not None and user_settings.accepted_tos is not None
+    )
 
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:

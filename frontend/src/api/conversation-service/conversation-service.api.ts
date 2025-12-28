@@ -11,7 +11,6 @@ import {
   CreateMicroagent,
   FileUploadSuccessResponse,
   GetFilesResponse,
-  GetFileResponse,
 } from "../open-hands.types";
 import { openHands } from "../open-hands-axios";
 import { Provider } from "#/types/settings";
@@ -157,19 +156,6 @@ class ConversationService {
     >(url);
 
     return data;
-  }
-
-  /**
-   * Get the blob of the workspace zip
-   * @returns Blob of the workspace zip
-   */
-  static async getWorkspaceZip(conversationId: string): Promise<Blob> {
-    const url = `${this.getConversationUrl(conversationId)}/zip-directory`;
-    const response = await openHands.get(url, {
-      responseType: "blob",
-      headers: this.getConversationHeaders(),
-    });
-    return response.data;
   }
 
   /**
@@ -377,22 +363,6 @@ class ConversationService {
     });
 
     return data;
-  }
-
-  /**
-   * Retrieve the content of a file
-   * @param conversationId ID of the conversation
-   * @param path Full path of the file to retrieve
-   * @returns Code content of the file
-   */
-  static async getFile(conversationId: string, path: string): Promise<string> {
-    const url = `${this.getConversationUrl(conversationId)}/select-file`;
-    const { data } = await openHands.get<GetFileResponse>(url, {
-      params: { file: path },
-      headers: this.getConversationHeaders(),
-    });
-
-    return data.code;
   }
 
   /**

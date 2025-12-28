@@ -7,5 +7,5 @@ export function paragraph({
 }: React.ClassAttributes<HTMLParagraphElement> &
   React.HTMLAttributes<HTMLParagraphElement> &
   ExtraProps) {
-  return <p className="pb-[10px] last:pb-0">{children}</p>;
+  return <p className="py-2.5 first:pt-0 last:pb-0">{children}</p>;
 }

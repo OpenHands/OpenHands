@@ -8,17 +8,18 @@
 import { HydratedRouter } from "react-router/dom";
 import React, { startTransition, StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
-import posthog from "posthog-js";
+import { PostHogProvider } from "posthog-js/react";
 import "./i18n";
 import { QueryClientProvider } from "@tanstack/react-query";
 import OptionService from "./api/option-service/option-service.api";
 import { displayErrorToast } from "./utils/custom-toast-handlers";
 import { queryClient } from "./query-client-config";
 
-function PosthogInit() {
+function PostHogWrapper({ children }: { children: React.ReactNode }) {
   const [posthogClientKey, setPosthogClientKey] = React.useState<string | null>(
     null,
   );
+  const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
     (async () => {
@@ -27,20 +28,27 @@ function PosthogInit() {
         setPosthogClientKey(config.POSTHOG_CLIENT_KEY);
       } catch {
         displayErrorToast("Error fetching PostHog client key");
+      } finally {
+        setIsLoading(false);
       }
     })();
   }, []);
 
-  React.useEffect(() => {
-    if (posthogClientKey) {
-      posthog.init(posthogClientKey, {
+  if (isLoading || !posthogClientKey) {
+    return children;
+  }
+
+  return (
+    <PostHogProvider
+      apiKey={posthogClientKey}
+      options={{
         api_host: "https://us.i.posthog.com",
         person_profiles: "identified_only",
-      });
-    }
-  }, [posthogClientKey]);
-
-  return null;
+      }}
+    >
+      {children}
+    </PostHogProvider>
+  );
 }
 
 async function prepareApp() {
@@ -62,10 +70,10 @@ prepareApp().then(() =>
       document,
       <StrictMode>
         <QueryClientProvider client={queryClient}>
-          <HydratedRouter />
-          <PosthogInit />
+          <PostHogWrapper>
+            <HydratedRouter />
+          </PostHogWrapper>
         </QueryClientProvider>
-        <div id="modal-portal-exit" />
       </StrictMode>,
     );
   }),

@@ -5,6 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { Feedback } from "#/api/open-hands.types";
 import { useSubmitFeedback } from "#/hooks/mutation/use-submit-feedback";
 import { BrandButton } from "../settings/brand-button";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 const FEEDBACK_VERSION = "1.0";
 const VIEWER_PAGE = "https://www.all-hands.dev/share";
@@ -16,6 +17,7 @@ interface FeedbackFormProps {
 
 export function FeedbackForm({ onClose, polarity }: FeedbackFormProps) {
   const { t } = useTranslation();
+  const { data: conversation } = useActiveConversation();
 
   const copiedToClipboardToast = () => {
     hotToast(t(I18nKey.FEEDBACK$PASSWORD_COPIED_MESSAGE), {
@@ -59,6 +61,15 @@ export function FeedbackForm({ onClose, polarity }: FeedbackFormProps) {
   };
 
   const { mutate: submitFeedback, isPending } = useSubmitFeedback();
+
+  // TODO: Hide FeedbackForm for V1 conversations
+  // This is a temporary measure and may be re-enabled in the future
+  const isV1Conversation = conversation?.conversation_version === "V1";
+
+  // Don't render anything for V1 conversations
+  if (isV1Conversation) {
+    return null;
+  }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event?.preventDefault();

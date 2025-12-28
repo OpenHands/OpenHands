@@ -1,1 +1,0 @@
-"""OpenHands CLI module."""

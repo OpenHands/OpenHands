@@ -14,11 +14,13 @@ from sqlalchemy import UUID as SQLUUID
 from sqlalchemy import Column, Enum, String, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     CreateEventCallbackRequest,
     EventCallback,
     EventCallbackPage,
     EventCallbackProcessor,
+    EventCallbackStatus,
     EventKind,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
@@ -46,9 +48,13 @@ class StoredEventCallback(Base):  # type: ignore
     __tablename__ = 'event_callback'
     id = Column(SQLUUID, primary_key=True)
     conversation_id = Column(SQLUUID, nullable=True)
+    status = Column(
+        Enum(EventCallbackStatus), nullable=False, default=EventCallbackStatus.ACTIVE
+    )
     processor = Column(create_json_type_decorator(EventCallbackProcessor))
     event_kind = Column(String, nullable=True)
     created_at = Column(UtcDateTime, server_default=func.now(), index=True)
+    updated_at = Column(UtcDateTime, server_default=func.now(), index=True)
 
 
 class StoredEventCallbackResult(Base):  # type: ignore
@@ -56,7 +62,7 @@ class StoredEventCallbackResult(Base):  # type: ignore
     id = Column(SQLUUID, primary_key=True)
     status = Column(Enum(EventCallbackResultStatus), nullable=True)
     event_callback_id = Column(SQLUUID, index=True)
-    event_id = Column(SQLUUID, index=True)
+    event_id = Column(String, index=True)
     conversation_id = Column(SQLUUID, index=True)
     detail = Column(String, nullable=True)
     created_at = Column(UtcDateTime, server_default=func.now(), index=True)
@@ -170,9 +176,16 @@ class SQLEventCallbackService(EventCallbackService):
         callbacks = [EventCallback(**row2dict(cb)) for cb in stored_callbacks]
         return EventCallbackPage(items=callbacks, next_page_id=next_page_id)
 
+    async def save_event_callback(self, event_callback: EventCallback) -> EventCallback:
+        event_callback.updated_at = utc_now()
+        stored_callback = StoredEventCallback(**event_callback.model_dump())
+        await self.db_session.merge(stored_callback)
+        return event_callback
+
     async def execute_callbacks(self, conversation_id: UUID, event: Event) -> None:
         query = (
             select(StoredEventCallback)
+            .where(StoredEventCallback.status == EventCallbackStatus.ACTIVE)
             .where(
                 or_(
                     StoredEventCallback.event_kind == event.kind,
@@ -196,6 +209,10 @@ class SQLEventCallbackService(EventCallbackService):
                     for callback in callbacks
                 ]
             )
+
+            # Persist any new changes callbacks may have made to itself
+            for callback in callbacks:
+                await self.save_event_callback(callback)
             await self.db_session.commit()
 
     async def execute_callback(
@@ -203,7 +220,9 @@ class SQLEventCallbackService(EventCallbackService):
     ):
         try:
             result = await callback.processor(conversation_id, callback, event)
-            stored_result = StoredEventCallbackResult(**row2dict(result))
+            if result is None:
+                return
+            stored_result = StoredEventCallbackResult(**result.model_dump())
         except Exception as exc:
             _logger.exception(f'Exception in callback {callback.id}', stack_info=True)
             stored_result = StoredEventCallbackResult(

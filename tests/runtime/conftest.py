@@ -17,6 +17,7 @@ from openhands.runtime.impl.docker.docker_runtime import DockerRuntime
 from openhands.runtime.impl.local.local_runtime import LocalRuntime
 from openhands.runtime.impl.remote.remote_runtime import RemoteRuntime
 from openhands.runtime.plugins import AgentSkillsRequirement, JupyterRequirement
+from openhands.runtime.utils.port_lock import find_available_port_with_lock
 from openhands.storage import get_file_store
 from openhands.utils.async_utils import call_async_from_sync
 
@@ -294,9 +295,49 @@ def _load_runtime(
     return runtime, runtime.config
 
 
+# Port range for test HTTP servers (separate from runtime ports to avoid conflicts)
+TEST_HTTP_SERVER_PORT_RANGE = (18000, 18999)
+
+
+@pytest.fixture
+def dynamic_port(request):
+    """Allocate a dynamic port with locking to prevent race conditions in parallel tests.
+
+    This fixture uses the existing port locking system to ensure that parallel test
+    workers don't try to use the same port for HTTP servers.
+
+    Returns:
+        int: An available port number that is locked for this test
+    """
+    result = find_available_port_with_lock(
+        min_port=TEST_HTTP_SERVER_PORT_RANGE[0],
+        max_port=TEST_HTTP_SERVER_PORT_RANGE[1],
+        max_attempts=20,
+        bind_address='0.0.0.0',
+        lock_timeout=2.0,
+    )
+
+    if result is None:
+        pytest.fail(
+            f'Could not allocate a dynamic port in range {TEST_HTTP_SERVER_PORT_RANGE}'
+        )
+
+    port, port_lock = result
+    logger.info(f'Allocated dynamic port {port} for test {request.node.name}')
+
+    def cleanup():
+        if port_lock:
+            port_lock.release()
+            logger.info(f'Released dynamic port {port} for test {request.node.name}')
+
+    request.addfinalizer(cleanup)
+    return port
+
+
 # Export necessary function
 __all__ = [
     '_load_runtime',
     '_get_host_folder',
     '_remove_folder',
+    'dynamic_port',
 ]

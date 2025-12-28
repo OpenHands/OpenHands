@@ -114,7 +114,7 @@ def test_load_microagents_with_selected_repo(temp_dir, runtime_cls, run_as_openh
     try:
         # Load microagents with selected repository
         loaded_agents = runtime.get_microagents_from_selected_repo(
-            'All-Hands-AI/OpenHands'
+            'OpenHands/OpenHands'
         )
 
         # Verify all agents are loaded

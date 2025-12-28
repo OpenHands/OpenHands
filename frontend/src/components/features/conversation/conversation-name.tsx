@@ -9,10 +9,11 @@ import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
-import { MicroagentsModal } from "../conversation-panel/microagents-modal";
+import { SkillsModal } from "../conversation-panel/skills-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { MetricsModal } from "./metrics-modal/metrics-modal";
+import { ConversationVersionBadge } from "../conversation-panel/conversation-card/conversation-version-badge";
 
 export function ConversationName() {
   const { t } = useTranslation();
@@ -29,9 +30,10 @@ export function ConversationName() {
     handleDelete,
     handleStop,
     handleDownloadViaVSCode,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
-    handleShowMicroagents,
+    handleShowSkills,
     handleExportConversation,
     handleConfirmDelete,
     handleConfirmStop,
@@ -39,8 +41,8 @@ export function ConversationName() {
     setMetricsModalVisible,
     systemModalVisible,
     setSystemModalVisible,
-    microagentsModalVisible,
-    setMicroagentsModalVisible,
+    skillsModalVisible,
+    setSkillsModalVisible,
     confirmDeleteModalVisible,
     setConfirmDeleteModalVisible,
     confirmStopModalVisible,
@@ -49,9 +51,10 @@ export function ConversationName() {
     shouldShowStop,
     shouldShowDownload,
     shouldShowExport,
+    shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
-    shouldShowMicroagents,
+    shouldShowSkills,
   } = useConversationNameContextMenu({
     conversationId,
     conversationStatus: conversation?.status,
@@ -123,7 +126,7 @@ export function ConversationName() {
   return (
     <>
       <div
-        className="flex items-center gap-2 h-[22px] text-base font-normal text-left pl-0 lg:pl-3.5"
+        className="flex items-center gap-2 h-[22px] text-base font-normal text-left pl-0 lg:pl-1"
         data-testid="conversation-name"
       >
         {titleMode === "edit" ? (
@@ -149,6 +152,12 @@ export function ConversationName() {
         )}
 
         {titleMode !== "edit" && (
+          <ConversationVersionBadge
+            version={conversation.conversation_version}
+          />
+        )}
+
+        {titleMode !== "edit" && (
           <div className="relative flex items-center">
             <EllipsisButton fill="#B1B9D3" onClick={handleEllipsisClick} />
             {contextMenuOpen && (
@@ -163,14 +172,17 @@ export function ConversationName() {
                 onShowAgentTools={
                   shouldShowAgentTools ? handleShowAgentTools : undefined
                 }
-                onShowMicroagents={
-                  shouldShowMicroagents ? handleShowMicroagents : undefined
-                }
+                onShowSkills={shouldShowSkills ? handleShowSkills : undefined}
                 onExportConversation={
                   shouldShowExport ? handleExportConversation : undefined
                 }
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
+                }
+                onDownloadConversation={
+                  shouldShowDownloadConversation
+                    ? handleDownloadConversation
+                    : undefined
                 }
                 position="bottom"
               />
@@ -192,9 +204,9 @@ export function ConversationName() {
         systemMessage={systemMessage ? systemMessage.args : null}
       />
 
-      {/* Microagents Modal */}
-      {microagentsModalVisible && (
-        <MicroagentsModal onClose={() => setMicroagentsModalVisible(false)} />
+      {/* Skills Modal */}
+      {skillsModalVisible && (
+        <SkillsModal onClose={() => setSkillsModalVisible(false)} />
       )}
 
       {/* Confirm Delete Modal */}

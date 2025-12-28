@@ -54,6 +54,7 @@ class IssueResolver:
 
     def __init__(self, args: Namespace) -> None:
         """Initialize the IssueResolver with the given parameters.
+
         Params initialized:
             owner: Owner of the repo.
             repo: Repository name.
@@ -81,6 +82,8 @@ class IssueResolver:
             or os.getenv('GITHUB_TOKEN')
             or os.getenv('GITLAB_TOKEN')
             or os.getenv('BITBUCKET_TOKEN')
+            or os.getenv('AZURE_DEVOPS_TOKEN')
+            or os.getenv('FORGEJO_TOKEN')
         )
         username = args.username if args.username else os.getenv('GIT_USERNAME')
         if not username:
@@ -130,6 +133,8 @@ class IssueResolver:
                 else 'gitlab.com'
                 if platform == ProviderType.GITLAB
                 else 'bitbucket.org'
+                if platform == ProviderType.BITBUCKET
+                else 'dev.azure.com'
             )
 
         self.output_dir = args.output_dir
@@ -222,7 +227,7 @@ class IssueResolver:
             and not is_experimental
         ):
             runtime_container_image = (
-                f'ghcr.io/all-hands-ai/runtime:{openhands.__version__}-nikolaik'
+                f'ghcr.io/openhands/runtime:{openhands.__version__}-nikolaik'
             )
 
         # Convert container image values to string or None

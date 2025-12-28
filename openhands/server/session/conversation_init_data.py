@@ -1,4 +1,7 @@
-from pydantic import ConfigDict, Field
+from collections.abc import Mapping
+from types import MappingProxyType
+
+from pydantic import ConfigDict, Field, field_validator
 
 from openhands.integrations.provider import CUSTOM_SECRETS_TYPE, PROVIDER_TOKEN_TYPE
 from openhands.integrations.service_types import ProviderType
@@ -19,3 +22,17 @@ class ConversationInitData(Settings):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
     )
+
+    @field_validator('git_provider_tokens', 'custom_secrets')
+    @classmethod
+    def immutable_validator(cls, value: Mapping | None) -> MappingProxyType | None:
+        """Ensure git_provider_tokens and custom_secrets are always MappingProxyType.
+
+        This validator converts any Mapping (including dict) to MappingProxyType,
+        ensuring type safety and immutability. If the value is None, it returns None.
+        """
+        if value is None:
+            return None
+        if isinstance(value, MappingProxyType):
+            return value
+        return MappingProxyType(value)

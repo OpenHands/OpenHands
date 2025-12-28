@@ -32,7 +32,7 @@ from openhands.utils.prompt import (
 
 GLOBAL_MICROAGENTS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(openhands.__file__)),
-    'microagents',
+    'skills',
 )
 
 USER_MICROAGENTS_DIR = Path.home() / '.openhands' / 'microagents'
@@ -77,7 +77,7 @@ class Memory:
         self.conversation_instructions: ConversationInstructions | None = None
 
         # Load global microagents (Knowledge + Repo)
-        # from typically OpenHands/microagents (i.e., the PUBLIC microagents)
+        # from typically OpenHands/skills (i.e., the PUBLIC microagents)
         self._load_global_microagents()
 
         # Load user microagents from ~/.openhands/microagents/
@@ -172,33 +172,50 @@ class Memory:
         ):
             obs = RecallObservation(
                 recall_type=RecallType.WORKSPACE_CONTEXT,
-                repo_name=self.repository_info.repo_name
-                if self.repository_info and self.repository_info.repo_name is not None
-                else '',
-                repo_directory=self.repository_info.repo_directory
-                if self.repository_info
-                and self.repository_info.repo_directory is not None
-                else '',
-                repo_branch=self.repository_info.branch_name
-                if self.repository_info and self.repository_info.branch_name is not None
-                else '',
+                repo_name=(
+                    self.repository_info.repo_name
+                    if self.repository_info
+                    and self.repository_info.repo_name is not None
+                    else ''
+                ),
+                repo_directory=(
+                    self.repository_info.repo_directory
+                    if self.repository_info
+                    and self.repository_info.repo_directory is not None
+                    else ''
+                ),
+                repo_branch=(
+                    self.repository_info.branch_name
+                    if self.repository_info
+                    and self.repository_info.branch_name is not None
+                    else ''
+                ),
                 repo_instructions=repo_instructions if repo_instructions else '',
-                runtime_hosts=self.runtime_info.available_hosts
-                if self.runtime_info and self.runtime_info.available_hosts is not None
-                else {},
-                additional_agent_instructions=self.runtime_info.additional_agent_instructions
-                if self.runtime_info
-                and self.runtime_info.additional_agent_instructions is not None
-                else '',
+                runtime_hosts=(
+                    self.runtime_info.available_hosts
+                    if self.runtime_info
+                    and self.runtime_info.available_hosts is not None
+                    else {}
+                ),
+                additional_agent_instructions=(
+                    self.runtime_info.additional_agent_instructions
+                    if self.runtime_info
+                    and self.runtime_info.additional_agent_instructions is not None
+                    else ''
+                ),
                 microagent_knowledge=microagent_knowledge,
                 content='Added workspace context',
                 date=self.runtime_info.date if self.runtime_info is not None else '',
-                custom_secrets_descriptions=self.runtime_info.custom_secrets_descriptions
-                if self.runtime_info is not None
-                else {},
-                conversation_instructions=self.conversation_instructions.content
-                if self.conversation_instructions is not None
-                else '',
+                custom_secrets_descriptions=(
+                    self.runtime_info.custom_secrets_descriptions
+                    if self.runtime_info is not None
+                    else {}
+                ),
+                conversation_instructions=(
+                    self.conversation_instructions.content
+                    if self.conversation_instructions is not None
+                    else ''
+                ),
                 working_dir=self.runtime_info.working_dir if self.runtime_info else '',
             )
             return obs

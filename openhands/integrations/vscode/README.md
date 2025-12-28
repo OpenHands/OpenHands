@@ -4,7 +4,7 @@ The official OpenHands companion extension for Visual Studio Code.
 
 This extension seamlessly integrates OpenHands into your VSCode workflow, allowing you to start coding sessions with your AI agent directly from your editor.
 
-![OpenHands VSCode Extension Demo](https://raw.githubusercontent.com/All-Hands-AI/OpenHands/main/assets/images/vscode-extension-demo.gif)
+![OpenHands VSCode Extension Demo](https://raw.githubusercontent.com/OpenHands/OpenHands/main/assets/images/vscode-extension-demo.gif)
 
 ## Features
 
@@ -32,7 +32,7 @@ You can access the extension's commands in two ways:
 For the best experience, the OpenHands CLI will attempt to install the extension for you automatically the first time you run it inside VSCode.
 
 If you need to install it manually:
-1.  Download the latest `.vsix` file from the [GitHub Releases page](https://github.com/All-Hands-AI/OpenHands/releases).
+1.  Download the latest `.vsix` file from the [GitHub Releases page](https://github.com/OpenHands/OpenHands/releases).
 2.  In VSCode, open the Command Palette (`Ctrl+Shift+P`).
 3.  Run the **"Extensions: Install from VSIX..."** command.
 4.  Select the `.vsix` file you downloaded.

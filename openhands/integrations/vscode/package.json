@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/all-hands-ai/OpenHands.git"
+    "url": "https://github.com/openhands/OpenHands.git"
   },
   "engines": {
     "vscode": "^1.98.2",

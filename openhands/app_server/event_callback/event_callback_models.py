@@ -4,12 +4,13 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID, uuid4
 
 from pydantic import Field
 
-from openhands.agent_server.utils import utc_now
+from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
     EventCallbackResultStatus,
@@ -28,6 +29,13 @@ else:
     EventKind = Literal[tuple(c.__name__ for c in get_known_concrete_subclasses(Event))]
 
 
+class EventCallbackStatus(Enum):
+    ACTIVE = 'ACTIVE'
+    DISABLED = 'DISABLED'
+    COMPLETED = 'COMPLETED'
+    ERROR = 'ERROR'
+
+
 class EventCallbackProcessor(DiscriminatedUnionMixin, ABC):
     @abstractmethod
     async def __call__(
@@ -35,7 +43,7 @@ class EventCallbackProcessor(DiscriminatedUnionMixin, ABC):
         conversation_id: UUID,
         callback: EventCallback,
         event: Event,
-    ) -> EventCallbackResult:
+    ) -> EventCallbackResult | None:
         """Process an event."""
 
 
@@ -58,7 +66,7 @@ class LoggingCallbackProcessor(EventCallbackProcessor):
 
 
 class CreateEventCallbackRequest(OpenHandsModel):
-    conversation_id: UUID | None = Field(
+    conversation_id: OpenHandsUUID | None = Field(
         default=None,
         description=(
             'Optional filter on the conversation to which this callback applies'
@@ -74,8 +82,10 @@ class CreateEventCallbackRequest(OpenHandsModel):
 
 
 class EventCallback(CreateEventCallbackRequest):
-    id: UUID = Field(default_factory=uuid4)
+    id: OpenHandsUUID = Field(default_factory=uuid4)
+    status: EventCallbackStatus = Field(default=EventCallbackStatus.ACTIVE)
     created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class EventCallbackPage(OpenHandsModel):

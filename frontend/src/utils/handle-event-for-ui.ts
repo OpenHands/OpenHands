@@ -2,7 +2,8 @@ import { OpenHandsEvent } from "#/types/v1/core";
 import { isObservationEvent } from "#/types/v1/type-guards";
 
 /**
- * Handles adding an event to the UI events array, with special logic for observation events
+ * Handles adding an event to the UI events array
+ * Replaces actions with observations when they arrive (so UI shows observation instead of action)
  */
 export const handleEventForUI = (
   event: OpenHandsEvent,

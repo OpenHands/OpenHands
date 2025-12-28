@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import React from "react";
-import posthog from "posthog-js";
+import { usePostHog } from "posthog-js/react";
 import { useParams, useNavigate } from "react-router";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import useMetricsStore from "#/stores/metrics-store";
@@ -8,13 +8,15 @@ import { isSystemMessage, isActionOrObservation } from "#/types/core/guards";
 import { ConversationStatus } from "#/types/conversation-status";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { useDeleteConversation } from "./mutation/use-delete-conversation";
-import { useStopConversation } from "./mutation/use-stop-conversation";
+import { useUnifiedPauseConversationSandbox } from "./mutation/use-unified-stop-conversation";
 import { useGetTrajectory } from "./mutation/use-get-trajectory";
 import { downloadTrajectory } from "#/utils/download-trajectory";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV0Event } from "#/types/v1/type-guards";
+import { useActiveConversation } from "./query/use-active-conversation";
+import { useDownloadConversation } from "./use-download-conversation";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -29,23 +31,25 @@ export function useConversationNameContextMenu({
   showOptions = false,
   onContextMenuToggle,
 }: UseConversationNameContextMenuProps) {
+  const posthog = usePostHog();
   const { t } = useTranslation();
   const { conversationId: currentConversationId } = useParams();
   const navigate = useNavigate();
   const events = useEventStore((state) => state.events);
+  const { data: conversation } = useActiveConversation();
   const { mutate: deleteConversation } = useDeleteConversation();
-  const { mutate: stopConversation } = useStopConversation();
+  const { mutate: stopConversation } = useUnifiedPauseConversationSandbox();
   const { mutate: getTrajectory } = useGetTrajectory();
   const metrics = useMetricsStore();
 
   const [metricsModalVisible, setMetricsModalVisible] = React.useState(false);
   const [systemModalVisible, setSystemModalVisible] = React.useState(false);
-  const [microagentsModalVisible, setMicroagentsModalVisible] =
-    React.useState(false);
+  const [skillsModalVisible, setSkillsModalVisible] = React.useState(false);
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
+  const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const systemMessage = events
     .filter(isV0Event)
@@ -148,6 +152,17 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
+  const handleDownloadConversation = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (conversationId && conversation?.conversation_version === "V1") {
+      await downloadConversation(conversationId);
+    }
+    onContextMenuToggle?.(false);
+  };
+
   const handleDisplayCost = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setMetricsModalVisible(true);
@@ -160,11 +175,9 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
-  const handleShowMicroagents = (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
+  const handleShowSkills = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setMicroagentsModalVisible(true);
+    setSkillsModalVisible(true);
     onContextMenuToggle?.(false);
   };
 
@@ -175,9 +188,10 @@ export function useConversationNameContextMenu({
     handleEdit,
     handleExportConversation,
     handleDownloadViaVSCode,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
-    handleShowMicroagents,
+    handleShowSkills,
     handleConfirmDelete,
     handleConfirmStop,
 
@@ -186,8 +200,8 @@ export function useConversationNameContextMenu({
     setMetricsModalVisible,
     systemModalVisible,
     setSystemModalVisible,
-    microagentsModalVisible,
-    setMicroagentsModalVisible,
+    skillsModalVisible,
+    setSkillsModalVisible,
     confirmDeleteModalVisible,
     setConfirmDeleteModalVisible,
     confirmStopModalVisible,
@@ -201,8 +215,13 @@ export function useConversationNameContextMenu({
     shouldShowStop: conversationStatus !== "STOPPED",
     shouldShowDownload: Boolean(conversationId && showOptions),
     shouldShowExport: Boolean(conversationId && showOptions),
+    shouldShowDownloadConversation: Boolean(
+      conversationId &&
+      showOptions &&
+      conversation?.conversation_version === "V1",
+    ),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
-    shouldShowMicroagents: Boolean(showOptions && conversationId),
+    shouldShowSkills: Boolean(showOptions && conversationId),
   };
 }

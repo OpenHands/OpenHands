@@ -48,7 +48,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
       - name: Install Python dependencies using Poetry
-        run: poetry install --with dev,test,runtime
+        run: |
+          poetry install --with dev,test,runtime
+          poetry run pip install pytest-xdist
+          poetry run pip install pytest-rerunfailures
       - name: Build Environment
         run: make build
       - name: Run Unit Tests
@@ -56,7 +59,7 @@ jobs:
         env:
           COVERAGE_FILE: ".coverage.${{ matrix.python_version }}"
       - name: Run Runtime Tests with CLIRuntime
-        run: PYTHONPATH=".:$PYTHONPATH" TEST_RUNTIME=cli poetry run pytest -s tests/runtime/test_bash.py --cov=openhands --cov-branch
+        run: PYTHONPATH=".:$PYTHONPATH" TEST_RUNTIME=cli poetry run pytest -n 5 --reruns 2 --reruns-delay 3 -s tests/runtime/test_bash.py --cov=openhands --cov-branch
         env:
           COVERAGE_FILE: ".coverage.runtime.${{ matrix.python_version }}"
       - name: Store coverage file
@@ -67,37 +70,7 @@ jobs:
             .coverage.${{ matrix.python_version }}
             .coverage.runtime.${{ matrix.python_version }}
           include-hidden-files: true
-  # Run specific Windows python tests
-  test-on-windows:
-    name: Python Tests on Windows
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python-version: ["3.12"]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install pipx
-        run: pip install pipx
-      - name: Install poetry via pipx
-        run: pipx install poetry
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "poetry"
-      - name: Install Python dependencies using Poetry
-        run: poetry install --with dev,test,runtime
-      - name: Run Windows unit tests
-        run: poetry run pytest -svv tests/unit/runtime/utils/test_windows_bash.py
-        env:
-          PYTHONPATH: ".;$env:PYTHONPATH"
-          DEBUG: "1"
-      - name: Run Windows runtime tests with LocalRuntime
-        run: $env:TEST_RUNTIME="local"; poetry run pytest -svv tests/runtime/test_bash.py
-        env:
-          PYTHONPATH: ".;$env:PYTHONPATH"
-          TEST_RUNTIME: local
-          DEBUG: "1"
+
   test-enterprise:
     name: Enterprise Python Unit Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -128,57 +101,11 @@ jobs:
           path: ".coverage.enterprise.${{ matrix.python_version }}"
           include-hidden-files: true
 
-  # Run CLI unit tests
-  test-cli-python:
-    name: CLI Unit Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    strategy:
-      matrix:
-        python-version: ["3.12"]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: useblacksmith/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "latest"
-
-      - name: Install dependencies
-        working-directory: ./openhands-cli
-        run: |
-          uv sync --group dev
-
-      - name: Run CLI unit tests
-        working-directory: ./openhands-cli
-        env:
-          # write coverage to repo root so the merge step finds it
-          COVERAGE_FILE: "${{ github.workspace }}/.coverage.openhands-cli.${{ matrix.python-version }}"
-        run: |
-          uv run pytest --forked -n auto -s \
-            -p no:ddtrace -p no:ddtrace.pytest_bdd -p no:ddtrace.pytest_benchmark \
-            tests --cov=openhands_cli --cov-branch
-
-      - name: Store coverage file
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-openhands-cli
-          path: ".coverage.openhands-cli.${{ matrix.python-version }}"
-          include-hidden-files: true
-
-
   coverage-comment:
     name: Coverage Comment
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    needs: [test-on-linux, test-enterprise, test-cli-python]
+    needs: [test-on-linux, test-enterprise]
 
     permissions:
       pull-requests: write
@@ -191,9 +118,6 @@ jobs:
         with:
           pattern: coverage-*
           merge-multiple: true
-
-      - name: Create symlink for CLI source files
-        run: ln -sf openhands-cli/openhands_cli openhands_cli
 
       - name: Coverage comment
         id: coverage_comment

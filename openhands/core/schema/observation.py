@@ -58,3 +58,6 @@ class ObservationType(str, Enum):
 
     TASK_TRACKING = 'task_tracking'
     """Result of a task tracking operation"""
+
+    LOOP_DETECTION = 'loop_detection'
+    """Results of a dead-loop detection"""

@@ -1,18 +1,15 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router";
-import { useMutation } from "@tanstack/react-query";
+import { useSearchParams } from "react-router";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 import { TOSCheckbox } from "#/components/features/waitlist/tos-checkbox";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { handleCaptureConsent } from "#/utils/handle-capture-consent";
-import { openHands } from "#/api/open-hands-axios";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { useAcceptTos } from "#/hooks/mutation/use-accept-tos";
 
 export default function AcceptTOS() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [isTosAccepted, setIsTosAccepted] = React.useState(false);
 
@@ -20,40 +17,11 @@ export default function AcceptTOS() {
   const redirectUrl = searchParams.get("redirect_url") || "/";
 
   // Use mutation for accepting TOS
-  const { mutate: acceptTOS, isPending: isSubmitting } = useMutation({
-    mutationFn: async () => {
-      // Set consent for analytics
-      handleCaptureConsent(true);
-
-      // Call the API to record TOS acceptance in the database
-      return openHands.post("/api/accept_tos", {
-        redirect_url: redirectUrl,
-      });
-    },
-    onSuccess: (response) => {
-      // Get the redirect URL from the response
-      const finalRedirectUrl = response.data.redirect_url || redirectUrl;
-
-      // Check if the redirect URL is an external URL (starts with http or https)
-      if (
-        finalRedirectUrl.startsWith("http://") ||
-        finalRedirectUrl.startsWith("https://")
-      ) {
-        // For external URLs, redirect using window.location
-        window.location.href = finalRedirectUrl;
-      } else {
-        // For internal routes, use navigate
-        navigate(finalRedirectUrl);
-      }
-    },
-    onError: () => {
-      window.location.href = "/";
-    },
-  });
+  const { mutate: acceptTOS, isPending: isSubmitting } = useAcceptTos();
 
   const handleAcceptTOS = () => {
     if (isTosAccepted && !isSubmitting) {
-      acceptTOS();
+      acceptTOS({ redirectUrl });
     }
   };
 

@@ -19,6 +19,8 @@ from openhands.app_server.sandbox.docker_sandbox_spec_service import get_docker_
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     VSCODE,
+    WORKER_1,
+    WORKER_2,
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
@@ -30,6 +32,9 @@ from openhands.app_server.sandbox.sandbox_service import (
 )
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname_for_docker,
+)
 
 _logger = logging.getLogger(__name__)
 SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
@@ -72,6 +77,7 @@ class DockerSandboxService(SandboxService):
     exposed_ports: list[ExposedPort]
     health_check_path: str | None
     httpx_client: httpx.AsyncClient
+    max_num_sandboxes: int
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
 
     def _find_unused_port(self) -> int:
@@ -87,7 +93,8 @@ class DockerSandboxService(SandboxService):
         status_mapping = {
             'running': SandboxStatus.RUNNING,
             'paused': SandboxStatus.PAUSED,
-            'exited': SandboxStatus.MISSING,
+            # The stop button was pressed in the docker console
+            'exited': SandboxStatus.PAUSED,
             'created': SandboxStatus.STARTING,
             'restarting': SandboxStatus.STARTING,
             'removing': SandboxStatus.MISSING,
@@ -124,6 +131,10 @@ class DockerSandboxService(SandboxService):
         session_api_key = None
 
         if status == SandboxStatus.RUNNING:
+            # Get session API key first
+            env = self._get_container_env_vars(container)
+            session_api_key = env.get(SESSION_API_KEY_VARIABLE)
+
             # Get the first exposed port mapping
             exposed_urls = []
             port_bindings = container.attrs.get('NetworkSettings', {}).get('Ports', {})
@@ -141,18 +152,19 @@ class DockerSandboxService(SandboxService):
                             None,
                         )
                         if exposed_port:
+                            url = self.container_url_pattern.format(port=host_port)
+
+                            # VSCode URLs require the api_key and working dir
+                            if exposed_port.name == VSCODE:
+                                url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+
                             exposed_urls.append(
                                 ExposedUrl(
                                     name=exposed_port.name,
-                                    url=self.container_url_pattern.format(
-                                        port=host_port
-                                    ),
+                                    url=url,
+                                    port=host_port,
                                 )
                             )
-
-            # Get session API key
-            env = self._get_container_env_vars(container)
-            session_api_key = env[SESSION_API_KEY_VARIABLE]
 
         return SandboxInfo(
             id=container.name,
@@ -177,6 +189,9 @@ class DockerSandboxService(SandboxService):
                 if exposed_url.name == AGENT_SERVER
             )
             try:
+                # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
+                app_server_url = replace_localhost_hostname_for_docker(app_server_url)
+
                 response = await self.httpx_client.get(
                     f'{app_server_url}{self.health_check_path}'
                 )
@@ -184,7 +199,7 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                _logger.info(f'Sandbox server not running: {exc}')
+                _logger.info(f'Sandbox server not running: {app_server_url} : {exc}')
                 sandbox_info.status = SandboxStatus.ERROR
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None
@@ -202,7 +217,9 @@ class DockerSandboxService(SandboxService):
             sandboxes = []
 
             for container in all_containers:
-                if container.name.startswith(self.container_name_prefix):
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
                     sandbox_info = await self._container_to_checked_sandbox_info(
                         container
                     )
@@ -243,8 +260,34 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return None
 
+    async def get_sandbox_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxInfo | None:
+        """Get a single sandbox by session API key."""
+        try:
+            # Get all containers with our prefix
+            all_containers = self.docker_client.containers.list(all=True)
+
+            for container in all_containers:
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
+                    # Check if this container has the matching session API key
+                    env_vars = self._get_container_env_vars(container)
+                    container_session_key = env_vars.get(SESSION_API_KEY_VARIABLE)
+
+                    if container_session_key == session_api_key:
+                        return await self._container_to_checked_sandbox_info(container)
+
+            return None
+        except (NotFound, APIError):
+            return None
+
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
         """Start a new sandbox."""
+        # Enforce sandbox limits by cleaning up old sandboxes
+        await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
+
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
         else:
@@ -265,8 +308,7 @@ class DockerSandboxService(SandboxService):
         env_vars = sandbox_spec.initial_env.copy()
         env_vars[SESSION_API_KEY_VARIABLE] = session_api_key
         env_vars[WEBHOOK_CALLBACK_VARIABLE] = (
-            f'http://host.docker.internal:{self.host_port}'
-            f'/api/v1/webhooks/{container_name}'
+            f'http://host.docker.internal:{self.host_port}/api/v1/webhooks'
         )
 
         # Prepare port mappings and add port environment variables
@@ -304,6 +346,9 @@ class DockerSandboxService(SandboxService):
                 working_dir=sandbox_spec.working_dir,
                 labels=labels,
                 detach=True,
+                # Use Docker's tini init process to ensure proper signal handling and reaping of
+                # zombie child processes.
+                init=True,
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)
@@ -315,6 +360,9 @@ class DockerSandboxService(SandboxService):
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox."""
+        # Enforce sandbox limits by cleaning up old sandboxes
+        await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
+
         try:
             if not sandbox_id.startswith(self.container_name_prefix):
                 return False
@@ -377,6 +425,10 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
     container_url_pattern: str = 'http://localhost:{port}'
     host_port: int = 3000
     container_name_prefix: str = 'oh-agent-server-'
+    max_num_sandboxes: int = Field(
+        default=5,
+        description='Maximum number of sandboxes allowed to run simultaneously',
+    )
     mounts: list[VolumeMount] = Field(default_factory=list)
     exposed_ports: list[ExposedPort] = Field(
         default_factory=lambda: [
@@ -393,6 +445,20 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                     'The port on which the VSCode server runs within the container'
                 ),
                 container_port=8001,
+            ),
+            ExposedPort(
+                name=WORKER_1,
+                description=(
+                    'The first port on which the agent should start application servers.'
+                ),
+                container_port=8011,
+            ),
+            ExposedPort(
+                name=WORKER_2,
+                description=(
+                    'The first port on which the agent should start application servers.'
+                ),
+                container_port=8012,
             ),
         ]
     )
@@ -426,4 +492,5 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 exposed_ports=self.exposed_ports,
                 health_check_path=self.health_check_path,
                 httpx_client=httpx_client,
+                max_num_sandboxes=self.max_num_sandboxes,
             )

@@ -24,6 +24,7 @@ export const handleActionEventCacheInvalidation = (
   // Invalidate file_changes cache for file-related actions
   if (
     action.kind === "StrReplaceEditorAction" ||
+    action.kind === "FileEditorAction" ||
     action.kind === "ExecuteBashAction"
   ) {
     queryClient.invalidateQueries(
@@ -35,7 +36,11 @@ export const handleActionEventCacheInvalidation = (
   }
 
   // Invalidate specific file diff cache for file modifications
-  if (action.kind === "StrReplaceEditorAction" && action.path) {
+  if (
+    (action.kind === "StrReplaceEditorAction" ||
+      action.kind === "FileEditorAction") &&
+    action.path
+  ) {
     const strippedPath = stripWorkspacePrefix(action.path);
     queryClient.invalidateQueries({
       queryKey: ["file_diff", conversationId, strippedPath],

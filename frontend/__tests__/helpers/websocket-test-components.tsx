@@ -10,11 +10,13 @@ import { OpenHandsEvent } from "#/types/v1/core";
  * Test component to access and display WebSocket connection state
  */
 export function ConnectionStatusComponent() {
-  const { connectionState } = useConversationWebSocket();
+  const context = useConversationWebSocket();
 
   return (
     <div>
-      <div data-testid="connection-state">{connectionState}</div>
+      <div data-testid="connection-state">
+        {context?.connectionState || "NOT_AVAILABLE"}
+      </div>
     </div>
   );
 }

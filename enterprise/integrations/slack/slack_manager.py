@@ -87,7 +87,7 @@ class SlackManager(Manager):
         return slack_user, saas_user_auth
 
     def _infer_repo_from_message(self, user_msg: str) -> str | None:
-        # Regular expression to match patterns like "All-Hands-AI/OpenHands" or "deploy repo"
+        # Regular expression to match patterns like "OpenHands/OpenHands" or "deploy repo"
         pattern = r'([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)|([a-zA-Z0-9_-]+)(?=\s+repo)'
         match = re.search(pattern, user_msg)
 

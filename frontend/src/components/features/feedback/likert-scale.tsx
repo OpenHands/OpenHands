@@ -5,6 +5,7 @@ import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { useSubmitConversationFeedback } from "#/hooks/mutation/use-submit-conversation-feedback";
 import { ScrollContext } from "#/context/scroll-context";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 // Global timeout duration in milliseconds
 const AUTO_SUBMIT_TIMEOUT = 10000;
@@ -23,6 +24,7 @@ export function LikertScale({
   initialReason,
 }: LikertScaleProps) {
   const { t } = useTranslation();
+  const { data: conversation } = useActiveConversation();
 
   const [selectedRating, setSelectedRating] = useState<number | null>(
     initialRating || null,
@@ -76,6 +78,56 @@ export function LikertScale({
       setSelectedReason(initialReason);
     }
   }, [initialReason]);
+
+  // Countdown effect
+  useEffect(() => {
+    if (countdown > 0 && showReasons && !isSubmitted) {
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    return () => {};
+  }, [countdown, showReasons, isSubmitted]);
+
+  // Clean up timeout on unmount
+  useEffect(
+    () => () => {
+      if (reasonTimeout) {
+        clearTimeout(reasonTimeout);
+      }
+    },
+    [reasonTimeout],
+  );
+
+  // Scroll to bottom when component mounts, but only if user is already at the bottom
+  useEffect(() => {
+    if (scrollToBottom && autoScroll && !isSubmitted) {
+      // Small delay to ensure the component is fully rendered
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+    }
+  }, [scrollToBottom, autoScroll, isSubmitted]);
+
+  // Scroll to bottom when reasons are shown, but only if user is already at the bottom
+  useEffect(() => {
+    if (scrollToBottom && autoScroll && showReasons) {
+      // Small delay to ensure the reasons are fully rendered
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+    }
+  }, [scrollToBottom, autoScroll, showReasons]);
+
+  // TODO: Hide LikertScale for V1 conversations
+  // This is a temporary measure and may be re-enabled in the future
+  const isV1Conversation = conversation?.conversation_version === "V1";
+
+  // Don't render anything for V1 conversations
+  if (isV1Conversation) {
+    return null;
+  }
 
   // Submit feedback and disable the component
   const submitFeedback = (rating: number, reason?: string) => {
@@ -136,47 +188,6 @@ export function LikertScale({
       submitFeedback(selectedRating, reason);
     }
   };
-
-  // Countdown effect
-  useEffect(() => {
-    if (countdown > 0 && showReasons && !isSubmitted) {
-      const timer = setTimeout(() => {
-        setCountdown(countdown - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-    return () => {};
-  }, [countdown, showReasons, isSubmitted]);
-
-  // Clean up timeout on unmount
-  useEffect(
-    () => () => {
-      if (reasonTimeout) {
-        clearTimeout(reasonTimeout);
-      }
-    },
-    [reasonTimeout],
-  );
-
-  // Scroll to bottom when component mounts, but only if user is already at the bottom
-  useEffect(() => {
-    if (scrollToBottom && autoScroll && !isSubmitted) {
-      // Small delay to ensure the component is fully rendered
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
-    }
-  }, [scrollToBottom, autoScroll, isSubmitted]);
-
-  // Scroll to bottom when reasons are shown, but only if user is already at the bottom
-  useEffect(() => {
-    if (scrollToBottom && autoScroll && showReasons) {
-      // Small delay to ensure the reasons are fully rendered
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
-    }
-  }, [scrollToBottom, autoScroll, showReasons]);
 
   // Helper function to get button class based on state
   const getButtonClass = (rating: number) => {

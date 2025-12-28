@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
+from server.config import get_config
 from server.constants import (
     LITE_LLM_API_KEY,
     LITE_LLM_API_URL,
@@ -22,13 +23,45 @@ from server.constants import (
 from server.logger import logger
 from storage.billing_session import BillingSession
 from storage.database import session_maker
+from storage.saas_settings_store import SaasSettingsStore
 from storage.subscription_access import SubscriptionAccess
-from storage.user_settings import UserSettings
 
 from openhands.server.user_auth import get_user_id
+from openhands.utils.http_session import httpx_verify_option
 
 stripe.api_key = STRIPE_API_KEY
 billing_router = APIRouter(prefix='/api/billing')
+
+
+# TODO: Add a new app_mode named "ON_PREM" to support self-hosted customers instead of doing this
+# and members should comment out the "validate_saas_environment" function if they are developing and testing locally.
+def is_all_hands_saas_environment(request: Request) -> bool:
+    """Check if the current domain is an All Hands SaaS environment.
+
+    Args:
+        request: FastAPI Request object
+
+    Returns:
+        True if the current domain contains "all-hands.dev" or "openhands.dev" postfix
+    """
+    hostname = request.url.hostname or ''
+    return hostname.endswith('all-hands.dev') or hostname.endswith('openhands.dev')
+
+
+def validate_saas_environment(request: Request) -> None:
+    """Validate that the request is coming from an All Hands SaaS environment.
+
+    Args:
+        request: FastAPI Request object
+
+    Raises:
+        HTTPException: If the request is not from an All Hands SaaS environment
+    """
+    if not is_all_hands_saas_environment(request):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Checkout sessions are only available for All Hands SaaS environments',
+        )
 
 
 class BillingSessionType(Enum):
@@ -78,7 +111,7 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
         user_json = await _get_litellm_user(client, user_id)
         credits = calculate_credits(user_json['user_info'])
     return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))
@@ -196,6 +229,8 @@ async def cancel_subscription(user_id: str = Depends(get_user_id)) -> JSONRespon
 async def create_customer_setup_session(
     request: Request, user_id: str = Depends(get_user_id)
 ) -> CreateBillingSessionResponse:
+    validate_saas_environment(request)
+
     customer_id = await stripe_service.find_or_create_customer(user_id)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_id,
@@ -214,6 +249,8 @@ async def create_checkout_session(
     request: Request,
     user_id: str = Depends(get_user_id),
 ) -> CreateBillingSessionResponse:
+    validate_saas_environment(request)
+
     customer_id = await stripe_service.find_or_create_customer(user_id)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_id,
@@ -268,6 +305,8 @@ async def create_subscription_checkout_session(
     billing_session_type: BillingSessionType = BillingSessionType.MONTHLY_SUBSCRIPTION,
     user_id: str = Depends(get_user_id),
 ) -> CreateBillingSessionResponse:
+    validate_saas_environment(request)
+
     # Prevent duplicate subscriptions for the same user
     with session_maker() as session:
         now = datetime.now(UTC)
@@ -343,6 +382,8 @@ async def create_subscription_checkout_session_via_get(
     user_id: str = Depends(get_user_id),
 ) -> RedirectResponse:
     """Create a subscription checkout session using a GET request (For easier copy / paste to URL bar)."""
+    validate_saas_environment(request)
+
     response = await create_subscription_checkout_session(
         request, billing_session_type, user_id
     )
@@ -390,7 +431,7 @@ async def success_callback(session_id: str, request: Request):
             )
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             # Update max budget in litellm
             user_json = await _get_litellm_user(client, billing_session.user_id)
             amount_subtotal = stripe_session.amount_subtotal or 0
@@ -578,11 +619,14 @@ async def stripe_webhook(request: Request) -> JSONResponse:
 
 def reset_user_to_free_tier_settings(user_id: str) -> None:
     """Reset user settings to free tier defaults when subscription ends."""
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
+
     with session_maker() as session:
-        user_settings = (
-            session.query(UserSettings)
-            .filter(UserSettings.keycloak_user_id == user_id)
-            .first()
+        user_settings = settings_store.get_user_settings_by_keycloak_id(
+            user_id, session
         )
 
         if user_settings:

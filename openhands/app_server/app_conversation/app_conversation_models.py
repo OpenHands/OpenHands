@@ -1,25 +1,33 @@
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
 from openhands.agent_server.models import SendMessageRequest
-from openhands.agent_server.utils import utc_now
+from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.integrations.service_types import ProviderType
-from openhands.sdk.conversation.state import AgentExecutionStatus
+from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+
+
+class AgentType(Enum):
+    """Agent type for conversation."""
+
+    DEFAULT = 'default'
+    PLAN = 'plan'
 
 
 class AppConversationInfo(BaseModel):
     """Conversation info which does not contain status."""
 
-    id: UUID = Field(default_factory=uuid4)
+    id: OpenHandsUUID = Field(default_factory=uuid4)
 
     created_by_user_id: str | None
     sandbox_id: str
@@ -33,6 +41,11 @@ class AppConversationInfo(BaseModel):
     llm_model: str | None = None
 
     metrics: MetricsSnapshot | None = None
+
+    parent_conversation_id: OpenHandsUUID | None = None
+    sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
+
+    public: bool | None = None
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -57,7 +70,7 @@ class AppConversation(AppConversationInfo):  # type: ignore
         default=SandboxStatus.MISSING,
         description='Current sandbox status. Will be MISSING if the sandbox does not exist.',
     )
-    agent_status: AgentExecutionStatus | None = Field(
+    execution_status: ConversationExecutionStatus | None = Field(
         default=None,
         description='Current agent status. Will be None if the sandbox_status is not RUNNING',
     )
@@ -87,8 +100,10 @@ class AppConversationStartRequest(BaseModel):
     """
 
     sandbox_id: str | None = Field(default=None)
+    conversation_id: UUID | None = Field(default=None)
     initial_message: SendMessageRequest | None = None
-    processors: list[EventCallbackProcessor] = Field(default_factory=list)
+    system_message_suffix: str | None = None
+    processors: list[EventCallbackProcessor] | None = Field(default=None)
     llm_model: str | None = None
 
     # Git parameters
@@ -98,6 +113,14 @@ class AppConversationStartRequest(BaseModel):
     title: str | None = None
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
+    parent_conversation_id: OpenHandsUUID | None = None
+    agent_type: AgentType = Field(default=AgentType.DEFAULT)
+
+    public: bool | None = None
+
+
+class AppConversationUpdateRequest(BaseModel):
+    public: bool
 
 
 class AppConversationStartTaskStatus(Enum):
@@ -106,6 +129,7 @@ class AppConversationStartTaskStatus(Enum):
     PREPARING_REPOSITORY = 'PREPARING_REPOSITORY'
     RUNNING_SETUP_SCRIPT = 'RUNNING_SETUP_SCRIPT'
     SETTING_UP_GIT_HOOKS = 'SETTING_UP_GIT_HOOKS'
+    SETTING_UP_SKILLS = 'SETTING_UP_SKILLS'
     STARTING_CONVERSATION = 'STARTING_CONVERSATION'
     READY = 'READY'
     ERROR = 'ERROR'
@@ -125,11 +149,11 @@ class AppConversationStartTask(BaseModel):
     we kick off a background task for it. Once the conversation is started, the app_conversation_id
     is populated."""
 
-    id: UUID = Field(default_factory=uuid4)
+    id: OpenHandsUUID = Field(default_factory=uuid4)
     created_by_user_id: str | None
     status: AppConversationStartTaskStatus = AppConversationStartTaskStatus.WORKING
     detail: str | None = None
-    app_conversation_id: UUID | None = Field(
+    app_conversation_id: OpenHandsUUID | None = Field(
         default=None, description='The id of the app_conversation, if READY'
     )
     sandbox_id: str | None = Field(
@@ -146,3 +170,12 @@ class AppConversationStartTask(BaseModel):
 class AppConversationStartTaskPage(BaseModel):
     items: list[AppConversationStartTask]
     next_page_id: str | None = None
+
+
+class SkillResponse(BaseModel):
+    """Response model for skills endpoint."""
+
+    name: str
+    type: Literal['repo', 'knowledge']
+    content: str
+    triggers: list[str] = []

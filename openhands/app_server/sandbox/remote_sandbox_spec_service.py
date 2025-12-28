@@ -10,9 +10,10 @@ from openhands.app_server.sandbox.sandbox_spec_models import (
     SandboxSpecInfo,
 )
 from openhands.app_server.sandbox.sandbox_spec_service import (
-    AGENT_SERVER_VERSION,
     SandboxSpecService,
     SandboxSpecServiceInjector,
+    get_agent_server_env,
+    get_agent_server_image,
 )
 from openhands.app_server.services.injector import InjectorState
 
@@ -20,7 +21,7 @@ from openhands.app_server.services.injector import InjectorState
 def get_default_sandbox_specs():
     return [
         SandboxSpecInfo(
-            id=f'ghcr.io/all-hands-ai/agent-server:{AGENT_SERVER_VERSION[:7]}-python',
+            id=get_agent_server_image(),
             command=['/usr/local/bin/openhands-agent-server', '--port', '60000'],
             initial_env={
                 'OPENVSCODE_SERVER_ROOT': '/openhands/.openvscode-server',
@@ -28,8 +29,10 @@ def get_default_sandbox_specs():
                 'OH_ENABLE_VNC': '0',
                 'OH_CONVERSATIONS_PATH': '/workspace/conversations',
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
+                'OH_VSCODE_PORT': '60001',
+                **get_agent_server_env(),
             },
-            working_dir='/workspace/projects',
+            working_dir='/workspace/project',
         )
     ]
 

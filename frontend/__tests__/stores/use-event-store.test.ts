@@ -55,7 +55,7 @@ const mockObservationEvent: ObservationEvent = {
   tool_call_id: "call_123",
   observation: {
     kind: "ExecuteBashObservation",
-    output: "hello\n",
+    content: [{ type: "text", text: "hello\n" }],
     command: "echo hello",
     exit_code: 0,
     error: false,

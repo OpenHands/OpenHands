@@ -44,12 +44,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/All-Hands-AI/OpenHands.git",
+    "url": "https://github.com/OpenHands/OpenHands.git",
     "directory": "openhands-ui"
   },
   "homepage": "https://www.all-hands.dev/",
   "bugs": {
-    "url": "https://github.com/All-Hands-AI/OpenHands/issues"
+    "url": "https://github.com/OpenHands/OpenHands/issues"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^4.0.0",

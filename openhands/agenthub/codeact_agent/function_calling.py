@@ -286,7 +286,7 @@ def response_to_actions(
                             f'Unexpected task format in task_list: {type(task)} - {task}'
                         )
                         raise FunctionCallValidationError(
-                            f'Unexpected task format in task_list: {type(task)}. Each task shoud be a dictionary.'
+                            f'Unexpected task format in task_list: {type(task)}. Each task should be a dictionary.'
                         )
                     normalized_task_list.append(normalized_task)
 

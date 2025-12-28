@@ -1,0 +1,65 @@
+name: Check Package Versions
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check-package-versions:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check for any 'rev' fields in pyproject.toml
+        run: |
+          python - <<'PY'
+          import sys, tomllib, pathlib
+
+          path = pathlib.Path("pyproject.toml")
+          if not path.exists():
+              print("❌ ERROR: pyproject.toml not found")
+              sys.exit(1)
+
+          try:
+              data = tomllib.loads(path.read_text(encoding="utf-8"))
+          except Exception as e:
+              print(f"❌ ERROR: Failed to parse pyproject.toml: {e}")
+              sys.exit(1)
+
+          poetry = data.get("tool", {}).get("poetry", {})
+          sections = {
+              "dependencies": poetry.get("dependencies", {}),
+          }
+
+          errors = []
+
+          print("🔍 Checking for any dependencies with 'rev' fields...\n")
+          for section_name, deps in sections.items():
+              if not isinstance(deps, dict):
+                  continue
+
+              for pkg_name, cfg in deps.items():
+                  if isinstance(cfg, dict) and "rev" in cfg:
+                      msg = f"  ✖ {pkg_name} in [{section_name}] uses rev='{cfg['rev']}' (NOT ALLOWED)"
+                      print(msg)
+                      errors.append(msg)
+                  else:
+                      print(f"  • {pkg_name}: OK")
+
+          if errors:
+              print("\n❌ FAILED: Found dependencies using 'rev' fields:\n" + "\n".join(errors))
+              print("\nPlease use versioned releases instead, e.g.:")
+              print('  my-package = "1.0.0"')
+              sys.exit(1)
+
+          print("\n✅ SUCCESS: No 'rev' fields found. All dependencies are using proper versioned releases.")
+          PY

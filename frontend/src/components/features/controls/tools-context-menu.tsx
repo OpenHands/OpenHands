@@ -26,18 +26,23 @@ const contextMenuListItemClassName = cn(
 
 interface ToolsContextMenuProps {
   onClose: () => void;
-  onShowMicroagents: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onShowSkills: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  shouldShowAgentTools?: boolean;
 }
 
 export function ToolsContextMenu({
   onClose,
-  onShowMicroagents,
+  onShowSkills,
   onShowAgentTools,
+  shouldShowAgentTools = true,
 }: ToolsContextMenuProps) {
   const { t } = useTranslation();
   const { data: conversation } = useActiveConversation();
   const { providers } = useUserProviders();
+
+  // This is a temporary measure and may be re-enabled in the future
+  const isV1Conversation = conversation?.conversation_version === "V1";
 
   const [activeSubmenu, setActiveSubmenu] = useState<"git" | "macros" | null>(
     null,
@@ -64,7 +69,7 @@ export function ToolsContextMenu({
       testId="tools-context-menu"
       position="top"
       alignment="left"
-      className="left-[-16px] mb-2 bottom-full overflow-visible"
+      className="left-[-16px] mb-2 bottom-full overflow-visible min-w-[200px]"
     >
       {/* Git Tools */}
       {showGitTools && (
@@ -122,33 +127,34 @@ export function ToolsContextMenu({
         </div>
       </div>
 
-      <Divider />
+      {(!isV1Conversation || shouldShowAgentTools) && <Divider />}
 
-      {/* Show Available Microagents */}
       <ContextMenuListItem
-        testId="show-microagents-button"
-        onClick={onShowMicroagents}
+        testId="show-skills-button"
+        onClick={onShowSkills}
         className={contextMenuListItemClassName}
       >
         <ToolsContextMenuIconText
           icon={<RobotIcon width={16} height={16} />}
-          text={t(I18nKey.CONVERSATION$SHOW_MICROAGENTS)}
+          text={t(I18nKey.CONVERSATION$SHOW_SKILLS)}
           className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
         />
       </ContextMenuListItem>
 
-      {/* Show Agent Tools and Metadata */}
-      <ContextMenuListItem
-        testId="show-agent-tools-button"
-        onClick={onShowAgentTools}
-        className={contextMenuListItemClassName}
-      >
-        <ToolsContextMenuIconText
-          icon={<ToolsIcon width={16} height={16} />}
-          text={t(I18nKey.BUTTON$SHOW_AGENT_TOOLS_AND_METADATA)}
-          className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
-        />
-      </ContextMenuListItem>
+      {/* Show Agent Tools and Metadata - Only show if system message is available */}
+      {shouldShowAgentTools && (
+        <ContextMenuListItem
+          testId="show-agent-tools-button"
+          onClick={onShowAgentTools}
+          className={contextMenuListItemClassName}
+        >
+          <ToolsContextMenuIconText
+            icon={<ToolsIcon width={16} height={16} />}
+            text={t(I18nKey.BUTTON$SHOW_AGENT_TOOLS_AND_METADATA)}
+            className={CONTEXT_MENU_ICON_TEXT_CLASSNAME}
+          />
+        </ContextMenuListItem>
+      )}
     </ContextMenu>
   );
 }

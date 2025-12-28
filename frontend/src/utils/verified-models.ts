@@ -19,6 +19,7 @@ export const VERIFIED_MODELS = [
   "claude-haiku-4-5-20251001",
   "claude-opus-4-20250514",
   "claude-opus-4-1-20250805",
+  "claude-opus-4-5-20251101",
   "gemini-2.5-pro",
   "o4-mini",
   "deepseek-chat",
@@ -59,6 +60,7 @@ export const VERIFIED_ANTHROPIC_MODELS = [
   "claude-haiku-4-5-20251001",
   "claude-opus-4-20250514",
   "claude-opus-4-1-20250805",
+  "claude-opus-4-5-20251101",
 ];
 
 // LiteLLM does not return the compatible Mistral models with the provider, so we list them here to set them ourselves
@@ -79,6 +81,7 @@ export const VERIFIED_OPENHANDS_MODELS = [
   "gpt-5-mini-2025-08-07",
   "claude-opus-4-20250514",
   "claude-opus-4-1-20250805",
+  "claude-opus-4-5-20251101",
   "gemini-2.5-pro",
   "o3",
   "o4-mini",
@@ -90,4 +93,4 @@ export const VERIFIED_OPENHANDS_MODELS = [
 ];
 
 // Default model for OpenHands provider
-export const DEFAULT_OPENHANDS_MODEL = "openhands/claude-sonnet-4-20250514";
+export const DEFAULT_OPENHANDS_MODEL = "openhands/claude-opus-4-5-20251101";

@@ -1,8 +1,8 @@
 import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
-import { useAgentStore } from "#/stores/agent-store";
+import { useAgentState } from "#/hooks/use-agent-state";
 
 export const useHandleRuntimeActive = () => {
-  const { curAgentState } = useAgentStore();
+  const { curAgentState } = useAgentState();
 
   const runtimeActive = !RUNTIME_INACTIVE_STATES.includes(curAgentState);
 

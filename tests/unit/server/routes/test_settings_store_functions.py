@@ -2,20 +2,23 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import ProviderType
 from openhands.server.routes.secrets import (
-    app,
+    app as secrets_router,
+)
+from openhands.server.routes.secrets import (
     check_provider_tokens,
 )
 from openhands.server.routes.settings import store_llm_settings
 from openhands.server.settings import POSTProviderModel
 from openhands.storage import get_file_store
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
-from openhands.storage.data_models.user_secrets import UserSecrets
 from openhands.storage.secrets.file_secrets_store import FileSecretsStore
 
 
@@ -27,7 +30,12 @@ async def get_settings_store(request):
 
 @pytest.fixture
 def test_client():
-    # Create a test client
+    # Create a test client with a FastAPI app that includes the secrets router
+    # This is necessary because TestClient with APIRouter directly doesn't set up
+    # the full middleware stack in newer FastAPI versions (0.118.0+)
+    test_app = FastAPI()
+    test_app.include_router(secrets_router)
+
     with (
         patch.dict(os.environ, {'SESSION_API_KEY': ''}, clear=False),
         patch('openhands.server.dependencies._SESSION_API_KEY', None),
@@ -36,7 +44,7 @@ def test_client():
             AsyncMock(return_value=''),
         ),
     ):
-        client = TestClient(app)
+        client = TestClient(test_app)
         yield client
 
 
@@ -220,9 +228,9 @@ async def test_store_provider_tokens_new_tokens(test_client, file_secrets_store)
     mock_store = MagicMock()
     mock_store.load = AsyncMock(return_value=None)  # No existing settings
 
-    UserSecrets()
+    Secrets()
 
-    user_secrets = await file_secrets_store.store(UserSecrets())
+    user_secrets = await file_secrets_store.store(Secrets())
 
     response = test_client.post('/api/add-git-providers', json=provider_tokens)
     assert response.status_code == 200
@@ -242,8 +250,8 @@ async def test_store_provider_tokens_update_existing(test_client, file_secrets_s
     github_token = ProviderToken(token=SecretStr('old-token'))
     provider_tokens = {ProviderType.GITHUB: github_token}
 
-    # Create a UserSecrets with the provider tokens
-    user_secrets = UserSecrets(provider_tokens=provider_tokens)
+    # Create a Secrets with the provider tokens
+    user_secrets = Secrets(provider_tokens=provider_tokens)
 
     await file_secrets_store.store(user_secrets)
 
@@ -268,7 +276,7 @@ async def test_store_provider_tokens_keep_existing(test_client, file_secrets_sto
     # Create existing secrets with a GitHub token
     github_token = ProviderToken(token=SecretStr('existing-token'))
     provider_tokens = {ProviderType.GITHUB: github_token}
-    user_secrets = UserSecrets(provider_tokens=provider_tokens)
+    user_secrets = Secrets(provider_tokens=provider_tokens)
 
     await file_secrets_store.store(user_secrets)
 

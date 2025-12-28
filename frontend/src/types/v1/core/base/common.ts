@@ -63,6 +63,17 @@ export enum SecurityRisk {
   HIGH = "HIGH",
 }
 
+// Agent status
+export enum V1ExecutionStatus {
+  IDLE = "idle",
+  RUNNING = "running",
+  PAUSED = "paused",
+  WAITING_FOR_CONFIRMATION = "waiting_for_confirmation",
+  FINISHED = "finished",
+  ERROR = "error",
+  STUCK = "stuck",
+}
+
 // Content types for LLM messages
 export interface TextContent {
   type: "text";

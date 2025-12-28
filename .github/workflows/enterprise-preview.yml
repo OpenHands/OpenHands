@@ -26,4 +26,4 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{\"ref\": \"main\", \"inputs\": {\"openhandsPrNumber\": \"${{ github.event.pull_request.number }}\", \"deployEnvironment\": \"feature\", \"enterpriseImageTag\": \"pr-${{ github.event.pull_request.number }}\" }}" \
-            https://api.github.com/repos/All-Hands-AI/deploy/actions/workflows/deploy.yaml/dispatches
+            https://api.github.com/repos/OpenHands/deploy/actions/workflows/deploy.yaml/dispatches

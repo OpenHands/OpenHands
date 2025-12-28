@@ -28,7 +28,7 @@ from openhands.runtime import get_runtime_cls
 from openhands.runtime.base import Runtime
 from openhands.server.services.conversation_stats import ConversationStats
 from openhands.storage import get_file_store
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 
 
@@ -109,9 +109,33 @@ def get_provider_tokens():
         bitbucket_token = SecretStr(os.environ['BITBUCKET_TOKEN'])
         provider_tokens[ProviderType.BITBUCKET] = ProviderToken(token=bitbucket_token)
 
-    # Wrap provider tokens in UserSecrets if any tokens were found
+    # Forgejo support (e.g., Codeberg or self-hosted Forgejo)
+    if 'FORGEJO_TOKEN' in os.environ:
+        forgejo_token = SecretStr(os.environ['FORGEJO_TOKEN'])
+        # If a base URL is provided, extract the domain to use as host override
+        forgejo_base_url = os.environ.get('FORGEJO_BASE_URL', '').strip()
+        host: str | None = None
+        if forgejo_base_url:
+            # Normalize by stripping protocol and any path (e.g., /api/v1)
+            url = forgejo_base_url
+            if url.startswith(('http://', 'https://')):
+                try:
+                    from urllib.parse import urlparse
+
+                    parsed = urlparse(url)
+                    host = parsed.netloc or None
+                except Exception:
+                    pass
+            if host is None:
+                host = url.replace('https://', '').replace('http://', '')
+            host = host.split('/')[0].strip('/') if host else None
+        provider_tokens[ProviderType.FORGEJO] = ProviderToken(
+            token=forgejo_token, host=host
+        )
+
+    # Wrap provider tokens in Secrets if any tokens were found
     secret_store = (
-        UserSecrets(provider_tokens=provider_tokens) if provider_tokens else None  # type: ignore[arg-type]
+        Secrets(provider_tokens=provider_tokens) if provider_tokens else None  # type: ignore[arg-type]
     )
     return secret_store.provider_tokens if secret_store else None
 

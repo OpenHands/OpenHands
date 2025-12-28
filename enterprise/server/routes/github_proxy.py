@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from server.logger import logger
 
 from openhands.server.shared import config
+from openhands.utils.http_session import httpx_verify_option
 
 GITHUB_PROXY_ENDPOINTS = bool(os.environ.get('GITHUB_PROXY_ENDPOINTS'))
 
@@ -87,7 +88,7 @@ def add_github_proxy_routes(app: FastAPI):
             ]
             body = urlencode(query_params, doseq=True)
         url = 'https://github.com/login/oauth/access_token'
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(url, content=body)
             return Response(
                 response.content,
@@ -101,7 +102,7 @@ def add_github_proxy_routes(app: FastAPI):
         logger.info(f'github_proxy_post:1:{path}')
         body = await request.body()
         url = f'https://github.com/{path}'
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(url, content=body, headers=request.headers)
             return Response(
                 response.content,

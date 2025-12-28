@@ -7,7 +7,7 @@ import { ToolsContextMenu } from "./tools-context-menu";
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
-import { MicroagentsModal } from "../conversation-panel/microagents-modal";
+import { SkillsModal } from "../conversation-panel/skills-modal";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -17,12 +17,13 @@ export function Tools() {
 
   const {
     handleShowAgentTools,
-    handleShowMicroagents,
+    handleShowSkills,
     systemModalVisible,
     setSystemModalVisible,
-    microagentsModalVisible,
-    setMicroagentsModalVisible,
+    skillsModalVisible,
+    setSkillsModalVisible,
     systemMessage,
+    shouldShowAgentTools,
   } = useConversationNameContextMenu({
     conversationId,
     conversationStatus: conversation?.status,
@@ -50,8 +51,9 @@ export function Tools() {
       {contextMenuOpen && (
         <ToolsContextMenu
           onClose={() => setContextMenuOpen(false)}
-          onShowMicroagents={handleShowMicroagents}
+          onShowSkills={handleShowSkills}
           onShowAgentTools={handleShowAgentTools}
+          shouldShowAgentTools={shouldShowAgentTools}
         />
       )}
 
@@ -62,9 +64,9 @@ export function Tools() {
         systemMessage={systemMessage ? systemMessage.args : null}
       />
 
-      {/* Microagents Modal */}
-      {microagentsModalVisible && (
-        <MicroagentsModal onClose={() => setMicroagentsModalVisible(false)} />
+      {/* Skills Modal */}
+      {skillsModalVisible && (
+        <SkillsModal onClose={() => setSkillsModalVisible(false)} />
       )}
     </div>
   );

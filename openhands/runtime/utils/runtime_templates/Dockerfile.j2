@@ -336,8 +336,8 @@ RUN \
 # ================================================================
 RUN if [ -d /openhands/code/openhands ]; then rm -rf /openhands/code/openhands; fi
 COPY --chown=openhands:openhands ./code/pyproject.toml ./code/poetry.lock /openhands/code/
-RUN if [ -d /openhands/code/microagents ]; then rm -rf /openhands/code/microagents; fi
-COPY --chown=openhands:openhands ./code/microagents /openhands/code/microagents
+RUN if [ -d /openhands/code/skills ]; then rm -rf /openhands/code/skills; fi
+COPY --chown=openhands:openhands ./code/skills /openhands/code/skills
 COPY --chown=openhands:openhands ./code/openhands /openhands/code/openhands
 RUN chmod a+rwx /openhands/code/openhands/__init__.py && \
     chown -R openhands:openhands /openhands/code

@@ -5,26 +5,18 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-import { ProPill } from "./pro-pill";
-
-interface NavigationItem {
-  to: string;
-  icon: React.ReactNode;
-  text: string;
-}
+import { SettingsNavItem } from "#/constants/settings-nav";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
   onCloseMobileMenu: () => void;
-  navigationItems: NavigationItem[];
-  isSaas: boolean;
+  navigationItems: SettingsNavItem[];
 }
 
 export function SettingsNavigation({
   isMobileMenuOpen,
   onCloseMobileMenu,
   navigationItems,
-  isSaas,
 }: SettingsNavigationProps) {
   const { t } = useTranslation();
 
@@ -37,7 +29,6 @@ export function SettingsNavigation({
           onClick={onCloseMobileMenu}
         />
       )}
-
       {/* Navigation sidebar */}
       <nav
         data-testid="settings-navbar"
@@ -85,7 +76,6 @@ export function SettingsNavigation({
                 <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
                   {t(text as I18nKey)}
                 </Typography.Text>
-                {isSaas && to === "/settings" && <ProPill />}
               </div>
             </NavLink>
           ))}

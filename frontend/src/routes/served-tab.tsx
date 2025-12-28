@@ -2,14 +2,14 @@ import React from "react";
 import { FaArrowRotateRight } from "react-icons/fa6";
 import { FaExternalLinkAlt, FaHome } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
-import { useActiveHost } from "#/hooks/query/use-active-host";
+import { useUnifiedActiveHost } from "#/hooks/query/use-unified-active-host";
 import { PathForm } from "#/components/features/served-host/path-form";
 import { I18nKey } from "#/i18n/declaration";
 import ServerProcessIcon from "#/icons/server-process.svg?react";
 
 function ServedApp() {
   const { t } = useTranslation();
-  const { activeHost } = useActiveHost();
+  const { activeHost } = useUnifiedActiveHost();
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [currentActiveHost, setCurrentActiveHost] = React.useState<
     string | null
@@ -65,6 +65,7 @@ function ServedApp() {
           type="button"
           onClick={() => window.open(fullUrl, "_blank")}
           className="text-sm"
+          aria-label={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
         >
           <FaExternalLinkAlt className="w-4 h-4" />
         </button>
@@ -72,11 +73,17 @@ function ServedApp() {
           type="button"
           onClick={() => setRefreshKey((prev) => prev + 1)}
           className="text-sm"
+          aria-label={t(I18nKey.BUTTON$REFRESH)}
         >
           <FaArrowRotateRight className="w-4 h-4" />
         </button>
 
-        <button type="button" onClick={() => resetUrl()} className="text-sm">
+        <button
+          type="button"
+          onClick={() => resetUrl()}
+          className="text-sm"
+          aria-label={t(I18nKey.BUTTON$HOME)}
+        >
           <FaHome className="w-4 h-4" />
         </button>
         <div className="w-full flex">

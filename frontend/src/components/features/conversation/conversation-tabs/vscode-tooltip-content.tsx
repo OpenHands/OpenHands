@@ -5,10 +5,10 @@ import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { useAgentStore } from "#/stores/agent-store";
+import { useAgentState } from "#/hooks/use-agent-state";
 
 export function VSCodeTooltipContent() {
-  const { curAgentState } = useAgentStore();
+  const { curAgentState } = useAgentState();
 
   const { t } = useTranslation();
   const { conversationId } = useConversationId();

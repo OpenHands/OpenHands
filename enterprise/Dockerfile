@@ -1,5 +1,5 @@
 ARG OPENHANDS_VERSION=latest
-ARG BASE="ghcr.io/all-hands-ai/openhands"
+ARG BASE="ghcr.io/openhands/openhands"
 FROM ${BASE}:${OPENHANDS_VERSION}
 
 # Datadog labels
@@ -31,9 +31,8 @@ RUN pip install alembic psycopg2-binary cloud-sql-python-connector pg8000 gsprea
         "pillow>=11.3.0"
 
 WORKDIR /app
-COPY enterprise .
+COPY --chown=openhands:openhands --chmod=770 enterprise .
 
-RUN chown -R openhands:openhands /app && chmod -R 770 /app
 USER openhands
 
 # Command will be overridden by Kubernetes deployment template

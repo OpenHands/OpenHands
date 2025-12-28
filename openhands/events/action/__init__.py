@@ -9,6 +9,7 @@ from openhands.events.action.agent import (
     AgentRejectAction,
     AgentThinkAction,
     ChangeAgentStateAction,
+    LoopRecoveryAction,
     RecallAction,
     TaskTrackingAction,
 )
@@ -45,4 +46,5 @@ __all__ = [
     'MCPAction',
     'TaskTrackingAction',
     'ActionSecurityRisk',
+    'LoopRecoveryAction',
 ]

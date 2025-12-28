@@ -8,7 +8,6 @@ from server.constants import (
     LITE_LLM_TEAM_ID,
 )
 from storage.saas_settings_store import SaasSettingsStore
-from storage.stored_settings import StoredSettings
 from storage.user_settings import UserSettings
 
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -244,7 +243,7 @@ async def test_update_settings_with_litellm_default(
     # Check that the URL and most of the JSON payload match what we expect
     assert call_args['json']['user_email'] == 'testy@tester.com'
     assert call_args['json']['models'] == []
-    assert call_args['json']['max_budget'] == 20.0
+    assert call_args['json']['max_budget'] == 10.0
     assert call_args['json']['user_id'] == 'user-id'
     assert call_args['json']['teams'] == ['test_team']
     assert call_args['json']['auto_create_key'] is True
@@ -301,26 +300,6 @@ async def test_create_default_settings_require_payment_disabled(
         settings = await settings_store.create_default_settings(None)
         assert settings is not None
         assert settings.language == 'en'
-
-
-@pytest.mark.asyncio
-async def test_create_default_settings_with_existing_llm_key(
-    settings_store, mock_stripe, mock_github_user, mock_litellm_api, session_maker
-):
-    # Test that existing llm_api_key is preserved and not overwritten with litellm default
-    with (
-        patch('storage.saas_settings_store.REQUIRE_PAYMENT', False),
-        patch('storage.saas_settings_store.LITE_LLM_API_KEY', 'mock-api-key'),
-        patch('storage.saas_settings_store.session_maker', session_maker),
-    ):
-        with settings_store.session_maker() as session:
-            kwargs = {'id': '12345', 'language': 'en', 'llm_api_key': 'existing_key'}
-            settings_store._encrypt_kwargs(kwargs)
-            session.merge(StoredSettings(**kwargs))
-            session.commit()
-        updated_settings = await settings_store.create_default_settings(None)
-        assert updated_settings is not None
-        assert updated_settings.llm_api_key.get_secret_value() == 'test_api_key'
 
 
 @pytest.mark.asyncio

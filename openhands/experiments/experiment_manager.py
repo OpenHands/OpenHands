@@ -1,9 +1,11 @@
 import os
+from uuid import UUID
 
 from pydantic import BaseModel
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
+from openhands.sdk import Agent
 from openhands.server.session.conversation_init_data import ConversationInitData
 from openhands.server.shared import file_store
 from openhands.storage.locations import get_experiment_config_filename
@@ -29,6 +31,12 @@ def load_experiment_config(conversation_id: str) -> ExperimentConfig | None:
 
 
 class ExperimentManager:
+    @staticmethod
+    def run_agent_variant_tests__v1(
+        user_id: str | None, conversation_id: UUID, agent: Agent
+    ) -> Agent:
+        return agent
+
     @staticmethod
     def run_conversation_variant_test(
         user_id: str | None,

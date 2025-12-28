@@ -13,6 +13,7 @@ from server.auth.auth_error import (
     ExpiredError,
     NoCredentialsError,
 )
+from server.auth.domain_blocker import domain_blocker
 from server.auth.token_manager import TokenManager
 from server.config import get_config
 from server.logger import logger
@@ -31,7 +32,7 @@ from openhands.integrations.provider import (
 )
 from openhands.server.settings import Settings
 from openhands.server.user_auth.user_auth import AuthType, UserAuth
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.settings.settings_store import SettingsStore
 
 token_manager = TokenManager()
@@ -52,7 +53,7 @@ class SaasUserAuth(UserAuth):
     settings_store: SaasSettingsStore | None = None
     secrets_store: SaasSecretsStore | None = None
     _settings: Settings | None = None
-    _user_secrets: UserSecrets | None = None
+    _secrets: Secrets | None = None
     accepted_tos: bool | None = None
     auth_type: AuthType = AuthType.COOKIE
 
@@ -119,13 +120,13 @@ class SaasUserAuth(UserAuth):
         self.secrets_store = secrets_store
         return secrets_store
 
-    async def get_user_secrets(self):
-        user_secrets = self._user_secrets
+    async def get_secrets(self):
+        user_secrets = self._secrets
         if user_secrets:
             return user_secrets
         secrets_store = await self.get_secrets_store()
         user_secrets = await secrets_store.load()
-        self._user_secrets = user_secrets
+        self._secrets = user_secrets
         return user_secrets
 
     async def get_access_token(self) -> SecretStr | None:
@@ -148,13 +149,15 @@ class SaasUserAuth(UserAuth):
         if not access_token:
             raise AuthError()
 
-        user_secrets = await self.get_user_secrets()
+        user_secrets = await self.get_secrets()
 
         try:
             # TODO: I think we can do this in a single request if we refactor
             with session_maker() as session:
-                tokens = session.query(AuthTokens).where(
-                    AuthTokens.keycloak_user_id == self.user_id
+                tokens = (
+                    session.query(AuthTokens)
+                    .where(AuthTokens.keycloak_user_id == self.user_id)
+                    .all()
                 )
 
             for token in tokens:
@@ -203,6 +206,15 @@ class SaasUserAuth(UserAuth):
         self.settings_store = settings_store
         return settings_store
 
+    async def get_mcp_api_key(self) -> str:
+        api_key_store = ApiKeyStore.get_instance()
+        mcp_api_key = api_key_store.retrieve_mcp_api_key(self.user_id)
+        if not mcp_api_key:
+            mcp_api_key = api_key_store.create_api_key(
+                self.user_id, 'MCP_API_KEY', None
+            )
+        return mcp_api_key
+
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         logger.debug('saas_user_auth_get_instance')
@@ -243,7 +255,12 @@ def get_api_key_from_header(request: Request):
     # This is a temp hack
     # Streamable HTTP MCP Client works via redirect requests, but drops the Authorization header for reason
     # We include `X-Session-API-Key` header by default due to nested runtimes, so it used as a drop in replacement here
-    return request.headers.get('X-Session-API-Key')
+    session_api_key = request.headers.get('X-Session-API-Key')
+    if session_api_key:
+        return session_api_key
+
+    # Fallback to X-Access-Token header as an additional option
+    return request.headers.get('X-Access-Token')
 
 
 async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
@@ -298,6 +315,16 @@ async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     user_id = access_token_payload['sub']
     email = access_token_payload['email']
     email_verified = access_token_payload['email_verified']
+
+    # Check if email domain is blocked
+    if email and domain_blocker.is_active() and domain_blocker.is_domain_blocked(email):
+        logger.warning(
+            f'Blocked authentication attempt for existing user with email: {email}'
+        )
+        raise AuthError(
+            'Access denied: Your email domain is not allowed to access this service'
+        )
+
     logger.debug('saas_user_auth_from_signed_token:return')
 
     return SaasUserAuth(

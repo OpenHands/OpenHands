@@ -26,6 +26,13 @@ export const useUpdateConversation = () => {
           ),
       );
 
+      // Also optimistically update the active conversation query
+      queryClient.setQueryData(
+        ["user", "conversation", variables.conversationId],
+        (old: { title: string } | undefined) =>
+          old ? { ...old, title: variables.newTitle } : old,
+      );
+
       return { previousConversations };
     },
     onError: (err, variables, context) => {

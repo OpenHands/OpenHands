@@ -80,6 +80,7 @@ def service(mock_sandbox_spec_service, mock_httpx_client, mock_docker_client):
         ],
         health_check_path='/health',
         httpx_client=mock_httpx_client,
+        max_num_sandboxes=3,
         docker_client=mock_docker_client,
     )
 
@@ -94,7 +95,8 @@ def mock_running_container():
     container.attrs = {
         'Created': '2024-01-15T10:30:00.000000000Z',
         'Config': {
-            'Env': ['OH_SESSION_API_KEYS_0=session_key_123', 'OTHER_VAR=other_value']
+            'Env': ['OH_SESSION_API_KEYS_0=session_key_123', 'OTHER_VAR=other_value'],
+            'WorkingDir': '/workspace',
         },
         'NetworkSettings': {
             'Ports': {
@@ -353,13 +355,21 @@ class TestDockerSandboxService:
 
         service.docker_client.containers.run.return_value = mock_container
 
-        with patch.object(service, '_find_unused_port', side_effect=[12345, 12346]):
+        with (
+            patch.object(service, '_find_unused_port', side_effect=[12345, 12346]),
+            patch.object(
+                service, 'pause_old_sandboxes', return_value=[]
+            ) as mock_cleanup,
+        ):
             # Execute
             result = await service.start_sandbox()
 
         # Verify
         assert result is not None
         assert result.id == 'oh-test-test_container_id'
+
+        # Verify cleanup was called with the correct limit
+        mock_cleanup.assert_called_once_with(2)
 
         # Verify container was created with correct parameters
         service.docker_client.containers.run.assert_called_once()
@@ -394,7 +404,10 @@ class TestDockerSandboxService:
         }
         service.docker_client.containers.run.return_value = mock_container
 
-        with patch.object(service, '_find_unused_port', return_value=12345):
+        with (
+            patch.object(service, '_find_unused_port', return_value=12345),
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+        ):
             # Execute
             await service.start_sandbox(sandbox_spec_id='custom-spec')
 
@@ -411,7 +424,10 @@ class TestDockerSandboxService:
         mock_sandbox_spec_service.get_sandbox_spec.return_value = None
 
         # Execute & Verify
-        with pytest.raises(ValueError, match='Sandbox Spec not found'):
+        with (
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+            pytest.raises(ValueError, match='Sandbox Spec not found'),
+        ):
             await service.start_sandbox(sandbox_spec_id='nonexistent')
 
     async def test_start_sandbox_docker_error(self, service):
@@ -421,10 +437,12 @@ class TestDockerSandboxService:
             'Failed to create container'
         )
 
-        with patch.object(service, '_find_unused_port', return_value=12345):
-            # Execute & Verify
-            with pytest.raises(SandboxError, match='Failed to start container'):
-                await service.start_sandbox()
+        with (
+            patch.object(service, '_find_unused_port', return_value=12345),
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+            pytest.raises(SandboxError, match='Failed to start container'),
+        ):
+            await service.start_sandbox()
 
     async def test_resume_sandbox_from_paused(self, service):
         """Test resuming a paused sandbox."""
@@ -433,13 +451,18 @@ class TestDockerSandboxService:
         mock_container.status = 'paused'
         service.docker_client.containers.get.return_value = mock_container
 
-        # Execute
-        result = await service.resume_sandbox('oh-test-abc123')
+        with patch.object(
+            service, 'pause_old_sandboxes', return_value=[]
+        ) as mock_cleanup:
+            # Execute
+            result = await service.resume_sandbox('oh-test-abc123')
 
         # Verify
         assert result is True
         mock_container.unpause.assert_called_once()
         mock_container.start.assert_not_called()
+        # Verify cleanup was called with the correct limit
+        mock_cleanup.assert_called_once_with(2)
 
     async def test_resume_sandbox_from_exited(self, service):
         """Test resuming an exited sandbox."""
@@ -448,22 +471,32 @@ class TestDockerSandboxService:
         mock_container.status = 'exited'
         service.docker_client.containers.get.return_value = mock_container
 
-        # Execute
-        result = await service.resume_sandbox('oh-test-abc123')
+        with patch.object(
+            service, 'pause_old_sandboxes', return_value=[]
+        ) as mock_cleanup:
+            # Execute
+            result = await service.resume_sandbox('oh-test-abc123')
 
         # Verify
         assert result is True
         mock_container.start.assert_called_once()
         mock_container.unpause.assert_not_called()
+        # Verify cleanup was called with the correct limit
+        mock_cleanup.assert_called_once_with(2)
 
     async def test_resume_sandbox_wrong_prefix(self, service):
         """Test resuming sandbox with wrong prefix."""
-        # Execute
-        result = await service.resume_sandbox('wrong-prefix-abc123')
+        with patch.object(
+            service, 'pause_old_sandboxes', return_value=[]
+        ) as mock_cleanup:
+            # Execute
+            result = await service.resume_sandbox('wrong-prefix-abc123')
 
         # Verify
         assert result is False
         service.docker_client.containers.get.assert_not_called()
+        # Verify cleanup was still called
+        mock_cleanup.assert_called_once_with(2)
 
     async def test_resume_sandbox_not_found(self, service):
         """Test resuming non-existent sandbox."""
@@ -472,11 +505,16 @@ class TestDockerSandboxService:
             'Container not found'
         )
 
-        # Execute
-        result = await service.resume_sandbox('oh-test-abc123')
+        with patch.object(
+            service, 'pause_old_sandboxes', return_value=[]
+        ) as mock_cleanup:
+            # Execute
+            result = await service.resume_sandbox('oh-test-abc123')
 
         # Verify
         assert result is False
+        # Verify cleanup was still called
+        mock_cleanup.assert_called_once_with(2)
 
     async def test_pause_sandbox_success(self, service):
         """Test pausing a running sandbox."""
@@ -563,7 +601,7 @@ class TestDockerSandboxService:
             service._docker_status_to_sandbox_status('paused') == SandboxStatus.PAUSED
         )
         assert (
-            service._docker_status_to_sandbox_status('exited') == SandboxStatus.MISSING
+            service._docker_status_to_sandbox_status('exited') == SandboxStatus.PAUSED
         )
         assert (
             service._docker_status_to_sandbox_status('created')
@@ -629,7 +667,10 @@ class TestDockerSandboxService:
         assert agent_url.url == 'http://localhost:12345'
 
         vscode_url = next(url for url in result.exposed_urls if url.name == VSCODE)
-        assert vscode_url.url == 'http://localhost:12346'
+        assert (
+            vscode_url.url
+            == 'http://localhost:12346/?tkn=session_key_123&folder=/workspace'
+        )
 
     async def test_container_to_sandbox_info_invalid_created_time(self, service):
         """Test conversion with invalid creation timestamp."""
@@ -656,10 +697,14 @@ class TestDockerSandboxService:
         assert result is not None
         assert isinstance(result.created_at, datetime)
 
+    @patch(
+        'openhands.app_server.utils.docker_utils.is_running_in_docker',
+        return_value=True,
+    )
     async def test_container_to_checked_sandbox_info_health_check_success(
-        self, service, mock_running_container
+        self, mock_is_docker, service, mock_running_container
     ):
-        """Test health check success."""
+        """Test health check success when running in Docker."""
         # Setup
         service.httpx_client.get.return_value.raise_for_status.return_value = None
 
@@ -674,7 +719,34 @@ class TestDockerSandboxService:
         assert result.exposed_urls is not None
         assert result.session_api_key == 'session_key_123'
 
-        # Verify health check was called
+        # Verify health check was called with Docker-internal URL
+        service.httpx_client.get.assert_called_once_with(
+            'http://host.docker.internal:12345/health'
+        )
+
+    @patch(
+        'openhands.app_server.utils.docker_utils.is_running_in_docker',
+        return_value=False,
+    )
+    async def test_container_to_checked_sandbox_info_health_check_success_not_in_docker(
+        self, mock_is_docker, service, mock_running_container
+    ):
+        """Test health check success when not running in Docker."""
+        # Setup
+        service.httpx_client.get.return_value.raise_for_status.return_value = None
+
+        # Execute
+        result = await service._container_to_checked_sandbox_info(
+            mock_running_container
+        )
+
+        # Verify
+        assert result is not None
+        assert result.status == SandboxStatus.RUNNING
+        assert result.exposed_urls is not None
+        assert result.session_api_key == 'session_key_123'
+
+        # Verify health check was called with original localhost URL
         service.httpx_client.get.assert_called_once_with(
             'http://localhost:12345/health'
         )

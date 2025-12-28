@@ -17,9 +17,10 @@ export function MicroagentManagementAccordionTitle({
         <TooltipButton
           tooltip={repository.full_name}
           ariaLabel={repository.full_name}
-          className="text-white text-base font-normal bg-transparent p-0 min-w-0 h-auto cursor-pointer truncate max-w-[194px] translate-y-[-1px]"
           testId="repository-name-tooltip"
           placement="bottom"
+          asSpan
+          className="text-white text-base font-normal bg-transparent p-0 min-w-0 h-auto cursor-pointer truncate max-w-[194px] translate-y-[-1px]"
         >
           <span>{repository.full_name}</span>
         </TooltipButton>

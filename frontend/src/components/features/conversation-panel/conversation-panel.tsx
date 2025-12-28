@@ -3,9 +3,10 @@ import { NavLink, useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
+import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useInfiniteScroll } from "#/hooks/use-infinite-scroll";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
-import { useStopConversation } from "#/hooks/mutation/use-stop-conversation";
+import { useUnifiedPauseConversationSandbox } from "#/hooks/mutation/use-unified-stop-conversation";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -15,6 +16,7 @@ import { Provider } from "#/types/settings";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { ConversationCard } from "./conversation-card/conversation-card";
+import { StartTaskCard } from "./start-task-card/start-task-card";
 
 interface ConversationPanelProps {
   onClose: () => void;
@@ -37,6 +39,8 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const [selectedConversationId, setSelectedConversationId] = React.useState<
     string | null
   >(null);
+  const [selectedConversationVersion, setSelectedConversationVersion] =
+    React.useState<"V0" | "V1" | undefined>(undefined);
   const [openContextMenuId, setOpenContextMenuId] = React.useState<
     string | null
   >(null);
@@ -50,11 +54,15 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     fetchNextPage,
   } = usePaginatedConversations();
 
+  // Fetch in-progress start tasks
+  const { data: startTasks } = useStartTasks();
+
   // Flatten all pages into a single array of conversations
   const conversations = data?.pages.flatMap((page) => page.results) ?? [];
 
   const { mutate: deleteConversation } = useDeleteConversation();
-  const { mutate: stopConversation } = useStopConversation();
+  const { mutate: pauseConversationSandbox } =
+    useUnifiedPauseConversationSandbox();
   const { mutate: updateConversation } = useUpdateConversation();
 
   // Set up infinite scroll
@@ -70,9 +78,13 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     setSelectedConversationId(conversationId);
   };
 
-  const handleStopConversation = (conversationId: string) => {
+  const handleStopConversation = (
+    conversationId: string,
+    version?: "V0" | "V1",
+  ) => {
     setConfirmStopModalVisible(true);
     setSelectedConversationId(conversationId);
+    setSelectedConversationVersion(version);
   };
 
   const handleConversationTitleChange = async (
@@ -106,7 +118,10 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
 
   const handleConfirmStop = () => {
     if (selectedConversationId) {
-      stopConversation({ conversationId: selectedConversationId });
+      pauseConversationSandbox({
+        conversationId: selectedConversationId,
+        version: selectedConversationVersion,
+      });
     }
   };
 
@@ -131,13 +146,24 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
           <p className="text-danger">{error.message}</p>
         </div>
       )}
-      {!isFetching && conversations?.length === 0 && (
+      {!isFetching && conversations?.length === 0 && !startTasks?.length && (
         <div className="flex flex-col items-center justify-center h-full">
           <p className="text-neutral-400">
             {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
           </p>
         </div>
       )}
+      {/* Render in-progress start tasks first */}
+      {startTasks?.map((task) => (
+        <NavLink
+          key={task.id}
+          to={`/conversations/task-${task.id}`}
+          onClick={onClose}
+        >
+          <StartTaskCard task={task} />
+        </NavLink>
+      ))}
+      {/* Then render completed conversations */}
       {conversations?.map((project) => (
         <NavLink
           key={project.conversation_id}
@@ -146,7 +172,12 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         >
           <ConversationCard
             onDelete={() => handleDeleteProject(project.conversation_id)}
-            onStop={() => handleStopConversation(project.conversation_id)}
+            onStop={() =>
+              handleStopConversation(
+                project.conversation_id,
+                project.conversation_version,
+              )
+            }
             onChangeTitle={(title) =>
               handleConversationTitleChange(project.conversation_id, title)
             }
@@ -160,6 +191,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
             createdAt={project.created_at}
             conversationStatus={project.status}
             conversationId={project.conversation_id}
+            conversationVersion={project.conversation_version}
             contextMenuOpen={openContextMenuId === project.conversation_id}
             onContextMenuToggle={(isOpen) =>
               setOpenContextMenuId(isOpen ? project.conversation_id : null)

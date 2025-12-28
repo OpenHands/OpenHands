@@ -51,6 +51,11 @@ ENABLE_SOLVABILITY_ANALYSIS = (
     os.getenv('ENABLE_SOLVABILITY_ANALYSIS', 'false').lower() == 'true'
 )
 
+# Toggle for V1 GitHub resolver feature
+ENABLE_V1_GITHUB_RESOLVER = (
+    os.getenv('ENABLE_V1_GITHUB_RESOLVER', 'false').lower() == 'true'
+)
+
 
 OPENHANDS_RESOLVER_TEMPLATES_DIR = 'openhands/integrations/templates/resolver/'
 jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
@@ -381,7 +386,7 @@ def infer_repo_from_message(user_msg: str) -> list[str]:
     # Captures: protocol, domain, owner, repo (with optional .git extension)
     git_url_pattern = r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:[/?#].*?)?(?=\s|$|[^\w.-])'
 
-    # Pattern to match direct owner/repo mentions (e.g., "All-Hands-AI/OpenHands")
+    # Pattern to match direct owner/repo mentions (e.g., "OpenHands/OpenHands")
     # Must be surrounded by word boundaries or specific characters to avoid false positives
     direct_pattern = (
         r'(?:^|\s|[\[\(\'"])([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?=\s|$|[\]\)\'",.])'

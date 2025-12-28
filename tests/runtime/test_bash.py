@@ -51,11 +51,11 @@ def get_platform_command(linux_cmd, windows_cmd):
     return windows_cmd if is_windows() else linux_cmd
 
 
-def test_bash_server(temp_dir, runtime_cls, run_as_openhands):
+def test_bash_server(temp_dir, runtime_cls, run_as_openhands, dynamic_port):
     runtime, config = _load_runtime(temp_dir, runtime_cls, run_as_openhands)
     try:
         # Use python -u for unbuffered output, potentially helping capture initial output on Windows
-        action = CmdRunAction(command='python -u -m http.server 8081')
+        action = CmdRunAction(command=f'python -u -m http.server {dynamic_port}')
         action.set_hard_timeout(1)
         obs = runtime.run_action(action)
         logger.info(obs, extra={'msg_type': 'OBSERVATION'})
@@ -110,7 +110,7 @@ def test_bash_server(temp_dir, runtime_cls, run_as_openhands):
             assert config.workspace_mount_path_in_sandbox in obs.metadata.working_dir
 
         # run it again!
-        action = CmdRunAction(command='python -u -m http.server 8081')
+        action = CmdRunAction(command=f'python -u -m http.server {dynamic_port}')
         action.set_hard_timeout(1)
         obs = runtime.run_action(action)
         logger.info(obs, extra={'msg_type': 'OBSERVATION'})
@@ -122,9 +122,9 @@ def test_bash_server(temp_dir, runtime_cls, run_as_openhands):
         _close_test_runtime(runtime)
 
 
-def test_bash_background_server(temp_dir, runtime_cls, run_as_openhands):
+def test_bash_background_server(temp_dir, runtime_cls, run_as_openhands, dynamic_port):
     runtime, config = _load_runtime(temp_dir, runtime_cls, run_as_openhands)
-    server_port = 8081
+    server_port = dynamic_port
     try:
         # Start the server, expect it to timeout (run in background manner)
         action = CmdRunAction(f'python3 -m http.server {server_port} &')
@@ -271,7 +271,7 @@ def test_no_ps2_in_output(temp_dir, runtime_cls, run_as_openhands):
     is_windows(), reason='Test uses Linux-specific bash loops and sed commands'
 )
 def test_multiline_command_loop(temp_dir, runtime_cls):
-    # https://github.com/All-Hands-AI/OpenHands/issues/3143
+    # https://github.com/OpenHands/OpenHands/issues/3143
     init_cmd = """mkdir -p _modules && \
 for month in {01..04}; do
     for day in {01..05}; do
@@ -1453,7 +1453,7 @@ def test_bash_remove_prefix(temp_dir, runtime_cls, run_as_openhands):
     try:
         # create a git repo - same for both platforms
         action = CmdRunAction(
-            'git init && git remote add origin https://github.com/All-Hands-AI/OpenHands'
+            'git init && git remote add origin https://github.com/OpenHands/OpenHands'
         )
         obs = runtime.run_action(action)
         # logger.info(obs, extra={'msg_type': 'OBSERVATION'})
@@ -1463,7 +1463,7 @@ def test_bash_remove_prefix(temp_dir, runtime_cls, run_as_openhands):
         obs = runtime.run_action(CmdRunAction('git remote -v'))
         # logger.info(obs, extra={'msg_type': 'OBSERVATION'})
         assert obs.metadata.exit_code == 0
-        assert 'https://github.com/All-Hands-AI/OpenHands' in obs.content
+        assert 'https://github.com/OpenHands/OpenHands' in obs.content
         assert 'git remote -v' not in obs.content
     finally:
         _close_test_runtime(runtime)

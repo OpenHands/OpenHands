@@ -9,6 +9,7 @@ from openhands.storage.local import LocalFileStore
 from openhands.storage.memory import InMemoryFileStore
 from openhands.storage.s3 import S3FileStore
 from openhands.storage.web_hook import WebHookFileStore
+from openhands.utils.http_session import httpx_verify_option
 
 
 def get_file_store(
@@ -38,7 +39,10 @@ def get_file_store(
                     'SESSION_API_KEY'
                 )
 
-        client = httpx.Client(headers=file_store_web_hook_headers or {})
+        client = httpx.Client(
+            headers=file_store_web_hook_headers or {},
+            verify=httpx_verify_option(),
+        )
 
         if file_store_web_hook_batch:
             # Use batched webhook file store

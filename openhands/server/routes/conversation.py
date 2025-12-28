@@ -1,7 +1,13 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from openhands.app_server.app_conversation.app_conversation_service import (
+    AppConversationService,
+)
+from openhands.app_server.config import depends_app_conversation_service
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action.message import MessageAction
 from openhands.events.event_filter import EventFilter
@@ -21,24 +27,116 @@ app = APIRouter(
     prefix='/api/conversations/{conversation_id}', dependencies=get_dependencies()
 )
 
+# Dependency for app conversation service
+app_conversation_service_dependency = depends_app_conversation_service()
 
-@app.get('/config')
-async def get_remote_runtime_config(
-    conversation: ServerConversation = Depends(get_conversation),
-) -> JSONResponse:
-    """Retrieve the runtime configuration.
 
-    Currently, this is the session ID and runtime ID (if available).
+async def _is_v1_conversation(
+    conversation_id: str, app_conversation_service: AppConversationService
+) -> bool:
+    """Check if the given conversation_id corresponds to a V1 conversation.
+
+    Args:
+        conversation_id: The conversation ID to check
+        app_conversation_service: Service to query V1 conversations
+
+    Returns:
+        True if this is a V1 conversation, False otherwise
+    """
+    try:
+        conversation_uuid = uuid.UUID(conversation_id)
+        app_conversation = await app_conversation_service.get_app_conversation(
+            conversation_uuid
+        )
+        return app_conversation is not None
+    except (ValueError, TypeError):
+        # Not a valid UUID, so it's not a V1 conversation
+        return False
+    except Exception:
+        # Service error, assume it's not a V1 conversation
+        return False
+
+
+async def _get_v1_conversation_config(
+    conversation_id: str, app_conversation_service: AppConversationService
+) -> dict[str, str | None]:
+    """Get configuration for a V1 conversation.
+
+    Args:
+        conversation_id: The conversation ID
+        app_conversation_service: Service to query V1 conversations
+
+    Returns:
+        Dictionary with runtime_id (sandbox_id) and session_id (conversation_id)
+    """
+    conversation_uuid = uuid.UUID(conversation_id)
+    app_conversation = await app_conversation_service.get_app_conversation(
+        conversation_uuid
+    )
+
+    if app_conversation is None:
+        raise ValueError(f'V1 conversation {conversation_id} not found')
+
+    return {
+        'runtime_id': app_conversation.sandbox_id,
+        'session_id': conversation_id,
+    }
+
+
+def _get_v0_conversation_config(
+    conversation: ServerConversation,
+) -> dict[str, str | None]:
+    """Get configuration for a V0 conversation.
+
+    Args:
+        conversation: The server conversation object
+
+    Returns:
+        Dictionary with runtime_id and session_id from the runtime
     """
     runtime = conversation.runtime
     runtime_id = runtime.runtime_id if hasattr(runtime, 'runtime_id') else None
     session_id = runtime.sid if hasattr(runtime, 'sid') else None
-    return JSONResponse(
-        content={
-            'runtime_id': runtime_id,
-            'session_id': session_id,
-        }
-    )
+
+    return {
+        'runtime_id': runtime_id,
+        'session_id': session_id,
+    }
+
+
+@app.get('/config')
+async def get_remote_runtime_config(
+    conversation_id: str,
+    app_conversation_service: AppConversationService = app_conversation_service_dependency,
+    user_id: str | None = Depends(get_user_id),
+) -> JSONResponse:
+    """Retrieve the runtime configuration.
+
+    For V0 conversations: returns runtime_id and session_id from the runtime.
+    For V1 conversations: returns sandbox_id as runtime_id and conversation_id as session_id.
+    """
+    # Check if this is a V1 conversation first
+    if await _is_v1_conversation(conversation_id, app_conversation_service):
+        # This is a V1 conversation
+        config = await _get_v1_conversation_config(
+            conversation_id, app_conversation_service
+        )
+    else:
+        # V0 conversation - get the conversation and use the existing logic
+        conversation = await conversation_manager.attach_to_conversation(
+            conversation_id, user_id
+        )
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f'Conversation {conversation_id} not found',
+            )
+        try:
+            config = _get_v0_conversation_config(conversation)
+        finally:
+            await conversation_manager.detach_from_conversation(conversation)
+
+    return JSONResponse(content=config)
 
 
 @app.get('/vscode-url')
@@ -279,12 +377,14 @@ async def get_microagents(
                     content=r_agent.content,
                     triggers=[],
                     inputs=r_agent.metadata.inputs,
-                    tools=[
-                        server.name
-                        for server in r_agent.metadata.mcp_tools.stdio_servers
-                    ]
-                    if r_agent.metadata.mcp_tools
-                    else [],
+                    tools=(
+                        [
+                            server.name
+                            for server in r_agent.metadata.mcp_tools.stdio_servers
+                        ]
+                        if r_agent.metadata.mcp_tools
+                        else []
+                    ),
                 )
             )
 
@@ -297,12 +397,14 @@ async def get_microagents(
                     content=k_agent.content,
                     triggers=k_agent.triggers,
                     inputs=k_agent.metadata.inputs,
-                    tools=[
-                        server.name
-                        for server in k_agent.metadata.mcp_tools.stdio_servers
-                    ]
-                    if k_agent.metadata.mcp_tools
-                    else [],
+                    tools=(
+                        [
+                            server.name
+                            for server in k_agent.metadata.mcp_tools.stdio_servers
+                        ]
+                        if k_agent.metadata.mcp_tools
+                        else []
+                    ),
                 )
             )
 

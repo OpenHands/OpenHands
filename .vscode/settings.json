@@ -3,4 +3,20 @@
     "files.eol": "\n",
     "files.trimTrailingWhitespace": true,
     "files.insertFinalNewline": true,
+
+    "python.defaultInterpreterPath": "./.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.extraPaths": [
+        "./.venv/lib/python3.12/site-packages"
+    ],
+    "python.analysis.packageIndexDepths": [
+        {
+            "name": "openhands",
+            "depth": 10,
+            "includeAllSymbols": true
+        }
+    ],
+    "python.analysis.stubPath": "./.venv/lib/python3.12/site-packages",
 }

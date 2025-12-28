@@ -32,6 +32,7 @@ from openhands.integrations.service_types import Repository
 from openhands.server.shared import server_config
 from openhands.server.types import LLMAuthenticationError, MissingSettingsError
 from openhands.server.user_auth.user_auth import UserAuth
+from openhands.utils.http_session import httpx_verify_option
 
 JIRA_CLOUD_API_URL = 'https://api.atlassian.com/ex/jira'
 
@@ -408,7 +409,7 @@ class JiraManager(Manager):
         svc_acc_api_key: str,
     ) -> Tuple[str, str]:
         url = f'{JIRA_CLOUD_API_URL}/{jira_cloud_id}/rest/api/2/issue/{job_context.issue_key}'
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.get(url, auth=(svc_acc_email, svc_acc_api_key))
             response.raise_for_status()
             issue_payload = response.json()
@@ -443,7 +444,7 @@ class JiraManager(Manager):
             f'{JIRA_CLOUD_API_URL}/{jira_cloud_id}/rest/api/2/issue/{issue_key}/comment'
         )
         data = {'body': message.message}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(
                 url, auth=(svc_acc_email, svc_acc_api_key), json=data
             )

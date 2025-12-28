@@ -1,7 +1,7 @@
 import { act, screen } from "@testing-library/react";
 import { renderWithProviders } from "test-utils";
 import { vi, describe, afterEach, it, expect } from "vitest";
-import { Command, useCommandStore } from "#/state/command-store";
+import { Command, useCommandStore } from "#/stores/command-store";
 import Terminal from "#/components/features/terminal/terminal";
 
 const renderTerminal = (commands: Command[] = []) => {
@@ -11,6 +11,7 @@ const renderTerminal = (commands: Command[] = []) => {
 };
 
 describe.skip("Terminal", () => {
+  // Terminal is now read-only - no user input functionality
   global.ResizeObserver = vi.fn().mockImplementation(() => ({
     observe: vi.fn(),
     disconnect: vi.fn(),
@@ -21,8 +22,6 @@ describe.skip("Terminal", () => {
     write: vi.fn(),
     writeln: vi.fn(),
     dispose: vi.fn(),
-    onKey: vi.fn(),
-    attachCustomKeyEventHandler: vi.fn(),
     loadAddon: vi.fn(),
   };
 

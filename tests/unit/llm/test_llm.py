@@ -201,6 +201,28 @@ def test_llm_top_k_not_in_completion_when_none(mock_litellm_completion):
     llm.completion(messages=[{'role': 'system', 'content': 'Test message'}])
 
 
+@patch('openhands.llm.llm.litellm_completion')
+def test_completion_kwargs_passed_to_litellm(mock_litellm_completion):
+    # Create a config with custom completion_kwargs
+    config_with_completion_kwargs = LLMConfig(
+        completion_kwargs={'custom_param': 'custom_value', 'another_param': 42}
+    )
+    llm = LLM(config_with_completion_kwargs, service_id='test-service')
+
+    # Define a side effect function to check completion_kwargs are passed
+    def side_effect(*args, **kwargs):
+        assert 'custom_param' in kwargs
+        assert kwargs['custom_param'] == 'custom_value'
+        assert 'another_param' in kwargs
+        assert kwargs['another_param'] == 42
+        return {'choices': [{'message': {'content': 'Mocked response'}}]}
+
+    mock_litellm_completion.side_effect = side_effect
+
+    # Call completion
+    llm.completion(messages=[{'role': 'system', 'content': 'Test message'}])
+
+
 def test_llm_init_with_metrics():
     config = LLMConfig(model='gpt-4o', api_key='test_key')
     metrics = Metrics()
@@ -1121,11 +1143,17 @@ def test_gemini_model_keeps_none_reasoning_effort():
     assert config.reasoning_effort is None
 
 
-def test_non_gemini_model_gets_high_reasoning_effort():
-    """Test that non-Gemini models get reasoning_effort='high' by default."""
-    config = LLMConfig(model='gpt-4o', api_key='test_key')
-    # Non-Gemini models should get reasoning_effort='high'
+def test_non_gemini_model_explicit_reasoning_effort():
+    """Test that non-Gemini models get reasoning_effort ONLY if explicitly set."""
+    config = LLMConfig(model='gpt-4o', api_key='test_key', reasoning_effort='high')
     assert config.reasoning_effort == 'high'
+
+
+def test_non_gemini_model_default_reasoning_effort_none():
+    """Test that non-Gemini models do NOT get reasoning_effort by default after PR."""
+    config = LLMConfig(model='gpt-4o', api_key='test_key')
+    # Should be None by default after your change
+    assert config.reasoning_effort is None
 
 
 def test_explicit_reasoning_effort_preserved():
@@ -1224,6 +1252,44 @@ def test_opus_41_keeps_temperature_top_p(mock_completion):
     call_kwargs = mock_completion.call_args[1]
     assert call_kwargs.get('temperature') == 0.7
     # Anthropic rejects both temperature and top_p together on Opus; we keep temperature and drop top_p
+    assert 'top_p' not in call_kwargs
+
+
+@patch('openhands.llm.llm.litellm_completion')
+def test_opus_45_keeps_temperature_drops_top_p(mock_completion):
+    mock_completion.return_value = {
+        'choices': [{'message': {'content': 'ok'}}],
+    }
+    config = LLMConfig(
+        model='anthropic/claude-opus-4-5-20251101',
+        api_key='k',
+        temperature=0.7,
+        top_p=0.9,
+    )
+    llm = LLM(config, service_id='svc')
+    llm.completion(messages=[{'role': 'user', 'content': 'hi'}])
+    call_kwargs = mock_completion.call_args[1]
+    assert call_kwargs.get('temperature') == 0.7
+    # Anthropic rejects both temperature and top_p together on Opus 4.5; we keep temperature and drop top_p
+    assert 'top_p' not in call_kwargs
+
+
+@patch('openhands.llm.llm.litellm_completion')
+def test_sonnet_4_keeps_temperature_drops_top_p(mock_completion):
+    mock_completion.return_value = {
+        'choices': [{'message': {'content': 'ok'}}],
+    }
+    config = LLMConfig(
+        model='anthropic/claude-sonnet-4-20250514',
+        api_key='k',
+        temperature=0.7,
+        top_p=0.9,
+    )
+    llm = LLM(config, service_id='svc')
+    llm.completion(messages=[{'role': 'user', 'content': 'hi'}])
+    call_kwargs = mock_completion.call_args[1]
+    assert call_kwargs.get('temperature') == 0.7
+    # Anthropic rejects both temperature and top_p together on Sonnet 4; we keep temperature and drop top_p
     assert 'top_p' not in call_kwargs
 
 

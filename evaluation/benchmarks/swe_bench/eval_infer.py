@@ -76,7 +76,7 @@ def get_config(metadata: EvalMetadata, instance: pd.Series) -> OpenHandsConfig:
     logger.info(
         f'Using instance container image: {base_container_image}. '
         f'Please make sure this image exists. '
-        f'Submit an issue on https://github.com/All-Hands-AI/OpenHands if you run into any issues.'
+        f'Submit an issue on https://github.com/OpenHands/OpenHands if you run into any issues.'
     )
     sandbox_config = get_default_sandbox_config_for_eval()
     sandbox_config.base_container_image = base_container_image

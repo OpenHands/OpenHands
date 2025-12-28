@@ -26,6 +26,7 @@ from openhands.events.observation.files import (
     FileReadObservation,
     FileWriteObservation,
 )
+from openhands.events.observation.loop_recovery import LoopDetectionObservation
 from openhands.events.observation.mcp import MCPObservation
 from openhands.events.observation.observation import Observation
 from openhands.events.observation.reject import UserRejectObservation
@@ -51,6 +52,7 @@ observations = (
     MCPObservation,
     FileDownloadObservation,
     TaskTrackingObservation,
+    LoopDetectionObservation,
 )
 
 OBSERVATION_TYPE_TO_CLASS = {
@@ -80,7 +82,7 @@ def _update_cmd_output_metadata(
 
 
 def handle_observation_deprecated_extras(extras: dict) -> dict:
-    # These are deprecated in https://github.com/All-Hands-AI/OpenHands/pull/4881
+    # These are deprecated in https://github.com/OpenHands/OpenHands/pull/4881
     if 'exit_code' in extras:
         extras['metadata'] = _update_cmd_output_metadata(
             extras.get('metadata', None), exit_code=extras.pop('exit_code')
@@ -90,7 +92,7 @@ def handle_observation_deprecated_extras(extras: dict) -> dict:
             extras.get('metadata', None), pid=extras.pop('command_id')
         )
 
-    # formatted_output_and_error has been deprecated in https://github.com/All-Hands-AI/OpenHands/pull/6671
+    # formatted_output_and_error has been deprecated in https://github.com/OpenHands/OpenHands/pull/6671
     if 'formatted_output_and_error' in extras:
         extras.pop('formatted_output_and_error')
     return extras

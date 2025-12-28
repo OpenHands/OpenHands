@@ -25,6 +25,7 @@ USER_SETTINGS_VERSION_TO_MODEL = {
     2: 'claude-3-7-sonnet-20250219',
     3: 'claude-sonnet-4-20250514',
     4: 'claude-sonnet-4-20250514',
+    5: 'claude-opus-4-5-20251101',
 }
 
 LITELLM_DEFAULT_MODEL = os.getenv('LITELLM_DEFAULT_MODEL')
@@ -50,7 +51,7 @@ SUBSCRIPTION_PRICE_DATA = {
     },
 }
 
-DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', '20'))
+DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', '10'))
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', None)
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', None)
 REQUIRE_PAYMENT = os.environ.get('REQUIRE_PAYMENT', '0') in ('1', 'true')

@@ -30,7 +30,7 @@ describe("ImagePreview", () => {
     expect(onRemoveMock).toHaveBeenCalledOnce();
   });
 
-  it("shoud not display the close button when onRemove is not provided", () => {
+  it("should not display the close button when onRemove is not provided", () => {
     render(<ImagePreview src="https://example.com/image.jpg" />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });

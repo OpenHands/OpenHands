@@ -14,11 +14,11 @@ from openhands.server.settings import (
 )
 from openhands.server.user_auth import (
     get_provider_tokens,
+    get_secrets,
     get_secrets_store,
-    get_user_secrets,
 )
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
-from openhands.storage.data_models.user_secrets import UserSecrets
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
 
@@ -32,20 +32,18 @@ app = APIRouter(prefix='/api', dependencies=get_dependencies())
 
 async def invalidate_legacy_secrets_store(
     settings: Settings, settings_store: SettingsStore, secrets_store: SecretsStore
-) -> UserSecrets | None:
+) -> Secrets | None:
     """We are moving `secrets_store` (a field from `Settings` object) to its own dedicated store
-    This function moves the values from Settings to UserSecrets, and deletes the values in Settings
+    This function moves the values from Settings to Secrets, and deletes the values in Settings
     While this function in called multiple times, the migration only ever happens once
     """
     if len(settings.secrets_store.provider_tokens.items()) > 0:
-        user_secrets = UserSecrets(
-            provider_tokens=settings.secrets_store.provider_tokens
-        )
+        user_secrets = Secrets(provider_tokens=settings.secrets_store.provider_tokens)
         await secrets_store.store(user_secrets)
 
         # Invalidate old tokens via settings store serializer
         invalidated_secrets_settings = settings.model_copy(
-            update={'secrets_store': UserSecrets()}
+            update={'secrets_store': Secrets()}
         )
         await settings_store.store(invalidated_secrets_settings)
 
@@ -120,7 +118,7 @@ async def store_provider_tokens(
     try:
         user_secrets = await secrets_store.load()
         if not user_secrets:
-            user_secrets = UserSecrets()
+            user_secrets = Secrets()
 
         if provider_info.provider_tokens:
             existing_providers = [provider for provider in user_secrets.provider_tokens]
@@ -183,7 +181,7 @@ async def unset_provider_tokens(
 
 @app.get('/secrets', response_model=GETCustomSecrets)
 async def load_custom_secrets_names(
-    user_secrets: UserSecrets | None = Depends(get_user_secrets),
+    user_secrets: Secrets | None = Depends(get_secrets),
 ) -> GETCustomSecrets | JSONResponse:
     try:
         if not user_secrets:
@@ -235,8 +233,8 @@ async def create_custom_secret(
             description=secret_description or '',
         )
 
-        # Create a new UserSecrets that preserves provider tokens
-        updated_user_secrets = UserSecrets(
+        # Create a new Secrets that preserves provider tokens
+        updated_user_secrets = Secrets(
             custom_secrets=custom_secrets,  # type: ignore[arg-type]
             provider_tokens=existing_secrets.provider_tokens
             if existing_secrets
@@ -290,7 +288,7 @@ async def update_custom_secret(
                 description=secret_description or '',
             )
 
-            updated_secrets = UserSecrets(
+            updated_secrets = Secrets(
                 custom_secrets=custom_secrets,  # type: ignore[arg-type]
                 provider_tokens=existing_secrets.provider_tokens,
             )
@@ -330,8 +328,8 @@ async def delete_custom_secret(
             # Remove the secret
             custom_secrets.pop(secret_id)
 
-            # Create a new UserSecrets that preserves provider tokens and remaining secrets
-            updated_secrets = UserSecrets(
+            # Create a new Secrets that preserves provider tokens and remaining secrets
+            updated_secrets = Secrets(
                 custom_secrets=custom_secrets,  # type: ignore[arg-type]
                 provider_tokens=existing_secrets.provider_tokens,
             )

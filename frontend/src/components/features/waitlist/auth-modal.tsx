@@ -8,15 +8,20 @@ import { BrandButton } from "../settings/brand-button";
 import GitHubLogo from "#/assets/branding/github-logo.svg?react";
 import GitLabLogo from "#/assets/branding/gitlab-logo.svg?react";
 import BitbucketLogo from "#/assets/branding/bitbucket-logo.svg?react";
+import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
 import { useAuthUrl } from "#/hooks/use-auth-url";
 import { GetConfigResponse } from "#/api/option-service/option.types";
 import { Provider } from "#/types/settings";
+import { useTracking } from "#/hooks/use-tracking";
+import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-notice";
 
 interface AuthModalProps {
   githubAuthUrl: string | null;
   appMode?: GetConfigResponse["APP_MODE"] | null;
   authUrl?: GetConfigResponse["AUTH_URL"];
   providersConfigured?: Provider[];
+  emailVerified?: boolean;
+  hasDuplicatedEmail?: boolean;
 }
 
 export function AuthModal({
@@ -24,8 +29,11 @@ export function AuthModal({
   appMode,
   authUrl,
   providersConfigured,
+  emailVerified = false,
+  hasDuplicatedEmail = false,
 }: AuthModalProps) {
   const { t } = useTranslation();
+  const { trackLoginButtonClick } = useTracking();
 
   const gitlabAuthUrl = useAuthUrl({
     appMode: appMode || null,
@@ -39,6 +47,12 @@ export function AuthModal({
     authUrl,
   });
 
+  const azureDevOpsAuthUrl = useAuthUrl({
+    appMode: appMode || null,
+    identityProvider: "azure_devops",
+    authUrl,
+  });
+
   const enterpriseSsoUrl = useAuthUrl({
     appMode: appMode || null,
     identityProvider: "enterprise_sso",
@@ -47,6 +61,7 @@ export function AuthModal({
 
   const handleGitHubAuth = () => {
     if (githubAuthUrl) {
+      trackLoginButtonClick({ provider: "github" });
       // Always start the OIDC flow, let the backend handle TOS check
       window.location.href = githubAuthUrl;
     }
@@ -54,6 +69,7 @@ export function AuthModal({
 
   const handleGitLabAuth = () => {
     if (gitlabAuthUrl) {
+      trackLoginButtonClick({ provider: "gitlab" });
       // Always start the OIDC flow, let the backend handle TOS check
       window.location.href = gitlabAuthUrl;
     }
@@ -61,13 +77,22 @@ export function AuthModal({
 
   const handleBitbucketAuth = () => {
     if (bitbucketAuthUrl) {
+      trackLoginButtonClick({ provider: "bitbucket" });
       // Always start the OIDC flow, let the backend handle TOS check
       window.location.href = bitbucketAuthUrl;
     }
   };
 
+  const handleAzureDevOpsAuth = () => {
+    if (azureDevOpsAuthUrl) {
+      // Always start the OIDC flow, let the backend handle TOS check
+      window.location.href = azureDevOpsAuthUrl;
+    }
+  };
+
   const handleEnterpriseSsoAuth = () => {
     if (enterpriseSsoUrl) {
+      trackLoginButtonClick({ provider: "enterprise_sso" });
       // Always start the OIDC flow, let the backend handle TOS check
       window.location.href = enterpriseSsoUrl;
     }
@@ -86,6 +111,10 @@ export function AuthModal({
     providersConfigured &&
     providersConfigured.length > 0 &&
     providersConfigured.includes("bitbucket");
+  const showAzureDevOps =
+    providersConfigured &&
+    providersConfigured.length > 0 &&
+    providersConfigured.includes("azure_devops");
   const showEnterpriseSso =
     providersConfigured &&
     providersConfigured.length > 0 &&
@@ -99,6 +128,18 @@ export function AuthModal({
     <ModalBackdrop>
       <ModalBody className="border border-tertiary">
         <OpenHandsLogo width={68} height={46} />
+        {emailVerified && (
+          <div className="flex flex-col gap-2 w-full items-center text-center">
+            <p className="text-sm text-muted-foreground">
+              {t(I18nKey.AUTH$EMAIL_VERIFIED_PLEASE_LOGIN)}
+            </p>
+          </div>
+        )}
+        {hasDuplicatedEmail && (
+          <div className="text-center text-danger text-sm mt-2 mb-2">
+            {t(I18nKey.AUTH$DUPLICATE_EMAIL_ERROR)}
+          </div>
+        )}
         <div className="flex flex-col gap-2 w-full items-center text-center">
           <h1 className="text-2xl font-bold">
             {t(I18nKey.AUTH$SIGN_IN_WITH_IDENTITY_PROVIDER)}
@@ -148,6 +189,18 @@ export function AuthModal({
                 </BrandButton>
               )}
 
+              {showAzureDevOps && (
+                <BrandButton
+                  type="button"
+                  variant="primary"
+                  onClick={handleAzureDevOpsAuth}
+                  className="w-full font-semibold"
+                  startContent={<AzureDevOpsLogo width={20} height={20} />}
+                >
+                  {t(I18nKey.AZURE_DEVOPS$CONNECT_ACCOUNT)}
+                </BrandButton>
+              )}
+
               {showEnterpriseSso && (
                 <BrandButton
                   type="button"
@@ -162,30 +215,7 @@ export function AuthModal({
           )}
         </div>
 
-        <p
-          className="mt-4 text-xs text-center text-muted-foreground"
-          data-testid="auth-modal-terms-of-service"
-        >
-          {t(I18nKey.AUTH$BY_SIGNING_UP_YOU_AGREE_TO_OUR)}{" "}
-          <a
-            href="https://www.all-hands.dev/tos"
-            target="_blank"
-            className="underline hover:text-primary"
-            rel="noopener noreferrer"
-          >
-            {t(I18nKey.COMMON$TERMS_OF_SERVICE)}
-          </a>{" "}
-          {t(I18nKey.COMMON$AND)}{" "}
-          <a
-            href="https://www.all-hands.dev/privacy"
-            target="_blank"
-            className="underline hover:text-primary"
-            rel="noopener noreferrer"
-          >
-            {t(I18nKey.COMMON$PRIVACY_POLICY)}
-          </a>
-          .
-        </p>
+        <TermsAndPrivacyNotice />
       </ModalBody>
     </ModalBackdrop>
   );

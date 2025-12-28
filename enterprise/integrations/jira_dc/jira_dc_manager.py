@@ -34,6 +34,7 @@ from openhands.integrations.service_types import Repository
 from openhands.server.shared import server_config
 from openhands.server.types import LLMAuthenticationError, MissingSettingsError
 from openhands.server.user_auth.user_auth import UserAuth
+from openhands.utils.http_session import httpx_verify_option
 
 
 class JiraDcManager(Manager):
@@ -422,7 +423,7 @@ class JiraDcManager(Manager):
         """Get issue details from Jira DC API."""
         url = f'{job_context.base_api_url}/rest/api/2/issue/{job_context.issue_key}'
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
             issue_payload = response.json()
@@ -452,7 +453,7 @@ class JiraDcManager(Manager):
         url = f'{base_api_url}/rest/api/2/issue/{issue_key}/comment'
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
         data = {'body': message.message}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
             return response.json()
