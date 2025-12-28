@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useSharedConversation } from "#/hooks/query/use-shared-conversation";
@@ -7,6 +7,7 @@ import { useSharedConversationEvents } from "#/hooks/query/use-shared-conversati
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 
 export default function SharedConversation() {
   const { t } = useTranslation();
@@ -37,7 +38,7 @@ export default function SharedConversation() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-neutral-900">
         <LoadingSpinner size="large" />
       </div>
     );
@@ -45,7 +46,7 @@ export default function SharedConversation() {
 
   if (error || !conversation) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-neutral-900">
         <div className="text-white">{t(I18nKey.CONVERSATION$NOT_FOUND)}</div>
       </div>
     );
@@ -53,23 +54,33 @@ export default function SharedConversation() {
 
   return (
     <div className="h-screen bg-neutral-900 text-white flex flex-col">
-      {/* Header with conversation title and branch info */}
+      {/* Header with logo, conversation title and branch info */}
       <div className="border-b border-neutral-700 p-4 flex-shrink-0">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-xl font-semibold mb-2">
-            {conversation?.title || t(I18nKey.CONVERSATION$SHARED_CONVERSATION)}
-          </h1>
-          {conversation?.selected_branch && (
-            <div className="text-sm text-neutral-400">
-              {t(I18nKey.CONVERSATION$BRANCH)}: {conversation.selected_branch}
-            </div>
-          )}
-          {conversation?.selected_repository && (
-            <div className="text-sm text-neutral-400">
-              {t(I18nKey.CONVERSATION$REPOSITORY)}:{" "}
-              {conversation.selected_repository}
-            </div>
-          )}
+        <div className="max-w-4xl mx-auto flex items-start gap-4">
+          <Link
+            to="/"
+            className="flex-shrink-0"
+            aria-label={t(I18nKey.BRANDING$OPENHANDS_LOGO)}
+          >
+            <OpenHandsLogo width={46} height={30} />
+          </Link>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-semibold mb-2">
+              {conversation?.title ||
+                t(I18nKey.CONVERSATION$SHARED_CONVERSATION)}
+            </h1>
+            {conversation?.selected_branch && (
+              <div className="text-sm text-neutral-400">
+                {t(I18nKey.CONVERSATION$BRANCH)}: {conversation.selected_branch}
+              </div>
+            )}
+            {conversation?.selected_repository && (
+              <div className="text-sm text-neutral-400">
+                {t(I18nKey.CONVERSATION$REPOSITORY)}:{" "}
+                {conversation.selected_repository}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -77,15 +88,17 @@ export default function SharedConversation() {
       <div className="flex-1 overflow-hidden">
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2">
-            {renderableEvents.length > 0 ? (
-              <V1Messages messages={renderableEvents} allEvents={v1Events} />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center text-neutral-400 py-8">
-                  {t(I18nKey.CONVERSATION$NO_HISTORY_AVAILABLE)}
+            <div className="max-w-4xl mx-auto">
+              {renderableEvents.length > 0 ? (
+                <V1Messages messages={renderableEvents} allEvents={v1Events} />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-neutral-400 py-8">
+                    {t(I18nKey.CONVERSATION$NO_HISTORY_AVAILABLE)}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
