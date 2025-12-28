@@ -82,7 +82,7 @@ export const useCreateConversationAndSubscribeMultiple = () => {
         subscribeToConversation({
           conversationId,
           sessionApiKey,
-          providersSet: providers,
+          providersSet: providers as Provider[],
           baseUrl,
           socketPath: conversationData.socketPath,
           onEvent: conversationData.onEventCallback,

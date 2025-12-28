@@ -215,6 +215,10 @@ export const getGitProviderBaseUrl = (gitProvider: Provider): string => {
       return "https://bitbucket.org";
     case "azure_devops":
       return "https://dev.azure.com";
+    case "forgejo":
+      // Default UI links to Codeberg unless a custom host is available in settings
+      // Note: UI link builders don't currently receive host; consider plumbing settings if needed
+      return "https://codeberg.org";
     default:
       return "";
   }
@@ -229,6 +233,7 @@ export const getProviderName = (gitProvider: Provider) => {
   if (gitProvider === "gitlab") return "GitLab";
   if (gitProvider === "bitbucket") return "Bitbucket";
   if (gitProvider === "azure_devops") return "Azure DevOps";
+  if (gitProvider === "forgejo") return "Forgejo";
   return "GitHub";
 };
 
@@ -268,6 +273,8 @@ export const constructPullRequestUrl = (
 
   switch (provider) {
     case "github":
+      return `${baseUrl}/${repositoryName}/pull/${prNumber}`;
+    case "forgejo":
       return `${baseUrl}/${repositoryName}/pull/${prNumber}`;
     case "gitlab":
       return `${baseUrl}/${repositoryName}/-/merge_requests/${prNumber}`;
@@ -312,6 +319,8 @@ export const constructMicroagentUrl = (
   switch (gitProvider) {
     case "github":
       return `${baseUrl}/${repositoryName}/blob/main/${microagentPath}`;
+    case "forgejo":
+      return `${baseUrl}/${repositoryName}/src/branch/main/${microagentPath}`;
     case "gitlab":
       return `${baseUrl}/${repositoryName}/-/blob/main/${microagentPath}`;
     case "bitbucket":
@@ -390,6 +399,8 @@ export const constructBranchUrl = (
   switch (provider) {
     case "github":
       return `${baseUrl}/${repositoryName}/tree/${branchName}`;
+    case "forgejo":
+      return `${baseUrl}/${repositoryName}/src/branch/${branchName}`;
     case "gitlab":
       return `${baseUrl}/${repositoryName}/-/tree/${branchName}`;
     case "bitbucket":
