@@ -18,6 +18,8 @@
     "i18next/no-literal-string": "error",
     "unused-imports/no-unused-imports": "error",
     "prettier/prettier": ["error"],
+    // Enforce using optional chaining (?.) instead of && chains for null/undefined checks
+    "@typescript-eslint/prefer-optional-chain": "error",
     // Resolves https://stackoverflow.com/questions/59265981/typescript-eslint-missing-file-extension-ts-import-extensions/59268871#59268871
     "import/extensions": [
       "error",

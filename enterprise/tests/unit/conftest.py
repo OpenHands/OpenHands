@@ -12,6 +12,7 @@ from storage.base import Base
 # Anything not loaded here may not have a table created for it.
 from storage.billing_session import BillingSession
 from storage.conversation_work import ConversationWork
+from storage.device_code import DeviceCode  # noqa: F401
 from storage.feedback import Feedback
 from storage.github_app_installation import GithubAppInstallation
 from storage.maintenance_task import MaintenanceTask, MaintenanceTaskStatus

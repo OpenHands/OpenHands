@@ -6,6 +6,7 @@ import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { getStatusColor } from "#/utils/utils";
+import { useErrorMessageStore } from "#/stores/error-message-store";
 
 export interface ServerStatusProps {
   className?: string;
@@ -21,6 +22,7 @@ export function ServerStatus({
   const { curAgentState } = useAgentState();
   const { t } = useTranslation();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
+  const { errorMessage } = useErrorMessageStore();
 
   const isStartingStatus =
     curAgentState === AgentState.LOADING || curAgentState === AgentState.INIT;
@@ -69,7 +71,7 @@ export function ServerStatus({
       return t(I18nKey.COMMON$SERVER_STOPPED);
     }
     if (curAgentState === AgentState.ERROR) {
-      return t(I18nKey.COMMON$ERROR);
+      return errorMessage || t(I18nKey.COMMON$ERROR);
     }
     return t(I18nKey.COMMON$RUNNING);
   };
@@ -79,7 +81,7 @@ export function ServerStatus({
   return (
     <div className={className} data-testid="server-status">
       <div className="flex items-center">
-        <DebugStackframeDot className="w-6 h-6" color={statusColor} />
+        <DebugStackframeDot className="w-6 h-6 shrink-0" color={statusColor} />
         <span className="text-[13px] text-white font-normal">{statusText}</span>
       </div>
     </div>

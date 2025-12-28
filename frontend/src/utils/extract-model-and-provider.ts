@@ -16,7 +16,7 @@ import {
  * splitIsActuallyVersion(split) // returns true
  */
 const splitIsActuallyVersion = (split: string[]) =>
-  split[1] && split[1][0] && isNumber(split[1][0]);
+  split[1]?.[0] && isNumber(split[1][0]);
 
 /**
  * Given a model string, extract the provider and model name. Currently the supported separators are "/" and "."

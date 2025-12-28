@@ -1,0 +1,47 @@
+# Workflow that runs frontend e2e tests with Playwright
+name: Run Frontend E2E Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/fe-e2e-tests.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.head_ref && github.ref) || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  fe-e2e-test:
+    name: FE E2E Tests
+    runs-on: blacksmith-4vcpu-ubuntu-2204
+    strategy:
+      matrix:
+        node-version: [22]
+      fail-fast: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: useblacksmith/setup-node@v5
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      - name: Install Playwright browsers
+        working-directory: ./frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright tests
+        working-directory: ./frontend
+        run: npx playwright test --project=chromium
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 30

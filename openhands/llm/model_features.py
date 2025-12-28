@@ -80,6 +80,7 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'o4-mini*',
     # Google Gemini
     'gemini-2.5-pro*',
+    'gemini-3*',
     # Groq models (via groq/ provider prefix)
     'groq/*',
     # Others
@@ -88,6 +89,7 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'qwen3-coder*',
     'qwen3-coder-480b-a35b-instruct',
     'deepseek-chat',
+    'grok-code-fast-1',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [
@@ -130,6 +132,8 @@ SUPPORTS_STOP_WORDS_FALSE_PATTERNS: list[str] = [
     'grok-code-fast-1',
     # DeepSeek R1 family
     'deepseek-r1-0528*',
+    # Azure GPT-5 family
+    'azure/gpt-5*',
 ]
 
 

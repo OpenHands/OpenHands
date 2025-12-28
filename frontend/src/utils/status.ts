@@ -5,6 +5,7 @@ import { ConversationStatus } from "#/types/conversation-status";
 import { StatusMessage } from "#/types/message";
 import { RuntimeStatus } from "#/types/runtime-status";
 import { V1AppConversationStartTaskStatus } from "#/api/conversation-service/v1-conversation-service.types";
+import { isTaskPolling } from "./utils";
 
 export enum IndicatorColor {
   BLUE = "bg-blue-500",
@@ -105,10 +106,11 @@ export function getStatusCode(
   runtimeStatus: RuntimeStatus | null,
   agentState: AgentState | null,
   taskStatus?: V1AppConversationStartTaskStatus | null,
+  subConversationTaskStatus?: V1AppConversationStartTaskStatus | null,
 ) {
   // PRIORITY 1: Handle task error state (when start-tasks API returns ERROR)
   // This must come first to prevent "Connecting..." from showing when task has errored
-  if (taskStatus === "ERROR") {
+  if (taskStatus === "ERROR" || subConversationTaskStatus === "ERROR") {
     return I18nKey.AGENT_STATUS$ERROR_OCCURRED;
   }
 
@@ -147,7 +149,10 @@ export function getStatusCode(
   if (webSocketStatus === "DISCONNECTED") {
     return I18nKey.CHAT_INTERFACE$DISCONNECTED;
   }
-  if (webSocketStatus === "CONNECTING") {
+  if (
+    webSocketStatus === "CONNECTING" ||
+    isTaskPolling(subConversationTaskStatus)
+  ) {
     return I18nKey.CHAT_INTERFACE$CONNECTING;
   }
 

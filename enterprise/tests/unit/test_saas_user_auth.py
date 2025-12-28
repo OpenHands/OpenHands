@@ -5,7 +5,12 @@ import jwt
 import pytest
 from fastapi import Request
 from pydantic import SecretStr
-from server.auth.auth_error import BearerTokenError, CookieError, NoCredentialsError
+from server.auth.auth_error import (
+    AuthError,
+    BearerTokenError,
+    CookieError,
+    NoCredentialsError,
+)
 from server.auth.saas_user_auth import (
     SaasUserAuth,
     get_api_key_from_header,
@@ -535,3 +540,209 @@ def test_get_api_key_from_header_with_invalid_authorization_format():
 
     # Assert that None was returned
     assert api_key is None
+
+
+def test_get_api_key_from_header_with_x_access_token():
+    """Test that get_api_key_from_header extracts API key from X-Access-Token header."""
+    # Create a mock request with X-Access-Token header
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {'X-Access-Token': 'access_token_key'}
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key was correctly extracted
+    assert api_key == 'access_token_key'
+
+
+def test_get_api_key_from_header_priority_authorization_over_x_access_token():
+    """Test that Authorization header takes priority over X-Access-Token header."""
+    # Create a mock request with both headers
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': 'Bearer auth_api_key',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from Authorization header was used
+    assert api_key == 'auth_api_key'
+
+
+def test_get_api_key_from_header_priority_x_session_over_x_access_token():
+    """Test that X-Session-API-Key header takes priority over X-Access-Token header."""
+    # Create a mock request with both headers
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'X-Session-API-Key': 'session_api_key',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from X-Session-API-Key header was used
+    assert api_key == 'session_api_key'
+
+
+def test_get_api_key_from_header_all_three_headers():
+    """Test header priority when all three headers are present."""
+    # Create a mock request with all three headers
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': 'Bearer auth_api_key',
+        'X-Session-API-Key': 'session_api_key',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from Authorization header was used (highest priority)
+    assert api_key == 'auth_api_key'
+
+
+def test_get_api_key_from_header_invalid_authorization_fallback_to_x_access_token():
+    """Test that invalid Authorization header falls back to X-Access-Token."""
+    # Create a mock request with invalid Authorization header and X-Access-Token
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': 'InvalidFormat api_key',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from X-Access-Token header was used
+    assert api_key == 'access_token_key'
+
+
+def test_get_api_key_from_header_empty_headers():
+    """Test that empty header values are handled correctly."""
+    # Create a mock request with empty header values
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': '',
+        'X-Session-API-Key': '',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from X-Access-Token header was used
+    assert api_key == 'access_token_key'
+
+
+def test_get_api_key_from_header_bearer_with_empty_token():
+    """Test that Bearer header with empty token falls back to other headers."""
+    # Create a mock request with Bearer header with empty token
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {
+        'Authorization': 'Bearer ',
+        'X-Access-Token': 'access_token_key',
+    }
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that empty string from Bearer is returned (current behavior)
+    # This tests the current implementation behavior
+    assert api_key == ''
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_signed_token_blocked_domain(mock_config):
+    """Test that saas_user_auth_from_signed_token raises AuthError when email domain is blocked."""
+    # Arrange
+    access_payload = {
+        'sub': 'test_user_id',
+        'exp': int(time.time()) + 3600,
+        'email': 'user@colsch.us',
+        'email_verified': True,
+    }
+    access_token = jwt.encode(access_payload, 'access_secret', algorithm='HS256')
+
+    token_payload = {
+        'access_token': access_token,
+        'refresh_token': 'test_refresh_token',
+    }
+    signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
+
+    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
+        mock_domain_blocker.is_active.return_value = True
+        mock_domain_blocker.is_domain_blocked.return_value = True
+
+        # Act & Assert
+        with pytest.raises(AuthError) as exc_info:
+            await saas_user_auth_from_signed_token(signed_token)
+
+        assert 'email domain is not allowed' in str(exc_info.value)
+        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
+    """Test that saas_user_auth_from_signed_token succeeds when email domain is not blocked."""
+    # Arrange
+    access_payload = {
+        'sub': 'test_user_id',
+        'exp': int(time.time()) + 3600,
+        'email': 'user@example.com',
+        'email_verified': True,
+    }
+    access_token = jwt.encode(access_payload, 'access_secret', algorithm='HS256')
+
+    token_payload = {
+        'access_token': access_token,
+        'refresh_token': 'test_refresh_token',
+    }
+    signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
+
+    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
+        mock_domain_blocker.is_active.return_value = True
+        mock_domain_blocker.is_domain_blocked.return_value = False
+
+        # Act
+        result = await saas_user_auth_from_signed_token(signed_token)
+
+        # Assert
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        assert result.email == 'user@example.com'
+        mock_domain_blocker.is_domain_blocked.assert_called_once_with(
+            'user@example.com'
+        )
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_config):
+    """Test that saas_user_auth_from_signed_token succeeds when domain blocking is not active."""
+    # Arrange
+    access_payload = {
+        'sub': 'test_user_id',
+        'exp': int(time.time()) + 3600,
+        'email': 'user@colsch.us',
+        'email_verified': True,
+    }
+    access_token = jwt.encode(access_payload, 'access_secret', algorithm='HS256')
+
+    token_payload = {
+        'access_token': access_token,
+        'refresh_token': 'test_refresh_token',
+    }
+    signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
+
+    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
+        mock_domain_blocker.is_active.return_value = False
+
+        # Act
+        result = await saas_user_auth_from_signed_token(signed_token)
+
+        # Assert
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        mock_domain_blocker.is_domain_blocked.assert_not_called()

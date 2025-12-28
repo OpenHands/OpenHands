@@ -80,7 +80,7 @@ def test_get_messages(codeact_agent: CodeActAgent):
     history.append(message_action_5)
 
     codeact_agent.reset()
-    messages = codeact_agent._get_messages(history, message_action_1)
+    messages = codeact_agent._get_messages(history, message_action_1, set())
 
     assert (
         len(messages) == 6
@@ -122,7 +122,7 @@ def test_get_messages_prompt_caching(codeact_agent: CodeActAgent):
         history.append(message_action_agent)
 
     codeact_agent.reset()
-    messages = codeact_agent._get_messages(history, initial_user_message)
+    messages = codeact_agent._get_messages(history, initial_user_message, set())
 
     # Check that only the last two user messages have cache_prompt=True
     cached_user_messages = [
