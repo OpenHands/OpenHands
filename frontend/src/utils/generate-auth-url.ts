@@ -1,6 +1,6 @@
 /**
  * Generates a URL to redirect to for OAuth authentication
- * @param identityProvider The identity provider to use (e.g., "github", "gitlab", "bitbucket")
+ * @param identityProvider The identity provider to use (e.g., "github", "gitlab", "bitbucket", "azure_devops")
  * @param requestUrl The URL of the request
  * @returns The URL to redirect to for OAuth
  */

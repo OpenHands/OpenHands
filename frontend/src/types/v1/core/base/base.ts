@@ -3,9 +3,11 @@ type EventType =
   | "Finish"
   | "Think"
   | "ExecuteBash"
+  | "Terminal"
   | "FileEditor"
   | "StrReplaceEditor"
-  | "TaskTracker";
+  | "TaskTracker"
+  | "PlanningFileEditor";
 
 type ActionOnlyType =
   | "BrowserNavigate"
@@ -24,7 +26,8 @@ type ObservationOnlyType = "Browser";
 type ActionEventType = `${ActionOnlyType}Action` | `${EventType}Action`;
 type ObservationEventType =
   | `${ObservationOnlyType}Observation`
-  | `${EventType}Observation`;
+  | `${EventType}Observation`
+  | "TerminalObservation";
 
 export interface ActionBase<T extends ActionEventType = ActionEventType> {
   kind: T;

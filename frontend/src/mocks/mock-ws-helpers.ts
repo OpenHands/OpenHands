@@ -165,7 +165,7 @@ export const createMockExecuteBashActionEvent = (
  * Creates a mock ExecuteBashObservation event for testing terminal output handling
  */
 export const createMockExecuteBashObservationEvent = (
-  output: string = "total 24\ndrwxr-xr-x  5 user  staff  160 Jan 10 12:00 .",
+  content: string = "total 24\ndrwxr-xr-x  5 user  staff  160 Jan 10 12:00 .",
   command: string = "ls -la",
 ) => ({
   id: "bash-obs-123",
@@ -175,7 +175,7 @@ export const createMockExecuteBashObservationEvent = (
   tool_call_id: "bash-call-456",
   observation: {
     kind: "ExecuteBashObservation",
-    output,
+    content: [{ type: "text", text: content }],
     command,
     exit_code: 0,
     error: false,
@@ -183,4 +183,56 @@ export const createMockExecuteBashObservationEvent = (
     metadata: { cwd: "/home/user" },
   },
   action_id: "bash-action-123",
+});
+
+/**
+ * Creates a mock BrowserObservation event for testing browser state handling
+ */
+export const createMockBrowserObservationEvent = (
+  screenshotData: string | null = "base64-screenshot-data",
+  output: string = "Browser action completed",
+  error: string | null = null,
+) => ({
+  id: "browser-obs-123",
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: "browser_navigate",
+  tool_call_id: "browser-call-456",
+  observation: {
+    kind: "BrowserObservation",
+    output,
+    error,
+    screenshot_data: screenshotData,
+  },
+  action_id: "browser-action-123",
+});
+
+/**
+ * Creates a mock BrowserNavigateAction event for testing browser URL extraction
+ */
+export const createMockBrowserNavigateActionEvent = (
+  url: string = "https://example.com",
+) => ({
+  id: "browser-action-123",
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  thought: [{ type: "text", text: "Navigating to URL" }],
+  thinking_blocks: [],
+  action: {
+    kind: "BrowserNavigateAction",
+    url,
+    new_tab: false,
+  },
+  tool_name: "browser_navigate",
+  tool_call_id: "browser-call-456",
+  tool_call: {
+    id: "browser-call-456",
+    type: "function",
+    function: {
+      name: "browser_navigate",
+      arguments: JSON.stringify({ url, new_tab: false }),
+    },
+  },
+  llm_response_id: "llm-response-789",
+  security_risk: { level: "low" },
 });

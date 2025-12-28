@@ -34,7 +34,7 @@ export const SECRETS_HANDLERS = [
 
   http.post("/api/secrets", async ({ request }) => {
     const body = (await request.json()) as CustomSecret;
-    if (typeof body === "object" && body && body.name) {
+    if (typeof body === "object" && body?.name) {
       secrets.set(body.name, body);
       return HttpResponse.json(true);
     }
@@ -48,7 +48,7 @@ export const SECRETS_HANDLERS = [
 
     if (typeof id === "string" && typeof body === "object") {
       const secret = secrets.get(id);
-      if (secret && body && body.name) {
+      if (secret && body?.name) {
         const newSecret: CustomSecret = { ...secret, ...body };
         secrets.delete(id);
         secrets.set(body.name, newSecret);

@@ -30,61 +30,33 @@ vi.mock("react-i18next", async () => {
   };
 });
 
-// Mock Zustand browser store
-let mockBrowserState = {
-  url: "https://example.com",
-  screenshotSrc: "",
-  setUrl: vi.fn(),
-  setScreenshotSrc: vi.fn(),
-  reset: vi.fn(),
-};
-
-vi.mock("#/stores/browser-store", () => ({
-  useBrowserStore: () => mockBrowserState,
-}));
-
-// Import the component after all mocks are set up
 import { BrowserPanel } from "#/components/features/browser/browser";
+import { useBrowserStore } from "#/stores/browser-store";
 
 describe("Browser", () => {
   afterEach(() => {
     vi.clearAllMocks();
-    // Reset the mock state
-    mockBrowserState = {
-      url: "https://example.com",
-      screenshotSrc: "",
-      setUrl: vi.fn(),
-      setScreenshotSrc: vi.fn(),
-      reset: vi.fn(),
-    };
   });
 
   it("renders a message if no screenshotSrc is provided", () => {
-    // Set the mock state for this test
-    mockBrowserState = {
+    useBrowserStore.setState({
       url: "https://example.com",
       screenshotSrc: "",
-      setUrl: vi.fn(),
-      setScreenshotSrc: vi.fn(),
       reset: vi.fn(),
-    };
+    });
 
     render(<BrowserPanel />);
 
-    // i18n empty message key
     expect(screen.getByText("BROWSER$NO_PAGE_LOADED")).toBeInTheDocument();
   });
 
   it("renders the url and a screenshot", () => {
-    // Set the mock state for this test
-    mockBrowserState = {
+    useBrowserStore.setState({
       url: "https://example.com",
       screenshotSrc:
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN0uGvyHwAFCAJS091fQwAAAABJRU5ErkJggg==",
-      setUrl: vi.fn(),
-      setScreenshotSrc: vi.fn(),
       reset: vi.fn(),
-    };
+    });
 
     render(<BrowserPanel />);
 

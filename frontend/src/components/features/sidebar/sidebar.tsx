@@ -34,13 +34,7 @@ export function Sidebar() {
 
   const { pathname } = useLocation();
 
-  // TODO: Remove HIDE_LLM_SETTINGS check once released
-  const shouldHideLlmSettings =
-    config?.FEATURE_FLAGS.HIDE_LLM_SETTINGS && config?.APP_MODE === "saas";
-
   React.useEffect(() => {
-    if (shouldHideLlmSettings) return;
-
     if (location.pathname === "/settings") {
       setSettingsModalIsOpen(false);
     } else if (
@@ -77,19 +71,19 @@ export function Sidebar() {
               <OpenHandsLogoButton />
             </div>
             <div>
-              <NewProjectButton disabled={settings?.EMAIL_VERIFIED === false} />
+              <NewProjectButton disabled={settings?.email_verified === false} />
             </div>
             <ConversationPanelButton
               isOpen={conversationPanelIsOpen}
               onClick={() =>
-                settings?.EMAIL_VERIFIED === false
+                settings?.email_verified === false
                   ? null
                   : setConversationPanelIsOpen((prev) => !prev)
               }
-              disabled={settings?.EMAIL_VERIFIED === false}
+              disabled={settings?.email_verified === false}
             />
             <MicroagentManagementButton
-              disabled={settings?.EMAIL_VERIFIED === false}
+              disabled={settings?.email_verified === false}
             />
           </div>
 

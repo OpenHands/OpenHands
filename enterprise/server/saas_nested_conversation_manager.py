@@ -31,6 +31,7 @@ from openhands.events.event_store import EventStore
 from openhands.events.serialization.event import event_to_dict
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
 from openhands.runtime.impl.remote.remote_runtime import RemoteRuntime
+from openhands.runtime.plugins.vscode import VSCodeRequirement
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.server.config.server_config import ServerConfig
 from openhands.server.constants import ROOM_KEY
@@ -69,6 +70,14 @@ RUNTIME_CONVERSATION_URL = RUNTIME_URL_PATTERN + (
     if RUNTIME_ROUTING_MODE == 'path'
     else '/api/conversations/{conversation_id}'
 )
+
+RUNTIME_USERNAME = os.getenv('RUNTIME_USERNAME')
+
+SU_TO_USER = os.getenv('SU_TO_USER', 'false')
+truthy = {'1', 'true', 't', 'yes', 'y', 'on'}
+SU_TO_USER = str(SU_TO_USER.lower() in truthy).lower()
+
+DISABLE_VSCODE_PLUGIN = os.getenv('DISABLE_VSCODE_PLUGIN', 'false').lower() == 'true'
 
 # Time in seconds before a Redis entry is considered expired if not refreshed
 _REDIS_ENTRY_TIMEOUT_SECONDS = 300
@@ -772,7 +781,11 @@ class SaasNestedConversationManager(ConversationManager):
         env_vars['SERVE_FRONTEND'] = '0'
         env_vars['RUNTIME'] = 'local'
         # TODO: In the long term we may come up with a more secure strategy for user management within the nested runtime.
-        env_vars['USER'] = 'openhands' if config.run_as_openhands else 'root'
+        env_vars['USER'] = (
+            RUNTIME_USERNAME
+            if RUNTIME_USERNAME
+            else ('openhands' if config.run_as_openhands else 'root')
+        )
         env_vars['PERMITTED_CORS_ORIGINS'] = ','.join(PERMITTED_CORS_ORIGINS)
         env_vars['port'] = '60000'
         # TODO: These values are static in the runtime-api project, but do not get copied into the runtime ENV
@@ -789,6 +802,10 @@ class SaasNestedConversationManager(ConversationManager):
         env_vars['INITIAL_NUM_WARM_SERVERS'] = '1'
         env_vars['INIT_GIT_IN_EMPTY_WORKSPACE'] = '1'
         env_vars['ENABLE_V1'] = '0'
+        env_vars['SU_TO_USER'] = SU_TO_USER
+        env_vars['DISABLE_VSCODE_PLUGIN'] = str(DISABLE_VSCODE_PLUGIN).lower()
+        env_vars['BROWSERGYM_DOWNLOAD_DIR'] = '/workspace/.downloads/'
+        env_vars['PLAYWRIGHT_BROWSERS_PATH'] = '/opt/playwright-browsers'
 
         # We need this for LLM traces tracking to identify the source of the LLM calls
         env_vars['WEB_HOST'] = WEB_HOST
@@ -804,11 +821,18 @@ class SaasNestedConversationManager(ConversationManager):
         if self._runtime_container_image:
             config.sandbox.runtime_container_image = self._runtime_container_image
 
+        plugins = [
+            plugin
+            for plugin in agent.sandbox_plugins
+            if not (DISABLE_VSCODE_PLUGIN and isinstance(plugin, VSCodeRequirement))
+        ]
+        logger.info(f'Loaded plugins for runtime {sid}: {plugins}')
+
         runtime = RemoteRuntime(
             config=config,
             event_stream=None,  # type: ignore[arg-type]
             sid=sid,
-            plugins=agent.sandbox_plugins,
+            plugins=plugins,
             # env_vars=env_vars,
             # status_callback: Callable[..., None] | None = None,
             attach_to_existing=False,

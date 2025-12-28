@@ -50,7 +50,7 @@ class LLMConfig(BaseModel):
         completion_kwargs: Custom kwargs to pass to litellm.completion.
     """
 
-    model: str = Field(default='claude-sonnet-4-20250514')
+    model: str = Field(default='claude-opus-4-5-20251101')
     api_key: SecretStr | None = Field(default=None)
     base_url: str | None = Field(default=None)
     api_version: str | None = Field(default=None)

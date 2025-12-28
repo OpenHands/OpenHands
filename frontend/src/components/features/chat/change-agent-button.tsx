@@ -5,26 +5,26 @@ import { I18nKey } from "#/i18n/declaration";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
 import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { ChangeAgentContextMenu } from "./change-agent-context-menu";
 import { cn } from "#/utils/utils";
 import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
+import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
+import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
 
 export function ChangeAgentButton() {
   const [contextMenuOpen, setContextMenuOpen] = useState<boolean>(false);
 
-  const conversationMode = useConversationStore(
-    (state) => state.conversationMode,
-  );
+  const { conversationMode, setConversationMode, subConversationTaskId } =
+    useConversationStore();
 
-  const setConversationMode = useConversationStore(
-    (state) => state.setConversationMode,
-  );
+  const webSocketStatus = useUnifiedWebSocketStatus();
+
+  const isWebSocketConnected = webSocketStatus === "CONNECTED";
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
@@ -35,53 +35,32 @@ export function ChangeAgentButton() {
   const isAgentRunning = curAgentState === AgentState.RUNNING;
 
   const { data: conversation } = useActiveConversation();
-  const { mutate: createConversation, isPending: isCreatingConversation } =
-    useCreateConversation();
+
+  // Poll sub-conversation task and invalidate parent conversation when ready
+  useSubConversationTaskPolling(
+    subConversationTaskId,
+    conversation?.conversation_id || null,
+  );
+
+  // Get handlePlanClick and isCreatingConversation from custom hook
+  const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
 
   // Close context menu when agent starts running
   useEffect(() => {
-    if (isAgentRunning && contextMenuOpen) {
+    if ((isAgentRunning || !isWebSocketConnected) && contextMenuOpen) {
       setContextMenuOpen(false);
     }
-  }, [isAgentRunning, contextMenuOpen]);
+  }, [isAgentRunning, contextMenuOpen, isWebSocketConnected]);
 
-  const handlePlanClick = (
-    event: React.MouseEvent<HTMLButtonElement> | KeyboardEvent,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    // Set conversation mode to "plan" immediately
-    setConversationMode("plan");
-
-    // Check if sub_conversation_ids is not empty
-    if (
-      (conversation?.sub_conversation_ids &&
-        conversation.sub_conversation_ids.length > 0) ||
-      !conversation?.conversation_id
-    ) {
-      // Do nothing if both conditions are true
-      return;
-    }
-
-    // Create a new sub-conversation if we have a current conversation ID
-    createConversation(
-      {
-        parentConversationId: conversation.conversation_id,
-        agentType: "plan",
-      },
-      {
-        onSuccess: () =>
-          displaySuccessToast(
-            t(I18nKey.PLANNING_AGENTT$PLANNING_AGENT_INITIALIZED),
-          ),
-      },
-    );
-  };
+  const isButtonDisabled =
+    isAgentRunning ||
+    isCreatingConversation ||
+    !isWebSocketConnected ||
+    !shouldUsePlanningAgent;
 
   // Handle Shift + Tab keyboard shortcut to cycle through modes
   useEffect(() => {
-    if (!shouldUsePlanningAgent || isAgentRunning) {
+    if (isButtonDisabled) {
       return undefined;
     }
 
@@ -108,10 +87,10 @@ export function ChangeAgentButton() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [
-    shouldUsePlanningAgent,
-    isAgentRunning,
+    isButtonDisabled,
     conversationMode,
     setConversationMode,
+    handlePlanClick,
   ]);
 
   const handleButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -141,8 +120,6 @@ export function ChangeAgentButton() {
     }
     return <LessonPlanIcon width={18} height={18} color="#ffffff" />;
   }, [isExecutionAgent]);
-
-  const isButtonDisabled = isAgentRunning || isCreatingConversation;
 
   if (!shouldUsePlanningAgent) {
     return null;

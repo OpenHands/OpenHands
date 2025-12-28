@@ -8,7 +8,7 @@ export function h1({
   React.HTMLAttributes<HTMLHeadingElement> &
   ExtraProps) {
   return (
-    <h1 className="text-[32px] text-white font-bold leading-8 mb-4 mt-6 first:mt-0">
+    <h1 className="text-2xl text-white font-bold leading-8 mb-4 mt-6 first:mt-0">
       {children}
     </h1>
   );

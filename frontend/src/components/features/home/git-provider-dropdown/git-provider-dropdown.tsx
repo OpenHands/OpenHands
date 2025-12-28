@@ -51,6 +51,8 @@ export function GitProviderDropdown({
         return "GitLab";
       case "bitbucket":
         return "Bitbucket";
+      case "azure_devops":
+        return "Azure DevOps";
       case "enterprise_sso":
         return "Enterprise SSO";
       default:
@@ -73,7 +75,7 @@ export function GitProviderDropdown({
     }
 
     // If no input value, show all providers
-    if (!inputValue || !inputValue.trim()) {
+    if (!inputValue?.trim()) {
       return providers;
     }
 
@@ -209,6 +211,7 @@ export function GitProviderDropdown({
         getItemProps={getItemProps}
         renderItem={renderItem}
         renderEmptyState={renderEmptyState}
+        itemKey={(provider) => provider}
       />
 
       <ErrorMessage isError={!!errorMessage} message={errorMessage} />

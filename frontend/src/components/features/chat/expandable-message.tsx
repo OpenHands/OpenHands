@@ -1,21 +1,15 @@
 import { useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import Markdown from "react-markdown";
 import { Link } from "react-router";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
 import { useConfig } from "#/hooks/query/use-config";
 import { I18nKey } from "#/i18n/declaration";
 import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import CheckCircle from "#/icons/check-circle-solid.svg?react";
-import XCircle from "#/icons/x-circle-solid.svg?react";
 import { OpenHandsAction } from "#/types/core/actions";
 import { OpenHandsObservation } from "#/types/core/observations";
 import { cn } from "#/utils/utils";
-import { code } from "../markdown/code";
-import { ol, ul } from "../markdown/list";
-import { paragraph } from "../markdown/paragraph";
+import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { MonoComponent } from "./mono-component";
 import { PathComponent } from "./path-component";
 
@@ -100,7 +94,7 @@ export function ExpandableMessage({
   const statusIconClasses = "h-4 w-4 ml-2 inline";
 
   if (
-    config?.FEATURE_FLAGS.ENABLE_BILLING &&
+    config?.FEATURE_FLAGS?.ENABLE_BILLING &&
     config?.APP_MODE === "saas" &&
     id === I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS
   ) {
@@ -174,35 +168,18 @@ export function ExpandableMessage({
               )}
             </button>
           </span>
-          {type === "action" && success !== undefined && (
+          {type === "action" && success && (
             <span className="flex-shrink-0">
-              {success ? (
-                <CheckCircle
-                  data-testid="status-icon"
-                  className={cn(statusIconClasses, "fill-success")}
-                />
-              ) : (
-                <XCircle
-                  data-testid="status-icon"
-                  className={cn(statusIconClasses, "fill-danger")}
-                />
-              )}
+              <CheckCircle
+                data-testid="status-icon"
+                className={cn(statusIconClasses, "fill-success")}
+              />
             </span>
           )}
         </div>
         {showDetails && (
           <div className="text-sm">
-            <Markdown
-              components={{
-                code,
-                ul,
-                ol,
-                p: paragraph,
-              }}
-              remarkPlugins={[remarkGfm, remarkBreaks]}
-            >
-              {details}
-            </Markdown>
+            <MarkdownRenderer includeStandard>{details}</MarkdownRenderer>
           </div>
         )}
       </div>

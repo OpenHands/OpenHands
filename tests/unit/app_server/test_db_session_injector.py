@@ -456,13 +456,10 @@ class TestDbSessionInjectorGCPIntegration:
         # Mock the google.cloud.sql.connector module
         with patch.dict('sys.modules', {'google.cloud.sql.connector': MagicMock()}):
             mock_connector_module = sys.modules['google.cloud.sql.connector']
-            mock_connector = AsyncMock()
-            mock_connector_module.Connector.return_value.__aenter__.return_value = (
-                mock_connector
-            )
-            mock_connector_module.Connector.return_value.__aexit__.return_value = None
+            mock_connector = MagicMock()
+            mock_connector_module.Connector.return_value = mock_connector
             mock_connection = AsyncMock()
-            mock_connector.connect_async.return_value = mock_connection
+            mock_connector.connect_async = AsyncMock(return_value=mock_connection)
 
             connection = await gcp_db_session_injector._create_async_gcp_db_connection()
 

@@ -318,8 +318,8 @@
   background: transparent !important;
 }
 
-/* Ensure all xterm elements have transparent backgrounds */
-.xterm * {
+/* Ensure all xterm DOM elements have transparent backgrounds. Exclude canvas elements */
+.xterm {
   background: transparent !important;
 }
 

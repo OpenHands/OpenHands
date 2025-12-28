@@ -10,6 +10,7 @@ import {
   CondensationRequestEvent,
   CondensationSummaryEvent,
   ConversationStateUpdateEvent,
+  ConversationErrorEvent,
   PauseEvent,
 } from "./events/index";
 
@@ -30,5 +31,6 @@ export type OpenHandsEvent =
   | CondensationRequestEvent
   | CondensationSummaryEvent
   | ConversationStateUpdateEvent
+  | ConversationErrorEvent
   // Control events
   | PauseEvent;
