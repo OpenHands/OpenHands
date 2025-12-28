@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +24,38 @@ from openhands.llm.gemini_native_conversions import (
 
 if TYPE_CHECKING:
     from openhands.core.config import AgentConfig
+
+
+# OAuth configuration (matching fleet-sdk gemini_cua reference)
+GOOG_PROJECT = os.environ.get("GOOG_PROJECT", "gemini-agents-area")
+USE_OAUTH = os.environ.get("USE_OAUTH", "false").lower() in ("true", "1", "yes")
+
+def _get_oauth_token() -> str:
+    """Get OAuth token from gcloud."""
+    import shutil
+
+    # Find gcloud binary - check PATH first, then common locations
+    gcloud_path = shutil.which("gcloud")
+    if not gcloud_path:
+        common_paths = [
+            os.path.expanduser("~/google-cloud-sdk/bin/gcloud"),
+            "/usr/local/bin/gcloud",
+            "/opt/homebrew/bin/gcloud",
+        ]
+        for path in common_paths:
+            if os.path.isfile(path):
+                gcloud_path = path
+                break
+
+    if not gcloud_path:
+        raise FileNotFoundError("gcloud not found in PATH or common locations")
+
+    ret = subprocess.run(
+        [gcloud_path, "auth", "application-default", "print-access-token"],
+        capture_output=True,
+        check=True,
+    )
+    return ret.stdout.decode().strip()
 
 
 class GeminiNativeCodeActAgent(Agent):
@@ -59,6 +93,7 @@ class GeminiNativeCodeActAgent(Agent):
                 "Install with: pip install google-genai"
             ) from e
 
+        self._genai = genai
         self._types = types
 
         # Determine API key and model name
@@ -70,7 +105,31 @@ class GeminiNativeCodeActAgent(Agent):
         except Exception:
             api_key = None
 
-        self._client = genai.Client(api_key=api_key)
+        # Build client with OAuth or API key (matching fleet-sdk gemini_cua reference)
+        # OAuth must be opt-in (USE_OAUTH=true), otherwise we stay in API-key mode.
+        self._api_key = api_key
+        self._http_opts: Any | None = None
+        self._use_multimodal_function_response = False
+        if USE_OAUTH:
+            try:
+                oauth_token = _get_oauth_token()
+                self._http_opts = types.HttpOptions(
+                    headers={
+                        "Authorization": f"Bearer {oauth_token}",
+                        "X-Goog-User-Project": GOOG_PROJECT,
+                    },
+                    api_version="v1alpha",
+                )
+                logger.info(f"Using OAuth (project: {GOOG_PROJECT})")
+                self._use_multimodal_function_response = True
+            except Exception as e:
+                logger.warning(f"OAuth token fetch failed, falling back to API key: {e}")
+                self._http_opts = None
+                self._use_multimodal_function_response = False
+
+        logger.info(f"{self._use_multimodal_function_response=}")
+
+        self._client = self._genai.Client(api_key=self._api_key, http_options=self._http_opts)
 
         model = getattr(self.llm.config, 'model', None) or ''
         # Strip common provider prefixes (e.g., "google/gemini-2.5-pro")
@@ -80,6 +139,9 @@ class GeminiNativeCodeActAgent(Agent):
 
         # Gemini chat history: list[types.Content]
         self._history: list[Any] = []
+
+        # Keep system prompt separate (reference agent passes it via system_instruction)
+        self._system_prompt: str = self._get_system_prompt()
 
         self.reset()
 
@@ -131,8 +193,96 @@ class GeminiNativeCodeActAgent(Agent):
 
         return decls
 
+    def _sanitize_history_for_gemini(self, contents: list[Any]) -> list[Any]:
+        """Strip image blobs from tool responses in-place (for Gemini API-key compatibility).
+
+        Why:
+        - Fleet UI wants screenshots embedded in function responses so it can render them.
+        - Some Gemini endpoints (API-key mode) reject multimodal function responses.
+
+        Approach:
+        - Keep `self._history` as the *full* history (used for Fleet logging).
+        - When calling Gemini with API-key mode, we deep-copy the history, then
+          remove any `FunctionResponse.parts` from the copied objects (so the request
+          is text-only, but Fleet still sees screenshots in the logged history).
+        """
+        for c in contents:
+            parts = getattr(c, 'parts', None)
+            if not isinstance(parts, list):
+                continue
+            for p in parts:
+                fr = getattr(p, 'function_response', None)
+                if fr is None:
+                    continue
+                # Remove image attachments if present.
+                # (Some google-genai types may not allow assignment; fail soft.)
+                try:
+                    if getattr(fr, 'parts', None):
+                        fr.parts = None
+                except Exception:
+                    pass
+
+        return contents
+
+    def _build_request_history_for_gemini(self) -> list[Any]:
+        """Build the message list to send to Gemini.
+
+        Important:
+        - `self._history` may include base64 screenshots for Fleet UI logging.
+        - We must NOT send those screenshots to Gemini in API-key mode (it errors),
+          and we should avoid deepcopying them (very large / slow).
+
+        So in API-key mode we construct a lightweight view of history where any
+        `FunctionResponse.parts` are removed, without copying image blobs.
+        """
+        if self._use_multimodal_function_response:
+            return self._history
+
+        sanitized: list[Any] = []
+        for c in self._history:
+            role = getattr(c, 'role', None)
+            parts = getattr(c, 'parts', None)
+            if role is None or not isinstance(parts, list):
+                sanitized.append(c)
+                continue
+
+            new_parts: list[Any] = []
+            for p in parts:
+                fr = getattr(p, 'function_response', None)
+                if fr is not None:
+                    name = getattr(fr, 'name', None)
+                    response = getattr(fr, 'response', None)
+                    # Rebuild without `.parts` (drops images)
+                    new_fr = self._types.FunctionResponse(name=name, response=response)
+                    new_parts.append(self._types.Part(function_response=new_fr))
+                else:
+                    new_parts.append(p)
+
+            sanitized.append(self._types.Content(role=role, parts=new_parts))
+
+        return sanitized
+
     def _ingest_new_tool_observations(self, history: list[Event]) -> None:
-        """After a tool action executes, add its function_response to Gemini history."""
+        """After a tool action executes, add its function_response to Gemini history.
+
+        OAuth + v1alpha API supports multimodal function responses (images in FunctionResponse.parts).
+        Some Gemini endpoints (API-key mode) reject multimodal function responses.
+
+        To support BOTH:
+        - We always store screenshots in `self._history` (so Fleet logging/UI can show them).
+        - When sending a request to Gemini in API-key mode, we pass a sanitized copy of
+          history that strips `FunctionResponse.parts` (see `_sanitize_history_for_gemini`).
+
+        Brief Gemini protocol explainer:
+        - Gemini conversations are `Content(role=..., parts=[...])`.
+        - A `Part` can be text, a `function_call`, or a `function_response`.
+        - When Gemini returns N tool calls in one turn, the client must reply with N
+          function responses (in the same order) before asking the model again.
+        - `FunctionResponse.response` is a JSON-ish dict (we include tool text in
+          `response["content"]` so API-key mode still has the page state).
+        - `FunctionResponse.parts` is for rich attachments (e.g., screenshots as
+          inline_data blobs) and only works for multimodal-enabled endpoints.
+        """
         if len(history) <= self._last_history_len:
             return
 
@@ -149,46 +299,63 @@ class GeminiNativeCodeActAgent(Agent):
 
             tool_name = self._pending_fc_names.popleft()
             ok = not getattr(ev, 'is_error', False)
-            content = ev.content or ''
-            # Truncate content to avoid blowing up the context window if tool output is huge
-            if len(content) > 20000:
-                content = content[:20000] + '... [truncated]'
 
-            response_payload = {
-                'status': 'success' if ok else 'error',
-                'content': content,
-            }
+            # Get text content from the observation (what the model should see)
+            text_content = getattr(ev, 'content', '') or ''
 
-            # Build Gemini function_response part, optionally including screenshots as inline_data
-            if getattr(ev, 'images', None):
-                parts = [
-                    self._types.FunctionResponsePart(
-                        inline_data=self._types.FunctionResponseBlob(
-                            mime_type=img.mime_type,
-                            data=img.data,
-                        )
+            # Extract image data if available.
+            # NOTE: we always attach images to stored history for Fleet UI, even if
+            # the current Gemini endpoint can't accept multimodal function responses.
+            img_data: str | None = None
+            img_mime_type: str = 'image/png'
+            images = getattr(ev, 'images', None)
+            if images:
+                for img in images:
+                    if isinstance(img, dict):
+                        img_mime_type = img.get('mime_type') or img.get('mimeType') or 'image/png'
+                        img_data = img.get('data') or ''
+                    else:
+                        img_mime_type = getattr(img, 'mime_type', 'image/png')
+                        img_data = getattr(img, 'data', '')
+                    if img_data:
+                        break
+
+            # Build response payload with text content
+            response_payload: dict[str, Any] = {'status': 'success' if ok else 'error'}
+            if text_content:
+                response_payload['content'] = text_content
+
+            # Build function response
+            if img_data:
+                # Store multimodal tool response (for Fleet UI). Gemini requests may strip this.
+                fr_part = self._types.Part(
+                    function_response=self._types.FunctionResponse(
+                        name=tool_name,
+                        response=response_payload,
+                        parts=[
+                            self._types.FunctionResponsePart(
+                                inline_data=self._types.FunctionResponseBlob(
+                                    mime_type=img_mime_type,
+                                    data=img_data,  # Base64 string
+                                )
+                            )
+                        ],
                     )
-                    for img in ev.images
-                ]
-                fr = self._types.FunctionResponse(
-                    name=tool_name,
-                    response=response_payload,
-                    parts=parts,
                 )
             else:
-                fr = self._types.FunctionResponse(
-                    name=tool_name,
-                    response=response_payload,
+                # API key or no image: text-only function response
+                fr_part = self._types.Part(
+                    function_response=self._types.FunctionResponse(
+                        name=tool_name,
+                        response=response_payload,
+                    )
                 )
 
-            self._batch_response_parts.append(self._types.Part(function_response=fr))
+            self._batch_response_parts.append(fr_part)
             self._batch_remaining -= 1
 
             if self._batch_remaining == 0 and self._batch_response_parts:
-                # Gemini expects function responses as role="model" parts (mirrors fleet-sdk gemini_cua)
-                self._history.append(
-                    self._types.Content(role='model', parts=self._batch_response_parts)
-                )
+                self._history.append(self._types.Content(role='model', parts=self._batch_response_parts))
                 self._batch_response_parts = []
 
     def _build_initial_user_prompt(self, state: State) -> str:
@@ -210,12 +377,13 @@ class GeminiNativeCodeActAgent(Agent):
 
         # If history is empty, seed it with system + initial user prompt
         if not self._history:
-            system_prompt = self._get_system_prompt()
             user_prompt = self._build_initial_user_prompt(state)
+            # Print the initial task prompt once for debugging/repro.
+            logger.info(f'[GeminiNativeCodeActAgent] initial_user_prompt:\n{user_prompt}')
             self._history.append(
                 self._types.Content(
                     role='user',
-                    parts=[self._types.Part(text=f'{system_prompt}\n\nTask:\n{user_prompt}')],
+                    parts=[self._types.Part(text=f'###User instruction: {user_prompt}')],
                 )
             )
 
@@ -224,6 +392,7 @@ class GeminiNativeCodeActAgent(Agent):
         config = self._types.GenerateContentConfig(
             tools=[self._types.Tool(function_declarations=decls)],
             max_output_tokens=4096,
+            system_instruction=self._system_prompt,
             thinking_config=self._types.ThinkingConfig(include_thoughts=True),
         )
 
@@ -232,11 +401,33 @@ class GeminiNativeCodeActAgent(Agent):
         logger.debug(f'Sending {len(tool_names)} tools to Gemini: {tool_names[:10]}...')
 
         # Call Gemini
-        response = self._client.models.generate_content(
-            model=self._model,
-            contents=self._history,
-            config=config,
-        )
+        # IMPORTANT: In API-key mode some Gemini endpoints reject multimodal function
+        # responses. We keep full history (with screenshots) for Fleet logging, but
+        # send a sanitized copy to Gemini when multimodal is not enabled.
+        request_history = self._build_request_history_for_gemini()
+
+        # Call Gemini (retry on transient MALFORMED_FUNCTION_CALL responses)
+        response = None
+        for attempt in range(3):
+            response = self._client.models.generate_content(
+                model=self._model,
+                contents=request_history,
+                config=config,
+            )
+            try:
+                candidate0 = response.candidates[0] if getattr(response, 'candidates', None) else None
+                finish_reason = getattr(candidate0, 'finish_reason', None)
+                content0 = getattr(candidate0, 'content', None) if candidate0 else None
+                if content0 is None and str(finish_reason) == 'MALFORMED_FUNCTION_CALL' and attempt < 2:
+                    logger.warning(
+                        f'Gemini returned MALFORMED_FUNCTION_CALL; retrying attempt={attempt+2}/3'
+                    )
+                    continue
+            except Exception:
+                # Best-effort: if inspection fails, just proceed with the response
+                pass
+            break
+
 
         # Optional: Fleet session logging (best-effort)
         try:

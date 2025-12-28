@@ -20,11 +20,16 @@ import argparse
 import asyncio
 import copy
 import os
+import time
+from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 from openhands.core.config import OpenHandsConfig
 from openhands.core.config.utils import load_from_toml
 from openhands.core.config.sandbox_config import SandboxConfig
+from openhands.core.logger import openhands_logger as logger
+from openhands.core.logger import reset_log_task_key, set_log_task_key
 from openhands.core.loop import run_agent_until_done
 from openhands.core.setup import create_agent, create_controller, create_memory, create_runtime
 from openhands.events import EventSource, EventStreamSubscriber
@@ -54,6 +59,18 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help='Optional OpenHands max_iterations override for each task',
     )
+    p.add_argument(
+        '--progress-interval',
+        type=float,
+        default=60.0,
+        help='Seconds between periodic progress logs (0 disables).',
+    )
+    p.add_argument(
+        '--task-logs',
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help='Emit per-task lifecycle logs (start/provision/reset/tools/finish).',
+    )
     return p.parse_args()
 
 def _require_valid_sandbox_section(config_path: str) -> None:
@@ -81,12 +98,32 @@ def _require_valid_sandbox_section(config_path: str) -> None:
         raise ValueError(f'Invalid [sandbox] section in {config_path}: {e}') from e
 
 
+def _save_pre_verifier_diff_sql(
+    *,
+    workspace_root: Path,
+    job_id: str,
+    task_key: str | None,
+    instance_id: str | None,
+    diff_sql: str,
+) -> Path:
+    safe_task_key = (task_key or "task").replace("/", "_")
+    safe_instance_id = instance_id or "unknown_instance"
+    diff_dir = workspace_root / ".openhands" / "fleet_diffs" / str(job_id)
+    diff_dir.mkdir(parents=True, exist_ok=True)
+    diff_path = diff_dir / f"{safe_task_key}__{safe_instance_id}.sql"
+    diff_path.write_text(diff_sql, encoding="utf-8")
+    return diff_path
+
+
 async def _run_one_task(
     *,
     base_config: OpenHandsConfig,
     job_id: str,
     task: Any,
     semaphore: asyncio.Semaphore,
+    progress: dict[str, int] | None = None,
+    progress_lock: asyncio.Lock | None = None,
+    task_logs: bool = True,
 ) -> dict[str, Any]:
     try:
         from openenv.fleet import FleetMCPTools  # type: ignore[import-not-found]
@@ -95,12 +132,21 @@ async def _run_one_task(
             "This runner requires OpenEnv Fleet support. Install: pip install 'openenv[fleet]' "
             "(or `poetry install --with fleet`)."
         ) from e
-
+    logger.info(f"{task=}")
+    task_key = getattr(task, 'key', None)
     async with semaphore:
+        set_log_task_key(task_key)
+        if progress is not None and progress_lock is not None:
+            async with progress_lock:
+                progress['started'] += 1
+
+        t0 = time.monotonic()
+        logger.info(f'[fleet_job_runner] task_start key={task_key}')
+
         cfg = copy.deepcopy(base_config)
         cfg.fleet_session_export_enabled = True
         cfg.fleet_session_export_job_id = job_id
-        cfg.fleet_session_export_task_key = getattr(task, 'key', None) or 'task'
+        cfg.fleet_session_export_task_key = task_key or 'task'
 
         fleet_api_key = cfg.sandbox.fleet_api_key or os.getenv('FLEET_API_KEY')
         if not fleet_api_key:
@@ -109,7 +155,14 @@ async def _run_one_task(
         os.environ.setdefault('FLEET_API_KEY', fleet_api_key)
 
         # Create env instance for this task (includes env_key + data_key + env_variables).
+
+        logger.info(f'[fleet_job_runner] provisioning_env key={task_key}')
+        env_t0 = time.monotonic()
         env = await task.make(image_type='mcp')
+        logger.info(
+            f'[fleet_job_runner] provisioned_env key={task_key} instance_id={getattr(env, "instance_id", None)} '
+            f'dt_s={time.monotonic() - env_t0:.2f}'
+        )
         cfg.fleet_session_export_instance_id = getattr(env, 'instance_id', None)
 
         # OpenHands runtime/session id: use task key for determinism (trim to keep it short).
@@ -129,12 +182,14 @@ async def _run_one_task(
             api_key=fleet_api_key,
             mcp_urls=(f'{root}api/v1/mcp', f'{root}mcp'),
         )
-        await env.reset()
 
         # Fleet MCP endpoints can be temporarily unavailable right after provisioning.
         # OpenEnv's FleetMCPTools will union endpoints; if it returns 0 tools, retry briefly.
         tools_action = None
         for attempt in range(6):
+            logger.info(
+                f'[fleet_job_runner] discovering_mcp_tools key={task_key} attempt={attempt + 1}/6'
+            )
             tools_action = await runtime.tools.list_tools()
             if getattr(tools_action, 'tools', None):
                 break
@@ -198,7 +253,69 @@ async def _run_one_task(
         verifier_execution_id = None
         try:
             if getattr(task, 'verifier', None) and state.agent_state == AgentState.FINISHED:
+                # Capture a lightweight DB diff before verifier runs (best-effort).
+                try:
+                    diff_sql = await env.diff_sql()
+                    if diff_sql:
+                        instance_id = getattr(env, "instance_id", None)
+                        diff_path = _save_pre_verifier_diff_sql(
+                            workspace_root=Path(runtime.workspace_root),
+                            job_id=str(job_id),
+                            task_key=task_key,
+                            instance_id=instance_id,
+                            diff_sql=diff_sql,
+                        )
+                        logger.info(
+                            f'[fleet_job_runner] pre_verifier_diff_saved key={task_key} '
+                            f'instance_id={instance_id} len={len(diff_sql)} path={diff_path}'
+                        )
+                    else:
+                        logger.info(
+                            f'[fleet_job_runner] pre_verifier_diff_unavailable key={task_key} '
+                            f'instance_id={getattr(env, "instance_id", None)}'
+                        )
+                except Exception as e:  # noqa: BLE001
+                    logger.info(
+                        f'[fleet_job_runner] pre_verifier_diff_failed key={task_key} '
+                        f'instance_id={getattr(env, "instance_id", None)} err={type(e).__name__}: {e}'
+                    )
+
+                # Best-effort: fetch verifier code metadata (latest version) and log a short summary.
+                try:
+                    verifier_id = getattr(task, "verifier_id", None)
+                    if verifier_id:
+                        import fleet  # type: ignore[import-not-found]
+
+                        client = fleet.AsyncFleet(
+                            api_key=fleet_api_key,
+                            base_url=cfg.fleet_session_export_base_url or os.getenv("FLEET_BASE_URL"),
+                        )
+                        vd = await client.get_verifier(verifier_id)
+                        code_len = len(getattr(vd, "code", "") or "")
+                        sha = getattr(vd, "sha256", None)
+                        # Print the entire verifier code in one log message (no chunking).
+                        verifier_code = getattr(vd, "code", "") or ""
+                        logger.info(
+                            f"[fleet_job_runner] verifier_code_begin key={task_key} verifier_id={verifier_id} "
+                            f"version={getattr(vd, 'version', None)}\n"
+                            f"{verifier_code}\n"
+                            f"[fleet_job_runner] verifier_code_end key={task_key} verifier_id={verifier_id} "
+                            f"version={getattr(vd, 'version', None)}"
+                        )
+                        logger.info(
+                            f'[fleet_job_runner] verifier_meta key={task_key} verifier_id={verifier_id} '
+                            f'version={getattr(vd, "version", None)} sha256={sha} code_len={code_len}'
+                        )
+                except Exception as e:  # noqa: BLE001
+                    logger.info(
+                        f'[fleet_job_runner] verifier_meta_failed key={task_key} '
+                        f'err={type(e).__name__}: {e}'
+                    )
+
+                logger.info(f'[fleet_job_runner] verifying key={task_key}')
+                logger.info(f"{final_answer=}")
                 v = await task.verify_detailed_async(env=env, final_answer=final_answer)
+                logger.info(f"[fleet_job_runner] verification_result: {v}")
                 verification_success = bool(getattr(v, 'success', False))
                 verifier_execution_id = getattr(v, 'execution_id', None)
         except Exception:
@@ -211,15 +328,30 @@ async def _run_one_task(
             else:
                 # Default: complete even if no verifier exists (or verifier success is None).
                 exporter.complete(verifier_execution_id=verifier_execution_id)
+            logger.info(
+                f'[fleet_job_runner] fleet_session_id key={task_key} '
+                f'instance_id={getattr(env, "instance_id", None)} session_id={getattr(exporter, "session_id", None)}'
+            )
 
         # Cleanup env
         try:
+            logger.info(f"Closing env: {env}")
             await env.close()
         except Exception:
             pass
 
+        logger.info(
+            f'[fleet_job_runner] task_done key={task_key} agent_state={state.agent_state} '
+            f'verification_success={verification_success} dt_s={time.monotonic() - t0:.2f}'
+        )
+        if progress is not None and progress_lock is not None:
+            async with progress_lock:
+                progress['finished'] += 1
+                if state.agent_state == AgentState.ERROR:
+                    progress['errors'] += 1
+
         return {
-            'task_key': getattr(task, 'key', None),
+            'task_key': task_key,
             'session_id': getattr(exporter, 'session_id', None) if exporter else None,
             'agent_state': str(state.agent_state),
             'verification_success': verification_success,
@@ -275,13 +407,48 @@ async def main() -> int:
         tasks = await load_tasks(project_key=args.project_key)
 
     sem = asyncio.Semaphore(max(1, int(args.max_concurrent)))
-    results = await asyncio.gather(
-        *[
-            _run_one_task(base_config=base_cfg, job_id=job_id, task=t, semaphore=sem)
-            for t in tasks
-        ],
-        return_exceptions=True,
-    )
+
+    progress: dict[str, int] = {'total': len(tasks), 'started': 0, 'finished': 0, 'errors': 0}
+    progress_lock = asyncio.Lock()
+
+    async def _progress_reporter() -> None:
+        if float(args.progress_interval) <= 0:
+            return
+        while True:
+            await asyncio.sleep(float(args.progress_interval))
+            async with progress_lock:
+                if progress['finished'] >= progress['total']:
+                    return
+                logger.info(
+                    '[fleet_job_runner] progress started=%d finished=%d total=%d errors=%d',
+                    progress['started'],
+                    progress['finished'],
+                    progress['total'],
+                    progress['errors'],
+                )
+
+    reporter_task = asyncio.create_task(_progress_reporter())
+    try:
+        results = await asyncio.gather(
+            *[
+                _run_one_task(
+                    base_config=base_cfg,
+                    job_id=job_id,
+                    task=t,
+                    semaphore=sem,
+                    progress=progress,
+                    progress_lock=progress_lock,
+                    task_logs=bool(args.task_logs),
+                )
+                for t in tasks
+            ],
+            return_exceptions=True,
+        )
+    finally:
+        reporter_task.cancel()
+        # Expected: CancelledError on shutdown; suppress to avoid noisy "uncaught exception" logs.
+        with suppress(asyncio.CancelledError):
+            await reporter_task
 
     # Print a small summary (machine-friendly).
     ok = 0

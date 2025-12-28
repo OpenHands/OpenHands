@@ -874,6 +874,8 @@ class AgentController:
             f'LEVEL {self.state.delegate_level} LOCAL STEP {self.state.get_local_step()} GLOBAL STEP {self.state.iteration_flag.current_value}',
             extra={'msg_type': 'STEP'},
         )
+        # In AgentController._step(), after line 872:
+        logger.info(f'STEP DEBUG: history_len={len(self.state.history)}, pending_actions={getattr(self.agent, "pending_actions", None)}')
 
         # Synchronize spend across all llm services with the budget flag
         self.state_tracker.sync_budget_flag_with_metrics()

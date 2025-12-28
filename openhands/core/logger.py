@@ -1,4 +1,5 @@
 import copy
+import contextvars
 import logging
 import os
 import re
@@ -20,6 +21,31 @@ DEBUG_LLM = os.getenv('DEBUG_LLM', 'False').lower() in ['true', '1', 'yes']
 # Structured logs with JSON, disabled by default
 LOG_JSON = os.getenv('LOG_JSON', 'False').lower() in ['true', '1', 'yes']
 LOG_JSON_LEVEL_KEY = os.getenv('LOG_JSON_LEVEL_KEY', 'level')
+
+
+# -----------------------------------------------------------------------------
+# Per-task logging context (useful for concurrent eval runs)
+# -----------------------------------------------------------------------------
+_task_key_var: contextvars.ContextVar[str] = contextvars.ContextVar('task_key', default='-')
+
+
+def set_log_task_key(task_key: str | None) -> contextvars.Token:
+    """Set the current task key for log prefixing; returns a token to reset later."""
+    return _task_key_var.set(task_key or '-')
+
+
+def reset_log_task_key(token: contextvars.Token) -> None:
+    """Reset the task key context using a token returned by set_log_task_key()."""
+    _task_key_var.reset(token)
+
+
+class TaskKeyFilter(logging.Filter):
+    """Inject task_key from contextvars into every LogRecord for formatting."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        # Ensure formatting never crashes on missing attributes.
+        setattr(record, 'task_key', _task_key_var.get() or '-')
+        return True
 
 
 # Configure litellm logging based on DEBUG_LLM
@@ -167,7 +193,7 @@ def _fix_record(record: logging.LogRecord) -> logging.LogRecord:
 
 
 file_formatter = NoColorFormatter(
-    '%(asctime)s - %(name)s:%(levelname)s: %(filename)s:%(lineno)s - %(message)s',
+    '%(asctime)s - task=%(task_key)s - %(name)s:%(levelname)s: %(filename)s:%(lineno)s - %(message)s',
     datefmt='%H:%M:%S',
 )
 llm_formatter = logging.Formatter('%(message)s')
@@ -289,7 +315,7 @@ def get_console_handler(log_level: int = logging.INFO) -> logging.StreamHandler:
     """Returns a console handler for logging."""
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
-    formatter_str = '\033[92m%(asctime)s - %(name)s:%(levelname)s\033[0m: %(filename)s:%(lineno)s - %(message)s'
+    formatter_str = '\033[92m%(asctime)s - task=%(task_key)s - %(name)s:%(levelname)s\033[0m: %(filename)s:%(lineno)s - %(message)s'
     console_handler.setFormatter(ColoredFormatter(formatter_str, datefmt='%H:%M:%S'))
     return console_handler
 
@@ -370,6 +396,8 @@ openhands_logger.setLevel(current_log_level)
 
 if DEBUG:
     openhands_logger.addFilter(StackInfoFilter())
+
+openhands_logger.addFilter(TaskKeyFilter())
 
 if current_log_level == logging.DEBUG:
     openhands_logger.debug('DEBUG mode enabled.')

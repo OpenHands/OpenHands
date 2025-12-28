@@ -27,7 +27,7 @@ from openhands.events.observation.files import (
     FileWriteObservation,
 )
 from openhands.events.observation.loop_recovery import LoopDetectionObservation
-from openhands.events.observation.mcp import MCPObservation
+from openhands.events.observation.mcp import MCPImage, MCPObservation
 from openhands.events.observation.observation import Observation
 from openhands.events.observation.reject import UserRejectObservation
 from openhands.events.observation.success import SuccessObservation
@@ -136,6 +136,25 @@ def observation_from_dict(observation: dict) -> Observation:
                 MicroagentKnowledge(**item) if isinstance(item, dict) else item
                 for item in extras['microagent_knowledge']
             ]
+
+    if observation_class is MCPObservation:
+        # images are dataclasses and get serialized to dict via dataclasses.asdict()
+        if 'images' in extras and isinstance(extras['images'], list):
+            normalized: list[MCPImage] = []
+            for img in extras['images']:
+                if isinstance(img, MCPImage):
+                    normalized.append(img)
+                    continue
+                if isinstance(img, dict):
+                    # tolerate either mime_type (dataclass) or mimeType (some MCP libs)
+                    if 'mimeType' in img and 'mime_type' not in img:
+                        img = {**img, 'mime_type': img.get('mimeType')}
+                    try:
+                        normalized.append(MCPImage(**img))
+                    except Exception:
+                        # If malformed, drop it rather than crashing deserialization.
+                        continue
+            extras['images'] = normalized
 
     obs = observation_class(content=content, **extras)
     assert isinstance(obs, Observation)

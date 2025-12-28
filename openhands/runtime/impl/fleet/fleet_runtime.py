@@ -1,4 +1,5 @@
 import inspect
+import json
 import time
 from typing import Any, Dict, List
 from pathlib import Path
@@ -149,7 +150,7 @@ class OpenEnvRuntime(Runtime):
         except Exception:
             args_preview = {}
 
-        self.log('debug', f'MCP call -> {action.name} args={args_preview}')
+        self.log('info', f'MCP call -> {action.name} args={args_preview}')
         try:
             result = await self.tools.call_tool(action.name, action.arguments)
             dur_ms = int((time.monotonic() - start) * 1000)
@@ -158,7 +159,7 @@ class OpenEnvRuntime(Runtime):
             text_content, images, is_error = self._parse_mcp_result(result)
 
             self.log(
-                'debug',
+                'info',
                 f'MCP result <- {action.name} ({dur_ms}ms): '
                 f'{len(text_content)} chars, {len(images)} images',
             )
@@ -210,9 +211,13 @@ class OpenEnvRuntime(Runtime):
             item_type = self._get_attr_or_key(item, 'type')
 
             if item_type == 'text':
-                text = self._get_attr_or_key(item, 'text', '')
-                if text:
-                    text_parts.append(text)
+                raw_text = self._get_attr_or_key(item, 'text', '')
+                if raw_text:
+                    text, extracted_images = self._extract_images_from_text(raw_text)
+                    if extracted_images:
+                        images.extend(extracted_images)
+                    if text:
+                        text_parts.append(text)
 
             elif item_type == 'image':
                 data = self._get_attr_or_key(item, 'data', '')
@@ -222,6 +227,35 @@ class OpenEnvRuntime(Runtime):
 
         text_content = '\n'.join(text_parts) if text_parts else ''
         return text_content, images, is_error
+
+    def _extract_images_from_text(self, raw_text: Any) -> tuple[str, list[MCPImage]]:
+        """Extract screenshot images embedded in tool 'text' JSON payloads.
+
+        Minimal support for the common Fleet/OpenEnv shape:
+          {"base64_image": "data:image/jpeg;base64,...."}
+        """
+        if not isinstance(raw_text, str):
+            return str(raw_text), []
+
+        try:
+            parsed = json.loads(raw_text)
+        except Exception:
+            return raw_text, []
+
+        if not isinstance(parsed, dict):
+            return raw_text, []
+
+        data_uri = parsed.get("base64_image")
+        if not isinstance(data_uri, str):
+            return raw_text, []
+
+        if not data_uri.startswith("data:image/") or ";base64," not in data_uri:
+            return raw_text, []
+
+        header, b64 = data_uri.split(",", 1)
+        # header: "data:image/jpeg;base64"
+        mime_type = header.split(";", 1)[0].split(":", 1)[-1] or "image/png"
+        return "[image extracted from tool result JSON]", [MCPImage(data=b64, mime_type=mime_type)]
 
     def _get_attr_or_key(self, obj: Any, key: str, default: Any = None) -> Any:
         """Get attribute or dict key from an object."""
