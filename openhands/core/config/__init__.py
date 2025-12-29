@@ -1,6 +1,5 @@
 from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.arg_utils import (
-    get_cli_parser,
     get_evaluation_parser,
     get_headless_parser,
 )
