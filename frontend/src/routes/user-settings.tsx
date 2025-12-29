@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "#/hooks/query/use-settings";
 import { openHands } from "#/api/open-hands-axios";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
-import { useResendEmailVerification } from "#/hooks/mutation/use-resend-email-verification";
+import { useEmailVerification } from "#/hooks/use-email-verification";
 
 // Email validation regex pattern
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -120,10 +120,8 @@ function UserSettingsScreen() {
   const queryClient = useQueryClient();
   const pollingIntervalRef = useRef<number | null>(null);
   const prevVerificationStatusRef = useRef<boolean | undefined>(undefined);
-  const {
-    mutate: resendEmailVerification,
-    isPending: isResendingVerification,
-  } = useResendEmailVerification();
+  const { resendEmailVerification, isResendingVerification } =
+    useEmailVerification();
 
   useEffect(() => {
     if (settings?.email) {

@@ -5,7 +5,7 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-notice";
 import { BrandButton } from "../settings/brand-button";
-import { useResendEmailVerification } from "#/hooks/mutation/use-resend-email-verification";
+import { useEmailVerification } from "#/hooks/use-email-verification";
 
 interface EmailVerificationModalProps {
   onClose: () => void;
@@ -17,8 +17,21 @@ export function EmailVerificationModal({
   userId,
 }: EmailVerificationModalProps) {
   const { t } = useTranslation();
-  const { mutate: resendEmailVerification, isPending: isResending } =
-    useResendEmailVerification();
+  const {
+    resendEmailVerification,
+    isResendingVerification: isResending,
+    isCooldownActive,
+    formattedCooldownTime,
+  } = useEmailVerification();
+
+  let resendButtonLabel: string;
+  if (isResending) {
+    resendButtonLabel = t(I18nKey.SETTINGS$SENDING);
+  } else if (isCooldownActive) {
+    resendButtonLabel = `${t(I18nKey.SETTINGS$RESEND_VERIFICATION)} (${formattedCooldownTime})`;
+  } else {
+    resendButtonLabel = t(I18nKey.SETTINGS$RESEND_VERIFICATION);
+  }
 
   return (
     <ModalBackdrop onClose={onClose}>
@@ -37,12 +50,10 @@ export function EmailVerificationModal({
             onClick={() =>
               resendEmailVerification({ userId, isAuthFlow: true })
             }
-            isDisabled={isResending}
+            isDisabled={isResending || isCooldownActive}
             className="w-full font-semibold"
           >
-            {isResending
-              ? t(I18nKey.SETTINGS$SENDING)
-              : t(I18nKey.SETTINGS$RESEND_VERIFICATION)}
+            {resendButtonLabel}
           </BrandButton>
         </div>
 
