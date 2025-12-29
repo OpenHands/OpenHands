@@ -229,7 +229,7 @@ class SaasSettingsStore(SettingsStore):
             else None
         )
 
-        # Custom base_url = definitely custom settings (BYOR)
+        # Custom base_url = definitely custom settings (BYOK)
         if user_base_url and user_base_url != LITE_LLM_API_URL:
             return True
 
