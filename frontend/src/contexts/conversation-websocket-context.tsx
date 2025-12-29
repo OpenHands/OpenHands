@@ -602,6 +602,7 @@ export function ConversationWebSocketProvider({
         }
       },
       onClose: (event: CloseEvent) => {
+        queryParams.resend_all = false;
         setMainConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
