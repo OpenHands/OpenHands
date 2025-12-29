@@ -56,4 +56,5 @@ export const sharedConversationService = {
       },
     );
     return response.data;
+  },
 };
