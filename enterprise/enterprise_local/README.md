@@ -50,7 +50,7 @@ First run this to retrieve Github App secrets
 ```
 gcloud auth application-default login
 gcloud config set project global-432717
-local/decrypt_env.sh
+enterprise_local/decrypt_env.sh /path/to/root/of/deploy/repo
 ```
 
 Now run this to generate a `.env` file, which will used to run SAAS locally
