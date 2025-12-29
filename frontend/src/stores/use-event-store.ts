@@ -21,6 +21,14 @@ export const useEventStore = create<EventState>()((set) => ({
   uiEvents: [],
   addEvent: (event: OHEvent) =>
     set((state) => {
+      // Deduplicate: skip if event with same id already exists
+      if (isV1Event(event)) {
+        const eventId = event.id;
+        if (state.events.some((e) => isV1Event(e) && e.id === eventId)) {
+          return state;
+        }
+      }
+
       const newEvents = [...state.events, event];
       const newUiEvents = isV1Event(event)
         ? // @ts-expect-error - temporary, needs proper typing
