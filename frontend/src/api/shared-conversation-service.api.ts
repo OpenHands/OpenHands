@@ -30,11 +30,11 @@ export const sharedConversationService = {
   async getSharedConversation(
     conversationId: string,
   ): Promise<SharedConversation | null> {
-    const response = await openHands.get(
-      `/api/shared-conversations?ids=${conversationId}`,
+    const response = await openHands.get<(SharedConversation | null)[]>(
+      "/api/shared-conversations",
+      { params: { ids: conversationId } },
     );
-    const conversations = response.data as (SharedConversation | null)[];
-    return conversations[0] || null;
+    return response.data[0] || null;
   },
 
   /**
