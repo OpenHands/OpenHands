@@ -1081,7 +1081,10 @@ async def test_update_settings_upgrades_user_from_old_defaults(
             session.commit()
 
         # Update settings to use test_base_url
-        settings = Settings(llm_model=old_model, llm_base_url=test_base_url)
+        # Set user_version to match the database so _has_custom_settings can detect old defaults
+        settings = Settings(
+            llm_model=old_model, llm_base_url=test_base_url, user_version=old_version
+        )
 
         # Act: Update settings
         updated_settings = await settings_store.update_settings_with_litellm_default(
