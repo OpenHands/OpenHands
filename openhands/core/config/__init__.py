@@ -4,7 +4,6 @@ from openhands.core.config.arg_utils import (
     get_evaluation_parser,
     get_headless_parser,
 )
-from openhands.core.config.cli_config import CLIConfig
 from openhands.core.config.config_utils import (
     OH_DEFAULT_AGENT,
     OH_MAX_ITERATIONS,
