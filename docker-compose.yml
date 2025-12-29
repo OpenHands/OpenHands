@@ -51,8 +51,7 @@ services:
       - "3002:3000"
     environment:
       # LLM Configuration - SGLang עם מודל qwen2.5-coder:14b
-      - LLM_MODEL=Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
-      - LLM_CUSTOM_LLM_PROVIDER=openai
+      - LLM_MODEL=openai/Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
       - LLM_BASE_URL=http://sglang:30000/v1
       - LLM_API_KEY=
       
