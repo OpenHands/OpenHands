@@ -1,27 +1,164 @@
+
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    volumes:
-      - ~/.ollama:/root/.ollama
-    restart: unless-stopped
 
+  # SGLang רץ ישירות על המערכת (לא ב-Docker) בגלל בעיית overlayfs
+  # להפעלה: /home/noya/OpenHands/scripts/start-sglang.sh
+
+  # OpenHands Main Application - עם גישה מלאה לשרת
   openhands:
-    image: openhands:latest
+    build:
+      context: .
+      dockerfile: containers/app/Dockerfile
     container_name: openhands-app
+    privileged: true  # גישה מלאה למערכת
     depends_on:
-      - ollama
+      invariant-server:
+        condition: service_started
+    env_file:
+      - .env
     ports:
-      - "3004:3000"
+      - "3002:3000"
     environment:
-      # LLM
-      LLM_MODEL: "ollama/qwen2.5:14b"
-      LLM_BASE_URL: "http://ollama:11434"
-      LLM_API_KEY: "ollama"
-
-      # 🔴 זה הקריטי
-      EXECUTION_MODE: "local"
-      RUNTIME: "local"
+      # LLM Configuration - SGLang עם מודל qwen2.5-coder:14b (רץ ישירות על המערכת)
+      - LLM_MODEL=Qwen/Qwen2.5-Coder-14B-Instruct
+      - LLM_BASE_URL=http://host.docker.internal:11434/v1
+      - LLM_API_KEY=
+      
+      # Execution Mode
+      - EXECUTION_MODE=local
+      - RUNTIME=docker
+      
+      # Security Analyzer
+      - SECURITY_ANALYZER_URL=http://invariant-server:8000
+      
+      # Workspace
+      - WORKSPACE_BASE=/workspace
+      
+      # Browser
+      - ENABLE_BROWSER=true
+      - BROWSER_HEADLESS=false
+      - CODEACT_ENABLE_BROWSING=true
+      - ENABLE_BROWSER_ACTIONS=true
+      - ENABLE_WEB_BROWSING=true
+      - ALLOW_BROWSER_EXEC=true
+      
+      # גישה לשרת
+      - HOST_SYSTEM_ACCESS=true
+      - SANDBOX_API_HOSTNAME=host.docker.internal
+      - DOCKER_HOST_ADDR=host.docker.internal
+      
     volumes:
+      # Workspace
       - ./workspace:/workspace
+      - /home/noya/openhands_data:/app/.openhands-state
+      
+      # גישה למערכת - תהליכים
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /dev:/host/dev:ro
+      
+      # גישה ל-Docker
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      
+      # גישה ל-systemd ולוגים
+      - /run/systemd:/host/run/systemd:ro
+      - /var/log:/host/var/log:ro
+      - /etc/systemd:/host/etc/systemd:ro
+      
+      # גישה לקבצי מערכת
+      - /etc:/host/etc:ro
+      - /usr/bin:/host/usr/bin:ro
+      - /usr/sbin:/host/usr/sbin:ro
+      
+      # גישה לרשת
+      - /etc/hosts:/host/etc/hosts:ro
+      - /etc/resolv.conf:/host/etc/resolv.conf:ro
+      
+      # גישה לנתונים נוספים
+      - /home:/host/home:ro
+      - /opt:/host/opt:ro
+      - /mnt:/host/mnt:ro
+      - /media:/host/media:ro
+      
+      # גישה ל-logs נוספים
+      - /var/lib/docker:/host/var/lib/docker:ro
+      
+    # Capabilities נוספות
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      
+    # Network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      
+    networks:
+      - openhands-network
+      
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+
+  # Security Analyzer (Invariant)
+  invariant-server:
+    image: ghcr.io/invariantlabs-ai/server:openhands
+    container_name: openhands-invariant-server
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+    networks:
+      - openhands-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Code Server (IDE)
+  code-server:
+    image: codercom/code-server:latest
+    container_name: openhands-code-server
+    ports:
+      - "8081:8080"
+    environment:
+      - PASSWORD=${CODE_SERVER_PASSWORD:-openhands123}
+    volumes:
+      - ./workspace:/home/coder/workspace
+      - ./code-server-data:/home/coder/.local/share/code-server
+      # גישה לשרת גם ב-Code Server
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - openhands-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  openhands-network:
+    driver: bridge
+    name: openhands-network
+
+volumes:
+  ollama_models:
+    name: openhands-ollama-models
+  openhands_data:
+    name: openhands-data
+  code-server-data:
+    name: openhands-code-server-data
