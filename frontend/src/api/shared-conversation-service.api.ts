@@ -45,18 +45,15 @@ export const sharedConversationService = {
     limit: number = 100,
     pageId?: string,
   ): Promise<EventPage> {
-    const params = new URLSearchParams({
-      conversation_id: conversationId,
-      limit: limit.toString(),
-    });
-
-    if (pageId) {
-      params.append("page_id", pageId);
-    }
-
-    const response = await openHands.get(
-      `/api/shared-events/search?${params.toString()}`,
+    const response = await openHands.get<EventPage>(
+      "/api/shared-events/search",
+      {
+        params: {
+          conversation_id: conversationId,
+          limit,
+          ...(pageId && { page_id: pageId }),
+        },
+      },
     );
-    return response.data as EventPage;
-  },
+    return response.data;
 };
