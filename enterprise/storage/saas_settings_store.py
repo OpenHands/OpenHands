@@ -262,15 +262,8 @@ class SaasSettingsStore(SettingsStore):
         local_deploy = os.environ.get('LOCAL_DEPLOYMENT', None)
         key = LITE_LLM_API_KEY
 
-        # Get user's old version to check if they're using the old default
-        old_user_version = None
-        with session_maker() as session:
-            user_settings = self.get_user_settings_by_keycloak_id(self.user_id, session)
-            if user_settings:
-                old_user_version = user_settings.user_version
-
         # Check if user has custom settings
-        has_custom = self._has_custom_settings(settings, old_user_version)
+        has_custom = self._has_custom_settings(settings, settings.user_version)
 
         # Determine model to use (needed before LiteLLM user creation)
         llm_model_to_use = (
