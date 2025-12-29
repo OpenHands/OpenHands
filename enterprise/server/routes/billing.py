@@ -118,13 +118,12 @@ async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse
         return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))
     except httpx.HTTPStatusError as e:
         logger.error(
-            'litellm_get_user_failed',
+            f'litellm_get_user_failed: {type(e).__name__}: {e}',
             extra={
                 'user_id': user_id,
                 'status_code': e.response.status_code,
-                'error_type': type(e).__name__,
-                'error_message': str(e),
             },
+            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
