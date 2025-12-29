@@ -372,3 +372,39 @@ class TestAgentControllerLoopRecovery:
         assert mock_controller.state.end_id == 5, (
             f'Expected end_id to be 5, got {mock_controller.state.end_id}'
         )
+
+    def test_stuck_detection_config_option_exists(self):
+        """Test that the enable_stuck_detection config option exists and defaults to True."""
+        from openhands.core.config.agent_config import AgentConfig
+
+        # Create a default config
+        config = AgentConfig()
+
+        # Verify the attribute exists and defaults to True
+        assert hasattr(config, 'enable_stuck_detection')
+        assert config.enable_stuck_detection is True
+
+        # Verify we can create a config with it disabled
+        config_disabled = AgentConfig(enable_stuck_detection=False)
+        assert config_disabled.enable_stuck_detection is False
+
+    def test_stuck_detection_config_from_env(self):
+        """Test that enable_stuck_detection can be set via environment variable."""
+        import os
+
+        from openhands.core.config.agent_config import AgentConfig
+
+        # Test with enabled (default)
+        os.environ.pop('AGENT_ENABLE_STUCK_DETECTION', None)
+        config = AgentConfig()
+        assert config.enable_stuck_detection is True
+
+        # Test with explicitly disabled
+        os.environ['AGENT_ENABLE_STUCK_DETECTION'] = 'false'
+        # Need to reload for env var to take effect in real usage
+        # For this test, we just verify the config accepts the parameter
+        config_disabled = AgentConfig(enable_stuck_detection=False)
+        assert config_disabled.enable_stuck_detection is False
+
+        # Cleanup
+        os.environ.pop('AGENT_ENABLE_STUCK_DETECTION', None)

@@ -20,6 +20,7 @@ class ExposedUrl(BaseModel):
 
     name: str
     url: str
+    port: int
 
 
 # Standard names

@@ -52,12 +52,16 @@ def _generate_dockerfile(
     )
     template = env.get_template('Dockerfile.j2')
 
+    # Allow overriding conda/mamba channel alias (e.g., to avoid anaconda.org)
+    channel_alias = os.getenv('OH_CONDA_CHANNEL_ALIAS', '').strip() or None
+
     dockerfile_content = template.render(
         base_image=base_image,
         build_from_scratch=build_from == BuildFromImageType.SCRATCH,
         build_from_versioned=build_from == BuildFromImageType.VERSIONED,
         extra_deps=extra_deps if extra_deps is not None else '',
         enable_browser=enable_browser,
+        channel_alias=channel_alias,
     )
     return dockerfile_content
 
@@ -247,9 +251,9 @@ def build_runtime_image_in_folder(
             lock_tag=lock_tag,
             # Only tag the versioned image if we are building from scratch.
             # This avoids too much layers when you lay one image on top of another multiple times
-            versioned_tag=versioned_tag
-            if build_from == BuildFromImageType.SCRATCH
-            else None,
+            versioned_tag=(
+                versioned_tag if build_from == BuildFromImageType.SCRATCH else None
+            ),
             platform=platform,
             extra_build_args=extra_build_args,
         )
@@ -282,10 +286,8 @@ def prep_build_folder(
         ),
     )
 
-    # Copy the 'microagents' directory (Microagents)
-    shutil.copytree(
-        Path(project_root, 'microagents'), Path(build_folder, 'code', 'microagents')
-    )
+    # Copy the 'skills' directory (Skills)
+    shutil.copytree(Path(project_root, 'skills'), Path(build_folder, 'code', 'skills'))
 
     # Copy pyproject.toml and poetry.lock files
     for file in ['pyproject.toml', 'poetry.lock']:

@@ -17,7 +17,7 @@ export const useTracking = () => {
     app_surface: config?.APP_MODE || "unknown",
     plan_tier: null,
     current_url: window.location.href,
-    user_email: settings?.EMAIL || settings?.GIT_USER_EMAIL || null,
+    user_email: settings?.email || settings?.git_user_email || null,
   };
 
   const trackLoginButtonClick = ({ provider }: { provider: Provider }) => {
@@ -67,6 +67,38 @@ export const useTracking = () => {
     });
   };
 
+  const trackUserSignupCompleted = () => {
+    posthog.capture("user_signup_completed", {
+      signup_timestamp: new Date().toISOString(),
+      ...commonProperties,
+    });
+  };
+
+  const trackCreditsPurchased = ({
+    amountUsd,
+    stripeSessionId,
+  }: {
+    amountUsd: number;
+    stripeSessionId: string;
+  }) => {
+    posthog.capture("credits_purchased", {
+      amount_usd: amountUsd,
+      stripe_session_id: stripeSessionId,
+      ...commonProperties,
+    });
+  };
+
+  const trackCreditLimitReached = ({
+    conversationId,
+  }: {
+    conversationId: string;
+  }) => {
+    posthog.capture("credit_limit_reached", {
+      conversation_id: conversationId,
+      ...commonProperties,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -74,5 +106,8 @@ export const useTracking = () => {
     trackPullButtonClick,
     trackCreatePrButtonClick,
     trackGitProviderConnected,
+    trackUserSignupCompleted,
+    trackCreditsPurchased,
+    trackCreditLimitReached,
   };
 };

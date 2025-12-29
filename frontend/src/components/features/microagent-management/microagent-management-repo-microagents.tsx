@@ -6,7 +6,7 @@ import { MicroagentManagementLearnThisRepo } from "./microagent-management-learn
 import { useRepositoryMicroagents } from "#/hooks/query/use-repository-microagents";
 import { useMicroagentManagementConversations } from "#/hooks/query/use-microagent-management-conversations";
 import { GitRepository } from "#/types/git";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 

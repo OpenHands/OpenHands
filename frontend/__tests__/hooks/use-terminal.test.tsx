@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useTerminal } from "#/hooks/use-terminal";
-import { Command, useCommandStore } from "#/state/command-store";
+import { Command, useCommandStore } from "#/stores/command-store";
 import { renderWithProviders } from "../../test-utils";
 
 // Mock the WsClient context
@@ -42,20 +42,46 @@ describe("useTerminal", () => {
     write: vi.fn(),
     writeln: vi.fn(),
     dispose: vi.fn(),
+    element: document.createElement("div"),
+  }));
+
+  const mockFitAddon = vi.hoisted(() => ({
+    fit: vi.fn(),
   }));
 
   beforeAll(() => {
-    // mock ResizeObserver
-    window.ResizeObserver = vi.fn().mockImplementation(() => ({
-      observe: vi.fn(),
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    }));
+    // mock ResizeObserver - use class for Vitest 4 constructor support
+    window.ResizeObserver = class {
+      observe = vi.fn();
 
-    // mock Terminal
+      unobserve = vi.fn();
+
+      disconnect = vi.fn();
+    } as unknown as typeof ResizeObserver;
+
+    // mock Terminal - use class for Vitest 4 constructor support
     vi.mock("@xterm/xterm", async (importOriginal) => ({
       ...(await importOriginal<typeof import("@xterm/xterm")>()),
-      Terminal: vi.fn().mockImplementation(() => mockTerminal),
+      Terminal: class {
+        loadAddon = mockTerminal.loadAddon;
+
+        open = mockTerminal.open;
+
+        write = mockTerminal.write;
+
+        writeln = mockTerminal.writeln;
+
+        dispose = mockTerminal.dispose;
+
+        element = mockTerminal.element;
+      },
+    }));
+
+    // mock FitAddon
+    vi.mock("@xterm/addon-fit", () => ({
+      FitAddon: class {
+        fit = mockFitAddon.fit;
+      },
     }));
   });
 
@@ -82,5 +108,19 @@ describe("useTerminal", () => {
 
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "hello");
+  });
+
+  it("should not call fit() when terminal.element is null", () => {
+    // Temporarily set element to null to simulate terminal not being opened
+    const originalElement = mockTerminal.element;
+    mockTerminal.element = null as unknown as HTMLDivElement;
+
+    renderWithProviders(<TestTerminalComponent />);
+
+    // fit() should not be called because terminal.element is null
+    expect(mockFitAddon.fit).not.toHaveBeenCalled();
+
+    // Restore original element
+    mockTerminal.element = originalElement;
   });
 });

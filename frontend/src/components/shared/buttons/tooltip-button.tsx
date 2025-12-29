@@ -16,6 +16,7 @@ export interface TooltipButtonProps {
   disabled?: boolean;
   placement?: TooltipProps["placement"];
   showArrow?: boolean;
+  asSpan?: boolean;
 }
 
 export function TooltipButton({
@@ -31,6 +32,7 @@ export function TooltipButton({
   disabled = false,
   placement = "right",
   showArrow = false,
+  asSpan = false,
 }: TooltipButtonProps) {
   const handleClick = (e: React.MouseEvent) => {
     if (onClick && !disabled) {
@@ -39,22 +41,67 @@ export function TooltipButton({
     }
   };
 
-  const buttonContent = (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      data-testid={testId}
-      onClick={handleClick}
-      className={cn(
-        "hover:opacity-80",
-        disabled && "opacity-50 cursor-not-allowed",
-        className,
-      )}
-      disabled={disabled}
-    >
-      {children}
-    </button>
-  );
+  const isClickable = !!onClick && !disabled;
+  let buttonContent: React.ReactNode;
+  if (asSpan) {
+    if (isClickable) {
+      buttonContent = (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={ariaLabel}
+          data-testid={testId}
+          onClick={handleClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              onClick();
+              e.preventDefault();
+            }
+          }}
+          className={cn(
+            "hover:opacity-80",
+            disabled && "opacity-50 cursor-not-allowed",
+            className,
+          )}
+          aria-disabled={disabled}
+        >
+          {children}
+        </span>
+      );
+    } else {
+      buttonContent = (
+        <span
+          aria-label={ariaLabel}
+          data-testid={testId}
+          className={cn(
+            "hover:opacity-80",
+            disabled && "opacity-50 cursor-not-allowed",
+            className,
+          )}
+          aria-disabled={disabled}
+        >
+          {children}
+        </span>
+      );
+    }
+  } else {
+    buttonContent = (
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        data-testid={testId}
+        onClick={handleClick}
+        className={cn(
+          "hover:opacity-80",
+          disabled && "opacity-50 cursor-not-allowed",
+          className,
+        )}
+        disabled={disabled}
+      >
+        {children}
+      </button>
+    );
+  }
 
   let content;
 

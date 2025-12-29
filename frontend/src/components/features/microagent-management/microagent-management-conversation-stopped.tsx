@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "../settings/brand-button";
 import { Loader } from "#/components/shared/loader";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 
 export function MicroagentManagementConversationStopped() {
   const { t } = useTranslation();

@@ -32,6 +32,9 @@ from openhands.app_server.sandbox.sandbox_service import (
 )
 from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname_for_docker,
+)
 
 _logger = logging.getLogger(__name__)
 SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
@@ -159,6 +162,7 @@ class DockerSandboxService(SandboxService):
                                 ExposedUrl(
                                     name=exposed_port.name,
                                     url=url,
+                                    port=host_port,
                                 )
                             )
 
@@ -185,6 +189,9 @@ class DockerSandboxService(SandboxService):
                 if exposed_url.name == AGENT_SERVER
             )
             try:
+                # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
+                app_server_url = replace_localhost_hostname_for_docker(app_server_url)
+
                 response = await self.httpx_client.get(
                     f'{app_server_url}{self.health_check_path}'
                 )
@@ -192,7 +199,7 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                _logger.info(f'Sandbox server not running: {exc}')
+                _logger.info(f'Sandbox server not running: {app_server_url} : {exc}')
                 sandbox_info.status = SandboxStatus.ERROR
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None
@@ -210,7 +217,9 @@ class DockerSandboxService(SandboxService):
             sandboxes = []
 
             for container in all_containers:
-                if container.name.startswith(self.container_name_prefix):
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
                     sandbox_info = await self._container_to_checked_sandbox_info(
                         container
                     )
@@ -251,6 +260,29 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return None
 
+    async def get_sandbox_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxInfo | None:
+        """Get a single sandbox by session API key."""
+        try:
+            # Get all containers with our prefix
+            all_containers = self.docker_client.containers.list(all=True)
+
+            for container in all_containers:
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
+                    # Check if this container has the matching session API key
+                    env_vars = self._get_container_env_vars(container)
+                    container_session_key = env_vars.get(SESSION_API_KEY_VARIABLE)
+
+                    if container_session_key == session_api_key:
+                        return await self._container_to_checked_sandbox_info(container)
+
+            return None
+        except (NotFound, APIError):
+            return None
+
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
         """Start a new sandbox."""
         # Enforce sandbox limits by cleaning up old sandboxes
@@ -276,8 +308,7 @@ class DockerSandboxService(SandboxService):
         env_vars = sandbox_spec.initial_env.copy()
         env_vars[SESSION_API_KEY_VARIABLE] = session_api_key
         env_vars[WEBHOOK_CALLBACK_VARIABLE] = (
-            f'http://host.docker.internal:{self.host_port}'
-            f'/api/v1/webhooks/{container_name}'
+            f'http://host.docker.internal:{self.host_port}/api/v1/webhooks'
         )
 
         # Prepare port mappings and add port environment variables
@@ -315,6 +346,9 @@ class DockerSandboxService(SandboxService):
                 working_dir=sandbox_spec.working_dir,
                 labels=labels,
                 detach=True,
+                # Use Docker's tini init process to ensure proper signal handling and reaping of
+                # zombie child processes.
+                init=True,
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)

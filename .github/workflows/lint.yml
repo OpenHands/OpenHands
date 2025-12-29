@@ -72,21 +72,3 @@ jobs:
       - name: Run pre-commit hooks
         working-directory: ./enterprise
         run: pre-commit run --all-files --show-diff-on-failure --config ./dev_config/python/.pre-commit-config.yaml
-
-  lint-cli-python:
-    name: Lint CLI python
-    runs-on: blacksmith-4vcpu-ubuntu-2204
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up python
-        uses: useblacksmith/setup-python@v6
-        with:
-          python-version: 3.12
-          cache: "pip"
-      - name: Install pre-commit
-        run: pip install pre-commit==4.2.0
-      - name: Run pre-commit hooks
-        working-directory: ./openhands-cli
-        run: pre-commit run --all-files --config ./dev_config/python/.pre-commit-config.yaml

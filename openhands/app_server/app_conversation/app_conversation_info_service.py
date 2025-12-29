@@ -9,6 +9,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationSortOrder,
 )
 from openhands.app_server.services.injector import Injector
+from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
@@ -68,6 +69,19 @@ class AppConversationInfoService(ABC):
         Returns True if the conversation was deleted successfully, False otherwise.
         """
 
+    @abstractmethod
+    async def get_sub_conversation_ids(
+        self, parent_conversation_id: UUID
+    ) -> list[UUID]:
+        """Get all sub-conversation IDs for a given parent conversation.
+
+        Args:
+            parent_conversation_id: The ID of the parent conversation
+
+        Returns:
+            List of sub-conversation IDs
+        """
+
     # Mutators
 
     @abstractmethod
@@ -77,6 +91,19 @@ class AppConversationInfoService(ABC):
         """Store the sandboxed conversation info object given.
 
         Return the stored info
+        """
+
+    @abstractmethod
+    async def process_stats_event(
+        self,
+        event: ConversationStateUpdateEvent,
+        conversation_id: UUID,
+    ) -> None:
+        """Process a stats event and update conversation statistics.
+
+        Args:
+            event: The ConversationStateUpdateEvent with key='stats'
+            conversation_id: The ID of the conversation to update
         """
 
 

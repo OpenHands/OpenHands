@@ -6,7 +6,7 @@ import { MicroagentManagementSidebarTabs } from "./microagent-management-sidebar
 import { useGitRepositories } from "#/hooks/query/use-git-repositories";
 import { useSearchRepositories } from "#/hooks/query/use-search-repositories";
 import { GitProviderDropdown } from "#/components/features/home/git-provider-dropdown";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { GitRepository } from "#/types/git";
 import { Provider } from "#/types/settings";
 import {

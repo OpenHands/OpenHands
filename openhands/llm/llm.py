@@ -21,6 +21,7 @@ from litellm import completion as litellm_completion
 from litellm import completion_cost as litellm_completion_cost
 from litellm.exceptions import (
     APIConnectionError,
+    BadGatewayError,
     RateLimitError,
     ServiceUnavailableError,
 )
@@ -45,6 +46,7 @@ LLM_RETRY_EXCEPTIONS: tuple[type[Exception], ...] = (
     APIConnectionError,
     RateLimitError,
     ServiceUnavailableError,
+    BadGatewayError,
     litellm.Timeout,
     litellm.InternalServerError,
     LLMNoResponseError,
@@ -188,13 +190,15 @@ class LLM(RetryMixin, DebugMixin):
         if 'claude-opus-4-1' in self.config.model.lower():
             kwargs['thinking'] = {'type': 'disabled'}
 
-        # Anthropic constraint: Opus models cannot accept both temperature and top_p
+        # Anthropic constraint: Opus 4.1, Opus 4.5, and Sonnet 4 models cannot accept both temperature and top_p
         # Prefer temperature (drop top_p) if both are specified.
         _model_lower = self.config.model.lower()
-        # Limit to Opus 4.1 specifically to avoid changing behavior of other Anthropic models
-        if ('claude-opus-4-1' in _model_lower) and (
-            'temperature' in kwargs and 'top_p' in kwargs
-        ):
+        # Apply to Opus 4.1, Opus 4.5, and Sonnet 4 models to avoid API errors
+        if (
+            ('claude-opus-4-1' in _model_lower)
+            or ('claude-opus-4-5' in _model_lower)
+            or ('claude-sonnet-4' in _model_lower)
+        ) and ('temperature' in kwargs and 'top_p' in kwargs):
             kwargs.pop('top_p', None)
 
         # Add completion_kwargs if present

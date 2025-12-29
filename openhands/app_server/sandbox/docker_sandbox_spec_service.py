@@ -14,9 +14,10 @@ from openhands.app_server.sandbox.sandbox_spec_models import (
     SandboxSpecInfo,
 )
 from openhands.app_server.sandbox.sandbox_spec_service import (
-    AGENT_SERVER_IMAGE,
     SandboxSpecService,
     SandboxSpecServiceInjector,
+    get_agent_server_env,
+    get_agent_server_image,
 )
 from openhands.app_server.services.injector import InjectorState
 
@@ -34,7 +35,7 @@ def get_docker_client() -> docker.DockerClient:
 def get_default_sandbox_specs():
     return [
         SandboxSpecInfo(
-            id=AGENT_SERVER_IMAGE,
+            id=get_agent_server_image(),
             command=['--port', '8000'],
             initial_env={
                 'OPENVSCODE_SERVER_ROOT': '/openhands/.openvscode-server',
@@ -42,6 +43,9 @@ def get_default_sandbox_specs():
                 'LOG_JSON': 'true',
                 'OH_CONVERSATIONS_PATH': '/workspace/conversations',
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
+                'PYTHONUNBUFFERED': '1',
+                'ENV_LOG_LEVEL': '20',
+                **get_agent_server_env(),
             },
             working_dir='/workspace/project',
         )
@@ -81,10 +85,49 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
             try:
                 docker_client.images.get(spec.id)
             except docker.errors.ImageNotFound:
-                _logger.info(f'⬇️ Pulling Docker Image: {spec.id}')
-                # Pull in a background thread to prevent locking up the main runloop
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, docker_client.images.pull, spec.id)
-                _logger.info(f'⬇️ Finished Pulling Docker Image: {spec.id}')
+                _logger.info(f'⬇️  Pulling Docker Image: {spec.id}')
+                await self._pull_with_progress_logging(docker_client, spec.id)
+                _logger.info(f'⬇️  Finished Pulling Docker Image: {spec.id}')
         except docker.errors.APIError as exc:
             raise SandboxError(f'Error Getting Docker Image: {spec.id}') from exc
+
+    async def _pull_with_progress_logging(
+        self, docker_client: docker.DockerClient, image_id: str
+    ):
+        """Pull Docker image with periodic progress logging every 5 seconds."""
+        # Event to signal when pull is complete
+        pull_complete = asyncio.Event()
+
+        async def periodic_logger():
+            """Log progress message every 5 seconds until pull is complete."""
+            while not pull_complete.is_set():
+                try:
+                    await asyncio.wait_for(pull_complete.wait(), timeout=5.0)
+                    break  # Pull completed
+                except asyncio.TimeoutError:
+                    # 5 seconds elapsed, log progress message
+                    _logger.info(f'🔄 Downloading Docker Image: {image_id}...')
+
+        async def pull_image():
+            """Perform the actual Docker image pull."""
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, docker_client.images.pull, image_id)
+            finally:
+                pull_complete.set()
+
+        # Run both tasks concurrently
+        logger_task = asyncio.create_task(periodic_logger())
+        pull_task = asyncio.create_task(pull_image())
+
+        try:
+            # Wait for pull to complete
+            await pull_task
+        finally:
+            # Ensure logger task is cancelled if still running
+            if not logger_task.done():
+                logger_task.cancel()
+                try:
+                    await logger_task
+                except asyncio.CancelledError:
+                    pass

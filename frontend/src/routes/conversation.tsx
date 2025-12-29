@@ -3,8 +3,8 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 
 import { useConversationId } from "#/hooks/use-conversation-id";
-import { useCommandStore } from "#/state/command-store";
-import { useConversationStore } from "#/state/conversation-store";
+import { useCommandStore } from "#/stores/command-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentStore } from "#/stores/agent-store";
 import { AgentState } from "#/types/agent-state";
 

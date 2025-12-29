@@ -6,9 +6,11 @@ from typing import AsyncContextManager
 
 import httpx
 from fastapi import Depends, Request
-from pydantic import Field
+from pydantic import Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Import the event_callback module to ensure all processors are registered
+import openhands.app_server.event_callback  # noqa: F401
 from openhands.agent_server.env_parser import from_env
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -72,6 +74,11 @@ def get_default_web_url() -> str | None:
     return f'https://{web_host}'
 
 
+def get_openhands_provider_base_url() -> str | None:
+    """Return the base URL for the OpenHands provider, if configured."""
+    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or None
+
+
 def _get_default_lifespan():
     # Check legacy parameters for saas mode. If we are in SAAS mode do not apply
     # OSS alembic migrations
@@ -85,6 +92,10 @@ class AppServerConfig(OpenHandsModel):
     web_url: str | None = Field(
         default_factory=get_default_web_url,
         description='The URL where OpenHands is running (e.g., http://localhost:3000)',
+    )
+    openhands_provider_base_url: str | None = Field(
+        default_factory=get_openhands_provider_base_url,
+        description='Base URL for the OpenHands provider',
     )
     # Dependency Injection Injectors
     event: EventServiceInjector | None = None
@@ -183,7 +194,13 @@ def config_from_env() -> AppServerConfig:
         )
 
     if config.app_conversation is None:
-        config.app_conversation = LiveStatusAppConversationServiceInjector()
+        tavily_api_key = None
+        tavily_api_key_str = os.getenv('TAVILY_API_KEY') or os.getenv('SEARCH_API_KEY')
+        if tavily_api_key_str:
+            tavily_api_key = SecretStr(tavily_api_key_str)
+        config.app_conversation = LiveStatusAppConversationServiceInjector(
+            tavily_api_key=tavily_api_key
+        )
 
     if config.user is None:
         config.user = AuthUserContextInjector()

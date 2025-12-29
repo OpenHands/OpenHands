@@ -152,17 +152,22 @@ class SetAuthCookieMiddleware:
             return False
         path = request.url.path
 
-        is_api_that_should_attach = path.startswith('/api') and path not in (
+        ignore_paths = (
             '/api/options/config',
             '/api/keycloak/callback',
             '/api/billing/success',
             '/api/billing/cancel',
             '/api/billing/customer-setup-success',
             '/api/billing/stripe-webhook',
+            '/oauth/device/authorize',
+            '/oauth/device/token',
         )
+        if path in ignore_paths:
+            return False
 
         is_mcp = path.startswith('/mcp')
-        return is_api_that_should_attach or is_mcp
+        is_api_route = path.startswith('/api')
+        return is_api_route or is_mcp
 
     async def _logout(self, request: Request):
         # Log out of keycloak - this prevents issues where you did not log in with the idp you believe you used
