@@ -60,9 +60,19 @@ async def check_rate_limit_by_user_id(
                     'ip': request.client.host if request.client else 'unknown',
                 },
             )
+            # Format error message based on duration
+            if rate_limit_seconds < 60:
+                wait_message = f'{rate_limit_seconds} seconds'
+            elif rate_limit_seconds % 60 == 0:
+                wait_message = f'{rate_limit_seconds // 60} minute{"s" if rate_limit_seconds // 60 != 1 else ""}'
+            else:
+                minutes = rate_limit_seconds // 60
+                seconds = rate_limit_seconds % 60
+                wait_message = f'{minutes} minute{"s" if minutes != 1 else ""} and {seconds} second{"s" if seconds != 1 else ""}'
+
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f'Too many requests. Please wait {rate_limit_seconds // 60} minutes before trying again.',
+                detail=f'Too many requests. Please wait {wait_message} before trying again.',
             )
     except HTTPException:
         # Re-raise HTTPException (rate limit exceeded)

@@ -118,8 +118,13 @@ async def resend_email_verification(
         )
 
     # Check rate limit (uses user_id if available, otherwise falls back to IP)
+    # Use 30 seconds for user-based rate limiting to match frontend cooldown
     await check_rate_limit_by_user_id(
-        request=request, key_prefix='email_resend', user_id=user_id
+        request=request,
+        key_prefix='email_resend',
+        user_id=user_id,
+        user_rate_limit_seconds=30,
+        ip_rate_limit_seconds=60,  # 1 minute for IP-based limiting (more lenient)
     )
 
     # Get is_auth_flow from body if provided, default to False

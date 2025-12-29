@@ -33,7 +33,7 @@ export function useEmailVerification() {
   >(null);
   const [cooldownRemaining, setCooldownRemaining] = React.useState<number>(0);
 
-  const COOLDOWN_DURATION_MS = 2 * 60 * 1000; // 2 minutes
+  const COOLDOWN_DURATION_MS = 30 * 1000; // 30 seconds
 
   const formatCooldownTime = (ms: number): string => {
     const seconds = Math.ceil(ms / 1000);
