@@ -1,13 +1,11 @@
 import hashlib
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import base62
 from pydantic import BaseModel, Field, SecretStr, TypeAdapter, field_serializer
-
-from openhands.agent_server.utils import utc_now
 
 
 class EncryptionKey(BaseModel):
@@ -17,7 +15,7 @@ class EncryptionKey(BaseModel):
     key: SecretStr
     active: bool = True
     notes: str | None = None
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_serializer('key')
     def serialize_key(self, key: SecretStr, info: Any):

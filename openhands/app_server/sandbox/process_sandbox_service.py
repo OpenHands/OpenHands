@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 import base62
@@ -21,7 +21,10 @@ import psutil
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from openhands.agent_server.utils import utc_now
+
+# Replacement for utc_now
+def utc_now():
+    return datetime.now(timezone.utc)
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -78,9 +81,9 @@ class ProcessSandboxService(SandboxService):
     base_working_dir: str
     base_port: int
     python_executable: str
-    agent_server_module: str
     health_check_path: str
     httpx_client: httpx.AsyncClient
+    agent_server_module: str = 'openhands.agenthub.agent_server'
 
     def __post_init__(self):
         """Initialize the service after dataclass creation."""
@@ -105,6 +108,7 @@ class ProcessSandboxService(SandboxService):
         os.makedirs(sandbox_dir, exist_ok=True)
         return sandbox_dir
 
+
     async def _start_agent_process(
         self,
         sandbox_id: str,
@@ -113,7 +117,7 @@ class ProcessSandboxService(SandboxService):
         session_api_key: str,
         sandbox_spec: SandboxSpecInfo,
     ) -> subprocess.Popen:
-        """Start the agent server process."""
+        """Start the agent server process, logging output to /tmp/openhands-sandboxes/{sandbox_id}.log."""
 
         # Prepare environment variables
         env = os.environ.copy()
@@ -121,10 +125,11 @@ class ProcessSandboxService(SandboxService):
         env['SESSION_API_KEY'] = session_api_key
 
         # Prepare command arguments
+        # Always launch the agent server as a module for robust startup
         cmd = [
             self.python_executable,
             '-m',
-            self.agent_server_module,
+            'openhands.agenthub.agent_server',
             '--port',
             str(port),
         ]
@@ -133,14 +138,27 @@ class ProcessSandboxService(SandboxService):
             f'Starting agent process for sandbox {sandbox_id}: {" ".join(cmd)}'
         )
 
+        # Try to create log file in /tmp/openhands-sandboxes, else fallback to /tmp
+        log_dir = "/tmp/openhands-sandboxes"
+        fallback_log_dir = "/tmp"
+        log_path = os.path.join(log_dir, f"{sandbox_id}.log")
+        fallback_log_path = os.path.join(fallback_log_dir, f"{sandbox_id}.log")
+        log_file = None
         try:
-            # Start the process
+            try:
+                os.makedirs(log_dir, exist_ok=True)
+                log_file = open(log_path, "a+")
+            except Exception as log_dir_exc:
+                _logger.error(f"Failed to create log dir or file at {log_path}: {log_dir_exc}. Trying fallback {fallback_log_path}")
+                log_file = open(fallback_log_path, "a+")
+                log_path = fallback_log_path
+
             process = subprocess.Popen(
                 cmd,
                 env=env,
                 cwd=working_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=log_file,
+                stderr=log_file,
             )
 
             # Wait a moment for the process to start
@@ -148,12 +166,15 @@ class ProcessSandboxService(SandboxService):
 
             # Check if process is still running
             if process.poll() is not None:
-                stdout, stderr = process.communicate()
-                raise SandboxError(f'Agent process failed to start: {stderr.decode()}')
+                log_file.seek(0)
+                log_contents = log_file.read()
+                log_file.close()
+                raise SandboxError(f'Agent process failed to start. See log: {log_path}\n{log_contents}')
 
             return process
 
         except Exception as e:
+            _logger.error(f"Failed to start agent process or write log: {e}")
             raise SandboxError(f'Failed to start agent process: {e}')
 
     async def _wait_for_server_ready(self, port: int, timeout: int = 30) -> bool:
@@ -419,7 +440,7 @@ class ProcessSandboxServiceInjector(SandboxServiceInjector):
         description='Python executable to use for agent processes',
     )
     agent_server_module: str = Field(
-        default='openhands.agent_server',
+        default='openhands.agenthub.agent_server',
         description='Python module for the agent server',
     )
     health_check_path: str = Field(

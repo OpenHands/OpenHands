@@ -3,14 +3,13 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID, uuid4
 
 from pydantic import Field
 
-from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
     EventCallbackResultStatus,
@@ -66,7 +65,7 @@ class LoggingCallbackProcessor(EventCallbackProcessor):
 
 
 class CreateEventCallbackRequest(OpenHandsModel):
-    conversation_id: OpenHandsUUID | None = Field(
+    conversation_id: UUID | None = Field(
         default=None,
         description=(
             'Optional filter on the conversation to which this callback applies'
@@ -82,10 +81,10 @@ class CreateEventCallbackRequest(OpenHandsModel):
 
 
 class EventCallback(CreateEventCallbackRequest):
-    id: OpenHandsUUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)
     status: EventCallbackStatus = Field(default=EventCallbackStatus.ACTIVE)
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EventCallbackPage(OpenHandsModel):

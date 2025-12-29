@@ -1,9 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from openhands.agent_server.utils import utc_now
+
+# Replacement for utc_now
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 class SandboxStatus(Enum):

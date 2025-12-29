@@ -1,10 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from openhands.agent_server.utils import OpenHandsUUID, utc_now
+from uuid import UUID
 from openhands.sdk.event.types import EventID
 
 
@@ -21,13 +21,13 @@ class EventCallbackResultSortOrder(Enum):
 class EventCallbackResult(BaseModel):
     """Object representing the result of an event callback."""
 
-    id: OpenHandsUUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)
     status: EventCallbackResultStatus
-    event_callback_id: OpenHandsUUID
+    event_callback_id: UUID
     event_id: EventID
-    conversation_id: OpenHandsUUID
+    conversation_id: UUID
     detail: str | None = None
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EventCallbackResultPage(BaseModel):

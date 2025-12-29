@@ -14,7 +14,7 @@ from sqlalchemy import UUID as SQLUUID
 from sqlalchemy import Column, Enum, String, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openhands.agent_server.utils import utc_now
+from datetime import datetime, timezone
 from openhands.app_server.event_callback.event_callback_models import (
     CreateEventCallbackRequest,
     EventCallback,
@@ -37,6 +37,7 @@ from openhands.app_server.utils.sql_utils import (
     create_json_type_decorator,
     row2dict,
 )
+from openhands.app_server.sandbox.sandbox_models import utc_now
 from openhands.sdk import Event
 
 _logger = logging.getLogger(__name__)
@@ -53,8 +54,8 @@ class StoredEventCallback(Base):  # type: ignore
     )
     processor = Column(create_json_type_decorator(EventCallbackProcessor))
     event_kind = Column(String, nullable=True)
-    created_at = Column(UtcDateTime, server_default=func.now(), index=True)
-    updated_at = Column(UtcDateTime, server_default=func.now(), index=True)
+    created_at = Column(UtcDateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(UtcDateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 
 class StoredEventCallbackResult(Base):  # type: ignore

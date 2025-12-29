@@ -1237,11 +1237,15 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 )
             config = get_global_config()
 
-            # If no web url has been set and we are using docker, we can use host.docker.internal
+            # If no web url has been set and we are using docker, we can use Docker network name
             web_url = config.web_url
             if web_url is None:
                 if isinstance(sandbox_service, DockerSandboxService):
-                    web_url = f'http://host.docker.internal:{sandbox_service.host_port}'
+                    # agent-server runs in bridge network, openhands-app runs in openhands-network
+                    # They are in different networks, so we need to use the host's gateway IP
+                    # The default gateway for bridge network is 172.17.0.1 (Docker's default)
+                    # agent-server can access this IP to reach the host, which forwards to openhands-app on port 3002
+                    web_url = 'http://172.17.0.1:3002'
 
             # Get app_mode and keycloak_auth cookie for SaaS mode
             app_mode = None

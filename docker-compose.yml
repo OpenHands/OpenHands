@@ -1,8 +1,37 @@
 
 services:
 
-  # SGLang רץ ישירות על המערכת (לא ב-Docker) בגלל בעיית overlayfs
-  # להפעלה: /home/noya/OpenHands/scripts/start-sglang.sh
+  # SGLang Inference Server - עם מודל qwen2.5-coder:14b + GPTQ Quantization
+  sglang:
+    image: lmsysorg/sglang:latest
+    container_name: openhands-sglang
+    runtime: nvidia
+    ports:
+      - "30000:30000"  # פורט פנימי ב-Container
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - MODEL_NAME=Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - PYTORCH_ALLOC_CONF=expandable_segments:True
+    command: >
+      python3 -m sglang.launch_server
+      --model-path Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
+      --host 0.0.0.0
+      --port 30000
+      --quantization gptq
+      --mem-fraction-static 0.8
+    volumes:
+      - /mnt/nvme/ollama_models:/root/.cache/huggingface
+    networks:
+      - openhands-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:30000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
 
   # OpenHands Main Application - עם גישה מלאה לשרת
   openhands:
@@ -12,6 +41,8 @@ services:
     container_name: openhands-app
     privileged: true  # גישה מלאה למערכת
     depends_on:
+      sglang:
+        condition: service_started
       invariant-server:
         condition: service_started
     env_file:
@@ -19,9 +50,10 @@ services:
     ports:
       - "3002:3000"
     environment:
-      # LLM Configuration - SGLang עם מודל qwen2.5-coder:14b (רץ ישירות על המערכת)
-      - LLM_MODEL=Qwen/Qwen2.5-Coder-14B-Instruct
-      - LLM_BASE_URL=http://host.docker.internal:11434/v1
+      # LLM Configuration - SGLang עם מודל qwen2.5-coder:14b
+      - LLM_MODEL=Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
+      - LLM_CUSTOM_LLM_PROVIDER=openai
+      - LLM_BASE_URL=http://sglang:30000/v1
       - LLM_API_KEY=
       
       # Execution Mode
@@ -46,6 +78,9 @@ services:
       - HOST_SYSTEM_ACCESS=true
       - SANDBOX_API_HOSTNAME=host.docker.internal
       - DOCKER_HOST_ADDR=host.docker.internal
+      
+      # MCP Configuration - משבית כדי למנוע בעיות חיבור
+      - ENABLE_MCP=false
       
     volumes:
       # Workspace
