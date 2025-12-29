@@ -12,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from openhands.core import logger
 from openhands.core.config.agent_config import AgentConfig
-from openhands.core.config.cli_config import CLIConfig
 from openhands.core.config.config_utils import (
     DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX,
     OH_DEFAULT_AGENT,
@@ -126,7 +125,6 @@ class OpenHandsConfig(BaseModel):
     mcp_host: str = Field(default=f'localhost:{os.getenv("port", 3000)}')
     mcp: MCPConfig = Field(default_factory=MCPConfig)
     kubernetes: KubernetesConfig = Field(default_factory=KubernetesConfig)
-    cli: CLIConfig = Field(default_factory=CLIConfig)
     git_user_name: str = Field(
         default='openhands', description='Git user name for commits made by the agent'
     )
