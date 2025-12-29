@@ -223,6 +223,38 @@
     "de": "Bitte warten Sie, bis die Laufzeitumgebung aktiv ist.",
     "uk": "Будь ласка, зачекайте, поки середовище виконання стане активним."
   },
+  "FORGEJO$TOKEN_LABEL": {
+    "en": "Forgejo Personal Access Token",
+    "ja": "Forgejo 個人用アクセス トークン",
+    "zh-CN": "Forgejo 个人访问令牌",
+    "zh-TW": "Forgejo 個人存取權杖",
+    "ko-KR": "Forgejo 개인 액세스 토큰",
+    "no": "Forgejo personlig tilgangstoken",
+    "it": "Token di accesso personale Forgejo",
+    "pt": "Token de acesso pessoal do Forgejo",
+    "es": "Token de acceso personal de Forgejo",
+    "ar": "رمز الوصول الشخصي لـ Forgejo",
+    "fr": "Jeton d'accès personnel Forgejo",
+    "tr": "Forgejo kişisel erişim belirteci",
+    "de": "Forgejo persönliches Zugriffstoken",
+    "uk": "Персональний токен доступу Forgejo"
+  },
+  "FORGEJO$HOST_LABEL": {
+    "en": "Forgejo Host (domain)",
+    "ja": "Forgejo ホスト (ドメイン)",
+    "zh-CN": "Forgejo 主机（域名）",
+    "zh-TW": "Forgejo 主機（網域）",
+    "ko-KR": "Forgejo 호스트(도메인)",
+    "no": "Forgejo vert (domene)",
+    "it": "Host Forgejo (dominio)",
+    "pt": "Host do Forgejo (domínio)",
+    "es": "Host de Forgejo (dominio)",
+    "ar": "مضيف Forgejo (نطاق)",
+    "fr": "Hôte Forgejo (domaine)",
+    "tr": "Forgejo ana makinesi (alan adı)",
+    "de": "Forgejo Host (Domain)",
+    "uk": "Хост Forgejo (домен)"
+  },
   "MICROAGENT$ADDING_CONTEXT": {
     "en": "OpenHands is adding this new context to your respository. We'll let you know when the pull request is ready.",
     "ja": "OpenHandsはこの新しいコンテキストをあなたのリポジトリに追加しています。プルリクエストの準備ができたらお知らせします。",
