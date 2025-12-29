@@ -52,7 +52,7 @@ services:
     environment:
       # LLM Configuration - SGLang עם מודל qwen2.5-coder:14b
       - LLM_MODEL=openai/Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
-      - LLM_BASE_URL=http://sglang:30000/v1
+      - LLM_BASE_URL=http://172.17.0.1:30000/v1
       - LLM_API_KEY=
       
       # Execution Mode
