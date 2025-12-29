@@ -1,16 +1,6 @@
 import React from "react";
 import { useSearchParams } from "react-router";
-import { AxiosError } from "axios";
-import { useMutation } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
-import { I18nKey } from "#/i18n/declaration";
-import { emailService } from "#/api/email-service/email-service.api";
-import {
-  displaySuccessToast,
-  displayErrorToast,
-} from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import { ResendEmailVerificationParams } from "#/api/email-service/email.types";
+import { useResendEmailVerification } from "#/hooks/mutation/use-resend-email-verification";
 
 /**
  * Hook to handle email verification logic from URL query parameters.
@@ -42,7 +32,6 @@ export function useEmailVerification() {
     number | null
   >(null);
   const [cooldownRemaining, setCooldownRemaining] = React.useState<number>(0);
-  const { t } = useTranslation();
 
   const COOLDOWN_DURATION_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -53,31 +42,9 @@ export function useEmailVerification() {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
-  const resendEmailVerificationMutation = useMutation({
-    mutationFn: (params: ResendEmailVerificationParams) =>
-      emailService.resendEmailVerification(params),
+  const resendEmailVerificationMutation = useResendEmailVerification({
     onSuccess: () => {
       setLastSentTimestamp(Date.now());
-      displaySuccessToast(t(I18nKey.SETTINGS$VERIFICATION_EMAIL_SENT));
-    },
-    onError: (error: AxiosError) => {
-      // Check if it's a rate limit error (429)
-      if (error.response?.status === 429) {
-        // FastAPI returns errors in { detail: "..." } format
-        const errorData = error.response.data as
-          | { detail?: string }
-          | undefined;
-
-        const rateLimitMessage =
-          errorData?.detail ||
-          retrieveAxiosErrorMessage(error) ||
-          t(I18nKey.SETTINGS$FAILED_TO_RESEND_VERIFICATION);
-
-        displayErrorToast(rateLimitMessage);
-      } else {
-        // For other errors, show the generic error message
-        displayErrorToast(t(I18nKey.SETTINGS$FAILED_TO_RESEND_VERIFICATION));
-      }
     },
   });
 
