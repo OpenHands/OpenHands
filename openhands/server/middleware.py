@@ -35,6 +35,13 @@ class LocalhostCORSMiddleware(CORSMiddleware):
         )
 
     def is_allowed_origin(self, origin: str) -> bool:
+        # First, check if we have explicit allow_origins configured
+        if self.allow_origins:
+            # Check if the origin is in the allowed list
+            if origin in self.allow_origins:
+                return True
+        
+        # If no explicit allow_origins, allow localhost/127.0.0.1
         if origin and not self.allow_origins and not self.allow_origin_regex:
             parsed = urlparse(origin)
             hostname = parsed.hostname or ''

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import AsyncGenerator
 
 import docker
@@ -32,19 +33,38 @@ def get_docker_client() -> docker.DockerClient:
 
 
 def get_default_sandbox_specs():
+    # Get CORS origins from environment variable or use default
+    permitted_cors_origins = os.getenv('PERMITTED_CORS_ORIGINS', '')
+    # If HOST_IP is set, add the frontend URL to CORS origins
+    host_ip = os.getenv('HOST_IP')
+    if host_ip and permitted_cors_origins:
+        # Add frontend URL if not already present
+        frontend_url = f'http://{host_ip}:3002'
+        if frontend_url not in permitted_cors_origins:
+            permitted_cors_origins = f'{permitted_cors_origins},{frontend_url}'
+    elif host_ip:
+        # If only HOST_IP is set, use it as the CORS origin
+        permitted_cors_origins = f'http://{host_ip}:3002'
+    
+    initial_env = {
+        'OPENVSCODE_SERVER_ROOT': '/openhands/.openvscode-server',
+        'OH_ENABLE_VNC': '0',
+        'LOG_JSON': 'true',
+        'OH_CONVERSATIONS_PATH': '/workspace/conversations',
+        'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
+        'PYTHONUNBUFFERED': '1',
+        'ENV_LOG_LEVEL': '20',
+    }
+    
+    # Add PERMITTED_CORS_ORIGINS if set
+    if permitted_cors_origins:
+        initial_env['PERMITTED_CORS_ORIGINS'] = permitted_cors_origins
+    
     return [
         SandboxSpecInfo(
             id=get_default_agent_server_image(),
             command=['--port', '8000'],
-            initial_env={
-                'OPENVSCODE_SERVER_ROOT': '/openhands/.openvscode-server',
-                'OH_ENABLE_VNC': '0',
-                'LOG_JSON': 'true',
-                'OH_CONVERSATIONS_PATH': '/workspace/conversations',
-                'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
-                'PYTHONUNBUFFERED': '1',
-                'ENV_LOG_LEVEL': '20',
-            },
+            initial_env=initial_env,
             working_dir='/workspace/project',
         )
     ]
