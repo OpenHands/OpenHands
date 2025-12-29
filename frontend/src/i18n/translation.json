@@ -15535,21 +15535,21 @@
     "de": "Admin",
     "uk": "адміністратор"
   },
-  "ORG$ROLE_USER": {
-    "en": "user",
-    "ja": "ユーザー",
-    "zh-CN": "用户",
-    "zh-TW": "用戶",
-    "ko-KR": "사용자",
-    "no": "bruker",
-    "it": "utente",
-    "pt": "usuário",
-    "es": "usuario",
-    "ar": "مستخدم",
-    "fr": "utilisateur",
-    "tr": "kullanıcı",
-    "de": "Benutzer",
-    "uk": "користувач"
+  "ORG$ROLE_MEMBER": {
+    "en": "member",
+    "ja": "メンバー",
+    "zh-CN": "成员",
+    "zh-TW": "成員",
+    "ko-KR": "멤버",
+    "no": "medlem",
+    "it": "membro",
+    "pt": "membro",
+    "es": "miembro",
+    "ar": "عضو",
+    "fr": "membre",
+    "tr": "üye",
+    "de": "Mitglied",
+    "uk": "учасник"
   },
   "ORG$ROLE_OWNER": {
     "en": "owner",

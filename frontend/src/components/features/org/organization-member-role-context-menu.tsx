@@ -102,7 +102,7 @@ export function OrganizationMemberRoleContextMenu({
         >
           <ContextMenuIconText
             icon={<UserIcon width={16} height={16} className="text-white" />}
-            text={t(I18nKey.ORG$ROLE_USER)}
+            text={t(I18nKey.ORG$ROLE_MEMBER)}
             className="capitalize"
           />
         </ContextMenuListItem>

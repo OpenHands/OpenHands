@@ -16,14 +16,6 @@ import {
 } from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  user: "Member",
-  member: "Member",
-};
-
-
 function ManageOrganizationMembersWithPortalRoot() {
   return (
     <div>
@@ -222,7 +214,7 @@ describe("Manage Organization Members Route", () => {
 
   // Helper function to find invite button
   const findInviteButton = async () =>
-    await screen.findByRole("button", {
+    screen.findByRole("button", {
       name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
     });
 
@@ -286,9 +278,10 @@ describe("Manage Organization Members Route", () => {
     expect(memberListItems).toHaveLength(members.length);
 
     members.forEach((member) => {
+      expect(screen.getByText(member.email)).toBeInTheDocument();
+      expect(screen.getByText(member.role)).toBeInTheDocument();
     });
   });
-
 
   test("an admin should be able to change the role of a organization member", async () => {
     await setupTestWithUserAndOrg(
