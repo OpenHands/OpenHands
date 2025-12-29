@@ -85,6 +85,8 @@ services:
       # Workspace
       - ./workspace:/workspace
       - /home/noya/openhands_data:/app/.openhands-state
+      # Config file
+      - ./config.toml:/app/config.toml:ro
       
       # גישה למערכת - תהליכים
       - /proc:/host/proc:ro

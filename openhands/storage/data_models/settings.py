@@ -161,11 +161,24 @@ class Settings(BaseModel):
         """Merge config.toml settings with stored settings.
 
         Config.toml takes priority for MCP settings, but they are merged rather than replaced.
+        Config.toml also takes priority for LLM settings (model, base_url, api_key).
         This method can be used by both server mode and CLI mode.
         """
         # Get config.toml settings
         config_settings = Settings.from_config()
-        if not config_settings or not config_settings.mcp_config:
+        if not config_settings:
+            return self
+
+        # Merge LLM settings - config.toml takes priority
+        if config_settings.llm_model:
+            self.llm_model = config_settings.llm_model
+        if config_settings.llm_base_url:
+            self.llm_base_url = config_settings.llm_base_url
+        if config_settings.llm_api_key:
+            self.llm_api_key = config_settings.llm_api_key
+
+        # Merge MCP settings - config.toml takes priority but they are merged
+        if not config_settings.mcp_config:
             return self
 
         # If stored settings don't have MCP config, use config.toml MCP config
