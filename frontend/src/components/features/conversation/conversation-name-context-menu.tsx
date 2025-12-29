@@ -205,7 +205,6 @@ export function ConversationNameContextMenu({
               <input
                 type="checkbox"
                 checked={conversation?.public || false}
-                onChange={() => {}} // Handled by parent onClick
                 className="w-4 h-4 ml-2"
               />
               <span>{t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}</span>
