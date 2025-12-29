@@ -210,7 +210,9 @@ async def keycloak_callback(
         from server.routes.email import verify_email
 
         await verify_email(request=request, user_id=user_id, is_auth_flow=True)
-        redirect_url = f'{request.base_url}?email_verification_required=true'
+        redirect_url = (
+            f'{request.base_url}?email_verification_required=true&user_id={user_id}'
+        )
         response = RedirectResponse(redirect_url, status_code=302)
         return response
 

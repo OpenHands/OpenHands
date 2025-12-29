@@ -10,8 +10,12 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversationSandbox } from "./mutation/use-unified-stop-conversation";
 import { useGetTrajectory } from "./mutation/use-get-trajectory";
+import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { downloadTrajectory } from "#/utils/download-trajectory";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV0Event } from "#/types/v1/type-guards";
@@ -36,10 +40,11 @@ export function useConversationNameContextMenu({
   const { conversationId: currentConversationId } = useParams();
   const navigate = useNavigate();
   const events = useEventStore((state) => state.events);
-  const { data: conversation } = useActiveConversation();
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: stopConversation } = useUnifiedPauseConversationSandbox();
   const { mutate: getTrajectory } = useGetTrajectory();
+  const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();
+  const { data: conversation } = useActiveConversation();
   const metrics = useMetricsStore();
 
   const [metricsModalVisible, setMetricsModalVisible] = React.useState(false);
@@ -181,6 +186,35 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
+  const handleTogglePublic = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (conversationId && conversation) {
+      // Toggle the current public state
+      const newPublicState = !conversation.public;
+      updatePublicFlag({
+        conversationId,
+        isPublic: newPublicState,
+      });
+    }
+
+    onContextMenuToggle?.(false);
+  };
+
+  const handleCopyShareLink = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (conversationId) {
+      const shareUrl = `${window.location.origin}/shared/conversations/${conversationId}`;
+      navigator.clipboard.writeText(shareUrl);
+      displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+    }
+
+    onContextMenuToggle?.(false);
+  };
+
   return {
     // Handlers
     handleDelete,
@@ -192,6 +226,8 @@ export function useConversationNameContextMenu({
     handleDisplayCost,
     handleShowAgentTools,
     handleShowSkills,
+    handleTogglePublic,
+    handleCopyShareLink,
     handleConfirmDelete,
     handleConfirmStop,
 

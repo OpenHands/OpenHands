@@ -1501,4 +1501,5 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
         sub_conversation_ids=[
             sub_id.hex for sub_id in app_conversation.sub_conversation_ids
         ],
+        public=app_conversation.public,
     )

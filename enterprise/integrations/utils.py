@@ -321,7 +321,7 @@ def append_conversation_footer(message: str, conversation_id: str) -> str:
         The message with the conversation footer appended
     """
     conversation_link = CONVERSATION_URL.format(conversation_id)
-    footer = f'\n\n<sub>[View full conversation]({conversation_link})</sub>'
+    footer = f'\n\n[View full conversation]({conversation_link})'
     return message + footer
 
 

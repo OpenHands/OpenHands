@@ -52,12 +52,16 @@ def _generate_dockerfile(
     )
     template = env.get_template('Dockerfile.j2')
 
+    # Allow overriding conda/mamba channel alias (e.g., to avoid anaconda.org)
+    channel_alias = os.getenv('OH_CONDA_CHANNEL_ALIAS', '').strip() or None
+
     dockerfile_content = template.render(
         base_image=base_image,
         build_from_scratch=build_from == BuildFromImageType.SCRATCH,
         build_from_versioned=build_from == BuildFromImageType.VERSIONED,
         extra_deps=extra_deps if extra_deps is not None else '',
         enable_browser=enable_browser,
+        channel_alias=channel_alias,
     )
     return dockerfile_content
 
