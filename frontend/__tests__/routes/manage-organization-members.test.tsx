@@ -214,7 +214,7 @@ describe("Manage Organization Members Route", () => {
 
   // Helper function to find invite button
   const findInviteButton = async () =>
-    screen.findByRole("button", {
+    await screen.findByRole("button", {
       name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
     });
 
