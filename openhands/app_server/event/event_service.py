@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from openhands.agent_server.models import EventPage, EventSortOrder
+from openhands.app_server.event.event_models import EventPage, EventSortOrder
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import Injector
 from openhands.sdk import Event

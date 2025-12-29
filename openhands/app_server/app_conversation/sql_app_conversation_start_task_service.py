@@ -27,7 +27,7 @@ from sqlalchemy import UUID as SQLUUID
 from sqlalchemy import Column, Enum, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openhands.agent_server.models import utc_now
+from datetime import datetime, timezone
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTask,
@@ -231,7 +231,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
             result = await self.session.execute(query)
             existing = result.scalar_one_or_none()
             assert existing is None or existing.created_by_user_id == self.user_id
-        task.updated_at = utc_now()
+        task.updated_at = datetime.now(timezone.utc)
         await self.session.merge(StoredAppConversationStartTask(**task.model_dump()))
         await self.session.commit()
         return task

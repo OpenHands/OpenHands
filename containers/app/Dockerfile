@@ -1,95 +1,85 @@
 ARG OPENHANDS_BUILD_VERSION=dev
-FROM node:24.8-trixie-slim AS frontend-builder
 
+# --- Professional, robust Dockerfile ---
+FROM python:3.13.7-slim AS base
+
+# Install all dependencies in one step
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    curl make git build-essential jq gettext tmux ssh sudo \
+    nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory and user
 WORKDIR /app
+ARG OPENHANDS_BUILD_VERSION=dev
+ENV PYTHONPATH='/app'
+ENV VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:$PATH" \
+    RUN_AS_OPENHANDS=true \
+    OPENHANDS_USER_ID=42420 \
+    SANDBOX_LOCAL_RUNTIME_URL=http://host.docker.internal \
+    USE_HOST_NETWORK=false \
+    WORKSPACE_BASE=/opt/workspace_base \
+    OPENHANDS_BUILD_VERSION=$OPENHANDS_BUILD_VERSION \
+    SANDBOX_USER_ID=0 \
+    FILE_STORE=local \
+    FILE_STORE_PATH=/app/.openhands-state \
+    INIT_GIT_IN_EMPTY_WORKSPACE=1
 
+# Create required directories
+RUN mkdir -p /app/.openhands-state /opt/workspace_base
+
+# Create user and set permissions
+RUN groupadd --gid 42420 openhands && \
+    useradd -l -m -u 42420 --gid 42420 -s /bin/bash openhands && \
+    usermod -aG sudo openhands && \
+    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    chown -R openhands:openhands /app && chmod -R 770 /app && \
+    chown -R openhands:openhands /opt/workspace_base && chmod -R 770 /opt/workspace_base
+
+# --- Build frontend ---
+FROM node:24.8-trixie-slim AS frontend-builder
+WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
-
 COPY frontend ./
 RUN npm run build
 
-FROM python:3.13.7-slim-trixie AS base
+# --- Build backend ---
 FROM base AS backend-builder
-
 WORKDIR /app
-ENV PYTHONPATH='/app'
-
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
-
-RUN apt-get update -y \
-    && apt-get install -y curl make git build-essential jq gettext \
-    && python3 -m pip install poetry --break-system-packages
-
 COPY pyproject.toml poetry.lock ./
+RUN pip install poetry
+RUN poetry config virtualenvs.in-project true
 RUN touch README.md
-RUN export POETRY_CACHE_DIR && poetry install --no-root && rm -rf $POETRY_CACHE_DIR
+RUN poetry install --no-root && rm -rf /tmp/poetry_cache
 
+# --- Final image ---
 FROM base AS openhands-app
-
 WORKDIR /app
 
-# re-declare for this section
-ARG OPENHANDS_BUILD_VERSION
+# Install tmux as root in final image to guarantee availability (after all COPY/USER)
 
-ENV RUN_AS_OPENHANDS=true
-# A random number--we need this to be different from the user's UID on the host machine
-ENV OPENHANDS_USER_ID=42420
-ENV SANDBOX_LOCAL_RUNTIME_URL=http://host.docker.internal
-ENV USE_HOST_NETWORK=false
-ENV WORKSPACE_BASE=/opt/workspace_base
-ENV OPENHANDS_BUILD_VERSION=$OPENHANDS_BUILD_VERSION
-ENV SANDBOX_USER_ID=0
-ENV FILE_STORE=local
-ENV FILE_STORE_PATH=/.openhands
-ENV INIT_GIT_IN_EMPTY_WORKSPACE=1
-RUN mkdir -p $FILE_STORE_PATH
-RUN mkdir -p $WORKSPACE_BASE
+ENV PYTHONPATH='/app' \
+    VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-RUN apt-get update -y \
-    && apt-get install -y curl ssh sudo \
-    && rm -rf /var/lib/apt/lists/*
-
-# Default is 1000, but OSX is often 501
-RUN sed -i 's/^UID_MIN.*/UID_MIN 499/' /etc/login.defs
-# Default is 60000, but we've seen up to 200000
-RUN sed -i 's/^UID_MAX.*/UID_MAX 1000000/' /etc/login.defs
-
-RUN groupadd --gid $OPENHANDS_USER_ID openhands
-RUN useradd -l -m -u $OPENHANDS_USER_ID --gid $OPENHANDS_USER_ID -s /bin/bash openhands && \
-    usermod -aG openhands openhands && \
-    usermod -aG sudo openhands && \
-    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-RUN chown -R openhands:openhands /app && chmod -R 770 /app
-RUN sudo chown -R openhands:openhands $WORKSPACE_BASE && sudo chmod -R 770 $WORKSPACE_BASE
-USER openhands
-
-ENV VIRTUAL_ENV=/app/.venv \
-    PATH="/app/.venv/bin:$PATH" \
-    PYTHONPATH='/app'
-
-COPY --chown=openhands:openhands --chmod=770 --from=backend-builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
-
+COPY --from=backend-builder /app/.venv /app/.venv
+COPY --from=frontend-builder /app/build ./frontend/build
 COPY --chown=openhands:openhands --chmod=770 ./skills ./skills
 COPY --chown=openhands:openhands --chmod=770 ./openhands ./openhands
-COPY --chown=openhands:openhands --chmod=777 ./openhands/runtime/plugins ./openhands/runtime/plugins
 COPY --chown=openhands:openhands pyproject.toml poetry.lock README.md MANIFEST.in LICENSE ./
-
-# This is run as "openhands" user, and will create __pycache__ with openhands:openhands ownership
-RUN python openhands/core/download.py # No-op to download assets
-# Add this line to set group ownership of all files/directories not already in "app" group
-# openhands:openhands -> openhands:openhands
-RUN find /app \! -group openhands -exec chgrp openhands {} +
-
-COPY --chown=openhands:openhands --chmod=770 --from=frontend-builder /app/build ./frontend/build
-COPY --chown=openhands:openhands --chmod=770 ./containers/app/entrypoint.sh /app/entrypoint.sh
+COPY --chown=openhands:openhands ./containers/app/entrypoint.sh /app/entrypoint.sh
 
 USER root
+RUN apt-get update && apt-get install -y --no-install-recommends tmux && rm -rf /var/lib/apt/lists/* && which tmux && tmux -V
 
-WORKDIR /app
+RUN python openhands/core/download.py || true
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+RUN /app/.venv/bin/playwright install --with-deps
+
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "openhands.server.listen:app", "--host", "0.0.0.0", "--port", "3000"]

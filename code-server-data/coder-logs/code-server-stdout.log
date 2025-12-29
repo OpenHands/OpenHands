@@ -1,0 +1,40 @@
+[2025-12-29T00:55:50.705Z] info  code-server 4.107.0 ac7322ce566a5dc99c60d92180375329f0bbd759
+[2025-12-29T00:55:50.706Z] info  Using user-data-dir /home/coder/.local/share/code-server
+[2025-12-29T00:55:50.723Z] info  Using config file /home/coder/.config/code-server/config.yaml
+[2025-12-29T00:55:50.723Z] info  HTTP server listening on http://0.0.0.0:8080/
+[2025-12-29T00:55:50.723Z] info    - Authentication is enabled
+[2025-12-29T00:55:50.723Z] info      - Using password from $PASSWORD
+[2025-12-29T00:55:50.723Z] info    - Not serving HTTPS
+[2025-12-29T00:55:50.723Z] info  Session server listening on /home/coder/.local/share/code-server/code-server-ipc.sock
+[2025-12-29T02:08:14.241Z] info  code-server 4.107.0 ac7322ce566a5dc99c60d92180375329f0bbd759
+[2025-12-29T02:08:14.242Z] info  Using user-data-dir /home/coder/.local/share/code-server
+[2025-12-29T02:08:14.259Z] info  Using config file /home/coder/.config/code-server/config.yaml
+[2025-12-29T02:08:14.259Z] info  HTTP server listening on http://0.0.0.0:8080/
+[2025-12-29T02:08:14.259Z] info    - Authentication is enabled
+[2025-12-29T02:08:14.259Z] info      - Using password from $PASSWORD
+[2025-12-29T02:08:14.259Z] info    - Not serving HTTPS
+[2025-12-29T02:08:14.260Z] info  Session server listening on /home/coder/.local/share/code-server/code-server-ipc.sock
+[2025-12-29T02:49:10.943Z] info  code-server 4.107.0 ac7322ce566a5dc99c60d92180375329f0bbd759
+[2025-12-29T02:49:11.666Z] info  Using user-data-dir /home/coder/.local/share/code-server
+[2025-12-29T02:49:11.799Z] info  Using config file /home/coder/.config/code-server/config.yaml
+[2025-12-29T02:49:11.800Z] info  HTTP server listening on http://0.0.0.0:8080/
+[2025-12-29T02:49:11.800Z] info    - Authentication is enabled
+[2025-12-29T02:49:11.800Z] info      - Using password from $PASSWORD
+[2025-12-29T02:49:11.800Z] info    - Not serving HTTPS
+[2025-12-29T02:49:11.800Z] info  Session server listening on /home/coder/.local/share/code-server/code-server-ipc.sock
+[2025-12-29T04:22:04.223Z] info  code-server 4.107.0 ac7322ce566a5dc99c60d92180375329f0bbd759
+[2025-12-29T04:22:04.434Z] info  Using user-data-dir /home/coder/.local/share/code-server
+[2025-12-29T04:22:04.518Z] info  Using config file /home/coder/.config/code-server/config.yaml
+[2025-12-29T04:22:04.519Z] info  HTTP server listening on http://0.0.0.0:8080/
+[2025-12-29T04:22:04.519Z] info    - Authentication is enabled
+[2025-12-29T04:22:04.519Z] info      - Using password from $PASSWORD
+[2025-12-29T04:22:04.519Z] info    - Not serving HTTPS
+[2025-12-29T04:22:04.519Z] info  Session server listening on /home/coder/.local/share/code-server/code-server-ipc.sock
+[2025-12-29T06:29:41.986Z] info  code-server 4.107.0 ac7322ce566a5dc99c60d92180375329f0bbd759
+[2025-12-29T06:29:42.491Z] info  Using user-data-dir /home/coder/.local/share/code-server
+[2025-12-29T06:29:42.534Z] info  Using config file /home/coder/.config/code-server/config.yaml
+[2025-12-29T06:29:42.534Z] info  HTTP server listening on http://0.0.0.0:8080/
+[2025-12-29T06:29:42.534Z] info    - Authentication is enabled
+[2025-12-29T06:29:42.534Z] info      - Using password from $PASSWORD
+[2025-12-29T06:29:42.534Z] info    - Not serving HTTPS
+[2025-12-29T06:29:42.534Z] info  Session server listening on /home/coder/.local/share/code-server/code-server-ipc.sock

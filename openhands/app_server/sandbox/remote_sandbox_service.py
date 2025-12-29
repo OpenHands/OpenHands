@@ -11,8 +11,13 @@ from pydantic import Field
 from sqlalchemy import Column, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openhands.agent_server.models import ConversationInfo, EventPage
-from openhands.agent_server.utils import utc_now
+from openhands.server.data_models.conversation_info import ConversationInfo
+from openhands.app_server.event.event_models import EventPage
+
+# Replacement for utc_now
+from datetime import datetime, timezone
+def utc_now():
+    return datetime.now(timezone.utc)
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )

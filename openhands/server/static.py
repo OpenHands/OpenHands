@@ -5,8 +5,10 @@ from starlette.types import Scope
 
 class SPAStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope: Scope) -> Response:
+        if scope.get("type") != "http":
+            # Return 404 for non-http scopes (e.g., websocket)
+            return Response("Not Found", status_code=404)
         try:
             return await super().get_response(path, scope)
         except Exception:
-            # FIXME: just making this HTTPException doesn't work for some reason
             return await super().get_response('index.html', scope)

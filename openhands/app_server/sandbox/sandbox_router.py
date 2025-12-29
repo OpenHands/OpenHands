@@ -4,7 +4,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from openhands.agent_server.models import Success
+
+# Replacement for Success model
+from pydantic import BaseModel
+class Success(BaseModel):
+    """Empty response model for successful operations."""
+    pass
 from openhands.app_server.config import depends_sandbox_service
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxPage
 from openhands.app_server.sandbox.sandbox_service import (

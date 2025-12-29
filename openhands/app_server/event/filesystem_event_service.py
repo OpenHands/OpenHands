@@ -12,7 +12,7 @@ from uuid import UUID
 
 from fastapi import Request
 
-from openhands.agent_server.models import EventPage, EventSortOrder
+from openhands.app_server.event.event_models import EventPage, EventSortOrder
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )

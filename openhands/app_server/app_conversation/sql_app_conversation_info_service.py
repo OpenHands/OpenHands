@@ -28,7 +28,7 @@ from fastapi import Request
 from sqlalchemy import Column, DateTime, Float, Integer, Select, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openhands.agent_server.utils import utc_now
+from datetime import datetime, timezone
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
     AppConversationInfoServiceInjector,
@@ -67,8 +67,8 @@ class StoredConversationMetadata(Base):  # type: ignore
         String, nullable=True
     )  # The git provider (GitHub, GitLab, etc.)
     title = Column(String, nullable=True)
-    last_updated_at = Column(DateTime(timezone=True), default=utc_now)  # type: ignore[attr-defined]
-    created_at = Column(DateTime(timezone=True), default=utc_now)  # type: ignore[attr-defined]
+    last_updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))  # type: ignore[attr-defined]
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))  # type: ignore[attr-defined]
 
     trigger = Column(String, nullable=True)
     pr_number = Column(create_json_type_decorator(list[int]))
@@ -434,7 +434,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             stored.per_turn_token = per_turn_token
 
         # Update last_updated_at timestamp
-        stored.last_updated_at = utc_now()
+        stored.last_updated_at = datetime.now(timezone.utc)
 
         await self.db_session.commit()
 

@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Rebuild OpenHands Docker image",
+			"type": "shell",
+			"command": "docker compose build",
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

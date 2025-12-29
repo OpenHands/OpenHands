@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
@@ -42,11 +42,10 @@ class AppConversationInfo(BaseModel):
 
     metrics: MetricsSnapshot | None = None
 
-    parent_conversation_id: OpenHandsUUID | None = None
-    sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
-
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    parent_conversation_id: UUID | None = None
+    sub_conversation_ids: list[UUID] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AppConversationSortOrder(Enum):
@@ -111,7 +110,7 @@ class AppConversationStartRequest(BaseModel):
     title: str | None = None
     trigger: ConversationTrigger | None = None
     pr_number: list[int] = Field(default_factory=list)
-    parent_conversation_id: OpenHandsUUID | None = None
+    parent_conversation_id: UUID | None = None
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
 
 
@@ -141,11 +140,11 @@ class AppConversationStartTask(BaseModel):
     we kick off a background task for it. Once the conversation is started, the app_conversation_id
     is populated."""
 
-    id: OpenHandsUUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)
     created_by_user_id: str | None
     status: AppConversationStartTaskStatus = AppConversationStartTaskStatus.WORKING
     detail: str | None = None
-    app_conversation_id: OpenHandsUUID | None = Field(
+    app_conversation_id: UUID | None = Field(
         default=None, description='The id of the app_conversation, if READY'
     )
     sandbox_id: str | None = Field(
@@ -155,8 +154,8 @@ class AppConversationStartTask(BaseModel):
         default=None, description='The agent server url, if READY'
     )
     request: AppConversationStartRequest
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AppConversationStartTaskPage(BaseModel):
