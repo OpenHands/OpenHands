@@ -182,7 +182,11 @@ async def test_resend_email_verification_with_user_id_from_body_succeeds(mock_re
         assert result.status_code == status.HTTP_200_OK
         assert 'message' in result.body.decode()
         mock_rate_limit.assert_called_once_with(
-            request=mock_request, key_prefix='email_resend', user_id=user_id
+            request=mock_request,
+            key_prefix='email_resend',
+            user_id=user_id,
+            user_rate_limit_seconds=30,
+            ip_rate_limit_seconds=60,
         )
         mock_keycloak_admin.a_send_verify_email.assert_called_once()
         # Logger is called multiple times (verify_email and resend_email_verification)
@@ -220,7 +224,11 @@ async def test_resend_email_verification_with_user_id_from_auth_succeeds(mock_re
         assert result.status_code == status.HTTP_200_OK
         mock_get_user_id.assert_called_once_with(mock_request)
         mock_rate_limit.assert_called_once_with(
-            request=mock_request, key_prefix='email_resend', user_id=user_id
+            request=mock_request,
+            key_prefix='email_resend',
+            user_id=user_id,
+            user_rate_limit_seconds=30,
+            ip_rate_limit_seconds=60,
         )
 
 
@@ -345,5 +353,9 @@ async def test_resend_email_verification_body_none_uses_auth(mock_request):
         assert result.status_code == status.HTTP_200_OK
         mock_get_user_id.assert_called_once()
         mock_rate_limit.assert_called_once_with(
-            request=mock_request, key_prefix='email_resend', user_id=user_id
+            request=mock_request,
+            key_prefix='email_resend',
+            user_id=user_id,
+            user_rate_limit_seconds=30,
+            ip_rate_limit_seconds=60,
         )
