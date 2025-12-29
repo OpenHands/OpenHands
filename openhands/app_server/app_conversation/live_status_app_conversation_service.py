@@ -579,6 +579,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 continue
 
             secret_name = f'{provider_type.name}_TOKEN'
+            description = f'{provider_type.name} authentication token'
 
             if self.web_url:
                 # Create an access token for web-based authentication
@@ -598,12 +599,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 secrets[secret_name] = LookupSecret(
                     url=self.web_url + '/api/v1/webhooks/secrets',
                     headers=headers,
+                    description=description,
                 )
             else:
                 # Use static token for environments without web URL access
                 static_token = await self.user_context.get_latest_token(provider_type)
                 if static_token:
-                    secrets[secret_name] = StaticSecret(value=static_token)
+                    secrets[secret_name] = StaticSecret(
+                        value=static_token, description=description
+                    )
 
         return secrets
 
