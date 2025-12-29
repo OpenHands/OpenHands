@@ -118,7 +118,7 @@ jobs:
               contains(github.event.review.body, '@openhands-agent-exp')
             )
           )
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.pythonLocation }}/lib/python3.12/site-packages/*
           key: ${{ runner.os }}-pip-openhands-resolver-${{ hashFiles('/tmp/requirements.txt') }}
