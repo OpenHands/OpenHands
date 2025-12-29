@@ -85,21 +85,17 @@ export default function SharedConversation() {
       </div>
 
       {/* Chat panel - read-only */}
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col">
-          <div className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2">
-            <div className="max-w-4xl mx-auto p-4 border border-neutral-700 rounded">
-              {renderableEvents.length > 0 ? (
-                <V1Messages messages={renderableEvents} allEvents={v1Events} />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center text-neutral-400 py-8">
-                    {t(I18nKey.CONVERSATION$NO_HISTORY_AVAILABLE)}
-                  </div>
-                </div>
-              )}
+      <div className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2">
+        <div className="max-w-4xl mx-auto p-4 border border-neutral-700 rounded">
+          {renderableEvents.length > 0 ? (
+            <V1Messages messages={renderableEvents} allEvents={v1Events} />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-neutral-400 py-8">
+                {t(I18nKey.CONVERSATION$NO_HISTORY_AVAILABLE)}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
