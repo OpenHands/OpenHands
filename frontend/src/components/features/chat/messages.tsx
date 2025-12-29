@@ -192,8 +192,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     ) => {
       const conversationInstructions = `Target file: ${target}\n\nDescription: ${query}\n\nTriggers: ${triggers.join(", ")}`;
       if (
-        !conversation ||
-        !conversation.selected_repository ||
+        !conversation?.selected_repository ||
         !conversation.selected_branch ||
         !conversation.git_provider ||
         !selectedEventId

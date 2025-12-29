@@ -4,7 +4,7 @@ import { Suggestions } from "#/components/features/suggestions/suggestions";
 import { I18nKey } from "#/i18n/declaration";
 import BuildIt from "#/icons/build-it.svg?react";
 import { SUGGESTIONS } from "#/utils/suggestions";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 
 interface ChatSuggestionsProps {
   onSuggestionsClick: (value: string) => void;

@@ -176,12 +176,15 @@ class TestExperimentManagerIntegration:
         jwt_service = Mock()
         httpx_client = Mock()
 
+        event_service = Mock()
+
         service = LiveStatusAppConversationService(
             init_git_in_empty_workspace=False,
             user_context=user_context,
             app_conversation_info_service=app_conversation_info_service,
             app_conversation_start_task_service=app_conversation_start_task_service,
             event_callback_service=event_callback_service,
+            event_service=event_service,
             sandbox_service=sandbox_service,
             sandbox_spec_service=sandbox_spec_service,
             jwt_service=jwt_service,

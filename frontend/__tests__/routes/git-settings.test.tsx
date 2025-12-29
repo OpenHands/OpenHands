@@ -298,6 +298,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -320,6 +321,7 @@ describe("Form submission", () => {
       gitlab: { token: "test-token", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -342,6 +344,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "test-token", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -364,6 +367,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "test-token", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 

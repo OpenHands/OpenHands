@@ -318,6 +318,21 @@ class V1ConversationService {
   }
 
   /**
+   * Download a conversation trajectory as a zip file
+   * @param conversationId The conversation ID
+   * @returns A blob containing the zip file
+   */
+  static async downloadConversation(conversationId: string): Promise<Blob> {
+    const response = await openHands.get(
+      `/api/v1/app-conversations/${conversationId}/download`,
+      {
+        responseType: "blob",
+      },
+    );
+    return response.data;
+  }
+
+  /**
    * Get all skills associated with a V1 conversation
    * @param conversationId The conversation ID
    * @returns The available skills associated with the conversation
