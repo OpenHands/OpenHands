@@ -784,10 +784,11 @@ class TestStuckDetector:
         assert stuck_detector.stuck_analysis.loop_start_idx == 0
 
     def test_is_not_stuck_context_window_error_in_non_headless(self, stuck_detector):
-        """Test that in non-headless mode, we don't detect a loop if the condensation events
-        are before the last user message.
+        """Test non-headless mode with condensation events before last user message.
 
-        In non-headless mode, we only look at events after the last user message.
+        In non-headless mode, we don't detect a loop if the condensation events
+        are before the last user message. We only look at events after the last
+        user message.
         """
         state = stuck_detector.state
 
@@ -823,7 +824,6 @@ class TestStuckDetector:
     @pytest.fixture
     def stuck_detector_mcdc(self):
         return StuckDetector(state=None)
-
 
     def test_fail_guard_five_actions(self, stuck_detector_mcdc: StuckDetector):
         history: list[Event] = [
@@ -883,7 +883,6 @@ class TestStuckDetector:
             is False
         )
 
-
     def test_fail_actions_break_A5_A3(self, stuck_detector_mcdc: StuckDetector):
         # action_5(read_file1_action) != action_3(read_file2_action)
         history: list[Event] = [
@@ -904,7 +903,6 @@ class TestStuckDetector:
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
             is False
         )
-
 
     def test_fail_obs_break_O6_O4(self, stuck_detector_mcdc: StuckDetector):
         # obs_6(cmd_ls_observation) != obs_4(cmd_ls_different_observation)
@@ -927,7 +925,6 @@ class TestStuckDetector:
             is False
         )
 
-
     def test_fail_obs_break_O5_O3(self, stuck_detector_mcdc: StuckDetector):
         # obs_5(read_file1_observation) != obs_3(read_file2_observation)
         history: list[Event] = [
@@ -948,7 +945,6 @@ class TestStuckDetector:
             stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
             is False
         )
-
 
     def test_loop_ignores_other_events(self, stuck_detector_mcdc: StuckDetector):
         history: list[Event] = [
