@@ -77,6 +77,11 @@ services:
       - HOST_SYSTEM_ACCESS=true
       - SANDBOX_API_HOSTNAME=host.docker.internal
       - DOCKER_HOST_ADDR=host.docker.internal
+      # Container URL Host - IP של המארח כדי שה-frontend יוכל לגשת
+      - HOST_IP=10.0.0.13
+      
+      # CORS Configuration - מאפשר ל-frontend לגשת ל-agent-server
+      - PERMITTED_CORS_ORIGINS=http://10.0.0.13:3002
       
       # MCP Configuration - משבית כדי למנוע בעיות חיבור
       - ENABLE_MCP=false

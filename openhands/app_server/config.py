@@ -175,7 +175,16 @@ def config_from_env() -> AppServerConfig:
         elif os.getenv('RUNTIME') in ('local', 'process'):
             config.sandbox = ProcessSandboxServiceInjector()
         else:
-            config.sandbox = DockerSandboxServiceInjector()
+            # Get the host IP for container URLs (for frontend access)
+            # Default to localhost, but use host IP if available
+            container_url_host = os.getenv('CONTAINER_URL_HOST', 'localhost')
+            # If running in Docker and no explicit host set, try to use host IP
+            if container_url_host == 'localhost' and os.getenv('HOST_IP'):
+                container_url_host = os.getenv('HOST_IP')
+            container_url_pattern = f'http://{container_url_host}:{{port}}'
+            config.sandbox = DockerSandboxServiceInjector(
+                container_url_pattern=container_url_pattern
+            )
 
     if config.sandbox_spec is None:
         if os.getenv('RUNTIME') == 'remote':

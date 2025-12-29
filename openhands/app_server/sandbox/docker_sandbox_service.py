@@ -193,12 +193,32 @@ class DockerSandboxService(SandboxService):
             )
             try:
                 # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
+                # However, if we're in the bridge network, use the bridge gateway IP instead
                 app_server_url = replace_localhost_hostname_for_docker(app_server_url)
-
-                response = await self.httpx_client.get(
-                    f'{app_server_url}{self.health_check_path}'
-                )
-                response.raise_for_status()
+                
+                # If host.docker.internal is in the URL, try to connect first
+                # If connection fails, use bridge gateway IP (172.17.0.1) as fallback
+                # This is because agent-server runs in bridge network and can't reach host.docker.internal
+                if 'host.docker.internal' in app_server_url:
+                    try:
+                        # Try to connect to the health check endpoint
+                        response = await self.httpx_client.get(
+                            f'{app_server_url}{self.health_check_path}',
+                            timeout=2.0
+                        )
+                        response.raise_for_status()
+                    except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError):
+                        # Connection failed, try with bridge gateway IP
+                        app_server_url = app_server_url.replace('host.docker.internal', '172.17.0.1')
+                        response = await self.httpx_client.get(
+                            f'{app_server_url}{self.health_check_path}'
+                        )
+                        response.raise_for_status()
+                else:
+                    response = await self.httpx_client.get(
+                        f'{app_server_url}{self.health_check_path}'
+                    )
+                    response.raise_for_status()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

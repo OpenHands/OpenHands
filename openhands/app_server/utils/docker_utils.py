@@ -26,6 +26,14 @@ def replace_localhost_hostname_for_docker(
         return url
     parsed = urlparse(url)
     if parsed.hostname == 'localhost':
+        # When running in Docker, check if we're in the bridge network
+        # If so, use the bridge gateway IP (172.17.0.1) instead of host.docker.internal
+        # This is because containers in the bridge network can't resolve host.docker.internal
+        import os
+        # Check if we're in the bridge network by checking if host.docker.internal is resolvable
+        # If not, use the bridge gateway IP
+        if os.environ.get('USE_BRIDGE_GATEWAY', 'false').lower() == 'true':
+            replacement = '172.17.0.1'
         # Replace only the hostname part, preserving port and everything else
         netloc = parsed.netloc.replace('localhost', replacement, 1)
         return urlunparse(parsed._replace(netloc=netloc))
