@@ -7,8 +7,13 @@ from pytest import TempPathFactory
 from openhands.controller.agent_controller import AgentController
 from openhands.controller.state.state import State
 from openhands.controller.stuck import StuckDetector
-from openhands.events.action import CmdRunAction, FileReadAction, MessageAction
+from openhands.events.action import (
+    CmdRunAction,
+    FileReadAction,
+    MessageAction,
+)
 from openhands.events.action.commands import IPythonRunCellAction
+from openhands.events.event import Event
 from openhands.events.observation import (
     CmdOutputObservation,
     FileReadObservation,
@@ -19,6 +24,28 @@ from openhands.events.observation.empty import NullObservation
 from openhands.events.observation.error import ErrorObservation
 from openhands.events.stream import EventSource, EventStream
 from openhands.storage import get_file_store
+
+# Reusable action/observation mocks for stuck-pattern tests
+cmd_ls_action = CmdRunAction(command='ls')
+cmd_ls_observation = CmdOutputObservation(command='ls', content='file1.txt')
+
+read_file1_action = FileReadAction(path='file1.txt')
+read_file1_observation = FileReadObservation(content='File content', path='file1.txt')
+
+pwd_action = CmdRunAction(command='pwd')
+read_file2_action = FileReadAction(path='file2.txt')
+
+cmd_ls_different_observation = CmdOutputObservation(
+    command='ls_DIFFERENT', content='file1.txt'
+)
+read_file2_observation = FileReadObservation(content='File content', path='file2.txt')
+
+
+class MockOtherEvent(Event):
+    """Event type used to verify non-action/observation events are ignored."""
+
+
+other_event = MockOtherEvent()
 
 
 def collect_events(stream):
@@ -757,10 +784,11 @@ class TestStuckDetector:
         assert stuck_detector.stuck_analysis.loop_start_idx == 0
 
     def test_is_not_stuck_context_window_error_in_non_headless(self, stuck_detector):
-        """Test that in non-headless mode, we don't detect a loop if the condensation events
-        are before the last user message.
+        """Test non-headless mode with condensation events before last user message.
 
-        In non-headless mode, we only look at events after the last user message.
+        In non-headless mode, we don't detect a loop if the condensation events
+        are before the last user message. We only look at events after the last
+        user message.
         """
         state = stuck_detector.state
 
@@ -792,6 +820,196 @@ class TestStuckDetector:
             # at events after the last user message
             assert stuck_detector.is_stuck(headless_mode=False) is False
             mock_warning.assert_not_called()
+
+    @pytest.fixture
+    def stuck_detector_mcdc(self):
+        return StuckDetector(state=None)
+
+    def test_fail_guard_five_actions(self, stuck_detector_mcdc: StuckDetector):
+        history: list[Event] = [
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1, obs_1, action_2, obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3, obs_3, action_4, obs_4
+            read_file1_action,
+            read_file1_observation,  # action_5, obs_5
+        ]  # Total 5 actions, 5 observations
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
+            is False
+        )
+
+    def test_fail_guard_five_obs(self, stuck_detector_mcdc: StuckDetector):
+        history: list[Event] = [
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1, obs_1, action_2, obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3, obs_3, action_4, obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,  # action_5, obs_5, action_6 (missing obs_6)
+        ]  # Total 6 actions, 5 observations
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
+            is False
+        )
+
+    def test_fail_actions_break_A6_A4(self, stuck_detector_mcdc: StuckDetector):
+        # action_6(cmd_ls_action) != action_4(pwd_action)
+        history: list[Event] = [
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1,obs_1, action_2,obs_2
+            read_file1_action,
+            read_file1_observation,
+            pwd_action,
+            cmd_ls_observation,  # action_3,obs_3, action_4(pwd_action),obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5,obs_5, action_6(cmd_ls_action),obs_6
+        ]
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
+            is False
+        )
+
+    def test_fail_actions_break_A5_A3(self, stuck_detector_mcdc: StuckDetector):
+        # action_5(read_file1_action) != action_3(read_file2_action)
+        history: list[Event] = [
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1,obs_1, action_2,obs_2
+            read_file2_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3(read_file2_action),obs_3, action_4,obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5(read_file1_action),obs_5, action_6,obs_6
+        ]
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
+            is False
+        )
+
+    def test_fail_obs_break_O6_O4(self, stuck_detector_mcdc: StuckDetector):
+        # obs_6(cmd_ls_observation) != obs_4(cmd_ls_different_observation)
+        history: list[Event] = [
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1,obs_1, action_2,obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_different_observation,  # action_3,obs_3, action_4,obs_4(cmd_ls_different_observation)
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5,obs_5, action_6,obs_6(cmd_ls_observation)
+        ]
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
+            is False
+        )
+
+    def test_fail_obs_break_O5_O3(self, stuck_detector_mcdc: StuckDetector):
+        # obs_5(read_file1_observation) != obs_3(read_file2_observation)
+        history: list[Event] = [
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1,obs_1, action_2,obs_2
+            read_file1_action,
+            read_file2_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3,obs_3(read_file2_observation), action_4,obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5(read_file1_observation),obs_5, action_6,obs_6
+        ]
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0)
+            is False
+        )
+
+    def test_loop_ignores_other_events(self, stuck_detector_mcdc: StuckDetector):
+        history: list[Event] = [
+            other_event,
+            read_file1_action,
+            read_file1_observation,
+            other_event,  # action_1, obs_1
+            cmd_ls_action,
+            cmd_ls_observation,
+            other_event,
+            read_file1_action,
+            read_file1_observation,  # action_2, obs_2, action_3, obs_3
+            cmd_ls_action,
+            cmd_ls_observation,
+            other_event,
+            read_file1_action,
+            read_file1_observation,  # action_4, obs_4, action_5, obs_5
+            cmd_ls_action,
+            cmd_ls_observation,
+            other_event,  # action_6, obs_6
+        ]
+
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0) is True
+        )
+
+    def test_loop_ignores_extra_actions(self, stuck_detector_mcdc: StuckDetector):
+        history: list[Event] = [
+            cmd_ls_action,  # Extra action (action_0), will be ignored
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1, obs_1, action_2, obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3, obs_3, action_4, obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5, obs_5, action_6, obs_6
+        ]
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0) is True
+        )
+
+    def test_loop_ignores_extra_observations(self, stuck_detector_mcdc: StuckDetector):
+        history: list[Event] = [
+            read_file1_observation,  # Extra observation (obs_0), will be ignored
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_1, obs_1, action_2, obs_2
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_3, obs_3, action_4, obs_4
+            read_file1_action,
+            read_file1_observation,
+            cmd_ls_action,
+            cmd_ls_observation,  # action_5, obs_5, action_6, obs_6
+        ]
+        assert (
+            stuck_detector_mcdc._is_stuck_action_observation_pattern(history, 0) is True
+        )
 
 
 class TestAgentController:
