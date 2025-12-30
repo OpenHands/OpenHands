@@ -61,11 +61,25 @@ const canFitTerminal = (
   // Check element is visible (not display: none)
   // When display is none, offsetParent is null (except for fixed/body elements)
   const computedStyle = window.getComputedStyle(containerElement);
-  if (computedStyle.display === "none") {
+  if (computedStyle.display === "none" || computedStyle.visibility === "hidden") {
     // #region agent log
-    console.log('[DEBUG] canFitTerminal: element is hidden', {display:computedStyle.display,location:'use-terminal.ts:57',hypothesisId:'H1'});
+    console.log('[DEBUG] canFitTerminal: element is hidden', {display:computedStyle.display,visibility:computedStyle.visibility,location:'use-terminal.ts:64',hypothesisId:'H1'});
     // #endregion
     return false;
+  }
+
+  // Check offsetParent to ensure element is actually rendered in the DOM
+  // offsetParent is null for elements with display: none, or elements not in the document flow
+  // For body and fixed elements, offsetParent might be null even when visible, so we check dimensions instead
+  if (containerElement.offsetParent === null && computedStyle.position !== "fixed" && computedStyle.position !== "absolute") {
+    // Check if parent is body or html (which is valid)
+    const parent = containerElement.parentElement;
+    if (parent && parent.tagName !== "BODY" && parent.tagName !== "HTML") {
+      // #region agent log
+      console.log('[DEBUG] canFitTerminal: element not in document flow', {offsetParent:containerElement.offsetParent,position:computedStyle.position,location:'use-terminal.ts:75',hypothesisId:'H1'});
+      // #endregion
+      return false;
+    }
   }
 
   // Check element has dimensions
@@ -220,8 +234,30 @@ export const useTerminal = () => {
       // Container not ready yet, retry with exponential backoff
       // Only retry if we haven't exceeded max retries and container exists
       // Increased max retries to 10 and max delay to 2000ms to give more time for container to load
-      const delay = Math.min(200 * Math.pow(1.5, retryCount), 2000);
-      setTimeout(() => fitTerminalSafely(retryCount + 1), delay);
+      // Check if container is still in DOM and not hidden before retrying
+      const container = ref.current;
+      const computedStyle = window.getComputedStyle(container);
+      const isHidden = computedStyle.display === "none" || computedStyle.visibility === "hidden";
+      
+      if (!isHidden && container.offsetParent !== null) {
+        // Container is visible, retry with exponential backoff
+        const delay = Math.min(200 * Math.pow(1.5, retryCount), 2000);
+        setTimeout(() => fitTerminalSafely(retryCount + 1), delay);
+      } else if (isHidden) {
+        // Container is hidden, wait for it to become visible
+        // Use ResizeObserver to detect when container becomes visible
+        const resizeObserver = new ResizeObserver((entries) => {
+          const entry = entries[0];
+          if (entry && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            resizeObserver.disconnect();
+            // Wait a bit more for DOM to settle, then retry
+            setTimeout(() => fitTerminalSafely(0), 100);
+          }
+        });
+        resizeObserver.observe(container);
+        // Disconnect after 5 seconds to avoid memory leak
+        setTimeout(() => resizeObserver.disconnect(), 5000);
+      }
     }
   }, []);
 
