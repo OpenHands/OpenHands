@@ -1,43 +1,43 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
+import { ConversationTabTitle } from "#/components/features/conversation/conversation-tabs/conversation-tab-title";
+import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 
-// IMPORTANT: mock the hook BEFORE importing the component
 vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
   useUnifiedGetGitChanges: vi.fn(),
 }));
 
-import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
-import { ConversationTabTitle } from "#/components/features/conversation/conversation-tabs/conversation-tab-title";
+const createMockHookResult = (isFetching: boolean) => ({
+  data: [],
+  isLoading: false,
+  isFetching,
+  isSuccess: true,
+  isError: false,
+  error: null,
+  refetch: vi.fn(),
+});
 
 describe("ConversationTabTitle", () => {
   it("disables refresh button and shows loading state while fetching", () => {
-    // Mock fetching state
-    (useUnifiedGetGitChanges as any).mockReturnValue({
-      refetch: vi.fn(),
-      isFetching: true,
-    });
-
-    render(
-      <ConversationTabTitle title="Changes" conversationKey="editor" />
+    vi.mocked(useUnifiedGetGitChanges).mockReturnValue(
+      createMockHookResult(true)
     );
+
+    render(<ConversationTabTitle title="Changes" conversationKey="editor" />);
 
     const button = screen.getByRole("button");
     expect(button).toBeDisabled();
 
     const icon = button.querySelector("svg");
-    expect(icon?.classList.contains("animate-spin")).toBe(true);
+    expect(icon).toHaveClass("animate-spin");
   });
 
   it("enables refresh button when not fetching", () => {
-    // Mock idle state
-    (useUnifiedGetGitChanges as any).mockReturnValue({
-      refetch: vi.fn(),
-      isFetching: false,
-    });
-
-    render(
-      <ConversationTabTitle title="Changes" conversationKey="editor" />
+    vi.mocked(useUnifiedGetGitChanges).mockReturnValue(
+      createMockHookResult(false)
     );
+
+    render(<ConversationTabTitle title="Changes" conversationKey="editor" />);
 
     const button = screen.getByRole("button");
     expect(button).not.toBeDisabled();
