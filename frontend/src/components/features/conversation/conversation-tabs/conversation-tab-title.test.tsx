@@ -20,7 +20,7 @@ const createMockHookResult = (isFetching: boolean) => ({
 describe("ConversationTabTitle", () => {
   it("disables refresh button and shows loading state while fetching", () => {
     vi.mocked(useUnifiedGetGitChanges).mockReturnValue(
-      createMockHookResult(true)
+      createMockHookResult(true),
     );
 
     render(<ConversationTabTitle title="Changes" conversationKey="editor" />);
@@ -34,7 +34,7 @@ describe("ConversationTabTitle", () => {
 
   it("enables refresh button when not fetching", () => {
     vi.mocked(useUnifiedGetGitChanges).mockReturnValue(
-      createMockHookResult(false)
+      createMockHookResult(false),
     );
 
     render(<ConversationTabTitle title="Changes" conversationKey="editor" />);
