@@ -155,7 +155,7 @@ async def verify_byor_key_in_litellm(byor_key: str, user_id: str) -> bool:
 
             # If we get a successful response (200) or other non-auth errors, consider it valid
             # Other errors (like 500) might be temporary, so we err on the side of considering it valid
-            if response.status_code == 200:
+            if response.is_success:
                 logger.debug(
                     'BYOR key verification successful',
                     extra={'user_id': user_id},

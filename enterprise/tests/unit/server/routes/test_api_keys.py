@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from fastapi import HTTPException
-
 from server.routes.api_keys import (
     get_llm_api_key_for_byor,
     verify_byor_key_in_litellm,
