@@ -158,7 +158,29 @@ class DockerSandboxService(SandboxService):
                             url = self.container_url_pattern.format(port=host_port)
 
                             # VSCode URLs require the api_key and working dir
+                            # Use HTTPS for VSCode to enable crypto.subtle (secure context)
+                            # VSCode should be accessed through NGINX HTTPS on port 8443
                             if exposed_port.name == VSCODE:
+                                # Find the external port for 8443 (HTTPS) - this is the NGINX HTTPS port
+                                https_port = None
+                                for cp, hb in port_bindings.items():
+                                    if cp == '8443/tcp' and hb:
+                                        https_port = hb[0]['HostPort']
+                                        break
+                                
+                                if https_port:
+                                    # Use the HTTPS port (8443) with HTTPS protocol
+                                    url = self.container_url_pattern.format(port=https_port)
+                                    url = url.replace('http://', 'https://')
+                                else:
+                                    # Fallback: use the VSCode port (8001) with HTTPS
+                                    # This won't work for crypto.subtle but is better than nothing
+                                    url = url.replace('http://', 'https://')
+                                
+                                url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+                            elif exposed_port.name == 'VSCODE_HTTPS':
+                                # VSCODE_HTTPS port (8443) should always use HTTPS
+                                url = url.replace('http://', 'https://')
                                 url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
 
                             exposed_urls.append(
@@ -192,33 +214,42 @@ class DockerSandboxService(SandboxService):
                 if exposed_url.name == AGENT_SERVER
             )
             try:
-                # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
-                # However, if we're in the bridge network, use the bridge gateway IP instead
-                app_server_url = replace_localhost_hostname_for_docker(app_server_url)
+                # When running in Docker, we need to use the bridge gateway IP (172.17.0.1) for internal connections
+                # The exposed_url.url is for frontend access (uses HOST_IP like 10.0.0.13), but for internal
+                # health checks from openhands-app container, we need to use 172.17.0.1
+                # Parse the URL to extract the port, then rebuild with bridge gateway IP
+                from urllib.parse import urlparse, urlunparse
+                parsed = urlparse(app_server_url)
+                # Use bridge gateway IP for internal health check connection
+                # Extract port from the original URL
+                port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+                internal_url = urlunparse(parsed._replace(netloc=f'172.17.0.1:{port}'))
                 
-                # If host.docker.internal is in the URL, try to connect first
-                # If connection fails, use bridge gateway IP (172.17.0.1) as fallback
-                # This is because agent-server runs in bridge network and can't reach host.docker.internal
-                if 'host.docker.internal' in app_server_url:
+                # Retry logic: agent-server may not be ready immediately after container start
+                # Agent-server can take up to 30-60 seconds to fully start (NGINX + agent-server + VSCode)
+                max_retries = 15  # Increased from 5 to 15 to allow more time for agent-server to start
+                retry_delay = 3.0  # Increased from 2.0 to 3.0 seconds base delay
+                last_exception = None
+                
+                for attempt in range(max_retries):
                     try:
-                        # Try to connect to the health check endpoint
+                        # Use bridge gateway IP for internal health check
                         response = await self.httpx_client.get(
-                            f'{app_server_url}{self.health_check_path}',
-                            timeout=2.0
+                            f'{internal_url}{self.health_check_path}',
+                            timeout=15.0  # Increased timeout to 15 seconds
                         )
                         response.raise_for_status()
-                    except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError):
-                        # Connection failed, try with bridge gateway IP
-                        app_server_url = app_server_url.replace('host.docker.internal', '172.17.0.1')
-                        response = await self.httpx_client.get(
-                            f'{app_server_url}{self.health_check_path}'
-                        )
-                        response.raise_for_status()
-                else:
-                    response = await self.httpx_client.get(
-                        f'{app_server_url}{self.health_check_path}'
-                    )
-                    response.raise_for_status()
+                        break  # Success, exit retry loop
+                    except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
+                        last_exception = e
+                        if attempt < max_retries - 1:
+                            # Wait before retrying (exponential backoff with max cap)
+                            # Cap the delay at 10 seconds to avoid extremely long waits
+                            delay = min(retry_delay * (attempt + 1), 10.0)
+                            await asyncio.sleep(delay)
+                        else:
+                            # Last attempt failed, raise the exception
+                            raise
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -330,8 +361,11 @@ class DockerSandboxService(SandboxService):
         # Prepare environment variables
         env_vars = sandbox_spec.initial_env.copy()
         env_vars[SESSION_API_KEY_VARIABLE] = session_api_key
+        # Use external port 3002 instead of internal port 3000
+        # openhands-app is exposed on port 3002 externally (3000 internally)
+        webhook_port = 3002 if self.host_port == 3000 else self.host_port
         env_vars[WEBHOOK_CALLBACK_VARIABLE] = (
-            f'http://host.docker.internal:{self.host_port}/api/v1/webhooks'
+            f'http://172.17.0.1:{webhook_port}/api/v1/webhooks'
         )
 
         # Prepare port mappings and add port environment variables
@@ -467,18 +501,11 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 container_port=8001,
             ),
             ExposedPort(
-                name=WORKER_1,
+                name='VSCODE_HTTPS',
                 description=(
-                    'The first port on which the agent should start application servers.'
+                    'The HTTPS port for VSCode through NGINX reverse proxy'
                 ),
-                container_port=8011,
-            ),
-            ExposedPort(
-                name=WORKER_2,
-                description=(
-                    'The first port on which the agent should start application servers.'
-                ),
-                container_port=8012,
+                container_port=8443,
             ),
         ]
     )

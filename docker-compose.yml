@@ -83,6 +83,10 @@ services:
       # CORS Configuration - מאפשר ל-frontend לגשת ל-agent-server
       - PERMITTED_CORS_ORIGINS=http://10.0.0.13:3002
       
+      # Agent Server Image Configuration - משתמש ב-image מותאם עם תמיכה ב-CORS
+      - AGENT_SERVER_IMAGE_REPOSITORY=openhands-agent-server-custom
+      - AGENT_SERVER_IMAGE_TAG=latest
+      
       # MCP Configuration - משבית כדי למנוע בעיות חיבור
       - ENABLE_MCP=false
       
