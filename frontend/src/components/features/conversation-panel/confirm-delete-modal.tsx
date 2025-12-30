@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import {
   BaseModalDescription,
   BaseModalTitle,
@@ -21,11 +21,15 @@ export function ConfirmDeleteModal({
 }: ConfirmDeleteModalProps) {
   const { t } = useTranslation();
 
-  const confirmationMessage = conversationTitle
-    ? t(I18nKey.CONVERSATION$DELETE_WARNING_WITH_TITLE, {
-        title: conversationTitle,
-      })
-    : t(I18nKey.CONVERSATION$DELETE_WARNING);
+  const confirmationMessage = conversationTitle ? (
+    <Trans
+      i18nKey={I18nKey.CONVERSATION$DELETE_WARNING_WITH_TITLE}
+      values={{ title: conversationTitle }}
+      components={{ title: <span className="text-white" /> }}
+    />
+  ) : (
+    t(I18nKey.CONVERSATION$DELETE_WARNING)
+  );
 
   return (
     <ModalBackdrop>
