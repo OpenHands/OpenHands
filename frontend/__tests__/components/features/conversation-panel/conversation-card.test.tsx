@@ -436,7 +436,7 @@ describe("ConversationCard", () => {
 
   const statusTable: [ConversationStatus, boolean][] = [
     ["RUNNING", true],
-    ["STARTING", false],
+    ["STARTING", true],
     ["STOPPED", false],
     ["ARCHIVED", false],
     ["ERROR", false],
