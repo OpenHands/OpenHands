@@ -18,7 +18,6 @@ export function adaptSystemMessage(
   events: OHEvent[],
 ): SystemMessageForModal | null {
   let systemMessage: SystemMessageForModal | null = null;
-  // 여기의 events타입은 2가지가 들어올 수 있다. v0와 v1타입
   const v0SystemMessage = events
     .filter(isV0Event)
     .filter(isActionOrObservation)

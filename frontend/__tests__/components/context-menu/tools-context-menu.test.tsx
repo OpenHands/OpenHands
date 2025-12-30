@@ -6,9 +6,6 @@ import { EventState } from "#/stores/use-event-store";
 import { SystemMessageModal } from "#/components/features/conversation-panel/system-message-modal";
 import { ToolsContextMenu } from "#/components/features/controls/tools-context-menu";
 
-// 기존의 로직이 v0 를 기준으로 짜여져 있고 v1 타입에 대한 어댑팅을 추가한 것이기 때문에 v1 타입에 대한 테스트를 추가
-// 이 로직이 정상적으로 작동되면 system message 모달에서 v1 타입의 system prompt가 정상적으로 표시됨
-
 const v1Event: EventState["events"] = [
   {
     id: "v1-id",
