@@ -12,7 +12,7 @@ export type OHEvent = (OpenHandsEvent | OpenHandsParsedEvent) & {
 const getEventId = (event: OHEvent): string | number | undefined =>
   "id" in event ? event.id : undefined;
 
-interface EventState {
+export interface EventState {
   events: OHEvent[];
   eventIds: Set<string | number>;
   uiEvents: OHEvent[];
