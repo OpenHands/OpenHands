@@ -24,6 +24,7 @@ class TestVerifyByorKeyInLitellm:
         user_id = 'user-123'
         mock_response = MagicMock()
         mock_response.status_code = 200
+        mock_response.is_success = True
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client.__aexit__.return_value = None
@@ -87,13 +88,14 @@ class TestVerifyByorKeyInLitellm:
     @pytest.mark.asyncio
     @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
     @patch('server.routes.api_keys.httpx.AsyncClient')
-    async def test_verify_server_error_returns_true(self, mock_client_class):
-        """Test that a server error (500) returns True to avoid false negatives."""
+    async def test_verify_server_error_returns_false(self, mock_client_class):
+        """Test that a server error (500) returns False to ensure key validity."""
         # Arrange
         byor_key = 'sk-key-123'
         user_id = 'user-123'
         mock_response = MagicMock()
         mock_response.status_code = 500
+        mock_response.is_success = False
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client.__aexit__.return_value = None
@@ -104,13 +106,13 @@ class TestVerifyByorKeyInLitellm:
         result = await verify_byor_key_in_litellm(byor_key, user_id)
 
         # Assert
-        assert result is True
+        assert result is False
 
     @pytest.mark.asyncio
     @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
     @patch('server.routes.api_keys.httpx.AsyncClient')
-    async def test_verify_timeout_returns_true(self, mock_client_class):
-        """Test that a timeout returns True to avoid false negatives."""
+    async def test_verify_timeout_returns_false(self, mock_client_class):
+        """Test that a timeout returns False to ensure key validity."""
         # Arrange
         byor_key = 'sk-key-123'
         user_id = 'user-123'
@@ -124,13 +126,13 @@ class TestVerifyByorKeyInLitellm:
         result = await verify_byor_key_in_litellm(byor_key, user_id)
 
         # Assert
-        assert result is True
+        assert result is False
 
     @pytest.mark.asyncio
     @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
     @patch('server.routes.api_keys.httpx.AsyncClient')
-    async def test_verify_network_error_returns_true(self, mock_client_class):
-        """Test that a network error returns True to avoid false negatives."""
+    async def test_verify_network_error_returns_false(self, mock_client_class):
+        """Test that a network error returns False to ensure key validity."""
         # Arrange
         byor_key = 'sk-key-123'
         user_id = 'user-123'
@@ -144,7 +146,7 @@ class TestVerifyByorKeyInLitellm:
         result = await verify_byor_key_in_litellm(byor_key, user_id)
 
         # Assert
-        assert result is True
+        assert result is False
 
     @pytest.mark.asyncio
     @patch('server.routes.api_keys.LITE_LLM_API_URL', None)

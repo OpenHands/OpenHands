@@ -4,7 +4,11 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from server.config import get_config
-from server.constants import LITE_LLM_API_KEY, LITE_LLM_API_URL
+from server.constants import (
+    BYOR_KEY_VERIFICATION_TIMEOUT,
+    LITE_LLM_API_KEY,
+    LITE_LLM_API_URL,
+)
 from storage.api_key_store import ApiKeyStore
 from storage.database import session_maker
 from storage.saas_settings_store import SaasSettingsStore
@@ -120,7 +124,8 @@ async def verify_byor_key_in_litellm(byor_key: str, user_id: str) -> bool:
         user_id: The user ID for logging purposes
 
     Returns:
-        True if the key is valid, False otherwise
+        True if the key is verified as valid, False if verification fails or key is invalid.
+        Returns False on network errors/timeouts to ensure we don't return potentially invalid keys.
     """
     if not (LITE_LLM_API_URL and byor_key):
         return False
@@ -128,7 +133,7 @@ async def verify_byor_key_in_litellm(byor_key: str, user_id: str) -> bool:
     try:
         async with httpx.AsyncClient(
             verify=httpx_verify_option(),
-            timeout=5.0,  # Short timeout for lightweight verification
+            timeout=BYOR_KEY_VERIFICATION_TIMEOUT,
         ) as client:
             # Make a lightweight request to verify the key
             # Using /v1/models endpoint as it's lightweight and requires authentication
@@ -139,53 +144,40 @@ async def verify_byor_key_in_litellm(byor_key: str, user_id: str) -> bool:
                 },
             )
 
-            # If we get a 401 or 403, the key is invalid
-            if response.status_code in (401, 403):
-                logger.warning(
-                    'BYOR key verification failed - authentication error',
-                    extra={
-                        'user_id': user_id,
-                        'status_code': response.status_code,
-                        'key_prefix': byor_key[:10] + '...'
-                        if len(byor_key) > 10
-                        else byor_key,
-                    },
-                )
-                return False
-
-            # If we get a successful response (200) or other non-auth errors, consider it valid
-            # Other errors (like 500) might be temporary, so we err on the side of considering it valid
-            if response.is_success:
+            # Only 200 status code indicates valid key
+            if response.status_code == 200:
                 logger.debug(
                     'BYOR key verification successful',
                     extra={'user_id': user_id},
                 )
                 return True
 
-            # For other status codes, log but consider it valid to avoid false negatives
+            # All other status codes (401, 403, 500, etc.) are treated as invalid
+            # This includes authentication errors and server errors
             logger.warning(
-                'BYOR key verification returned unexpected status code',
+                'BYOR key verification failed - treating as invalid',
                 extra={
                     'user_id': user_id,
                     'status_code': response.status_code,
+                    'key_prefix': byor_key[:10] + '...'
+                    if len(byor_key) > 10
+                    else byor_key,
                 },
             )
-            return True  # Consider valid to avoid false negatives
+            return False
 
-    except httpx.TimeoutException:
+    except (httpx.TimeoutException, Exception) as e:
+        # Any exception (timeout, network error, etc.) means we can't verify
+        # Return False to trigger regeneration rather than returning potentially invalid key
         logger.warning(
-            'BYOR key verification timed out - considering key as valid to avoid false negatives',
-            extra={'user_id': user_id},
+            'BYOR key verification error - treating as invalid to ensure key validity',
+            extra={
+                'user_id': user_id,
+                'error': str(e),
+                'error_type': type(e).__name__,
+            },
         )
-        # Timeout might be due to network issues, not invalid key
-        return True
-    except Exception as e:
-        logger.warning(
-            'Error verifying BYOR key in LiteLLM - considering key as valid to avoid false negatives',
-            extra={'user_id': user_id, 'error': str(e)},
-        )
-        # On error, consider it valid to avoid false negatives that would cause unnecessary regeneration
-        return True
+        return False
 
 
 async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
