@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConversationTabTitle } from "#/components/features/conversation/conversation-tabs/conversation-tab-title";
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 
@@ -15,6 +15,10 @@ const createMockHookResult = (isFetching: boolean) => ({
   isError: false,
   error: null,
   refetch: vi.fn(),
+});
+
+beforeEach(() => {
+  vi.mocked(useUnifiedGetGitChanges).mockReset();
 });
 
 describe("ConversationTabTitle", () => {
