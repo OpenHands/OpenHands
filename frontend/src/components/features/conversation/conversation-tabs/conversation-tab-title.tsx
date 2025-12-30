@@ -10,10 +10,12 @@ export function ConversationTabTitle({
   title,
   conversationKey,
 }: ConversationTabTitleProps) {
-  const { refetch } = useUnifiedGetGitChanges();
+  const { refetch, isFetching } = useUnifiedGetGitChanges(); //  updated
 
   const handleRefresh = () => {
-    refetch();
+    if (!isFetching) {
+      refetch();
+    }
   };
 
   return (
