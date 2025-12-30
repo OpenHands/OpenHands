@@ -13,21 +13,31 @@ export function ConversationTabTitle({
   const { refetch, isFetching } = useUnifiedGetGitChanges();
 
   const handleRefresh = () => {
-    if (!isFetching) {
-      refetch();
-    }
+    refetch();
   };
 
   return (
     <div className="flex flex-row items-center justify-between border-b border-[#474A54] py-2 px-3">
       <span className="text-xs font-medium text-white">{title}</span>
+
       {conversationKey === "editor" && (
         <button
           type="button"
-          className="flex w-[26px] py-1 justify-center items-center gap-[10px] rounded-[7px] hover:bg-[#474A54] cursor-pointer"
           onClick={handleRefresh}
+          disabled={isFetching}
+          className={[
+            "flex w-[26px] py-1 items-center justify-center rounded-[7px] transition",
+            isFetching
+              ? "opacity-50 cursor-not-allowed"
+              : "hover:bg-[#474A54] cursor-pointer",
+          ].join(" ")}
         >
-          <RefreshIcon width={12.75} height={15} color="#ffffff" />
+          <RefreshIcon
+            width={12.75}
+            height={15}
+            color="#ffffff"
+            className={isFetching ? "animate-spin" : ""}
+          />
         </button>
       )}
     </div>

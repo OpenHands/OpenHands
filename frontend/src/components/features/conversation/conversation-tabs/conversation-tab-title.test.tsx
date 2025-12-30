@@ -1,13 +1,12 @@
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ConversationTabTitle } from "#/components/features/conversation/conversation-tabs/conversation-tab-title";
+import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 
-// IMPORTANT: mock BEFORE importing the component
+// ESLint requires imports first; Vitest will still hoist this mock
 vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
   useUnifiedGetGitChanges: vi.fn(),
 }));
-
-import { render, screen } from "@testing-library/react";
-import { ConversationTabTitle } from "#/components/features/conversation/conversation-tabs/conversation-tab-title";
-import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 
 const createMockHookResult = (isFetching: boolean) => ({
   data: [],
@@ -32,8 +31,6 @@ describe("ConversationTabTitle", () => {
     render(<ConversationTabTitle title="Changes" conversationKey="editor" />);
 
     const button = screen.getByRole("button");
-
-    // Assert visible loading styles (stable UI assertions)
     expect(button).toHaveClass("opacity-50");
     expect(button).toHaveClass("cursor-not-allowed");
 
@@ -49,7 +46,6 @@ describe("ConversationTabTitle", () => {
     render(<ConversationTabTitle title="Changes" conversationKey="editor" />);
 
     const button = screen.getByRole("button");
-
     expect(button).not.toHaveClass("opacity-50");
     expect(button).not.toHaveClass("cursor-not-allowed");
 
