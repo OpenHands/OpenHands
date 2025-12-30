@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from github import Github, GithubIntegration
+from github import Auth, Github, GithubIntegration
 from integrations.github.github_view import (
     GithubIssue,
 )
@@ -84,7 +84,7 @@ class GitHubDataCollector:
         # self.full_saved_pr_path = 'github_data/prs/{}-{}/data.json'
         self.full_saved_pr_path = 'prs/github/{}-{}/data.json'
         self.github_integration = GithubIntegration(
-            GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
+            auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
         )
         self.conversation_id = None
 

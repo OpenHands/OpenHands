@@ -1,6 +1,6 @@
 from types import MappingProxyType
 
-from github import Github, GithubIntegration
+from github import Auth, Github, GithubIntegration
 from integrations.github.data_collector import GitHubDataCollector
 from integrations.github.github_solvability import summarize_issue_solvability
 from integrations.github.github_view import (
@@ -43,7 +43,7 @@ class GithubManager(Manager):
         self.token_manager = token_manager
         self.data_collector = data_collector
         self.github_integration = GithubIntegration(
-            GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
+            auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
         )
 
         self.jinja_env = Environment(

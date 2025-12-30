@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from github import Github, GithubIntegration
+from github import Auth, Github, GithubIntegration
 from github.Issue import Issue
 from integrations.github.github_types import (
     WorkflowRun,
@@ -729,7 +729,7 @@ class GithubFactory:
 
         def _interact_with_github() -> Issue | None:
             with GithubIntegration(
-                GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
+                auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
             ) as integration:
                 access_token = integration.get_access_token(
                     payload['installation']['id']
@@ -867,7 +867,7 @@ class GithubFactory:
 
             access_token = ''
             with GithubIntegration(
-                GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
+                auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
             ) as integration:
                 access_token = integration.get_access_token(installation_id).token
 
