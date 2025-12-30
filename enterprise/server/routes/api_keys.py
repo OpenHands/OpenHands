@@ -112,6 +112,82 @@ async def generate_byor_key(user_id: str) -> str | None:
         return None
 
 
+async def verify_byor_key_in_litellm(byor_key: str, user_id: str) -> bool:
+    """Verify that a BYOR key is valid in LiteLLM by making a lightweight API call.
+
+    Args:
+        byor_key: The BYOR key to verify
+        user_id: The user ID for logging purposes
+
+    Returns:
+        True if the key is valid, False otherwise
+    """
+    if not (LITE_LLM_API_URL and byor_key):
+        return False
+
+    try:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
+            timeout=5.0,  # Short timeout for lightweight verification
+        ) as client:
+            # Make a lightweight request to verify the key
+            # Using /v1/models endpoint as it's lightweight and requires authentication
+            response = await client.get(
+                f'{LITE_LLM_API_URL}/v1/models',
+                headers={
+                    'Authorization': f'Bearer {byor_key}',
+                },
+            )
+
+            # If we get a 401 or 403, the key is invalid
+            if response.status_code in (401, 403):
+                logger.warning(
+                    'BYOR key verification failed - authentication error',
+                    extra={
+                        'user_id': user_id,
+                        'status_code': response.status_code,
+                        'key_prefix': byor_key[:10] + '...'
+                        if len(byor_key) > 10
+                        else byor_key,
+                    },
+                )
+                return False
+
+            # If we get a successful response (200) or other non-auth errors, consider it valid
+            # Other errors (like 500) might be temporary, so we err on the side of considering it valid
+            if response.status_code == 200:
+                logger.debug(
+                    'BYOR key verification successful',
+                    extra={'user_id': user_id},
+                )
+                return True
+
+            # For other status codes, log but consider it valid to avoid false negatives
+            logger.warning(
+                'BYOR key verification returned unexpected status code',
+                extra={
+                    'user_id': user_id,
+                    'status_code': response.status_code,
+                },
+            )
+            return True  # Consider valid to avoid false negatives
+
+    except httpx.TimeoutException:
+        logger.warning(
+            'BYOR key verification timed out - considering key as valid to avoid false negatives',
+            extra={'user_id': user_id},
+        )
+        # Timeout might be due to network issues, not invalid key
+        return True
+    except Exception as e:
+        logger.warning(
+            'Error verifying BYOR key in LiteLLM - considering key as valid to avoid false negatives',
+            extra={'user_id': user_id, 'error': str(e)},
+        )
+        # On error, consider it valid to avoid false negatives that would cause unnecessary regeneration
+        return True
+
+
 async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
     """Delete the BYOR key from LiteLLM using the key directly."""
     if not (LITE_LLM_API_KEY and LITE_LLM_API_URL):
@@ -278,18 +354,44 @@ async def delete_api_key(key_id: int, user_id: str = Depends(get_user_id)):
 
 @api_router.get('/llm/byor', response_model=LlmApiKeyResponse)
 async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
-    """Get the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user."""
+    """Get the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user.
+
+    This endpoint validates that the key exists in LiteLLM before returning it.
+    If validation fails, it automatically generates a new key to ensure users
+    always receive a working key.
+    """
     try:
         # Check if the BYOR key exists in the database
         byor_key = await get_byor_key_from_db(user_id)
         if byor_key:
-            return {'key': byor_key}
+            # Validate that the key is actually registered in LiteLLM
+            is_valid = await verify_byor_key_in_litellm(byor_key, user_id)
+            if is_valid:
+                return {'key': byor_key}
+            else:
+                # Key exists in DB but is invalid in LiteLLM - regenerate it
+                logger.warning(
+                    'BYOR key found in database but invalid in LiteLLM - regenerating',
+                    extra={
+                        'user_id': user_id,
+                        'key_prefix': byor_key[:10] + '...'
+                        if len(byor_key) > 10
+                        else byor_key,
+                    },
+                )
+                # Delete the invalid key from LiteLLM (best effort, don't fail if it doesn't exist)
+                await delete_byor_key_from_litellm(user_id, byor_key)
+                # Fall through to generate a new key
 
-        # If not, generate a new key for BYOR
+        # Generate a new key for BYOR (either no key exists or validation failed)
         key = await generate_byor_key(user_id)
         if key:
             # Store the key in the database
             await store_byor_key_in_db(user_id, key)
+            logger.info(
+                'Successfully generated and stored new BYOR key',
+                extra={'user_id': user_id},
+            )
             return {'key': key}
         else:
             logger.error(
@@ -301,6 +403,9 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
                 detail='Failed to generate new BYOR LLM API key',
             )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         logger.exception('Error retrieving BYOR LLM API key', extra={'error': str(e)})
         raise HTTPException(
