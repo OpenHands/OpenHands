@@ -10,13 +10,14 @@ import {
 } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderWithProviders } from "test-utils";
+import { renderWithProviders, useParamsMock } from "test-utils";
 import type { Message } from "#/message";
 import { SUGGESTIONS } from "#/utils/suggestions";
 import { ChatInterface } from "#/components/features/chat/chat-interface";
 import { useWsClient } from "#/context/ws-client-provider";
+import { useConversationId } from "#/hooks/use-conversation-id";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConfig } from "#/hooks/query/use-config";
@@ -29,19 +30,8 @@ vi.mock("#/context/ws-client-provider");
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-get-trajectory");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
+vi.mock("#/hooks/use-conversation-id");
 
-// Mock React Router hooks at the top level
-vi.mock("react-router", async () => {
-  const actual = await vi.importActual("react-router");
-  return {
-    ...actual,
-    useNavigate: () => vi.fn(),
-    useParams: () => ({ conversationId: "test-conversation-id" }),
-    useRouteLoaderData: vi.fn(() => ({})),
-  };
-});
-
-// Mock other hooks that might be used by the component
 vi.mock("#/hooks/use-user-providers", () => ({
   useUserProviders: () => ({
     providers: [],
@@ -79,12 +69,25 @@ const renderChatInterface = (messages: Message[]) =>
 const renderWithQueryClient = (
   ui: React.ReactElement,
   queryClient: QueryClient,
+  route = "/test-conversation-id",
 ) =>
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={[route]}>
+        <Routes>
+          <Route path="/:conversationId" element={ui} />
+          <Route path="/" element={ui} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
+
+beforeEach(() => {
+  useParamsMock.mockReturnValue({ conversationId: "test-conversation-id" });
+  (useConversationId as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    conversationId: "test-conversation-id",
+  });
+});
 
 describe("ChatInterface - Chat Suggestions", () => {
   // Create a new QueryClient for each test
@@ -121,7 +124,9 @@ describe("ChatInterface - Chat Suggestions", () => {
       mutateAsync: vi.fn(),
       isLoading: false,
     });
-    (useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
       mutateAsync: vi
         .fn()
         .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
@@ -252,7 +257,9 @@ describe("ChatInterface - Empty state", () => {
       mutateAsync: vi.fn(),
       isLoading: false,
     });
-    (useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
       mutateAsync: vi
         .fn()
         .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
@@ -604,4 +611,44 @@ describe.skip("ChatInterface - General functionality", () => {
 
     expect(screen.getByTestId("feedback-actions")).toBeInTheDocument();
   });
+});
+
+describe("ChatInterface – skeleton loading state", () => {
+  test("renders chat message skeleton when loading existing conversation", () => {
+    (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      send: vi.fn(),
+      isLoadingMessages: true,
+      parsedEvents: [],
+    });
+
+    renderWithQueryClient(<ChatInterface />, new QueryClient());
+
+    expect(screen.getByTestId("chat-messages-skeleton")).toBeInTheDocument();
+
+    expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
+
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+  });
+});
+
+test("does not render skeleton for new conversation (shows spinner instead)", () => {
+  useParamsMock.mockReturnValue({ conversationId: undefined } as unknown as {
+    conversationId: string;
+  });
+  (useConversationId as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    conversationId: "",
+  });
+  (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    send: vi.fn(),
+    isLoadingMessages: true,
+    parsedEvents: [],
+  });
+
+  renderWithQueryClient(<ChatInterface />, new QueryClient(), "/");
+
+  expect(screen.getAllByTestId("loading-spinner").length).toBeGreaterThan(0);
+
+  expect(
+    screen.queryByTestId("chat-messages-skeleton"),
+  ).not.toBeInTheDocument();
 });

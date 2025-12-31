@@ -1,8 +1,7 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
-import { useConversationId } from "#/hooks/use-conversation-id";
 
 /**
  * Hook that polls V1 conversation start tasks and navigates when ready.
@@ -20,12 +19,13 @@ import { useConversationId } from "#/hooks/use-conversation-id";
  * Note: This hook does NOT fetch conversation data. It only handles task polling and navigation.
  */
 export const useTaskPolling = () => {
-  const { conversationId } = useConversationId();
+  const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
 
   // Check if this is a task ID (format: "task-{uuid}")
-  const isTask = conversationId.startsWith("task-");
-  const taskId = isTask ? conversationId.replace("task-", "") : null;
+  const isTask = conversationId?.startsWith("task-") ?? false;
+  const taskId =
+    isTask && conversationId ? conversationId.replace("task-", "") : null;
 
   // Poll the task if this is a task ID
   const taskQuery = useQuery({
@@ -62,7 +62,7 @@ export const useTaskPolling = () => {
   return {
     isTask,
     taskId,
-    conversationId: isTask ? null : conversationId,
+    conversationId: isTask ? null : (conversationId ?? null),
     task: taskQuery.data,
     taskStatus: taskQuery.data?.status,
     taskDetail: taskQuery.data?.detail,

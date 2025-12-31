@@ -21,6 +21,7 @@ import { useAgentState } from "#/hooks/use-agent-state";
 
 import { ScrollToBottomButton } from "#/components/shared/buttons/scroll-to-bottom-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { ChatMessagesSkeleton } from "./chat-messages-skeleton";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -121,6 +122,13 @@ export function ChatInterface() {
 
     prevV1LoadingRef.current = isLoading;
   }, [conversationWebSocket?.isLoadingHistory]);
+
+  const isReturningToConversation = !!params.conversationId;
+  const isHistoryLoading =
+    (isLoadingMessages && !isV1Conversation) ||
+    (isV1Conversation &&
+      (conversationWebSocket?.isLoadingHistory || !showV1Messages));
+  const isChatLoading = isHistoryLoading && !isTask;
 
   // Filter V0 events
   const v0Events = storeEvents
@@ -240,7 +248,8 @@ export function ChatInterface() {
       <div className="h-full flex flex-col justify-between pr-0 md:pr-4 relative">
         {!hasSubstantiveAgentActions &&
           !optimisticUserMessage &&
-          !userEventsExist && (
+          !userEventsExist &&
+          !isChatLoading && (
             <ChatSuggestions
               onSuggestionsClick={(message) => setMessageToSend(message)}
             />
@@ -252,19 +261,15 @@ export function ChatInterface() {
           onScroll={(e) => onChatBodyScroll(e.currentTarget)}
           className="custom-scrollbar-always flex flex-col grow overflow-y-auto overflow-x-hidden px-4 pt-4 gap-2 fast-smooth-scroll"
         >
-          {isLoadingMessages && !isV1Conversation && !isTask && (
-            <div className="flex justify-center">
+          {isChatLoading && isReturningToConversation && (
+            <ChatMessagesSkeleton />
+          )}
+
+          {isChatLoading && !isReturningToConversation && (
+            <div className="flex justify-center" data-testid="loading-spinner">
               <LoadingSpinner size="small" />
             </div>
           )}
-
-          {(conversationWebSocket?.isLoadingHistory || !showV1Messages) &&
-            isV1Conversation &&
-            !isTask && (
-              <div className="flex justify-center">
-                <LoadingSpinner size="small" />
-              </div>
-            )}
 
           {!isLoadingMessages && v0UserEventsExist && (
             <V0Messages
