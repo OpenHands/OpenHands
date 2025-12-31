@@ -9,7 +9,7 @@ import time
 import traceback
 from contextlib import contextmanager
 from inspect import signature
-from typing import Any, Awaitable, Callable, Optional, TextIO
+from typing import Any, Callable, Optional, TextIO
 
 import pandas as pd
 from pydantic import BaseModel
@@ -495,9 +495,7 @@ def run_evaluation(
     metadata: EvalMetadata | None,
     output_file: str,
     num_workers: int,
-    process_instance_func: Callable[
-        [pd.Series, EvalMetadata, bool], EvalOutput
-    ],
+    process_instance_func: Callable[[pd.Series, EvalMetadata, bool], EvalOutput],
     max_retries: int = 5,  # number of retries for each instance
     timeout_seconds: int | None = None,
 ):

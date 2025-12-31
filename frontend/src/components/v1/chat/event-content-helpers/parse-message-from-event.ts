@@ -5,7 +5,7 @@ export const parseMessageFromEvent = (event: MessageEvent): string => {
   const message = event.llm_message;
 
   // Safety check: ensure llm_message exists and has content
-  if (!message || !message.content) {
+  if (!message?.content) {
     return "";
   }
 

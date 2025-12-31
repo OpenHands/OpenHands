@@ -111,10 +111,24 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
-        user_json = await _get_litellm_user(client, user_id)
-        credits = calculate_credits(user_json['user_info'])
-    return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))
+    try:
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            user_json = await _get_litellm_user(client, user_id)
+            credits = calculate_credits(user_json['user_info'])
+        return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            f'litellm_get_user_failed: {type(e).__name__}: {e}',
+            extra={
+                'user_id': user_id,
+                'status_code': e.response.status_code,
+            },
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve credit balance from billing service',
+        )
 
 
 # Endpoint to retrieve user's current subscription access

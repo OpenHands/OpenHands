@@ -1,3 +1,11 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# V1 replacement for this module lives in the Software Agent SDK.
 from __future__ import annotations
 
 import asyncio
@@ -944,6 +952,23 @@ class AgentController:
                         return
                     else:
                         raise LLMContextWindowExceedError()
+                # Check if this is a tool call validation error that should be recoverable
+                elif (
+                    isinstance(e, BadRequestError)
+                    and 'tool call validation failed' in error_str
+                    and (
+                        'missing properties' in error_str
+                        or 'missing required' in error_str
+                    )
+                ):
+                    # Handle tool call validation errors from Groq as recoverable errors
+                    self.event_stream.add_event(
+                        ErrorObservation(
+                            content=f'Tool call validation failed: {str(e)}. Please check the tool parameters and try again.',
+                        ),
+                        EventSource.AGENT,
+                    )
+                    return
                 else:
                     raise e
 

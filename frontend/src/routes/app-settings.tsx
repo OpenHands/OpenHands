@@ -56,7 +56,7 @@ function AppSettingsScreen() {
     const languageValue = AvailableLanguages.find(
       ({ label }) => label === languageLabel,
     )?.value;
-    const language = languageValue || DEFAULT_SETTINGS.LANGUAGE;
+    const language = languageValue || DEFAULT_SETTINGS.language;
 
     const enableAnalytics =
       formData.get("enable-analytics-switch")?.toString() === "on";
@@ -77,21 +77,21 @@ function AppSettingsScreen() {
 
     const gitUserName =
       formData.get("git-user-name-input")?.toString() ||
-      DEFAULT_SETTINGS.GIT_USER_NAME;
+      DEFAULT_SETTINGS.git_user_name;
     const gitUserEmail =
       formData.get("git-user-email-input")?.toString() ||
-      DEFAULT_SETTINGS.GIT_USER_EMAIL;
+      DEFAULT_SETTINGS.git_user_email;
 
     saveSettings(
       {
-        LANGUAGE: language,
+        language,
         user_consents_to_analytics: enableAnalytics,
-        ENABLE_SOUND_NOTIFICATIONS: enableSoundNotifications,
-        ENABLE_PROACTIVE_CONVERSATION_STARTERS: enableProactiveConversations,
-        ENABLE_SOLVABILITY_ANALYSIS: enableSolvabilityAnalysis,
-        MAX_BUDGET_PER_TASK: maxBudgetPerTask,
-        GIT_USER_NAME: gitUserName,
-        GIT_USER_EMAIL: gitUserEmail,
+        enable_sound_notifications: enableSoundNotifications,
+        enable_proactive_conversation_starters: enableProactiveConversations,
+        enable_solvability_analysis: enableSolvabilityAnalysis,
+        max_budget_per_task: maxBudgetPerTask,
+        git_user_name: gitUserName,
+        git_user_email: gitUserEmail,
       },
       {
         onSuccess: () => {
@@ -120,7 +120,7 @@ function AppSettingsScreen() {
       ({ label: langValue }) => langValue === value,
     )?.label;
     const currentLanguage = AvailableLanguages.find(
-      ({ value: langValue }) => langValue === settings?.LANGUAGE,
+      ({ value: langValue }) => langValue === settings?.language,
     )?.label;
 
     setLanguageInputHasChanged(selectedLanguage !== currentLanguage);
@@ -128,12 +128,12 @@ function AppSettingsScreen() {
 
   const checkIfAnalyticsSwitchHasChanged = (checked: boolean) => {
     // Treat null as true since analytics is opt-in by default
-    const currentAnalytics = settings?.USER_CONSENTS_TO_ANALYTICS ?? true;
+    const currentAnalytics = settings?.user_consents_to_analytics ?? true;
     setAnalyticsSwitchHasChanged(checked !== currentAnalytics);
   };
 
   const checkIfSoundNotificationsSwitchHasChanged = (checked: boolean) => {
-    const currentSoundNotifications = !!settings?.ENABLE_SOUND_NOTIFICATIONS;
+    const currentSoundNotifications = !!settings?.enable_sound_notifications;
     setSoundNotificationsSwitchHasChanged(
       checked !== currentSoundNotifications,
     );
@@ -141,14 +141,14 @@ function AppSettingsScreen() {
 
   const checkIfProactiveConversationsSwitchHasChanged = (checked: boolean) => {
     const currentProactiveConversations =
-      !!settings?.ENABLE_PROACTIVE_CONVERSATION_STARTERS;
+      !!settings?.enable_proactive_conversation_starters;
     setProactiveConversationsSwitchHasChanged(
       checked !== currentProactiveConversations,
     );
   };
 
   const checkIfSolvabilityAnalysisSwitchHasChanged = (checked: boolean) => {
-    const currentSolvabilityAnalysis = !!settings?.ENABLE_SOLVABILITY_ANALYSIS;
+    const currentSolvabilityAnalysis = !!settings?.enable_solvability_analysis;
     setSolvabilityAnalysisSwitchHasChanged(
       checked !== currentSolvabilityAnalysis,
     );
@@ -156,17 +156,17 @@ function AppSettingsScreen() {
 
   const checkIfMaxBudgetPerTaskHasChanged = (value: string) => {
     const newValue = parseMaxBudgetPerTask(value);
-    const currentValue = settings?.MAX_BUDGET_PER_TASK;
+    const currentValue = settings?.max_budget_per_task;
     setMaxBudgetPerTaskHasChanged(newValue !== currentValue);
   };
 
   const checkIfGitUserNameHasChanged = (value: string) => {
-    const currentValue = settings?.GIT_USER_NAME;
+    const currentValue = settings?.git_user_name;
     setGitUserNameHasChanged(value !== currentValue);
   };
 
   const checkIfGitUserEmailHasChanged = (value: string) => {
-    const currentValue = settings?.GIT_USER_EMAIL;
+    const currentValue = settings?.git_user_email;
     setGitUserEmailHasChanged(value !== currentValue);
   };
 
@@ -193,14 +193,14 @@ function AppSettingsScreen() {
         <div className="flex flex-col gap-6">
           <LanguageInput
             name="language-input"
-            defaultKey={settings.LANGUAGE}
+            defaultKey={settings.language}
             onChange={checkIfLanguageInputHasChanged}
           />
 
           <SettingsSwitch
             testId="enable-analytics-switch"
             name="enable-analytics-switch"
-            defaultIsToggled={settings.USER_CONSENTS_TO_ANALYTICS ?? true}
+            defaultIsToggled={settings.user_consents_to_analytics ?? true}
             onToggle={checkIfAnalyticsSwitchHasChanged}
           >
             {t(I18nKey.ANALYTICS$SEND_ANONYMOUS_DATA)}
@@ -209,7 +209,7 @@ function AppSettingsScreen() {
           <SettingsSwitch
             testId="enable-sound-notifications-switch"
             name="enable-sound-notifications-switch"
-            defaultIsToggled={!!settings.ENABLE_SOUND_NOTIFICATIONS}
+            defaultIsToggled={!!settings.enable_sound_notifications}
             onToggle={checkIfSoundNotificationsSwitchHasChanged}
           >
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
@@ -220,7 +220,7 @@ function AppSettingsScreen() {
               testId="enable-proactive-conversations-switch"
               name="enable-proactive-conversations-switch"
               defaultIsToggled={
-                !!settings.ENABLE_PROACTIVE_CONVERSATION_STARTERS
+                !!settings.enable_proactive_conversation_starters
               }
               onToggle={checkIfProactiveConversationsSwitchHasChanged}
             >
@@ -232,20 +232,20 @@ function AppSettingsScreen() {
             <SettingsSwitch
               testId="enable-solvability-analysis-switch"
               name="enable-solvability-analysis-switch"
-              defaultIsToggled={!!settings.ENABLE_SOLVABILITY_ANALYSIS}
+              defaultIsToggled={!!settings.enable_solvability_analysis}
               onToggle={checkIfSolvabilityAnalysisSwitchHasChanged}
             >
               {t(I18nKey.SETTINGS$SOLVABILITY_ANALYSIS)}
             </SettingsSwitch>
           )}
 
-          {!settings?.V1_ENABLED && (
+          {!settings?.v1_enabled && (
             <SettingsInput
               testId="max-budget-per-task-input"
               name="max-budget-per-task-input"
               type="number"
               label={t(I18nKey.SETTINGS$MAX_BUDGET_PER_CONVERSATION)}
-              defaultValue={settings.MAX_BUDGET_PER_TASK?.toString() || ""}
+              defaultValue={settings.max_budget_per_task?.toString() || ""}
               onChange={checkIfMaxBudgetPerTaskHasChanged}
               placeholder={t(I18nKey.SETTINGS$MAXIMUM_BUDGET_USD)}
               min={1}
@@ -267,7 +267,7 @@ function AppSettingsScreen() {
                 name="git-user-name-input"
                 type="text"
                 label={t(I18nKey.SETTINGS$GIT_USERNAME)}
-                defaultValue={settings.GIT_USER_NAME || ""}
+                defaultValue={settings.git_user_name || ""}
                 onChange={checkIfGitUserNameHasChanged}
                 placeholder="Username for git commits"
                 className="w-full max-w-[680px]"
@@ -277,7 +277,7 @@ function AppSettingsScreen() {
                 name="git-user-email-input"
                 type="email"
                 label={t(I18nKey.SETTINGS$GIT_EMAIL)}
-                defaultValue={settings.GIT_USER_EMAIL || ""}
+                defaultValue={settings.git_user_email || ""}
                 onChange={checkIfGitUserEmailHasChanged}
                 placeholder="Email for git commits"
                 className="w-full max-w-[680px]"

@@ -1,15 +1,10 @@
 import asyncio
-import json
-import logging
-import multiprocessing as mp
 import os
-import time
-from typing import Any
 
 import pandas as pd  # type: ignore
+
 # Assuming bfcl-eval is installed or we use a similar local structure
 # The user mentioned: "Integrate bfcl-eval package for official metrics"
-
 from evaluation.utils.shared import (
     EvalMetadata,
     EvalOutput,
@@ -32,8 +27,6 @@ from openhands.core.config import (
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.main import create_runtime, run_controller
 from openhands.events.action import MessageAction
-from openhands.events.event import Event
-from openhands.runtime.base import Runtime
 from openhands.utils.async_utils import call_async_from_sync
 
 AGENT_CLS_TO_FAKE_USER_RESPONSE_FN = {
@@ -43,6 +36,7 @@ AGENT_CLS_TO_FAKE_USER_RESPONSE_FN = {
 AGENT_CLS_TO_INST_SUFFIX = {
     'CodeActAgent': 'When you think you have completed the request, please finish the interaction using the "finish" tool.\n'
 }
+
 
 def get_config(
     metadata: EvalMetadata,
@@ -59,13 +53,16 @@ def get_config(
     agent_config.enable_prompt_extensions = False
     return config
 
+
 def process_instance(
     instance: pd.Series,
     metadata: EvalMetadata,
     reset_logger: bool = True,
 ) -> EvalOutput:
     config = get_config(metadata)
-    instance_id = str(instance['id']).replace('/', '_') # BFCL IDs might contain slashes
+    instance_id = str(instance['id']).replace(
+        '/', '_'
+    )  # BFCL IDs might contain slashes
 
     if reset_logger:
         log_dir = os.path.join(metadata.eval_output_dir, 'infer_logs')
@@ -79,7 +76,7 @@ def process_instance(
     # We might need to format it with available tools?
     # For now, let's assume the agent can handle raw text or we format it.
 
-    instruction = f"Question: {question}\n"
+    instruction = f'Question: {question}\n'
     # instruction += f"Available Functions: {instance['function']}\n"
 
     instruction += 'IMPORTANT: You should ONLY interact with the environment provided to you AND NEVER ASK FOR HUMAN HELP.\n'
@@ -122,6 +119,7 @@ def process_instance(
     )
     return output
 
+
 if __name__ == '__main__':
     parser = get_evaluation_parser()
     parser.add_argument(
@@ -147,16 +145,25 @@ if __name__ == '__main__':
         elif args.dataset_path.endswith('.jsonl'):
             dataset_df = pd.read_json(args.dataset_path, lines=True)
         else:
-            raise ValueError("Dataset must be .json or .jsonl")
+            raise ValueError('Dataset must be .json or .jsonl')
     else:
         # Try to load from huggingface or default location?
         # For now require path or create dummy
-        logger.warning("No dataset path provided, creating dummy dataset.")
-        dataset_df = pd.DataFrame([{
-            'id': 'test-0',
-            'question': 'What is the weather in San Francisco?',
-            'function': [{'name': 'get_weather', 'parameters': {'location': 'San Francisco'}}]
-        }])
+        logger.warning('No dataset path provided, creating dummy dataset.')
+        dataset_df = pd.DataFrame(
+            [
+                {
+                    'id': 'test-0',
+                    'question': 'What is the weather in San Francisco?',
+                    'function': [
+                        {
+                            'name': 'get_weather',
+                            'parameters': {'location': 'San Francisco'},
+                        }
+                    ],
+                }
+            ]
+        )
 
     if 'instance_id' not in dataset_df.columns:
         if 'id' in dataset_df.columns:

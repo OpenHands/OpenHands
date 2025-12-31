@@ -16,12 +16,24 @@ vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
   }),
 }));
 
+// Mock toast handlers to prevent unhandled rejection errors
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
+  TOAST_OPTIONS: {},
+}));
+
 describe("ConversationPanel", () => {
   const onCloseMock = vi.fn();
   const RouterStub = createRoutesStub([
     {
       Component: () => <ConversationPanel onClose={onCloseMock} />,
       path: "/",
+    },
+    {
+      // Add route to prevent "No routes matched location" warning
+      Component: () => null,
+      path: "/conversations/:conversationId",
     },
   ]);
 
@@ -629,12 +641,6 @@ describe("ConversationPanel", () => {
     );
     updateConversationSpy.mockResolvedValue(true);
 
-    // Mock the toast function
-    const mockToast = vi.fn();
-    vi.mock("#/utils/custom-toast-handlers", () => ({
-      displaySuccessToast: mockToast,
-    }));
-
     renderConversationPanel();
 
     const cards = await screen.findAllByTestId("conversation-card");
@@ -761,10 +767,6 @@ describe("ConversationPanel", () => {
       "updateConversation",
     );
     updateConversationSpy.mockRejectedValue(new Error("API Error"));
-
-    vi.mock("#/utils/custom-toast-handlers", () => ({
-      displayErrorToast: vi.fn(),
-    }));
 
     renderConversationPanel();
 

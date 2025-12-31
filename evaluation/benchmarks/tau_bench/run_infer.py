@@ -1,12 +1,9 @@
 import asyncio
-import json
-import logging
-import multiprocessing as mp
 import os
-import time
 from typing import Any
 
 import pandas as pd  # type: ignore
+
 try:
     from tau_bench.agents.base import Agent as TauAgent  # type: ignore
     from tau_bench.envs import get_env  # type: ignore
@@ -38,8 +35,6 @@ from openhands.core.config import (
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.main import create_runtime, run_controller
 from openhands.events.action import MessageAction
-from openhands.events.event import Event
-from openhands.runtime.base import Runtime
 from openhands.utils.async_utils import call_async_from_sync
 
 AGENT_CLS_TO_FAKE_USER_RESPONSE_FN = {
@@ -49,6 +44,7 @@ AGENT_CLS_TO_FAKE_USER_RESPONSE_FN = {
 AGENT_CLS_TO_INST_SUFFIX = {
     'CodeActAgent': 'When you think you have completed the request, please finish the interaction using the "finish" tool.\n'
 }
+
 
 def get_config(
     metadata: EvalMetadata,
@@ -64,6 +60,7 @@ def get_config(
     agent_config = config.get_agent_config(metadata.agent_class)
     agent_config.enable_prompt_extensions = False
     return config
+
 
 def process_instance(
     instance: pd.Series,
@@ -81,8 +78,8 @@ def process_instance(
         logger.info(f'Starting evaluation for instance {instance_id}.')
 
     # Initialize Tau-Bench environment
-    env_name = instance['env']
-    task_index = instance['task_index']
+    instance['env']
+    instance['task_index']
 
     # Initialize runtime
     runtime = create_runtime(config)
@@ -141,6 +138,7 @@ def process_instance(
     )
     return output
 
+
 if __name__ == '__main__':
     parser = get_evaluation_parser()
     parser.add_argument(
@@ -166,29 +164,36 @@ if __name__ == '__main__':
     # But I will write the import and let the user/system install it.
     try:
         from tau_bench.envs import get_env  # type: ignore
-        from tau_bench.types import EnvInfo  # type: ignore
     except ImportError:
-        logger.error("Tau-Bench not installed. Please install it via `pip install tau-bench`")
+        logger.error(
+            'Tau-Bench not installed. Please install it via `pip install tau-bench`'
+        )
         # For now, we create a dummy dataset to allow syntax checking
-        dataset_df = pd.DataFrame([{
-            'instance_id': '0',
-            'env': 'retail',
-            'task_index': 0,
-            'instruction': 'Test instruction'
-        }])
+        dataset_df = pd.DataFrame(
+            [
+                {
+                    'instance_id': '0',
+                    'env': 'retail',
+                    'task_index': 0,
+                    'instruction': 'Test instruction',
+                }
+            ]
+        )
     else:
         # Load tasks from the environment
         env = get_env(args.env)
         tasks = env.get_tasks()
         data = []
         for i, task in enumerate(tasks):
-            data.append({
-                'instance_id': f'{args.env}_{i}',
-                'env': args.env,
-                'task_index': i,
-                'instruction': task.instruction,
-                'ground_truth': task.actions, # Or whatever ground truth it provides
-            })
+            data.append(
+                {
+                    'instance_id': f'{args.env}_{i}',
+                    'env': args.env,
+                    'task_index': i,
+                    'instruction': task.instruction,
+                    'ground_truth': task.actions,  # Or whatever ground truth it provides
+                }
+            )
         dataset_df = pd.DataFrame(data)
 
     metadata = make_metadata(

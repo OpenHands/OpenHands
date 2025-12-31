@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from server.auth.token_manager import TokenManager, create_encryption_utility
@@ -246,3 +246,103 @@ async def test_refresh(token_manager):
         mock_keycloak.return_value.a_refresh_token.assert_called_once_with(
             'test_refresh_token'
         )
+
+
+@pytest.mark.asyncio
+async def test_disable_keycloak_user_success(token_manager):
+    """Test successful disabling of a Keycloak user account."""
+    # Arrange
+    user_id = 'test_user_id'
+    email = 'user@colsch.us'
+    mock_user = {
+        'id': user_id,
+        'username': 'testuser',
+        'email': email,
+        'emailVerified': True,
+    }
+
+    with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
+        mock_admin = MagicMock()
+        mock_admin.a_get_user = AsyncMock(return_value=mock_user)
+        mock_admin.a_update_user = AsyncMock()
+        mock_get_admin.return_value = mock_admin
+
+        # Act
+        await token_manager.disable_keycloak_user(user_id, email)
+
+        # Assert
+        mock_admin.a_get_user.assert_called_once_with(user_id)
+        mock_admin.a_update_user.assert_called_once_with(
+            user_id=user_id,
+            payload={
+                'enabled': False,
+                'username': 'testuser',
+                'email': email,
+                'emailVerified': True,
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_disable_keycloak_user_without_email(token_manager):
+    """Test disabling Keycloak user without providing email."""
+    # Arrange
+    user_id = 'test_user_id'
+    mock_user = {
+        'id': user_id,
+        'username': 'testuser',
+        'email': 'user@example.com',
+        'emailVerified': False,
+    }
+
+    with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
+        mock_admin = MagicMock()
+        mock_admin.a_get_user = AsyncMock(return_value=mock_user)
+        mock_admin.a_update_user = AsyncMock()
+        mock_get_admin.return_value = mock_admin
+
+        # Act
+        await token_manager.disable_keycloak_user(user_id)
+
+        # Assert
+        mock_admin.a_get_user.assert_called_once_with(user_id)
+        mock_admin.a_update_user.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_disable_keycloak_user_not_found(token_manager):
+    """Test disabling Keycloak user when user is not found."""
+    # Arrange
+    user_id = 'nonexistent_user_id'
+    email = 'user@colsch.us'
+
+    with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
+        mock_admin = MagicMock()
+        mock_admin.a_get_user = AsyncMock(return_value=None)
+        mock_get_admin.return_value = mock_admin
+
+        # Act
+        await token_manager.disable_keycloak_user(user_id, email)
+
+        # Assert
+        mock_admin.a_get_user.assert_called_once_with(user_id)
+        mock_admin.a_update_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_disable_keycloak_user_exception_handling(token_manager):
+    """Test that disable_keycloak_user handles exceptions gracefully without raising."""
+    # Arrange
+    user_id = 'test_user_id'
+    email = 'user@colsch.us'
+
+    with patch('server.auth.token_manager.get_keycloak_admin') as mock_get_admin:
+        mock_admin = MagicMock()
+        mock_admin.a_get_user = AsyncMock(side_effect=Exception('Connection error'))
+        mock_get_admin.return_value = mock_admin
+
+        # Act & Assert - should not raise exception
+        await token_manager.disable_keycloak_user(user_id, email)
+
+        # Verify the method was called
+        mock_admin.a_get_user.assert_called_once_with(user_id)

@@ -6,13 +6,14 @@ import {
   beforeEach,
   afterAll,
   afterEach,
+  vi,
 } from "vitest";
 import { screen, waitFor, render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
-import { useCommandStore } from "#/state/command-store";
+import { useCommandStore } from "#/stores/command-store";
 import {
   createMockMessageEvent,
   createMockUserMessageEvent,
@@ -34,6 +35,7 @@ import {
 } from "#/contexts/conversation-websocket-context";
 import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
+import { isV1Event } from "#/types/v1/type-guards";
 
 // MSW WebSocket mock setup
 const { wsLink, server: mswServer } = conversationWebSocketTestSetup();
@@ -141,6 +143,11 @@ describe("Conversation WebSocket Handler", () => {
     });
 
     it("should handle malformed/invalid event data gracefully", async () => {
+      // Suppress expected console.warn for invalid JSON parsing
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
       // Set up MSW to send various invalid events when connection is established
       mswServer.use(
         wsLink.addEventListener("connection", ({ client, server }) => {
@@ -203,6 +210,9 @@ describe("Conversation WebSocket Handler", () => {
         "valid-event-123",
       );
       expect(screen.getByTestId("ui-events-count")).toHaveTextContent("1");
+
+      // Restore console.warn
+      consoleWarnSpy.mockRestore();
     });
   });
 
@@ -415,6 +425,101 @@ describe("Conversation WebSocket Handler", () => {
       // based on how the actual reconnection logic is implemented
     });
 
+    it("should not create duplicate events when WebSocket reconnects with resend_all=true", async () => {
+      const conversationId = "test-conversation-reconnect";
+      let connectionCount = 0;
+
+      // Clear event store before test
+      useEventStore.getState().clearEvents();
+
+      // Create mock events that will be sent on each connection
+      const mockHistoryEvents = [
+        createMockUserMessageEvent({ id: "event-1" }),
+        createMockMessageEvent({ id: "event-2" }),
+        createMockMessageEvent({ id: "event-3" }),
+      ];
+
+      // Set up MSW to mock event count API and WebSocket
+      // The WebSocket will resend all events on each connection (simulating resend_all=true behavior)
+      mswServer.use(
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(3),
+        ),
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          connectionCount += 1;
+          server.connect();
+
+          // Send all history events on EVERY connection (simulating resend_all=true)
+          mockHistoryEvents.forEach((event) => {
+            client.send(JSON.stringify(event));
+          });
+
+          // On first connection, simulate a disconnect after events are sent
+          if (connectionCount === 1) {
+            setTimeout(() => {
+              client.close(1006, "Simulated disconnect");
+            }, 100);
+          }
+        }),
+      );
+
+      // Render with WebSocket context
+      renderWithWebSocketContext(
+        <ConnectionStatusComponent />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      // Wait for initial connection and events
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+
+      await waitFor(() => {
+        expect(useEventStore.getState().events.length).toBe(3);
+      });
+
+      // Wait for disconnect
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "CLOSED",
+        );
+      });
+
+      // Wait for reconnection
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("connection-state")).toHaveTextContent(
+            "OPEN",
+          );
+        },
+        { timeout: 5000 },
+      );
+
+      // Give time for resent events to be processed
+      await new Promise((resolve) => {
+        setTimeout(resolve, 200);
+      });
+
+      // After reconnection, events should NOT be duplicated
+      // The server sends 3 events again (resend_all=true), but we should deduplicate
+      const { events } = useEventStore.getState();
+      const v1Events = events.filter(isV1Event);
+      const uniqueEventIds = [...new Set(v1Events.map((e) => e.id))];
+
+      // This assertion will FAIL with current implementation (showing the bug)
+      // Expected: 3 events (deduplicated)
+      // Actual: 6 events (duplicated)
+      expect(v1Events.length).toBe(3);
+      expect(uniqueEventIds.length).toBe(3);
+
+      // Verify we actually had 2 connections
+      expect(connectionCount).toBe(2);
+    });
+
     it.todo("should track and display errors with proper metadata");
     it.todo("should set appropriate error states on connection failures");
     it.todo(
@@ -453,18 +558,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(expectedEventCount);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(expectedEventCount),
+        ),
         wsLink.addEventListener("connection", ({ client, server }) => {
           server.connect();
           // Send all history events
@@ -520,18 +617,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(0);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(0),
+        ),
         wsLink.addEventListener("connection", ({ server }) => {
           server.connect();
           // No events sent for empty history
@@ -577,18 +666,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(expectedEventCount);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(expectedEventCount),
+        ),
         wsLink.addEventListener("connection", ({ client, server }) => {
           server.connect();
           // Send all history events

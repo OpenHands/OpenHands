@@ -21,12 +21,10 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.config import (
     depends_app_conversation_info_service,
-    depends_db_session,
     depends_event_service,
     depends_jwt_service,
     depends_sandbox_service,
     get_event_callback_service,
-    get_global_config,
 )
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
@@ -42,7 +40,7 @@ from openhands.app_server.user.specifiy_user_context import (
 )
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderType
-from openhands.sdk import Event
+from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent
 from openhands.server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.server.user_auth.user_auth import (
@@ -54,8 +52,6 @@ sandbox_service_dependency = depends_sandbox_service()
 event_service_dependency = depends_event_service()
 app_conversation_info_service_dependency = depends_app_conversation_info_service()
 jwt_dependency = depends_jwt_service()
-config = get_global_config()
-db_session_dependency = depends_db_session()
 _logger = logging.getLogger(__name__)
 
 
@@ -110,6 +106,11 @@ async def on_conversation_update(
     existing = await valid_conversation(
         conversation_info.id, sandbox_info, app_conversation_info_service
     )
+
+    # If the conversation is being deleted, no action is required...
+    # Later we may consider deleting the conversation if it exists...
+    if conversation_info.execution_status == ConversationExecutionStatus.DELETING:
+        return Success()
 
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,

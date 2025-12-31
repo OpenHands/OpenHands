@@ -45,6 +45,8 @@ from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.http_session import httpx_verify_option
 from openhands.utils.tenacity_stop import stop_if_should_exit
 
+DISABLE_VSCODE_PLUGIN = os.getenv('DISABLE_VSCODE_PLUGIN', 'false').lower() == 'true'
+
 
 @dataclass
 class ActionExecutionServerInfo:
@@ -247,7 +249,22 @@ class LocalRuntime(ActionExecutionClient):
             )
         else:
             # Set up workspace directory
+            # For local runtime, prefer a stable host path over /workspace defaults.
+            if (
+                self.config.workspace_base is None
+                and self.config.runtime
+                and self.config.runtime.lower() == 'local'
+            ):
+                env_base = os.getenv('LOCAL_WORKSPACE_BASE')
+                if env_base:
+                    self.config.workspace_base = os.path.abspath(env_base)
+                else:
+                    self.config.workspace_base = os.path.abspath(
+                        os.path.join(os.getcwd(), 'workspace', 'local')
+                    )
+
             if self.config.workspace_base is not None:
+                os.makedirs(self.config.workspace_base, exist_ok=True)
                 logger.warning(
                     f'Workspace base path is set to {self.config.workspace_base}. '
                     'It will be used as the path for the agent to run in. '
@@ -406,7 +423,7 @@ class LocalRuntime(ActionExecutionClient):
             plugins = _get_plugins(config)
 
             # Copy the logic from Runtime where we add a VSCodePlugin on init if missing
-            if not headless_mode:
+            if not headless_mode and not DISABLE_VSCODE_PLUGIN:
                 plugins.append(VSCodeRequirement())
 
             for _ in range(initial_num_warm_servers):

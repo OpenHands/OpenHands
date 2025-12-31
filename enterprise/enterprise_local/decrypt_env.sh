@@ -4,12 +4,12 @@ set -euo pipefail
 # Check if DEPLOY_DIR argument was provided
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <DEPLOY_DIR>"
-  echo "Example: $0 /path/to/deploy"
+  echo "Example: $0 /path/to/root/of/deploy/repo"
   exit 1
 fi
 
 # Normalize path (remove trailing slash)
-DEPLOY_DIR="${DEPLOY_DIR%/}"
+DEPLOY_DIR="${1%/}"
 
 # Function to decrypt and rename
 decrypt_and_move() {

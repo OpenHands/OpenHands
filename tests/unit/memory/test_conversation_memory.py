@@ -158,7 +158,8 @@ def test_ensure_initial_user_message_adds_if_only_system(
     system_message = SystemMessageAction(content='System')
     system_message._source = EventSource.AGENT
     events = [system_message]
-    conversation_memory._ensure_initial_user_message(events, initial_user_action)
+    # Pass empty set for forgotten_event_ids (no events have been condensed)
+    conversation_memory._ensure_initial_user_message(events, initial_user_action, set())
     assert len(events) == 2
     assert events[0] == system_message
     assert events[1] == initial_user_action
@@ -177,7 +178,8 @@ def test_ensure_initial_user_message_correct_already_present(
         agent_message,
     ]
     original_events = list(events)
-    conversation_memory._ensure_initial_user_message(events, initial_user_action)
+    # Pass empty set for forgotten_event_ids (no events have been condensed)
+    conversation_memory._ensure_initial_user_message(events, initial_user_action, set())
     assert events == original_events
 
 
@@ -189,7 +191,8 @@ def test_ensure_initial_user_message_incorrect_at_index_1(
     incorrect_second_message = MessageAction(content='Assistant')
     incorrect_second_message._source = EventSource.AGENT
     events = [system_message, incorrect_second_message]
-    conversation_memory._ensure_initial_user_message(events, initial_user_action)
+    # Pass empty set for forgotten_event_ids (no events have been condensed)
+    conversation_memory._ensure_initial_user_message(events, initial_user_action, set())
     assert len(events) == 3
     assert events[0] == system_message
     assert events[1] == initial_user_action  # Correct one inserted
@@ -206,7 +209,8 @@ def test_ensure_initial_user_message_correct_present_later(
     # Correct initial message is present, but later in the list
     events = [system_message, incorrect_second_message]
     conversation_memory._ensure_system_message(events)
-    conversation_memory._ensure_initial_user_message(events, initial_user_action)
+    # Pass empty set for forgotten_event_ids (no events have been condensed)
+    conversation_memory._ensure_initial_user_message(events, initial_user_action, set())
     assert len(events) == 3  # Should still insert at index 1, not remove the later one
     assert events[0] == system_message
     assert events[1] == initial_user_action  # Correct one inserted at index 1
@@ -222,7 +226,8 @@ def test_ensure_initial_user_message_different_user_msg_at_index_1(
     different_user_message = MessageAction(content='Different User Message')
     different_user_message._source = EventSource.USER
     events = [system_message, different_user_message]
-    conversation_memory._ensure_initial_user_message(events, initial_user_action)
+    # Pass empty set for forgotten_event_ids (no events have been condensed)
+    conversation_memory._ensure_initial_user_message(events, initial_user_action, set())
     assert len(events) == 2
     assert events[0] == system_message
     assert events[1] == different_user_message  # Original second message remains
@@ -1583,3 +1588,132 @@ def test_process_ipython_observation_with_vision_disabled(
     assert isinstance(message.content[1], ImageContent)
     # Check that NO explanatory text about filtered images was added when vision is disabled
     assert 'invalid or empty image(s) were filtered' not in message.content[0].text
+
+
+def test_ensure_initial_user_message_not_reinserted_when_condensed(
+    conversation_memory, initial_user_action
+):
+    """Test that initial user message is NOT re-inserted when it has been condensed.
+
+    This is a critical test for bug #11910: Old instructions should not be re-executed
+    after conversation condensation. If the initial user message has been condensed
+    (its ID is in the forgotten_event_ids set), we should NOT re-insert it to prevent
+    the LLM from seeing old instructions as fresh commands.
+    """
+    system_message = SystemMessageAction(content='System')
+    system_message._source = EventSource.AGENT
+
+    # Simulate that the initial_user_action has been condensed by adding its ID
+    # to the forgotten_event_ids set
+    initial_user_action._id = 1  # Assign an ID to the initial user action
+    forgotten_event_ids = {1}  # The initial user action's ID is in the forgotten set
+
+    events = [system_message]  # Only system message, no user message
+
+    # Call _ensure_initial_user_message with the condensed event ID
+    conversation_memory._ensure_initial_user_message(
+        events, initial_user_action, forgotten_event_ids
+    )
+
+    # The initial user action should NOT be inserted because it was condensed
+    assert len(events) == 1
+    assert events[0] == system_message
+    # Verify the initial user action was NOT added
+    assert initial_user_action not in events
+
+
+def test_ensure_initial_user_message_reinserted_when_not_condensed(
+    conversation_memory, initial_user_action
+):
+    """Test that initial user message IS re-inserted when it has NOT been condensed.
+
+    This ensures backward compatibility: when no condensation has happened,
+    the initial user message should still be inserted as before.
+    """
+    system_message = SystemMessageAction(content='System')
+    system_message._source = EventSource.AGENT
+
+    # The initial user action has NOT been condensed
+    initial_user_action._id = 1
+    forgotten_event_ids = {5, 10, 15}  # Different IDs, not including the initial action
+
+    events = [system_message]
+
+    # Call _ensure_initial_user_message with non-matching forgotten IDs
+    conversation_memory._ensure_initial_user_message(
+        events, initial_user_action, forgotten_event_ids
+    )
+
+    # The initial user action SHOULD be inserted because it was NOT condensed
+    assert len(events) == 2
+    assert events[0] == system_message
+    assert events[1] == initial_user_action
+
+
+def test_process_events_does_not_reinsert_condensed_initial_message(
+    conversation_memory,
+):
+    """Test that process_events does not re-insert initial user message when condensed.
+
+    This is an integration test for the full process_events flow, verifying that
+    when the initial user message has been condensed, it is not re-inserted into
+    the conversation sent to the LLM.
+    """
+    # Create a system message
+    system_message = SystemMessageAction(content='System message')
+    system_message._source = EventSource.AGENT
+    system_message._id = 0
+
+    # Create the initial user message (will be marked as condensed)
+    initial_user_message = MessageAction(content='Do task A, B, and C')
+    initial_user_message._source = EventSource.USER
+    initial_user_message._id = 1
+
+    # Create a condensation summary observation
+    from openhands.events.observation.agent import AgentCondensationObservation
+
+    condensation_summary = AgentCondensationObservation(
+        content='Summary: User requested tasks A, B, C. Task A was completed successfully.'
+    )
+    condensation_summary._id = 2
+
+    # Create a recent user message (not condensed)
+    recent_user_message = MessageAction(content='Now continue with task D')
+    recent_user_message._source = EventSource.USER
+    recent_user_message._id = 3
+
+    # Simulate condensed history: system + summary + recent message
+    # The initial user message (id=1) has been condensed/forgotten
+    condensed_history = [system_message, condensation_summary, recent_user_message]
+
+    # The initial user message's ID is in the forgotten set
+    forgotten_event_ids = {1}
+
+    messages = conversation_memory.process_events(
+        condensed_history=condensed_history,
+        initial_user_action=initial_user_message,
+        forgotten_event_ids=forgotten_event_ids,
+        max_message_chars=None,
+        vision_is_active=False,
+    )
+
+    # Verify the structure of messages
+    # Should have: system, condensation summary, recent user message
+    # Should NOT have the initial user message "Do task A, B, and C"
+    assert len(messages) == 3
+    assert messages[0].role == 'system'
+    assert messages[0].content[0].text == 'System message'
+
+    # The second message should be the condensation summary, NOT the initial user message
+    assert messages[1].role == 'user'
+    assert 'Summary: User requested tasks A, B, C' in messages[1].content[0].text
+
+    # The third message should be the recent user message
+    assert messages[2].role == 'user'
+    assert 'Now continue with task D' in messages[2].content[0].text
+
+    # Critically, the old instruction should NOT appear
+    for msg in messages:
+        for content in msg.content:
+            if hasattr(content, 'text'):
+                assert 'Do task A, B, and C' not in content.text
