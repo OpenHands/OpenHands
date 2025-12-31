@@ -134,9 +134,7 @@ class GraySwanAnalyzer(SecurityAnalyzer):
             async with response as resp:
                 if resp.status == 200:
                     result = await resp.json()
-                    violation_score = (
-                        result.get('output', {}).get('data', {}).get('violation', 0.0)
-                    )
+                    violation_score = result.get('violation', 0.0)
                     risk_level = self._map_violation_to_risk(violation_score)
                     if 'ipi' in result and result['ipi']:
                         risk_level = (

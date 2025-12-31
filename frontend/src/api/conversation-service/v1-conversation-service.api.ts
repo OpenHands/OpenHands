@@ -11,6 +11,7 @@ import type {
   V1AppConversationStartTask,
   V1AppConversationStartTaskPage,
   V1AppConversation,
+  GetSkillsResponse,
 } from "./v1-conversation-service.types";
 
 class V1ConversationService {
@@ -298,6 +299,23 @@ class V1ConversationService {
   }
 
   /**
+   * Update a V1 conversation's public flag
+   * @param conversationId The conversation ID
+   * @param isPublic Whether the conversation should be public
+   * @returns Updated conversation info
+   */
+  static async updateConversationPublicFlag(
+    conversationId: string,
+    isPublic: boolean,
+  ): Promise<V1AppConversation> {
+    const { data } = await openHands.patch<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      { public: isPublic },
+    );
+    return data;
+  }
+
+  /**
    * Read a file from a specific conversation's sandbox workspace
    * @param conversationId The conversation ID
    * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/PLAN.md)
@@ -312,6 +330,33 @@ class V1ConversationService {
 
     const { data } = await openHands.get<string>(
       `/api/v1/app-conversations/${conversationId}/file?${params.toString()}`,
+    );
+    return data;
+  }
+
+  /**
+   * Download a conversation trajectory as a zip file
+   * @param conversationId The conversation ID
+   * @returns A blob containing the zip file
+   */
+  static async downloadConversation(conversationId: string): Promise<Blob> {
+    const response = await openHands.get(
+      `/api/v1/app-conversations/${conversationId}/download`,
+      {
+        responseType: "blob",
+      },
+    );
+    return response.data;
+  }
+
+  /**
+   * Get all skills associated with a V1 conversation
+   * @param conversationId The conversation ID
+   * @returns The available skills associated with the conversation
+   */
+  static async getSkills(conversationId: string): Promise<GetSkillsResponse> {
+    const { data } = await openHands.get<GetSkillsResponse>(
+      `/api/v1/app-conversations/${conversationId}/skills`,
     );
     return data;
   }

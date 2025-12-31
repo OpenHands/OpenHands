@@ -8,16 +8,18 @@ import { I18nKey } from "#/i18n/declaration";
 interface ExitConversationModalProps {
   onConfirm: () => void;
   onClose: () => void;
+  onCancel: () => void;
 }
 
 export function ExitConversationModal({
   onConfirm,
   onClose,
+  onCancel,
 }: ExitConversationModalProps) {
   const { t } = useTranslation();
 
   return (
-    <ModalBackdrop>
+    <ModalBackdrop onClose={onCancel}>
       <ModalBody testID="confirm-new-conversation-modal">
         <BaseModalTitle title={t(I18nKey.CONVERSATION$EXIT_WARNING)} />
         <div className="flex w-full gap-2">

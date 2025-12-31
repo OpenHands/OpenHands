@@ -51,6 +51,11 @@ ENABLE_SOLVABILITY_ANALYSIS = (
     os.getenv('ENABLE_SOLVABILITY_ANALYSIS', 'false').lower() == 'true'
 )
 
+# Toggle for V1 GitHub resolver feature
+ENABLE_V1_GITHUB_RESOLVER = (
+    os.getenv('ENABLE_V1_GITHUB_RESOLVER', 'false').lower() == 'true'
+)
+
 
 OPENHANDS_RESOLVER_TEMPLATES_DIR = 'openhands/integrations/templates/resolver/'
 jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
@@ -316,7 +321,7 @@ def append_conversation_footer(message: str, conversation_id: str) -> str:
         The message with the conversation footer appended
     """
     conversation_link = CONVERSATION_URL.format(conversation_id)
-    footer = f'\n\n<sub>[View full conversation]({conversation_link})</sub>'
+    footer = f'\n\n[View full conversation]({conversation_link})'
     return message + footer
 
 

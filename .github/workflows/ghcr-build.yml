@@ -64,7 +64,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.6.0
+        uses: docker/setup-qemu-action@v3.7.0
         with:
           image: tonistiigi/binfmt:latest
       - name: Login to GHCR
@@ -102,7 +102,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.6.0
+        uses: docker/setup-qemu-action@v3.7.0
         with:
           image: tonistiigi/binfmt:latest
       - name: Login to GHCR
@@ -161,7 +161,7 @@ jobs:
           context: containers/runtime
       - name: Upload runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
@@ -247,7 +247,7 @@ jobs:
       - name: Trigger remote job
         run: |
           curl --fail-with-body -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{\"ref\": \"main\", \"inputs\": {\"openhandsPrNumber\": \"${{ github.event.pull_request.number }}\", \"deployEnvironment\": \"feature\", \"enterpriseImageTag\": \"pr-${{ github.event.pull_request.number }}\" }}" \
             https://api.github.com/repos/OpenHands/deploy/actions/workflows/deploy.yaml/dispatches
@@ -268,7 +268,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Download runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
@@ -330,7 +330,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Download runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime

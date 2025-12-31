@@ -14,7 +14,7 @@ from openhands.integrations.provider import (
     ProviderHandler,
     ProviderType,
 )
-from openhands.sdk.conversation.secret_source import SecretSource, StaticSecret
+from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
 
 USER_AUTH_ATTR = 'user_auth'
@@ -81,7 +81,12 @@ class AuthUserContext(UserContext):
         secrets = await self.user_auth.get_secrets()
         if secrets:
             for name, custom_secret in secrets.custom_secrets.items():
-                results[name] = StaticSecret(value=custom_secret.secret)
+                results[name] = StaticSecret(
+                    value=custom_secret.secret,
+                    description=custom_secret.description
+                    if custom_secret.description
+                    else None,
+                )
 
         return results
 

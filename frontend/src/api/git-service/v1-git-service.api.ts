@@ -53,6 +53,13 @@ class V1GitService {
     // V1 API returns V1GitChangeStatus types, we need to map them to V0 format
     const { data } = await axios.get<V1GitChange[]>(url, { headers });
 
+    // Validate response is an array (could be HTML error page if runtime is dead)
+    if (!Array.isArray(data)) {
+      throw new Error(
+        "Invalid response from runtime - runtime may be unavailable",
+      );
+    }
+
     // Map V1 statuses to V0 format for compatibility
     return data.map((change) => ({
       status: mapV1ToV0Status(change.status),

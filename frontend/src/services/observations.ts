@@ -1,5 +1,5 @@
 import { ObservationMessage } from "#/types/message";
-import { useCommandStore } from "#/state/command-store";
+import { useCommandStore } from "#/stores/command-store";
 import ObservationType from "#/types/observation-type";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useAgentStore } from "#/stores/agent-store";

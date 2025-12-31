@@ -5,6 +5,7 @@ from openhands.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl as AzureDevOpsService,
 )
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
+from openhands.integrations.forgejo.forgejo_service import ForgejoService
 from openhands.integrations.github.github_service import GitHubService
 from openhands.integrations.gitlab.gitlab_service import GitLabService
 from openhands.integrations.provider import ProviderType
@@ -48,6 +49,17 @@ async def validate_provider_token(
     except Exception as e:
         gitlab_error = e
 
+    # Try Forgejo if a base_domain was provided (custom instances may not contain
+    # the substring 'forgejo' or 'codeberg')
+    forgejo_error = None
+    if base_domain:
+        try:
+            forgejo_service = ForgejoService(token=token, base_domain=base_domain)
+            await forgejo_service.get_user()
+            return ProviderType.FORGEJO
+        except Exception as e:
+            forgejo_error = e
+
     # Try Bitbucket next
     bitbucket_error = None
     try:
@@ -67,7 +79,7 @@ async def validate_provider_token(
         azure_devops_error = e
 
     logger.debug(
-        f'Failed to validate token: {github_error} \n {gitlab_error} \n {bitbucket_error} \n {azure_devops_error}'
+        f'Failed to validate token: {github_error} \n {gitlab_error} \n {forgejo_error} \n {bitbucket_error} \n {azure_devops_error}'
     )
 
     return None

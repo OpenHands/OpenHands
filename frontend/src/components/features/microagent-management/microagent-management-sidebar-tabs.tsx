@@ -2,7 +2,7 @@ import { Tab, Tabs } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { MicroagentManagementRepositories } from "./microagent-management-repositories";
 import { I18nKey } from "#/i18n/declaration";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 
 interface MicroagentManagementSidebarTabsProps {
   isSearchLoading?: boolean;
