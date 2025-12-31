@@ -192,6 +192,9 @@ datasets = "*"
 joblib = "*"
 swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }
 multi-swe-bench = "0.1.2"
+pandas = "*"
+# tau-bench = { git = "https://github.com/sierra-research/tau-bench.git" }
+# bfcl-eval = "*" # TODO: Verify exact package name/source
 
 [tool.poetry.group.testgeneval.dependencies]
 fuzzywuzzy = "^0.18.0"

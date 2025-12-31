@@ -9695,6 +9695,22 @@
     "de": "Sind Sie sicher, dass Sie dieses Gespräch löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
     "uk": "Ви впевнені, що хочете видалити цю розмову? Цю дію не можна скасувати."
   },
+  "CONVERSATION$DELETE_WARNING_WITH_TITLE": {
+    "en": "Are you sure you want to delete the \"<title>{{title}}</title>\" conversation? This action cannot be undone.",
+    "ja": "「<title>{{title}}</title>」の会話を削除してもよろしいですか？この操作は元に戻せません。",
+    "zh-CN": "您确定要删除\"<title>{{title}}</title>\"对话吗？此操作无法撤消。",
+    "zh-TW": "您確定要刪除「<title>{{title}}</title>」對話嗎？此操作無法撤消。",
+    "ko-KR": "\"<title>{{title}}</title>\" 대화를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+    "no": "Er du sikker på at du vil slette samtalen \"<title>{{title}}</title>\"? Denne handlingen kan ikke angres.",
+    "it": "Sei sicuro di voler eliminare la conversazione \"<title>{{title}}</title>\"? Questa azione non può essere annullata.",
+    "pt": "Tem certeza de que deseja excluir a conversa \"<title>{{title}}</title>\"? Esta ação não pode ser desfeita.",
+    "es": "¿Está seguro de que desea eliminar la conversación \"<title>{{title}}</title>\"? Esta acción no se puede deshacer.",
+    "ar": "هل أنت متأكد أنك تريد حذف المحادثة \"<title>{{title}}</title>\"؟ لا يمكن التراجع عن هذا الإجراء.",
+    "fr": "Êtes-vous sûr de vouloir supprimer la conversation « <title>{{title}}</title> » ? Cette action ne peut pas être annulée.",
+    "tr": "\"<title>{{title}}</title>\" konuşmasını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+    "de": "Sind Sie sicher, dass Sie das Gespräch „<title>{{title}}</title>\" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "uk": "Ви впевнені, що хочете видалити розмову «<title>{{title}}</title>»? Цю дію не можна скасувати."
+  },
   "FEEDBACK$TITLE": {
     "en": "Feedback",
     "ja": "フィードバック",

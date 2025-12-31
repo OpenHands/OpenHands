@@ -227,6 +227,7 @@ export function ConversationName() {
         <ConfirmDeleteModal
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmDeleteModalVisible(false)}
+          conversationTitle={conversation?.title}
         />
       )}
 
