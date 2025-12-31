@@ -84,14 +84,15 @@ class BitBucketBranchesMixin(BitBucketMixinBase):
         """Search branches by name using Bitbucket API with `q` param."""
         owner, repo = self._extract_owner_and_repo(repository)
 
-        url = f'{self._repo_api_base(owner, repo)}/branches'
         if self._is_server:
+            url = f'{self._repo_api_base(owner, repo)}/branches'
             params = {
                 'limit': per_page,
                 'filterText': query,
                 'orderBy': 'MODIFICATION',
             }
         else:
+            url = f'{self._repo_api_base(owner, repo)}/refs/branches'
             # Bitbucket filtering: name ~ "query"
             params = {
                 'pagelen': per_page,

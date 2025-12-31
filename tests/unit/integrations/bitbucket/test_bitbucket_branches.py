@@ -82,3 +82,30 @@ async def test_search_branches_bitbucket_filters_by_name_contains():
                 last_push_date='2024-01-10T10:00:00Z',
             )
         ]
+
+
+@pytest.mark.asyncio
+async def test_search_branches_bitbucket_server_filters_by_name_contains():
+    service = BitBucketService(token=SecretStr('t'), bitbucket_mode='server')
+
+    mock_response = {'values': [{'displayId': 'bugfix/issue-1', 'latestCommit': 'hhh'}]}
+
+    with patch.object(service, '_make_request', return_value=(mock_response, {})) as m:
+        branches = await service.search_branches('w/r', query='bugfix', per_page=15)
+
+        args, kwargs = m.call_args
+        url = args[0]
+        params = args[1]
+        assert 'repos/r/branches' in url
+        assert params['limit'] == 15
+        assert params['filterText'] == 'bugfix'
+        assert params['orderBy'] == 'MODIFICATION'
+
+        assert branches == [
+            Branch(
+                name='bugfix/issue-1',
+                commit_sha='hhh',
+                protected=False,
+                last_push_date=None,
+            )
+        ]

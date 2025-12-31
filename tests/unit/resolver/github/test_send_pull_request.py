@@ -1,5 +1,6 @@
 import os
 import tempfile
+from argparse import Namespace
 from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
@@ -977,6 +978,7 @@ def test_process_single_issue(
         base_domain='github.com',
         git_user_name='openhands',
         git_user_email='openhands@all-hands.dev',
+        bitbucket_mode='cloud',
     )
 
 
@@ -1116,7 +1118,7 @@ def test_main(
     mock_parser,
 ):
     # Setup mock parser
-    mock_args = MagicMock()
+    mock_args = Namespace()
     mock_args.token = None
     mock_args.username = 'mock_username'
     mock_args.output_dir = '/mock/output'
@@ -1131,6 +1133,10 @@ def test_main(
     mock_args.reviewer = None
     mock_args.pr_title = None
     mock_args.selected_repo = None
+    mock_args.base_domain = None
+    mock_args.git_user_name = None
+    mock_args.git_user_email = None
+    mock_args.bitbucket_mode = 'cloud'
     mock_parser.return_value.parse_args.return_value = mock_args
 
     # Setup environment variables
@@ -1172,9 +1178,10 @@ def test_main(
         mock_args.target_branch,
         mock_args.reviewer,
         mock_args.pr_title,
-        ANY,
-        ANY,  # git_user_name from args
-        ANY,  # git_user_email from args
+        ANY,  # base_domain
+        ANY,  # git_user_name
+        ANY,  # git_user_email
+        mock_args.bitbucket_mode,
     )
 
     # Other assertions

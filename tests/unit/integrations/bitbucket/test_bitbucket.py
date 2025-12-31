@@ -793,12 +793,11 @@ async def test_validate_provider_token_with_bitbucket_server_mode():
 
         token = SecretStr('username:password')
         base_domain = 'bitbucket.example.com'
-        result = await validate_provider_token(token, base_domain, 'server')
+        result = await validate_provider_token(token, base_domain)
 
         mock_bitbucket_service.assert_called_once_with(
             token=token,
             base_domain=base_domain,
-            bitbucket_mode='server',
         )
         assert result == ProviderType.BITBUCKET
 
@@ -835,7 +834,6 @@ async def test_check_provider_tokens_with_only_bitbucket():
         args, kwargs = mock_validate.call_args
         assert args[0].get_secret_value() == 'username:app_password'
         assert args[1] == 'bitbucket.org'
-        assert args[2] == 'cloud'
 
         # Verify that no error message was returned
         assert result == ''

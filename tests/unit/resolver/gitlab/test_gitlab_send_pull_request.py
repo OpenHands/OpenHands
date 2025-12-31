@@ -1,5 +1,6 @@
 import os
 import tempfile
+from argparse import Namespace
 from unittest.mock import ANY, MagicMock, call, patch
 from urllib.parse import quote
 
@@ -888,6 +889,7 @@ def test_process_single_issue(
         base_domain='gitlab.com',
         git_user_name='openhands',
         git_user_email='openhands@all-hands.dev',
+        bitbucket_mode='cloud',
     )
 
 
@@ -1033,7 +1035,7 @@ def test_main(
     mock_parser,
 ):
     # Setup mock parser
-    mock_args = MagicMock()
+    mock_args = Namespace()
     mock_args.token = None
     mock_args.username = 'mock_username'
     mock_args.output_dir = '/mock/output'
@@ -1048,8 +1050,10 @@ def test_main(
     mock_args.reviewer = None
     mock_args.pr_title = None
     mock_args.selected_repo = None
+    mock_args.base_domain = None
     mock_args.git_user_name = 'openhands'
     mock_args.git_user_email = 'openhands@all-hands.dev'
+    mock_args.bitbucket_mode = 'cloud'
     mock_parser.return_value.parse_args.return_value = mock_args
 
     # Setup environment variables
@@ -1094,6 +1098,7 @@ def test_main(
         ANY,
         mock_args.git_user_name,
         mock_args.git_user_email,
+        ANY,
     )
 
     # Other assertions
