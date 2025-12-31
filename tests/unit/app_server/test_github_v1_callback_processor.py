@@ -211,6 +211,7 @@ class TestGithubV1CallbackProcessor:
     @patch(
         'openhands.app_server.event_callback.github_v1_callback_processor.get_prompt_template'
     )
+    @patch('openhands.app_server.event_callback.github_v1_callback_processor.Auth')
     @patch(
         'openhands.app_server.event_callback.github_v1_callback_processor.GithubIntegration'
     )
@@ -219,6 +220,7 @@ class TestGithubV1CallbackProcessor:
         self,
         mock_github,
         mock_github_integration,
+        mock_auth,
         mock_get_prompt_template,
         mock_get_httpx_client,
         mock_get_sandbox_service,
@@ -241,6 +243,10 @@ class TestGithubV1CallbackProcessor:
         )
 
         mock_get_prompt_template.return_value = 'Please provide a summary'
+
+        # Auth.AppAuth mock
+        mock_app_auth_instance = MagicMock()
+        mock_auth.AppAuth.return_value = mock_app_auth_instance
 
         # GitHub integration
         mock_token_data = MagicMock()
@@ -271,9 +277,8 @@ class TestGithubV1CallbackProcessor:
         assert result.detail == 'Test summary from agent'
         assert github_callback_processor.should_request_summary is False
 
-        mock_github_integration.assert_called_once_with(
-            'test_client_id', 'test_private_key'
-        )
+        mock_auth.AppAuth.assert_called_once_with('test_client_id', 'test_private_key')
+        mock_github_integration.assert_called_once_with(auth=mock_app_auth_instance)
         mock_integration_instance.get_access_token.assert_called_once_with(12345)
 
         mock_github.assert_called_once_with('test_access_token')
@@ -618,12 +623,17 @@ class TestGithubV1CallbackProcessor:
             'GITHUB_APP_PRIVATE_KEY': 'test_private_key\\nwith_newlines',
         },
     )
+    @patch('openhands.app_server.event_callback.github_v1_callback_processor.Auth')
     @patch(
         'openhands.app_server.event_callback.github_v1_callback_processor.GithubIntegration'
     )
     def test_get_installation_access_token_success(
-        self, mock_github_integration, github_callback_processor
+        self, mock_github_integration, mock_auth, github_callback_processor
     ):
+        # Auth.AppAuth mock
+        mock_app_auth_instance = MagicMock()
+        mock_auth.AppAuth.return_value = mock_app_auth_instance
+
         mock_token_data = MagicMock()
         mock_token_data.token = 'test_access_token'
         mock_integration_instance = MagicMock()
@@ -633,9 +643,10 @@ class TestGithubV1CallbackProcessor:
         token = github_callback_processor._get_installation_access_token()
 
         assert token == 'test_access_token'
-        mock_github_integration.assert_called_once_with(
+        mock_auth.AppAuth.assert_called_once_with(
             'test_client_id', 'test_private_key\nwith_newlines'
         )
+        mock_github_integration.assert_called_once_with(auth=mock_app_auth_instance)
         mock_integration_instance.get_access_token.assert_called_once_with(12345)
 
     @patch('openhands.app_server.event_callback.github_v1_callback_processor.Github')

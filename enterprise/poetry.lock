@@ -4558,25 +4558,25 @@ valkey = ["valkey (>=6)"]
 
 [[package]]
 name = "litellm"
-version = "1.80.7"
+version = "1.80.11"
 description = "Library to easily interface with LLM API providers"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 files = [
-    {file = "litellm-1.80.7-py3-none-any.whl", hash = "sha256:f7d993f78c1e0e4e1202b2a925cc6540b55b6e5fb055dd342d88b145ab3102ed"},
-    {file = "litellm-1.80.7.tar.gz", hash = "sha256:3977a8d195aef842d01c18bf9e22984829363c6a4b54daf9a43c9dd9f190b42c"},
+    {file = "litellm-1.80.11-py3-none-any.whl", hash = "sha256:406283d66ead77dc7ff0e0b2559c80e9e497d8e7c2257efb1cb9210a20d09d54"},
+    {file = "litellm-1.80.11.tar.gz", hash = "sha256:c9fc63e7acb6360363238fe291bcff1488c59ff66020416d8376c0ee56414a19"},
 ]
 
 [package.dependencies]
 aiohttp = ">=3.10"
 click = "*"
 fastuuid = ">=0.13.0"
-grpcio = ">=1.62.3,<1.68.0"
+grpcio = {version = ">=1.62.3,<1.68.0", markers = "python_version < \"3.14\""}
 httpx = ">=0.23.0"
 importlib-metadata = ">=6.8.0"
 jinja2 = ">=3.1.2,<4.0.0"
-jsonschema = ">=4.22.0,<5.0.0"
+jsonschema = ">=4.23.0,<5.0.0"
 openai = ">=2.8.0"
 pydantic = ">=2.5.0,<3.0.0"
 python-dotenv = ">=0.2.0"
@@ -4587,7 +4587,7 @@ tokenizers = "*"
 caching = ["diskcache (>=5.6.1,<6.0.0)"]
 extra-proxy = ["azure-identity (>=1.15.0,<2.0.0) ; python_version >= \"3.9\"", "azure-keyvault-secrets (>=4.8.0,<5.0.0)", "google-cloud-iam (>=2.19.1,<3.0.0)", "google-cloud-kms (>=2.21.3,<3.0.0)", "prisma (==0.11.0)", "redisvl (>=0.4.1,<0.5.0) ; python_version >= \"3.9\" and python_version < \"3.14\"", "resend (>=0.8.0)"]
 mlflow = ["mlflow (>3.1.4) ; python_version >= \"3.10\""]
-proxy = ["PyJWT (>=2.10.1,<3.0.0) ; python_version >= \"3.9\"", "apscheduler (>=3.10.4,<4.0.0)", "azure-identity (>=1.15.0,<2.0.0) ; python_version >= \"3.9\"", "azure-storage-blob (>=12.25.1,<13.0.0)", "backoff", "boto3 (==1.36.0)", "cryptography", "fastapi (>=0.120.1)", "fastapi-sso (>=0.16.0,<0.17.0)", "gunicorn (>=23.0.0,<24.0.0)", "litellm-enterprise (==0.1.22)", "litellm-proxy-extras (==0.4.9)", "mcp (>=1.21.2,<2.0.0) ; python_version >= \"3.10\"", "orjson (>=3.9.7,<4.0.0)", "polars (>=1.31.0,<2.0.0) ; python_version >= \"3.10\"", "pynacl (>=1.5.0,<2.0.0)", "python-multipart (>=0.0.18,<0.0.19)", "pyyaml (>=6.0.1,<7.0.0)", "rich (==13.7.1)", "rq", "soundfile (>=0.12.1,<0.13.0)", "uvicorn (>=0.31.1,<0.32.0)", "uvloop (>=0.21.0,<0.22.0) ; sys_platform != \"win32\"", "websockets (>=15.0.1,<16.0.0)"]
+proxy = ["PyJWT (>=2.10.1,<3.0.0) ; python_version >= \"3.9\"", "apscheduler (>=3.10.4,<4.0.0)", "azure-identity (>=1.15.0,<2.0.0) ; python_version >= \"3.9\"", "azure-storage-blob (>=12.25.1,<13.0.0)", "backoff", "boto3 (==1.36.0)", "cryptography", "fastapi (>=0.120.1)", "fastapi-sso (>=0.16.0,<0.17.0)", "gunicorn (>=23.0.0,<24.0.0)", "litellm-enterprise (==0.1.27)", "litellm-proxy-extras (==0.4.16)", "mcp (>=1.21.2,<2.0.0) ; python_version >= \"3.10\"", "orjson (>=3.9.7,<4.0.0)", "polars (>=1.31.0,<2.0.0) ; python_version >= \"3.10\"", "pynacl (>=1.5.0,<2.0.0)", "python-multipart (>=0.0.18,<0.0.19)", "pyyaml (>=6.0.1,<7.0.0)", "rich (==13.7.1)", "rq", "soundfile (>=0.12.1,<0.13.0)", "uvicorn (>=0.31.1,<0.32.0)", "uvloop (>=0.21.0,<0.22.0) ; sys_platform != \"win32\"", "websockets (>=15.0.1,<16.0.0)"]
 semantic-router = ["semantic-router (>=0.1.12) ; python_version >= \"3.9\" and python_version < \"3.14\""]
 utils = ["numpydoc"]
 
@@ -5836,14 +5836,14 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.6.0"
+version = "1.7.3"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.6.0-py3-none-any.whl", hash = "sha256:e6ae865ac3e7a96b234e10a0faad23f6210e025bbf7721cb66bc7a71d160848c"},
-    {file = "openhands_agent_server-1.6.0.tar.gz", hash = "sha256:44ce7694ae2d4bb0666d318ef13e6618bd4dc73022c60354839fe6130e67d02a"},
+    {file = "openhands_agent_server-1.7.3-py3-none-any.whl", hash = "sha256:456e7162cefec8ed7fda61433180b3f867265e15c7151b3a2e3e02546c9d9b6d"},
+    {file = "openhands_agent_server-1.7.3.tar.gz", hash = "sha256:2c06dc497c38050d445559da2825d4d69fe84af90289c82a95317e45359cc547"},
 ]
 
 [package.dependencies]
@@ -5860,7 +5860,7 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-ai"
-version = "0.0.0-post.5687+7853b41ad"
+version = "0.0.0-post.5769+b5758b160"
 description = "OpenHands: Code Less, Make More"
 optional = false
 python-versions = "^3.12,<3.14"
@@ -5896,15 +5896,15 @@ json-repair = "*"
 jupyter_kernel_gateway = "*"
 kubernetes = "^33.1.0"
 libtmux = ">=0.46.2"
-litellm = ">=1.74.3, <=1.80.7, !=1.64.4, !=1.67.*"
+litellm = ">=1.74.3, !=1.64.4, !=1.67.*"
 lmnr = "^0.7.20"
 memory-profiler = "^0.61.0"
 numpy = "*"
 openai = "2.8.0"
 openhands-aci = "0.3.2"
-openhands-agent-server = "1.6.0"
-openhands-sdk = "1.6.0"
-openhands-tools = "1.6.0"
+openhands-agent-server = "1.7.3"
+openhands-sdk = "1.7.3"
+openhands-tools = "1.7.3"
 opentelemetry-api = "^1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 pathspec = "^0.12.1"
@@ -5960,21 +5960,21 @@ url = ".."
 
 [[package]]
 name = "openhands-sdk"
-version = "1.6.0"
+version = "1.7.3"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.6.0-py3-none-any.whl", hash = "sha256:94d2f87fb35406373da6728ae2d88584137f9e9b67fa0e940444c72f2e44e7d3"},
-    {file = "openhands_sdk-1.6.0.tar.gz", hash = "sha256:f45742350e3874a7f5b08befc4a9d5adc7e4454f7ab5f8391c519eee3116090f"},
+    {file = "openhands_sdk-1.7.3-py3-none-any.whl", hash = "sha256:afbce9c9e7d1167d9b9610673657fbbcd454b04f0151d943418d897de790aeed"},
+    {file = "openhands_sdk-1.7.3.tar.gz", hash = "sha256:7fa0cde9148ab905e24346b50f2d7267fb6dde32ec8dcbc1c7d35ced6e0233aa"},
 ]
 
 [package.dependencies]
 deprecation = ">=2.1.0"
 fastmcp = ">=2.11.3"
 httpx = ">=0.27.0"
-litellm = ">=1.80.7"
+litellm = ">=1.80.10"
 lmnr = ">=0.7.24"
 pydantic = ">=2.11.7"
 python-frontmatter = ">=1.1.0"
@@ -5987,14 +5987,14 @@ boto3 = ["boto3 (>=1.35.0)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.6.0"
+version = "1.7.3"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.6.0-py3-none-any.whl", hash = "sha256:176556d44186536751b23fe052d3505492cc2afb8d52db20fb7a2cc0169cd57a"},
-    {file = "openhands_tools-1.6.0.tar.gz", hash = "sha256:d07ba31050fd4a7891a4c48388aa53ce9f703e17064ddbd59146d6c77e5980b3"},
+    {file = "openhands_tools-1.7.3-py3-none-any.whl", hash = "sha256:e823f5a47936dd23221cb4eb846d62b59dce5be69210330095fc242772e71d27"},
+    {file = "openhands_tools-1.7.3.tar.gz", hash = "sha256:f2779cc5ca3b78b9afebb7617006da8069c12b41e6d67cbf0cc8de5d819005f8"},
 ]
 
 [package.dependencies]

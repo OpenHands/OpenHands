@@ -78,6 +78,7 @@ export interface Conversation {
   pr_number?: number[] | null;
   conversation_version?: "V0" | "V1";
   sub_conversation_ids?: string[];
+  public?: boolean;
 }
 
 export interface ResultSet<T> {

@@ -249,6 +249,7 @@ async def test_keycloak_callback_email_not_verified(mock_request):
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
         assert 'email_verification_required=true' in result.headers['location']
+        assert 'user_id=test_user_id' in result.headers['location']
         mock_verify_email.assert_called_once_with(
             request=mock_request, user_id='test_user_id', is_auth_flow=True
         )
@@ -287,6 +288,7 @@ async def test_keycloak_callback_email_not_verified_missing_field(mock_request):
         assert isinstance(result, RedirectResponse)
         assert result.status_code == 302
         assert 'email_verification_required=true' in result.headers['location']
+        assert 'user_id=test_user_id' in result.headers['location']
         mock_verify_email.assert_called_once_with(
             request=mock_request, user_id='test_user_id', is_auth_flow=True
         )

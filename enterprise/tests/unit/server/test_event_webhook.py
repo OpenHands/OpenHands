@@ -699,12 +699,11 @@ class TestProcessBatchOperationsBackground:
             # Should not raise exceptions
             await _process_batch_operations_background(batch_ops, 'test-api-key')
 
-            # Should log the error
-            mock_logger.error.assert_called_once_with(
-                'error_processing_batch_operation',
-                extra={
-                    'path': 'invalid-path',
-                    'method': 'BatchMethod.POST',
-                    'error': mock_logger.error.call_args[1]['extra']['error'],
-                },
-            )
+            # Should log the error with exception type and message in the log message
+            mock_logger.error.assert_called_once()
+            call_args = mock_logger.error.call_args
+            log_message = call_args[0][0]
+            assert log_message.startswith('error_processing_batch_operation:')
+            assert call_args[1]['extra']['path'] == 'invalid-path'
+            assert call_args[1]['extra']['method'] == 'BatchMethod.POST'
+            assert call_args[1]['exc_info'] is True

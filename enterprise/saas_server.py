@@ -37,6 +37,12 @@ from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
+from server.sharing.shared_conversation_router import (  # noqa: E402
+    router as shared_conversation_router,
+)
+from server.sharing.shared_event_router import (  # noqa: E402
+    router as shared_event_router,
+)
 
 from openhands.server.app import app as base_app  # noqa: E402
 from openhands.server.listen_socket import sio  # noqa: E402
@@ -66,6 +72,8 @@ base_app.include_router(saas_user_router)  # Add additional route SAAS user call
 base_app.include_router(
     billing_router
 )  # Add routes for credit management and Stripe payment integration
+base_app.include_router(shared_conversation_router)
+base_app.include_router(shared_event_router)
 
 # Add GitHub integration router only if GITHUB_APP_CLIENT_ID is set
 if GITHUB_APP_CLIENT_ID:
@@ -98,6 +106,7 @@ base_app.include_router(feedback_router)  # Add routes for conversation feedback
 base_app.include_router(
     event_webhook_router
 )  # Add routes for Events in nested runtimes
+
 
 base_app.add_middleware(
     CORSMiddleware,

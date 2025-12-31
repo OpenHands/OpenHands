@@ -74,3 +74,23 @@ export const createAxiosNotFoundErrorObject = () =>
       config: {},
     },
   );
+
+export const createAxiosError = (
+  status: number,
+  statusText: string,
+  data: unknown,
+) =>
+  new AxiosError(
+    `Request failed with status code ${status}`,
+    "ERR_BAD_REQUEST",
+    undefined,
+    undefined,
+    {
+      status,
+      statusText,
+      data,
+      headers: {},
+      // @ts-expect-error - we only need the response object for this test
+      config: {},
+    },
+  );
