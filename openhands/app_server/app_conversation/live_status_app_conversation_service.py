@@ -54,6 +54,7 @@ from openhands.app_server.event_callback.set_title_callback_processor import (
 from openhands.app_server.sandbox.docker_sandbox_service import DockerSandboxService
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
+    ExposedUrl,
     SandboxInfo,
     SandboxStatus,
 )
@@ -210,8 +211,36 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # Get the sandbox
             sandbox_id = task.sandbox_id
             assert sandbox_id is not None
-            sandbox = await self.sandbox_service.get_sandbox(sandbox_id)
-            assert sandbox is not None
+            
+            # If sandbox_id is "disabled", create a dummy SandboxInfo pointing to main agent-server
+            if sandbox_id == 'disabled':
+                import os
+                from datetime import datetime, timezone
+                agent_server_url = os.getenv('AGENT_SERVER_URL', 'http://agent-server-main:8002')
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(agent_server_url)
+                    port = parsed.port or (8443 if parsed.scheme == 'https' else 8002)
+                except Exception:
+                    port = 8002
+                sandbox = SandboxInfo(
+                    id='disabled',
+                    created_by_user_id=user_id,
+                    sandbox_spec_id='disabled',
+                    status=SandboxStatus.RUNNING,
+                    session_api_key=None,
+                    exposed_urls=[
+                        ExposedUrl(
+                            name=AGENT_SERVER,
+                            url=agent_server_url,
+                            port=port,
+                        ),
+                    ],
+                    created_at=datetime.now(timezone.utc),
+                )
+            else:
+                sandbox = await self.sandbox_service.get_sandbox(sandbox_id)
+                assert sandbox is not None
             agent_server_url = self._get_agent_server_url(sandbox)
 
             # Get the working dir
@@ -471,6 +500,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         task.status = AppConversationStartTaskStatus.WAITING_FOR_SANDBOX
         task.sandbox_id = sandbox.id
         yield task
+
+        # If sandbox is disabled (pointing to main agent-server), skip polling and return immediately
+        if sandbox.id == 'disabled':
+            # Verify the main agent-server is alive
+            if await self._check_agent_server_alive(sandbox):
+                return
+            else:
+                raise SandboxError('Main agent-server is not responding')
 
         if sandbox.status == SandboxStatus.PAUSED:
             await self.sandbox_service.resume_sandbox(sandbox.id)

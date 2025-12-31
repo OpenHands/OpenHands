@@ -1,0 +1,90 @@
+###################### OpenHands Configuration ######################
+# קונפיגורציה מקצועית ל-OpenHands עם גישה מלאה לשרת
+
+#################################### Core ####################################
+[core]
+workspace_base = "./workspace"
+cache_dir = "/tmp/cache"
+debug = false
+disable_color = false
+max_iterations = 500
+default_agent = "CodeActAgent"
+runtime = "docker"
+enable_browser = true
+max_concurrent_conversations = 3
+conversation_max_age_seconds = 864000  # 10 days
+
+#################################### LLM #####################################
+[llm]
+# הגדרת LLM עם SGLang - מודל qwen2.5-coder:14b + GPTQ Quantization
+# SGLang רץ ב-Docker על פורט 30000, נגיש דרך NGINX על פורט 11434
+api_key = ""
+base_url = "http://172.17.0.1:30000/v1"
+model = "openai/Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4"
+temperature = 0.0
+timeout = 60
+max_input_tokens = 0
+max_output_tokens = 0
+num_retries = 8
+retry_max_wait = 120
+retry_min_wait = 15
+retry_multiplier = 2.0
+caching_prompt = true
+# Qwen2.5-Coder-14B לא תומך ב-native tool calling כראוי, משביתים אותו
+native_tool_calling = false
+
+#################################### Agent ###################################
+[agent]
+# Agent configuration (all valid fields)
+enable_browsing = true
+enable_llm_editor = false
+enable_editor = true
+enable_jupyter = true
+enable_cmd = true
+enable_think = true
+enable_finish = true
+enable_condensation_request = false
+enable_prompt_extensions = true
+enable_mcp = false
+disabled_microagents = []
+enable_history_truncation = true
+enable_som_visual_browsing = true
+enable_plan_mode = true
+enable_stuck_detection = true
+
+#################################### Sandbox ###################################
+[sandbox]
+# Sandbox עם גישה מלאה לשרת
+timeout = 120
+user_id = 1000
+base_container_image = "nikolaik/python-nodejs:python3.12-nodejs22"
+use_host_network = false
+enable_auto_lint = false
+initialize_plugins = true
+runtime_extra_deps = ""
+keep_runtime_alive = false
+pause_closed_runtimes = false
+close_delay = 300
+rm_all_containers = false
+enable_gpu = false
+cuda_visible_devices = ''
+
+# Volumes לגישה למערכת
+volumes = "/proc:/host/proc:ro,/sys:/host/sys:ro,/var/run/docker.sock:/var/run/docker.sock:rw,/run/systemd:/host/run/systemd:ro,/var/log:/host/var/log:ro,/etc:/host/etc:ro"
+
+#################################### Security ###################################
+[security]
+confirmation_mode = false
+security_analyzer = "invariant"
+
+#################################### Condenser #################################
+[condenser]
+type = "noop"
+
+
+
+
+
+[agent]
+agent_server_url = "http://localhost:8002"
+

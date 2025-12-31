@@ -60,7 +60,11 @@ services:
       
       # Execution Mode
       - EXECUTION_MODE=local
-      - RUNTIME=docker
+      - RUNTIME=local
+      - SANDBOX_EXECUTION_MODE=disabled
+      - ENABLE_SANDBOX=false
+      - CORE_RUNTIME=local
+      - AGENT_SERVER_URL=http://agent-server-main:8002
       
       # Security Analyzer
       - SECURITY_ANALYZER_URL=http://invariant-server:8000
@@ -244,6 +248,36 @@ services:
       - prometheus
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Main Agent Server - עם כל התיקונים והפאצ'ים
+  agent-server-main:
+    image: openhands/agent-server:patched
+    container_name: agent-server-main
+    # Port 8002 is exposed internally only (no host mapping to avoid conflicts)
+    expose:
+      - "8002"
+    environment:
+      # LLM Configuration - חייב להיות זהה ל-openhands-app
+      - LLM_MODEL=openai/Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
+      - LLM_BASE_URL=http://172.17.0.1:30000/v1
+      - LLM_API_KEY=
+      - LLM_NATIVE_TOOL_CALLING=false
+      # Agent Server URL for internal communication
+      - AGENT_SERVER_URL=http://agent-server-main:8002
+      # CORS Configuration
+      - PERMITTED_CORS_ORIGINS=http://10.0.0.13:3002
+    volumes:
+      - ./workspace:/workspace
+      - ./config.toml:/app/config.toml:ro
+      - ./sdk_patches:/tmp/sdk_patches:ro
+    networks:
+      - openhands-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 30s
       timeout: 10s
       retries: 3

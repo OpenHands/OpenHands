@@ -9,8 +9,9 @@ if [ -f "/usr/local/bin/apply_sdk_patches.sh" ]; then
     echo "🔧 Applying SDK patches (before agent-server starts)..."
     if /usr/local/bin/apply_sdk_patches.sh; then
         echo "✅ SDK patches applied successfully (before server start)"
-        # Add a small delay to ensure patches are fully written
-        sleep 2
+        # Add a delay to ensure patches are fully written and any file system sync completes
+        sleep 3
+        echo "✅ Waited 3 seconds for patches to settle"
     else
         echo "⚠️  Failed to apply SDK patches, but continuing..."
     fi
@@ -64,27 +65,77 @@ done
 
 # Apply SDK patches AFTER agent-server is ready (SDK is now installed)
 # This ensures patches are applied even if SDK wasn't available before
+# CRITICAL: This is when _MEIPASS is created by PyInstaller, so we MUST patch it here
 if [ -f "/usr/local/bin/apply_sdk_patches.sh" ]; then
-    echo "🔧 Applying SDK patches (after agent-server started)..."
+    echo "🔧 Applying SDK patches (after agent-server started - _MEIPASS now exists)..."
     if /usr/local/bin/apply_sdk_patches.sh; then
         echo "✅ SDK patches applied successfully (after server start)"
-        # Verify patches were applied by checking the file
-        PATCHED_FILE=$(python3 << 'PYEOF'
+        
+        # Wait a moment for file system to sync
+        sleep 1
+        
+        # Verify patches were applied by checking ALL possible locations
+        echo "🔍 Verifying patches in all locations..."
+        VERIFICATION_RESULT=$(python3 << 'PYEOF'
+import sys
 import importlib.util
 import os
+import glob
 
-spec = importlib.util.find_spec('openhands.sdk.llm.mixins.fn_call_converter')
-if spec and spec.origin and os.path.exists(spec.origin):
-    print(spec.origin)
+verified = []
+not_found = []
+
+# Method 1: Check loaded module
+module_name = 'openhands.sdk.llm.mixins.fn_call_converter'
+if module_name in sys.modules:
+    module = sys.modules[module_name]
+    if hasattr(module, '__file__') and module.__file__:
+        file_path = module.__file__
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                content = f.read()
+                if 'message.get("content")' in content:
+                    verified.append(f"Loaded module: {file_path}")
+                else:
+                    not_found.append(f"Loaded module NOT patched: {file_path}")
+
+# Method 2: Check _MEIPASS
+if getattr(sys, 'frozen', False):
+    meipass = getattr(sys, '_MEIPASS', None)
+    if meipass:
+        meipass_file = os.path.join(meipass, 'openhands', 'sdk', 'llm', 'mixins', 'fn_call_converter.py')
+        if os.path.exists(meipass_file):
+            with open(meipass_file, 'r') as f:
+                content = f.read()
+                if 'message.get("content")' in content:
+                    verified.append(f"sys._MEIPASS: {meipass_file}")
+                else:
+                    not_found.append(f"sys._MEIPASS NOT patched: {meipass_file}")
+
+# Method 3: Check /tmp/_MEI*
+for meipass_dir in glob.glob('/tmp/_MEI*'):
+    if os.path.isdir(meipass_dir):
+        meipass_file = os.path.join(meipass_dir, 'openhands', 'sdk', 'llm', 'mixins', 'fn_call_converter.py')
+        if os.path.exists(meipass_file):
+            with open(meipass_file, 'r') as f:
+                content = f.read()
+                if 'message.get("content")' in content:
+                    verified.append(f"/tmp/_MEI*: {meipass_file}")
+                else:
+                    not_found.append(f"/tmp/_MEI* NOT patched: {meipass_file}")
+
+# Print results
+if verified:
+    print("✅ VERIFIED:")
+    for v in verified:
+        print(f"  {v}")
+if not_found:
+    print("⚠️  NOT PATCHED:")
+    for nf in not_found:
+        print(f"  {nf}")
 PYEOF
 )
-        if [ -n "$PATCHED_FILE" ] && [ -f "$PATCHED_FILE" ]; then
-            if grep -q 'message.get("content") or ""' "$PATCHED_FILE" || grep -q 'message.get("content")' "$PATCHED_FILE"; then
-                echo "✅ Verified: fn_call_converter.py is patched"
-            else
-                echo "⚠️  Warning: fn_call_converter.py may not be properly patched"
-            fi
-        fi
+        echo "$VERIFICATION_RESULT"
     else
         echo "⚠️  Failed to apply SDK patches, but continuing..."
     fi

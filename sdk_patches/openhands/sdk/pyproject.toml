@@ -1,0 +1,35 @@
+[project]
+name = "openhands-sdk"
+version = "1.7.3"
+description = "OpenHands SDK - Core functionality for building AI agents"
+
+requires-python = ">=3.12"
+dependencies = [
+    "deprecation>=2.1.0",
+    "fastmcp>=2.11.3",
+    "httpx>=0.27.0",
+    "litellm>=1.80.10",
+    "pydantic>=2.11.7",
+    "python-frontmatter>=1.1.0",
+    "python-json-logger>=3.3.0",
+    "tenacity>=9.1.2",
+    "websockets>=12",
+    "lmnr>=0.7.24"
+]
+
+[project.optional-dependencies]
+boto3 = ["boto3>=1.35.0"]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.setuptools.packages.find]
+include = ["openhands.sdk*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"*" = ["py.typed", "*.j2"]

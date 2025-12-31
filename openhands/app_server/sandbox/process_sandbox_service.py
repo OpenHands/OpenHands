@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import AsyncGenerator
+from urllib.parse import urlparse
 
 import base62
 import httpx
@@ -309,6 +310,33 @@ class ProcessSandboxService(SandboxService):
 
     async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
         """Start a new sandbox."""
+        # Check if sandbox execution is disabled - return dummy sandbox pointing to main agent-server
+        sandbox_execution_mode = os.getenv('SANDBOX_EXECUTION_MODE', '').lower()
+        if sandbox_execution_mode == 'disabled':
+            agent_server_url = os.getenv('AGENT_SERVER_URL', 'http://localhost:8002')
+            # Parse port from URL (default 8002)
+            try:
+                parsed = urlparse(agent_server_url)
+                port = parsed.port or (8443 if parsed.scheme == 'https' else 8002)
+            except Exception:
+                port = 8002
+            
+            return SandboxInfo(
+                id='disabled',
+                created_by_user_id=self.user_id,
+                sandbox_spec_id='disabled',
+                status=SandboxStatus.RUNNING,
+                session_api_key=None,
+                exposed_urls=[
+                    ExposedUrl(
+                        name=AGENT_SERVER,
+                        url=agent_server_url,
+                        port=port,
+                    ),
+                ],
+                created_at=utc_now(),
+            )
+        
         # Get sandbox spec
         if sandbox_spec_id is None:
             sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()

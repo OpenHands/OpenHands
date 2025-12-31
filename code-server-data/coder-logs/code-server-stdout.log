@@ -38,3 +38,28 @@
 [2025-12-29T06:29:42.534Z] info      - Using password from $PASSWORD
 [2025-12-29T06:29:42.534Z] info    - Not serving HTTPS
 [2025-12-29T06:29:42.534Z] info  Session server listening on /home/coder/.local/share/code-server/code-server-ipc.sock
+[11:47:24] 
+
+
+
+
+[reconnection-grace-time] No CLI argument provided, using default: 10800000ms (10800s)
+[11:47:25] Extension host agent started.
+[11:47:25] Started initializing default profile extensions in extensions installation folder. file:///home/coder/.local/share/code-server/extensions
+[11:47:25] Completed initializing default profile extensions in extensions installation folder. file:///home/coder/.local/share/code-server/extensions
+[2025-12-29T11:48:00.951Z] info  code-server 4.107.0 ac7322ce566a5dc99c60d92180375329f0bbd759
+[2025-12-29T11:48:00.953Z] info  Using user-data-dir /home/coder/.local/share/code-server
+[2025-12-29T11:48:00.966Z] info  Using config file /home/coder/.config/code-server/config.yaml
+[2025-12-29T11:48:00.966Z] info  HTTP server listening on http://0.0.0.0:8080/
+[2025-12-29T11:48:00.967Z] info    - Authentication is enabled
+[2025-12-29T11:48:00.967Z] info      - Using password from $PASSWORD
+[2025-12-29T11:48:00.967Z] info    - Not serving HTTPS
+[2025-12-29T11:48:00.967Z] info  Session server listening on /home/coder/.local/share/code-server/code-server-ipc.sock
+[2025-12-29T15:21:08.154Z] info  code-server 4.107.0 ac7322ce566a5dc99c60d92180375329f0bbd759
+[2025-12-29T15:21:08.155Z] info  Using user-data-dir /home/coder/.local/share/code-server
+[2025-12-29T15:21:08.254Z] info  Using config file /home/coder/.config/code-server/config.yaml
+[2025-12-29T15:21:08.255Z] info  HTTP server listening on http://0.0.0.0:8080/
+[2025-12-29T15:21:08.255Z] info    - Authentication is enabled
+[2025-12-29T15:21:08.255Z] info      - Using password from $PASSWORD
+[2025-12-29T15:21:08.255Z] info    - Not serving HTTPS
+[2025-12-29T15:21:08.255Z] info  Session server listening on /home/coder/.local/share/code-server/code-server-ipc.sock

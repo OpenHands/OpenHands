@@ -34,3 +34,6 @@ RUN chmod +x /usr/local/bin/apply_sdk_patches.sh
 # Set the entrypoint to our custom script
 ENTRYPOINT ["/usr/local/bin/custom-agent-server-entrypoint.sh"]
 
+
+# Always install a patched fn_call_converter.py
+COPY sdk_patches/openhands/sdk/openhands/sdk/llm/mixins/fn_call_converter.py /usr/local/lib/python3.12/site-packages/openhands/sdk/llm/mixins/fn_call_converter.py
