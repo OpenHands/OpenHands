@@ -163,14 +163,21 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
     async def get_user(self) -> User:
         """Get the authenticated user's information."""
         if self._is_server:
-            user_id = getattr(self, 'user_id', None)
-            if not user_id:
-                raise AuthenticationError(
-                    'User ID is required for Bitbucket Server access'
-                )
-            url = f'{self.BASE_URL}/users/{user_id}'
-            data, _ = await self._make_request(url)
-            links = data.get('links', {})
+            token_value = self.token.get_secret_value()
+            # PAT auth - return empty user since we can't determine identity
+            if ':' not in token_value:
+                return User(id='', login='', avatar_url='', name=None, email=None)
+
+            # Basic auth - extract username and query users API to get slug
+            name = token_value.split(':', 1)[0]
+            users_url = f'{self.BASE_URL}/users'
+            data, _ = await self._make_request(users_url, {'filter': name})
+            users = data.get('values', [])
+            if not users:
+                raise AuthenticationError(f'User not found: {name}')
+
+            user_data = users[0]
+            links = user_data.get('links', {})
             avatar = ''
             if isinstance(links, dict):
                 self_links = links.get('self') or []
@@ -179,8 +186,8 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
             display_name = data.get('displayName')
             email = data.get('emailAddress')
             return User(
-                id=str(data.get('id') or data.get('slug') or user_id),
-                login=data.get('name') or user_id,
+                id=str(user_data.get('id') or user_data.get('slug') or name),
+                login=user_data.get('name') or name,
                 avatar_url=avatar,
                 name=display_name,
                 email=email,
