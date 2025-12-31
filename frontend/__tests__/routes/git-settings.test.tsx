@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import i18next from "i18next";
 import { I18nextProvider } from "react-i18next";
 import GitSettingsScreen from "#/routes/git-settings";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import AuthService from "#/api/auth-service/auth-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -298,6 +298,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -320,6 +321,7 @@ describe("Form submission", () => {
       gitlab: { token: "test-token", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -342,6 +344,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "test-token", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -364,6 +367,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "test-token", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 

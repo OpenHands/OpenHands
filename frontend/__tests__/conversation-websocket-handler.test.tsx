@@ -1,12 +1,27 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterAll,
+  afterEach,
+  vi,
+} from "vitest";
 import { screen, waitFor, render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { useBrowserStore } from "#/stores/browser-store";
+import { useCommandStore } from "#/stores/command-store";
 import {
   createMockMessageEvent,
   createMockUserMessageEvent,
   createMockAgentErrorEvent,
+  createMockBrowserObservationEvent,
+  createMockBrowserNavigateActionEvent,
+  createMockExecuteBashActionEvent,
+  createMockExecuteBashObservationEvent,
 } from "#/mocks/mock-ws-helpers";
 import {
   ConnectionStatusComponent,
@@ -20,6 +35,7 @@ import {
 } from "#/contexts/conversation-websocket-context";
 import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
+import { isV1Event } from "#/types/v1/type-guards";
 
 // MSW WebSocket mock setup
 const { wsLink, server: mswServer } = conversationWebSocketTestSetup();
@@ -127,6 +143,11 @@ describe("Conversation WebSocket Handler", () => {
     });
 
     it("should handle malformed/invalid event data gracefully", async () => {
+      // Suppress expected console.warn for invalid JSON parsing
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
       // Set up MSW to send various invalid events when connection is established
       mswServer.use(
         wsLink.addEventListener("connection", ({ client, server }) => {
@@ -189,6 +210,9 @@ describe("Conversation WebSocket Handler", () => {
         "valid-event-123",
       );
       expect(screen.getByTestId("ui-events-count")).toHaveTextContent("1");
+
+      // Restore console.warn
+      consoleWarnSpy.mockRestore();
     });
   });
 
@@ -401,6 +425,101 @@ describe("Conversation WebSocket Handler", () => {
       // based on how the actual reconnection logic is implemented
     });
 
+    it("should not create duplicate events when WebSocket reconnects with resend_all=true", async () => {
+      const conversationId = "test-conversation-reconnect";
+      let connectionCount = 0;
+
+      // Clear event store before test
+      useEventStore.getState().clearEvents();
+
+      // Create mock events that will be sent on each connection
+      const mockHistoryEvents = [
+        createMockUserMessageEvent({ id: "event-1" }),
+        createMockMessageEvent({ id: "event-2" }),
+        createMockMessageEvent({ id: "event-3" }),
+      ];
+
+      // Set up MSW to mock event count API and WebSocket
+      // The WebSocket will resend all events on each connection (simulating resend_all=true behavior)
+      mswServer.use(
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(3),
+        ),
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          connectionCount += 1;
+          server.connect();
+
+          // Send all history events on EVERY connection (simulating resend_all=true)
+          mockHistoryEvents.forEach((event) => {
+            client.send(JSON.stringify(event));
+          });
+
+          // On first connection, simulate a disconnect after events are sent
+          if (connectionCount === 1) {
+            setTimeout(() => {
+              client.close(1006, "Simulated disconnect");
+            }, 100);
+          }
+        }),
+      );
+
+      // Render with WebSocket context
+      renderWithWebSocketContext(
+        <ConnectionStatusComponent />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      // Wait for initial connection and events
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+
+      await waitFor(() => {
+        expect(useEventStore.getState().events.length).toBe(3);
+      });
+
+      // Wait for disconnect
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "CLOSED",
+        );
+      });
+
+      // Wait for reconnection
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("connection-state")).toHaveTextContent(
+            "OPEN",
+          );
+        },
+        { timeout: 5000 },
+      );
+
+      // Give time for resent events to be processed
+      await new Promise((resolve) => {
+        setTimeout(resolve, 200);
+      });
+
+      // After reconnection, events should NOT be duplicated
+      // The server sends 3 events again (resend_all=true), but we should deduplicate
+      const { events } = useEventStore.getState();
+      const v1Events = events.filter(isV1Event);
+      const uniqueEventIds = [...new Set(v1Events.map((e) => e.id))];
+
+      // This assertion will FAIL with current implementation (showing the bug)
+      // Expected: 3 events (deduplicated)
+      // Actual: 6 events (duplicated)
+      expect(v1Events.length).toBe(3);
+      expect(uniqueEventIds.length).toBe(3);
+
+      // Verify we actually had 2 connections
+      expect(connectionCount).toBe(2);
+    });
+
     it.todo("should track and display errors with proper metadata");
     it.todo("should set appropriate error states on connection failures");
     it.todo(
@@ -439,18 +558,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(expectedEventCount);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(expectedEventCount),
+        ),
         wsLink.addEventListener("connection", ({ client, server }) => {
           server.connect();
           // Send all history events
@@ -461,7 +572,7 @@ describe("Conversation WebSocket Handler", () => {
       );
 
       // Create a test component that displays loading state
-      const HistoryLoadingComponent = () => {
+      function HistoryLoadingComponent() {
         const context = useConversationWebSocket();
         const { events } = useEventStore();
 
@@ -474,7 +585,7 @@ describe("Conversation WebSocket Handler", () => {
             <div data-testid="expected-event-count">{expectedEventCount}</div>
           </div>
         );
-      };
+      }
 
       // Render with WebSocket context
       renderWithWebSocketContext(
@@ -484,7 +595,9 @@ describe("Conversation WebSocket Handler", () => {
       );
 
       // Initially should be loading history
-      expect(screen.getByTestId("is-loading-history")).toHaveTextContent("true");
+      expect(screen.getByTestId("is-loading-history")).toHaveTextContent(
+        "true",
+      );
 
       // Wait for all events to be received
       await waitFor(() => {
@@ -504,18 +617,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(0);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(0),
+        ),
         wsLink.addEventListener("connection", ({ server }) => {
           server.connect();
           // No events sent for empty history
@@ -523,7 +628,7 @@ describe("Conversation WebSocket Handler", () => {
       );
 
       // Create a test component that displays loading state
-      const HistoryLoadingComponent = () => {
+      function HistoryLoadingComponent() {
         const context = useConversationWebSocket();
 
         return (
@@ -533,7 +638,7 @@ describe("Conversation WebSocket Handler", () => {
             </div>
           </div>
         );
-      };
+      }
 
       // Render with WebSocket context
       renderWithWebSocketContext(
@@ -561,18 +666,10 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
-        http.get("/api/v1/events/count", ({ request }) => {
-          const url = new URL(request.url);
-          const conversationIdParam = url.searchParams.get(
-            "conversation_id__eq",
-          );
-
-          if (conversationIdParam === conversationId) {
-            return HttpResponse.json(expectedEventCount);
-          }
-
-          return HttpResponse.json(0);
-        }),
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(expectedEventCount),
+        ),
         wsLink.addEventListener("connection", ({ client, server }) => {
           server.connect();
           // Send all history events
@@ -583,7 +680,7 @@ describe("Conversation WebSocket Handler", () => {
       );
 
       // Create a test component that displays loading state
-      const HistoryLoadingComponent = () => {
+      function HistoryLoadingComponent() {
         const context = useConversationWebSocket();
         const { events } = useEventStore();
 
@@ -595,7 +692,7 @@ describe("Conversation WebSocket Handler", () => {
             <div data-testid="events-received">{events.length}</div>
           </div>
         );
-      };
+      }
 
       // Render with WebSocket context
       renderWithWebSocketContext(
@@ -605,7 +702,9 @@ describe("Conversation WebSocket Handler", () => {
       );
 
       // Initially should be loading history
-      expect(screen.getByTestId("is-loading-history")).toHaveTextContent("true");
+      expect(screen.getByTestId("is-loading-history")).toHaveTextContent(
+        "true",
+      );
 
       // Wait for all events to be received
       await waitFor(() => {
@@ -621,17 +720,133 @@ describe("Conversation WebSocket Handler", () => {
     });
   });
 
-  // 9. Terminal I/O Tests (ExecuteBashAction and ExecuteBashObservation)
-  describe("Terminal I/O Integration", () => {
-    it("should append command to store when ExecuteBashAction event is received", async () => {
-      const { createMockExecuteBashActionEvent } = await import(
-        "#/mocks/mock-ws-helpers"
+  // 9. Browser State Tests (BrowserObservation)
+  describe("Browser State Integration", () => {
+    beforeEach(() => {
+      useBrowserStore.getState().reset();
+    });
+
+    it("should update browser store with screenshot when BrowserObservation event is received", async () => {
+      // Create a mock BrowserObservation event with screenshot data
+      const mockBrowserObsEvent = createMockBrowserObservationEvent(
+        "base64-screenshot-data",
+        "Page loaded successfully",
       );
-      const { useCommandStore } = await import("#/state/command-store");
 
-      // Clear the command store before test
+      // Set up MSW to send the event when connection is established
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          // Send the mock event after connection
+          client.send(JSON.stringify(mockBrowserObsEvent));
+        }),
+      );
+
+      // Render with WebSocket context
+      renderWithWebSocketContext(<ConnectionStatusComponent />);
+
+      // Wait for connection
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+
+      // Wait for the browser store to be updated with screenshot
+      await waitFor(() => {
+        const { screenshotSrc } = useBrowserStore.getState();
+        expect(screenshotSrc).toBe(
+          "data:image/png;base64,base64-screenshot-data",
+        );
+      });
+    });
+
+    it("should update browser store with URL when BrowserNavigateAction followed by BrowserObservation", async () => {
+      // Create mock events - action first, then observation
+      const mockBrowserActionEvent = createMockBrowserNavigateActionEvent(
+        "https://example.com/test-page",
+      );
+      const mockBrowserObsEvent = createMockBrowserObservationEvent(
+        "base64-screenshot-data",
+        "Page loaded successfully",
+      );
+
+      // Set up MSW to send both events when connection is established
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          // Send action first, then observation
+          client.send(JSON.stringify(mockBrowserActionEvent));
+          client.send(JSON.stringify(mockBrowserObsEvent));
+        }),
+      );
+
+      // Render with WebSocket context
+      renderWithWebSocketContext(<ConnectionStatusComponent />);
+
+      // Wait for connection
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+
+      // Wait for the browser store to be updated with both screenshot and URL
+      await waitFor(() => {
+        const { screenshotSrc, url } = useBrowserStore.getState();
+        expect(screenshotSrc).toBe(
+          "data:image/png;base64,base64-screenshot-data",
+        );
+        expect(url).toBe("https://example.com/test-page");
+      });
+    });
+
+    it("should not update browser store when BrowserObservation has no screenshot data", async () => {
+      const initialScreenshot = useBrowserStore.getState().screenshotSrc;
+
+      // Create a mock BrowserObservation event WITHOUT screenshot data
+      const mockBrowserObsEvent = createMockBrowserObservationEvent(
+        null, // no screenshot
+        "Browser action completed",
+      );
+
+      // Set up MSW to send the event when connection is established
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          // Send the mock event after connection
+          client.send(JSON.stringify(mockBrowserObsEvent));
+        }),
+      );
+
+      // Render with WebSocket context
+      renderWithWebSocketContext(<ConnectionStatusComponent />);
+
+      // Wait for connection
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+
+      // Give some time for any potential updates
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+
+      // Screenshot should remain unchanged (empty/initial value)
+      const { screenshotSrc } = useBrowserStore.getState();
+      expect(screenshotSrc).toBe(initialScreenshot);
+    });
+  });
+
+  // 10. Terminal I/O Tests (ExecuteBashAction and ExecuteBashObservation)
+  describe("Terminal I/O Integration", () => {
+    beforeEach(() => {
       useCommandStore.getState().clearTerminal();
+    });
 
+    it("should append command to store when ExecuteBashAction event is received", async () => {
       // Create a mock ExecuteBashAction event
       const mockBashActionEvent = createMockExecuteBashActionEvent("npm test");
 
@@ -667,14 +882,6 @@ describe("Conversation WebSocket Handler", () => {
     });
 
     it("should append output to store when ExecuteBashObservation event is received", async () => {
-      const { createMockExecuteBashObservationEvent } = await import(
-        "#/mocks/mock-ws-helpers"
-      );
-      const { useCommandStore } = await import("#/state/command-store");
-
-      // Clear the command store before test
-      useCommandStore.getState().clearTerminal();
-
       // Create a mock ExecuteBashObservation event
       const mockBashObservationEvent = createMockExecuteBashObservationEvent(
         "PASS  tests/example.test.js\n  ✓ should work (2 ms)",

@@ -1,6 +1,8 @@
 import asyncio
+import os
 from abc import ABC, abstractmethod
 
+from openhands.agent_server import env_parser
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_spec_models import (
     SandboxSpecInfo,
@@ -11,7 +13,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 # The version of the agent server to use for deployments.
 # Typically this will be the same as the values from the pyproject.toml
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:5f62cee-python'
+AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:5cbfbf7-python'
 
 
 class SandboxSpecService(ABC):
@@ -57,3 +59,37 @@ class SandboxSpecServiceInjector(
     DiscriminatedUnionMixin, Injector[SandboxSpecService], ABC
 ):
     pass
+
+
+def get_agent_server_image() -> str:
+    agent_server_image_repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY')
+    agent_server_image_tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
+    if agent_server_image_repository and agent_server_image_tag:
+        return f'{agent_server_image_repository}:{agent_server_image_tag}'
+    return AGENT_SERVER_IMAGE
+
+
+def get_agent_server_env() -> dict[str, str]:
+    """Get environment variables to be injected into agent server sandbox environments.
+
+    This function reads environment variable overrides from the OH_AGENT_SERVER_ENV
+    environment variable, which should contain a JSON string mapping variable names
+    to their values.
+
+    Usage:
+        Set OH_AGENT_SERVER_ENV to a JSON string:
+        OH_AGENT_SERVER_ENV='{"DEBUG": "true", "LOG_LEVEL": "info", "CUSTOM_VAR": "value"}'
+
+        This will inject the following environment variables into all sandbox environments:
+        - DEBUG=true
+        - LOG_LEVEL=info
+        - CUSTOM_VAR=value
+
+    Returns:
+        dict[str, str]: Dictionary of environment variable names to values.
+                       Returns empty dict if OH_AGENT_SERVER_ENV is not set or invalid.
+
+    Raises:
+        JSONDecodeError: If OH_AGENT_SERVER_ENV contains invalid JSON.
+    """
+    return env_parser.from_env(dict[str, str], 'OH_AGENT_SERVER_ENV')

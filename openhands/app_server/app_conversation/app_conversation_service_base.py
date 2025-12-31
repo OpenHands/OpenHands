@@ -4,11 +4,16 @@ import tempfile
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import TYPE_CHECKING, AsyncGenerator
+from uuid import UUID
+
+if TYPE_CHECKING:
+    import httpx
 
 import base62
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    AgentType,
     AppConversationStartTask,
     AppConversationStartTaskStatus,
 )
@@ -17,6 +22,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 )
 from openhands.app_server.app_conversation.skill_loader import (
     load_global_skills,
+    load_org_skills,
     load_repo_skills,
     load_sandbox_skills,
     merge_skills,
@@ -25,7 +31,17 @@ from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk import Agent
 from openhands.sdk.context.agent_context import AgentContext
+from openhands.sdk.context.condenser import LLMSummarizingCondenser
 from openhands.sdk.context.skills import load_user_skills
+from openhands.sdk.llm import LLM
+from openhands.sdk.security.analyzer import SecurityAnalyzerBase
+from openhands.sdk.security.confirmation_policy import (
+    AlwaysConfirm,
+    ConfirmationPolicyBase,
+    ConfirmRisky,
+    NeverConfirm,
+)
+from openhands.sdk.security.llm_analyzer import LLMSecurityAnalyzer
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)
@@ -42,7 +58,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
     init_git_in_empty_workspace: bool
     user_context: UserContext
 
-    async def _load_and_merge_all_skills(
+    async def load_and_merge_all_skills(
         self,
         sandbox: SandboxInfo,
         remote_workspace: AsyncRemoteWorkspace,
@@ -79,13 +95,20 @@ class AppConversationServiceBase(AppConversationService, ABC):
             except Exception as e:
                 _logger.warning(f'Failed to load user skills: {str(e)}')
                 user_skills = []
+
+            # Load organization-level skills
+            org_skills = await load_org_skills(
+                remote_workspace, selected_repository, working_dir, self.user_context
+            )
+
             repo_skills = await load_repo_skills(
                 remote_workspace, selected_repository, working_dir
             )
 
             # Merge all skills (later lists override earlier ones)
+            # Precedence: sandbox < global < user < org < repo
             all_skills = merge_skills(
-                [sandbox_skills, global_skills, user_skills, repo_skills]
+                [sandbox_skills, global_skills, user_skills, org_skills, repo_skills]
             )
 
             _logger.info(
@@ -146,7 +169,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             Updated agent with skills loaded into context
         """
         # Load and merge all skills
-        all_skills = await self._load_and_merge_all_skills(
+        all_skills = await self.load_and_merge_all_skills(
             sandbox, remote_workspace, selected_repository, working_dir
         )
 
@@ -175,12 +198,49 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         task.status = AppConversationStartTaskStatus.SETTING_UP_SKILLS
         yield task
-        await self._load_and_merge_all_skills(
+        await self.load_and_merge_all_skills(
             sandbox,
             workspace,
             task.request.selected_repository,
             workspace.working_dir,
         )
+
+    async def _configure_git_user_settings(
+        self,
+        workspace: AsyncRemoteWorkspace,
+    ) -> None:
+        """Configure git global user settings from user preferences.
+
+        Reads git_user_name and git_user_email from user settings and
+        configures them as git global settings in the workspace.
+
+        Args:
+            workspace: The remote workspace to configure git settings in.
+        """
+        try:
+            user_info = await self.user_context.get_user_info()
+
+            if user_info.git_user_name:
+                cmd = f'git config --global user.name "{user_info.git_user_name}"'
+                result = await workspace.execute_command(cmd, workspace.working_dir)
+                if result.exit_code:
+                    _logger.warning(f'Git config user.name failed: {result.stderr}')
+                else:
+                    _logger.info(
+                        f'Git configured with user.name={user_info.git_user_name}'
+                    )
+
+            if user_info.git_user_email:
+                cmd = f'git config --global user.email "{user_info.git_user_email}"'
+                result = await workspace.execute_command(cmd, workspace.working_dir)
+                if result.exit_code:
+                    _logger.warning(f'Git config user.email failed: {result.stderr}')
+                else:
+                    _logger.info(
+                        f'Git configured with user.email={user_info.git_user_email}'
+                    )
+        except Exception as e:
+            _logger.warning(f'Failed to configure git user settings: {e}')
 
     async def clone_or_init_git_repo(
         self,
@@ -196,6 +256,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
         )
         if result.exit_code:
             _logger.warning(f'mkdir failed: {result.stderr}')
+
+        # Configure git user settings from user preferences
+        await self._configure_git_user_settings(workspace)
 
         if not request.selected_repository:
             if self.init_git_in_empty_workspace:
@@ -221,7 +284,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         # Clone the repo - this is the slow part!
         clone_command = f'git clone {remote_repo_url} {dir_name}'
-        result = await workspace.execute_command(clone_command, workspace.working_dir)
+        result = await workspace.execute_command(
+            clone_command, workspace.working_dir, 120
+        )
         if result.exit_code:
             _logger.warning(f'Git clone failed: {result.stderr}')
 
@@ -233,7 +298,10 @@ class AppConversationServiceBase(AppConversationService, ABC):
             random_str = base62.encodebytes(os.urandom(16))
             openhands_workspace_branch = f'openhands-workspace-{random_str}'
             checkout_command = f'git checkout -b {openhands_workspace_branch}'
-        await workspace.execute_command(checkout_command, workspace.working_dir)
+        git_dir = Path(workspace.working_dir) / dir_name
+        result = await workspace.execute_command(checkout_command, git_dir)
+        if result.exit_code:
+            _logger.warning(f'Git checkout failed: {result.stderr}')
 
     async def maybe_run_setup_script(
         self,
@@ -295,3 +363,131 @@ class AppConversationServiceBase(AppConversationService, ABC):
             return
 
         _logger.info('Git pre-commit hook installed successfully')
+
+    def _create_condenser(
+        self,
+        llm: LLM,
+        agent_type: AgentType,
+        condenser_max_size: int | None,
+    ) -> LLMSummarizingCondenser:
+        """Create a condenser based on user settings and agent type.
+
+        Args:
+            llm: The LLM instance to use for condensation
+            agent_type: Type of agent (PLAN or DEFAULT)
+            condenser_max_size: condenser_max_size setting
+
+        Returns:
+            Configured LLMSummarizingCondenser instance
+        """
+        # LLMSummarizingCondenser has defaults: max_size=120, keep_first=4
+        condenser_kwargs = {
+            'llm': llm.model_copy(
+                update={
+                    'usage_id': (
+                        'condenser'
+                        if agent_type == AgentType.DEFAULT
+                        else 'planning_condenser'
+                    )
+                }
+            ),
+        }
+        # Only override max_size if user has a custom value
+        if condenser_max_size is not None:
+            condenser_kwargs['max_size'] = condenser_max_size
+
+        condenser = LLMSummarizingCondenser(**condenser_kwargs)
+
+        return condenser
+
+    def _create_security_analyzer_from_string(
+        self, security_analyzer_str: str | None
+    ) -> SecurityAnalyzerBase | None:
+        """Convert security analyzer string from settings to SecurityAnalyzerBase instance.
+
+        Args:
+            security_analyzer_str: String value from settings. Valid values:
+                - "llm" -> LLMSecurityAnalyzer
+                - "none" or None -> None
+                - Other values -> None (unsupported analyzers are ignored)
+
+        Returns:
+            SecurityAnalyzerBase instance or None
+        """
+        if not security_analyzer_str or security_analyzer_str.lower() == 'none':
+            return None
+
+        if security_analyzer_str.lower() == 'llm':
+            return LLMSecurityAnalyzer()
+
+        # For unknown values, log a warning and return None
+        _logger.warning(
+            f'Unknown security analyzer value: {security_analyzer_str}. '
+            'Supported values: "llm", "none". Defaulting to None.'
+        )
+        return None
+
+    def _select_confirmation_policy(
+        self, confirmation_mode: bool, security_analyzer: str | None
+    ) -> ConfirmationPolicyBase:
+        """Choose confirmation policy using only mode flag and analyzer string."""
+        if not confirmation_mode:
+            return NeverConfirm()
+
+        analyzer_kind = (security_analyzer or '').lower()
+        if analyzer_kind == 'llm':
+            return ConfirmRisky()
+
+        return AlwaysConfirm()
+
+    async def _set_security_analyzer_from_settings(
+        self,
+        agent_server_url: str,
+        session_api_key: str | None,
+        conversation_id: UUID,
+        security_analyzer_str: str | None,
+        httpx_client: 'httpx.AsyncClient',
+    ) -> None:
+        """Set security analyzer on conversation using only the analyzer string.
+
+        Args:
+            agent_server_url: URL of the agent server
+            session_api_key: Session API key for authentication
+            conversation_id: ID of the conversation to update
+            security_analyzer_str: String value from settings
+            httpx_client: HTTP client for making API requests
+        """
+
+        if session_api_key is None:
+            return
+
+        security_analyzer = self._create_security_analyzer_from_string(
+            security_analyzer_str
+        )
+
+        # Only make API call if we have a security analyzer to set
+        # (None is the default, so we can skip the call if it's None)
+        if security_analyzer is None:
+            return
+
+        try:
+            # Prepare the request payload
+            payload = {'security_analyzer': security_analyzer.model_dump()}
+
+            # Call agent server API to set security analyzer
+            response = await httpx_client.post(
+                f'{agent_server_url}/api/conversations/{conversation_id}/security_analyzer',
+                json=payload,
+                headers={'X-Session-API-Key': session_api_key},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            _logger.info(
+                f'Successfully set security analyzer for conversation {conversation_id}'
+            )
+        except Exception as e:
+            # Log error but don't fail conversation creation
+            _logger.warning(
+                f'Failed to set security analyzer for conversation {conversation_id}: {e}',
+                exc_info=True,
+            )

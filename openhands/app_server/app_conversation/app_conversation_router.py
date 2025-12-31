@@ -1,11 +1,12 @@
 """Sandboxed Conversation router for OpenHands Server."""
 
 import asyncio
+import logging
 import os
 import sys
 import tempfile
 from datetime import datetime
-from typing import Annotated, AsyncGenerator
+from typing import Annotated, AsyncGenerator, Literal
 from uuid import UUID
 
 import httpx
@@ -28,8 +29,8 @@ else:
         return await async_iterator.__anext__()
 
 
-from fastapi import APIRouter, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.app_server.app_conversation.app_conversation_models import (
@@ -39,9 +40,14 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
+    AppConversationUpdateRequest,
+    SkillResponse,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
+)
+from openhands.app_server.app_conversation.app_conversation_service_base import (
+    AppConversationServiceBase,
 )
 from openhands.app_server.app_conversation.app_conversation_start_task_service import (
     AppConversationStartTaskService,
@@ -65,9 +71,11 @@ from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 router = APIRouter(prefix='/app-conversations', tags=['Conversations'])
+logger = logging.getLogger(__name__)
 app_conversation_service_dependency = depends_app_conversation_service()
 app_conversation_start_task_service_dependency = (
     depends_app_conversation_start_task_service()
@@ -203,11 +211,32 @@ async def start_app_conversation(
     set_db_session_keep_open(request.state, True)
     set_httpx_client_keep_open(request.state, True)
 
-    """Start an app conversation start task and return it."""
-    async_iter = app_conversation_service.start_app_conversation(start_request)
-    result = await anext(async_iter)
-    asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
-    return result
+    try:
+        """Start an app conversation start task and return it."""
+        async_iter = app_conversation_service.start_app_conversation(start_request)
+        result = await anext(async_iter)
+        asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
+        return result
+    except Exception:
+        await db_session.close()
+        await httpx_client.aclose()
+        raise
+
+
+@router.patch('/{conversation_id}')
+async def update_app_conversation(
+    conversation_id: str,
+    update_request: AppConversationUpdateRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+) -> AppConversation:
+    info = await app_conversation_service.update_app_conversation(
+        UUID(conversation_id), update_request
+    )
+    if info is None:
+        raise HTTPException(404, 'unknown_app_conversation')
+    return info
 
 
 @router.post('/stream-start')
@@ -398,6 +427,184 @@ async def read_conversation_file(
                 pass
 
     return ''
+
+
+@router.get('/{conversation_id}/skills')
+async def get_conversation_skills(
+    conversation_id: UUID,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+    sandbox_service: SandboxService = sandbox_service_dependency,
+    sandbox_spec_service: SandboxSpecService = sandbox_spec_service_dependency,
+) -> JSONResponse:
+    """Get all skills associated with the conversation.
+
+    This endpoint returns all skills that are loaded for the v1 conversation.
+    Skills are loaded from multiple sources:
+    - Sandbox skills (exposed URLs)
+    - Global skills (OpenHands/skills/)
+    - User skills (~/.openhands/skills/)
+    - Organization skills (org/.openhands repository)
+    - Repository skills (repo/.openhands/skills/ or .openhands/microagents/)
+
+    Returns:
+        JSONResponse: A JSON response containing the list of skills.
+    """
+    try:
+        # Get the conversation info
+        conversation = await app_conversation_service.get_app_conversation(
+            conversation_id
+        )
+        if not conversation:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': f'Conversation {conversation_id} not found'},
+            )
+
+        # Get the sandbox info
+        sandbox = await sandbox_service.get_sandbox(conversation.sandbox_id)
+        if not sandbox or sandbox.status != SandboxStatus.RUNNING:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    'error': f'Sandbox not found or not running for conversation {conversation_id}'
+                },
+            )
+
+        # Get the sandbox spec to find the working directory
+        sandbox_spec = await sandbox_spec_service.get_sandbox_spec(
+            sandbox.sandbox_spec_id
+        )
+        if not sandbox_spec:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': 'Sandbox spec not found'},
+            )
+
+        # Get the agent server URL
+        if not sandbox.exposed_urls:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': 'No agent server URL found for sandbox'},
+            )
+
+        agent_server_url = None
+        for exposed_url in sandbox.exposed_urls:
+            if exposed_url.name == AGENT_SERVER:
+                agent_server_url = exposed_url.url
+                break
+
+        if not agent_server_url:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={'error': 'Agent server URL not found in sandbox'},
+            )
+
+        agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+
+        # Create remote workspace
+        remote_workspace = AsyncRemoteWorkspace(
+            host=agent_server_url,
+            api_key=sandbox.session_api_key,
+            working_dir=sandbox_spec.working_dir,
+        )
+
+        # Load skills from all sources
+        logger.info(f'Loading skills for conversation {conversation_id}')
+
+        # Prefer the shared loader to avoid duplication; otherwise return empty list.
+        all_skills: list = []
+        if isinstance(app_conversation_service, AppConversationServiceBase):
+            all_skills = await app_conversation_service.load_and_merge_all_skills(
+                sandbox,
+                remote_workspace,
+                conversation.selected_repository,
+                sandbox_spec.working_dir,
+            )
+
+        logger.info(
+            f'Loaded {len(all_skills)} skills for conversation {conversation_id}: '
+            f'{[s.name for s in all_skills]}'
+        )
+
+        # Transform skills to response format
+        skills_response = []
+        for skill in all_skills:
+            # Determine type based on trigger
+            skill_type: Literal['repo', 'knowledge']
+            if skill.trigger is None:
+                skill_type = 'repo'
+            else:
+                skill_type = 'knowledge'
+
+            # Extract triggers
+            triggers = []
+            if isinstance(skill.trigger, (KeywordTrigger, TaskTrigger)):
+                if hasattr(skill.trigger, 'keywords'):
+                    triggers = skill.trigger.keywords
+                elif hasattr(skill.trigger, 'triggers'):
+                    triggers = skill.trigger.triggers
+
+            skills_response.append(
+                SkillResponse(
+                    name=skill.name,
+                    type=skill_type,
+                    content=skill.content,
+                    triggers=triggers,
+                )
+            )
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={'skills': [s.model_dump() for s in skills_response]},
+        )
+
+    except Exception as e:
+        logger.error(f'Error getting skills for conversation {conversation_id}: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': f'Error getting skills: {str(e)}'},
+        )
+
+
+@router.get('/{conversation_id}/download')
+async def export_conversation(
+    conversation_id: UUID,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+):
+    """Download a conversation trajectory as a zip file.
+
+    Returns a zip file containing all events and metadata for the conversation.
+
+    Args:
+        conversation_id: The UUID of the conversation to download
+
+    Returns:
+        A zip file containing the conversation trajectory
+    """
+    try:
+        # Get the zip file content
+        zip_content = await app_conversation_service.export_conversation(
+            conversation_id
+        )
+
+        # Return as a downloadable zip file
+        return Response(
+            content=zip_content,
+            media_type='application/zip',
+            headers={
+                'Content-Disposition': f'attachment; filename="conversation_{conversation_id}.zip"'
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f'Failed to download trajectory: {str(e)}'
+        )
 
 
 async def _consume_remaining(

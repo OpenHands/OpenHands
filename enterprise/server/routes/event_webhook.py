@@ -134,12 +134,12 @@ async def _process_batch_operations_background(
             )
         except Exception as e:
             logger.error(
-                'error_processing_batch_operation',
+                f'error_processing_batch_operation: {type(e).__name__}: {e}',
                 extra={
                     'path': batch_op.path,
                     'method': str(batch_op.method),
-                    'error': str(e),
                 },
+                exc_info=True,
             )
 
 

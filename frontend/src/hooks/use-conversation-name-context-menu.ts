@@ -10,11 +10,17 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversationSandbox } from "./mutation/use-unified-stop-conversation";
 import { useGetTrajectory } from "./mutation/use-get-trajectory";
+import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { downloadTrajectory } from "#/utils/download-trajectory";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV0Event } from "#/types/v1/type-guards";
+import { useActiveConversation } from "./query/use-active-conversation";
+import { useDownloadConversation } from "./use-download-conversation";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -37,16 +43,18 @@ export function useConversationNameContextMenu({
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: stopConversation } = useUnifiedPauseConversationSandbox();
   const { mutate: getTrajectory } = useGetTrajectory();
+  const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();
+  const { data: conversation } = useActiveConversation();
   const metrics = useMetricsStore();
 
   const [metricsModalVisible, setMetricsModalVisible] = React.useState(false);
   const [systemModalVisible, setSystemModalVisible] = React.useState(false);
-  const [microagentsModalVisible, setMicroagentsModalVisible] =
-    React.useState(false);
+  const [skillsModalVisible, setSkillsModalVisible] = React.useState(false);
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
+  const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const systemMessage = events
     .filter(isV0Event)
@@ -149,6 +157,17 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
+  const handleDownloadConversation = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (conversationId && conversation?.conversation_version === "V1") {
+      await downloadConversation(conversationId);
+    }
+    onContextMenuToggle?.(false);
+  };
+
   const handleDisplayCost = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setMetricsModalVisible(true);
@@ -161,11 +180,38 @@ export function useConversationNameContextMenu({
     onContextMenuToggle?.(false);
   };
 
-  const handleShowMicroagents = (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
+  const handleShowSkills = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setMicroagentsModalVisible(true);
+    setSkillsModalVisible(true);
+    onContextMenuToggle?.(false);
+  };
+
+  const handleTogglePublic = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (conversationId && conversation) {
+      // Toggle the current public state
+      const newPublicState = !conversation.public;
+      updatePublicFlag({
+        conversationId,
+        isPublic: newPublicState,
+      });
+    }
+
+    onContextMenuToggle?.(false);
+  };
+
+  const handleCopyShareLink = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (conversationId) {
+      const shareUrl = `${window.location.origin}/shared/conversations/${conversationId}`;
+      navigator.clipboard.writeText(shareUrl);
+      displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+    }
+
     onContextMenuToggle?.(false);
   };
 
@@ -176,9 +222,12 @@ export function useConversationNameContextMenu({
     handleEdit,
     handleExportConversation,
     handleDownloadViaVSCode,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
-    handleShowMicroagents,
+    handleShowSkills,
+    handleTogglePublic,
+    handleCopyShareLink,
     handleConfirmDelete,
     handleConfirmStop,
 
@@ -187,8 +236,8 @@ export function useConversationNameContextMenu({
     setMetricsModalVisible,
     systemModalVisible,
     setSystemModalVisible,
-    microagentsModalVisible,
-    setMicroagentsModalVisible,
+    skillsModalVisible,
+    setSkillsModalVisible,
     confirmDeleteModalVisible,
     setConfirmDeleteModalVisible,
     confirmStopModalVisible,
@@ -202,8 +251,13 @@ export function useConversationNameContextMenu({
     shouldShowStop: conversationStatus !== "STOPPED",
     shouldShowDownload: Boolean(conversationId && showOptions),
     shouldShowExport: Boolean(conversationId && showOptions),
+    shouldShowDownloadConversation: Boolean(
+      conversationId &&
+      showOptions &&
+      conversation?.conversation_version === "V1",
+    ),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
-    shouldShowMicroagents: Boolean(showOptions && conversationId),
+    shouldShowSkills: Boolean(showOptions && conversationId),
   };
 }

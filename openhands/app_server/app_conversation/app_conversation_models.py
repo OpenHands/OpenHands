@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -43,6 +44,8 @@ class AppConversationInfo(BaseModel):
 
     parent_conversation_id: OpenHandsUUID | None = None
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
+
+    public: bool | None = None
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -113,6 +116,12 @@ class AppConversationStartRequest(BaseModel):
     parent_conversation_id: OpenHandsUUID | None = None
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
 
+    public: bool | None = None
+
+
+class AppConversationUpdateRequest(BaseModel):
+    public: bool
+
 
 class AppConversationStartTaskStatus(Enum):
     WORKING = 'WORKING'
@@ -161,3 +170,12 @@ class AppConversationStartTask(BaseModel):
 class AppConversationStartTaskPage(BaseModel):
     items: list[AppConversationStartTask]
     next_page_id: str | None = None
+
+
+class SkillResponse(BaseModel):
+    """Response model for skills endpoint."""
+
+    name: str
+    type: Literal['repo', 'knowledge']
+    content: str
+    triggers: list[str] = []

@@ -20,7 +20,7 @@ export function ConversationPanelWrapper({
   return ReactDOM.createPortal(
     <div
       className={cn(
-        "absolute h-full w-full left-0 top-0 z-[9999] bg-black/80 rounded-xl",
+        "absolute h-full w-full left-0 top-0 z-[100] bg-black/80 rounded-xl",
         pathname === "/" && "bottom-0 top-0 md:top-3 md:bottom-3 h-auto",
       )}
     >

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -28,6 +30,7 @@ class Settings(BaseModel):
     llm_model: str | None = None
     llm_api_key: SecretStr | None = None
     llm_base_url: str | None = None
+    user_version: int | None = None
     remote_runtime_resource_factor: int | None = None
     # Planned to be removed from settings
     secrets_store: Secrets = Field(default_factory=Secrets, frozen=True)
@@ -48,7 +51,7 @@ class Settings(BaseModel):
     email_verified: bool | None = None
     git_user_name: str | None = None
     git_user_email: str | None = None
-    v1_enabled: bool | None = None
+    v1_enabled: bool | None = Field(default=bool(os.getenv('V1_ENABLED') == '1'))
 
     model_config = ConfigDict(
         validate_assignment=True,
