@@ -5,19 +5,17 @@ import { CustomChatInput } from "./custom-chat-input";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { GitControlBar } from "./git-control-bar";
-import { useConversationStore } from "#/state/conversation-store";
-import { useAgentStore } from "#/stores/agent-store";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useAgentState } from "#/hooks/use-agent-state";
 import { processFiles, processImages } from "#/utils/file-processing";
+import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
+import { isTaskPolling } from "#/utils/utils";
 
 interface InteractiveChatBoxProps {
   onSubmit: (message: string, images: File[], files: File[]) => void;
-  onStop: () => void;
 }
 
-export function InteractiveChatBox({
-  onSubmit,
-  onStop,
-}: InteractiveChatBoxProps) {
+export function InteractiveChatBox({ onSubmit }: InteractiveChatBoxProps) {
   const {
     images,
     files,
@@ -28,9 +26,17 @@ export function InteractiveChatBox({
     removeFileLoading,
     addImageLoading,
     removeImageLoading,
+    subConversationTaskId,
   } = useConversationStore();
-  const { curAgentState } = useAgentStore();
+  const { curAgentState } = useAgentState();
   const { data: conversation } = useActiveConversation();
+
+  // Poll sub-conversation task to check if it's loading
+  const { taskStatus: subConversationTaskStatus } =
+    useSubConversationTaskPolling(
+      subConversationTaskId,
+      conversation?.conversation_id || null,
+    );
 
   // Helper function to validate and filter files
   const validateAndFilterFiles = (selectedFiles: File[]) => {
@@ -120,7 +126,7 @@ export function InteractiveChatBox({
 
       // Step 5: Handle failed results
       handleFailedFiles(fileResults, imageResults);
-    } catch (error) {
+    } catch {
       // Clear loading states and show error
       clearLoadingStates(validFiles, validImages);
       displayErrorToast("An unexpected error occurred while processing files");
@@ -138,14 +144,14 @@ export function InteractiveChatBox({
 
   const isDisabled =
     curAgentState === AgentState.LOADING ||
-    curAgentState === AgentState.AWAITING_USER_CONFIRMATION;
+    curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
+    isTaskPolling(subConversationTaskStatus);
 
   return (
     <div data-testid="interactive-chat-box">
       <CustomChatInput
         disabled={isDisabled}
         onSubmit={handleSubmit}
-        onStop={onStop}
         onFilesPaste={handleUpload}
         conversationStatus={conversation?.status || null}
       />

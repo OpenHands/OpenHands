@@ -307,7 +307,7 @@ class TheoremqaTask(Task):
 
         # Converting the string answer to a number/list/bool/option
         try:
-            prediction = eval(prediction)
+            prediction = ast.literal_eval(prediction)
         except Exception:
             LOGGER.warning(
                 f'[TASK] Failed to convert the answer: {prediction}\n{traceback.format_exc()}'

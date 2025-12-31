@@ -18,6 +18,8 @@ class View(BaseModel):
 
     events: list[Event]
     unhandled_condensation_request: bool = False
+    # Set of event IDs that have been forgotten/condensed
+    forgotten_event_ids: set[int] = set()
 
     def __len__(self) -> int:
         return len(self.events)
@@ -90,4 +92,5 @@ class View(BaseModel):
         return View(
             events=kept_events,
             unhandled_condensation_request=unhandled_condensation_request,
+            forgotten_event_ids=forgotten_event_ids,
         )

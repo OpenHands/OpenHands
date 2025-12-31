@@ -1,0 +1,15 @@
+# OpenHands App Server Alembic Integration
+
+This alembic integration keeps the SQLite database up to date in single user deployments by managing schema migrations for app_server models. Migrations are applied automatically on startup.
+
+## Configuration
+
+Uses `DbSessionInjector` from `get_global_config()` for database connectivity and auto-detects models from the declarative base in `openhands.app_server.utils.sql_utils.Base`.
+
+## Key Commands
+
+Generate migration from model changes:
+```bash
+cd openhands/app_server/app_lifespan
+alembic revision --autogenerate -m 'Sync DB with Models'
+```

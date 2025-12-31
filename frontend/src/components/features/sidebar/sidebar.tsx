@@ -2,7 +2,7 @@ import React from "react";
 import { useLocation } from "react-router";
 import { useGitUser } from "#/hooks/query/use-git-user";
 import { UserActions } from "./user-actions";
-import { AllHandsLogoButton } from "#/components/shared/buttons/all-hands-logo-button";
+import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NewProjectButton } from "#/components/shared/buttons/new-project-button";
 import { ConversationPanelButton } from "#/components/shared/buttons/conversation-panel-button";
 import { SettingsModal } from "#/components/shared/modals/settings/settings-modal";
@@ -34,13 +34,7 @@ export function Sidebar() {
 
   const { pathname } = useLocation();
 
-  // TODO: Remove HIDE_LLM_SETTINGS check once released
-  const shouldHideLlmSettings =
-    config?.FEATURE_FLAGS.HIDE_LLM_SETTINGS && config?.APP_MODE === "saas";
-
   React.useEffect(() => {
-    if (shouldHideLlmSettings) return;
-
     if (location.pathname === "/settings") {
       setSettingsModalIsOpen(false);
     } else if (
@@ -74,22 +68,22 @@ export function Sidebar() {
         <nav className="flex flex-row md:flex-col items-center justify-between w-full h-auto md:w-auto md:h-full">
           <div className="flex flex-row md:flex-col items-center gap-[26px]">
             <div className="flex items-center justify-center">
-              <AllHandsLogoButton />
+              <OpenHandsLogoButton />
             </div>
             <div>
-              <NewProjectButton disabled={settings?.EMAIL_VERIFIED === false} />
+              <NewProjectButton disabled={settings?.email_verified === false} />
             </div>
             <ConversationPanelButton
               isOpen={conversationPanelIsOpen}
               onClick={() =>
-                settings?.EMAIL_VERIFIED === false
+                settings?.email_verified === false
                   ? null
                   : setConversationPanelIsOpen((prev) => !prev)
               }
-              disabled={settings?.EMAIL_VERIFIED === false}
+              disabled={settings?.email_verified === false}
             />
             <MicroagentManagementButton
-              disabled={settings?.EMAIL_VERIFIED === false}
+              disabled={settings?.email_verified === false}
             />
           </div>
 

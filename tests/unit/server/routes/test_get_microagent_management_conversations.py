@@ -1,8 +1,13 @@
+import base64
+import json
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from openhands.app_server.app_conversation.app_conversation_service import (
+    AppConversationService,
+)
 from openhands.integrations.provider import ProviderHandler
 from openhands.server.data_models.conversation_info_result_set import (
     ConversationInfoResultSet,
@@ -15,6 +20,54 @@ from openhands.storage.data_models.conversation_metadata import (
     ConversationMetadata,
     ConversationTrigger,
 )
+
+
+def _create_mock_app_conversation_service():
+    """Create a mock AppConversationService that returns empty V1 results."""
+    mock_service = MagicMock(spec=AppConversationService)
+    mock_service.search_app_conversations = AsyncMock(
+        return_value=MagicMock(items=[], next_page_id=None)
+    )
+    return mock_service
+
+
+def _decode_combined_page_id(page_id: str | None) -> dict:
+    """Decode a combined page_id to get v0 and v1 components."""
+    if not page_id:
+        return {'v0': None, 'v1': None}
+    try:
+        return json.loads(base64.b64decode(page_id))
+    except Exception:
+        # Legacy format - just v0
+        return {'v0': page_id, 'v1': None}
+
+
+async def _mock_wait_all(coros):
+    """Mock implementation of wait_all that properly awaits coroutines."""
+    results = []
+    for coro in coros:
+        if hasattr(coro, '__await__'):
+            results.append(await coro)
+        else:
+            results.append(coro)
+    return results
+
+
+def _setup_common_mocks():
+    """Set up common mocks used by all tests."""
+    return {
+        'config': patch('openhands.server.routes.manage_conversations.config'),
+        'conversation_manager': patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ),
+        'wait_all': patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
+        'provider_handler': patch(
+            'openhands.server.routes.manage_conversations.ProviderHandler'
+        ),
+    }
 
 
 @pytest.mark.asyncio
@@ -64,23 +117,29 @@ async def test_get_microagent_management_conversations_success():
     mock_provider_handler = MagicMock(spec=ProviderHandler)
     mock_provider_handler.is_pr_open = AsyncMock(return_value=True)
 
+    # Mock app conversation service
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch(
             'openhands.server.routes.manage_conversations.ProviderHandler',
             return_value=mock_provider_handler,
         ),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[], next_page_id='next_page_456'
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400  # 24 hours
+
+        # Mock conversation manager
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function with correct parameter order
         result = await get_microagent_management_conversations(
@@ -89,11 +148,16 @@ async def test_get_microagent_management_conversations_success():
             limit=limit,
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify the result
         assert isinstance(result, ConversationInfoResultSet)
-        assert result.next_page_id == 'next_page_456'
+
+        # Decode the combined page_id to verify v0 component
+        decoded_page_id = _decode_combined_page_id(result.next_page_id)
+        assert decoded_page_id['v0'] == 'next_page_456'
+        assert decoded_page_id['v1'] is None
 
         # Verify conversation store was called correctly
         mock_conversation_store.search.assert_called_once_with(page_id, limit)
@@ -114,26 +178,31 @@ async def test_get_microagent_management_conversations_no_results():
     # Mock provider tokens
     mock_provider_tokens = {'github': 'token_123'}
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch('openhands.server.routes.manage_conversations.ProviderHandler'),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[], next_page_id=None
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function with required selected_repository parameter
         result = await get_microagent_management_conversations(
             selected_repository='owner/repo',
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify the result
@@ -184,29 +253,34 @@ async def test_get_microagent_management_conversations_filter_by_repository():
     mock_provider_handler = MagicMock(spec=ProviderHandler)
     mock_provider_handler.is_pr_open = AsyncMock(return_value=True)
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch(
             'openhands.server.routes.manage_conversations.ProviderHandler',
             return_value=mock_provider_handler,
         ),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function - only repo1 should be included
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[mock_conversations[0]], next_page_id=None
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function with repository filter
         result = await get_microagent_management_conversations(
             selected_repository='owner/repo1',
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify only conversations from the specified repository are returned
@@ -257,29 +331,34 @@ async def test_get_microagent_management_conversations_filter_by_trigger():
     mock_provider_handler = MagicMock(spec=ProviderHandler)
     mock_provider_handler.is_pr_open = AsyncMock(return_value=True)
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch(
             'openhands.server.routes.manage_conversations.ProviderHandler',
             return_value=mock_provider_handler,
         ),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function - only microagent_management should be included
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[mock_conversations[0]], next_page_id=None
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function
         result = await get_microagent_management_conversations(
             selected_repository='owner/repo',
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify only microagent_management conversations are returned
@@ -330,29 +409,34 @@ async def test_get_microagent_management_conversations_filter_inactive_pr():
     mock_provider_handler = MagicMock(spec=ProviderHandler)
     mock_provider_handler.is_pr_open = AsyncMock(side_effect=[True, False])
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch(
             'openhands.server.routes.manage_conversations.ProviderHandler',
             return_value=mock_provider_handler,
         ),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function - only active PR should be included
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[mock_conversations[0]], next_page_id=None
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function
         result = await get_microagent_management_conversations(
             selected_repository='owner/repo',
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify only conversations with active PRs are returned
@@ -393,29 +477,34 @@ async def test_get_microagent_management_conversations_no_pr_number():
     # Mock provider handler
     mock_provider_handler = MagicMock(spec=ProviderHandler)
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch(
             'openhands.server.routes.manage_conversations.ProviderHandler',
             return_value=mock_provider_handler,
         ),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=mock_conversations, next_page_id=None
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function
         result = await get_microagent_management_conversations(
             selected_repository='owner/repo',
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify conversation without PR number is included
@@ -456,29 +545,34 @@ async def test_get_microagent_management_conversations_no_repository():
     # Mock provider handler
     mock_provider_handler = MagicMock(spec=ProviderHandler)
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch(
             'openhands.server.routes.manage_conversations.ProviderHandler',
             return_value=mock_provider_handler,
         ),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function - conversation should be filtered out due to repository mismatch
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[], next_page_id=None
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function
         result = await get_microagent_management_conversations(
             selected_repository='owner/repo',
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify conversation without repository is filtered out
@@ -532,29 +626,34 @@ async def test_get_microagent_management_conversations_age_filter():
     mock_provider_handler = MagicMock(spec=ProviderHandler)
     mock_provider_handler.is_pr_open = AsyncMock(return_value=True)
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch(
             'openhands.server.routes.manage_conversations.ProviderHandler',
             return_value=mock_provider_handler,
         ),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function - only recent conversation should be included
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[recent_conversation], next_page_id=None
-        )
-
         # Mock config with short max age
         mock_config.conversation_max_age_seconds = 3600  # 1 hour
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function
         result = await get_microagent_management_conversations(
             selected_repository='owner/repo',
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify only recent conversation is returned
@@ -574,20 +673,24 @@ async def test_get_microagent_management_conversations_pagination():
     # Mock provider tokens
     mock_provider_tokens = {'github': 'token_123'}
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch('openhands.server.routes.manage_conversations.ProviderHandler'),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[], next_page_id='next_page_789'
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function with pagination parameters
         result = await get_microagent_management_conversations(
@@ -596,11 +699,15 @@ async def test_get_microagent_management_conversations_pagination():
             limit=5,
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify pagination parameters were passed correctly
         mock_conversation_store.search.assert_called_once_with('test_page', 5)
-        assert result.next_page_id == 'next_page_789'
+
+        # Decode and verify the next_page_id
+        decoded_page_id = _decode_combined_page_id(result.next_page_id)
+        assert decoded_page_id['v0'] == 'next_page_789'
 
 
 @pytest.mark.asyncio
@@ -615,26 +722,31 @@ async def test_get_microagent_management_conversations_default_parameters():
     # Mock provider tokens
     mock_provider_tokens = {'github': 'token_123'}
 
+    mock_app_conversation_service = _create_mock_app_conversation_service()
+
     with (
         patch('openhands.server.routes.manage_conversations.ProviderHandler'),
-        patch(
-            'openhands.server.routes.manage_conversations._build_conversation_result_set'
-        ) as mock_build_result,
         patch('openhands.server.routes.manage_conversations.config') as mock_config,
+        patch(
+            'openhands.server.routes.manage_conversations.conversation_manager'
+        ) as mock_conv_mgr,
+        patch(
+            'openhands.server.routes.manage_conversations.wait_all',
+            side_effect=_mock_wait_all,
+        ),
     ):
-        # Mock the build result function
-        mock_build_result.return_value = ConversationInfoResultSet(
-            results=[], next_page_id=None
-        )
-
         # Mock config
         mock_config.conversation_max_age_seconds = 86400
+
+        mock_conv_mgr.get_connections = AsyncMock(return_value=[])
+        mock_conv_mgr.get_agent_loop_info = AsyncMock(return_value=[])
 
         # Call the function without parameters (selected_repository is required)
         result = await get_microagent_management_conversations(
             selected_repository='owner/repo',
             conversation_store=mock_conversation_store,
             provider_tokens=mock_provider_tokens,
+            app_conversation_service=mock_app_conversation_service,
         )
 
         # Verify default values were used

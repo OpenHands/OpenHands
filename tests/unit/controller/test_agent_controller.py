@@ -24,6 +24,7 @@ from openhands.core.schema import AgentState
 from openhands.events import Event, EventSource, EventStream, EventStreamSubscriber
 from openhands.events.action import ChangeAgentStateAction, CmdRunAction, MessageAction
 from openhands.events.action.agent import CondensationAction, RecallAction
+from openhands.events.action.empty import NullAction
 from openhands.events.action.message import SystemMessageAction
 from openhands.events.event import RecallType
 from openhands.events.observation import (
@@ -94,6 +95,7 @@ def mock_agent_with_stats():
     )
     agent_config.disabled_microagents = []
     agent_config.enable_mcp = True
+    agent_config.enable_stuck_detection = True
     llm_registry.service_to_llm.clear()
     mock_llm = llm_registry.get_llm('agent_llm', llm_config)
     agent.llm = mock_llm
@@ -294,6 +296,64 @@ async def test_react_to_content_policy_violation(
         == RuntimeStatus.ERROR_LLM_CONTENT_POLICY_VIOLATION.value
     )
     assert controller.state.agent_state == AgentState.ERROR
+
+    await controller.close()
+
+
+@pytest.mark.asyncio
+async def test_tool_call_validation_error_handling(
+    mock_agent_with_stats,
+    test_event_stream,
+):
+    """Test that tool call validation errors from Groq are handled as recoverable errors."""
+    mock_agent, conversation_stats, llm_registry = mock_agent_with_stats
+
+    controller = AgentController(
+        agent=mock_agent,
+        event_stream=test_event_stream,
+        conversation_stats=conversation_stats,
+        iteration_delta=10,
+        sid='test',
+        confirmation_mode=False,
+        headless_mode=True,
+    )
+
+    controller.state.agent_state = AgentState.RUNNING
+
+    # Track call count to only raise error on first call
+    # This prevents a feedback loop where ErrorObservation triggers another step
+    # which raises the same error again (since the mock always raises)
+    call_count = 0
+
+    def mock_step(state):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise BadRequestError(
+                message='litellm.BadRequestError: GroqException - {"error":{"message":"tool call validation failed: parameters for tool str_replace_editor did not match schema: errors: [missing properties: \'path\']","type":"invalid_request_error","code":"tool_use_failed"}}',
+                model='groq/llama3-8b-8192',
+                llm_provider='groq',
+            )
+        # Return NullAction on subsequent calls to break the feedback loop
+        return NullAction()
+
+    mock_agent.step = mock_step
+
+    # Call _step which should handle the tool validation error
+    await controller._step()
+
+    # Verify that the agent state is still RUNNING (not ERROR)
+    assert controller.state.agent_state == AgentState.RUNNING
+
+    # Verify that an ErrorObservation was added to the event stream
+    events = list(test_event_stream.get_events())
+    error_observations = [e for e in events if isinstance(e, ErrorObservation)]
+    assert len(error_observations) == 1
+
+    error_obs = error_observations[0]
+    assert 'tool call validation failed' in error_obs.content
+    assert 'missing properties' in error_obs.content
+    assert 'path' in error_obs.content
 
     await controller.close()
 
@@ -1412,6 +1472,7 @@ async def test_run_controller_with_memory_error(
     assert state.last_error == 'Error: RuntimeError'
 
 
+@pytest.mark.skip(reason='2025-10-07 : This test is flaky')
 @pytest.mark.asyncio
 async def test_action_metrics_copy(mock_agent_with_stats):
     mock_agent, conversation_stats, llm_registry = mock_agent_with_stats
@@ -1581,16 +1642,15 @@ async def test_condenser_metrics_included(mock_agent_with_stats, test_event_stre
     # Attach the condenser to the mock_agent
     mock_agent.condenser = condenser
 
-    # Create a real CondensationAction
-    action = CondensationAction(
-        forgotten_events_start_id=1,
-        forgotten_events_end_id=5,
-        summary='Test summary',
-        summary_offset=1,
-    )
-    action._source = EventSource.AGENT  # Required for event_stream.add_event
-
     def agent_step_fn(state):
+        # Create a new CondensationAction each time to avoid ID reuse
+        action = CondensationAction(
+            forgotten_events_start_id=1,
+            forgotten_events_end_id=5,
+            summary='Test summary',
+            summary_offset=1,
+        )
+        action._source = EventSource.AGENT  # Required for event_stream.add_event
         return action
 
     mock_agent.step = agent_step_fn

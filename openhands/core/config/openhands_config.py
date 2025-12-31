@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import os
 from typing import Any, ClassVar, Literal
 
@@ -5,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from openhands.core import logger
 from openhands.core.config.agent_config import AgentConfig
-from openhands.core.config.cli_config import CLIConfig
 from openhands.core.config.config_utils import (
     DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX,
     OH_DEFAULT_AGENT,
@@ -93,8 +99,8 @@ class OpenHandsConfig(BaseModel):
     )
 
     # Deprecated parameters - will be removed in a future version
-    workspace_mount_path: str | None = Field(default=None, deprecated=True)
-    workspace_mount_rewrite: str | None = Field(default=None, deprecated=True)
+    workspace_mount_path: str | None = Field(default=None)
+    workspace_mount_rewrite: str | None = Field(default=None)
     # End of deprecated parameters
 
     cache_dir: str = Field(default='/tmp/cache')
@@ -116,10 +122,13 @@ class OpenHandsConfig(BaseModel):
     max_concurrent_conversations: int = Field(
         default=3
     )  # Maximum number of concurrent agent loops allowed per user
+    client_wait_timeout: int = Field(
+        default=30,
+        description='Timeout in seconds for waiting for websocket client connection during initialization',
+    )
     mcp_host: str = Field(default=f'localhost:{os.getenv("port", 3000)}')
     mcp: MCPConfig = Field(default_factory=MCPConfig)
     kubernetes: KubernetesConfig = Field(default_factory=KubernetesConfig)
-    cli: CLIConfig = Field(default_factory=CLIConfig)
     git_user_name: str = Field(
         default='openhands', description='Git user name for commits made by the agent'
     )

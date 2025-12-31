@@ -4,7 +4,6 @@ import { useConversationId } from "../use-conversation-id";
 
 export const useMicroagentPrompt = (eventId: number) => {
   const { conversationId } = useConversationId();
-
   return useQuery({
     queryKey: ["memory", "prompt", conversationId, eventId],
     queryFn: () =>

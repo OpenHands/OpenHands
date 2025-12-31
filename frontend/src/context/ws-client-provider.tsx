@@ -1,6 +1,7 @@
 import React from "react";
 import { io, Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePostHog } from "posthog-js/react";
 import EventLogger from "#/utils/event-logger";
 import { handleAssistantMessage } from "#/services/actions";
 import { showChatError, trackError } from "#/utils/error-handler";
@@ -11,13 +12,11 @@ import {
   CommandAction,
   FileEditAction,
   FileWriteAction,
-  OpenHandsAction,
   UserMessageAction,
 } from "#/types/core/actions";
 import { Conversation } from "#/api/open-hands.types";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { OpenHandsObservation } from "#/types/core/observations";
 import {
   isAgentStateChangeObservation,
   isErrorObservation,
@@ -28,8 +27,14 @@ import {
 } from "#/types/core/guards";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { useEventStore } from "#/stores/use-event-store";
 
-export type WebSocketStatus = "CONNECTING" | "CONNECTED" | "DISCONNECTED";
+/**
+ * @deprecated Use `V1_WebSocketConnectionState` from `conversation-websocket-context.tsx` instead.
+ * This type is for legacy V0 conversations only.
+ */
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export type V0_WebSocketStatus = "CONNECTING" | "CONNECTED" | "DISCONNECTED";
 
 const hasValidMessageProperty = (obj: unknown): obj is { message: string } =>
   typeof obj === "object" &&
@@ -70,18 +75,14 @@ const isMessageAction = (
   isUserMessage(event) || isAssistantMessage(event);
 
 interface UseWsClient {
-  webSocketStatus: WebSocketStatus;
+  webSocketStatus: V0_WebSocketStatus;
   isLoadingMessages: boolean;
-  events: Record<string, unknown>[];
-  parsedEvents: (OpenHandsAction | OpenHandsObservation)[];
   send: (event: Record<string, unknown>) => void;
 }
 
 const WsClientContext = React.createContext<UseWsClient>({
   webSocketStatus: "DISCONNECTED",
   isLoadingMessages: true,
-  events: [],
-  parsedEvents: [],
   send: () => {
     throw new Error("not connected");
   },
@@ -100,7 +101,10 @@ interface ErrorArgData {
   msg_id: string;
 }
 
-export function updateStatusWhenErrorMessagePresent(data: ErrorArg | unknown) {
+export function updateStatusWhenErrorMessagePresent(
+  data: ErrorArg | unknown,
+  posthog?: ReturnType<typeof usePostHog>,
+) {
   const isObject = (val: unknown): val is object =>
     !!val && typeof val === "object";
   const isString = (val: unknown): val is string => typeof val === "string";
@@ -123,6 +127,7 @@ export function updateStatusWhenErrorMessagePresent(data: ErrorArg | unknown) {
       source: "websocket",
       metadata,
       msgId,
+      posthog,
     });
   }
 }
@@ -131,16 +136,15 @@ export function WsClientProvider({
   conversationId,
   children,
 }: React.PropsWithChildren<WsClientProviderProps>) {
+  const posthog = usePostHog();
   const { setErrorMessage, removeErrorMessage } = useErrorMessageStore();
   const { removeOptimisticUserMessage } = useOptimisticUserMessageStore();
+  const { addEvent, clearEvents } = useEventStore();
   const queryClient = useQueryClient();
   const sioRef = React.useRef<Socket | null>(null);
+  const pendingEventsRef = React.useRef<Record<string, unknown>[]>([]);
   const [webSocketStatus, setWebSocketStatus] =
-    React.useState<WebSocketStatus>("DISCONNECTED");
-  const [events, setEvents] = React.useState<Record<string, unknown>[]>([]);
-  const [parsedEvents, setParsedEvents] = React.useState<
-    (OpenHandsAction | OpenHandsObservation)[]
-  >([]);
+    React.useState<V0_WebSocketStatus>("DISCONNECTED");
   const lastEventRef = React.useRef<Record<string, unknown> | null>(null);
   const { providers } = useUserProviders();
 
@@ -148,17 +152,37 @@ export function WsClientProvider({
   const { data: conversation, refetch: refetchConversation } =
     useActiveConversation();
 
-  function send(event: Record<string, unknown>) {
-    if (!sioRef.current) {
-      EventLogger.error("WebSocket is not connected.");
+  function flushPendingEvents(socket: Socket | null = sioRef.current) {
+    if (!socket || pendingEventsRef.current.length === 0) {
       return;
     }
-    sioRef.current.emit("oh_user_action", event);
+
+    pendingEventsRef.current.forEach((queuedEvent) => {
+      socket.emit("oh_user_action", queuedEvent);
+    });
+    pendingEventsRef.current = [];
+  }
+
+  function send(event: Record<string, unknown>) {
+    const socket = sioRef.current;
+
+    if (!socket) {
+      EventLogger.error("WebSocket is not connected, queuing message...");
+      pendingEventsRef.current.push(event);
+      return;
+    }
+
+    if (pendingEventsRef.current.length > 0) {
+      flushPendingEvents(socket);
+    }
+
+    socket.emit("oh_user_action", event);
   }
 
   function handleConnect() {
     setWebSocketStatus("CONNECTED");
     removeErrorMessage();
+    flushPendingEvents();
   }
 
   function handleMessage(event: Record<string, unknown>) {
@@ -181,6 +205,7 @@ export function WsClientProvider({
           message: errorMessage,
           source: "chat",
           metadata: { msgId: event.id },
+          posthog,
         });
         setErrorMessage(errorMessage);
 
@@ -188,7 +213,7 @@ export function WsClientProvider({
       }
 
       if (isOpenHandsAction(event) || isOpenHandsObservation(event)) {
-        setParsedEvents((prevEvents) => [...prevEvents, event]);
+        addEvent(event); // Event is already OpenHandsParsedEvent
       }
 
       if (isErrorObservation(event)) {
@@ -196,6 +221,7 @@ export function WsClientProvider({
           message: event.message,
           source: "chat",
           metadata: { msgId: event.id },
+          posthog,
         });
       } else {
         removeErrorMessage();
@@ -249,7 +275,6 @@ export function WsClientProvider({
       }
     }
 
-    setEvents((prevEvents) => [...prevEvents, event]);
     if (!Number.isNaN(parseInt(event.id as string, 10))) {
       lastEventRef.current = event;
     }
@@ -264,14 +289,14 @@ export function WsClientProvider({
     sio.io.opts.query = sio.io.opts.query || {};
     sio.io.opts.query.latest_event_id = lastEventRef.current?.id;
 
-    updateStatusWhenErrorMessagePresent(data);
+    updateStatusWhenErrorMessagePresent(data, posthog);
     setErrorMessage(hasValidMessageProperty(data) ? data.message : "");
   }
 
   function handleError(data: unknown) {
     // set status
     setWebSocketStatus("DISCONNECTED");
-    updateStatusWhenErrorMessagePresent(data);
+    updateStatusWhenErrorMessagePresent(data, posthog);
 
     setErrorMessage(
       hasValidMessageProperty(data)
@@ -286,10 +311,9 @@ export function WsClientProvider({
   React.useEffect(() => {
     lastEventRef.current = null;
 
-    // reset events when conversationId changes
-    setEvents([]);
-    setParsedEvents([]);
+    clearEvents();
     setWebSocketStatus("CONNECTING");
+    pendingEventsRef.current = [];
   }, [conversationId]);
 
   React.useEffect(() => {
@@ -299,6 +323,12 @@ export function WsClientProvider({
 
     // Clear error messages when conversation is intentionally stopped
     if (conversation && conversation.status === "STOPPED") {
+      const existingSocket = sioRef.current;
+      if (existingSocket) {
+        existingSocket.disconnect();
+      }
+      sioRef.current = null;
+      pendingEventsRef.current = [];
       removeErrorMessage();
       setWebSocketStatus("DISCONNECTED");
       return () => undefined; // conversation intentionally stopped
@@ -318,6 +348,10 @@ export function WsClientProvider({
       !conversation.runtime_status ||
       conversation.runtime_status === "STATUS$STOPPED"
     ) {
+      if (sioRef.current) {
+        sioRef.current.disconnect();
+      }
+      sioRef.current = null;
       return () => undefined; // conversation not ready for WebSocket connection
     }
 
@@ -366,6 +400,7 @@ export function WsClientProvider({
     sio.on("disconnect", handleDisconnect);
 
     sioRef.current = sio;
+    flushPendingEvents(sio);
 
     return () => {
       sio.off("connect", handleConnect);
@@ -397,16 +432,9 @@ export function WsClientProvider({
     () => ({
       webSocketStatus,
       isLoadingMessages: messageRateHandler.isUnderThreshold,
-      events,
-      parsedEvents,
       send,
     }),
-    [
-      webSocketStatus,
-      messageRateHandler.isUnderThreshold,
-      events,
-      parsedEvents,
-    ],
+    [webSocketStatus, messageRateHandler.isUnderThreshold],
   );
 
   return <WsClientContext value={value}>{children}</WsClientContext>;

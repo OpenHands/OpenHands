@@ -1,11 +1,19 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import asyncio
 import json
 import os
+import signal
+import sys
 from pathlib import Path
 from typing import Callable, Protocol
 
 import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
-import openhands.cli.suppress_warnings  # noqa: F401
 from openhands.controller.replay import ReplayManager
 from openhands.controller.state.state import State
 from openhands.core.config import (
@@ -174,6 +182,27 @@ async def run_controller(
         f'{agent.llm.config.model}, with actions: {initial_user_action}'
     )
 
+    # Set up asyncio-safe signal handler for graceful shutdown
+    sigint_count = 0
+    shutdown_event = asyncio.Event()
+
+    def signal_handler():
+        """Handle SIGINT signals for graceful shutdown."""
+        nonlocal sigint_count
+        sigint_count += 1
+
+        if sigint_count == 1:
+            logger.info('Received SIGINT (Ctrl+C). Initiating graceful shutdown...')
+            logger.info('Press Ctrl+C again to force immediate exit.')
+            shutdown_event.set()
+        else:
+            logger.info('Received second SIGINT. Forcing immediate exit...')
+            sys.exit(1)
+
+    # Register the asyncio signal handler (safer for async contexts)
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGINT, signal_handler)
+
     # start event is a MessageAction with the task, either resumed or new
     if initial_state is not None and initial_state.last_error:
         # we're resuming the previous session
@@ -213,7 +242,52 @@ async def run_controller(
     ]
 
     try:
-        await run_agent_until_done(controller, runtime, memory, end_states)
+        # Create a task for the main agent loop
+        agent_task = asyncio.create_task(
+            run_agent_until_done(controller, runtime, memory, end_states)
+        )
+
+        # Wait for either the agent to complete or shutdown signal
+        done, pending = await asyncio.wait(
+            [agent_task, asyncio.create_task(shutdown_event.wait())],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        # Cancel any pending tasks
+        for task in pending:
+            task.cancel()
+
+        # Wait for all cancelled tasks to complete in parallel
+        await asyncio.gather(*pending, return_exceptions=True)
+
+        # Check if shutdown was requested
+        if shutdown_event.is_set():
+            logger.info('Graceful shutdown requested.')
+
+            # Perform graceful cleanup sequence
+            try:
+                # 1. Stop the agent controller first to prevent new LLM calls
+                logger.debug('Stopping agent controller...')
+                await controller.close()
+
+                # 2. Stop the EventStream to prevent new events from being processed
+                logger.debug('Stopping EventStream...')
+                event_stream.close()
+
+                # 3. Give time for in-flight operations to complete before closing runtime
+                logger.debug('Waiting for in-flight operations to complete...')
+                await asyncio.sleep(0.3)
+
+                # 4. Close the runtime to avoid bash session interruption errors
+                logger.debug('Closing runtime...')
+                runtime.close()
+
+                # 5. Give a brief moment for final cleanup to complete
+                await asyncio.sleep(0.1)
+
+            except Exception as e:
+                logger.warning(f'Error during graceful cleanup: {e}')
+
     except Exception as e:
         logger.error(f'Exception in main loop: {e}')
 
@@ -238,7 +312,7 @@ async def run_controller(
             file_path = config.save_trajectory_path
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         histories = controller.get_trajectory(config.save_screenshots_in_trajectory)
-        with open(file_path, 'w') as f:  # noqa: ASYNC101
+        with open(file_path, 'w') as f:
             json.dump(histories, f, indent=4)
 
     return state

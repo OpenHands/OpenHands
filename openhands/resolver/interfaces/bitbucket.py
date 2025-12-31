@@ -10,6 +10,7 @@ from openhands.resolver.interfaces.issue import (
     ReviewThread,
 )
 from openhands.resolver.utils import extract_issue_references
+from openhands.utils.http_session import httpx_verify_option
 
 
 class BitbucketIssueHandler(IssueHandlerInterface):

@@ -1,4 +1,5 @@
 import { RefObject } from "react";
+import { EPS } from "#/utils/constants";
 import { isMobileDevice } from "#/utils/utils";
 
 // Drag handling hook
@@ -9,6 +10,7 @@ interface UseDragResizeOptions {
   onGripDragStart?: () => void;
   onGripDragEnd?: () => void;
   onHeightChange?: (height: number) => void;
+  onReachedMinHeight?: () => void; // Notify when user drags to minimum height
 }
 
 export const useDragResize = ({
@@ -18,6 +20,7 @@ export const useDragResize = ({
   onGripDragStart,
   onGripDragEnd,
   onHeightChange,
+  onReachedMinHeight,
 }: UseDragResizeOptions) => {
   const getClientY = (event: MouseEvent | TouchEvent): number => {
     if ("touches" in event && event.touches.length > 0) {
@@ -55,6 +58,11 @@ export const useDragResize = ({
       // Call the height change callback if provided
       if (onHeightChange) {
         onHeightChange(newHeight);
+      }
+
+      // Notify when dragged to minimum height to clear manual mode
+      if (onReachedMinHeight && Math.abs(newHeight - minHeight) <= EPS) {
+        onReachedMinHeight();
       }
     };
     return handleDragMove;

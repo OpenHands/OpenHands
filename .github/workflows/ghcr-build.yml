@@ -37,7 +37,6 @@ jobs:
         shell: bash
         id: define-base-images
         run: |
-          # Only build nikolaik on PRs, otherwise build both nikolaik and ubuntu.
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             json=$(jq -n -c '[
                 { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
@@ -46,7 +45,6 @@ jobs:
           else
             json=$(jq -n -c '[
                 { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
-                { image: "ghcr.io/all-hands-ai/python-nodejs:python3.13-nodejs22-trixie", tag: "trixie" },
                 { image: "ubuntu:24.04", tag: "ubuntu" }
               ]')
           fi
@@ -66,7 +64,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.6.0
+        uses: docker/setup-qemu-action@v3.7.0
         with:
           image: tonistiigi/binfmt:latest
       - name: Login to GHCR
@@ -88,7 +86,7 @@ jobs:
 
   # Builds the runtime Docker images
   ghcr_build_runtime:
-    name: Build Image
+    name: Build Runtime Image
     runs-on: blacksmith-8vcpu-ubuntu-2204
     if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ext-v'))"
     permissions:
@@ -104,7 +102,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.6.0
+        uses: docker/setup-qemu-action@v3.7.0
         with:
           image: tonistiigi/binfmt:latest
       - name: Login to GHCR
@@ -126,7 +124,7 @@ jobs:
       - name: Install Python dependencies using Poetry
         run: make install-python-dependencies POETRY_GROUP=main INSTALL_PLAYWRIGHT=0
       - name: Create source distribution and Dockerfile
-        run: poetry run python3 openhands/runtime/utils/runtime_build.py --base_image ${{ matrix.base_image.image }} --build_folder containers/runtime --force_rebuild
+        run: poetry run python3 -m openhands.runtime.utils.runtime_build --base_image ${{ matrix.base_image.image }} --build_folder containers/runtime --force_rebuild
       - name: Lowercase Repository Owner
         run: |
           echo REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
@@ -163,7 +161,7 @@ jobs:
           context: containers/runtime
       - name: Upload runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
@@ -200,7 +198,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/all-hands-ai/enterprise-server
+          images: ghcr.io/openhands/enterprise-server
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -249,16 +247,16 @@ jobs:
       - name: Trigger remote job
         run: |
           curl --fail-with-body -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{\"ref\": \"main\", \"inputs\": {\"openhandsPrNumber\": \"${{ github.event.pull_request.number }}\", \"deployEnvironment\": \"feature\", \"enterpriseImageTag\": \"pr-${{ github.event.pull_request.number }}\" }}" \
-            https://api.github.com/repos/All-Hands-AI/deploy/actions/workflows/deploy.yaml/dispatches
+            https://api.github.com/repos/OpenHands/deploy/actions/workflows/deploy.yaml/dispatches
 
   # Run unit tests with the Docker runtime Docker images as root
   test_runtime_root:
     name: RT Unit Tests (Root)
     needs: [ghcr_build_runtime, define-matrix]
-    runs-on: blacksmith-8vcpu-ubuntu-2204
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -270,7 +268,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Download runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
@@ -300,7 +298,7 @@ jobs:
           # We install pytest-xdist in order to run tests across CPUs
           poetry run pip install pytest-xdist
 
-          # Install to be able to retry on failures for flaky tests
+          # Install to be able to retry on failures for flakey tests
           poetry run pip install pytest-rerunfailures
 
           image_name=ghcr.io/${{ env.REPO_OWNER }}/runtime:${{ env.RELEVANT_SHA }}-${{ matrix.base_image.tag }}
@@ -313,14 +311,14 @@ jobs:
           SANDBOX_RUNTIME_CONTAINER_IMAGE=$image_name \
           TEST_IN_CI=true \
           RUN_AS_OPENHANDS=false \
-          poetry run pytest -n 0 -raRs --reruns 2 --reruns-delay 5 -s ./tests/runtime --ignore=tests/runtime/test_browsergym_envs.py --durations=10
+          poetry run pytest -n 5 -raRs --reruns 2 --reruns-delay 3 -s ./tests/runtime --ignore=tests/runtime/test_browsergym_envs.py --durations=10
         env:
           DEBUG: "1"
 
   # Run unit tests with the Docker runtime Docker images as openhands user
   test_runtime_oh:
     name: RT Unit Tests (openhands)
-    runs-on: blacksmith-8vcpu-ubuntu-2204
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [ghcr_build_runtime, define-matrix]
     strategy:
       matrix:
@@ -332,7 +330,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Download runtime source for fork
         if: github.event.pull_request.head.repo.fork
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
@@ -372,7 +370,7 @@ jobs:
           SANDBOX_RUNTIME_CONTAINER_IMAGE=$image_name \
           TEST_IN_CI=true \
           RUN_AS_OPENHANDS=true \
-          poetry run pytest -n 0 -raRs --reruns 2 --reruns-delay 5 -s ./tests/runtime --ignore=tests/runtime/test_browsergym_envs.py --durations=10
+          poetry run pytest -n 5 -raRs --reruns 2 --reruns-delay 3 -s ./tests/runtime --ignore=tests/runtime/test_browsergym_envs.py --durations=10
         env:
           DEBUG: "1"
 

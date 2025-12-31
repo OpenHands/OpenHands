@@ -20,7 +20,7 @@ def token_store(session_maker, mock_config):
 
 @pytest.fixture
 def token_manager():
-    with patch('server.auth.token_manager.get_config') as mock_get_config:
+    with patch('server.config.get_config') as mock_get_config:
         mock_config = mock_get_config.return_value
         mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
         return TokenManager(external=False)

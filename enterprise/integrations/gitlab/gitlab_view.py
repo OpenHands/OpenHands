@@ -4,7 +4,8 @@ from integrations.models import Message
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import HOST, get_oh_labels, has_exact_mention
 from jinja2 import Environment
-from server.auth.token_manager import TokenManager, get_config
+from server.auth.token_manager import TokenManager
+from server.config import get_config
 from storage.database import session_maker
 from storage.saas_secrets_store import SaasSecretsStore
 

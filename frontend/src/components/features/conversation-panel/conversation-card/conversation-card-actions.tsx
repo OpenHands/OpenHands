@@ -11,6 +11,7 @@ interface ConversationCardActionsProps {
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   conversationStatus?: ConversationStatus;
   conversationId?: string;
   showOptions?: boolean;
@@ -23,10 +24,13 @@ export function ConversationCardActions({
   onStop,
   onEdit,
   onDownloadViaVSCode,
+  onDownloadConversation,
   conversationStatus,
   conversationId,
   showOptions,
 }: ConversationCardActionsProps) {
+  const isConversationArchived = conversationStatus === "ARCHIVED";
+
   return (
     <div className="group">
       <button
@@ -37,7 +41,10 @@ export function ConversationCardActions({
           event.stopPropagation();
           onContextMenuToggle(!contextMenuOpen);
         }}
-        className="cursor-pointer w-6 h-6 flex flex-row items-center justify-end"
+        className={cn(
+          "cursor-pointer w-6 h-6 flex flex-row items-center justify-center translate-x-2.5",
+          isConversationArchived && "opacity-60",
+        )}
       >
         <EllipsisIcon />
       </button>
@@ -52,10 +59,18 @@ export function ConversationCardActions({
         <ConversationCardContextMenu
           onClose={() => onContextMenuToggle(false)}
           onDelete={onDelete}
-          onStop={conversationStatus !== "STOPPED" ? onStop : undefined}
+          onStop={
+            conversationStatus === "RUNNING" ||
+            conversationStatus === "STARTING"
+              ? onStop
+              : undefined
+          }
           onEdit={onEdit}
           onDownloadViaVSCode={
             conversationId && showOptions ? onDownloadViaVSCode : undefined
+          }
+          onDownloadConversation={
+            conversationId ? onDownloadConversation : undefined
           }
           position="bottom"
         />

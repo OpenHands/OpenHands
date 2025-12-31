@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -51,6 +58,8 @@ class AgentConfig(BaseModel):
     """Whether to enable SoM (Set of Marks) visual browsing."""
     enable_plan_mode: bool = Field(default=True)
     """Whether to enable plan mode, which uses the long horizon system message and add the new tool - task_tracker - for planning, tracking and executing complex tasks."""
+    enable_stuck_detection: bool = Field(default=True)
+    """Whether to enable stuck/loop detection. When disabled, the agent will not automatically detect and recover from loops."""
     condenser: CondenserConfig = Field(
         # The default condenser is set to the conversation window condenser -- if
         # we use NoOp and the conversation hits the LLM context length limit,

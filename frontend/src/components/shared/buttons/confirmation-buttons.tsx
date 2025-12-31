@@ -3,13 +3,15 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { AgentState } from "#/types/agent-state";
 import { generateAgentStateChangeEvent } from "#/services/agent-state-service";
-import { useWsClient } from "#/context/ws-client-provider";
 import { ActionTooltip } from "../action-tooltip";
-import { isOpenHandsAction } from "#/types/core/guards";
+import { isOpenHandsAction, isActionOrObservation } from "#/types/core/guards";
 import { ActionSecurityRisk } from "#/stores/security-analyzer-store";
 import { RiskAlert } from "#/components/shared/risk-alert";
 import WarningIcon from "#/icons/u-warning.svg?react";
 import { useEventMessageStore } from "#/stores/event-message-store";
+import { useEventStore } from "#/stores/use-event-store";
+import { isV0Event } from "#/types/v1/type-guards";
+import { useSendMessage } from "#/hooks/use-send-message";
 
 export function ConfirmationButtons() {
   const submittedEventIds = useEventMessageStore(
@@ -21,10 +23,13 @@ export function ConfirmationButtons() {
 
   const { t } = useTranslation();
 
-  const { send, parsedEvents } = useWsClient();
+  const { send } = useSendMessage();
+  const events = useEventStore((state) => state.events);
 
   // Find the most recent action awaiting confirmation
-  const awaitingAction = parsedEvents
+  const awaitingAction = events
+    .filter(isV0Event)
+    .filter(isActionOrObservation)
     .slice()
     .reverse()
     .find((ev) => {

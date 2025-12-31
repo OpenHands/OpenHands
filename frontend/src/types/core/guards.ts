@@ -105,3 +105,8 @@ export const isStatusUpdate = (event: unknown): event is StatusUpdate =>
   "status_update" in event &&
   "type" in event &&
   "id" in event;
+
+export const isActionOrObservation = (
+  event: OpenHandsParsedEvent,
+): event is OpenHandsAction | OpenHandsObservation =>
+  isOpenHandsAction(event) || isOpenHandsObservation(event);

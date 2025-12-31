@@ -4,7 +4,7 @@ import {
   clearEmptyContent,
   getTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 
 /**
  * Hook for managing chat input content logic

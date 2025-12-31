@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import argparse
 import os
 import pathlib
@@ -12,7 +19,6 @@ import toml
 from dotenv import load_dotenv
 from pydantic import BaseModel, SecretStr, ValidationError
 
-from openhands import __version__
 from openhands.core import logger
 from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.arg_utils import get_headless_parser
@@ -149,7 +155,10 @@ def load_from_toml(cfg: OpenHandsConfig, toml_file: str = 'config.toml') -> None
     try:
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        logger.openhands_logger.info(
+            f'{toml_file} not found: {e}. Toml values have not been applied.'
+        )
         return
     except toml.TomlDecodeError as e:
         logger.openhands_logger.warning(
@@ -377,11 +386,6 @@ def get_or_create_jwt_secret(file_store: FileStore) -> str:
 def finalize_config(cfg: OpenHandsConfig) -> None:
     """More tweaks to the config after it's been loaded."""
     # Handle the sandbox.volumes parameter
-    if cfg.workspace_base is not None or cfg.workspace_mount_path is not None:
-        logger.openhands_logger.warning(
-            'DEPRECATED: The WORKSPACE_BASE and WORKSPACE_MOUNT_PATH environment variables are deprecated. '
-            "Please use SANDBOX_VOLUMES instead, e.g. 'SANDBOX_VOLUMES=/my/host/dir:/workspace:rw'"
-        )
     if cfg.sandbox.volumes is not None:
         # Split by commas to handle multiple mounts
         mounts = cfg.sandbox.volumes.split(',')
@@ -508,7 +512,7 @@ def get_agent_config_arg(
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
     except FileNotFoundError as e:
-        logger.openhands_logger.error(f'Config file not found: {e}')
+        logger.openhands_logger.info(f'Config file not found: {e}')
         return None
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -572,7 +576,7 @@ def get_llm_config_arg(
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
     except FileNotFoundError as e:
-        logger.openhands_logger.error(f'Config file not found: {e}')
+        logger.openhands_logger.info(f'Config file not found: {e}')
         return None
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -607,7 +611,10 @@ def get_llms_for_routing_config(toml_file: str = 'config.toml') -> dict[str, LLM
     try:
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        logger.openhands_logger.info(
+            f'Config file not found: {e}. Toml values have not been applied.'
+        )
         return llms_for_routing
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -670,7 +677,7 @@ def get_condenser_config_arg(
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
     except FileNotFoundError as e:
-        logger.openhands_logger.error(f'Config file not found: {toml_file}. Error: {e}')
+        logger.openhands_logger.info(f'Config file not found: {toml_file}. Error: {e}')
         return None
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -756,7 +763,7 @@ def get_model_routing_config_arg(toml_file: str = 'config.toml') -> ModelRouting
         with open(toml_file, 'r', encoding='utf-8') as toml_contents:
             toml_config = toml.load(toml_contents)
     except FileNotFoundError as e:
-        logger.openhands_logger.error(f'Config file not found: {toml_file}. Error: {e}')
+        logger.openhands_logger.info(f'Config file not found: {toml_file}. Error: {e}')
         return default_cfg
     except toml.TomlDecodeError as e:
         logger.openhands_logger.error(
@@ -785,9 +792,10 @@ def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = get_headless_parser()
     args = parser.parse_args()
+    from openhands import get_version
 
     if args.version:
-        print(f'OpenHands version: {__version__}')
+        print(f'OpenHands version: {get_version()}')
         sys.exit(0)
 
     return args

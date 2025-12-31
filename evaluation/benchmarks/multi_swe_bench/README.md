@@ -15,7 +15,7 @@ python evaluation/benchmarks/multi_swe_bench/scripts/data/data_change.py
 
 ## Docker image download
 
-Please download the multi-swe-bench dokcer images from [here](https://github.com/multi-swe-bench/multi-swe-bench?tab=readme-ov-file#run-evaluation).
+Please download the multi-swe-bench docker images from [here](https://github.com/multi-swe-bench/multi-swe-bench?tab=readme-ov-file#run-evaluation).
 
 ## Generate patch
 
@@ -47,7 +47,7 @@ For debugging purposes, you can set `export EVAL_SKIP_MAXIMUM_RETRIES_EXCEEDED=t
 
 The results will be generated in evaluation/evaluation_outputs/outputs/XXX/CodeActAgent/YYY/output.jsonl, you can refer to the [example](examples/output.jsonl).
 
-## Runing evaluation
+## Running evaluation
 
 First, install [multi-swe-bench](https://github.com/multi-swe-bench/multi-swe-bench).
 

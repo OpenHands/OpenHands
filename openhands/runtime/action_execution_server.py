@@ -14,7 +14,6 @@ import shutil
 import sys
 import tempfile
 import time
-import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 from zipfile import ZipFile
@@ -36,6 +35,7 @@ from uvicorn import run
 
 from openhands.core.config.mcp_config import MCPStdioServerConfig
 from openhands.core.exceptions import BrowserUnavailableException
+from openhands.core.logger import get_uvicorn_json_log_config
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import (
     Action,
@@ -241,7 +241,7 @@ class ActionExecutor:
             self.browser = BrowserEnv(self.browsergym_eval_env)
             logger.debug('Browser initialized asynchronously')
         except Exception as e:
-            logger.error(f'Failed to initialize browser: {e}')
+            logger.exception(f'Failed to initialize browser: {e}')
             self.browser = None
 
     async def _ensure_browser_ready(self):
@@ -393,7 +393,7 @@ class ActionExecutor:
             obs = await call_sync_from_async(bash_session.execute, action)
             return obs
         except Exception as e:
-            logger.error(f'Error running command: {e}')
+            logger.exception(f'Error running command: {e}')
             return ErrorObservation(str(e))
 
     async def run_ipython(self, action: IPythonRunCellAction) -> Observation:
@@ -768,14 +768,14 @@ if __name__ == '__main__':
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-        logger.error(f'HTTP exception occurred: {exc.detail}')
+        logger.exception(f'HTTP exception occurred: {exc.detail}')
         return JSONResponse(status_code=exc.status_code, content={'detail': exc.detail})
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ):
-        logger.error(f'Validation error occurred: {exc}')
+        logger.exception(f'Validation error occurred: {exc}')
         return JSONResponse(
             status_code=422,
             content={
@@ -822,10 +822,10 @@ if __name__ == '__main__':
             observation = await client.run_action(action)
             return event_to_dict(observation)
         except Exception as e:
-            logger.error(f'Error while running /execute_action: {str(e)}')
+            logger.exception(f'Error while running /execute_action: {str(e)}')
             raise HTTPException(
                 status_code=500,
-                detail=traceback.format_exc(),
+                detail=f'Internal server error: {str(e)}',
             )
         finally:
             update_last_execution_time()
@@ -1067,8 +1067,12 @@ if __name__ == '__main__':
             return JSONResponse(content=sorted_entries)
 
         except Exception as e:
-            logger.error(f'Error listing files: {e}')
+            logger.exception(f'Error listing files: {e}')
             return JSONResponse(content=[])
 
     logger.debug(f'Starting action execution API on port {args.port}')
-    run(app, host='0.0.0.0', port=args.port)
+    # When LOG_JSON=1, provide a JSON log config to Uvicorn so error/access logs are structured
+    log_config = None
+    if os.getenv('LOG_JSON', '0') in ('1', 'true', 'True'):
+        log_config = get_uvicorn_json_log_config()
+    run(app, host='0.0.0.0', port=args.port, log_config=log_config, use_colors=False)

@@ -24,7 +24,7 @@ export function transformVSCodeUrl(vsCodeUrl: string | null): string | null {
     }
 
     return vsCodeUrl;
-  } catch (error) {
+  } catch {
     // Silently handle the error and return the original URL
     return vsCodeUrl;
   }

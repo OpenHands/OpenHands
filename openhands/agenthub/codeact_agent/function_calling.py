@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 """This file contains the function calling implementation for different actions.
 
 This is similar to the functionality of `CodeActResponseParser`.
@@ -286,7 +293,7 @@ def response_to_actions(
                             f'Unexpected task format in task_list: {type(task)} - {task}'
                         )
                         raise FunctionCallValidationError(
-                            f'Unexpected task format in task_list: {type(task)}. Each task shoud be a dictionary.'
+                            f'Unexpected task format in task_list: {type(task)}. Each task should be a dictionary.'
                         )
                     normalized_task_list.append(normalized_task)
 

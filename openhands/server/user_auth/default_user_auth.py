@@ -1,3 +1,11 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from dataclasses import dataclass
 
 from fastapi import Request
@@ -7,7 +15,7 @@ from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
 from openhands.server import shared
 from openhands.server.settings import Settings
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.user_secrets import UserSecrets
+from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
 
@@ -19,7 +27,7 @@ class DefaultUserAuth(UserAuth):
     _settings: Settings | None = None
     _settings_store: SettingsStore | None = None
     _secrets_store: SecretsStore | None = None
-    _user_secrets: UserSecrets | None = None
+    _secrets: Secrets | None = None
 
     async def get_user_id(self) -> str | None:
         """The default implementation does not support multi tenancy, so user_id is always None"""
@@ -73,22 +81,30 @@ class DefaultUserAuth(UserAuth):
         self._secrets_store = secret_store
         return secret_store
 
-    async def get_user_secrets(self) -> UserSecrets | None:
-        user_secrets = self._user_secrets
+    async def get_secrets(self) -> Secrets | None:
+        user_secrets = self._secrets
         if user_secrets:
             return user_secrets
         secrets_store = await self.get_secrets_store()
         user_secrets = await secrets_store.load()
-        self._user_secrets = user_secrets
+        self._secrets = user_secrets
         return user_secrets
 
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
-        user_secrets = await self.get_user_secrets()
+        user_secrets = await self.get_secrets()
         if user_secrets is None:
             return None
         return user_secrets.provider_tokens
+
+    async def get_mcp_api_key(self) -> str | None:
+        return None
 
     @classmethod
     async def get_instance(cls, request: Request) -> UserAuth:
         user_auth = DefaultUserAuth()
         return user_auth
+
+    @classmethod
+    async def get_for_user(cls, user_id: str) -> UserAuth:
+        assert user_id == 'root'
+        return DefaultUserAuth()

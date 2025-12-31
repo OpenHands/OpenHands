@@ -137,7 +137,9 @@ class TestLinearExistingConversationView:
     ):
         """Test conversation update with no metadata"""
         mock_store = AsyncMock()
-        mock_store.get_metadata.return_value = None
+        mock_store.get_metadata.side_effect = FileNotFoundError(
+            'No such file or directory'
+        )
         mock_store_impl.return_value = mock_store
 
         with pytest.raises(
@@ -307,7 +309,7 @@ class TestLinearViewEdgeCases:
         mock_agent_loop_info,
     ):
         """Test conversation creation when user has no secrets"""
-        new_conversation_view.saas_user_auth.get_user_secrets.return_value = None
+        new_conversation_view.saas_user_auth.get_secrets.return_value = None
         mock_create_conversation.return_value = mock_agent_loop_info
         mock_store.create_conversation = AsyncMock()
 

@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -80,12 +87,16 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'o4-mini*',
     # Google Gemini
     'gemini-2.5-pro*',
+    'gemini-3*',
+    # Groq models (via groq/ provider prefix)
+    'groq/*',
     # Others
     'kimi-k2-0711-preview',
     'kimi-k2-instruct',
     'qwen3-coder*',
     'qwen3-coder-480b-a35b-instruct',
     'deepseek-chat',
+    'grok-code-fast-1',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [
@@ -104,6 +115,7 @@ REASONING_EFFORT_PATTERNS: list[str] = [
     # DeepSeek reasoning family
     'deepseek-r1-0528*',
     'claude-sonnet-4-5*',
+    'claude-haiku-4-5*',
 ]
 
 PROMPT_CACHE_PATTERNS: list[str] = [
@@ -127,6 +139,8 @@ SUPPORTS_STOP_WORDS_FALSE_PATTERNS: list[str] = [
     'grok-code-fast-1',
     # DeepSeek R1 family
     'deepseek-r1-0528*',
+    # Azure GPT-5 family
+    'azure/gpt-5*',
 ]
 
 

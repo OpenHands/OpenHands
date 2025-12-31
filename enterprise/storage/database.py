@@ -1,7 +1,6 @@
 import asyncio
 import os
 
-from google.cloud.sql.connector import Connector
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -20,15 +19,23 @@ GCP_REGION = os.environ.get('GCP_REGION')
 
 POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', '25'))
 MAX_OVERFLOW = int(os.environ.get('DB_MAX_OVERFLOW', '10'))
+POOL_RECYCLE = int(os.environ.get('DB_POOL_RECYCLE', '1800'))
+
+# Initialize Cloud SQL Connector once at module level for GCP environments.
+_connector = None
 
 
 def _get_db_engine():
     if GCP_DB_INSTANCE:  # GCP environments
 
         def get_db_connection():
-            connector = Connector()
+            global _connector
+            from google.cloud.sql.connector import Connector
+
+            if not _connector:
+                _connector = Connector()
             instance_string = f'{GCP_PROJECT}:{GCP_REGION}:{GCP_DB_INSTANCE}'
-            return connector.connect(
+            return _connector.connect(
                 instance_string, 'pg8000', user=DB_USER, password=DB_PASS, db=DB_NAME
             )
 
@@ -37,6 +44,7 @@ def _get_db_engine():
             creator=get_db_connection,
             pool_size=POOL_SIZE,
             max_overflow=MAX_OVERFLOW,
+            pool_recycle=POOL_RECYCLE,
             pool_pre_ping=True,
         )
     else:
@@ -47,11 +55,14 @@ def _get_db_engine():
             host_string,
             pool_size=POOL_SIZE,
             max_overflow=MAX_OVERFLOW,
+            pool_recycle=POOL_RECYCLE,
             pool_pre_ping=True,
         )
 
 
 async def async_creator():
+    from google.cloud.sql.connector import Connector
+
     loop = asyncio.get_running_loop()
     async with Connector(loop=loop) as connector:
         conn = await connector.connect_async(

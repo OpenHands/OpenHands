@@ -13,7 +13,7 @@ from integrations.solvability.models.report import SolvabilityReport
 from integrations.solvability.models.summary import SolvabilitySummary
 from integrations.utils import ENABLE_SOLVABILITY_ANALYSIS
 from pydantic import ValidationError
-from server.auth.token_manager import get_config
+from server.config import get_config
 from storage.database import session_maker
 from storage.saas_settings_store import SaasSettingsStore
 

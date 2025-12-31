@@ -21,6 +21,8 @@ class ProviderType(Enum):
     GITHUB = 'github'
     GITLAB = 'gitlab'
     BITBUCKET = 'bitbucket'
+    FORGEJO = 'forgejo'
+    AZURE_DEVOPS = 'azure_devops'
     ENTERPRISE_SSO = 'enterprise_sso'
 
 
@@ -458,7 +460,13 @@ class GitService(Protocol):
         ...
 
     async def search_repositories(
-        self, query: str, per_page: int, sort: str, order: str, public: bool
+        self,
+        query: str,
+        per_page: int,
+        sort: str,
+        order: str,
+        public: bool,
+        app_mode: AppMode,
     ) -> list[Repository]:
         """Search for public repositories"""
         ...

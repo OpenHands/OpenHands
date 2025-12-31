@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { MicroagentManagementSidebar } from "./microagent-management-sidebar";
 import { MicroagentManagementMain } from "./microagent-management-main";
 import { MicroagentManagementUpsertMicroagentModal } from "./microagent-management-upsert-microagent-modal";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { useCreateConversationAndSubscribeMultiple } from "#/hooks/use-create-conversation-and-subscribe-multiple";
 import {
   LearnThisRepoFormData,

@@ -78,7 +78,7 @@ class JupyterPlugin(Plugin):
 
             # Using synchronous subprocess.Popen for Windows as asyncio.create_subprocess_shell
             # has limitations on Windows platforms
-            self.gateway_process = subprocess.Popen(  # type: ignore[ASYNC101] # noqa: ASYNC101
+            self.gateway_process = subprocess.Popen(  # type: ignore[ASYNC101]
                 jupyter_launch_command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -91,19 +91,19 @@ class JupyterPlugin(Plugin):
             output = ''
             while should_continue():
                 if self.gateway_process.stdout is None:
-                    time.sleep(1)  # type: ignore[ASYNC101] # noqa: ASYNC101
+                    time.sleep(1)  # type: ignore[ASYNC101]
                     continue
 
                 line = self.gateway_process.stdout.readline()
                 if not line:
-                    time.sleep(1)  # type: ignore[ASYNC101] # noqa: ASYNC101
+                    time.sleep(1)  # type: ignore[ASYNC101]
                     continue
 
                 output += line
                 if 'at' in line:
                     break
 
-                time.sleep(1)  # type: ignore[ASYNC101] # noqa: ASYNC101
+                time.sleep(1)  # type: ignore[ASYNC101]
                 logger.debug('Waiting for jupyter kernel gateway to start...')
 
             logger.debug(

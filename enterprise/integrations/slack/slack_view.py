@@ -14,6 +14,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
 from openhands.events.action import MessageAction
 from openhands.events.serialization.event import event_to_dict
+from openhands.integrations.provider import ProviderHandler
 from openhands.server.services.conversation_service import (
     create_new_conversation,
     setup_init_conversation_settings,
@@ -185,8 +186,15 @@ class SlackNewConversationView(SlackViewInterface):
         self._verify_necessary_values_are_set()
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        user_secrets = await self.saas_user_auth.get_user_secrets()
+        user_secrets = await self.saas_user_auth.get_secrets()
         user_instructions, conversation_instructions = self._get_instructions(jinja)
+
+        # Determine git provider from repository
+        git_provider = None
+        if self.selected_repo and provider_tokens:
+            provider_handler = ProviderHandler(provider_tokens)
+            repository = await provider_handler.verify_repo_provider(self.selected_repo)
+            git_provider = repository.git_provider
 
         agent_loop_info = await create_new_conversation(
             user_id=self.slack_to_openhands_user.keycloak_user_id,
@@ -194,13 +202,14 @@ class SlackNewConversationView(SlackViewInterface):
             selected_repository=self.selected_repo,
             selected_branch=None,
             initial_user_msg=user_instructions,
-            conversation_instructions=conversation_instructions
-            if conversation_instructions
-            else None,
+            conversation_instructions=(
+                conversation_instructions if conversation_instructions else None
+            ),
             image_urls=None,
             replay_json=None,
             conversation_trigger=ConversationTrigger.SLACK,
             custom_secrets=user_secrets.custom_secrets if user_secrets else None,
+            git_provider=git_provider,
         )
 
         self.conversation_id = agent_loop_info.conversation_id
@@ -263,8 +272,10 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
         # Check if conversation has been deleted
         # Update logic when soft delete is implemented
         conversation_store = await ConversationStoreImpl.get_instance(config, user_id)
-        metadata = await conversation_store.get_metadata(self.conversation_id)
-        if not metadata:
+
+        try:
+            await conversation_store.get_metadata(self.conversation_id)
+        except FileNotFoundError:
             raise StartingConvoException('Conversation no longer exists.')
 
         provider_tokens = await saas_user_auth.get_provider_tokens()

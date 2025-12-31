@@ -1,31 +1,35 @@
 import { useTranslation } from "react-i18next";
-import posthog from "posthog-js";
 import PRIcon from "#/icons/u-pr.svg?react";
 import { cn, getCreatePRPrompt } from "#/utils/utils";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { I18nKey } from "#/i18n/declaration";
 import { Provider } from "#/types/settings";
+import { useTracking } from "#/hooks/use-tracking";
 
 interface GitControlBarPrButtonProps {
   onSuggestionsClick: (value: string) => void;
   hasRepository: boolean;
   currentGitProvider: Provider;
+  isConversationReady?: boolean;
 }
 
 export function GitControlBarPrButton({
   onSuggestionsClick,
   hasRepository,
   currentGitProvider,
+  isConversationReady = true,
 }: GitControlBarPrButtonProps) {
   const { t } = useTranslation();
+  const { trackCreatePrButtonClick } = useTracking();
 
   const { providers } = useUserProviders();
 
   const providersAreSet = providers.length > 0;
-  const isButtonEnabled = providersAreSet && hasRepository;
+  const isButtonEnabled =
+    providersAreSet && hasRepository && isConversationReady;
 
   const handlePrClick = () => {
-    posthog.capture("create_pr_button_clicked");
+    trackCreatePrButtonClick();
     onSuggestionsClick(getCreatePRPrompt(currentGitProvider));
   };
 

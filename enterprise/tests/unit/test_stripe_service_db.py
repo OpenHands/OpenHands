@@ -13,7 +13,6 @@ from integrations.stripe_service import (
 )
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from storage.stored_settings import Base as StoredBase
 from storage.stripe_customer import Base as StripeCustomerBase
 from storage.stripe_customer import StripeCustomer
 from storage.user_settings import Base as UserBase
@@ -22,7 +21,7 @@ from storage.user_settings import Base as UserBase
 @pytest.fixture
 def engine():
     engine = create_engine('sqlite:///:memory:')
-    StoredBase.metadata.create_all(engine)
+
     UserBase.metadata.create_all(engine)
     StripeCustomerBase.metadata.create_all(engine)
     return engine

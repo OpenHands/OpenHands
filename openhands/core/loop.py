@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import asyncio
 
 from openhands.controller import AgentController
@@ -13,6 +20,7 @@ async def run_agent_until_done(
     runtime: Runtime,
     memory: Memory,
     end_states: list[AgentState],
+    skip_set_callback: bool = False,
 ) -> None:
     """run_agent_until_done takes a controller and a runtime, and will run
     the agent until it reaches a terminal state.
@@ -28,18 +36,19 @@ async def run_agent_until_done(
         else:
             logger.info(msg)
 
-    if hasattr(runtime, 'status_callback') and runtime.status_callback:
-        raise ValueError(
-            'Runtime status_callback was set, but run_agent_until_done will override it'
-        )
-    if hasattr(controller, 'status_callback') and controller.status_callback:
-        raise ValueError(
-            'Controller status_callback was set, but run_agent_until_done will override it'
-        )
+    if not skip_set_callback:
+        if hasattr(runtime, 'status_callback') and runtime.status_callback:
+            raise ValueError(
+                'Runtime status_callback was set, but run_agent_until_done will override it'
+            )
+        if hasattr(controller, 'status_callback') and controller.status_callback:
+            raise ValueError(
+                'Controller status_callback was set, but run_agent_until_done will override it'
+            )
 
-    runtime.status_callback = status_callback
-    controller.status_callback = status_callback
-    memory.status_callback = status_callback
+        runtime.status_callback = status_callback
+        controller.status_callback = status_callback
+        memory.status_callback = status_callback
 
     while controller.state.agent_state not in end_states:
         await asyncio.sleep(1)

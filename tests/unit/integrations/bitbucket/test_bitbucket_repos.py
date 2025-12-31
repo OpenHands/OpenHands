@@ -8,6 +8,7 @@ from pydantic import SecretStr
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
 from openhands.integrations.service_types import OwnerType, Repository
 from openhands.integrations.service_types import ProviderType as ServiceProviderType
+from openhands.server.types import AppMode
 
 
 @pytest.fixture
@@ -37,7 +38,12 @@ async def test_search_repositories_url_parsing_standard_url(bitbucket_service):
     ) as mock_get_repo:
         url = 'https://bitbucket.org/workspace/repo'
         repositories = await bitbucket_service.search_repositories(
-            query=url, per_page=10, sort='updated', order='desc', public=True
+            query=url,
+            per_page=10,
+            sort='updated',
+            order='desc',
+            public=True,
+            app_mode=AppMode.OSS,
         )
 
         # Verify the correct workspace/repo combination was extracted and passed
@@ -70,7 +76,12 @@ async def test_search_repositories_url_parsing_with_extra_path_segments(
         # Test complex URL with query params, fragments, and extra paths
         url = 'https://bitbucket.org/my-workspace/my-repo/src/feature-branch/src/main.py?at=feature-branch&fileviewer=file-view-default#lines-25'
         repositories = await bitbucket_service.search_repositories(
-            query=url, per_page=10, sort='updated', order='desc', public=True
+            query=url,
+            per_page=10,
+            sort='updated',
+            order='desc',
+            public=True,
+            app_mode=AppMode.OSS,
         )
 
         # Verify the correct workspace/repo combination was extracted from complex URL
@@ -87,7 +98,12 @@ async def test_search_repositories_url_parsing_invalid_url(bitbucket_service):
     ) as mock_get_repo:
         url = 'not-a-valid-url'
         repositories = await bitbucket_service.search_repositories(
-            query=url, per_page=10, sort='updated', order='desc', public=True
+            query=url,
+            per_page=10,
+            sort='updated',
+            order='desc',
+            public=True,
+            app_mode=AppMode.OSS,
         )
 
         # Should return empty list for invalid URL and not call API
@@ -105,7 +121,12 @@ async def test_search_repositories_url_parsing_insufficient_path_segments(
     ) as mock_get_repo:
         url = 'https://bitbucket.org/workspace'
         repositories = await bitbucket_service.search_repositories(
-            query=url, per_page=10, sort='updated', order='desc', public=True
+            query=url,
+            per_page=10,
+            sort='updated',
+            order='desc',
+            public=True,
+            app_mode=AppMode.OSS,
         )
 
         # Should return empty list for insufficient path segments and not call API

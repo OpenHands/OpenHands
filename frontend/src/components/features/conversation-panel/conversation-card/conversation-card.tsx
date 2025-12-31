@@ -1,5 +1,5 @@
 import React from "react";
-import posthog from "posthog-js";
+import { usePostHog } from "posthog-js/react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -8,6 +8,7 @@ import { RepositorySelection } from "#/api/open-hands.types";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
+import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -21,6 +22,7 @@ interface ConversationCardProps {
   createdAt?: string; // ISO 8601
   conversationStatus?: ConversationStatus;
   conversationId?: string; // Optional conversation ID for VS Code URL
+  conversationVersion?: "V0" | "V1";
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
 }
@@ -39,10 +41,13 @@ export function ConversationCard({
   createdAt,
   conversationId,
   conversationStatus,
+  conversationVersion,
   contextMenuOpen = false,
   onContextMenuToggle,
 }: ConversationCardProps) {
+  const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
+  const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -90,11 +95,23 @@ export function ConversationCard({
           }
         }
         // VS Code URL not available
-      } catch (error) {
+      } catch {
         // Failed to fetch VS Code URL
       }
     }
 
+    onContextMenuToggle?.(false);
+  };
+
+  const handleDownloadConversation = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (conversationId && conversationVersion === "V1") {
+      await downloadConversation(conversationId);
+    }
     onContextMenuToggle?.(false);
   };
 
@@ -108,7 +125,6 @@ export function ConversationCard({
       className={cn(
         "relative h-auto w-full p-3.5 border-b border-neutral-600 cursor-pointer",
         "data-[context-menu-open=false]:hover:bg-[#454545]",
-        conversationStatus === "ARCHIVED" && "opacity-60",
       )}
     >
       <div className="flex items-center justify-between w-full">
@@ -117,6 +133,7 @@ export function ConversationCard({
           titleMode={titleMode}
           onTitleSave={onTitleSave}
           conversationStatus={conversationStatus}
+          conversationVersion={conversationVersion}
         />
 
         {hasContextMenu && (
@@ -127,6 +144,11 @@ export function ConversationCard({
             onStop={onStop && handleStop}
             onEdit={onChangeTitle && handleEdit}
             onDownloadViaVSCode={handleDownloadViaVSCode}
+            onDownloadConversation={
+              conversationVersion === "V1"
+                ? handleDownloadConversation
+                : undefined
+            }
             conversationStatus={conversationStatus}
             conversationId={conversationId}
             showOptions={showOptions}
@@ -138,6 +160,7 @@ export function ConversationCard({
         selectedRepository={selectedRepository}
         lastUpdatedAt={lastUpdatedAt}
         createdAt={createdAt}
+        conversationStatus={conversationStatus}
       />
     </div>
   );

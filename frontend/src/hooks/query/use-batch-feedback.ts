@@ -4,6 +4,7 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConfig } from "#/hooks/query/use-config";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 export interface BatchFeedbackData {
   exists: boolean;
@@ -25,13 +26,20 @@ export const getFeedbackExistsQueryKey = (
 export const useBatchFeedback = () => {
   const { conversationId } = useConversationId();
   const { data: config } = useConfig();
+  const { data: conversation } = useActiveConversation();
   const queryClient = useQueryClient();
   const runtimeIsReady = useRuntimeIsReady();
+
+  const isV1Conversation = conversation?.conversation_version === "V1";
 
   const query = useQuery({
     queryKey: getFeedbackQueryKey(conversationId),
     queryFn: () => ConversationService.getBatchFeedback(conversationId!),
-    enabled: runtimeIsReady && !!conversationId && config?.APP_MODE === "saas",
+    enabled:
+      runtimeIsReady &&
+      !!conversationId &&
+      config?.APP_MODE === "saas" &&
+      !isV1Conversation,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
   });

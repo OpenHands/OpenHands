@@ -1,3 +1,5 @@
+const START = "[Python Interpreter: ";
+
 /**
  * Parses the raw output from the terminal into the command and symbol
  * @param raw The raw output to be displayed in the terminal
@@ -13,9 +15,14 @@
  * console.log(parsed.symbol); // openhands@659478cb008c:/workspace $
  */
 export const parseTerminalOutput = (raw: string) => {
-  const envRegex = /(.*)\[Python Interpreter: (.*)\]/s;
-  const match = raw.match(envRegex);
-
-  if (!match) return raw;
-  return match[1]?.trim() || "";
+  const start = raw.indexOf(START);
+  if (start < 0) {
+    return raw;
+  }
+  const offset = start + START.length;
+  const end = raw.indexOf("]", offset);
+  if (end <= offset) {
+    return raw;
+  }
+  return raw.substring(0, start).trim();
 };

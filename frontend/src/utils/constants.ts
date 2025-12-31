@@ -67,3 +67,6 @@ export const CONTEXT_MENU_ICON_TEXT_CLASSNAME = "h-[30px]";
 export const CHAT_INPUT = {
   HEIGHT_THRESHOLD: 100, // Height in pixels when suggestions should be hidden
 };
+
+// UI tolerance constants
+export const EPS = 1.5; // px tolerance for "near min" height comparisons

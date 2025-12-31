@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import AppSettingsScreen from "#/routes/app-settings";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { AvailableLanguages } from "#/i18n";
 import * as CaptureConsent from "#/utils/handle-capture-consent";
@@ -43,6 +43,21 @@ describe("Content", () => {
       expect(language).toHaveValue("Norsk");
       expect(analytics).toBeChecked();
       expect(sound).toBeChecked();
+    });
+  });
+
+  it("should render analytics toggle as enabled when server returns null (opt-in by default)", async () => {
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      user_consents_to_analytics: null,
+    });
+
+    renderAppSettingsScreen();
+
+    await waitFor(() => {
+      const analytics = screen.getByTestId("enable-analytics-switch");
+      expect(analytics).toBeChecked();
     });
   });
 
@@ -163,7 +178,10 @@ describe("Form submission", () => {
     await userEvent.click(submit);
 
     await waitFor(() =>
-      expect(handleCaptureConsentsSpy).toHaveBeenCalledWith(true),
+      expect(handleCaptureConsentsSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        true,
+      ),
     );
   });
 
@@ -188,7 +206,10 @@ describe("Form submission", () => {
     await userEvent.click(submit);
 
     await waitFor(() =>
-      expect(handleCaptureConsentsSpy).toHaveBeenCalledWith(false),
+      expect(handleCaptureConsentsSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        false,
+      ),
     );
   });
 

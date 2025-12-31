@@ -12,6 +12,7 @@ export const useChatSubmission = (
   fileInputRef: React.RefObject<HTMLInputElement | null>,
   smartResize: () => void,
   onSubmit: (message: string) => void,
+  resetManualResize?: () => void,
 ) => {
   // Send button click handler
   const handleSubmit = useCallback(() => {
@@ -30,7 +31,10 @@ export const useChatSubmission = (
 
     // Reset height and show suggestions again
     smartResize();
-  }, [chatInputRef, fileInputRef, smartResize, onSubmit]);
+
+    // Reset manual resize state for next message
+    resetManualResize?.();
+  }, [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize]);
 
   // Resume agent button click handler
   const handleResumeAgent = useCallback(() => {
@@ -44,7 +48,10 @@ export const useChatSubmission = (
 
     // Reset height and show suggestions again
     smartResize();
-  }, [chatInputRef, fileInputRef, smartResize, onSubmit]);
+
+    // Reset manual resize state for next message
+    resetManualResize?.();
+  }, [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize]);
 
   // Handle stop button click
   const handleStop = useCallback((onStop?: () => void) => {

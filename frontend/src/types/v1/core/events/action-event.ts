@@ -7,7 +7,7 @@ import {
   RedactedThinkingBlock,
 } from "../base/event";
 
-export interface ActionEvent extends BaseEvent {
+export interface ActionEvent<T extends Action = Action> extends BaseEvent {
   /**
    * The thought process of the agent before taking this action
    */
@@ -26,7 +26,7 @@ export interface ActionEvent extends BaseEvent {
   /**
    * Single action (tool call) returned by LLM
    */
-  action: Action;
+  action: T;
 
   /**
    * The name of the tool being called

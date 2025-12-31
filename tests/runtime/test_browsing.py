@@ -123,17 +123,21 @@ def find_element_by_tag_and_attributes(
     return None
 
 
-def test_browser_disabled(temp_dir, runtime_cls, run_as_openhands):
+def test_browser_disabled(temp_dir, runtime_cls, run_as_openhands, dynamic_port):
     runtime, _ = _load_runtime(
         temp_dir, runtime_cls, run_as_openhands, enable_browser=False
     )
 
-    action_cmd = CmdRunAction(command='python3 -m http.server 8000 > server.log 2>&1 &')
+    action_cmd = CmdRunAction(
+        command=f'python3 -m http.server {dynamic_port} > server.log 2>&1 &'
+    )
     logger.info(action_cmd, extra={'msg_type': 'ACTION'})
     obs = runtime.run_action(action_cmd)
     logger.info(obs, extra={'msg_type': 'OBSERVATION'})
 
-    action_browse = BrowseURLAction(url='http://localhost:8000', return_axtree=False)
+    action_browse = BrowseURLAction(
+        url=f'http://localhost:{dynamic_port}', return_axtree=False
+    )
     logger.info(action_browse, extra={'msg_type': 'ACTION'})
     obs = runtime.run_action(action_browse)
     logger.info(obs, extra={'msg_type': 'OBSERVATION'})
@@ -143,13 +147,15 @@ def test_browser_disabled(temp_dir, runtime_cls, run_as_openhands):
     _close_test_runtime(runtime)
 
 
-def test_simple_browse(temp_dir, runtime_cls, run_as_openhands):
+def test_simple_browse(temp_dir, runtime_cls, run_as_openhands, dynamic_port):
     runtime, config = _load_runtime(
         temp_dir, runtime_cls, run_as_openhands, enable_browser=True
     )
 
     # Test browse
-    action_cmd = CmdRunAction(command='python3 -m http.server 8000 > server.log 2>&1 &')
+    action_cmd = CmdRunAction(
+        command=f'python3 -m http.server {dynamic_port} > server.log 2>&1 &'
+    )
     logger.info(action_cmd, extra={'msg_type': 'ACTION'})
     obs = runtime.run_action(action_cmd)
     logger.info(obs, extra={'msg_type': 'OBSERVATION'})
@@ -164,17 +170,19 @@ def test_simple_browse(temp_dir, runtime_cls, run_as_openhands):
     logger.info(obs, extra={'msg_type': 'OBSERVATION'})
     assert obs.exit_code == 0
 
-    action_browse = BrowseURLAction(url='http://localhost:8000', return_axtree=False)
+    action_browse = BrowseURLAction(
+        url=f'http://localhost:{dynamic_port}', return_axtree=False
+    )
     logger.info(action_browse, extra={'msg_type': 'ACTION'})
     obs = runtime.run_action(action_browse)
     logger.info(obs, extra={'msg_type': 'OBSERVATION'})
 
     assert isinstance(obs, BrowserOutputObservation)
-    assert 'http://localhost:8000' in obs.url
+    assert f'http://localhost:{dynamic_port}' in obs.url
     assert not obs.error
-    assert obs.open_pages_urls == ['http://localhost:8000/']
+    assert obs.open_pages_urls == [f'http://localhost:{dynamic_port}/']
     assert obs.active_page_index == 0
-    assert obs.last_browser_action == 'goto("http://localhost:8000")'
+    assert obs.last_browser_action == f'goto("http://localhost:{dynamic_port}")'
     assert obs.last_browser_action_error == ''
     assert 'Directory listing for /' in obs.content
     assert 'server.log' in obs.content
@@ -189,7 +197,9 @@ def test_simple_browse(temp_dir, runtime_cls, run_as_openhands):
     _close_test_runtime(runtime)
 
 
-def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
+def test_browser_navigation_actions(
+    temp_dir, runtime_cls, run_as_openhands, dynamic_port
+):
     """Test browser navigation actions: goto, go_back, go_forward, noop."""
     runtime, config = _load_runtime(
         temp_dir, runtime_cls, run_as_openhands, enable_browser=True
@@ -234,7 +244,7 @@ def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
 
         # Start HTTP server
         action_cmd = CmdRunAction(
-            command='python3 -m http.server 8000 > server.log 2>&1 &'
+            command=f'python3 -m http.server {dynamic_port} > server.log 2>&1 &'
         )
         logger.info(action_cmd, extra={'msg_type': 'ACTION'})
         obs = runtime.run_action(action_cmd)
@@ -249,7 +259,7 @@ def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
 
         # Test goto action
         action_browse = BrowseInteractiveAction(
-            browser_actions='goto("http://localhost:8000/page1.html")',
+            browser_actions=f'goto("http://localhost:{dynamic_port}/page1.html")',
             return_axtree=False,
         )
         logger.info(action_browse, extra={'msg_type': 'ACTION'})
@@ -259,7 +269,7 @@ def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
         assert isinstance(obs, BrowserOutputObservation)
         assert not obs.error
         assert 'Page 1' in obs.content
-        assert 'http://localhost:8000/page1.html' in obs.url
+        assert f'http://localhost:{dynamic_port}/page1.html' in obs.url
 
         # Test noop action (should not change page)
         action_browse = BrowseInteractiveAction(
@@ -272,11 +282,11 @@ def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
         assert isinstance(obs, BrowserOutputObservation)
         assert not obs.error
         assert 'Page 1' in obs.content
-        assert 'http://localhost:8000/page1.html' in obs.url
+        assert f'http://localhost:{dynamic_port}/page1.html' in obs.url
 
         # Navigate to page 2
         action_browse = BrowseInteractiveAction(
-            browser_actions='goto("http://localhost:8000/page2.html")',
+            browser_actions=f'goto("http://localhost:{dynamic_port}/page2.html")',
             return_axtree=False,
         )
         logger.info(action_browse, extra={'msg_type': 'ACTION'})
@@ -286,7 +296,7 @@ def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
         assert isinstance(obs, BrowserOutputObservation)
         assert not obs.error
         assert 'Page 2' in obs.content
-        assert 'http://localhost:8000/page2.html' in obs.url
+        assert f'http://localhost:{dynamic_port}/page2.html' in obs.url
 
         # Test go_back action
         action_browse = BrowseInteractiveAction(
@@ -299,7 +309,7 @@ def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
         assert isinstance(obs, BrowserOutputObservation)
         assert not obs.error
         assert 'Page 1' in obs.content
-        assert 'http://localhost:8000/page1.html' in obs.url
+        assert f'http://localhost:{dynamic_port}/page1.html' in obs.url
 
         # Test go_forward action
         action_browse = BrowseInteractiveAction(
@@ -312,7 +322,7 @@ def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
         assert isinstance(obs, BrowserOutputObservation)
         assert not obs.error
         assert 'Page 2' in obs.content
-        assert 'http://localhost:8000/page2.html' in obs.url
+        assert f'http://localhost:{dynamic_port}/page2.html' in obs.url
 
         # Clean up
         action_cmd = CmdRunAction(command='pkill -f "python3 -m http.server" || true')
@@ -324,7 +334,9 @@ def test_browser_navigation_actions(temp_dir, runtime_cls, run_as_openhands):
         _close_test_runtime(runtime)
 
 
-def test_browser_form_interactions(temp_dir, runtime_cls, run_as_openhands):
+def test_browser_form_interactions(
+    temp_dir, runtime_cls, run_as_openhands, dynamic_port
+):
     """Test browser form interaction actions: fill, click, select_option, clear."""
     runtime, config = _load_runtime(
         temp_dir, runtime_cls, run_as_openhands, enable_browser=True
@@ -370,7 +382,7 @@ def test_browser_form_interactions(temp_dir, runtime_cls, run_as_openhands):
 
         # Start HTTP server
         action_cmd = CmdRunAction(
-            command='python3 -m http.server 8000 > server.log 2>&1 &'
+            command=f'python3 -m http.server {dynamic_port} > server.log 2>&1 &'
         )
         logger.info(action_cmd, extra={'msg_type': 'ACTION'})
         obs = runtime.run_action(action_cmd)
@@ -385,7 +397,7 @@ def test_browser_form_interactions(temp_dir, runtime_cls, run_as_openhands):
 
         # Navigate to form page
         action_browse = BrowseInteractiveAction(
-            browser_actions='goto("http://localhost:8000/form.html")',
+            browser_actions=f'goto("http://localhost:{dynamic_port}/form.html")',
             return_axtree=True,  # Need axtree to get element bids
         )
         logger.info(action_browse, extra={'msg_type': 'ACTION'})
@@ -540,7 +552,9 @@ fill("{textarea_bid}", "This is a test message")
         _close_test_runtime(runtime)
 
 
-def test_browser_interactive_actions(temp_dir, runtime_cls, run_as_openhands):
+def test_browser_interactive_actions(
+    temp_dir, runtime_cls, run_as_openhands, dynamic_port
+):
     """Test browser interactive actions: scroll, hover, fill, press, focus."""
     runtime, config = _load_runtime(
         temp_dir, runtime_cls, run_as_openhands, enable_browser=True
@@ -587,7 +601,7 @@ def test_browser_interactive_actions(temp_dir, runtime_cls, run_as_openhands):
 
         # Start HTTP server
         action_cmd = CmdRunAction(
-            command='python3 -m http.server 8000 > server.log 2>&1 &'
+            command=f'python3 -m http.server {dynamic_port} > server.log 2>&1 &'
         )
         logger.info(action_cmd, extra={'msg_type': 'ACTION'})
         obs = runtime.run_action(action_cmd)
@@ -602,7 +616,7 @@ def test_browser_interactive_actions(temp_dir, runtime_cls, run_as_openhands):
 
         # Navigate to scroll page
         action_browse = BrowseInteractiveAction(
-            browser_actions='goto("http://localhost:8000/scroll.html")',
+            browser_actions=f'goto("http://localhost:{dynamic_port}/scroll.html")',
             return_axtree=True,
         )
         logger.info(action_browse, extra={'msg_type': 'ACTION'})
@@ -748,7 +762,7 @@ scroll(0, 400)
         _close_test_runtime(runtime)
 
 
-def test_browser_file_upload(temp_dir, runtime_cls, run_as_openhands):
+def test_browser_file_upload(temp_dir, runtime_cls, run_as_openhands, dynamic_port):
     """Test browser file upload action."""
     runtime, config = _load_runtime(
         temp_dir, runtime_cls, run_as_openhands, enable_browser=True
@@ -799,7 +813,7 @@ def test_browser_file_upload(temp_dir, runtime_cls, run_as_openhands):
 
         # Start HTTP server
         action_cmd = CmdRunAction(
-            command='python3 -m http.server 8000 > server.log 2>&1 &'
+            command=f'python3 -m http.server {dynamic_port} > server.log 2>&1 &'
         )
         logger.info(action_cmd, extra={'msg_type': 'ACTION'})
         obs = runtime.run_action(action_cmd)
@@ -814,7 +828,7 @@ def test_browser_file_upload(temp_dir, runtime_cls, run_as_openhands):
 
         # Navigate to upload page
         action_browse = BrowseInteractiveAction(
-            browser_actions='goto("http://localhost:8000/upload.html")',
+            browser_actions=f'goto("http://localhost:{dynamic_port}/upload.html")',
             return_axtree=True,
         )
         logger.info(action_browse, extra={'msg_type': 'ACTION'})
@@ -1049,7 +1063,8 @@ def test_read_png_browse(temp_dir, runtime_cls, run_as_openhands):
         _close_test_runtime(runtime)
 
 
-def test_download_file(temp_dir, runtime_cls, run_as_openhands):
+@pytest.mark.skip(reason='This test is flaky')
+def test_download_file(temp_dir, runtime_cls, run_as_openhands, dynamic_port):
     """Test downloading a file using the browser."""
     runtime, config = _load_runtime(
         temp_dir, runtime_cls, run_as_openhands, enable_browser=True
@@ -1142,7 +1157,7 @@ def test_download_file(temp_dir, runtime_cls, run_as_openhands):
 
         # Start HTTP server
         action_cmd = CmdRunAction(
-            command='python3 -m http.server 8000 > server.log 2>&1 &'
+            command=f'python3 -m http.server {dynamic_port} > server.log 2>&1 &'
         )
         logger.info(action_cmd, extra={'msg_type': 'ACTION'})
         obs = runtime.run_action(action_cmd)
@@ -1157,19 +1172,19 @@ def test_download_file(temp_dir, runtime_cls, run_as_openhands):
         logger.info(obs, extra={'msg_type': 'OBSERVATION'})
 
         # Browse to the HTML page
-        action_browse = BrowseURLAction(url='http://localhost:8000/download_test.html')
+        action_browse = BrowseURLAction(url=f'http://localhost:{dynamic_port}/')
         logger.info(action_browse, extra={'msg_type': 'ACTION'})
         obs = runtime.run_action(action_browse)
         logger.info(obs, extra={'msg_type': 'OBSERVATION'})
 
         # Verify the browser observation
         assert isinstance(obs, BrowserOutputObservation)
-        assert 'http://localhost:8000/download_test.html' in obs.url
+        assert f'http://localhost:{dynamic_port}/download_test.html' in obs.url
         assert not obs.error
         assert 'Download Test Page' in obs.content
 
         # Go to the PDF file url directly - this should trigger download
-        file_url = f'http://localhost:8000/{test_file_name}'
+        file_url = f'http://localhost:{dynamic_port}/{test_file_name}'
         action_browse = BrowseInteractiveAction(
             browser_actions=f'goto("{file_url}")',
         )

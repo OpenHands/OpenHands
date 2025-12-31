@@ -1,14 +1,16 @@
 # Publishes the OpenHands PyPi package
 name: Publish PyPi Package
 
-
 on:
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Reason for manual trigger'
+        description: "What are you publishing?"
         required: true
-        default: ''
+        type: choice
+        options:
+          - app server
+        default: app server
   push:
     tags:
       - "*"
@@ -16,6 +18,10 @@ on:
 jobs:
   release:
     runs-on: blacksmith-4vcpu-ubuntu-2204
+    # Run when manually dispatched for "app server" OR for tag pushes that don't contain '-cli'
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.reason == 'app server')
+      || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-cli'))
     steps:
       - uses: actions/checkout@v4
       - uses: useblacksmith/setup-python@v6

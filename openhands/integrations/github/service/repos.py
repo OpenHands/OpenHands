@@ -161,6 +161,29 @@ class GitHubReposMixin(GitHubMixinBase):
             logger.warning(f'Failed to get user organizations: {e}')
             return []
 
+    async def get_organizations_from_installations(self) -> list[str]:
+        """Get list of organization logins from GitHub App installations.
+
+        This method provides a more reliable way to get organizations that the
+        GitHub App has access to, regardless of user membership context.
+        """
+        try:
+            # Get installations with account details
+            url = f'{self.BASE_URL}/user/installations'
+            response, _ = await self._make_request(url)
+            installations = response.get('installations', [])
+
+            orgs = []
+            for installation in installations:
+                account = installation.get('account', {})
+                if account.get('type') == 'Organization':
+                    orgs.append(account.get('login'))
+
+            return orgs
+        except Exception as e:
+            logger.warning(f'Failed to get organizations from installations: {e}')
+            return []
+
     def _fuzzy_match_org_name(self, query: str, org_name: str) -> bool:
         """Check if query fuzzy matches organization name."""
         query_lower = query.lower().replace('-', '').replace('_', '').replace(' ', '')
@@ -181,7 +204,13 @@ class GitHubReposMixin(GitHubMixinBase):
         return False
 
     async def search_repositories(
-        self, query: str, per_page: int, sort: str, order: str, public: bool
+        self,
+        query: str,
+        per_page: int,
+        sort: str,
+        order: str,
+        public: bool,
+        app_mode: AppMode,
     ) -> list[Repository]:
         url = f'{self.BASE_URL}/search/repositories'
         params = {
@@ -206,9 +235,12 @@ class GitHubReposMixin(GitHubMixinBase):
             query_with_user = f'org:{org} in:name {repo_query}'
             params['q'] = query_with_user
         elif not public:
-            # Expand search scope to include user's repositories and organizations they're a member of
+            # Expand search scope to include user's repositories and organizations the app has access to
             user = await self.get_user()
-            user_orgs = await self.get_user_organizations()
+            if app_mode == AppMode.SAAS:
+                user_orgs = await self.get_organizations_from_installations()
+            else:
+                user_orgs = await self.get_user_organizations()
 
             # Search in user repos and org repos separately
             all_repos = []

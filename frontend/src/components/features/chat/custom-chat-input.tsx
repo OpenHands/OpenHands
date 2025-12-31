@@ -8,14 +8,13 @@ import { useChatSubmission } from "#/hooks/chat/use-chat-submission";
 import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 
 export interface CustomChatInputProps {
   disabled?: boolean;
   showButton?: boolean;
   conversationStatus?: ConversationStatus | null;
   onSubmit: (message: string) => void;
-  onStop?: () => void;
   onFocus?: () => void;
   onBlur?: () => void;
   onFilesPaste?: (files: File[]) => void;
@@ -28,7 +27,6 @@ export function CustomChatInput({
   showButton = true,
   conversationStatus = null,
   onSubmit,
-  onStop,
   onFocus,
   onBlur,
   onFilesPaste,
@@ -82,16 +80,18 @@ export function CustomChatInput({
     handleGripMouseDown,
     handleGripTouchStart,
     increaseHeightForEmptyContent,
+    resetManualResize,
   } = useGripResize(
     chatInputRef as React.RefObject<HTMLDivElement | null>,
     messageToSend,
   );
 
-  const { handleSubmit, handleResumeAgent, handleStop } = useChatSubmission(
+  const { handleSubmit, handleResumeAgent } = useChatSubmission(
     chatInputRef as React.RefObject<HTMLDivElement | null>,
     fileInputRef as React.RefObject<HTMLInputElement | null>,
     smartResize,
     onSubmit,
+    resetManualResize,
   );
 
   const { handleInput, handlePaste, handleKeyDown, handleBlur, handleFocus } =
@@ -113,7 +113,6 @@ export function CustomChatInput({
     },
     [setShouldHideSuggestions, clearAllFiles],
   );
-
   return (
     <div className={`w-full ${className}`}>
       {/* Hidden file input */}
@@ -138,11 +137,9 @@ export function CustomChatInput({
           disabled={isDisabled}
           showButton={showButton}
           buttonClassName={buttonClassName}
-          conversationStatus={conversationStatus}
           chatInputRef={chatInputRef}
           handleFileIconClick={handleFileIconClick}
           handleSubmit={handleSubmit}
-          handleStop={handleStop}
           handleResumeAgent={handleResumeAgent}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -152,7 +149,6 @@ export function CustomChatInput({
           onKeyDown={(e) => handleKeyDown(e, isDisabled, handleSubmit)}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          onStop={onStop}
         />
       </div>
     </div>

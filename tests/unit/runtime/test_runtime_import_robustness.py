@@ -11,24 +11,6 @@ import sys
 import pytest
 
 
-def test_cli_import_with_broken_third_party_runtime():
-    """Test that CLI can be imported even with broken third-party runtime dependencies."""
-    # Clear any cached modules to ensure fresh import
-    modules_to_clear = [
-        k for k in sys.modules.keys() if 'openhands' in k or 'third_party' in k
-    ]
-    for module in modules_to_clear:
-        del sys.modules[module]
-
-    # This should not raise an exception even if third-party runtimes have broken dependencies
-    try:
-        import openhands.cli.main  # noqa: F401
-
-        assert True
-    except Exception as e:
-        pytest.fail(f'CLI import failed: {e}')
-
-
 def test_runtime_import_robustness():
     """Test that runtime import system is robust against broken dependencies."""
     # Clear any cached runtime modules

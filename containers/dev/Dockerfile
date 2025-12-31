@@ -104,6 +104,9 @@ RUN apt-get update && apt-get install -y \
 	&& apt-get clean \
 	&& apt-get autoremove -y
 
+# mark /app as safe git directory to avoid pre-commit errors
+RUN git config --system --add safe.directory /app
+
 WORKDIR /app
 
 # cache build dependencies

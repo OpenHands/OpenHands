@@ -1,10 +1,7 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
-import { afterEach } from "node:test";
+import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useTerminal } from "#/hooks/use-terminal";
-import { Command, useCommandStore } from "#/state/command-store";
-import { AgentState } from "#/types/agent-state";
+import { Command, useCommandStore } from "#/stores/command-store";
 import { renderWithProviders } from "../../test-utils";
-import { useAgentStore } from "#/stores/agent-store";
 
 // Mock the WsClient context
 vi.mock("#/context/ws-client-provider", () => ({
@@ -16,51 +13,86 @@ vi.mock("#/context/ws-client-provider", () => ({
   }),
 }));
 
-interface TestTerminalComponentProps {
-  commands: Command[];
-}
+// Mock useActiveConversation
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => ({
+    data: {
+      id: "test-conversation-id",
+      conversation_version: "V0",
+    },
+    isFetched: true,
+  }),
+}));
 
-function TestTerminalComponent({ commands }: TestTerminalComponentProps) {
-  // Set commands in Zustand store
-  useCommandStore.setState({ commands });
-  // Set agent state in Zustand store
-  useAgentStore.setState({ curAgentState: AgentState.RUNNING });
+// Mock useConversationWebSocket (returns null for V0 conversations)
+vi.mock("#/contexts/conversation-websocket-context", () => ({
+  useConversationWebSocket: () => null,
+}));
+
+function TestTerminalComponent() {
   const ref = useTerminal();
   return <div ref={ref} />;
 }
 
 describe("useTerminal", () => {
+  // Terminal is read-only - no longer tests user input functionality
   const mockTerminal = vi.hoisted(() => ({
     loadAddon: vi.fn(),
     open: vi.fn(),
     write: vi.fn(),
     writeln: vi.fn(),
-    onKey: vi.fn(),
-    attachCustomKeyEventHandler: vi.fn(),
     dispose: vi.fn(),
+    element: document.createElement("div"),
+  }));
+
+  const mockFitAddon = vi.hoisted(() => ({
+    fit: vi.fn(),
   }));
 
   beforeAll(() => {
-    // mock ResizeObserver
-    window.ResizeObserver = vi.fn().mockImplementation(() => ({
-      observe: vi.fn(),
-      unobserve: vi.fn(),
-      disconnect: vi.fn(),
-    }));
+    // mock ResizeObserver - use class for Vitest 4 constructor support
+    window.ResizeObserver = class {
+      observe = vi.fn();
 
-    // mock Terminal
+      unobserve = vi.fn();
+
+      disconnect = vi.fn();
+    } as unknown as typeof ResizeObserver;
+
+    // mock Terminal - use class for Vitest 4 constructor support
     vi.mock("@xterm/xterm", async (importOriginal) => ({
       ...(await importOriginal<typeof import("@xterm/xterm")>()),
-      Terminal: vi.fn().mockImplementation(() => mockTerminal),
+      Terminal: class {
+        loadAddon = mockTerminal.loadAddon;
+
+        open = mockTerminal.open;
+
+        write = mockTerminal.write;
+
+        writeln = mockTerminal.writeln;
+
+        dispose = mockTerminal.dispose;
+
+        element = mockTerminal.element;
+      },
+    }));
+
+    // mock FitAddon
+    vi.mock("@xterm/addon-fit", () => ({
+      FitAddon: class {
+        fit = mockFitAddon.fit;
+      },
     }));
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    // Reset command store between tests
+    useCommandStore.setState({ commands: [] });
   });
 
   it("should render", () => {
-    renderWithProviders(<TestTerminalComponent commands={[]} />);
+    renderWithProviders(<TestTerminalComponent />);
   });
 
   it("should render the commands in the terminal", () => {
@@ -69,26 +101,26 @@ describe("useTerminal", () => {
       { content: "hello", type: "output" },
     ];
 
-    renderWithProviders(<TestTerminalComponent commands={commands} />);
+    // Set commands in store before rendering to ensure they're picked up during initialization
+    useCommandStore.setState({ commands });
+
+    renderWithProviders(<TestTerminalComponent />);
 
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "hello");
   });
 
-  // This test is no longer relevant as secrets filtering has been removed
-  it.skip("should hide secrets in the terminal", () => {
-    const secret = "super_secret_github_token";
-    const anotherSecret = "super_secret_another_token";
-    const commands: Command[] = [
-      {
-        content: `export GITHUB_TOKEN=${secret},${anotherSecret},${secret}`,
-        type: "input",
-      },
-      { content: secret, type: "output" },
-    ];
+  it("should not call fit() when terminal.element is null", () => {
+    // Temporarily set element to null to simulate terminal not being opened
+    const originalElement = mockTerminal.element;
+    mockTerminal.element = null as unknown as HTMLDivElement;
 
-    renderWithProviders(<TestTerminalComponent commands={commands} />);
+    renderWithProviders(<TestTerminalComponent />);
 
-    // This test is no longer relevant as secrets filtering has been removed
+    // fit() should not be called because terminal.element is null
+    expect(mockFitAddon.fit).not.toHaveBeenCalled();
+
+    // Restore original element
+    mockTerminal.element = originalElement;
   });
 });

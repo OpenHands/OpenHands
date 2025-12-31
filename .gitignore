@@ -185,6 +185,9 @@ cython_debug/
 .repomix
 repomix-output.txt
 
+# Emacs backup
+*~
+
 # evaluation
 evaluation/evaluation_outputs
 evaluation/outputs

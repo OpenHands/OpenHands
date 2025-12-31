@@ -5,8 +5,9 @@ way to manage PowerShell processes compared to using temporary script files.
 """
 
 import os
+import re
+import subprocess
 import time
-import traceback
 from pathlib import Path
 from threading import RLock
 
@@ -46,39 +47,121 @@ except Exception as coreclr_ex:
     logger.error(f'{error_msg} Details: {details}')
     raise DotNetMissingError(error_msg, details)
 
+
+def find_latest_pwsh_sdk_path(
+    executable_name='pwsh.exe',
+    dll_name='System.Management.Automation.dll',
+    min_version=(7, 0, 0),
+    env_var='PWSH_DIR',
+):
+    """
+    Checks PWSH_DIR environment variable first to find pwsh and DLL.
+    If not found or not suitable, scans all pwsh executables in PATH, runs --version to find latest >= min_version.
+    Returns full DLL path if found, else None.
+    """
+
+    def parse_version(output):
+        # Extract semantic version from pwsh --version output
+        match = re.search(r'(\d+)\.(\d+)\.(\d+)', output)
+        if match:
+            return tuple(map(int, match.groups()))
+        return None
+
+    # Try environment variable override first
+    pwsh_dir = os.environ.get(env_var)
+    if pwsh_dir:
+        pwsh_path = Path(pwsh_dir) / executable_name
+        dll_path = Path(pwsh_dir) / dll_name
+        if pwsh_path.is_file() and dll_path.is_file():
+            try:
+                completed = subprocess.run(
+                    [str(pwsh_path), '--version'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if completed.returncode == 0:
+                    ver = parse_version(completed.stdout)
+                    if ver and ver >= min_version:
+                        logger.info(f'Found pwsh from env variable "{env_var}"')
+                        return str(dll_path)
+            except Exception:
+                pass
+
+    # Adjust executable_name for Windows if needed
+    if os.name == 'nt' and not executable_name.lower().endswith('.exe'):
+        executable_name += '.exe'
+
+    # Search PATH for all pwsh executables
+    paths = os.environ.get('PATH', '').split(os.pathsep)
+    candidates = []
+    for p in paths:
+        exe_path = Path(p) / executable_name
+        if exe_path.is_file() and os.access(str(exe_path), os.X_OK):
+            try:
+                completed = subprocess.run(
+                    [str(exe_path), '--version'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if completed.returncode == 0:
+                    ver = parse_version(completed.stdout)
+                    if ver:
+                        candidates.append((ver, exe_path.resolve()))
+            except Exception:
+                pass
+
+    # Sort candidates by version descending
+    candidates.sort(key=lambda x: x[0], reverse=True)
+
+    for ver, exe_path in candidates:
+        if ver >= min_version:
+            dll_path = exe_path.parent / dll_name
+            if dll_path.is_file():
+                return str(dll_path)
+
+    return None
+
+
 # Attempt to load the PowerShell SDK assembly only if clr and System loaded
 ps_sdk_path = None
 try:
-    # Prioritize PowerShell 7+ if available (adjust path if necessary)
-    pwsh7_path = (
-        Path(os.environ.get('ProgramFiles', 'C:\\Program Files'))
-        / 'PowerShell'
-        / '7'
-        / 'System.Management.Automation.dll'
-    )
-    if pwsh7_path.exists():
-        ps_sdk_path = str(pwsh7_path)
+    # Attempt primary detection via helper function
+    ps_sdk_path = find_latest_pwsh_sdk_path()
+    if ps_sdk_path:
         clr.AddReference(ps_sdk_path)
-        logger.info(f'Loaded PowerShell SDK (Core): {ps_sdk_path}')
+        logger.info(f'Loaded PowerShell SDK dynamically detected: {ps_sdk_path}')
     else:
-        # Fallback to Windows PowerShell 5.1 bundled with Windows
-        winps_path = (
-            Path(os.environ.get('SystemRoot', 'C:\\Windows'))
-            / 'System32'
-            / 'WindowsPowerShell'
-            / 'v1.0'
+        pwsh7_path = (
+            Path(os.environ.get('ProgramFiles', 'C:\\Program Files'))
+            / 'PowerShell'
+            / '7'
             / 'System.Management.Automation.dll'
         )
-        if winps_path.exists():
-            ps_sdk_path = str(winps_path)
+        if pwsh7_path.exists():
+            ps_sdk_path = str(pwsh7_path)
             clr.AddReference(ps_sdk_path)
-            logger.debug(f'Loaded PowerShell SDK (Desktop): {ps_sdk_path}')
+            logger.info(f'Loaded PowerShell SDK (Core): {ps_sdk_path}')
         else:
-            # Last resort: try loading by assembly name (might work if in GAC or path)
-            clr.AddReference('System.Management.Automation')
-            logger.info(
-                'Attempted to load PowerShell SDK by name (System.Management.Automation)'
+            # Fallback to Windows PowerShell 5.1 bundled with Windows
+            winps_path = (
+                Path(os.environ.get('SystemRoot', 'C:\\Windows'))
+                / 'System32'
+                / 'WindowsPowerShell'
+                / 'v1.0'
+                / 'System.Management.Automation.dll'
             )
+            if winps_path.exists():
+                ps_sdk_path = str(winps_path)
+                clr.AddReference(ps_sdk_path)
+                logger.debug(f'Loaded PowerShell SDK (Desktop): {ps_sdk_path}')
+            else:
+                # Last resort: try loading by assembly name (might work if in GAC or path)
+                clr.AddReference('System.Management.Automation')
+                logger.info(
+                    'Attempted to load PowerShell SDK by name (System.Management.Automation)'
+                )
 
     from System.Management.Automation import JobState, PowerShell
     from System.Management.Automation.Language import Parser
@@ -155,8 +238,7 @@ class WindowsPowershellSession:
             self._initialized = True  # Set to True only on successful initialization
             logger.info(f'PowerShell runspace created. Initial CWD set to: {self._cwd}')
         except Exception as e:
-            logger.error(f'Failed to create or open PowerShell runspace: {e}')
-            logger.error(traceback.format_exc())
+            logger.exception(f'Failed to create or open PowerShell runspace: {e}')
             self.close()  # Ensure cleanup if init fails partially
             raise RuntimeError(f'Failed to initialize PowerShell runspace: {e}')
 
@@ -177,8 +259,7 @@ class WindowsPowershellSession:
                 # Optional: Confirm CWD even on success for robustness
                 # self._confirm_cwd()
         except Exception as e:
-            logger.error(f'Exception setting initial CWD: {e}')
-            logger.error(traceback.format_exc())
+            logger.exception(f'Exception setting initial CWD: {e}')
             # Attempt to confirm CWD even if setting threw an exception
             self._confirm_cwd()
         finally:
@@ -945,8 +1026,7 @@ class WindowsPowershellSession:
                 )
 
         except Exception as parse_ex:
-            logger.error(f'Exception during PowerShell command parsing: {parse_ex}')
-            logger.error(traceback.format_exc())
+            logger.exception(f'Exception during PowerShell command parsing: {parse_ex}')
             return ErrorObservation(
                 content=f'ERROR: An exception occurred while parsing the command: {parse_ex}'
             )
@@ -1118,10 +1198,9 @@ class WindowsPowershellSession:
                         with self._job_lock:
                             self.active_job = None
                 except AttributeError as e:
-                    logger.error(
+                    logger.exception(
                         f'Get-Job returned an object without expected properties on BaseObject: {e}'
                     )
-                    logger.error(traceback.format_exc())
                     all_errors.append('Get-Job did not return a valid Job object.')
                     job_start_failed = True
 
@@ -1131,8 +1210,7 @@ class WindowsPowershellSession:
                 job_start_failed = True
 
         except Exception as start_ex:
-            logger.error(f'Exception during job start/retrieval: {start_ex}')
-            logger.error(traceback.format_exc())
+            logger.exception(f'Exception during job start/retrieval: {start_ex}')
             all_errors.append(f'[Job Start/Get Exception: {start_ex}]')
             job_start_failed = True
         finally:
@@ -1403,8 +1481,7 @@ class WindowsPowershellSession:
                 self.runspace.Dispose()
                 logger.info('PowerShell runspace closed and disposed.')
             except Exception as e:
-                logger.error(f'Error closing/disposing PowerShell runspace: {e}')
-                logger.error(traceback.format_exc())
+                logger.exception(f'Error closing/disposing PowerShell runspace: {e}')
 
         self.runspace = None
         self._initialized = False

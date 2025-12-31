@@ -1,0 +1,39 @@
+{% if issue_number %}
+You are requested to fix issue #{{ issue_number }}: "{{ issue_title }}" in a repository on Bitbucket.
+A comment on the issue has been addressed to you.
+{% else %}
+Your task is to fix the issue: "{{ issue_title }}".
+{% endif %}
+
+# Issue Body
+{{ issue_body }}
+
+{% if previous_comments %}
+# Previous Comments
+For reference, here are the previous comments on the issue:
+
+{% for comment in previous_comments %}
+- @{{ comment.author }} said:
+{{ comment.body }}
+{% if not loop.last %}\n\n{% endif %}
+{% endfor %}
+{% endif %}
+
+# Guidelines
+
+1. Review the task carefully.
+2. For all changes to actual application code (e.g. in Python or Javascript), add an appropriate test to the testing directory to make sure that the issue has been fixed
+3. Run the tests, and if they pass you are done!
+4. You do NOT need to write new tests if there are only changes to documentation or configuration files.
+
+# Final Checklist
+Re-read the issue title, body, and comments and make sure that you have successfully implemented all requirements.
+
+Use the Bitbucket token and Bitbucket APIs to:
+
+1. Create a new branch using `openhands/` as a prefix (e.g `openhands/update-readme`)
+2. Commit your changes with a clear commit message
+3. Push the branch to Bitbucket
+4. Create a pull request that:
+   - Mentions that it "fixes" or "resolves" the issue number
+   - Has a clear description of the changes made

@@ -12,12 +12,12 @@ from storage.base import Base
 # Anything not loaded here may not have a table created for it.
 from storage.billing_session import BillingSession
 from storage.conversation_work import ConversationWork
+from storage.device_code import DeviceCode  # noqa: F401
 from storage.feedback import Feedback
 from storage.github_app_installation import GithubAppInstallation
 from storage.maintenance_task import MaintenanceTask, MaintenanceTaskStatus
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_offline_token import StoredOfflineToken
-from storage.stored_settings import StoredSettings
 from storage.stripe_customer import StripeCustomer
 from storage.user_settings import UserSettings
 
@@ -85,7 +85,7 @@ def add_minimal_fixtures(session_maker):
                 updated_at=datetime.fromisoformat('2025-03-08'),
             )
         )
-        session.add(StoredSettings(id='mock-user-id', user_consents_to_analytics=True))
+
         session.add(
             StripeCustomer(
                 keycloak_user_id='mock-user-id',

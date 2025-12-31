@@ -19,12 +19,12 @@ from server.constants import (
     LITE_LLM_API_URL,
     LITE_LLM_TEAM_ID,
     REQUIRE_PAYMENT,
+    USER_SETTINGS_VERSION_TO_MODEL,
     get_default_litellm_model,
 )
 from server.logger import logger
 from sqlalchemy.orm import sessionmaker
 from storage.database import session_maker
-from storage.stored_settings import StoredSettings
 from storage.user_settings import UserSettings
 
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -32,6 +32,7 @@ from openhands.server.settings import Settings
 from openhands.storage import get_file_store
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import call_sync_from_async
+from openhands.utils.http_session import httpx_verify_option
 
 
 @dataclass
@@ -40,15 +41,46 @@ class SaasSettingsStore(SettingsStore):
     session_maker: sessionmaker
     config: OpenHandsConfig
 
+    def get_user_settings_by_keycloak_id(
+        self, keycloak_user_id: str, session=None
+    ) -> UserSettings | None:
+        """
+        Get UserSettings by keycloak_user_id.
+
+        Args:
+            keycloak_user_id: The keycloak user ID to search for
+            session: Optional existing database session. If not provided, creates a new one.
+
+        Returns:
+            UserSettings object if found, None otherwise
+        """
+        if not keycloak_user_id:
+            return None
+
+        def _get_settings():
+            if session:
+                # Use provided session
+                return (
+                    session.query(UserSettings)
+                    .filter(UserSettings.keycloak_user_id == keycloak_user_id)
+                    .first()
+                )
+            else:
+                # Create new session
+                with self.session_maker() as new_session:
+                    return (
+                        new_session.query(UserSettings)
+                        .filter(UserSettings.keycloak_user_id == keycloak_user_id)
+                        .first()
+                    )
+
+        return _get_settings()
+
     async def load(self) -> Settings | None:
         if not self.user_id:
             return None
         with self.session_maker() as session:
-            settings = (
-                session.query(UserSettings)
-                .filter(UserSettings.keycloak_user_id == self.user_id)
-                .first()
-            )
+            settings = self.get_user_settings_by_keycloak_id(self.user_id, session)
 
             if not settings or settings.user_version != CURRENT_USER_SETTINGS_VERSION:
                 logger.info(
@@ -63,21 +95,22 @@ class SaasSettingsStore(SettingsStore):
             }
             self._decrypt_kwargs(kwargs)
             settings = Settings(**kwargs)
+
             return settings
 
     async def store(self, item: Settings):
+        # Check if provider is OpenHands and generate API key if needed
+        if item and self._is_openhands_provider(item):
+            await self._ensure_openhands_api_key(item)
+
         with self.session_maker() as session:
             existing = None
             kwargs = {}
             if item:
                 kwargs = item.model_dump(context={'expose_secrets': True})
                 self._encrypt_kwargs(kwargs)
-                query = session.query(UserSettings).filter(
-                    UserSettings.keycloak_user_id == self.user_id
-                )
-
                 # First check if we have an existing entry in the new table
-                existing = query.first()
+                existing = self.get_user_settings_by_keycloak_id(self.user_id, session)
 
             kwargs = {
                 key: value
@@ -144,33 +177,6 @@ class SaasSettingsStore(SettingsStore):
         await self.store(settings)
         return settings
 
-    def load_legacy_db_settings(self, github_user_id: str) -> Settings | None:
-        if not github_user_id:
-            return None
-
-        with self.session_maker() as session:
-            settings = (
-                session.query(StoredSettings)
-                .filter(StoredSettings.id == github_user_id)
-                .first()
-            )
-            if settings is None:
-                return None
-
-            logger.info(
-                'saas_settings_store:load_legacy_db_settings:found',
-                extra={'github_user_id': github_user_id},
-            )
-            kwargs = {
-                c.name: getattr(settings, c.name)
-                for c in StoredSettings.__table__.columns
-                if c.name in Settings.model_fields
-            }
-            self._decrypt_kwargs(kwargs)
-            del kwargs['secrets_store']
-            settings = Settings(**kwargs)
-            return settings
-
     async def load_legacy_file_store_settings(self, github_user_id: str):
         if not github_user_id:
             return None
@@ -197,6 +203,53 @@ class SaasSettingsStore(SettingsStore):
             )
             return None
 
+    def _has_custom_settings(
+        self, settings: Settings, old_user_version: int | None
+    ) -> bool:
+        """
+        Check if user has custom LLM settings that should be preserved.
+        Returns True if user customized either model or base_url.
+
+        Args:
+            settings: The user's current settings
+            old_user_version: The user's old settings version, if any
+
+        Returns:
+            True if user has custom settings, False if using old defaults
+        """
+        # Normalize values
+        user_model = (
+            settings.llm_model.strip()
+            if settings.llm_model and settings.llm_model.strip()
+            else None
+        )
+        user_base_url = (
+            settings.llm_base_url.strip()
+            if settings.llm_base_url and settings.llm_base_url.strip()
+            else None
+        )
+
+        # Custom base_url = definitely custom settings (BYOK)
+        if user_base_url and user_base_url != LITE_LLM_API_URL:
+            return True
+
+        # No model set = using defaults
+        if not user_model:
+            return False
+
+        # Check if model matches old version's default
+        if (
+            old_user_version
+            and old_user_version < CURRENT_USER_SETTINGS_VERSION
+            and old_user_version in USER_SETTINGS_VERSION_TO_MODEL
+        ):
+            old_default_base = USER_SETTINGS_VERSION_TO_MODEL[old_user_version]
+            user_model_base = user_model.split('/')[-1]
+            if user_model_base == old_default_base:
+                return False  # Matches old default
+
+        return True  # Custom model
+
     async def update_settings_with_litellm_default(
         self, settings: Settings
     ) -> Settings | None:
@@ -208,6 +261,17 @@ class SaasSettingsStore(SettingsStore):
             return None
         local_deploy = os.environ.get('LOCAL_DEPLOYMENT', None)
         key = LITE_LLM_API_KEY
+
+        # Check if user has custom settings
+        has_custom = self._has_custom_settings(settings, settings.user_version)
+
+        # Determine model to use (needed before LiteLLM user creation)
+        llm_model_to_use = (
+            settings.llm_model
+            if has_custom and settings.llm_model
+            else get_default_litellm_model()
+        )
+
         if not local_deploy:
             # Get user info to add to litellm
             token_manager = TokenManager()
@@ -216,9 +280,10 @@ class SaasSettingsStore(SettingsStore):
             )
 
             async with httpx.AsyncClient(
+                verify=httpx_verify_option(),
                 headers={
                     'x-goog-api-key': LITE_LLM_API_KEY,
-                }
+                },
             ) as client:
                 # Get the previous max budget to prevent accidental loss
                 # In Litellm a get always succeeds, regardless of whether the user actually exists
@@ -235,10 +300,8 @@ class SaasSettingsStore(SettingsStore):
                 spend = user_info.get('spend') or 0
 
                 with session_maker() as session:
-                    user_settings = (
-                        session.query(UserSettings)
-                        .filter(UserSettings.keycloak_user_id == self.user_id)
-                        .first()
+                    user_settings = self.get_user_settings_by_keycloak_id(
+                        self.user_id, session
                     )
                     # In upgrade to V4, we no longer use billing margin, but instead apply this directly
                     # in litellm. The default billing marign was 2 before this (hence the magic numbers below)
@@ -272,7 +335,7 @@ class SaasSettingsStore(SettingsStore):
 
                 # Create the new litellm user
                 response = await self._create_user_in_lite_llm(
-                    client, email, max_budget, spend
+                    client, email, max_budget, spend, llm_model_to_use
                 )
                 if not response.is_success:
                     logger.warning(
@@ -281,7 +344,7 @@ class SaasSettingsStore(SettingsStore):
                     )
                     # Litellm insists on unique email addresses - it is possible the email address was registered with a different user.
                     response = await self._create_user_in_lite_llm(
-                        client, None, max_budget, spend
+                        client, None, max_budget, spend, llm_model_to_use
                     )
 
                 # User failed to create in litellm - this is an unforseen error state...
@@ -307,11 +370,17 @@ class SaasSettingsStore(SettingsStore):
                     extra={'user_id': self.user_id},
                 )
 
+        if has_custom:
+            settings.llm_model = settings.llm_model or get_default_litellm_model()
+            settings.llm_base_url = settings.llm_base_url or LITE_LLM_API_URL
+            settings.llm_api_key = settings.llm_api_key or SecretStr(key)
+        else:
+            settings.llm_model = get_default_litellm_model()
+            settings.llm_base_url = LITE_LLM_API_URL
+            settings.llm_api_key = SecretStr(key)
+
         settings.agent = 'CodeActAgent'
-        # Use the model corresponding to the current user settings version
-        settings.llm_model = get_default_litellm_model()
-        settings.llm_api_key = SecretStr(key)
-        settings.llm_base_url = LITE_LLM_API_URL
+
         return settings
 
     @classmethod
@@ -369,8 +438,37 @@ class SaasSettingsStore(SettingsStore):
     def _should_encrypt(self, key: str) -> bool:
         return key in ('llm_api_key', 'llm_api_key_for_byor', 'search_api_key')
 
+    def _is_openhands_provider(self, item: Settings) -> bool:
+        """Check if the settings use the OpenHands provider."""
+        return bool(item.llm_model and item.llm_model.startswith('openhands/'))
+
+    async def _ensure_openhands_api_key(self, item: Settings) -> None:
+        """Generate and set the OpenHands API key for the given settings.
+
+        First checks if an existing key with the OpenHands alias exists,
+        and reuses it if found. Otherwise, generates a new key.
+        """
+        # Generate new key if none exists
+        generated_key = await self._generate_openhands_key()
+        if generated_key:
+            item.llm_api_key = SecretStr(generated_key)
+            logger.info(
+                'saas_settings_store:store:generated_openhands_key',
+                extra={'user_id': self.user_id},
+            )
+        else:
+            logger.warning(
+                'saas_settings_store:store:failed_to_generate_openhands_key',
+                extra={'user_id': self.user_id},
+            )
+
     async def _create_user_in_lite_llm(
-        self, client: httpx.AsyncClient, email: str | None, max_budget: int, spend: int
+        self,
+        client: httpx.AsyncClient,
+        email: str | None,
+        max_budget: int,
+        spend: int,
+        llm_model: str,
     ):
         response = await client.post(
             f'{LITE_LLM_API_URL}/user/new',
@@ -385,9 +483,61 @@ class SaasSettingsStore(SettingsStore):
                 'send_invite_email': False,
                 'metadata': {
                     'version': CURRENT_USER_SETTINGS_VERSION,
-                    'model': get_default_litellm_model(),
+                    'model': llm_model,
                 },
                 'key_alias': f'OpenHands Cloud - user {self.user_id}',
             },
         )
         return response
+
+    async def _generate_openhands_key(self) -> str | None:
+        """Generate a new OpenHands provider key for a user."""
+        if not (LITE_LLM_API_KEY and LITE_LLM_API_URL):
+            logger.warning(
+                'saas_settings_store:_generate_openhands_key:litellm_config_not_found',
+                extra={'user_id': self.user_id},
+            )
+            return None
+
+        try:
+            async with httpx.AsyncClient(
+                verify=httpx_verify_option(),
+                headers={
+                    'x-goog-api-key': LITE_LLM_API_KEY,
+                },
+            ) as client:
+                response = await client.post(
+                    f'{LITE_LLM_API_URL}/key/generate',
+                    json={
+                        'user_id': self.user_id,
+                        'metadata': {'type': 'openhands'},
+                    },
+                )
+                response.raise_for_status()
+                response_json = response.json()
+                key = response_json.get('key')
+
+                if key:
+                    logger.info(
+                        'saas_settings_store:_generate_openhands_key:success',
+                        extra={
+                            'user_id': self.user_id,
+                            'key_length': len(key) if key else 0,
+                            'key_prefix': (
+                                key[:10] + '...' if key and len(key) > 10 else key
+                            ),
+                        },
+                    )
+                    return key
+                else:
+                    logger.error(
+                        'saas_settings_store:_generate_openhands_key:no_key_in_response',
+                        extra={'user_id': self.user_id, 'response_json': response_json},
+                    )
+                    return None
+        except Exception as e:
+            logger.exception(
+                'saas_settings_store:_generate_openhands_key:error',
+                extra={'user_id': self.user_id, 'error': str(e)},
+            )
+            return None

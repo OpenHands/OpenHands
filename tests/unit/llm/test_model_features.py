@@ -188,6 +188,7 @@ def test_get_features(model, expect):
         'o4-mini',
         # Google Gemini
         'gemini-2.5-pro',
+        'gemini-3-pro-preview',
         # Others
         'kimi-k2-0711-preview',
         'kimi-k2-instruct',

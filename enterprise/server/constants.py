@@ -25,6 +25,7 @@ USER_SETTINGS_VERSION_TO_MODEL = {
     2: 'claude-3-7-sonnet-20250219',
     3: 'claude-sonnet-4-20250514',
     4: 'claude-sonnet-4-20250514',
+    5: 'claude-opus-4-5-20251101',
 }
 
 LITELLM_DEFAULT_MODEL = os.getenv('LITELLM_DEFAULT_MODEL')
@@ -37,6 +38,8 @@ LITE_LLM_API_URL = os.environ.get(
 )
 LITE_LLM_TEAM_ID = os.environ.get('LITE_LLM_TEAM_ID', None)
 LITE_LLM_API_KEY = os.environ.get('LITE_LLM_API_KEY', None)
+# Timeout in seconds for BYOR key verification requests to LiteLLM
+BYOR_KEY_VERIFICATION_TIMEOUT = 5.0
 SUBSCRIPTION_PRICE_DATA = {
     'MONTHLY_SUBSCRIPTION': {
         'unit_amount': 2000,
@@ -50,7 +53,7 @@ SUBSCRIPTION_PRICE_DATA = {
     },
 }
 
-DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', '20'))
+DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', '10'))
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', None)
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', None)
 REQUIRE_PAYMENT = os.environ.get('REQUIRE_PAYMENT', '0') in ('1', 'true')

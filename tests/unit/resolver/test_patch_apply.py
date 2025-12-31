@@ -4,7 +4,7 @@ from openhands.resolver.patching.patch import diffobj, parse_diff
 
 def test_patch_apply_with_empty_lines():
     # The original file has no indentation and uses \n line endings
-    original_content = '# PR Viewer\n\nThis React application allows you to view open pull requests from GitHub repositories in a GitHub organization. By default, it uses the All-Hands-AI organization.\n\n## Setup'
+    original_content = '# PR Viewer\n\nThis React application allows you to view open pull requests from GitHub repositories in a GitHub organization. By default, it uses the OpenHands organization.\n\n## Setup'
 
     # The patch has spaces at the start of each line and uses \n line endings
     patch = """diff --git a/README.md b/README.md
@@ -14,8 +14,8 @@ index b760a53..5071727 100644
 @@ -1,3 +1,3 @@
  # PR Viewer
 
--This React application allows you to view open pull requests from GitHub repositories in a GitHub organization. By default, it uses the All-Hands-AI organization.
-+This React application was created by Graham Neubig and OpenHands. It allows you to view open pull requests from GitHub repositories in a GitHub organization. By default, it uses the All-Hands-AI organization."""
+-This React application allows you to view open pull requests from GitHub repositories in a GitHub organization. By default, it uses the OpenHands organization.
++This React application was created by Graham Neubig and OpenHands. It allows you to view open pull requests from GitHub repositories in a GitHub organization. By default, it uses the OpenHands organization."""
 
     print('Original content lines:')
     for i, line in enumerate(original_content.splitlines(), 1):
@@ -40,7 +40,7 @@ index b760a53..5071727 100644
     expected_result = [
         '# PR Viewer',
         '',
-        'This React application was created by Graham Neubig and OpenHands. It allows you to view open pull requests from GitHub repositories in a GitHub organization. By default, it uses the All-Hands-AI organization.',
+        'This React application was created by Graham Neubig and OpenHands. It allows you to view open pull requests from GitHub repositories in a GitHub organization. By default, it uses the OpenHands organization.',
         '',
         '## Setup',
     ]

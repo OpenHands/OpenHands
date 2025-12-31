@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import os
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -60,7 +67,7 @@ class SandboxConfig(BaseModel):
     logger.debug(f'SandboxConfig user_id default: {user_id}')
     timeout: int = Field(default=120)
     remote_runtime_init_timeout: int = Field(default=180)
-    remote_runtime_api_timeout: int = Field(default=10)
+    remote_runtime_api_timeout: int = Field(default=180)
     remote_runtime_enable_retries: bool = Field(default=True)
     remote_runtime_class: str | None = Field(
         default=None

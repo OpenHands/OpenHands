@@ -37,7 +37,7 @@ jobs:
           node-version: '22'
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -70,7 +70,7 @@ jobs:
           fi
 
       - name: Upload VSCode extension artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vscode-extension
           path: openhands/integrations/vscode/openhands-vscode-0.0.1.vsix
@@ -142,13 +142,13 @@ jobs:
 
     steps:
       - name: Download .vsix artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: vscode-extension
           path: ./
 
       - name: Create Release
-        uses: ncipollo/release-action@v1.16.0
+        uses: ncipollo/release-action@v1.20.0
         with:
           artifacts: "*.vsix"
           token: ${{ secrets.GITHUB_TOKEN }}

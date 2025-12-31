@@ -10,7 +10,7 @@ from openhands.resolver.issue_resolver import IssueResolver
 def assert_sandbox_config(
     config: SandboxConfig,
     base_container_image=SandboxConfig.model_fields['base_container_image'].default,
-    runtime_container_image='ghcr.io/all-hands-ai/runtime:mock-nikolaik',  # Default to mock version
+    runtime_container_image='ghcr.io/openhands/runtime:mock-nikolaik',  # Default to mock version
     local_runtime_url=SandboxConfig.model_fields['local_runtime_url'].default,
     enable_auto_lint=False,
 ):
@@ -38,7 +38,7 @@ def test_setup_sandbox_config_default():
 
         assert_sandbox_config(
             openhands_config.sandbox,
-            runtime_container_image='ghcr.io/all-hands-ai/runtime:mock-nikolaik',
+            runtime_container_image='ghcr.io/openhands/runtime:mock-nikolaik',
         )
 
 

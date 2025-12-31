@@ -13,10 +13,8 @@ import { CreateApiKeyModal } from "./create-api-key-modal";
 import { DeleteApiKeyModal } from "./delete-api-key-modal";
 import { NewApiKeyModal } from "./new-api-key-modal";
 import { useApiKeys } from "#/hooks/query/use-api-keys";
-import {
-  useLlmApiKey,
-  useRefreshLlmApiKey,
-} from "#/hooks/query/use-llm-api-key";
+import { useLlmApiKey } from "#/hooks/query/use-llm-api-key";
+import { useRefreshLlmApiKey } from "#/hooks/mutation/use-refresh-llm-api-key";
 
 interface LlmApiKeyManagerProps {
   llmApiKey: { key: string | null } | undefined;
@@ -97,7 +95,7 @@ function LlmApiKeyManager({
               {llmApiKey.key && (
                 <button
                   type="button"
-                  className="text-white hover:text-gray-300 mr-2"
+                  className="text-white hover:text-gray-300 mr-2 cursor-pointer"
                   aria-label={showLlmApiKey ? "Hide API key" : "Show API key"}
                   title={showLlmApiKey ? "Hide API key" : "Show API key"}
                   onClick={() => setShowLlmApiKey(!showLlmApiKey)}
@@ -111,7 +109,7 @@ function LlmApiKeyManager({
               )}
               <button
                 type="button"
-                className="text-white hover:text-gray-300 mr-2"
+                className="text-white hover:text-gray-300 mr-2 cursor-pointer"
                 aria-label="Copy API key"
                 title="Copy API key"
                 onClick={() => {

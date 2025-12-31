@@ -35,6 +35,7 @@ class SaasConversationStore(ConversationStore):
             session.query(StoredConversationMetadata)
             .filter(StoredConversationMetadata.user_id == self.user_id)
             .filter(StoredConversationMetadata.conversation_id == conversation_id)
+            .filter(StoredConversationMetadata.conversation_version == 'V0')
         )
 
     def _to_external_model(self, conversation_metadata: StoredConversationMetadata):
@@ -51,6 +52,16 @@ class SaasConversationStore(ConversationStore):
         if kwargs['git_provider'] and isinstance(kwargs['git_provider'], str):
             # Convert string to ProviderType enum
             kwargs['git_provider'] = ProviderType(kwargs['git_provider'])
+
+        # Remove V1 attributes
+        kwargs.pop('max_budget_per_task', None)
+        kwargs.pop('cache_read_tokens', None)
+        kwargs.pop('cache_write_tokens', None)
+        kwargs.pop('reasoning_tokens', None)
+        kwargs.pop('context_window', None)
+        kwargs.pop('per_turn_token', None)
+        kwargs.pop('parent_conversation_id', None)
+        kwargs.pop('public')
 
         return ConversationMetadata(**kwargs)
 
@@ -115,6 +126,7 @@ class SaasConversationStore(ConversationStore):
                 conversations = (
                     session.query(StoredConversationMetadata)
                     .filter(StoredConversationMetadata.user_id == self.user_id)
+                    .filter(StoredConversationMetadata.conversation_version == 'V0')
                     .order_by(StoredConversationMetadata.created_at.desc())
                     .offset(offset)
                     .limit(limit + 1)

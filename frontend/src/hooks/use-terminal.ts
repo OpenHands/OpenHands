@@ -1,12 +1,8 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
-import { Command, useCommandStore } from "#/state/command-store";
-import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
-import { useWsClient } from "#/context/ws-client-provider";
-import { getTerminalCommand } from "#/services/terminal-service";
+import { Command, useCommandStore } from "#/stores/command-store";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
-import { useAgentStore } from "#/stores/agent-store";
 
 /*
   NOTE: Tests for this hook are indirectly covered by the tests for the XTermTerminal component.
@@ -26,9 +22,52 @@ const renderCommand = (
     return;
   }
 
-  terminal.writeln(
-    parseTerminalOutput(content.replaceAll("\n", "\r\n").trim()),
-  );
+  const trimmedContent = (content || "").replaceAll("\n", "\r\n").trim();
+  // Only write if there's actual content to avoid empty newlines
+  if (trimmedContent) {
+    terminal.writeln(parseTerminalOutput(trimmedContent));
+  }
+};
+
+/**
+ * Check if the terminal is ready for fit operations.
+ * This prevents the "Cannot read properties of undefined (reading 'dimensions')" error
+ * that occurs when fit() is called on a terminal that is hidden, disposed, or not fully initialized.
+ */
+const canFitTerminal = (
+  terminalInstance: Terminal | null,
+  fitAddonInstance: FitAddon | null,
+  containerElement: HTMLDivElement | null,
+): boolean => {
+  // Check terminal and fitAddon exist
+  if (!terminalInstance || !fitAddonInstance) {
+    return false;
+  }
+
+  // Check container element exists
+  if (!containerElement) {
+    return false;
+  }
+
+  // Check element is visible (not display: none)
+  // When display is none, offsetParent is null (except for fixed/body elements)
+  const computedStyle = window.getComputedStyle(containerElement);
+  if (computedStyle.display === "none") {
+    return false;
+  }
+
+  // Check element has dimensions
+  const { clientWidth, clientHeight } = containerElement;
+  if (clientWidth === 0 || clientHeight === 0) {
+    return false;
+  }
+
+  // Check terminal has been opened (element property is set after open())
+  if (!terminalInstance.element) {
+    return false;
+  }
+
+  return true;
 };
 
 // Create a persistent reference that survives component unmounts
@@ -36,86 +75,50 @@ const renderCommand = (
 const persistentLastCommandIndex = { current: 0 };
 
 export const useTerminal = () => {
-  const { send } = useWsClient();
-  const { curAgentState } = useAgentStore();
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
   const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
-  const keyEventDisposable = React.useRef<{ dispose: () => void } | null>(null);
-  const disabled = RUNTIME_INACTIVE_STATES.includes(curAgentState);
+  const isDisposed = React.useRef(false);
 
   const createTerminal = () =>
     new Terminal({
       fontFamily: "Menlo, Monaco, 'Courier New', monospace",
       fontSize: 14,
-      scrollback: 1000,
+      scrollback: 10000,
       scrollSensitivity: 1,
-      fastScrollModifier: "alt",
       fastScrollSensitivity: 5,
-      allowTransparency: true,
+      disableStdin: true, // Make terminal read-only
       theme: {
-        background: "transparent",
+        background: "#25272D",
       },
     });
+
+  const fitTerminalSafely = React.useCallback(() => {
+    if (isDisposed.current) {
+      return;
+    }
+    if (canFitTerminal(terminal.current, fitAddon.current, ref.current)) {
+      fitAddon.current!.fit();
+    }
+  }, []);
 
   const initializeTerminal = () => {
     if (terminal.current) {
       if (fitAddon.current) terminal.current.loadAddon(fitAddon.current);
-      if (ref.current) terminal.current.open(ref.current);
-    }
-  };
-
-  const copySelection = (selection: string) => {
-    const clipboardItem = new ClipboardItem({
-      "text/plain": new Blob([selection], { type: "text/plain" }),
-    });
-
-    navigator.clipboard.write([clipboardItem]);
-  };
-
-  const pasteSelection = (callback: (text: string) => void) => {
-    navigator.clipboard.readText().then(callback);
-  };
-
-  const pasteHandler = (event: KeyboardEvent, cb: (text: string) => void) => {
-    const isControlOrMetaPressed =
-      event.type === "keydown" && (event.ctrlKey || event.metaKey);
-
-    if (isControlOrMetaPressed) {
-      if (event.code === "KeyV") {
-        pasteSelection((text: string) => {
-          terminal.current?.write(text);
-          cb(text);
-        });
-      }
-
-      if (event.code === "KeyC") {
-        const selection = terminal.current?.getSelection();
-        if (selection) copySelection(selection);
+      if (ref.current) {
+        terminal.current.open(ref.current);
+        // Hide cursor for read-only terminal using ANSI escape sequence
+        terminal.current.write("\x1b[?25l");
+        fitTerminalSafely();
       }
     }
-
-    return true;
-  };
-
-  const handleEnter = (command: string) => {
-    terminal.current?.write("\r\n");
-    // Don't write the command again as it will be added to the commands array
-    // and rendered by the useEffect that watches commands
-    send(getTerminalCommand(command));
-    // Don't add the prompt here as it will be added when the command is processed
-    // and the commands array is updated
-  };
-
-  const handleBackspace = (command: string) => {
-    terminal.current?.write("\b \b");
-    return command.slice(0, -1);
   };
 
   // Initialize terminal and handle cleanup
   React.useEffect(() => {
+    isDisposed.current = false;
     terminal.current = createTerminal();
     fitAddon.current = new FitAddon();
 
@@ -134,11 +137,13 @@ export const useTerminal = () => {
         }
         lastCommandIndex.current = commands.length;
       }
-      terminal.current.write("$ ");
+      // Don't show prompt in read-only terminal
     }
 
     return () => {
+      isDisposed.current = true;
       terminal.current?.dispose();
+      lastCommandIndex.current = 0;
     };
   }, []);
 
@@ -148,25 +153,26 @@ export const useTerminal = () => {
       commands.length > 0 &&
       lastCommandIndex.current < commands.length
     ) {
-      let lastCommandType = "";
       for (let i = lastCommandIndex.current; i < commands.length; i += 1) {
-        lastCommandType = commands[i].type;
+        if (commands[i].type === "input") {
+          terminal.current.write("$ ");
+        }
         // Pass true for isUserInput to skip rendering user input commands
         // that have already been displayed as the user typed
-        renderCommand(commands[i], terminal.current, true);
+        renderCommand(commands[i], terminal.current, false);
       }
       lastCommandIndex.current = commands.length;
-      if (lastCommandType === "output") {
-        terminal.current.write("$ ");
-      }
     }
-  }, [commands, disabled]);
+  }, [commands]);
 
   React.useEffect(() => {
     let resizeObserver: ResizeObserver | null = null;
 
     resizeObserver = new ResizeObserver(() => {
-      fitAddon.current?.fit();
+      // Use requestAnimationFrame to debounce resize events and ensure DOM is ready
+      requestAnimationFrame(() => {
+        fitTerminalSafely();
+      });
     });
 
     if (ref.current) {
@@ -176,62 +182,7 @@ export const useTerminal = () => {
     return () => {
       resizeObserver?.disconnect();
     };
-  }, []);
-
-  React.useEffect(() => {
-    if (terminal.current) {
-      // Dispose of existing listeners if they exist
-      if (keyEventDisposable.current) {
-        keyEventDisposable.current.dispose();
-        keyEventDisposable.current = null;
-      }
-
-      let commandBuffer = "";
-
-      if (!disabled) {
-        // Add new key event listener and store the disposable
-        keyEventDisposable.current = terminal.current.onKey(
-          ({ key, domEvent }) => {
-            if (domEvent.key === "Enter") {
-              handleEnter(commandBuffer);
-              commandBuffer = "";
-            } else if (domEvent.key === "Backspace") {
-              if (commandBuffer.length > 0) {
-                commandBuffer = handleBackspace(commandBuffer);
-              }
-            } else {
-              // Ignore paste event
-              if (key.charCodeAt(0) === 22) {
-                return;
-              }
-              commandBuffer += key;
-              terminal.current?.write(key);
-            }
-          },
-        );
-
-        // Add custom key handler and store the disposable
-        terminal.current.attachCustomKeyEventHandler((event) =>
-          pasteHandler(event, (text) => {
-            commandBuffer += text;
-          }),
-        );
-      } else {
-        // Add a noop handler when disabled
-        keyEventDisposable.current = terminal.current.onKey((e) => {
-          e.domEvent.preventDefault();
-          e.domEvent.stopPropagation();
-        });
-      }
-    }
-
-    return () => {
-      if (keyEventDisposable.current) {
-        keyEventDisposable.current.dispose();
-        keyEventDisposable.current = null;
-      }
-    };
-  }, [disabled]);
+  }, [fitTerminalSafely]);
 
   return ref;
 };

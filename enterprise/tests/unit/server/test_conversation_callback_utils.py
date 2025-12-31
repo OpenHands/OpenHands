@@ -80,7 +80,7 @@ class TestUpdateActiveWorkingSeconds:
         events.append(event6)
 
         # Configure the mock event store to return our test events
-        mock_event_store.get_events.return_value = events
+        mock_event_store.search_events.return_value = events
 
         # Call the function under test with mocked session_maker
         with patch(
@@ -133,7 +133,7 @@ class TestUpdateActiveWorkingSeconds:
 
         events = [event1, event2]
 
-        mock_event_store.get_events.return_value = events
+        mock_event_store.search_events.return_value = events
 
         # Call the function under test with mocked session_maker
         with patch(
@@ -178,7 +178,7 @@ class TestUpdateActiveWorkingSeconds:
         events = [event1, event2, event3]
         # No final state change - agent still running
 
-        mock_event_store.get_events.return_value = events
+        mock_event_store.search_events.return_value = events
 
         # Call the function under test with mocked session_maker
         with patch(
@@ -221,7 +221,7 @@ class TestUpdateActiveWorkingSeconds:
 
         events = [event1, event2, event3]
 
-        mock_event_store.get_events.return_value = events
+        mock_event_store.search_events.return_value = events
 
         # Call the function under test with mocked session_maker
         with patch(
@@ -267,7 +267,7 @@ class TestUpdateActiveWorkingSeconds:
 
         events = [event1, event2, event3, event4]
 
-        mock_event_store.get_events.return_value = events
+        mock_event_store.search_events.return_value = events
 
         # Call the function under test with mocked session_maker
         with patch(
@@ -297,7 +297,7 @@ class TestUpdateActiveWorkingSeconds:
         user_id = 'test_user_error'
 
         # Configure the mock to raise an exception
-        mock_event_store.get_events.side_effect = Exception('Test error')
+        mock_event_store.search_events.side_effect = Exception('Test error')
 
         # Call the function under test
         update_active_working_seconds(
@@ -376,7 +376,7 @@ class TestUpdateActiveWorkingSeconds:
         event10.timestamp = '1970-01-01T00:00:37.000000'
         events.append(event10)
 
-        mock_event_store.get_events.return_value = events
+        mock_event_store.search_events.return_value = events
 
         # Call the function under test with mocked session_maker
         with patch(

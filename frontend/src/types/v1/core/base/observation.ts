@@ -6,7 +6,7 @@ import {
   ImageContent,
 } from "./common";
 
-interface MCPToolObservation extends ObservationBase<"MCPToolObservation"> {
+export interface MCPToolObservation extends ObservationBase<"MCPToolObservation"> {
   /**
    * Content returned from the MCP tool converted to LLM Ready TextContent or ImageContent
    */
@@ -21,21 +21,25 @@ interface MCPToolObservation extends ObservationBase<"MCPToolObservation"> {
   tool_name: string;
 }
 
-interface FinishObservation extends ObservationBase<"FinishObservation"> {
+export interface FinishObservation extends ObservationBase<"FinishObservation"> {
   /**
-   * Final message sent to the user
+   * Content returned from the finish action as a list of TextContent/ImageContent objects.
    */
-  message: string;
+  content: Array<TextContent | ImageContent>;
+  /**
+   * Whether the finish action resulted in an error
+   */
+  is_error: boolean;
 }
 
-interface ThinkObservation extends ObservationBase<"ThinkObservation"> {
+export interface ThinkObservation extends ObservationBase<"ThinkObservation"> {
   /**
    * Confirmation message. DEFAULT: "Your thought has been logged."
    */
-  content: string;
+  content: Array<TextContent | ImageContent>;
 }
 
-interface BrowserObservation extends ObservationBase<"BrowserObservation"> {
+export interface BrowserObservation extends ObservationBase<"BrowserObservation"> {
   /**
    * The output message from the browser operation
    */
@@ -50,12 +54,11 @@ interface BrowserObservation extends ObservationBase<"BrowserObservation"> {
   screenshot_data: string | null;
 }
 
-interface ExecuteBashObservation
-  extends ObservationBase<"ExecuteBashObservation"> {
+export interface ExecuteBashObservation extends ObservationBase<"ExecuteBashObservation"> {
   /**
-   * The raw output from the tool.
+   * Content returned from the tool as a list of TextContent/ImageContent objects.
    */
-  output: string;
+  content: Array<TextContent | ImageContent>;
   /**
    * The bash command that was executed. Can be empty string if the observation is from a previous command that hit soft timeout and is not yet finished.
    */
@@ -78,8 +81,34 @@ interface ExecuteBashObservation
   metadata: CmdOutputMetadata;
 }
 
-interface StrReplaceEditorObservation
-  extends ObservationBase<"StrReplaceEditorObservation"> {
+export interface TerminalObservation extends ObservationBase<"TerminalObservation"> {
+  /**
+   * Content returned from the terminal as a list of TextContent/ImageContent objects.
+   */
+  content: Array<TextContent | ImageContent>;
+  /**
+   * The bash command that was executed.
+   */
+  command: string | null;
+  /**
+   * The exit code of the command if it has finished.
+   */
+  exit_code: number | null;
+  /**
+   * Whether the command execution produced an error.
+   */
+  is_error: boolean;
+  /**
+   * Whether the command execution timed out.
+   */
+  timeout: boolean;
+  /**
+   * Additional metadata captured from the shell after command execution.
+   */
+  metadata: CmdOutputMetadata;
+}
+
+export interface FileEditorObservation extends ObservationBase<"FileEditorObservation"> {
   /**
    * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
    */
@@ -110,8 +139,39 @@ interface StrReplaceEditorObservation
   error: string | null;
 }
 
-interface TaskTrackerObservation
-  extends ObservationBase<"TaskTrackerObservation"> {
+// Keep StrReplaceEditorObservation as a separate interface for backward compatibility
+export interface StrReplaceEditorObservation extends ObservationBase<"StrReplaceEditorObservation"> {
+  /**
+   * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
+   */
+  command: "view" | "create" | "str_replace" | "insert" | "undo_edit";
+  /**
+   * The output message from the tool for the LLM to see.
+   */
+  output: string;
+  /**
+   * The file path that was edited.
+   */
+  path: string | null;
+  /**
+   * Indicates if the file previously existed. If not, it was created.
+   */
+  prev_exist: boolean;
+  /**
+   * The content of the file before the edit.
+   */
+  old_content: string | null;
+  /**
+   * The content of the file after the edit.
+   */
+  new_content: string | null;
+  /**
+   * Error message if any.
+   */
+  error: string | null;
+}
+
+export interface TaskTrackerObservation extends ObservationBase<"TaskTrackerObservation"> {
   /**
    * The formatted task list or status message.
    */
@@ -126,11 +186,45 @@ interface TaskTrackerObservation
   task_list: TaskItem[];
 }
 
+export interface PlanningFileEditorObservation extends ObservationBase<"PlanningFileEditorObservation"> {
+  /**
+   * Content returned from the tool as a list of TextContent/ImageContent objects.
+   */
+  content: Array<TextContent | ImageContent>;
+  /**
+   * Whether the call resulted in an error.
+   */
+  is_error: boolean;
+  /**
+   * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
+   */
+  command: "view" | "create" | "str_replace" | "insert" | "undo_edit";
+  /**
+   * The file path that was edited.
+   */
+  path: string | null;
+  /**
+   * Indicates if the file previously existed. If not, it was created.
+   */
+  prev_exist: boolean;
+  /**
+   * The content of the file before the edit.
+   */
+  old_content: string | null;
+  /**
+   * The content of the file after the edit.
+   */
+  new_content: string | null;
+}
+
 export type Observation =
   | MCPToolObservation
   | FinishObservation
   | ThinkObservation
   | BrowserObservation
   | ExecuteBashObservation
+  | TerminalObservation
+  | FileEditorObservation
   | StrReplaceEditorObservation
-  | TaskTrackerObservation;
+  | TaskTrackerObservation
+  | PlanningFileEditorObservation;

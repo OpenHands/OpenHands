@@ -3,43 +3,49 @@ from datetime import UTC, datetime
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from server.constants import LITE_LLM_API_KEY, LITE_LLM_API_URL
+from server.config import get_config
+from server.constants import (
+    BYOR_KEY_VERIFICATION_TIMEOUT,
+    LITE_LLM_API_KEY,
+    LITE_LLM_API_URL,
+)
 from storage.api_key_store import ApiKeyStore
 from storage.database import session_maker
-from storage.user_settings import UserSettings
+from storage.saas_settings_store import SaasSettingsStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
 from openhands.utils.async_utils import call_sync_from_async
+from openhands.utils.http_session import httpx_verify_option
 
 
 # Helper functions for BYOR API key management
 async def get_byor_key_from_db(user_id: str) -> str | None:
     """Get the BYOR key from the database for a user."""
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
 
-    def _get_byor_key():
-        with session_maker() as session:
-            user_db_settings = (
-                session.query(UserSettings)
-                .filter(UserSettings.keycloak_user_id == user_id)
-                .first()
-            )
-            if user_db_settings and user_db_settings.llm_api_key_for_byor:
-                return user_db_settings.llm_api_key_for_byor
-        return None
-
-    return await call_sync_from_async(_get_byor_key)
+    user_db_settings = await call_sync_from_async(
+        settings_store.get_user_settings_by_keycloak_id, user_id
+    )
+    if user_db_settings and user_db_settings.llm_api_key_for_byor:
+        return user_db_settings.llm_api_key_for_byor
+    return None
 
 
 async def store_byor_key_in_db(user_id: str, key: str) -> None:
     """Store the BYOR key in the database for a user."""
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
 
     def _update_user_settings():
         with session_maker() as session:
-            user_db_settings = (
-                session.query(UserSettings)
-                .filter(UserSettings.keycloak_user_id == user_id)
-                .first()
+            user_db_settings = settings_store.get_user_settings_by_keycloak_id(
+                user_id, session
             )
             if user_db_settings:
                 user_db_settings.llm_api_key_for_byor = key
@@ -67,9 +73,10 @@ async def generate_byor_key(user_id: str) -> str | None:
 
     try:
         async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
             headers={
                 'x-goog-api-key': LITE_LLM_API_KEY,
-            }
+            },
         ) as client:
             response = await client.post(
                 f'{LITE_LLM_API_URL}/key/generate',
@@ -109,6 +116,70 @@ async def generate_byor_key(user_id: str) -> str | None:
         return None
 
 
+async def verify_byor_key_in_litellm(byor_key: str, user_id: str) -> bool:
+    """Verify that a BYOR key is valid in LiteLLM by making a lightweight API call.
+
+    Args:
+        byor_key: The BYOR key to verify
+        user_id: The user ID for logging purposes
+
+    Returns:
+        True if the key is verified as valid, False if verification fails or key is invalid.
+        Returns False on network errors/timeouts to ensure we don't return potentially invalid keys.
+    """
+    if not (LITE_LLM_API_URL and byor_key):
+        return False
+
+    try:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
+            timeout=BYOR_KEY_VERIFICATION_TIMEOUT,
+        ) as client:
+            # Make a lightweight request to verify the key
+            # Using /v1/models endpoint as it's lightweight and requires authentication
+            response = await client.get(
+                f'{LITE_LLM_API_URL}/v1/models',
+                headers={
+                    'Authorization': f'Bearer {byor_key}',
+                },
+            )
+
+            # Only 200 status code indicates valid key
+            if response.status_code == 200:
+                logger.debug(
+                    'BYOR key verification successful',
+                    extra={'user_id': user_id},
+                )
+                return True
+
+            # All other status codes (401, 403, 500, etc.) are treated as invalid
+            # This includes authentication errors and server errors
+            logger.warning(
+                'BYOR key verification failed - treating as invalid',
+                extra={
+                    'user_id': user_id,
+                    'status_code': response.status_code,
+                    'key_prefix': byor_key[:10] + '...'
+                    if len(byor_key) > 10
+                    else byor_key,
+                },
+            )
+            return False
+
+    except (httpx.TimeoutException, Exception) as e:
+        # Any exception (timeout, network error, etc.) means we can't verify
+        # Return False to trigger regeneration rather than returning potentially invalid key
+        logger.warning(
+            'BYOR key verification error - treating as invalid to ensure key validity',
+            extra={
+                'user_id': user_id,
+                'error': str(e),
+                'error_type': type(e).__name__,
+            },
+        )
+        return False
+
+
 async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
     """Delete the BYOR key from LiteLLM using the key directly."""
     if not (LITE_LLM_API_KEY and LITE_LLM_API_URL):
@@ -119,9 +190,10 @@ async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
 
     try:
         async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
             headers={
                 'x-goog-api-key': LITE_LLM_API_KEY,
-            }
+            },
         ) as client:
             # Delete the key directly using the key value
             delete_url = f'{LITE_LLM_API_URL}/key/delete'
@@ -274,18 +346,44 @@ async def delete_api_key(key_id: int, user_id: str = Depends(get_user_id)):
 
 @api_router.get('/llm/byor', response_model=LlmApiKeyResponse)
 async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
-    """Get the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user."""
+    """Get the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user.
+
+    This endpoint validates that the key exists in LiteLLM before returning it.
+    If validation fails, it automatically generates a new key to ensure users
+    always receive a working key.
+    """
     try:
         # Check if the BYOR key exists in the database
         byor_key = await get_byor_key_from_db(user_id)
         if byor_key:
-            return {'key': byor_key}
+            # Validate that the key is actually registered in LiteLLM
+            is_valid = await verify_byor_key_in_litellm(byor_key, user_id)
+            if is_valid:
+                return {'key': byor_key}
+            else:
+                # Key exists in DB but is invalid in LiteLLM - regenerate it
+                logger.warning(
+                    'BYOR key found in database but invalid in LiteLLM - regenerating',
+                    extra={
+                        'user_id': user_id,
+                        'key_prefix': byor_key[:10] + '...'
+                        if len(byor_key) > 10
+                        else byor_key,
+                    },
+                )
+                # Delete the invalid key from LiteLLM (best effort, don't fail if it doesn't exist)
+                await delete_byor_key_from_litellm(user_id, byor_key)
+                # Fall through to generate a new key
 
-        # If not, generate a new key for BYOR
+        # Generate a new key for BYOR (either no key exists or validation failed)
         key = await generate_byor_key(user_id)
         if key:
             # Store the key in the database
             await store_byor_key_in_db(user_id, key)
+            logger.info(
+                'Successfully generated and stored new BYOR key',
+                extra={'user_id': user_id},
+            )
             return {'key': key}
         else:
             logger.error(
@@ -297,6 +395,9 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
                 detail='Failed to generate new BYOR LLM API key',
             )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         logger.exception('Error retrieving BYOR LLM API key', extra={'error': str(e)})
         raise HTTPException(

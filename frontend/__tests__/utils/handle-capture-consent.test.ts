@@ -13,14 +13,14 @@ describe("handleCaptureConsent", () => {
   });
 
   it("should opt out of of capturing", () => {
-    handleCaptureConsent(false);
+    handleCaptureConsent(posthog, false);
 
     expect(optOutSpy).toHaveBeenCalled();
     expect(optInSpy).not.toHaveBeenCalled();
   });
 
   it("should opt in to capturing if the user consents", () => {
-    handleCaptureConsent(true);
+    handleCaptureConsent(posthog, true);
 
     expect(optInSpy).toHaveBeenCalled();
     expect(optOutSpy).not.toHaveBeenCalled();
@@ -28,7 +28,7 @@ describe("handleCaptureConsent", () => {
 
   it("should not opt in to capturing if the user is already opted in", () => {
     hasOptedInSpy.mockReturnValueOnce(true);
-    handleCaptureConsent(true);
+    handleCaptureConsent(posthog, true);
 
     expect(optInSpy).not.toHaveBeenCalled();
     expect(optOutSpy).not.toHaveBeenCalled();
@@ -36,7 +36,7 @@ describe("handleCaptureConsent", () => {
 
   it("should not opt out of capturing if the user is already opted out", () => {
     hasOptedOutSpy.mockReturnValueOnce(true);
-    handleCaptureConsent(false);
+    handleCaptureConsent(posthog, false);
 
     expect(optOutSpy).not.toHaveBeenCalled();
     expect(optInSpy).not.toHaveBeenCalled();

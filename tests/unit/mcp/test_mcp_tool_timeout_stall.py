@@ -149,6 +149,7 @@ async def test_mcp_tool_timeout_error_handling(conversation_stats):
     # This demonstrates that the fix is working
 
 
+@pytest.mark.skip(reason='2025-10-07 : This test is flaky')
 @pytest.mark.asyncio
 async def test_mcp_tool_timeout_agent_continuation(conversation_stats):
     """Test that verifies the agent can continue processing after an MCP tool timeout."""

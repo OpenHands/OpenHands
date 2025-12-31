@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from typing import Any
 
-import openhands
 from openhands.core.schema import ActionType
 from openhands.events.action.action import Action, ActionSecurityRisk
+from openhands.version import get_version
 
 
 @dataclass
@@ -48,7 +48,7 @@ class SystemMessageAction(Action):
 
     content: str
     tools: list[Any] | None = None
-    openhands_version: str | None = openhands.__version__
+    openhands_version: str | None = get_version()
     agent_class: str | None = None
     action: ActionType = ActionType.SYSTEM
 

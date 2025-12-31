@@ -2,6 +2,6 @@
 Unified SQLAlchemy declarative base for all models.
 """
 
-from sqlalchemy.orm import declarative_base
+from openhands.app_server.utils.sql_utils import Base
 
-Base = declarative_base()
+__all__ = ['Base']

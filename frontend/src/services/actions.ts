@@ -1,6 +1,6 @@
 import { trackError } from "#/utils/error-handler";
 import useMetricsStore from "#/stores/metrics-store";
-import { useStatusStore } from "#/state/status-store";
+import { useStatusStore } from "#/stores/status-store";
 import ActionType from "#/types/action-type";
 import {
   ActionMessage,
@@ -8,8 +8,7 @@ import {
   StatusMessage,
 } from "#/types/message";
 import { handleObservationMessage } from "./observations";
-import { useJupyterStore } from "#/state/jupyter-store";
-import { useCommandStore } from "#/state/command-store";
+import { useCommandStore } from "#/stores/command-store";
 import { queryClient } from "#/query-client-config";
 import {
   ActionSecurityRisk,
@@ -33,10 +32,6 @@ export function handleActionMessage(message: ActionMessage) {
 
   if (message.action === ActionType.RUN) {
     useCommandStore.getState().appendInput(message.args.command);
-  }
-
-  if (message.action === ActionType.RUN_IPYTHON) {
-    useJupyterStore.getState().appendJupyterInput(message.args.code);
   }
 
   if ("args" in message && "security_risk" in message.args) {
@@ -77,6 +72,7 @@ export function handleStatusMessage(message: StatusMessage) {
       message: message.message,
       source: "chat",
       metadata: { msgId: message.id },
+      posthog: undefined, // Service file - can't use hooks
     });
   }
 }

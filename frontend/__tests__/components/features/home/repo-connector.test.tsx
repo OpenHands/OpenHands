@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { createRoutesStub, Outlet } from "react-router";
-import SettingsService from "#/settings-service/settings-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import GitService from "#/api/git-service/git-service.api";
 import OptionService from "#/api/option-service/option-service.api";
@@ -57,7 +57,7 @@ const MOCK_RESPOSITORIES: GitRepository[] = [
   },
   {
     id: "2",
-    full_name: "All-Hands-AI/OpenHands",
+    full_name: "OpenHands/OpenHands",
     git_provider: "github",
     is_public: true,
     main_branch: "main",
@@ -71,6 +71,7 @@ beforeEach(() => {
     provider_tokens_set: {
       github: "some-token",
       gitlab: null,
+      azure_devops: null,
     },
   });
 });
@@ -114,7 +115,7 @@ describe("RepoConnector", () => {
     // Wait for the options to be loaded and displayed
     await waitFor(() => {
       expect(screen.getByText("rbren/polaris")).toBeInTheDocument();
-      expect(screen.getByText("All-Hands-AI/OpenHands")).toBeInTheDocument();
+      expect(screen.getByText("OpenHands/OpenHands")).toBeInTheDocument();
     });
   });
 
@@ -403,7 +404,7 @@ describe("RepoConnector", () => {
       ConversationService,
       "createConversation",
     );
-    createConversationSpy.mockImplementation(() => new Promise(() => {})); // Never resolves to keep loading state
+    createConversationSpy.mockImplementation(() => new Promise(() => { })); // Never resolves to keep loading state
     const retrieveUserGitRepositoriesSpy = vi.spyOn(
       GitService,
       "retrieveUserGitRepositories",

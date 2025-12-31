@@ -1,3 +1,11 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from __future__ import annotations
 
 import asyncio
@@ -42,6 +50,7 @@ from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
 from openhands.storage.locations import get_conversation_dir
 from openhands.utils.async_utils import call_sync_from_async
+from openhands.utils.http_session import httpx_verify_option
 from openhands.utils.import_utils import get_impl
 from openhands.utils.utils import create_registry_and_conversation_stats
 
@@ -62,6 +71,7 @@ class DockerNestedConversationManager(ConversationManager):
     async def __aenter__(self):
         runtime_cls = get_runtime_cls(self.config.runtime)
         runtime_cls.setup(self.config)
+        return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         runtime_cls = get_runtime_cls(self.config.runtime)
@@ -199,9 +209,10 @@ class DockerNestedConversationManager(ConversationManager):
             await call_sync_from_async(runtime.wait_until_alive)
             await call_sync_from_async(runtime.setup_initial_env)
             async with httpx.AsyncClient(
+                verify=httpx_verify_option(),
                 headers={
                     'X-Session-API-Key': self._get_session_api_key_for_conversation(sid)
-                }
+                },
             ) as client:
                 # setup the settings...
                 settings_json = settings.model_dump(context={'expose_secrets': True})
@@ -295,9 +306,10 @@ class DockerNestedConversationManager(ConversationManager):
 
     async def send_event_to_conversation(self, sid, data):
         async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
             headers={
                 'X-Session-API-Key': self._get_session_api_key_for_conversation(sid)
-            }
+            },
         ) as client:
             nested_url = self._get_nested_url(sid)
             response = await client.post(
@@ -318,9 +330,10 @@ class DockerNestedConversationManager(ConversationManager):
         try:
             nested_url = self.get_nested_url_for_container(container)
             async with httpx.AsyncClient(
+                verify=httpx_verify_option(),
                 headers={
                     'X-Session-API-Key': self._get_session_api_key_for_conversation(sid)
-                }
+                },
             ) as client:
                 # Stop conversation
                 response = await client.post(
@@ -356,11 +369,12 @@ class DockerNestedConversationManager(ConversationManager):
         """
         try:
             async with httpx.AsyncClient(
+                verify=httpx_verify_option(),
                 headers={
                     'X-Session-API-Key': self._get_session_api_key_for_conversation(
                         conversation_id
                     )
-                }
+                },
             ) as client:
                 # Query the nested runtime for conversation info
                 response = await client.get(nested_url)

@@ -150,7 +150,7 @@
   position: absolute;
   width: 100%;
   z-index: 100;
-  transform: translateY(16%);
+  padding-top: 2rem;
 }
 
 .drag-over-ui-content {
@@ -318,8 +318,8 @@
   background: transparent !important;
 }
 
-/* Ensure all xterm elements have transparent backgrounds */
-.xterm * {
+/* Ensure all xterm DOM elements have transparent backgrounds. Exclude canvas elements */
+.xterm {
   background: transparent !important;
 }
 

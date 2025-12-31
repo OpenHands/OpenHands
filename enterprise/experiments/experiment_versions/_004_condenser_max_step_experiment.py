@@ -5,12 +5,18 @@ This module contains the handler for the condenser max step experiment that test
 different max_size values for the condenser configuration.
 """
 
+from uuid import UUID
+
 import posthog
 from experiments.constants import EXPERIMENT_CONDENSER_MAX_STEP
 from server.constants import IS_FEATURE_ENV
 from storage.experiment_assignment_store import ExperimentAssignmentStore
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.sdk import Agent
+from openhands.sdk.context.condenser import (
+    LLMSummarizingCondenser,
+)
 from openhands.server.session.conversation_init_data import ConversationInitData
 
 
@@ -190,3 +196,37 @@ def handle_condenser_max_step_experiment(
         return conversation_settings
 
     return conversation_settings
+
+
+def handle_condenser_max_step_experiment__v1(
+    user_id: str | None,
+    conversation_id: UUID,
+    agent: Agent,
+) -> Agent:
+    enabled_variant = _get_condenser_max_step_variant(user_id, str(conversation_id))
+
+    if enabled_variant is None:
+        return agent
+
+    if enabled_variant == 'control':
+        condenser_max_size = 120
+    elif enabled_variant == 'treatment':
+        condenser_max_size = 80
+    else:
+        logger.error(
+            'condenser_max_step_experiment:unknown_variant',
+            extra={
+                'user_id': user_id,
+                'convo_id': conversation_id,
+                'variant': enabled_variant,
+                'reason': 'unknown variant; returning original conversation settings',
+            },
+        )
+        return agent
+
+    condenser_llm = agent.llm.model_copy(update={'usage_id': 'condenser'})
+    condenser = LLMSummarizingCondenser(
+        llm=condenser_llm, max_size=condenser_max_size, keep_first=4
+    )
+
+    return agent.model_copy(update={'condenser': condenser})

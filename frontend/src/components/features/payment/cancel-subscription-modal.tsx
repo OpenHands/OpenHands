@@ -28,7 +28,7 @@ export function CancelSubscriptionModal({
       await cancelSubscriptionMutation.mutateAsync();
       displaySuccessToast(t(I18nKey.PAYMENT$SUBSCRIPTION_CANCELLED));
       onClose();
-    } catch (error) {
+    } catch {
       displayErrorToast(t(I18nKey.ERROR$GENERIC));
     }
   };

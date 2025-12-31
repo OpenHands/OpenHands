@@ -1,3 +1,11 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# V1 replacement for this module lives in the Software Agent SDK.
 import copy
 import os
 import time
@@ -21,6 +29,7 @@ from litellm import completion as litellm_completion
 from litellm import completion_cost as litellm_completion_cost
 from litellm.exceptions import (
     APIConnectionError,
+    BadGatewayError,
     RateLimitError,
     ServiceUnavailableError,
 )
@@ -45,6 +54,7 @@ LLM_RETRY_EXCEPTIONS: tuple[type[Exception], ...] = (
     APIConnectionError,
     RateLimitError,
     ServiceUnavailableError,
+    BadGatewayError,
     litellm.Timeout,
     litellm.InternalServerError,
     LLMNoResponseError,
@@ -148,17 +158,20 @@ class LLM(RetryMixin, DebugMixin):
                 logger.debug(
                     f'Gemini model {self.config.model} with reasoning_effort {self.config.reasoning_effort} mapped to thinking {kwargs.get("thinking")}'
                 )
-            elif 'claude-sonnet-4-5' in self.config.model:
-                kwargs.pop(
-                    'reasoning_effort', None
-                )  # don't send reasoning_effort to Claude Sonnet 4.5
+            elif any(
+                k in self.config.model
+                for k in ('claude-sonnet-4-5', 'claude-haiku-4-5-20251001')
+            ):
+                # don't send reasoning_effort to specific Claude Sonnet/Haiku 4.5 variants
+                kwargs.pop('reasoning_effort', None)
             else:
-                kwargs['reasoning_effort'] = self.config.reasoning_effort
+                if self.config.reasoning_effort is not None:
+                    kwargs['reasoning_effort'] = self.config.reasoning_effort
             kwargs.pop(
                 'temperature'
             )  # temperature is not supported for reasoning models
             kwargs.pop('top_p')  # reasoning model like o3 doesn't support top_p
-        # Azure issue: https://github.com/All-Hands-AI/OpenHands/issues/6777
+        # Azure issue: https://github.com/OpenHands/OpenHands/issues/6777
         if self.config.model.startswith('azure'):
             kwargs['max_tokens'] = self.config.max_output_tokens
             kwargs.pop('max_completion_tokens')
@@ -185,14 +198,20 @@ class LLM(RetryMixin, DebugMixin):
         if 'claude-opus-4-1' in self.config.model.lower():
             kwargs['thinking'] = {'type': 'disabled'}
 
-        # Anthropic constraint: Opus models cannot accept both temperature and top_p
+        # Anthropic constraint: Opus 4.1, Opus 4.5, and Sonnet 4 models cannot accept both temperature and top_p
         # Prefer temperature (drop top_p) if both are specified.
         _model_lower = self.config.model.lower()
-        # Limit to Opus 4.1 specifically to avoid changing behavior of other Anthropic models
-        if ('claude-opus-4-1' in _model_lower) and (
-            'temperature' in kwargs and 'top_p' in kwargs
-        ):
+        # Apply to Opus 4.1, Opus 4.5, and Sonnet 4 models to avoid API errors
+        if (
+            ('claude-opus-4-1' in _model_lower)
+            or ('claude-opus-4-5' in _model_lower)
+            or ('claude-sonnet-4' in _model_lower)
+        ) and ('temperature' in kwargs and 'top_p' in kwargs):
             kwargs.pop('top_p', None)
+
+        # Add completion_kwargs if present
+        if self.config.completion_kwargs is not None:
+            kwargs.update(self.config.completion_kwargs)
 
         self._completion = partial(
             litellm_completion,
@@ -511,6 +530,7 @@ class LLM(RetryMixin, DebugMixin):
                 'claude-3.7-sonnet',
                 'claude-sonnet-4',
                 'claude-sonnet-4-5-20250929',
+                'claude-haiku-4-5-20251001',
             ]
             if any(model in self.config.model for model in sonnet_models):
                 self.config.max_output_tokens = 64000  # litellm set max to 128k, but that requires a header to be set
@@ -819,9 +839,14 @@ class LLM(RetryMixin, DebugMixin):
                 message.force_string_serializer = True
             if 'kimi-k2-instruct' in self.config.model and 'groq' in self.config.model:
                 message.force_string_serializer = True
-            if 'openrouter/anthropic/claude-sonnet-4' in self.config.model:
-                message.force_string_serializer = True
-            if 'openrouter/anthropic/claude-sonnet-4-5-20250929' in self.config.model:
+            if any(
+                k in self.config.model
+                for k in (
+                    'openrouter/anthropic/claude-sonnet-4',
+                    'openrouter/anthropic/claude-sonnet-4-5-20250929',
+                    'openrouter/anthropic/claude-haiku-4-5-20251001',
+                )
+            ):
                 message.force_string_serializer = True
 
         # let pydantic handle the serialization

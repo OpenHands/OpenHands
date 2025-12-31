@@ -1,3 +1,11 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import asyncio
 import time
 from logging import LoggerAdapter
@@ -390,9 +398,15 @@ class WebSession:
             _waiting_times = 1
 
             if self.sio:
+                # Get timeout from configuration, default to 30 seconds
+                client_wait_timeout = self.config.client_wait_timeout
+                self.logger.debug(
+                    f'Using client wait timeout: {client_wait_timeout}s for session {self.sid}'
+                )
+
                 # Wait once during initialization to avoid event push failures during websocket connection intervals
                 while self._wait_websocket_initial_complete and (
-                    time.time() - _start_time < 2
+                    time.time() - _start_time < client_wait_timeout
                 ):
                     if bool(
                         self.sio.manager.rooms.get('/', {}).get(
@@ -400,12 +414,18 @@ class WebSession:
                         )
                     ):
                         break
-                    self.logger.warning(
-                        f'There is no listening client in the current room,'
-                        f' waiting for the {_waiting_times}th attempt: {self.sid}'
-                    )
+
+                    # Progressive backoff: start with 0.1s, increase to 1s after 10 attempts
+                    sleep_duration = 0.1 if _waiting_times <= 10 else 1.0
+
+                    # Log every 2 seconds to reduce spam
+                    if _waiting_times % (20 if sleep_duration == 0.1 else 2) == 0:
+                        self.logger.debug(
+                            f'There is no listening client in the current room,'
+                            f' waiting for the {_waiting_times}th attempt (timeout: {client_wait_timeout}s): {self.sid}'
+                        )
                     _waiting_times += 1
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(sleep_duration)
                 self._wait_websocket_initial_complete = False
                 await self.sio.emit('oh_event', data, to=ROOM_KEY.format(sid=self.sid))
 

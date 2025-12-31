@@ -17,7 +17,7 @@ def test_initialize_repository_for_runtime(temp_dir, runtime_cls, run_as_openhan
     runtime, config = _load_runtime(temp_dir, runtime_cls, run_as_openhands)
     mock_repo = Repository(
         id='1232',
-        full_name='All-Hands-AI/OpenHands',
+        full_name='OpenHands/OpenHands',
         git_provider=ProviderType.GITHUB,
         is_public=True,
     )
@@ -27,7 +27,7 @@ def test_initialize_repository_for_runtime(temp_dir, runtime_cls, run_as_openhan
         return_value=mock_repo,
     ):
         repository_dir = initialize_repository_for_runtime(
-            runtime, selected_repository='All-Hands-AI/OpenHands'
+            runtime, selected_repository='OpenHands/OpenHands'
         )
 
     assert repository_dir is not None

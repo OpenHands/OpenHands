@@ -14,6 +14,7 @@ import { LoadingMicroagentBody } from "./loading-microagent-body";
 import { LoadingMicroagentTextarea } from "./loading-microagent-textarea";
 import { useGetMicroagents } from "#/hooks/query/use-get-microagents";
 import { Typography } from "#/ui/typography";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 interface LaunchMicroagentModalProps {
   onClose: () => void;
@@ -32,6 +33,7 @@ export function LaunchMicroagentModal({
 }: LaunchMicroagentModalProps) {
   const { t } = useTranslation();
   const { runtimeActive } = useHandleRuntimeActive();
+  const { data: conversation } = useActiveConversation();
   const { data: prompt, isLoading: promptIsLoading } =
     useMicroagentPrompt(eventId);
 
@@ -39,6 +41,15 @@ export function LaunchMicroagentModal({
     useGetMicroagents(`${selectedRepo}/.openhands/microagents`);
 
   const [triggers, setTriggers] = React.useState<string[]>([]);
+
+  // TODO: Hide LaunchMicroagentModal for V1 conversations
+  // This is a temporary measure and may be re-enabled in the future
+  const isV1Conversation = conversation?.conversation_version === "V1";
+
+  // Don't render anything for V1 conversations
+  if (isV1Conversation) {
+    return null;
+  }
 
   const formAction = (formData: FormData) => {
     const query = formData.get("query-input")?.toString();

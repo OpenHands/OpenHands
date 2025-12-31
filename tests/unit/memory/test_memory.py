@@ -485,7 +485,7 @@ def test_custom_secrets_descriptions_serialization(prompt_dir):
     # Verify that the workspace context includes the custom_secrets_descriptions
     assert '<CUSTOM_SECRETS>' in workspace_context
     for secret_name, secret_description in custom_secrets.items():
-        assert f'$**{secret_name}**' in workspace_context
+        assert f'**${secret_name}**' in workspace_context
         assert secret_description in workspace_context
 
     assert '<CONVERSATION_INSTRUCTIONS>' in workspace_context

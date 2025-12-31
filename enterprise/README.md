@@ -8,7 +8,7 @@
 This directory contains the enterprise server used by [OpenHands Cloud](https://github.com/All-Hands-AI/OpenHands-Cloud/). The official, public version of OpenHands Cloud is available at
 [app.all-hands.dev](https://app.all-hands.dev).
 
-You may also want to check out the MIT-licensed [OpenHands](https://github.com/All-Hands-AI/OpenHands)
+You may also want to check out the MIT-licensed [OpenHands](https://github.com/OpenHands/OpenHands)
 
 ## Extension of OpenHands (OSS)
 
@@ -16,7 +16,7 @@ The code in `/enterprise` directory builds on top of open source (OSS) code, ext
 
 - Enterprise stacks on top of OSS. For example, the middleware in enterprise is stacked right on top of the middlewares in OSS. In `SAAS`, the middleware from BOTH repos will be present and running (which can sometimes cause conflicts)
 
-- Enterprise overrides the implementation in OSS (only one is present at a time). For example, the server config SaasServerConfig which overrides [`ServerConfig`](https://github.com/All-Hands-AI/OpenHands/blob/main/openhands/server/config/server_config.py#L8) on OSS. This is done through dynamic imports ([see here](https://github.com/All-Hands-AI/OpenHands/blob/main/openhands/server/config/server_config.py#L37-#L45))
+- Enterprise overrides the implementation in OSS (only one is present at a time). For example, the server config SaasServerConfig which overrides [`ServerConfig`](https://github.com/OpenHands/OpenHands/blob/main/openhands/server/config/server_config.py#L8) on OSS. This is done through dynamic imports ([see here](https://github.com/OpenHands/OpenHands/blob/main/openhands/server/config/server_config.py#L37-#L45))
 
 Key areas that change on `SAAS` are
 

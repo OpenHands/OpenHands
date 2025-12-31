@@ -30,6 +30,9 @@ vi.mock("#/hooks/use-is-on-tos-page", () => ({
   useIsOnTosPage: () => false,
 }));
 
+// Import the Zustand mock to enable automatic store resets
+vi.mock("zustand");
+
 // Mock requests during tests
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "bypass" });

@@ -10,6 +10,7 @@ from openhands.events.action.agent import (
     ChangeAgentStateAction,
     CondensationAction,
     CondensationRequestAction,
+    LoopRecoveryAction,
     RecallAction,
     TaskTrackingAction,
 )
@@ -48,13 +49,14 @@ actions = (
     CondensationRequestAction,
     MCPAction,
     TaskTrackingAction,
+    LoopRecoveryAction,
 )
 
 ACTION_TYPE_TO_CLASS = {action_class.action: action_class for action_class in actions}  # type: ignore[attr-defined]
 
 
 def handle_action_deprecated_args(args: dict[str, Any]) -> dict[str, Any]:
-    # keep_prompt has been deprecated in https://github.com/All-Hands-AI/OpenHands/pull/4881
+    # keep_prompt has been deprecated in https://github.com/OpenHands/OpenHands/pull/4881
     if 'keep_prompt' in args:
         args.pop('keep_prompt')
 

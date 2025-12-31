@@ -32,7 +32,7 @@ export function DeleteApiKeyModal({
       await deleteApiKeyMutation.mutateAsync(keyToDelete.id);
       displaySuccessToast(t(I18nKey.SETTINGS$API_KEY_DELETED));
       onClose();
-    } catch (error) {
+    } catch {
       displayErrorToast(t(I18nKey.ERROR$GENERIC));
     }
   };

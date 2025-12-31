@@ -8,8 +8,14 @@
 MODEL=$1  # eg your llm config name in config.toml (eg: "llm.claude-3-5-sonnet-20241022-t05")
 EXP_NAME=$2 # "train-t05"
 EVAL_DATASET=$3  # path to original dataset (jsonl file)
-N_WORKERS=${4:-64}
-N_RUNS=${5:-1}
+MAX_ITER=$4
+N_WORKERS=${5:-64}
+N_RUNS=${6:-1}
+EVAL_LIMIT=${7:-}
+SKIP_IDS_THRESHOLD=$8
+SKIP_IDS_PATTERN=$9
+INPUT_SKIP_IDS=${10}
+FILTER_DATASET_AFTER_SAMPLING=${11:-}
 
 export EXP_NAME=$EXP_NAME
 # use 2x resources for rollout since some codebases are pretty resource-intensive
@@ -17,6 +23,7 @@ export DEFAULT_RUNTIME_RESOURCE_FACTOR=2
 echo "MODEL: $MODEL"
 echo "EXP_NAME: $EXP_NAME"
 echo "EVAL_DATASET: $EVAL_DATASET"
+echo "INPUT_SKIP_IDS: $INPUT_SKIP_IDS"
 # Generate DATASET path by adding _with_runtime_ before .jsonl extension
 DATASET="${EVAL_DATASET%.jsonl}_with_runtime_.jsonl"  # path to converted dataset
 
@@ -34,9 +41,6 @@ else
     echo "ALLHANDS_API_KEY is set and RUNTIME is set to remote. Continuing rollout and evaluation with remote runtime..."
     export SANDBOX_REMOTE_RUNTIME_API_URL="https://runtime.eval.all-hands.dev"
 fi
-
-#EVAL_LIMIT=3000
-MAX_ITER=100
 
 
 # ===== Run inference =====
@@ -69,17 +73,52 @@ function run_eval() {
     --dataset $DATASET \
     --split $SPLIT"
 
+  # Conditionally add filter flag
+  if [ "$FILTER_DATASET_AFTER_SAMPLING" = "true" ]; then
+    COMMAND="$COMMAND --filter_dataset_after_sampling"
+  fi
+
   echo "Running command: $COMMAND"
   if [ -n "$EVAL_LIMIT" ]; then
     echo "EVAL_LIMIT: $EVAL_LIMIT"
     COMMAND="$COMMAND --eval-n-limit $EVAL_LIMIT"
   fi
 
-  # Run the command
   eval $COMMAND
 }
 
 for run_idx in $(seq 1 $N_RUNS); do
+    if [ -n "$SKIP_IDS_THRESHOLD" ]; then
+        echo "Computing SKIP_IDS for run $run_idx..."
+        SKIP_CMD="poetry run python evaluation/benchmarks/multi_swe_bench/compute_skip_ids.py $SKIP_IDS_THRESHOLD"
+        if [ -n "$SKIP_IDS_PATTERN" ]; then
+            SKIP_CMD="$SKIP_CMD --pattern \"$SKIP_IDS_PATTERN\""
+        fi
+        COMPUTED_SKIP_IDS=$(eval $SKIP_CMD)
+        SKIP_STATUS=$?
+        if [ $SKIP_STATUS -ne 0 ]; then
+            echo "ERROR: Skip IDs computation failed with exit code $SKIP_STATUS"
+            exit $SKIP_STATUS
+        fi
+        echo "COMPUTED_SKIP_IDS: $COMPUTED_SKIP_IDS"
+    else
+        echo "SKIP_IDS_THRESHOLD not provided, skipping SKIP_IDS computation"
+        COMPUTED_SKIP_IDS=""
+    fi
+
+    # Concatenate COMPUTED_SKIP_IDS and INPUT_SKIP_IDS
+    if [ -n "$COMPUTED_SKIP_IDS" ] && [ -n "$INPUT_SKIP_IDS" ]; then
+        export SKIP_IDS="${COMPUTED_SKIP_IDS},${INPUT_SKIP_IDS}"
+    elif [ -n "$COMPUTED_SKIP_IDS" ]; then
+        export SKIP_IDS="$COMPUTED_SKIP_IDS"
+    elif [ -n "$INPUT_SKIP_IDS" ]; then
+        export SKIP_IDS="$INPUT_SKIP_IDS"
+    else
+        unset SKIP_IDS
+    fi
+
+    echo "FINAL SKIP_IDS: $SKIP_IDS"
+    echo ""
 
     while true; do
         echo "### Running inference... ###"
@@ -111,15 +150,10 @@ for run_idx in $(seq 1 $N_RUNS); do
         echo "### Evaluating on $OUTPUT_FILE ... ###"
         OUTPUT_CONFIG_FILE="${OUTPUT_FILE%.jsonl}_config.json"
         export EVAL_SKIP_BUILD_ERRORS=true
-        pip install multi-swe-bench --quiet --disable-pip-version-check > /dev/null 2>&1
         COMMAND="poetry run python ./evaluation/benchmarks/multi_swe_bench/scripts/eval/update_multi_swe_bench_config.py --input $OUTPUT_FILE --output $OUTPUT_CONFIG_FILE --dataset $EVAL_DATASET;
-        python -m multi_swe_bench.harness.run_evaluation --config $OUTPUT_CONFIG_FILE
+        poetry run python -m multi_swe_bench.harness.run_evaluation --config $OUTPUT_CONFIG_FILE
         "
 
-        if [ -n "$EVAL_LIMIT" ]; then
-        echo "EVAL_LIMIT: $EVAL_LIMIT"
-        COMMAND="$COMMAND --eval-n-limit $EVAL_LIMIT"
-        fi
         echo "Running command: $COMMAND"
         # Run the command
         eval $COMMAND

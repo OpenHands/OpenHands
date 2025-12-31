@@ -466,11 +466,15 @@ class DockerRuntime(ActionExecutionClient):
                 'VSCODE_PORT': str(self._vscode_port),
                 'APP_PORT_1': str(self._app_ports[0]),
                 'APP_PORT_2': str(self._app_ports[1]),
+                'OPENHANDS_SESSION_ID': str(self.sid),
                 'PIP_BREAK_SYSTEM_PACKAGES': '1',
             }
         )
         if self.config.debug or DEBUG:
             environment['DEBUG'] = 'true'
+        # Pass DOCKER_HOST_ADDR to spawned containers if it exists
+        if os.environ.get('DOCKER_HOST_ADDR'):
+            environment['DOCKER_HOST_ADDR'] = os.environ['DOCKER_HOST_ADDR']
         # also update with runtime_startup_env_vars
         environment.update(self.config.sandbox.runtime_startup_env_vars)
 
@@ -516,6 +520,9 @@ class DockerRuntime(ActionExecutionClient):
 
             self.container = self.docker_client.containers.run(
                 self.runtime_container_image,
+                # Use Docker's tini init process to ensure proper signal handling and reaping of
+                # zombie child processes.
+                init=True,
                 command=command,
                 # Override the default 'bash' entrypoint because the command is a binary.
                 entrypoint=[],

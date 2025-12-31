@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import asyncio
 from functools import partial
 from typing import Any, Callable
@@ -62,8 +69,11 @@ class AsyncLLM(LLM):
             elif 'messages' in kwargs:
                 messages = kwargs['messages']
 
-            # Set reasoning effort for models that support it
-            if get_features(self.config.model).supports_reasoning_effort:
+            # Set reasoning effort for models that support it, only if explicitly provided
+            if (
+                get_features(self.config.model).supports_reasoning_effort
+                and self.config.reasoning_effort is not None
+            ):
                 kwargs['reasoning_effort'] = self.config.reasoning_effort
 
             # ensure we work with a list of messages

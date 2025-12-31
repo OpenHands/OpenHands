@@ -4,7 +4,7 @@ import { CHAT_INPUT } from "#/utils/constants";
 import {
   IMessageToSend,
   useConversationStore,
-} from "#/state/conversation-store";
+} from "#/stores/conversation-store";
 
 /**
  * Hook for managing grip resize functionality
@@ -58,6 +58,7 @@ export const useGripResize = (
     handleGripMouseDown,
     handleGripTouchStart,
     increaseHeightForEmptyContent,
+    resetManualResize,
   } = useAutoResize(chatInputRef as React.RefObject<HTMLElement | null>, {
     minHeight: 20,
     maxHeight: 400,
@@ -76,5 +77,6 @@ export const useGripResize = (
     handleGripMouseDown,
     handleGripTouchStart,
     increaseHeightForEmptyContent,
+    resetManualResize,
   };
 };

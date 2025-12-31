@@ -158,7 +158,7 @@ CURRENT_STATE: Last flip: Heads, Haiku count: 15/20"""
         )
 
     def should_condense(self, view: View) -> bool:
-        return len(view) > self.max_size
+        return len(view) > self.max_size or view.unhandled_condensation_request
 
     @classmethod
     def from_config(

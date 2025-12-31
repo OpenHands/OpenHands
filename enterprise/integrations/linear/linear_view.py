@@ -57,7 +57,7 @@ class LinearNewConversationView(LinearViewInterface):
             raise StartingConvoException('No repository selected for this conversation')
 
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
-        user_secrets = await self.saas_user_auth.get_user_secrets()
+        user_secrets = await self.saas_user_auth.get_secrets()
         instructions, user_msg = self._get_instructions(jinja_env)
 
         try:
@@ -132,8 +132,10 @@ class LinearExistingConversationView(LinearViewInterface):
             conversation_store = await ConversationStoreImpl.get_instance(
                 config, user_id
             )
-            metadata = await conversation_store.get_metadata(self.conversation_id)
-            if not metadata:
+
+            try:
+                await conversation_store.get_metadata(self.conversation_id)
+            except FileNotFoundError:
                 raise StartingConvoException('Conversation no longer exists.')
 
             provider_tokens = await self.saas_user_auth.get_provider_tokens()

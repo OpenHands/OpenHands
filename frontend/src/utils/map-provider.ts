@@ -24,6 +24,8 @@ export const MAP_PROVIDER = {
   voyage: "Voyage AI",
   openrouter: "OpenRouter",
   openhands: "OpenHands",
+  lemonade: "Lemonade",
+  clarifai: "Clarifai",
 };
 
 export const mapProvider = (provider: string) =>

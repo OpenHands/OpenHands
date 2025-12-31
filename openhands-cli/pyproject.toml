@@ -4,7 +4,7 @@ requires = [ "hatchling>=1.25" ]
 
 [project]
 name = "openhands"
-version = "0.1.0"
+version = "1.0.7"
 description = "OpenHands CLI - Terminal User Interface for OpenHands AI Agent"
 readme = "README.md"
 license = { text = "MIT" }
@@ -15,15 +15,14 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+# Using Git URLs for dependencies so installs from PyPI pull from GitHub
+# TODO: pin package versions once agent-sdk has published PyPI packages
 dependencies = [
-  "openhands-sdk",
-  "openhands-tools",
+  "openhands-sdk==1.1",
+  "openhands-tools==1.1",
   "prompt-toolkit>=3",
   "typer>=0.17.4",
 ]
-
-# Dev-only tools with uv groups: `uv sync --group dev`
-scripts.openhands = "openhands_cli.simple_main:main"
 
 [dependency-groups]
 # Hatchling wheel target: include the package directory
@@ -42,8 +41,8 @@ dev = [
   "ruff>=0.11.8",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = [ "openhands_cli" ]
+[tool.hatch.metadata]
+allow-direct-references = true
 
 # uv source pins for internal packages
 
@@ -82,12 +81,6 @@ line_length = 88
 relative_files = true
 omit = [ "tests/*", "**/test_*" ]
 
-[tool.coverage.paths]
-source = [
-  "openhands_cli/",
-  "openhands-cli/openhands_cli/",
-]
-
 [tool.mypy]
 python_version = "3.12"
 warn_return_any = true
@@ -95,6 +88,8 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
 
-[tool.uv.sources]
-openhands-sdk = { git = "https://github.com/All-Hands-AI/agent-sdk.git", subdirectory = "openhands/sdk", rev = "3ce74a16565be0e3f7e7617174bd0323e866597f" }
-openhands-tools = { git = "https://github.com/All-Hands-AI/agent-sdk.git", subdirectory = "openhands/tools", rev = "3ce74a16565be0e3f7e7617174bd0323e866597f" }
+# UNCOMMENT TO USE EXACT COMMIT FROM AGENT-SDK
+
+# [tool.uv.sources]
+# openhands-sdk = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-sdk", rev = "7b695dc519084e75c482b34473e714845d6cef92" }
+# openhands-tools = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-tools", rev = "7b695dc519084e75c482b34473e714845d6cef92" }

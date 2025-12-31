@@ -1,7 +1,7 @@
 # Develop in Docker
 
 > [!WARNING]
-> This is not officially supported and may not work.
+> This way of running OpenHands is not officially supported. It is maintained by the community and may not work.
 
 Install [Docker](https://docs.docker.com/engine/install/) on your host machine and run:
 

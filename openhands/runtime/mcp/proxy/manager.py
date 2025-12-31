@@ -10,6 +10,7 @@ from typing import Any, Optional
 from anyio import get_cancelled_exc_class
 from fastapi import FastAPI
 from fastmcp import FastMCP
+from fastmcp.server.auth import StaticTokenVerifier
 from fastmcp.utilities.logging import get_logger as fastmcp_get_logger
 
 from openhands.core.config.mcp_config import MCPStdioServerConfig
@@ -59,11 +60,21 @@ class MCPProxyManager:
             )
             return None
 
+        # Create authentication provider if auth is enabled
+        auth_provider = None
+        if self.auth_enabled and self.api_key:
+            # Use StaticTokenVerifier for simple API key authentication
+            auth_provider = StaticTokenVerifier(
+                {self.api_key: {'client_id': 'openhands', 'scopes': []}}
+            )
+            logger.info('FastMCP Proxy authentication enabled')
+        else:
+            logger.info('FastMCP Proxy authentication disabled')
+
         # Create a new proxy with the current configuration
         self.proxy = FastMCP.as_proxy(
             self.config,
-            auth_enabled=self.auth_enabled,
-            api_key=self.api_key,
+            auth=auth_provider,
         )
 
         logger.info('FastMCP Proxy initialized successfully')

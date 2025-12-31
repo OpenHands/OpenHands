@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 from __future__ import annotations
 
 import os
@@ -47,9 +54,10 @@ class LLMConfig(BaseModel):
         seed: The seed to use for the LLM.
         safety_settings: Safety settings for models that support them (like Mistral AI and Gemini).
         for_routing: Whether this LLM is used for routing. This is set to True for models used in conjunction with the main LLM in the model routing feature.
+        completion_kwargs: Custom kwargs to pass to litellm.completion.
     """
 
-    model: str = Field(default='claude-sonnet-4-20250514')
+    model: str = Field(default='claude-opus-4-5-20251101')
     api_key: SecretStr | None = Field(default=None)
     base_url: str | None = Field(default=None)
     api_version: str | None = Field(default=None)
@@ -94,6 +102,12 @@ class LLMConfig(BaseModel):
         description='Safety settings for models that support them (like Mistral AI and Gemini)',
     )
     for_routing: bool = Field(default=False)
+    # The number of correction attempts for the LLM draft editor
+    correct_num: int = Field(default=5)
+    completion_kwargs: dict[str, Any] | None = Field(
+        default=None,
+        description='Custom kwargs to pass to litellm.completion',
+    )
 
     model_config = ConfigDict(extra='forbid')
 
@@ -172,14 +186,11 @@ class LLMConfig(BaseModel):
         if self.openrouter_app_name:
             os.environ['OR_APP_NAME'] = self.openrouter_app_name
 
-        # Set reasoning_effort to 'high' by default for non-Gemini models
-        # Gemini models use optimized thinking budget when reasoning_effort is None
-        if self.reasoning_effort is None and 'gemini-2.5-pro' not in self.model:
-            self.reasoning_effort = 'high'
+        # Do not set a default reasoning_effort. Leave as None unless user-configured.
 
         # Set an API version by default for Azure models
         # Required for newer models.
-        # Azure issue: https://github.com/All-Hands-AI/OpenHands/issues/7755
+        # Azure issue: https://github.com/OpenHands/OpenHands/issues/7755
         if self.model.startswith('azure') and self.api_version is None:
             self.api_version = '2024-12-01-preview'
 
