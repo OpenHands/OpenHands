@@ -19,13 +19,13 @@ export function ConversationStatusIndicator({
       case "STOPPED":
         return "bg-[#3C3C49]";
       case "RUNNING":
-        return "bg-[#1FBD53]";
+        return "bg-[#1FBD53]"; // Running/online - green
       case "STARTING":
-        return "bg-[#FFD43B]";
+        return "bg-[#FFD43B]"; // Busy/starting - yellow
       case "ERROR":
-        return "bg-[#FF684E]";
+        return "bg-[#FF684E]"; // Error - red
       default:
-        return "bg-[#3C3C49]";
+        return "bg-[#3C3C49]"; // Default to grey for unknown states
     }
   }, [conversationStatus]);
 
