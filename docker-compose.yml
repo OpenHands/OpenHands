@@ -1,7 +1,7 @@
 
 services:
 
-  # SGLang Inference Server - עם מודל qwen2.5-coder:14b + GPTQ Quantization
+  # SGLang Inference Server - עם מודל Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
   sglang:
     image: lmsysorg/sglang:latest
     container_name: openhands-sglang
@@ -19,8 +19,8 @@ services:
       --model-path Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
       --host 0.0.0.0
       --port 30000
-      --quantization gptq
       --mem-fraction-static 0.8
+      --tp 1
     volumes:
       - /mnt/nvme/ollama_models:/root/.cache/huggingface
     networks:
@@ -50,10 +50,13 @@ services:
     ports:
       - "3002:3000"
     environment:
-      # LLM Configuration - SGLang עם מודל qwen2.5-coder:14b
+      # LLM Configuration - SGLang עם מודל Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
       - LLM_MODEL=openai/Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
       - LLM_BASE_URL=http://172.17.0.1:30000/v1
       - LLM_API_KEY=
+      # Qwen2.5-Coder-14B לא תומך ב-native tool calling כראוי, משביתים אותו
+      # כפוי ל-string-based function calling
+      - LLM_NATIVE_TOOL_CALLING=false
       
       # Execution Mode
       - EXECUTION_MODE=local
@@ -195,6 +198,56 @@ services:
       timeout: 10s
       retries: 3
 
+  # Prometheus - ניטור ומטריקות
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: openhands-prometheus
+    ports:
+      - "9092:9090"  # Changed from 9090 due to Cursor conflict
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - openhands-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana - דשבורדים ויזואליזציה
+  grafana:
+    image: grafana/grafana:latest
+    container_name: openhands-grafana
+    ports:
+      - "3003:3000"  # Changed from 3001 due to Cursor conflict
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://10.0.0.13:3003
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - openhands-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   openhands-network:
     driver: bridge
@@ -207,3 +260,7 @@ volumes:
     name: openhands-data
   code-server-data:
     name: openhands-code-server-data
+  prometheus-data:
+    name: openhands-prometheus-data
+  grafana-data:
+    name: openhands-grafana-data

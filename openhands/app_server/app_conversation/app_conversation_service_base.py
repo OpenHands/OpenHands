@@ -252,9 +252,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
         # Create the projects directory if it does not exist yet
         parent = Path(workspace.working_dir).parent
         result = await workspace.execute_command(
-            f'mkdir {workspace.working_dir}', parent
+            f'mkdir -p {workspace.working_dir}', parent
         )
-        if result.exit_code:
+        if result.exit_code and "File exists" not in result.stderr:
             _logger.warning(f'mkdir failed: {result.stderr}')
 
         # Configure git user settings from user preferences
@@ -381,16 +381,30 @@ class AppConversationServiceBase(AppConversationService, ABC):
             Configured LLMSummarizingCondenser instance
         """
         # LLMSummarizingCondenser has defaults: max_size=120, keep_first=4
+        # Force native_tool_calling=false for condenser to use string-based function calling
+        update_dict = {
+            'usage_id': (
+                'condenser'
+                if agent_type == AgentType.DEFAULT
+                else 'planning_condenser'
+            )
+        }
+        # Get native_tool_calling from global config and force it to false
+        try:
+            from openhands.app_server.config import get_global_config
+            config = get_global_config()
+            llm_config = config.get_llm_config()
+            if llm_config.native_tool_calling is not None:
+                update_dict['native_tool_calling'] = llm_config.native_tool_calling
+            else:
+                # If not set, default to false for models that don't support native tool calling
+                update_dict['native_tool_calling'] = False
+        except Exception:
+            # If config is not available, default to false
+            update_dict['native_tool_calling'] = False
+        
         condenser_kwargs = {
-            'llm': llm.model_copy(
-                update={
-                    'usage_id': (
-                        'condenser'
-                        if agent_type == AgentType.DEFAULT
-                        else 'planning_condenser'
-                    )
-                }
-            ),
+            'llm': llm.model_copy(update=update_dict),
         }
         # Only override max_size if user has a custom value
         if condenser_max_size is not None:

@@ -3,6 +3,8 @@ import { useWsClient } from "#/context/ws-client-provider";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import { V1MessageContent } from "#/api/conversation-service/v1-conversation-service.types";
+import { resumeV1Conversation } from "#/hooks/mutation/conversation-mutation-utils";
+import { useConversationId } from "#/hooks/use-conversation-id";
 
 /**
  * Unified hook for sending messages that works with both V0 and V1 conversations
@@ -12,6 +14,7 @@ import { V1MessageContent } from "#/api/conversation-service/v1-conversation-ser
 export function useSendMessage() {
   const { data: conversation } = useActiveConversation();
   const { send: v0Send } = useWsClient();
+  const { conversationId } = useConversationId();
 
   // Get V1 context (will be null if not in V1 provider)
   const v1Context = useConversationWebSocket();
@@ -54,6 +57,18 @@ export function useSendMessage() {
             role: "user",
             content,
           });
+
+          // After sending the message, resume the conversation to start the agent
+          if (conversationId) {
+            try {
+              await resumeV1Conversation(conversationId);
+            } catch (error) {
+              console.error(
+                "Failed to resume V1 conversation after sending message:",
+                error,
+              );
+            }
+          }
         } else {
           // For non-message events, fall back to V0 send
           // (e.g., agent state changes, other control events)
@@ -64,7 +79,7 @@ export function useSendMessage() {
         v0Send(event);
       }
     },
-    [isV1Conversation, v1Context, v0Send],
+    [isV1Conversation, v1Context, v0Send, conversationId],
   );
 
   return { send };

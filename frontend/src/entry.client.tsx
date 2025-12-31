@@ -26,7 +26,7 @@ function PostHogWrapper({ children }: { children: React.ReactNode }) {
       try {
         const config = await OptionService.getConfig();
         setPosthogClientKey(config.POSTHOG_CLIENT_KEY);
-      } catch {
+      } catch (error) {
         displayErrorToast("Error fetching PostHog client key");
       } finally {
         setIsLoading(false);
@@ -34,7 +34,14 @@ function PostHogWrapper({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  if (isLoading || !posthogClientKey) {
+  // Check if PostHog key is valid (not empty or placeholder)
+  const isValidKey =
+    posthogClientKey &&
+    posthogClientKey.trim() !== "" &&
+    posthogClientKey !== "phc_placeholder" &&
+    !posthogClientKey.startsWith("fake-");
+
+  if (isLoading || !isValidKey) {
     return children;
   }
 
@@ -44,6 +51,9 @@ function PostHogWrapper({ children }: { children: React.ReactNode }) {
       options={{
         api_host: "https://us.i.posthog.com",
         person_profiles: "identified_only",
+        // Disable automatic capture on load to prevent network errors
+        autocapture: false,
+        capture_pageview: false, // Disable automatic pageview capture
       }}
     >
       {children}

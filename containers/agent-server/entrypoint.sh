@@ -3,6 +3,21 @@
 
 set -e
 
+# Apply SDK patches BEFORE starting the server (to avoid module caching issues)
+# This patches the files in site-packages before Python loads them
+if [ -f "/usr/local/bin/apply_sdk_patches.sh" ]; then
+    echo "🔧 Applying SDK patches (before agent-server starts)..."
+    if /usr/local/bin/apply_sdk_patches.sh; then
+        echo "✅ SDK patches applied successfully (before server start)"
+        # Add a small delay to ensure patches are fully written
+        sleep 2
+    else
+        echo "⚠️  Failed to apply SDK patches, but continuing..."
+    fi
+else
+    echo "⚠️  SDK patches script not found at /usr/local/bin/apply_sdk_patches.sh"
+fi
+
 # Agent-server will run on internal port 8002 (VSCode uses 8001, NGINX uses 8000)
 # We ignore the command line arguments (--port 8000) and use our internal port
 INTERNAL_PORT=8002
@@ -46,6 +61,36 @@ for i in {1..30}; do
     fi
     sleep 1
 done
+
+# Apply SDK patches AFTER agent-server is ready (SDK is now installed)
+# This ensures patches are applied even if SDK wasn't available before
+if [ -f "/usr/local/bin/apply_sdk_patches.sh" ]; then
+    echo "🔧 Applying SDK patches (after agent-server started)..."
+    if /usr/local/bin/apply_sdk_patches.sh; then
+        echo "✅ SDK patches applied successfully (after server start)"
+        # Verify patches were applied by checking the file
+        PATCHED_FILE=$(python3 << 'PYEOF'
+import importlib.util
+import os
+
+spec = importlib.util.find_spec('openhands.sdk.llm.mixins.fn_call_converter')
+if spec and spec.origin and os.path.exists(spec.origin):
+    print(spec.origin)
+PYEOF
+)
+        if [ -n "$PATCHED_FILE" ] && [ -f "$PATCHED_FILE" ]; then
+            if grep -q 'message.get("content") or ""' "$PATCHED_FILE" || grep -q 'message.get("content")' "$PATCHED_FILE"; then
+                echo "✅ Verified: fn_call_converter.py is patched"
+            else
+                echo "⚠️  Warning: fn_call_converter.py may not be properly patched"
+            fi
+        fi
+    else
+        echo "⚠️  Failed to apply SDK patches, but continuing..."
+    fi
+else
+    echo "⚠️  SDK patches script not found at /usr/local/bin/apply_sdk_patches.sh"
+fi
 
 # Generate NGINX config with CORS origins from environment variable
 echo "Configuring NGINX with CORS origins: ${PERMITTED_CORS_ORIGINS:-localhost/127.0.0.1}"

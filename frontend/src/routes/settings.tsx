@@ -9,6 +9,8 @@ import { SettingsLayout } from "#/components/features/settings/settings-layout";
 import { Typography } from "#/ui/typography";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 
+export const hydrateFallback = () => <div>Loading settings...</div>;
+
 const SAAS_ONLY_PATHS = [
   "/settings/user",
   "/settings/billing",

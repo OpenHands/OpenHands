@@ -8,7 +8,15 @@ class SPAStaticFiles(StaticFiles):
         if scope.get("type") != "http":
             # Return 404 for non-http scopes (e.g., websocket)
             return Response("Not Found", status_code=404)
+        
+        # Don't serve index.html for API requests
+        if path.startswith('/api/'):
+            return Response("Not Found", status_code=404)
+        
         try:
             return await super().get_response(path, scope)
         except Exception:
-            return await super().get_response('index.html', scope)
+            # Only serve index.html for non-API paths
+            if not path.startswith('/api/'):
+                return await super().get_response('index.html', scope)
+            raise

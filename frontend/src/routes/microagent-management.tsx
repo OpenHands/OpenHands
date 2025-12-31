@@ -5,6 +5,10 @@ import { MicroagentManagementContent } from "#/components/features/microagent-ma
 import { ConversationSubscriptionsProvider } from "#/context/conversation-subscriptions-provider";
 import { V0EventHandler } from "#/wrapper/v0-event-handler";
 
+export const hydrateFallback = () => (
+  <div>Loading microagent management...</div>
+);
+
 export const clientLoader = async () => {
   let config = queryClient.getQueryData<GetConfigResponse>(["config"]);
   if (!config) {

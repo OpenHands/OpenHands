@@ -101,8 +101,10 @@ def response_to_actions(
             # ================================================
             # CmdRunTool (Bash)
             # ================================================
-
-            if tool_call.function.name == create_cmd_run_tool()['function']['name']:
+            # Support both 'execute_bash' and 'terminal' as tool names
+            # (some LLMs may use 'terminal' instead of 'execute_bash')
+            execute_bash_tool_name = create_cmd_run_tool()['function']['name']
+            if tool_call.function.name == execute_bash_tool_name or tool_call.function.name == 'terminal':
                 if 'command' not in arguments:
                     raise FunctionCallValidationError(
                         f'Missing required argument "command" in tool call {tool_call.function.name}'

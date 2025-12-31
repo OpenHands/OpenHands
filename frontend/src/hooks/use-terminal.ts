@@ -39,63 +39,51 @@ const canFitTerminal = (
   fitAddonInstance: FitAddon | null,
   containerElement: HTMLDivElement | null,
 ): boolean => {
-  // #region agent log
-  console.log('[DEBUG] canFitTerminal entry', {hasTerminal:!!terminalInstance,hasFitAddon:!!fitAddonInstance,hasContainer:!!containerElement,location:'use-terminal.ts:37',hypothesisId:'H1'});
-  // #endregion
   // Check terminal and fitAddon exist
   if (!terminalInstance || !fitAddonInstance) {
-    // #region agent log
-    console.log('[DEBUG] canFitTerminal: missing terminal or fitAddon', {location:'use-terminal.ts:44',hypothesisId:'H2'});
-    // #endregion
     return false;
   }
 
   // Check container element exists
   if (!containerElement) {
-    // #region agent log
-    console.log('[DEBUG] canFitTerminal: missing container', {location:'use-terminal.ts:50',hypothesisId:'H2'});
-    // #endregion
     return false;
   }
 
   // Check element is visible (not display: none)
   // When display is none, offsetParent is null (except for fixed/body elements)
   const computedStyle = window.getComputedStyle(containerElement);
-  if (computedStyle.display === "none" || computedStyle.visibility === "hidden") {
-    // #region agent log
-    console.log('[DEBUG] canFitTerminal: element is hidden', {display:computedStyle.display,visibility:computedStyle.visibility,location:'use-terminal.ts:64',hypothesisId:'H1'});
-    // #endregion
+  if (
+    computedStyle.display === "none" ||
+    computedStyle.visibility === "hidden"
+  ) {
     return false;
   }
 
   // Check offsetParent to ensure element is actually rendered in the DOM
   // offsetParent is null for elements with display: none, or elements not in the document flow
   // For body and fixed elements, offsetParent might be null even when visible, so we check dimensions instead
-  if (containerElement.offsetParent === null && computedStyle.position !== "fixed" && computedStyle.position !== "absolute") {
+  if (
+    containerElement.offsetParent === null &&
+    computedStyle.position !== "fixed" &&
+    computedStyle.position !== "absolute" &&
+    computedStyle.position !== "relative"
+  ) {
     // Check if parent is body or html (which is valid)
     const parent = containerElement.parentElement;
     if (parent && parent.tagName !== "BODY" && parent.tagName !== "HTML") {
-      // #region agent log
-      console.log('[DEBUG] canFitTerminal: element not in document flow', {offsetParent:containerElement.offsetParent,position:computedStyle.position,location:'use-terminal.ts:75',hypothesisId:'H1'});
-      // #endregion
       return false;
     }
+    // If parent is body/html, continue (valid case)
   }
 
   // Check element has dimensions
   const { clientWidth, clientHeight } = containerElement;
   if (clientWidth === 0 || clientHeight === 0) {
-    // #region agent log
-    console.log('[DEBUG] canFitTerminal: element has zero dimensions', {clientWidth,clientHeight,location:'use-terminal.ts:63',hypothesisId:'H1'});
-    // #endregion
     return false;
   }
 
   // Check terminal has been opened (element property is set after open())
   if (!terminalInstance.element) {
-    // #region agent log
-    console.log('[DEBUG] canFitTerminal: terminal.element is null', {location:'use-terminal.ts:69',hypothesisId:'H2'});
-    // #endregion
     return false;
   }
 
@@ -103,48 +91,19 @@ const canFitTerminal = (
   // The error "Cannot read properties of undefined (reading 'dimensions')" occurs
   // when xterm's Viewport.syncScrollArea tries to access viewport.dimensions
   // but viewport is undefined or dimensions is undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const element = terminalInstance.element as any;
   const viewport = element?.viewport;
-  
-  // #region agent log
-  console.log('[DEBUG] canFitTerminal: checking viewport', {
-    hasElement:!!element,
-    hasViewport:!!viewport,
-    viewportType:viewport?.constructor?.name,
-    hasDimensions:!!viewport?.dimensions,
-    dimensionsType:viewport?.dimensions?.constructor?.name,
-    location:'use-terminal.ts:88',
-    hypothesisId:'H5'
-  });
-  // #endregion
-  
+
   if (!viewport) {
-    // #region agent log
-    console.log('[DEBUG] canFitTerminal: viewport is null/undefined', {location:'use-terminal.ts:95',hypothesisId:'H5'});
-    // #endregion
-    return false;
-  }
-  
-  // Check if viewport has dimensions property and it's not null/undefined
-  if (!viewport.dimensions) {
-    // #region agent log
-    console.log('[DEBUG] canFitTerminal: viewport.dimensions is null/undefined', {
-      viewportKeys:Object.keys(viewport),
-      location:'use-terminal.ts:102',
-      hypothesisId:'H5'
-    });
-    // #endregion
     return false;
   }
 
-  // #region agent log
-  console.log('[DEBUG] canFitTerminal: all checks passed', {
-    hasViewport:!!viewport,
-    hasDimensions:!!viewport.dimensions,
-    location:'use-terminal.ts:110',
-    hypothesisId:'H1'
-  });
-  // #endregion
+  // Check if viewport has dimensions property and it's not null/undefined
+  if (!viewport.dimensions) {
+    return false;
+  }
+
   return true;
 };
 
@@ -169,65 +128,40 @@ export const useTerminal = () => {
       fastScrollModifier: "alt",
       fastScrollSensitivity: 5,
       allowTransparency: true,
-      disableStdin: true, // Make terminal read-only
+      disableStdin: false, // Allow terminal input for interactive commands
       theme: {
         background: "transparent",
       },
     });
 
   const fitTerminalSafely = React.useCallback((retryCount: number = 0) => {
-    // #region agent log
-    console.log('[DEBUG] fitTerminalSafely called', {isDisposed:isDisposed.current,hasTerminal:!!terminal.current,hasFitAddon:!!fitAddon.current,hasRef:!!ref.current,retryCount,location:'use-terminal.ts:164',hypothesisId:'H1'});
-    // #endregion
     if (isDisposed.current) {
-      // #region agent log
-      console.log('[DEBUG] Terminal is disposed, skipping fit', {location:'use-terminal.ts:168',hypothesisId:'H4'});
-      // #endregion
       return;
     }
-    const canFit = canFitTerminal(terminal.current, fitAddon.current, ref.current);
-    // #region agent log
-    console.log('[DEBUG] canFitTerminal result', {canFit,hasTerminal:!!terminal.current,hasFitAddon:!!fitAddon.current,hasRef:!!ref.current,refDisplay:ref.current?window.getComputedStyle(ref.current).display:'N/A',refDimensions:ref.current?{width:ref.current.clientWidth,height:ref.current.clientHeight}:null,hasElement:!!terminal.current?.element,location:'use-terminal.ts:174',hypothesisId:'H1'});
-    // #endregion
+    const canFit = canFitTerminal(
+      terminal.current,
+      fitAddon.current,
+      ref.current,
+    );
     if (canFit) {
-      // #region agent log
-      console.log('[DEBUG] Calling fit()', {location:'use-terminal.ts:180',hypothesisId:'H1'});
-      // #endregion
       try {
         // Double-check viewport before calling fit() to prevent the error
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const element = terminal.current?.element as any;
         const viewport = element?.viewport;
-        if (!viewport || !viewport.dimensions) {
-          // #region agent log
-          console.warn('[DEBUG] fit() skipped: viewport check failed', {
-            hasViewport:!!viewport,
-            hasDimensions:!!viewport?.dimensions,
-            location:'use-terminal.ts:188',
-            hypothesisId:'H5'
-          });
-          // #endregion
+        if (!viewport?.dimensions) {
           // Retry if viewport is not ready yet (max 10 retries with exponential backoff)
           if (retryCount < 10 && ref.current) {
-            const delay = Math.min(200 * Math.pow(1.5, retryCount), 2000);
+            const delay = Math.min(200 * 1.5 ** retryCount, 2000);
             setTimeout(() => fitTerminalSafely(retryCount + 1), delay);
           }
           return;
         }
-        
+
         fitAddon.current!.fit();
-        // #region agent log
-        console.log('[DEBUG] fit() completed successfully', {location:'use-terminal.ts:202',hypothesisId:'H1'});
-        // #endregion
       } catch (error) {
-        // #region agent log
-        console.error('[DEBUG] fit() threw error', {
-          error:error instanceof Error?error.message:String(error),
-          stack:error instanceof Error?error.stack:undefined,
-          location:'use-terminal.ts:207',
-          hypothesisId:'H1'
-        });
-        // #endregion
-        console.error('Error fitting terminal:', error);
+        // eslint-disable-next-line no-console
+        console.error("Error fitting terminal:", error);
         // Don't re-throw - just log the error to prevent breaking the app
       }
     } else if (retryCount < 10 && ref.current) {
@@ -237,18 +171,24 @@ export const useTerminal = () => {
       // Check if container is still in DOM and not hidden before retrying
       const container = ref.current;
       const computedStyle = window.getComputedStyle(container);
-      const isHidden = computedStyle.display === "none" || computedStyle.visibility === "hidden";
-      
+      const isHidden =
+        computedStyle.display === "none" ||
+        computedStyle.visibility === "hidden";
+
       if (!isHidden && container.offsetParent !== null) {
         // Container is visible, retry with exponential backoff
-        const delay = Math.min(200 * Math.pow(1.5, retryCount), 2000);
+        const delay = Math.min(200 * 1.5 ** retryCount, 2000);
         setTimeout(() => fitTerminalSafely(retryCount + 1), delay);
       } else if (isHidden) {
         // Container is hidden, wait for it to become visible
         // Use ResizeObserver to detect when container becomes visible
         const resizeObserver = new ResizeObserver((entries) => {
           const entry = entries[0];
-          if (entry && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          if (
+            entry &&
+            entry.contentRect.width > 0 &&
+            entry.contentRect.height > 0
+          ) {
             resizeObserver.disconnect();
             // Wait a bit more for DOM to settle, then retry
             setTimeout(() => fitTerminalSafely(0), 100);
@@ -266,14 +206,18 @@ export const useTerminal = () => {
       if (fitAddon.current) terminal.current.loadAddon(fitAddon.current);
       if (ref.current) {
         terminal.current.open(ref.current);
-        // Hide cursor for read-only terminal using ANSI escape sequence
-        terminal.current.write("\x1b[?25l");
+        // Show cursor for interactive terminal
+        terminal.current.write("\x1b[?25h");
         // Wait for container to be ready before fitting
         // Use requestAnimationFrame to ensure DOM is ready, then check dimensions
         // Use multiple requestAnimationFrame calls to ensure DOM is fully ready
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            if (ref.current && ref.current.clientWidth > 0 && ref.current.clientHeight > 0) {
+            if (
+              ref.current &&
+              ref.current.clientWidth > 0 &&
+              ref.current.clientHeight > 0
+            ) {
               fitTerminalSafely(0);
             } else {
               // Container not ready, retry with longer delay and more attempts
@@ -306,7 +250,7 @@ export const useTerminal = () => {
         }
         lastCommandIndex.current = commands.length;
       }
-      // Don't show prompt in read-only terminal
+      // Terminal is interactive, commands will be executed
     }
 
     return () => {
@@ -338,35 +282,25 @@ export const useTerminal = () => {
     let resizeObserver: ResizeObserver | null = null;
 
     resizeObserver = new ResizeObserver((entries) => {
-      // #region agent log
-      console.log('[DEBUG] ResizeObserver callback triggered', {entriesCount:entries.length,entrySizes:entries.map(e=>({width:e.contentRect.width,height:e.contentRect.height})),location:'use-terminal.ts:281',hypothesisId:'H1'});
-      // #endregion
       // Check if container has valid dimensions before attempting to fit
       const entry = entries[0];
-      if (entry && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+      if (
+        entry &&
+        entry.contentRect.width > 0 &&
+        entry.contentRect.height > 0
+      ) {
         // Use requestAnimationFrame to debounce resize events and ensure DOM is ready
         requestAnimationFrame(() => {
           fitTerminalSafely(0);
         });
-      } else {
-        // Container not ready yet, will retry when dimensions are available
-        // #region agent log
-        console.log('[DEBUG] ResizeObserver: container not ready, skipping fit', {width:entry?.contentRect.width,height:entry?.contentRect.height,location:'use-terminal.ts:290',hypothesisId:'H1'});
-        // #endregion
       }
     });
 
     if (ref.current) {
-      // #region agent log
-      console.log('[DEBUG] ResizeObserver observing element', {location:'use-terminal.ts:181',hypothesisId:'H1'});
-      // #endregion
       resizeObserver.observe(ref.current);
     }
 
     return () => {
-      // #region agent log
-      console.log('[DEBUG] ResizeObserver cleanup', {location:'use-terminal.ts:186',hypothesisId:'H4'});
-      // #endregion
       resizeObserver?.disconnect();
     };
   }, [fitTerminalSafely]);

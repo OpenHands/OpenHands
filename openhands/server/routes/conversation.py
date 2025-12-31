@@ -1,5 +1,6 @@
 import uuid
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -269,11 +270,100 @@ async def search_events(
 
 @app.post('/events')
 async def add_event(
-    request: Request, conversation: ServerConversation = Depends(get_conversation)
+    request: Request,
+    conversation_id: str,
+    app_conversation_service: AppConversationService = app_conversation_service_dependency,
 ):
+    """Add an event to a conversation.
+    
+    For V1 conversations: sends the event directly to the agent server.
+    For V0 conversations: sends the event through the conversation manager.
+    """
     data = await request.json()
-    await conversation_manager.send_event_to_conversation(conversation.sid, data)
-    return JSONResponse({'success': True})
+    
+    # Check if this is a V1 conversation first
+    is_v1 = await _is_v1_conversation(conversation_id, app_conversation_service)
+    
+    if is_v1:
+        # For V1 conversations, send directly to agent server
+        try:
+            conversation_uuid = uuid.UUID(conversation_id)
+            app_conversation = await app_conversation_service.get_app_conversation(
+                conversation_uuid
+            )
+            
+            if not app_conversation:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f'V1 conversation {conversation_id} not found',
+                )
+            
+            if not app_conversation.conversation_url:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f'Agent server not available for conversation {conversation_id}',
+                )
+            
+            # Extract agent server base URL from conversation_url
+            # conversation_url format: http://host:port/api/conversations/{id}
+            agent_server_url = app_conversation.conversation_url.replace(
+                f'/api/conversations/{conversation_id}', ''
+            )
+            
+            headers = {}
+            if app_conversation.session_api_key:
+                headers['X-Session-API-Key'] = app_conversation.session_api_key
+            
+            # Send to agent server via webhook endpoint
+            # The agent server expects events at /api/v1/webhooks/events/{conversation_id}
+            async with httpx.AsyncClient() as client:
+                # Wrap the event in a list as the webhook expects a list of events
+                events_list = [data] if isinstance(data, dict) else data if isinstance(data, list) else [data]
+                response = await client.post(
+                    f'{agent_server_url}/api/v1/webhooks/events/{conversation_id}',
+                    json=events_list,
+                    headers=headers,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+            
+            logger.info(
+                f'Successfully sent event to V1 conversation {conversation_id} via agent server'
+            )
+            return JSONResponse({'success': True})
+        except httpx.HTTPError as e:
+            logger.error(
+                f'Error sending event to agent server for V1 conversation {conversation_id}: {e}'
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f'Failed to send event to agent server: {e}',
+            )
+        except Exception as e:
+            logger.error(
+                f'Error processing event for V1 conversation {conversation_id}: {e}',
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Error processing event: {e}',
+            )
+    else:
+        # For V0 conversations, use the existing flow
+        user_id = await get_user_id(request)
+        conversation = await conversation_manager.attach_to_conversation(
+            conversation_id, user_id
+        )
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f'Conversation {conversation_id} not found',
+            )
+        try:
+            await conversation_manager.send_event_to_conversation(conversation.sid, data)
+            return JSONResponse({'success': True})
+        finally:
+            await conversation_manager.detach_from_conversation(conversation)
 
 
 class AddMessageRequest(BaseModel):

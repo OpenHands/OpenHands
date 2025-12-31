@@ -46,7 +46,8 @@ multiple lines
 <IMPORTANT>
 Reminder:
 - Function calls MUST follow the specified format, start with <function= and end with </function>
-- Required parameters MUST be specified
+- ALL required parameters MUST be specified - check the function description for which parameters are marked as (required)
+- If a parameter is marked as (required), you MUST include it in your function call
 - Only call one function at a time
 - You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after.
 - If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls
@@ -488,7 +489,9 @@ def convert_fncall_messages_to_non_fncall_messages(
     first_user_message_encountered = False
     for message in messages:
         role = message['role']
-        content = message['content']
+        content = message.get('content')  # Use .get() to handle missing 'content' key
+        if content is None:
+            content = ''  # Default to empty string if content is None
 
         # 1. SYSTEM MESSAGES
         # append system prompt suffix to content
@@ -558,6 +561,9 @@ def convert_fncall_messages_to_non_fncall_messages(
         # - 3.1 no change if no function call
         # - 3.2 change if function call
         elif role == 'assistant':
+            # Handle None content for assistant messages
+            if content is None:
+                content = ''
             if 'tool_calls' in message and message['tool_calls'] is not None:
                 if len(message['tool_calls']) != 1:
                     raise FunctionCallConversionError(
@@ -685,9 +691,17 @@ def _extract_and_validate_params(
     # Check all required parameters are present
     missing_params = required_params - found_params
     if missing_params:
-        raise FunctionCallValidationError(
-            f"Missing required parameters for function '{fn_name}': {missing_params}"
-        )
+        # For terminal/execute_bash, security_risk has a default value
+        if fn_name in ('terminal', 'execute_bash') and missing_params == {'security_risk'}:
+            # Set default security_risk to LOW if not provided
+            params['security_risk'] = 'LOW'
+            found_params.add('security_risk')
+            missing_params = required_params - found_params
+        
+        if missing_params:
+            raise FunctionCallValidationError(
+                f"Missing required parameters for function '{fn_name}': {missing_params}"
+            )
     return params
 
 
@@ -736,8 +750,8 @@ def convert_non_fncall_messages_to_fncall_messages(
 
     first_user_message_encountered = False
     for message in messages:
-        role, content = message['role'], message['content']
-        content = content or ''  # handle cases where content is None
+        role = message['role']
+        content = message.get('content') or ''  # Use .get() to handle missing 'content' key
         # For system messages, remove the added suffix
         if role == 'system':
             if isinstance(content, str):
@@ -935,7 +949,8 @@ def convert_from_multiple_tool_calls_to_single_tool_call_messages(
 
     pending_tool_calls: dict[str, dict] = {}
     for message in messages:
-        role, content = message['role'], message['content']
+        role = message['role']
+        content = message.get('content') or ''  # Use .get() to handle missing 'content' key
         if role == 'assistant':
             if message.get('tool_calls') and len(message['tool_calls']) > 1:
                 # handle multiple tool calls by breaking them into multiple messages

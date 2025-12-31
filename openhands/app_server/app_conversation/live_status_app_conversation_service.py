@@ -614,12 +614,29 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if model and model.startswith('openhands/'):
             base_url = user.llm_base_url or self.openhands_provider_base_url
 
-        return LLM(
-            model=model,
-            base_url=base_url,
-            api_key=user.llm_api_key,
-            usage_id='agent',
-        )
+        # Get native_tool_calling from global config
+        llm_kwargs = {
+            'model': model,
+            'base_url': base_url,
+            'api_key': user.llm_api_key,
+            'usage_id': 'agent',
+        }
+        
+        try:
+            from openhands.app_server.config import get_global_config
+            config = get_global_config()
+            llm_config = config.get_llm_config()
+            # Always set native_tool_calling - use config value or default to False
+            llm_kwargs['native_tool_calling'] = (
+                llm_config.native_tool_calling
+                if llm_config.native_tool_calling is not None
+                else False
+            )
+        except Exception:
+            # If config is not available, default to False for string-based function calling
+            llm_kwargs['native_tool_calling'] = False
+
+        return LLM(**llm_kwargs)
 
     async def _get_tavily_api_key(self, user: UserInfo) -> str | None:
         """Get Tavily search API key, prioritizing user's key over service key.
