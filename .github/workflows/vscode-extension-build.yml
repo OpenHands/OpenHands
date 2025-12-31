@@ -148,7 +148,7 @@ jobs:
           path: ./
 
       - name: Create Release
-        uses: ncipollo/release-action@v1.16.0
+        uses: ncipollo/release-action@v1.20.0
         with:
           artifacts: "*.vsix"
           token: ${{ secrets.GITHUB_TOKEN }}
