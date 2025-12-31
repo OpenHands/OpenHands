@@ -1,4 +1,4 @@
-import { TooltipButton } from "#/components/shared/buttons/tooltip-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 
 interface GitControlBarTooltipWrapperProps {
   tooltipMessage: string;
@@ -18,16 +18,15 @@ export function GitControlBarTooltipWrapper({
   }
 
   return (
-    <TooltipButton
-      tooltip={tooltipMessage}
-      ariaLabel={tooltipMessage}
-      testId={testId}
+    <StyledTooltip
+      content={tooltipMessage}
       placement="top"
-      className="hover:opacity-100"
-      tooltipClassName="bg-white text-black"
       showArrow
+      tooltipClassName="bg-white text-black"
     >
-      {children}
-    </TooltipButton>
+      <span data-testid={testId} className="hover:opacity-100">
+        {children}
+      </span>
+    </StyledTooltip>
   );
 }

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "#/hooks/query/use-settings";
 import { openHands } from "#/api/open-hands-axios";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import { useEmailVerification } from "#/hooks/use-email-verification";
 
 // Email validation regex pattern
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -115,11 +116,12 @@ function UserSettingsScreen() {
   const [email, setEmail] = useState("");
   const [originalEmail, setOriginalEmail] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [isEmailValid, setIsEmailValid] = useState(true);
   const queryClient = useQueryClient();
   const pollingIntervalRef = useRef<number | null>(null);
   const prevVerificationStatusRef = useRef<boolean | undefined>(undefined);
+  const { resendEmailVerification, isResendingVerification } =
+    useEmailVerification();
 
   useEffect(() => {
     if (settings?.email) {
@@ -185,18 +187,8 @@ function UserSettingsScreen() {
     }
   };
 
-  const handleResendVerification = async () => {
-    try {
-      setIsResendingVerification(true);
-      await openHands.put("/api/email/verify", {}, { withCredentials: true });
-      // Display toast notification instead of setting state
-      displaySuccessToast(t("SETTINGS$VERIFICATION_EMAIL_SENT"));
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(t("SETTINGS$FAILED_TO_RESEND_VERIFICATION"), error);
-    } finally {
-      setIsResendingVerification(false);
-    }
+  const handleResendVerification = () => {
+    resendEmailVerification({});
   };
 
   const isEmailChanged = email !== originalEmail;

@@ -4,6 +4,8 @@ from uuid import uuid4
 
 from integrations.types import GitLabResourceType
 from integrations.utils import GITLAB_WEBHOOK_URL
+from sqlalchemy import text
+from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
@@ -257,6 +259,25 @@ class VerifyWebhookStatus:
         """
 
         from integrations.gitlab.gitlab_service import SaaSGitLabService
+
+        # Check if the table exists before proceeding
+        # This handles cases where the CronJob runs before database migrations complete
+        async with a_session_maker() as session:
+            query = text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_name = 'gitlab_webhook'
+                )
+            """)
+            result = await session.execute(query)
+            table_exists = result.scalar() or False
+
+        if not table_exists:
+            logger.info(
+                'gitlab_webhook table does not exist yet, '
+                'waiting for database migrations to complete'
+            )
+            return
 
         # Get an instance of the webhook store
         webhook_store = await GitlabWebhookStore.get_instance()

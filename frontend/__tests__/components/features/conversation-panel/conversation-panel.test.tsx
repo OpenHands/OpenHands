@@ -16,6 +16,13 @@ vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
   }),
 }));
 
+// Mock toast handlers to prevent unhandled rejection errors
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
+  TOAST_OPTIONS: {},
+}));
+
 describe("ConversationPanel", () => {
   const onCloseMock = vi.fn();
   const RouterStub = createRoutesStub([
@@ -634,12 +641,6 @@ describe("ConversationPanel", () => {
     );
     updateConversationSpy.mockResolvedValue(true);
 
-    // Mock the toast function
-    const mockToast = vi.fn();
-    vi.mock("#/utils/custom-toast-handlers", () => ({
-      displaySuccessToast: mockToast,
-    }));
-
     renderConversationPanel();
 
     const cards = await screen.findAllByTestId("conversation-card");
@@ -767,10 +768,6 @@ describe("ConversationPanel", () => {
     );
     updateConversationSpy.mockRejectedValue(new Error("API Error"));
 
-    vi.mock("#/utils/custom-toast-handlers", () => ({
-      displayErrorToast: vi.fn(),
-    }));
-
     renderConversationPanel();
 
     const cards = await screen.findAllByTestId("conversation-card");
@@ -887,5 +884,84 @@ describe("ConversationPanel", () => {
     expect(updateConversationSpy).toHaveBeenCalledWith("1", {
       title: "Special @#$%^&*()_+ Characters",
     });
+  });
+
+  it("should close delete modal when clicking backdrop", async () => {
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Open context menu and click delete
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    const deleteButton = within(cards[0]).getByTestId("delete-button");
+    await user.click(deleteButton);
+
+    // Modal should be visible
+    expect(
+      screen.getByRole("button", { name: /confirm/i }),
+    ).toBeInTheDocument();
+
+    // Click the backdrop (the dark overlay behind the modal)
+    const backdrop = document.querySelector(".bg-black.opacity-60");
+    expect(backdrop).toBeInTheDocument();
+    await user.click(backdrop!);
+
+    // Modal should be closed
+    expect(
+      screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should close stop modal when clicking backdrop", async () => {
+    const user = userEvent.setup();
+
+    // Create mock data with a RUNNING conversation
+    const mockRunningConversations: Conversation[] = [
+      {
+        conversation_id: "1",
+        title: "Running Conversation",
+        selected_repository: null,
+        git_provider: null,
+        selected_branch: null,
+        last_updated_at: "2021-10-01T12:00:00Z",
+        created_at: "2021-10-01T12:00:00Z",
+        status: "RUNNING" as const,
+        runtime_status: null,
+        url: null,
+        session_api_key: null,
+      },
+    ];
+
+    vi.spyOn(ConversationService, "getUserConversations").mockResolvedValue({
+      results: mockRunningConversations,
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    // Open context menu and click stop
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    const stopButton = within(cards[0]).getByTestId("stop-button");
+    await user.click(stopButton);
+
+    // Modal should be visible
+    expect(
+      screen.getByRole("button", { name: /confirm/i }),
+    ).toBeInTheDocument();
+
+    // Click the backdrop
+    const backdrop = document.querySelector(".bg-black.opacity-60");
+    expect(backdrop).toBeInTheDocument();
+    await user.click(backdrop!);
+
+    // Modal should be closed
+    expect(
+      screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
   });
 });

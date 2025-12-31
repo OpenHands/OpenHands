@@ -299,6 +299,23 @@ class V1ConversationService {
   }
 
   /**
+   * Update a V1 conversation's public flag
+   * @param conversationId The conversation ID
+   * @param isPublic Whether the conversation should be public
+   * @returns Updated conversation info
+   */
+  static async updateConversationPublicFlag(
+    conversationId: string,
+    isPublic: boolean,
+  ): Promise<V1AppConversation> {
+    const { data } = await openHands.patch<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      { public: isPublic },
+    );
+    return data;
+  }
+
+  /**
    * Read a file from a specific conversation's sandbox workspace
    * @param conversationId The conversation ID
    * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/PLAN.md)

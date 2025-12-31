@@ -88,12 +88,10 @@ export const useTerminal = () => {
       fontSize: 14,
       scrollback: 10000,
       scrollSensitivity: 1,
-      fastScrollModifier: "alt",
       fastScrollSensitivity: 5,
-      allowTransparency: true,
       disableStdin: true, // Make terminal read-only
       theme: {
-        background: "transparent",
+        background: "#25272D",
       },
     });
 

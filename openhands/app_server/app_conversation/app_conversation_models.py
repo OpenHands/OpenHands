@@ -45,6 +45,8 @@ class AppConversationInfo(BaseModel):
     parent_conversation_id: OpenHandsUUID | None = None
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
 
+    public: bool | None = None
+
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -113,6 +115,12 @@ class AppConversationStartRequest(BaseModel):
     pr_number: list[int] = Field(default_factory=list)
     parent_conversation_id: OpenHandsUUID | None = None
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
+
+    public: bool | None = None
+
+
+class AppConversationUpdateRequest(BaseModel):
+    public: bool
 
 
 class AppConversationStartTaskStatus(Enum):

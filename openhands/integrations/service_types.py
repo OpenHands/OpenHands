@@ -21,6 +21,7 @@ class ProviderType(Enum):
     GITHUB = 'github'
     GITLAB = 'gitlab'
     BITBUCKET = 'bitbucket'
+    FORGEJO = 'forgejo'
     AZURE_DEVOPS = 'azure_devops'
     ENTERPRISE_SSO = 'enterprise_sso'
 

@@ -40,6 +40,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
+    AppConversationUpdateRequest,
     SkillResponse,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
@@ -210,11 +211,32 @@ async def start_app_conversation(
     set_db_session_keep_open(request.state, True)
     set_httpx_client_keep_open(request.state, True)
 
-    """Start an app conversation start task and return it."""
-    async_iter = app_conversation_service.start_app_conversation(start_request)
-    result = await anext(async_iter)
-    asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
-    return result
+    try:
+        """Start an app conversation start task and return it."""
+        async_iter = app_conversation_service.start_app_conversation(start_request)
+        result = await anext(async_iter)
+        asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
+        return result
+    except Exception:
+        await db_session.close()
+        await httpx_client.aclose()
+        raise
+
+
+@router.patch('/{conversation_id}')
+async def update_app_conversation(
+    conversation_id: str,
+    update_request: AppConversationUpdateRequest,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+) -> AppConversation:
+    info = await app_conversation_service.update_app_conversation(
+        UUID(conversation_id), update_request
+    )
+    if info is None:
+        raise HTTPException(404, 'unknown_app_conversation')
+    return info
 
 
 @router.post('/stream-start')

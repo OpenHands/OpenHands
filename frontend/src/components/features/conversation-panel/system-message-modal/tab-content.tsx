@@ -1,12 +1,13 @@
 import { SystemMessageContent } from "./system-message-content";
 import { ToolsList } from "./tools-list";
 import { EmptyToolsState } from "./empty-tools-state";
+import { ChatCompletionToolParam } from "#/types/v1/core";
 
 interface TabContentProps {
   activeTab: "system" | "tools";
   systemMessage: {
     content: string;
-    tools: Array<Record<string, unknown>> | null;
+    tools: Array<Record<string, unknown>> | ChatCompletionToolParam[] | null;
   };
   expandedTools: Record<number, boolean>;
   onToggleTool: (index: number) => void;

@@ -22,6 +22,7 @@ from openhands.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketServiceImpl
+from openhands.integrations.forgejo.forgejo_service import ForgejoServiceImpl
 from openhands.integrations.github.github_service import GithubServiceImpl
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.integrations.service_types import (
@@ -105,6 +106,7 @@ class ProviderHandler:
         ProviderType.GITHUB: 'github.com',
         ProviderType.GITLAB: 'gitlab.com',
         ProviderType.BITBUCKET: 'bitbucket.org',
+        ProviderType.FORGEJO: 'codeberg.org',
         ProviderType.AZURE_DEVOPS: 'dev.azure.com',
     }
 
@@ -126,6 +128,7 @@ class ProviderHandler:
             ProviderType.GITHUB: GithubServiceImpl,
             ProviderType.GITLAB: GitLabServiceImpl,
             ProviderType.BITBUCKET: BitBucketServiceImpl,
+            ProviderType.FORGEJO: ForgejoServiceImpl,
             ProviderType.AZURE_DEVOPS: AzureDevOpsServiceImpl,
         }
 
@@ -672,6 +675,14 @@ class ProviderHandler:
             if provider != ProviderType.AZURE_DEVOPS:
                 domain = self.provider_tokens[provider].host or domain
 
+        # Normalize domain to prevent double protocols or path segments
+        if domain:
+            domain = domain.strip()
+            domain = domain.replace('https://', '').replace('http://', '')
+            # Remove any trailing path like /api/v3 or /api/v4
+            if '/' in domain:
+                domain = domain.split('/')[0]
+
         # Try to use token if available, otherwise use public URL
         if self.provider_tokens and provider in self.provider_tokens:
             git_token = self.provider_tokens[provider].token
@@ -747,7 +758,7 @@ class ProviderHandler:
                             f'https://user:***@{clean_domain}/{repo_name}.git'
                         )
                 else:
-                    # GitHub
+                    # GitHub, Forgejo
                     remote_url = f'https://{token_value}@{domain}/{repo_name}.git'
             else:
                 remote_url = f'https://{domain}/{repo_name}.git'

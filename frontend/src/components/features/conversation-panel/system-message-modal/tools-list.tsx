@@ -1,7 +1,8 @@
+import { ChatCompletionToolParam } from "#/types/v1/core";
 import { ToolItem } from "./tool-item";
 
 interface ToolsListProps {
-  tools: Array<Record<string, unknown>>;
+  tools: Array<Record<string, unknown>> | ChatCompletionToolParam[];
   expandedTools: Record<number, boolean>;
   onToggleTool: (index: number) => void;
 }
