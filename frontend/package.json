@@ -13,7 +13,7 @@
     "@react-router/node": "^7.11.0",
     "@react-router/serve": "^7.11.0",
     "@tailwindcss/vite": "^4.1.18",
-    "@tanstack/react-query": "^5.90.15",
+    "@tanstack/react-query": "^5.90.16",
     "@uidotdev/usehooks": "^2.4.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
