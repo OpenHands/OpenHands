@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 
@@ -10,7 +11,7 @@ export function ConversationTabTitle({
   title,
   conversationKey,
 }: ConversationTabTitleProps) {
-  const { refetch } = useUnifiedGetGitChanges();
+  const { refetch, isFetching } = useUnifiedGetGitChanges();
 
   const handleRefresh = () => {
     refetch();
@@ -22,10 +23,16 @@ export function ConversationTabTitle({
       {conversationKey === "editor" && (
         <button
           type="button"
+          disabled={isFetching}
           className="flex w-[26px] py-1 justify-center items-center gap-[10px] rounded-[7px] hover:bg-[#474A54] cursor-pointer"
           onClick={handleRefresh}
         >
-          <RefreshIcon width={12.75} height={15} color="#ffffff" />
+          <RefreshIcon
+            width={12.75}
+            height={15}
+            color="#ffffff"
+            className={clsx(isFetching && "animate-spin")}
+          />
         </button>
       )}
     </div>
