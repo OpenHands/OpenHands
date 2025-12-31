@@ -21,9 +21,9 @@ export function MetricsModal({ isOpen, onOpenChange }: MetricsModalProps) {
 
   return (
     <ModalBackdrop onClose={() => onOpenChange(false)}>
-      <ModalBody className="items-start border border-tertiary">
+      <ModalBody className="items-center border border-tertiary">
         <BaseModalTitle title={t(I18nKey.CONVERSATION$METRICS_INFO)} />
-        <div className="space-y-4">
+        <div className="space-y-4 w-full">
           {(metrics?.cost !== null || metrics?.usage !== null) && (
             <div className="rounded-md p-3">
               <div className="grid gap-3">
