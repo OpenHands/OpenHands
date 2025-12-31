@@ -27,14 +27,24 @@ class BitBucketReposMixin(BitBucketMixinBase):
         if public:
             try:
                 parsed_url = urlparse(query)
-                path_segments = [segment for segment in parsed_url.path.split('/') if segment]
+                path_segments = [
+                    segment for segment in parsed_url.path.split('/') if segment
+                ]
                 if self._is_server:
                     # Server URLs: /projects/{projectKey}/repos/{repoSlug}
                     if 'projects' in path_segments:
                         idx = path_segments.index('projects')
-                        if len(path_segments) > idx + 2 and path_segments[idx + 1] and path_segments[idx + 2] == 'repos':
+                        if (
+                            len(path_segments) > idx + 2
+                            and path_segments[idx + 1]
+                            and path_segments[idx + 2] == 'repos'
+                        ):
                             project_key = path_segments[idx + 1]
-                            repo_name = path_segments[idx + 3] if len(path_segments) > idx + 3 else ''
+                            repo_name = (
+                                path_segments[idx + 3]
+                                if len(path_segments) > idx + 3
+                                else ''
+                            )
                         elif len(path_segments) > idx + 2:
                             project_key = path_segments[idx + 1]
                             repo_name = path_segments[idx + 2]
@@ -42,7 +52,9 @@ class BitBucketReposMixin(BitBucketMixinBase):
                             project_key = ''
                             repo_name = ''
                     else:
-                        project_key = path_segments[0] if len(path_segments) >= 1 else ''
+                        project_key = (
+                            path_segments[0] if len(path_segments) >= 1 else ''
+                        )
                         repo_name = path_segments[1] if len(path_segments) >= 2 else ''
                 else:
                     if len(path_segments) >= 2:
@@ -136,7 +148,7 @@ class BitBucketReposMixin(BitBucketMixinBase):
                 name = project.get('name', '')
                 if not key:
                     continue
-                if query and query.lower() not in f"{key}{name}".lower():
+                if query and query.lower() not in f'{key}{name}'.lower():
                     continue
                 project_keys.append(key)
             return project_keys
@@ -279,7 +291,9 @@ class BitBucketReposMixin(BitBucketMixinBase):
             for project_key in projects:
                 project_repos_url = f'{self.BASE_URL}/projects/{project_key}/repos'
                 project_repos = await self._fetch_paginated_data(
-                    project_repos_url, {'limit': PER_PAGE}, MAX_REPOS - len(repositories)
+                    project_repos_url,
+                    {'limit': PER_PAGE},
+                    MAX_REPOS - len(repositories),
                 )
                 for repo in project_repos:
                     repositories.append(self._parse_repository(repo))

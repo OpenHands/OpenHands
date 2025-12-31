@@ -1,5 +1,4 @@
 import os
-
 from typing import Optional
 
 from pydantic import SecretStr
@@ -58,7 +57,9 @@ class BitBucketService(
             resolved_mode = bitbucket_mode
         else:
             try:
-                from openhands.server.shared import config as shared_config  # type: ignore
+                from openhands.server.shared import (
+                    config as shared_config,  # type: ignore
+                )
 
                 if shared_config.bitbucket_mode in {'cloud', 'server'}:
                     resolved_mode = shared_config.bitbucket_mode
@@ -71,9 +72,7 @@ class BitBucketService(
         self.bitbucket_mode = resolved_mode
 
         if self.bitbucket_mode not in {'cloud', 'server'}:
-            raise ValueError(
-                f'Unsupported Bitbucket mode: {self.bitbucket_mode}'
-            )
+            raise ValueError(f'Unsupported Bitbucket mode: {self.bitbucket_mode}')
 
         if token:
             self.token = token

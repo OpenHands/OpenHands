@@ -12,6 +12,7 @@ from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.integrations.service_types import OwnerType, Repository, RequestMethod
 from openhands.integrations.service_types import ProviderType as ServiceProviderType
 from openhands.integrations.utils import validate_provider_token
+from openhands.microagent.types import MicroagentContentResponse
 from openhands.resolver.interfaces.bitbucket import BitbucketIssueHandler
 from openhands.resolver.interfaces.issue import Issue
 from openhands.resolver.interfaces.issue_definitions import ServiceContextIssue
@@ -20,7 +21,6 @@ from openhands.runtime.base import Runtime
 from openhands.server.routes.secrets import check_provider_tokens
 from openhands.server.settings import POSTProviderModel
 from openhands.server.types import AppMode
-from openhands.microagent.types import MicroagentContentResponse
 
 
 # BitbucketIssueHandler Tests
@@ -75,7 +75,10 @@ def test_init_server_mode():
         == 'https://bitbucket.example.com/rest/api/latest/projects/PROJ/repos/test-repo/archive?format=zip'
     )
     assert handler.clone_url == 'https://bitbucket.example.com/scm/PROJ/test-repo.git'
-    assert handler.get_repo_url() == 'https://bitbucket.example.com/projects/PROJ/repos/test-repo'
+    assert (
+        handler.get_repo_url()
+        == 'https://bitbucket.example.com/projects/PROJ/repos/test-repo'
+    )
     assert handler.get_issue_url(42) == (
         'https://bitbucket.example.com/projects/PROJ/repos/test-repo/pull-requests/42'
     )
@@ -188,9 +191,7 @@ async def test_cloud_create_pr_uses_v2_endpoint(monkeypatch):
 
     response = {
         'links': {
-            'html': {
-                'href': 'https://bitbucket.org/workspace/repo/pull-requests/42'
-            }
+            'html': {'href': 'https://bitbucket.org/workspace/repo/pull-requests/42'}
         }
     }
     make_request = AsyncMock(return_value=(response, {}))
@@ -372,9 +373,7 @@ async def test_cloud_microagent_content_uses_src_endpoint(monkeypatch):
         call_args.args[0]
         == 'https://api.bitbucket.org/2.0/repositories/workspace/repo/src/main/.openhands/microagents/file.md'
     )
-    parse_mock.assert_called_once_with(
-        'raw-content', '.openhands/microagents/file.md'
-    )
+    parse_mock.assert_called_once_with('raw-content', '.openhands/microagents/file.md')
     assert result is expected_content
 
 
@@ -482,7 +481,13 @@ def test_create_pr_server_mode(mock_post):
     mock_response.raise_for_status.return_value = None
     mock_response.json.return_value = {
         'id': 99,
-        'links': {'self': [{'href': 'https://bitbucket.example.com/projects/PROJ/repos/test-repo/pull-requests/99'}]},
+        'links': {
+            'self': [
+                {
+                    'href': 'https://bitbucket.example.com/projects/PROJ/repos/test-repo/pull-requests/99'
+                }
+            ]
+        },
     }
     mock_post.return_value = mock_response
 
@@ -770,7 +775,9 @@ async def test_validate_provider_token_with_bitbucket_server_mode():
     with (
         patch('openhands.integrations.utils.GitHubService') as mock_github_service,
         patch('openhands.integrations.utils.GitLabService') as mock_gitlab_service,
-        patch('openhands.integrations.utils.BitBucketService') as mock_bitbucket_service,
+        patch(
+            'openhands.integrations.utils.BitBucketService'
+        ) as mock_bitbucket_service,
     ):
         github_instance = AsyncMock()
         github_instance.verify_access.side_effect = Exception('Invalid GitHub token')
@@ -1150,7 +1157,10 @@ async def test_fetch_paginated_data_cloud_mode():
 
     service = BitBucketService(token=SecretStr('token'))
 
-    first_page = ({'values': [{'id': 'a'}], 'next': 'https://api.bitbucket.org/2.0/page/2'}, {})
+    first_page = (
+        {'values': [{'id': 'a'}], 'next': 'https://api.bitbucket.org/2.0/page/2'},
+        {},
+    )
     second_page = ({'values': [{'id': 'b'}], 'next': None}, {})
 
     with patch.object(

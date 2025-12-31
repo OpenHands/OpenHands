@@ -1,5 +1,4 @@
 import base64
-import ssl
 from typing import Any
 
 import httpx
@@ -32,8 +31,8 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
 
     def _repo_api_base(self, owner: str, repo: str) -> str:
         if self._is_server:
-            return f"{self.BASE_URL}/projects/{owner}/repos/{repo}"
-        return f"{self.BASE_URL}/repositories/{owner}/{repo}"
+            return f'{self.BASE_URL}/projects/{owner}/repos/{repo}'
+        return f'{self.BASE_URL}/repositories/{owner}/{repo}'
 
     def _extract_owner_and_repo(self, repository: str) -> tuple[str, str]:
         """Extract owner and repo from repository string.
@@ -166,7 +165,9 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         if self._is_server:
             user_id = getattr(self, 'user_id', None)
             if not user_id:
-                raise AuthenticationError('User ID is required for Bitbucket Server access')
+                raise AuthenticationError(
+                    'User ID is required for Bitbucket Server access'
+                )
             url = f'{self.BASE_URL}/users/{user_id}'
             data, _ = await self._make_request(url)
             links = data.get('links', {})
@@ -216,10 +217,16 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
             project = repo.get('project', {}) or {}
             workspace_slug = project.get('key', '')
             repo_slug = repo.get('slug', '')
-            full_name = f'{workspace_slug}/{repo_slug}' if workspace_slug and repo_slug else repo_slug
+            full_name = (
+                f'{workspace_slug}/{repo_slug}'
+                if workspace_slug and repo_slug
+                else repo_slug
+            )
             default_branch = repo.get('defaultBranch') or {}
             main_branch = default_branch.get('displayId')
-            if not main_branch and default_branch.get('id', '').startswith('refs/heads/'):
+            if not main_branch and default_branch.get('id', '').startswith(
+                'refs/heads/'
+            ):
                 main_branch = default_branch['id'].split('refs/heads/', 1)[-1]
             return Repository(
                 id=str(repo.get('id', repo_slug)),
@@ -283,8 +290,8 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         if self._is_server:
             owner, repo = self._extract_owner_and_repo(repository)
             return (
-                f"{self.BASE_URL}/projects/{owner}/repos/{repo}/browse/.cursorrules"
-                f"?at=refs/heads/{repo_details.main_branch}"
+                f'{self.BASE_URL}/projects/{owner}/repos/{repo}/browse/.cursorrules'
+                f'?at=refs/heads/{repo_details.main_branch}'
             )
         return f'{self.BASE_URL}/repositories/{repository}/src/{repo_details.main_branch}/.cursorrules'
 
@@ -302,8 +309,8 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         if self._is_server:
             owner, repo = self._extract_owner_and_repo(repository)
             return (
-                f"{self.BASE_URL}/projects/{owner}/repos/{repo}/browse/{microagents_path}"
-                f"?at=refs/heads/{repo_details.main_branch}"
+                f'{self.BASE_URL}/projects/{owner}/repos/{repo}/browse/{microagents_path}'
+                f'?at=refs/heads/{repo_details.main_branch}'
             )
         return f'{self.BASE_URL}/repositories/{repository}/src/{repo_details.main_branch}/{microagents_path}'
 

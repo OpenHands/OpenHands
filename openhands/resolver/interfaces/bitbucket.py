@@ -10,7 +10,6 @@ from openhands.resolver.interfaces.issue import (
     ReviewThread,
 )
 from openhands.resolver.utils import extract_issue_references
-from openhands.utils.http_session import httpx_verify_option
 
 
 class BitbucketIssueHandler(IssueHandlerInterface):
@@ -39,9 +38,7 @@ class BitbucketIssueHandler(IssueHandlerInterface):
         self.base_domain = base_domain
         self.bitbucket_mode = bitbucket_mode
         if self.bitbucket_mode not in {'cloud', 'server'}:
-            raise ValueError(
-                f'Unsupported Bitbucket mode: {self.bitbucket_mode}'
-            )
+            raise ValueError(f'Unsupported Bitbucket mode: {self.bitbucket_mode}')
         if self.user_id is None and ':' in self.token:
             self.user_id = self.token.split(':', 1)[0]
         self.base_url = self.get_base_url()
@@ -532,7 +529,6 @@ class BitbucketIssueHandler(IssueHandlerInterface):
 
         if self.bitbucket_mode == 'server':
             return closing_issues
-
 
         if issue_body:
             new_issue_references.extend(extract_issue_references(issue_body))
