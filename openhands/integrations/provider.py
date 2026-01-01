@@ -428,21 +428,8 @@ class ProviderHandler:
                     else SecretStr('')
                 )
 
-                # Fetch latest token if requested, or if using external token manager
-                if (
-                    get_latest
-                    and self.REFRESH_TOKEN_URL
-                    and self.sid
-                    and self.session_api_key
-                ):
+                if get_latest and self.REFRESH_TOKEN_URL and self.sid:
                     token = await self._get_latest_provider_token(provider)
-                elif self.external_token_manager and self.external_auth_id:
-                    # When external_token_manager is True, ALWAYS fetch token dynamically
-                    # Don't rely on potentially stale tokens from provider_tokens
-                    service = self.get_service(provider)
-                    fetched_token = await service.get_latest_token()
-                    if fetched_token:
-                        token = fetched_token
 
                 if token:
                     env_vars[provider] = token

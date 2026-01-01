@@ -56,9 +56,7 @@ class GitLabService(
         self.external_auth_id = external_auth_id
         self.external_auth_token = external_auth_token
 
-        # Only use provided token if not using external token manager
-        # When external_token_manager is True, tokens should be fetched dynamically
-        if token and not external_token_manager:
+        if token:
             self.token = token
 
         if base_domain:

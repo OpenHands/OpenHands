@@ -368,7 +368,6 @@ class AgentSession:
                 attach_to_existing=False,
                 env_vars=env_vars,
                 git_provider_tokens=git_provider_tokens,
-                user_id=self.user_id,
             )
 
         try:
