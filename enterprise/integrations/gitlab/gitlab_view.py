@@ -60,8 +60,7 @@ class GitlabIssue(ResolverViewInterface):
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         user_instructions_template = jinja_env.get_template('issue_prompt.j2')
-        # Note: _load_resolver_context() is now called earlier in gitlab_manager.py
-        # to ensure we get a fresh token before creating the conversation
+        await self._load_resolver_context()
 
         user_instructions = user_instructions_template.render(
             issue_number=self.issue_number,
@@ -118,8 +117,7 @@ class GitlabIssueComment(GitlabIssue):
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         user_instructions_template = jinja_env.get_template('issue_prompt.j2')
-        # Note: _load_resolver_context() is now called earlier in gitlab_manager.py
-        # to ensure we get a fresh token before creating the conversation
+        await self._load_resolver_context()
 
         user_instructions = user_instructions_template.render(
             issue_comment=self.comment_body
@@ -145,8 +143,7 @@ class GitlabMRComment(GitlabIssueComment):
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         user_instructions_template = jinja_env.get_template('mr_update_prompt.j2')
-        # Note: _load_resolver_context() is now called earlier in gitlab_manager.py
-        # to ensure we get a fresh token before creating the conversation
+        await self._load_resolver_context()
 
         user_instructions = user_instructions_template.render(
             mr_comment=self.comment_body,
@@ -212,8 +209,7 @@ class GitlabInlineMRComment(GitlabMRComment):
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         user_instructions_template = jinja_env.get_template('mr_update_prompt.j2')
-        # Note: _load_resolver_context() is now called earlier in gitlab_manager.py
-        # to ensure we get a fresh token before creating the conversation
+        await self._load_resolver_context()
 
         user_instructions = user_instructions_template.render(
             mr_comment=self.comment_body,
