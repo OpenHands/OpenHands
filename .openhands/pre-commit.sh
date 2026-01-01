@@ -13,7 +13,6 @@ STAGED_FILES=$(git diff --cached --name-only)
 # Check if any files match specific patterns
 has_frontend_changes=false
 has_backend_changes=false
-has_vscode_changes=false
 
 # Check each file individually to avoid issues with grep
 for file in $STAGED_FILES; do
@@ -21,17 +20,12 @@ for file in $STAGED_FILES; do
         has_frontend_changes=true
     elif [[ $file == openhands/* || $file == evaluation/* || $file == tests/* ]]; then
         has_backend_changes=true
-        # Check for VSCode extension changes (subset of backend changes)
-        if [[ $file == openhands/integrations/vscode/* ]]; then
-            has_vscode_changes=true
-        fi
     fi
 done
 
 echo "Analyzing changes..."
 echo "- Frontend changes: $has_frontend_changes"
 echo "- Backend changes: $has_backend_changes"
-echo "- VSCode extension changes: $has_vscode_changes"
 
 # Run frontend linting if needed
 if [ "$has_frontend_changes" = true ]; then
@@ -92,12 +86,6 @@ else
     echo "Skipping backend checks (no backend changes detected)."
 fi
 
-# Run VSCode extension checks if needed
-if [ "$has_vscode_changes" = true ]; then
-    # The VSCode extension has been removed from this repo.
-    # If this message appears, it likely means staged paths include legacy references.
-    echo "Skipping VSCode extension checks (VSCode extension no longer exists in this repo)."
-fi
 
 # If no specific code changes detected, run basic checks
 if [ "$has_frontend_changes" = false ] && [ "$has_backend_changes" = false ]; then
