@@ -184,6 +184,14 @@ class GitlabManager(Manager):
                     f'[GitLab] Starting job for {user_info.username} in {gitlab_view.full_repo_name}#{gitlab_view.issue_number}'
                 )
 
+                # Load resolver context first - this will refresh the token internally
+                # and ensure we get a fresh token afterwards
+                logger.info(
+                    f'[GitLab] Loading resolver context for {gitlab_view.full_repo_name}#{gitlab_view.issue_number}'
+                )
+                await gitlab_view._load_resolver_context()
+
+                # Now get the fresh token after the context has been loaded
                 user_token = await self.token_manager.get_idp_token_from_idp_user_id(
                     str(user_info.user_id), ProviderType.GITLAB
                 )
