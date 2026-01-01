@@ -20,7 +20,7 @@ export function ConfirmStopModal({
   const { t } = useTranslation();
 
   return (
-    <ModalBackdrop>
+    <ModalBackdrop onClose={onCancel}>
       <ModalBody className="items-start border border-tertiary">
         <div className="flex flex-col gap-2">
           <BaseModalTitle

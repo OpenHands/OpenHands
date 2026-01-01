@@ -243,6 +243,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
             onClose();
           }}
           onClose={() => setConfirmExitConversationModalVisible(false)}
+          onCancel={() => setConfirmExitConversationModalVisible(false)}
         />
       )}
     </div>
