@@ -51,6 +51,14 @@ The experience will be familiar to anyone who has used Devin or Jules.
 
 [Check out the docs](https://docs.openhands.dev/openhands/usage/run-openhands/local-setup) or view the source in this repo.
 
+### OpenHands-AAAA
+
+You can also use OpenHands on your mobile phone using OpenHands-AAAA. This is an independent adaptation to run OpenHands on Android devices using on-device inference:
+
+[Check out the code](https://codeberg.org/erkinalp/OpenHands-AAAA).
+
+AAAA stands for the AAAA battery size, and refers to the fact it's "batteries-included".
+
 ### OpenHands Cloud
 This is a deployment of OpenHands GUI, running on hosted infrastructure.
 
