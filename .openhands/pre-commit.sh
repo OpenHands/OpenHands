@@ -94,48 +94,9 @@ fi
 
 # Run VSCode extension checks if needed
 if [ "$has_vscode_changes" = true ]; then
-    # Check if we're in a CI environment
-    if [ -n "$CI" ]; then
-        echo "Skipping VSCode extension checks (CI environment detected)."
-        echo "WARNING: VSCode extension files have changed but checks are being skipped."
-        echo "Please run VSCode extension checks manually before submitting your PR."
-    else
-        echo "Running VSCode extension checks..."
-        if [ -d "openhands/integrations/vscode" ]; then
-            cd openhands/integrations/vscode || exit 1
-
-            echo "Running npm lint:fix..."
-            npm run lint:fix
-            if [ $? -ne 0 ]; then
-                echo "VSCode extension linting failed. Please fix the issues before committing."
-                EXIT_CODE=1
-            else
-                echo "VSCode extension linting passed!"
-            fi
-
-            echo "Running npm typecheck..."
-            npm run typecheck
-            if [ $? -ne 0 ]; then
-                echo "VSCode extension type checking failed. Please fix the issues before committing."
-                EXIT_CODE=1
-            else
-                echo "VSCode extension type checking passed!"
-            fi
-
-            echo "Running npm compile..."
-            npm run compile
-            if [ $? -ne 0 ]; then
-                echo "VSCode extension compilation failed. Please fix the issues before committing."
-                EXIT_CODE=1
-            else
-                echo "VSCode extension compilation passed!"
-            fi
-
-            cd ../../..
-        fi
-    fi
-else
-    echo "Skipping VSCode extension checks (no VSCode extension changes detected)."
+    # The VSCode extension has been removed from this repo.
+    # If this message appears, it likely means staged paths include legacy references.
+    echo "Skipping VSCode extension checks (VSCode extension no longer exists in this repo)."
 fi
 
 # If no specific code changes detected, run basic checks
