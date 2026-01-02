@@ -206,22 +206,17 @@ def get_summary_for_agent_state(
 def _search_single_event(
     event_store: EventStoreABC,
     event_filter: EventFilter,
-    expected_types: type[T] | tuple[type[T], ...],
     start_id: int = 0,
 ) -> T | None:
-    """Search for a single event matching the filter and validate its type.
+    """Search for a single event matching the filter.
 
     Args:
         event_store: The event store to search
-        event_filter: Filter criteria for the search
-        expected_types: Expected type(s) for validation
+        event_filter: Filter criteria for the search (including type filtering via include_types)
         start_id: Starting event ID (default 0 for beginning)
 
     Returns:
         The single matching event, or None if no events found
-
-    Raises:
-        AssertionError: If more than one event is returned or type doesn't match
     """
     events = list(
         event_store.search_events(
@@ -233,16 +228,7 @@ def _search_single_event(
     )
     if not events:
         return None
-    assert len(events) == 1, f'Expected at most 1 event, got {len(events)}'
-    event = events[0]
-    if isinstance(expected_types, tuple):
-        type_names = ' or '.join(t.__name__ for t in expected_types)
-    else:
-        type_names = expected_types.__name__
-    assert isinstance(
-        event, expected_types
-    ), f'Expected {type_names}, got {type(event).__name__}'
-    return event  # type: ignore[return-value]
+    return events[0]  # type: ignore[return-value]
 
 
 def get_final_agent_observation(
@@ -254,7 +240,6 @@ def get_final_agent_observation(
             source=EventSource.ENVIRONMENT,
             include_types=(AgentStateChangedObservation,),
         ),
-        AgentStateChangedObservation,
     )
     return [event] if event else []
 
@@ -266,7 +251,6 @@ def get_last_user_msg(event_store: EventStoreABC) -> list[MessageAction]:
             source=EventSource.USER,
             include_types=(MessageAction,),
         ),
-        MessageAction,
     )
     return [event] if event else []
 
@@ -287,7 +271,6 @@ def extract_summary_from_event_store(
             source=EventSource.USER,
             include_types=(MessageAction,),
         ),
-        MessageAction,
     )
 
     final_agent_observation = get_final_agent_observation(event_store)
@@ -307,7 +290,6 @@ def extract_summary_from_event_store(
             source=EventSource.AGENT,
             include_types=(MessageAction, AgentFinishAction),
         ),
-        (MessageAction, AgentFinishAction),
         start_id=instruction_event.id,
     )
 
