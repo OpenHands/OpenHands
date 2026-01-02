@@ -128,7 +128,7 @@ async def store_llm_settings(
         if settings.llm_base_url is None:
             settings.llm_base_url = existing_settings.llm_base_url
         
-        # Keep existing search API key if not provided OR if it's an empty string
+        # Keep search API key if missing or empty
         if not settings.search_api_key:
             settings.search_api_key = existing_settings.search_api_key
 
