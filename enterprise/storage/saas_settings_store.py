@@ -287,15 +287,7 @@ class SaasSettingsStore(SettingsStore):
             ) as client:
                 # Get the previous max budget to prevent accidental loss.
                 #
-                # LiteLLM API behavior changed between versions:
-                # - v1.79.x and earlier: GET /user/info always succeeds, returning
-                #   empty user_info for non-existent users
-                # - v1.80.x and later: GET /user/info returns 404 for non-existent users
-                #
-                # We handle both cases to maintain compatibility during the transition:
-                # - 200 OK: User exists, extract their info
-                # - 404 Not Found: User doesn't exist yet (new user), use empty dict
-                # - Other errors: Raise as before (unexpected server issues)
+                # LiteLLM v1.80+ returns 404 for non-existent users (previously returned empty user_info)
                 response = await client.get(
                     f'{LITE_LLM_API_URL}/user/info?user_id={self.user_id}'
                 )
