@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from jinja2 import Environment, FileSystemLoader
 from server.constants import WEB_HOST
@@ -20,10 +20,13 @@ from openhands.events.action import (
     AgentFinishAction,
     MessageAction,
 )
+from openhands.events.event_filter import EventFilter
 from openhands.events.event_store_abc import EventStoreABC
 from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.integrations.service_types import Repository
 from openhands.storage.data_models.conversation_status import ConversationStatus
+
+T = TypeVar('T', bound=Event)
 
 if TYPE_CHECKING:
     from openhands.server.conversation_manager.conversation_manager import (
@@ -200,21 +203,72 @@ def get_summary_for_agent_state(
     return unknown_error_msg
 
 
+def _search_single_event(
+    event_store: EventStoreABC,
+    event_filter: EventFilter,
+    expected_types: type[T] | tuple[type[T], ...],
+    start_id: int = 0,
+) -> T | None:
+    """Search for a single event matching the filter and validate its type.
+
+    Args:
+        event_store: The event store to search
+        event_filter: Filter criteria for the search
+        expected_types: Expected type(s) for validation
+        start_id: Starting event ID (default 0 for beginning)
+
+    Returns:
+        The single matching event, or None if no events found
+
+    Raises:
+        AssertionError: If more than one event is returned or type doesn't match
+    """
+    events = list(
+        event_store.search_events(
+            filter=event_filter,
+            limit=1,
+            reverse=True,
+            start_id=start_id,
+        )
+    )
+    if not events:
+        return None
+    assert len(events) == 1, f'Expected at most 1 event, got {len(events)}'
+    event = events[0]
+    if isinstance(expected_types, tuple):
+        type_names = ' or '.join(t.__name__ for t in expected_types)
+    else:
+        type_names = expected_types.__name__
+    assert isinstance(
+        event, expected_types
+    ), f'Expected {type_names}, got {type(event).__name__}'
+    return event  # type: ignore[return-value]
+
+
 def get_final_agent_observation(
     event_store: EventStoreABC,
 ) -> list[AgentStateChangedObservation]:
-    return event_store.get_matching_events(
-        source=EventSource.ENVIRONMENT,
-        event_types=(AgentStateChangedObservation,),
-        limit=1,
-        reverse=True,
+    event = _search_single_event(
+        event_store,
+        EventFilter(
+            source=EventSource.ENVIRONMENT,
+            include_types=(AgentStateChangedObservation,),
+        ),
+        AgentStateChangedObservation,
     )
+    return [event] if event else []
 
 
 def get_last_user_msg(event_store: EventStoreABC) -> list[MessageAction]:
-    return event_store.get_matching_events(
-        source=EventSource.USER, event_types=(MessageAction,), limit=1, reverse='true'
+    event = _search_single_event(
+        event_store,
+        EventFilter(
+            source=EventSource.USER,
+            include_types=(MessageAction,),
+        ),
+        MessageAction,
     )
+    return [event] if event else []
 
 
 def extract_summary_from_event_store(
@@ -226,18 +280,20 @@ def extract_summary_from_event_store(
     conversation_link = CONVERSATION_URL.format(conversation_id)
     summary_instruction = get_summary_instruction()
 
-    instruction_event: list[MessageAction] = event_store.get_matching_events(
-        query=json.dumps(summary_instruction),
-        source=EventSource.USER,
-        event_types=(MessageAction,),
-        limit=1,
-        reverse=True,
+    instruction_event = _search_single_event(
+        event_store,
+        EventFilter(
+            query=json.dumps(summary_instruction),
+            source=EventSource.USER,
+            include_types=(MessageAction,),
+        ),
+        MessageAction,
     )
 
     final_agent_observation = get_final_agent_observation(event_store)
 
     # Find summary instruction event ID
-    if len(instruction_event) == 0:
+    if not instruction_event:
         logger.warning(
             'no_instruction_event_found', extra={'conversation_id': conversation_id}
         )
@@ -245,19 +301,17 @@ def extract_summary_from_event_store(
             final_agent_observation, conversation_link
         )  # Agent did not receive summary instruction
 
-    event_id: int = instruction_event[0].id
-
-    agent_messages: list[MessageAction | AgentFinishAction] = (
-        event_store.get_matching_events(
-            start_id=event_id,
+    summary_event = _search_single_event(
+        event_store,
+        EventFilter(
             source=EventSource.AGENT,
-            event_types=(MessageAction, AgentFinishAction),
-            reverse=True,
-            limit=1,
-        )
+            include_types=(MessageAction, AgentFinishAction),
+        ),
+        (MessageAction, AgentFinishAction),
+        start_id=instruction_event.id,
     )
 
-    if len(agent_messages) == 0:
+    if not summary_event:
         logger.warning(
             'no_agent_messages_found', extra={'conversation_id': conversation_id}
         )
@@ -265,10 +319,10 @@ def extract_summary_from_event_store(
             final_agent_observation, conversation_link
         )  # Agent failed to generate summary
 
-    summary_event: MessageAction | AgentFinishAction = agent_messages[0]
     if isinstance(summary_event, MessageAction):
         return summary_event.content
 
+    assert isinstance(summary_event, AgentFinishAction)
     return summary_event.final_thought
 
 
