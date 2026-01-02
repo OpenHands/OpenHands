@@ -204,31 +204,27 @@ def get_summary_for_agent_state(
 def get_final_agent_observation(
     event_store: EventStoreABC,
 ) -> list[AgentStateChangedObservation]:
-    events = list(
-        event_store.search_events(
-            filter=EventFilter(
-                source=EventSource.ENVIRONMENT,
-                include_types=(AgentStateChangedObservation,),
-            ),
-            limit=1,
-            reverse=True,
-        )
+    events = event_store.search_events(
+        filter=EventFilter(
+            source=EventSource.ENVIRONMENT,
+            include_types=(AgentStateChangedObservation,),
+        ),
+        limit=1,
+        reverse=True,
     )
-    return events  # type: ignore[return-value]
+    return [e for e in events if isinstance(e, AgentStateChangedObservation)]
 
 
 def get_last_user_msg(event_store: EventStoreABC) -> list[MessageAction]:
-    events = list(
-        event_store.search_events(
-            filter=EventFilter(
-                source=EventSource.USER,
-                include_types=(MessageAction,),
-            ),
-            limit=1,
-            reverse=True,
-        )
+    events = event_store.search_events(
+        filter=EventFilter(
+            source=EventSource.USER,
+            include_types=(MessageAction,),
+        ),
+        limit=1,
+        reverse=True,
     )
-    return events  # type: ignore[return-value]
+    return [e for e in events if isinstance(e, MessageAction)]
 
 
 def extract_summary_from_event_store(
