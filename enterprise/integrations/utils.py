@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader
 from server.constants import WEB_HOST
@@ -15,7 +15,7 @@ from storage.user_repo_map_store import UserRepositoryMapStore
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
-from openhands.events import Event, EventSource
+from openhands.events import EventSource
 from openhands.events.action import (
     AgentFinishAction,
     MessageAction,
@@ -25,8 +25,6 @@ from openhands.events.event_store_abc import EventStoreABC
 from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.integrations.service_types import Repository
 from openhands.storage.data_models.conversation_status import ConversationStatus
-
-T = TypeVar('T', bound=Event)
 
 if TYPE_CHECKING:
     from openhands.server.conversation_manager.conversation_manager import (
@@ -203,56 +201,34 @@ def get_summary_for_agent_state(
     return unknown_error_msg
 
 
-def _search_single_event(
-    event_store: EventStoreABC,
-    event_filter: EventFilter,
-    start_id: int = 0,
-) -> T | None:
-    """Search for a single event matching the filter.
-
-    Args:
-        event_store: The event store to search
-        event_filter: Filter criteria for the search (including type filtering via include_types)
-        start_id: Starting event ID (default 0 for beginning)
-
-    Returns:
-        The single matching event, or None if no events found
-    """
-    events = list(
-        event_store.search_events(
-            filter=event_filter,
-            limit=1,
-            reverse=True,
-            start_id=start_id,
-        )
-    )
-    if not events:
-        return None
-    return events[0]  # type: ignore[return-value]
-
-
 def get_final_agent_observation(
     event_store: EventStoreABC,
 ) -> list[AgentStateChangedObservation]:
-    event = _search_single_event(
-        event_store,
-        EventFilter(
-            source=EventSource.ENVIRONMENT,
-            include_types=(AgentStateChangedObservation,),
-        ),
+    events = list(
+        event_store.search_events(
+            filter=EventFilter(
+                source=EventSource.ENVIRONMENT,
+                include_types=(AgentStateChangedObservation,),
+            ),
+            limit=1,
+            reverse=True,
+        )
     )
-    return [event] if event else []
+    return events  # type: ignore[return-value]
 
 
 def get_last_user_msg(event_store: EventStoreABC) -> list[MessageAction]:
-    event = _search_single_event(
-        event_store,
-        EventFilter(
-            source=EventSource.USER,
-            include_types=(MessageAction,),
-        ),
+    events = list(
+        event_store.search_events(
+            filter=EventFilter(
+                source=EventSource.USER,
+                include_types=(MessageAction,),
+            ),
+            limit=1,
+            reverse=True,
+        )
     )
-    return [event] if event else []
+    return events  # type: ignore[return-value]
 
 
 def extract_summary_from_event_store(
@@ -264,19 +240,22 @@ def extract_summary_from_event_store(
     conversation_link = CONVERSATION_URL.format(conversation_id)
     summary_instruction = get_summary_instruction()
 
-    instruction_event = _search_single_event(
-        event_store,
-        EventFilter(
-            query=json.dumps(summary_instruction),
-            source=EventSource.USER,
-            include_types=(MessageAction,),
-        ),
+    instruction_events = list(
+        event_store.search_events(
+            filter=EventFilter(
+                query=json.dumps(summary_instruction),
+                source=EventSource.USER,
+                include_types=(MessageAction,),
+            ),
+            limit=1,
+            reverse=True,
+        )
     )
 
     final_agent_observation = get_final_agent_observation(event_store)
 
     # Find summary instruction event ID
-    if not instruction_event:
+    if not instruction_events:
         logger.warning(
             'no_instruction_event_found', extra={'conversation_id': conversation_id}
         )
@@ -284,16 +263,19 @@ def extract_summary_from_event_store(
             final_agent_observation, conversation_link
         )  # Agent did not receive summary instruction
 
-    summary_event = _search_single_event(
-        event_store,
-        EventFilter(
-            source=EventSource.AGENT,
-            include_types=(MessageAction, AgentFinishAction),
-        ),
-        start_id=instruction_event.id,
+    summary_events = list(
+        event_store.search_events(
+            filter=EventFilter(
+                source=EventSource.AGENT,
+                include_types=(MessageAction, AgentFinishAction),
+            ),
+            limit=1,
+            reverse=True,
+            start_id=instruction_events[0].id,
+        )
     )
 
-    if not summary_event:
+    if not summary_events:
         logger.warning(
             'no_agent_messages_found', extra={'conversation_id': conversation_id}
         )
@@ -301,6 +283,7 @@ def extract_summary_from_event_store(
             final_agent_observation, conversation_link
         )  # Agent failed to generate summary
 
+    summary_event = summary_events[0]
     if isinstance(summary_event, MessageAction):
         return summary_event.content
 
