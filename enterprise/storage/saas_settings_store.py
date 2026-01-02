@@ -285,14 +285,29 @@ class SaasSettingsStore(SettingsStore):
                     'x-goog-api-key': LITE_LLM_API_KEY,
                 },
             ) as client:
-                # Get the previous max budget to prevent accidental loss
-                # In Litellm a get always succeeds, regardless of whether the user actually exists
+                # Get the previous max budget to prevent accidental loss.
+                #
+                # LiteLLM API behavior changed between versions:
+                # - v1.79.x and earlier: GET /user/info always succeeds, returning
+                #   empty user_info for non-existent users
+                # - v1.80.x and later: GET /user/info returns 404 for non-existent users
+                #
+                # We handle both cases to maintain compatibility during the transition:
+                # - 200 OK: User exists, extract their info
+                # - 404 Not Found: User doesn't exist yet (new user), use empty dict
+                # - Other errors: Raise as before (unexpected server issues)
                 response = await client.get(
                     f'{LITE_LLM_API_URL}/user/info?user_id={self.user_id}'
                 )
-                response.raise_for_status()
-                response_json = response.json()
-                user_info = response_json.get('user_info') or {}
+                user_info: dict
+                if response.status_code == 404:
+                    # New user - doesn't exist in LiteLLM yet (v1.80+ behavior)
+                    user_info = {}
+                else:
+                    # For any other status, use standard error handling
+                    response.raise_for_status()
+                    response_json = response.json()
+                    user_info = response_json.get('user_info') or {}
                 logger.info(
                     f'creating_litellm_user: {self.user_id}; prev_max_budget: {user_info.get("max_budget")}; prev_metadata: {user_info.get("metadata")}'
                 )

@@ -336,6 +336,55 @@ async def test_update_settings_with_litellm_default_error(settings_store):
 
 
 @pytest.mark.asyncio
+async def test_update_settings_with_litellm_default_handles_404_for_new_user(
+    settings_store, session_maker
+):
+    """Test that 404 response from LiteLLM user/info is handled gracefully.
+
+    LiteLLM API behavior changed between versions:
+    - v1.79.x and earlier: GET /user/info always succeeds with empty user_info
+    - v1.80.x and later: GET /user/info returns 404 for non-existent users
+
+    This test verifies we handle the v1.80+ behavior correctly for new users.
+    """
+    # Mock a 404 response for GET /user/info (new user doesn't exist in LiteLLM)
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 404
+
+    # Mock successful responses for POST operations (delete and create)
+    mock_post_response = MagicMock()
+    mock_post_response.is_success = True
+    mock_post_response.json = MagicMock(return_value={'key': 'new_user_api_key'})
+
+    with (
+        patch('storage.saas_settings_store.LITE_LLM_API_KEY', 'test_key'),
+        patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'),
+        patch('storage.saas_settings_store.LITE_LLM_TEAM_ID', 'test_team'),
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'newuser@example.com'}),
+        ),
+        patch('httpx.AsyncClient') as mock_client,
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Set up the mock client
+        mock_client.return_value.__aenter__.return_value.get.return_value = (
+            mock_get_response
+        )
+        mock_client.return_value.__aenter__.return_value.post.return_value = (
+            mock_post_response
+        )
+
+        settings = Settings()
+        settings = await settings_store.update_settings_with_litellm_default(settings)
+
+        # Verify the user was created successfully despite the 404
+        assert settings is not None
+        assert settings.llm_api_key is not None
+        assert settings.llm_api_key.get_secret_value() == 'new_user_api_key'
+
+
+@pytest.mark.asyncio
 async def test_update_settings_with_litellm_retry_on_duplicate_email(
     settings_store, mock_litellm_api, session_maker
 ):
