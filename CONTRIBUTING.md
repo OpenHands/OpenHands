@@ -31,7 +31,7 @@ We're always looking to improve the look and feel of the application. If you've 
 for something that's bugging you, feel free to open up a PR that changes the [`./frontend`](./frontend) directory.
 
 If you're looking to make a bigger change, add a new UI element, or significantly alter the style
-of the application, please open an issue first, or better, join the #eng-ui-ux channel in our Slack
+of the application, please open an issue first, or better, join the #dev-ui-ux channel in our Slack
 to gather consensus from our design team first.
 
 #### Improving the agent
