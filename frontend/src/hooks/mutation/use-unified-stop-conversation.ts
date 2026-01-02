@@ -76,9 +76,6 @@ export const useUnifiedPauseConversationSandbox = () => {
         );
       }
     },
-    onSettled: (_, __, variables) => {
-      invalidateConversationQueries(queryClient, variables.conversationId);
-    },
     onSuccess: (_, variables, context) => {
       if (context?.toastId) {
         toast.dismiss(context.toastId);
