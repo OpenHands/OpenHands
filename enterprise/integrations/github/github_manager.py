@@ -77,7 +77,7 @@ class GithubManager(Manager):
             reaction: The reaction to add (e.g. "eyes", "+1", "-1", "laugh", "confused", "heart", "hooray", "rocket")
             installation_token: GitHub installation access token for API access
         """
-        with Github(installation_token) as github_client:
+        with Github(auth=Auth.Token(installation_token)) as github_client:
             repo = github_client.get_repo(github_view.full_repo_name)
             # Add reaction based on view type
             if isinstance(github_view, GithubInlinePRComment):
@@ -199,7 +199,7 @@ class GithubManager(Manager):
         outgoing_message = message.message
 
         if isinstance(github_view, GithubInlinePRComment):
-            with Github(installation_token) as github_client:
+            with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
                 pr = repo.get_pull(github_view.issue_number)
                 pr.create_review_comment_reply(
@@ -211,7 +211,7 @@ class GithubManager(Manager):
             or isinstance(github_view, GithubIssueComment)
             or isinstance(github_view, GithubIssue)
         ):
-            with Github(installation_token) as github_client:
+            with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
                 issue = repo.get_issue(number=github_view.issue_number)
                 issue.create_comment(outgoing_message)

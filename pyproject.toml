@@ -77,7 +77,6 @@ shellingham = "^1.5.4"
 # TODO: Should these go into the runtime group?
 ipywidgets = "^8.1.5"
 qtconsole = "^5.6.1"
-PyPDF2 = "*"
 python-pptx = "*"
 pylatexenc = "*"
 python-docx = "*"

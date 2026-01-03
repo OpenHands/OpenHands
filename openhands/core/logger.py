@@ -552,11 +552,11 @@ def get_uvicorn_json_log_config() -> dict:
             },
             # Actual JSON formatters used by handlers below
             'json': {
-                '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+                '()': 'pythonjsonlogger.json.JsonFormatter',
                 'fmt': '%(message)s %(levelname)s %(name)s %(asctime)s %(exc_info)s',
             },
             'json_access': {
-                '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+                '()': 'pythonjsonlogger.json.JsonFormatter',
                 'fmt': '%(message)s %(levelname)s %(name)s %(asctime)s %(client_addr)s %(request_line)s %(status_code)s',
             },
         },
