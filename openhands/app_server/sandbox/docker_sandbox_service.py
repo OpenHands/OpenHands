@@ -78,6 +78,7 @@ class DockerSandboxService(SandboxService):
     health_check_path: str | None
     httpx_client: httpx.AsyncClient
     max_num_sandboxes: int
+    extra_hosts: dict[str, str] = field(default_factory=dict)
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
 
     def _find_unused_port(self) -> int:
@@ -349,6 +350,9 @@ class DockerSandboxService(SandboxService):
                 # Use Docker's tini init process to ensure proper signal handling and reaping of
                 # zombie child processes.
                 init=True,
+                # Allow agent-server containers to resolve host.docker.internal
+                # and other custom hostnames for LAN deployments
+                extra_hosts=self.extra_hosts if self.extra_hosts else None,
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)
@@ -469,6 +473,15 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'determine whether the server is running'
         ),
     )
+    extra_hosts: dict[str, str] = Field(
+        default_factory=lambda: {'host.docker.internal': 'host-gateway'},
+        description=(
+            'Extra hostname mappings to add to agent-server containers. '
+            'This allows containers to resolve hostnames like host.docker.internal '
+            'for LAN deployments and MCP connections. '
+            'Format: {"hostname": "ip_or_gateway"}'
+        ),
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -493,4 +506,5 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 health_check_path=self.health_check_path,
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
+                extra_hosts=self.extra_hosts,
             )
