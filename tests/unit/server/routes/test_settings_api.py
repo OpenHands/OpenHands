@@ -116,3 +116,36 @@ async def test_settings_api_endpoints(test_client):
     # Test the unset-provider-tokens endpoint
     response = test_client.post('/api/unset-provider-tokens')
     assert response.status_code == 200
+
+@pytest.mark.asyncio
+async def test_search_api_key_preservation(test_client):
+    """Test that search_api_key is preserved when sending empty string"""
+    # 1. Set initial settings with a search API key
+    initial_settings = {
+        'search_api_key': 'initial-secret-key',
+        'llm_model': 'gpt-4',
+    }
+    response = test_client.post('/api/settings', json=initial_settings)
+    assert response.status_code == 200
+
+    # Verify key is set
+    response = test_client.get('/api/settings')
+    assert response.status_code == 200
+    assert response.json()['search_api_key_set'] is True
+
+    # 2. Update settings with EMPTY search API key (simulating the frontend bug)
+    # and changing another field (llm_model)
+    update_settings = {
+        'search_api_key': '',  # The frontend sends an empty string here
+        'llm_model': 'claude-3-opus',
+    }
+    response = test_client.post('/api/settings', json=update_settings)
+    assert response.status_code == 200
+
+    # 3. Verify the key was NOT wiped out (The Critical Check)
+    response = test_client.get('/api/settings')
+    assert response.status_code == 200
+    # If the bug was present, this would be False
+    assert response.json()['search_api_key_set'] is True
+    # Verify the other field updated correctly
+    assert response.json()['llm_model'] == 'claude-3-opus'

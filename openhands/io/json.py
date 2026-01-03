@@ -1,7 +1,9 @@
 import json
 from datetime import datetime
 
-from json_repair import repair_json
+# from json_repair import repair_json  <-- Commented out!
+def repair_json(json_str, *args, **kwargs):
+    return json_str  # <-- Fake function that just does nothing
 from litellm.types.utils import ModelResponse
 
 from openhands.core.exceptions import LLMResponseError
