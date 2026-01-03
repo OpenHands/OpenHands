@@ -34,7 +34,9 @@ class MockUserAuth(UserAuth):
     async def get_access_token(self) -> SecretStr | None:
         return SecretStr('test-token')
 
-    async def get_provider_tokens(self) -> dict[ProviderType, ProviderToken] | None:  # noqa: E501
+    async def get_provider_tokens(
+        self,
+    ) -> dict[ProviderType, ProviderToken] | None:  # noqa: E501
         return None
 
     async def get_user_settings_store(self) -> SettingsStore | None:
@@ -116,6 +118,7 @@ async def test_settings_api_endpoints(test_client):
     # Test the unset-provider-tokens endpoint
     response = test_client.post('/api/unset-provider-tokens')
     assert response.status_code == 200
+
 
 @pytest.mark.asyncio
 async def test_search_api_key_preservation(test_client):
