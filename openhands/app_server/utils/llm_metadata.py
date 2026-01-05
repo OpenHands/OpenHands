@@ -60,7 +60,11 @@ def get_llm_metadata(
 
     if conversation_id is not None:
         # Convert UUID to string if needed
-        session_id = str(conversation_id) if isinstance(conversation_id, UUID) else conversation_id
+        session_id = (
+            str(conversation_id)
+            if isinstance(conversation_id, UUID)
+            else conversation_id
+        )
         metadata['session_id'] = session_id
 
     if user_id is not None:

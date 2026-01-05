@@ -900,7 +900,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self,
         agent: Agent,
         conversation_id: UUID,
-        user_id: str,
+        user_id: str | None,
     ) -> Agent:
         """Update agent's LLM and condenser LLM with litellm_extra_body metadata.
 
@@ -910,7 +910,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Args:
             agent: The agent to update
             conversation_id: The conversation ID
-            user_id: The user ID
+            user_id: The user ID (can be None)
 
         Returns:
             Updated agent with LLM metadata
