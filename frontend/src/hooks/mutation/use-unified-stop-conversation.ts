@@ -9,7 +9,6 @@ import {
   pauseV1ConversationSandbox,
   stopV0Conversation,
   updateConversationStatusInCache,
-  invalidateConversationQueries,
 } from "./conversation-mutation-utils";
 
 /**
