@@ -81,7 +81,7 @@ def build_litellm_proxy_model_path(model_name: str) -> str:
     Returns:
         The full LiteLLM proxy model path (e.g., 'litellm_proxy/claude-3-7-sonnet-20250219')
     """
-    if 'litellm' in model_name or 'proxy' in model_name:
+    if 'litellm' in model_name:
         raise ValueError("Only include model name, don't include prefix")
 
     return 'litellm_proxy/' + model_name
