@@ -4,7 +4,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from github import Github, GithubIntegration
+from github import Auth, Github, GithubIntegration
 from pydantic import Field
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
@@ -124,8 +124,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
             raise ValueError('GitHub App credentials are not configured')
 
         github_integration = GithubIntegration(
-            github_app_client_id,
-            github_app_private_key,
+            auth=Auth.AppAuth(github_app_client_id, github_app_private_key),
         )
         token_data = github_integration.get_access_token(installation_id)
         return token_data.token

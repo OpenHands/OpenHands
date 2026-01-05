@@ -23,7 +23,7 @@ jobs:
       - name: Trigger remote job
         run: |
           curl --fail-with-body -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{\"ref\": \"main\", \"inputs\": {\"openhandsPrNumber\": \"${{ github.event.pull_request.number }}\", \"deployEnvironment\": \"feature\", \"enterpriseImageTag\": \"pr-${{ github.event.pull_request.number }}\" }}" \
             https://api.github.com/repos/OpenHands/deploy/actions/workflows/deploy.yaml/dispatches

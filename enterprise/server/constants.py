@@ -38,6 +38,8 @@ LITE_LLM_API_URL = os.environ.get(
 )
 LITE_LLM_TEAM_ID = os.environ.get('LITE_LLM_TEAM_ID', None)
 LITE_LLM_API_KEY = os.environ.get('LITE_LLM_API_KEY', None)
+# Timeout in seconds for BYOR key verification requests to LiteLLM
+BYOR_KEY_VERIFICATION_TIMEOUT = 5.0
 SUBSCRIPTION_PRICE_DATA = {
     'MONTHLY_SUBSCRIPTION': {
         'unit_amount': 2000,
