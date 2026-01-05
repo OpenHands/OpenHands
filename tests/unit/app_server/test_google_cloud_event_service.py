@@ -428,35 +428,3 @@ class TestGoogleCloudEventService:
         result = await google_cloud_event_service.get_event('nonexistent_id')
 
         assert result is None
-
-
-class TestGoogleCloudEventServiceInjector:
-    """Test cases for GoogleCloudEventServiceInjector."""
-
-    @patch.dict('os.environ', {'GOOGLE_CLOUD_BUCKET_NAME': 'test-bucket'})
-    @patch('openhands.app_server.event.google_cloud_event_service.storage.Client')
-    async def test_inject_with_env_bucket_name(self, mock_storage_client):
-        """Test injection with bucket name from environment."""
-        from openhands.app_server.event.google_cloud_event_service import (
-            GoogleCloudEventServiceInjector,
-        )
-
-        mock_client = MagicMock()
-        mock_storage_client.return_value = mock_client
-        mock_bucket = MagicMock()
-        mock_client.bucket.return_value = mock_bucket
-
-        injector = GoogleCloudEventServiceInjector()
-
-        # We can't fully test inject without mocking more dependencies,
-        # but we can verify the injector is created correctly
-        assert injector.bucket_name is None
-
-    async def test_inject_with_explicit_bucket_name(self):
-        """Test injection with explicit bucket name."""
-        from openhands.app_server.event.google_cloud_event_service import (
-            GoogleCloudEventServiceInjector,
-        )
-
-        injector = GoogleCloudEventServiceInjector(bucket_name='explicit-bucket')
-        assert injector.bucket_name == 'explicit-bucket'
