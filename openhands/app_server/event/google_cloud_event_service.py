@@ -17,6 +17,7 @@ from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
 
 from openhands.agent_server.models import EventPage, EventSortOrder
+from more_itertools import bucket
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -25,6 +26,8 @@ from openhands.app_server.event.event_service import EventService, EventServiceI
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
+
+from pydantic import Field
 
 _logger = logging.getLogger(__name__)
 
@@ -429,7 +432,7 @@ class GoogleCloudEventService(EventService):
 
 
 class GoogleCloudEventServiceInjector(EventServiceInjector):
-    bucket_name: str | None = None
+    bucket_name: str
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -440,13 +443,6 @@ class GoogleCloudEventServiceInjector(EventServiceInjector):
             state, request
         ) as app_conversation_info_service:
             bucket_name = self.bucket_name
-            if bucket_name is None:
-                bucket_name = os.environ.get('GOOGLE_CLOUD_BUCKET_NAME')
-            if bucket_name is None:
-                raise ValueError(
-                    'GOOGLE_CLOUD_BUCKET_NAME environment variable is required'
-                )
-
             storage_client: Client = storage.Client()
             bucket: Bucket = storage_client.bucket(bucket_name)
 
