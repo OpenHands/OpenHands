@@ -130,6 +130,12 @@ def config_from_env() -> AppServerConfig:
     from openhands.app_server.app_conversation.sql_app_conversation_start_task_service import (  # noqa: E501
         SQLAppConversationStartTaskServiceInjector,
     )
+    from openhands.app_server.event.filesystem_event_service import (
+        FilesystemEventServiceInjector,
+    )
+    from openhands.app_server.event.google_cloud_event_service import (
+        GoogleCloudEventServiceInjector,
+    )
     from openhands.app_server.event_callback.sql_event_callback_service import (
         SQLEventCallbackServiceInjector,
     )
@@ -160,18 +166,10 @@ def config_from_env() -> AppServerConfig:
     if config.event is None:
         if os.environ.get('FILE_STORE') == 'google_cloud':
             # Legacy V0 google cloud storage configuration
-            from openhands.app_server.event.google_cloud_event_service import (
-                GoogleCloudEventServiceInjector,
-            )
-
             config.event = GoogleCloudEventServiceInjector(
                 bucket_name=os.environ.get('FILE_STORE_PATH')
             )
         else:
-            from openhands.app_server.event.filesystem_event_service import (
-                FilesystemEventServiceInjector,
-            )
-
             config.event = FilesystemEventServiceInjector()
 
     if config.event_callback is None:
