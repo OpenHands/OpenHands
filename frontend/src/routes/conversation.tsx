@@ -16,7 +16,6 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { useDocumentTitleFromState } from "#/hooks/use-document-title-from-state";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { ConversationSubscriptionsProvider } from "#/context/conversation-subscriptions-provider";
 import { useUserProviders } from "#/hooks/use-user-providers";
@@ -33,7 +32,6 @@ import { useEventStore } from "#/stores/use-event-store";
 
 function AppContent() {
   useConversationConfig();
-
   const { t } = useTranslation();
   const { conversationId } = useConversationId();
   const clearEvents = useEventStore((state) => state.clearEvents);
@@ -61,9 +59,6 @@ function AppContent() {
 
   // Fetch batch feedback data when conversation is loaded
   useBatchFeedback();
-
-  // Set the document title to the conversation title when available
-  useDocumentTitleFromState();
 
   // 1. Cleanup Effect - runs when navigating to a different conversation
   React.useEffect(() => {
