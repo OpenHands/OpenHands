@@ -19,10 +19,8 @@ packages = [
   { include = "poetry.lock", to = "openhands" },
 ]
 include = [
-  "openhands/integrations/vscode/openhands-vscode-0.0.1.vsix",
   "skills/**/*",
 ]
-build = "build_vscode.py" # Build VSCode extension during Poetry build
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
@@ -79,7 +77,6 @@ shellingham = "^1.5.4"
 # TODO: Should these go into the runtime group?
 ipywidgets = "^8.1.5"
 qtconsole = "^5.6.1"
-PyPDF2 = "*"
 python-pptx = "*"
 pylatexenc = "*"
 python-docx = "*"
@@ -192,6 +189,9 @@ datasets = "*"
 joblib = "*"
 swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }
 multi-swe-bench = "0.1.2"
+pandas = "*"
+# tau-bench = { git = "https://github.com/sierra-research/tau-bench.git" }
+# bfcl-eval = "*" # TODO: Verify exact package name/source
 
 [tool.poetry.group.testgeneval.dependencies]
 fuzzywuzzy = "^0.18.0"

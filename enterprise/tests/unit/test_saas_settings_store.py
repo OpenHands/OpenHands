@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from pydantic import SecretStr
 from server.constants import (
@@ -333,6 +334,80 @@ async def test_update_settings_with_litellm_default_error(settings_store):
                 settings
             )
             assert settings is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'status_code,user_info_response,should_succeed',
+    [
+        # 200 OK with user info - existing user (v1.79.x and v1.80+ behavior)
+        (200, {'user_info': {'max_budget': 10, 'spend': 5}}, True),
+        # 200 OK with empty user info - new user (v1.79.x behavior)
+        (200, {'user_info': None}, True),
+        # 404 Not Found - new user (v1.80+ behavior)
+        (404, None, True),
+        # 500 Internal Server Error - should fail
+        (500, None, False),
+    ],
+)
+async def test_update_settings_with_litellm_default_handles_user_info_responses(
+    settings_store, session_maker, status_code, user_info_response, should_succeed
+):
+    """Test that various LiteLLM user/info responses are handled correctly.
+
+    LiteLLM API behavior changed between versions:
+    - v1.79.x and earlier: GET /user/info always succeeds with empty user_info
+    - v1.80.x and later: GET /user/info returns 404 for non-existent users
+    """
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = status_code
+    if user_info_response is not None:
+        mock_get_response.json = MagicMock(return_value=user_info_response)
+        mock_get_response.raise_for_status = MagicMock()
+    else:
+        mock_get_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                'Error', request=MagicMock(), response=mock_get_response
+            )
+            if status_code >= 500
+            else None
+        )
+
+    # Mock successful responses for POST operations (delete and create)
+    mock_post_response = MagicMock()
+    mock_post_response.is_success = True
+    mock_post_response.json = MagicMock(return_value={'key': 'new_user_api_key'})
+
+    with (
+        patch('storage.saas_settings_store.LITE_LLM_API_KEY', 'test_key'),
+        patch('storage.saas_settings_store.LITE_LLM_API_URL', 'http://test.url'),
+        patch('storage.saas_settings_store.LITE_LLM_TEAM_ID', 'test_team'),
+        patch(
+            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
+            AsyncMock(return_value={'email': 'testuser@example.com'}),
+        ),
+        patch('httpx.AsyncClient') as mock_client,
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        # Set up the mock client
+        mock_client.return_value.__aenter__.return_value.get.return_value = (
+            mock_get_response
+        )
+        mock_client.return_value.__aenter__.return_value.post.return_value = (
+            mock_post_response
+        )
+
+        settings = Settings()
+        if should_succeed:
+            settings = await settings_store.update_settings_with_litellm_default(
+                settings
+            )
+            assert settings is not None
+            assert settings.llm_api_key is not None
+            assert settings.llm_api_key.get_secret_value() == 'new_user_api_key'
+        else:
+            with pytest.raises(httpx.HTTPStatusError):
+                await settings_store.update_settings_with_litellm_default(settings)
 
 
 @pytest.mark.asyncio

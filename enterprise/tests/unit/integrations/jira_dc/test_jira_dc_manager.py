@@ -18,7 +18,11 @@ from integrations.jira_dc.jira_dc_view import (
 from integrations.models import Message, SourceType
 
 from openhands.integrations.service_types import ProviderType, Repository
-from openhands.server.types import LLMAuthenticationError, MissingSettingsError
+from openhands.server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
 
 
 class TestJiraDcManagerInit:
@@ -760,6 +764,32 @@ class TestStartJob:
         jira_dc_manager.send_message.assert_called_once()
         call_args = jira_dc_manager.send_message.call_args[0]
         assert 'valid LLM API key' in call_args[0].message
+
+    @pytest.mark.asyncio
+    async def test_start_job_session_expired_error(
+        self, jira_dc_manager, sample_jira_dc_workspace
+    ):
+        """Test job start with session expired error."""
+        mock_view = MagicMock(spec=JiraDcNewConversationView)
+        mock_view.jira_dc_user = MagicMock()
+        mock_view.jira_dc_user.keycloak_user_id = 'test_user'
+        mock_view.job_context = MagicMock()
+        mock_view.job_context.issue_key = 'PROJ-123'
+        mock_view.jira_dc_workspace = sample_jira_dc_workspace
+        mock_view.create_or_update_conversation = AsyncMock(
+            side_effect=SessionExpiredError('Session expired')
+        )
+
+        jira_dc_manager.send_message = AsyncMock()
+        jira_dc_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+
+        await jira_dc_manager.start_job(mock_view)
+
+        # Should send error message about session expired
+        jira_dc_manager.send_message.assert_called_once()
+        call_args = jira_dc_manager.send_message.call_args[0]
+        assert 'session has expired' in call_args[0].message
+        assert 'login again' in call_args[0].message
 
     @pytest.mark.asyncio
     async def test_start_job_unexpected_error(

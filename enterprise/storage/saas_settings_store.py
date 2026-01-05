@@ -286,6 +286,7 @@ class SaasSettingsStore(SettingsStore):
                 },
             ) as client:
                 # Get the previous max budget to prevent accidental loss.
+                #
                 # LiteLLM v1.80+ returns 404 for non-existent users (previously returned empty user_info)
                 response = await client.get(
                     f'{LITE_LLM_API_URL}/user/info?user_id={self.user_id}'
