@@ -986,13 +986,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Generate conversation ID if not provided
         conversation_id = conversation_id or uuid4()
 
-        # Update agent's LLM with litellm_extra_body metadata for tracing
-        agent = self._update_agent_with_llm_metadata(agent, conversation_id, user.id)
-
         # Apply experiment variants
         agent = ExperimentManagerImpl.run_agent_variant_tests__v1(
             user.id, conversation_id, agent
         )
+
+        # Update agent's LLM with litellm_extra_body metadata for tracing
+        # This is done after experiment variants to ensure the final LLM config is used
+        agent = self._update_agent_with_llm_metadata(agent, conversation_id, user.id)
 
         # Load and merge skills if remote workspace is available
         if remote_workspace:
