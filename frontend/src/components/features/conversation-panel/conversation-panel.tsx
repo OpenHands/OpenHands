@@ -39,6 +39,8 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const [selectedConversationId, setSelectedConversationId] = React.useState<
     string | null
   >(null);
+  const [selectedConversationTitle, setSelectedConversationTitle] =
+    React.useState<string | null>(null);
   const [selectedConversationVersion, setSelectedConversationVersion] =
     React.useState<"V0" | "V1" | undefined>(undefined);
   const [openContextMenuId, setOpenContextMenuId] = React.useState<
@@ -73,9 +75,10 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
     threshold: 200, // Load more when 200px from bottom
   });
 
-  const handleDeleteProject = (conversationId: string) => {
+  const handleDeleteProject = (conversationId: string, title: string) => {
     setConfirmDeleteModalVisible(true);
     setSelectedConversationId(conversationId);
+    setSelectedConversationTitle(title);
   };
 
   const handleStopConversation = (
@@ -171,7 +174,9 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
           onClick={onClose}
         >
           <ConversationCard
-            onDelete={() => handleDeleteProject(project.conversation_id)}
+            onDelete={() =>
+              handleDeleteProject(project.conversation_id, project.title)
+            }
             onStop={() =>
               handleStopConversation(
                 project.conversation_id,
@@ -212,8 +217,13 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
           onConfirm={() => {
             handleConfirmDelete();
             setConfirmDeleteModalVisible(false);
+            setSelectedConversationTitle(null);
           }}
-          onCancel={() => setConfirmDeleteModalVisible(false)}
+          onCancel={() => {
+            setConfirmDeleteModalVisible(false);
+            setSelectedConversationTitle(null);
+          }}
+          conversationTitle={selectedConversationTitle ?? undefined}
         />
       )}
 
@@ -233,6 +243,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
             onClose();
           }}
           onClose={() => setConfirmExitConversationModalVisible(false)}
+          onCancel={() => setConfirmExitConversationModalVisible(false)}
         />
       )}
     </div>

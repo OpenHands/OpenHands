@@ -1,9 +1,9 @@
-import { TooltipButton } from "#/components/shared/buttons/tooltip-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 
 interface ChatActionTooltipProps {
   children: React.ReactNode;
   tooltip: string | React.ReactNode;
-  ariaLabel: string;
+  ariaLabel?: string;
 }
 
 export function ChatActionTooltip({
@@ -12,14 +12,12 @@ export function ChatActionTooltip({
   ariaLabel,
 }: ChatActionTooltipProps) {
   return (
-    <TooltipButton
-      tooltip={tooltip}
-      ariaLabel={ariaLabel}
-      disabled={false}
+    <StyledTooltip
+      content={tooltip}
       placement="bottom"
       tooltipClassName="bg-white text-black text-xs font-medium leading-5"
     >
-      {children}
-    </TooltipButton>
+      <span data-aria-label={ariaLabel}>{children}</span>
+    </StyledTooltip>
   );
 }

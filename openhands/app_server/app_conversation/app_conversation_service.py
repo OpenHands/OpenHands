@@ -10,6 +10,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationSortOrder,
     AppConversationStartRequest,
     AppConversationStartTask,
+    AppConversationUpdateRequest,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
 from openhands.app_server.services.injector import Injector
@@ -97,6 +98,13 @@ class AppConversationService(ABC):
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Run the setup scripts for the project and yield status updates"""
         yield task
+
+    @abstractmethod
+    async def update_app_conversation(
+        self, conversation_id: UUID, request: AppConversationUpdateRequest
+    ) -> AppConversation | None:
+        """Update an app conversation and return it. Return None if the conversation
+        did not exist."""
 
     @abstractmethod
     async def delete_app_conversation(self, conversation_id: UUID) -> bool:

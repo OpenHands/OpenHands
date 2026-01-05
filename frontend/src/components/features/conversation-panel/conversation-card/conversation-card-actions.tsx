@@ -59,7 +59,12 @@ export function ConversationCardActions({
         <ConversationCardContextMenu
           onClose={() => onContextMenuToggle(false)}
           onDelete={onDelete}
-          onStop={conversationStatus !== "STOPPED" ? onStop : undefined}
+          onStop={
+            conversationStatus === "RUNNING" ||
+            conversationStatus === "STARTING"
+              ? onStop
+              : undefined
+          }
           onEdit={onEdit}
           onDownloadViaVSCode={
             conversationId && showOptions ? onDownloadViaVSCode : undefined

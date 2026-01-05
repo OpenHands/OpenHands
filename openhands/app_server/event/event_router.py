@@ -22,7 +22,7 @@ event_service_dependency = depends_event_service()
 @router.get('/search')
 async def search_events(
     conversation_id__eq: Annotated[
-        UUID | None,
+        str | None,
         Query(title='Optional filter by conversation ID'),
     ] = None,
     kind__eq: Annotated[
@@ -55,7 +55,7 @@ async def search_events(
     assert limit > 0
     assert limit <= 100
     return await event_service.search_events(
-        conversation_id__eq=conversation_id__eq,
+        conversation_id__eq=UUID(conversation_id__eq) if conversation_id__eq else None,
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
@@ -68,7 +68,7 @@ async def search_events(
 @router.get('/count')
 async def count_events(
     conversation_id__eq: Annotated[
-        UUID | None,
+        str | None,
         Query(title='Optional filter by conversation ID'),
     ] = None,
     kind__eq: Annotated[
@@ -91,7 +91,7 @@ async def count_events(
 ) -> int:
     """Count events matching the given filters."""
     return await event_service.count_events(
-        conversation_id__eq=conversation_id__eq,
+        conversation_id__eq=UUID(conversation_id__eq) if conversation_id__eq else None,
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
