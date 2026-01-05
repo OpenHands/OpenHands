@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import AsyncGenerator
@@ -17,7 +16,6 @@ from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
 
 from openhands.agent_server.models import EventPage, EventSortOrder
-from more_itertools import bucket
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -26,8 +24,6 @@ from openhands.app_server.event.event_service import EventService, EventServiceI
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
-
-from pydantic import Field
 
 _logger = logging.getLogger(__name__)
 
