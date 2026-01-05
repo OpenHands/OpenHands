@@ -1,13 +1,13 @@
 import { useTranslation } from "react-i18next";
 import React from "react";
 import { FileDiffViewer } from "#/components/features/diff-viewer/file-diff-viewer";
+import { EmptyChangesMessage } from "#/components/features/diff-viewer/empty-changes-message";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 import { I18nKey } from "#/i18n/declaration";
 import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
 import { RandomTip } from "#/components/features/tips/random-tip";
 import { useAgentState } from "#/hooks/use-agent-state";
-import { FaCodeCompare } from "react-icons/fa6";
 
 // Error message patterns
 const GIT_REPO_ERROR_PATTERN = /not a git repository/i;
@@ -16,19 +16,6 @@ function StatusMessage({ children }: React.PropsWithChildren) {
   return (
     <div className="w-full h-full flex flex-col items-center text-center justify-center text-2xl text-tertiary-light">
       {children}
-    </div>
-  );
-}
-
-function EmptyChangesMessage() {
-  const { t } = useTranslation();
-
-  return (
-    <div className="flex flex-col items-center justify-center w-full h-full p-10 gap-4">
-      <FaCodeCompare size={113} />
-      <span className="text-[#8D95A9] text-[19px] font-normal leading-5">
-        {t(I18nKey.DIFF_VIEWER$NO_CHANGES)}
-      </span>
     </div>
   );
 }
@@ -90,7 +77,8 @@ function GitChanges() {
                   <span key={msg}>{t(msg)}</span>
                 ))}
               </StatusMessage>
-            ) : isSuccess && gitChanges.length === 0 ? (
+            ) : null}
+            {!statusMessage && isSuccess && gitChanges.length === 0 ? (
               <EmptyChangesMessage />
             ) : null}
           </div>
