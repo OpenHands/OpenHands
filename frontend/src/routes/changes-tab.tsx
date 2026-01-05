@@ -71,16 +71,16 @@ function GitChanges() {
       {!isSuccess || !gitChanges.length ? (
         <div className="relative flex h-full w-full items-center">
           <div className="absolute inset-x-0 top-1/2 -translate-y-1/2">
-            {statusMessage ? (
+            {statusMessage && (
               <StatusMessage>
                 {statusMessage.map((msg) => (
                   <span key={msg}>{t(msg)}</span>
                 ))}
               </StatusMessage>
-            ) : null}
-            {!statusMessage && isSuccess && gitChanges.length === 0 ? (
+            )}
+            {!statusMessage && isSuccess && gitChanges.length === 0 && (
               <EmptyChangesMessage />
-            ) : null}
+            )}
           </div>
 
           <div className="absolute inset-x-0 bottom-0">
