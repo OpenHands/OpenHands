@@ -850,6 +850,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         system_message_suffix: str | None,
         mcp_config: dict,
         condenser_max_size: int | None,
+        condenser_keep_first: int | None = None,
         secrets: dict | None = None,
     ) -> Agent:
         """Create an agent with appropriate tools and context based on agent type.
@@ -859,14 +860,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             agent_type: Type of agent to create (PLAN or DEFAULT)
             system_message_suffix: Optional suffix for system messages
             mcp_config: MCP configuration dictionary
-            condenser_max_size: condenser_max_size setting
+            condenser_max_size: Maximum number of events before condensation
+            condenser_keep_first: Number of initial events to always keep
             secrets: Optional dictionary of secrets for authentication
 
         Returns:
             Configured Agent instance with context
         """
         # Create condenser with user's settings
-        condenser = self._create_condenser(llm, agent_type, condenser_max_size)
+        condenser = self._create_condenser(
+            llm, agent_type, condenser_max_size, condenser_keep_first
+        )
 
         # Create agent based on type
         if agent_type == AgentType.PLAN:
@@ -1054,6 +1058,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             system_message_suffix,
             mcp_config,
             user.condenser_max_size,
+            user.condenser_keep_first,
             secrets=secrets,
         )
 

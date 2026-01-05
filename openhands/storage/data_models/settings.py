@@ -47,6 +47,8 @@ class Settings(BaseModel):
     max_budget_per_task: float | None = None
     # Maximum number of events in the conversation view before condensation runs
     condenser_max_size: int | None = None
+    # Number of initial events to always keep in history during condensation
+    condenser_keep_first: int | None = None
     email: str | None = None
     email_verified: bool | None = None
     git_user_name: str | None = None
@@ -120,6 +122,15 @@ class Settings(BaseModel):
             return v
         if v < 20:
             raise ValueError('condenser_max_size must be at least 20')
+        return v
+
+    @field_validator('condenser_keep_first')
+    @classmethod
+    def validate_condenser_keep_first(cls, v: int | None) -> int | None:
+        if v is None:
+            return v
+        if v < 0:
+            raise ValueError('condenser_keep_first must be non-negative')
         return v
 
     @field_serializer('secrets_store')
