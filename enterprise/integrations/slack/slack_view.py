@@ -7,6 +7,7 @@ from integrations.slack.slack_types import SlackViewInterface, StartingConvoExce
 from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProcessor
 from integrations.utils import (
     CONVERSATION_URL,
+    ENABLE_V1_SLACK_RESOLVER,
     get_final_agent_observation,
     get_user_v1_enabled_setting,
 )
@@ -53,6 +54,10 @@ from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 CONTEXT_LIMIT = 21
 slack_conversation_store = SlackConversationStore.get_instance()
 slack_team_store = SlackTeamStore.get_instance()
+
+
+async def is_v1_enabled_for_slack_resolver(user_id: str) -> bool:
+    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_SLACK_RESOLVER
 
 
 @dataclass
@@ -221,7 +226,7 @@ class SlackNewConversationView(SlackViewInterface):
         user_secrets = await self.saas_user_auth.get_secrets()
 
         # Check if V1 conversations are enabled for this user
-        v1_enabled = await get_user_v1_enabled_setting(
+        v1_enabled = await is_v1_enabled_for_slack_resolver(
             self.slack_to_openhands_user.keycloak_user_id
         )
 

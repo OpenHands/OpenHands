@@ -81,6 +81,9 @@ ENABLE_V1_GITHUB_RESOLVER = (
     os.getenv('ENABLE_V1_GITHUB_RESOLVER', 'false').lower() == 'true'
 )
 
+ENABLE_V1_SLACK_RESOLVER = (
+    os.getenv('ENABLE_V1_SLACK_RESOLVER', 'false').lower() == 'true'
+)
 
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
