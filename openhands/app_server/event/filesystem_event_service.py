@@ -49,18 +49,19 @@ class FilesystemEventServiceInjector(EventServiceInjector):
         from openhands.app_server.config import (
             get_global_config,
             get_user_context,
+            get_app_conversation_info_service
         )
 
-        async with get_user_context(
-            state, request
-        ) as user_context:
+        async with (
+            get_user_context(state, request) as user_context,
+            get_app_conversation_info_service(state, request) as app_conversation_info_service
+        ):
             # Set up a service with a path {persistence_dir}/{user_id}/v1_conversations
-            path = get_global_config().persistence_dir
-
+            prefix = get_global_config().persistence_dir
             user_id = await user_context.get_user_id()
-            if user_id:
-                path /= user_id
 
-            path /= 'v1_conversations'
-
-            yield FilesystemEventService(path=path)
+            yield FilesystemEventService(
+                prefix=prefix,
+                user_id=user_id,
+                app_conversation_info_service=app_conversation_info_service
+            )

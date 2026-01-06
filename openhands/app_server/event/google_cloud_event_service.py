@@ -13,6 +13,7 @@ from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
 
+from openhands.app_server.config import get_app_conversation_info_service
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
 from openhands.app_server.event.event_service_base import EventServiceBase
 from openhands.app_server.services.injector import InjectorState
@@ -59,6 +60,7 @@ class GoogleCloudEventService(EventServiceBase):
 
 class GoogleCloudEventServiceInjector(EventServiceInjector):
     bucket_name: str
+    prefix: Path = Path('users')
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -67,21 +69,19 @@ class GoogleCloudEventServiceInjector(EventServiceInjector):
             get_user_context,
         )
 
-        async with get_user_context(
-            state, request
-        ) as user_context:
-
+        async with (
+            get_user_context(state, request) as user_context,
+            get_app_conversation_info_service(state, request) as app_conversation_info_service
+        ):
             user_id = await user_context.get_user_id()
-            if user_id:
-                path = Path('users') / user_id / 'v1_conversations'
-            else:
-                path = Path('v1_conversations')
 
             bucket_name = self.bucket_name
             storage_client: Client = storage.Client()
             bucket: Bucket = storage_client.bucket(bucket_name)
 
             yield GoogleCloudEventService(
-                path=path,
+                prefix=self.prefix,
+                user_id=user_id,
+                app_conversation_info_service=app_conversation_info_service,
                 bucket=bucket,
             )
