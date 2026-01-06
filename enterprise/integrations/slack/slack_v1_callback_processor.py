@@ -30,7 +30,7 @@ _logger = logging.getLogger(__name__)
 class SlackV1CallbackProcessor(EventCallbackProcessor):
     """Callback processor for Slack V1 integrations."""
 
-    slack_view_data: dict[str, str] = Field(default_factory=dict)
+    slack_view_data: dict[str, str | None] = Field(default_factory=dict)
 
     async def __call__(
         self,

@@ -515,7 +515,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 f'{user_info.slack_display_name} is not authorized to send messages to this conversation.'
             )
 
-        if self.slack_conversation.v1:
+        if self.slack_conversation.v1_enabled:
             await self.send_message_to_v1_conversation(jinja)
         else:
             await self.send_message_to_v0_conversation(jinja)

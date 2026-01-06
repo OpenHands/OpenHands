@@ -13,11 +13,9 @@ from integrations.resolver_context import ResolverUserContext
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
     ENABLE_PROACTIVE_CONVERSATION_STARTERS,
-    ENABLE_V1_GITHUB_RESOLVER,
     HOST,
     HOST_URL,
     get_oh_labels,
-    get_user_v1_enabled_setting,
     has_exact_mention,
 )
 from jinja2 import Environment
@@ -57,7 +55,10 @@ OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 
 
 async def is_v1_enabled_for_github_resolver(user_id: str) -> bool:
-    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_GITHUB_RESOLVER
+    # return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_GITHUB_RESOLVER
+    # WARNING
+    # TODO: remove this override
+    return True
 
 
 async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
