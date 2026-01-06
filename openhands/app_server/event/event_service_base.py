@@ -50,21 +50,14 @@ class EventServiceBase(EventService, ABC):
         limit: int = 100,
     ) -> EventPage:
         """Search events matching the given filters."""
-        #TODO: Apply paging and limit here...
         loop = asyncio.get_running_loop()
         prefix = self.path / conversation_id.hex
         paths = await loop.run_in_executor(None, self._search_paths, prefix)
-        start_offset = 0
-        if page_id:
-            start_offset = int(page_id)
-            paths = paths[start_offset:]
-        if len(paths) > limit:
-            paths = paths[:limit]
-            next_page_id = str(start_offset + limit)
-
+        events = await asyncio.gather(
+            *[loop.run_in_executor(None, self._load_event, path) for path in paths]
+        )
         items = []
-        for path in paths:
-            event: Event = await loop.run_in_executor(None, self._load_event, path)
+        for event in events:
             if not event:
                 continue
             if kind__eq and event.kind != kind__eq:
@@ -74,6 +67,21 @@ class EventServiceBase(EventService, ABC):
             if timestamp__lt and event.timestamp >= timestamp__lt:
                 continue
             items.append(event)
+
+        if sort_order:
+            items.sort(
+                key=lambda e: e.timestamp,
+                reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC)
+            )
+
+        start_offset = 0
+        if page_id:
+            start_offset = int(page_id)
+            paths = paths[start_offset:]
+        if len(paths) > limit:
+            paths = paths[:limit]
+            next_page_id = str(start_offset + limit)
+
         return EventPage(items, next_page_id=next_page_id)
 
     async def count_events(

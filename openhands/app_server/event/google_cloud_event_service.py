@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Iterator
 
 from fastapi import Request
 from google.api_core.exceptions import NotFound
@@ -49,7 +49,7 @@ class GoogleCloudEventService(EventServiceBase):
 
     def _search_paths(self, prefix: Path, page_id: str | None = None) -> list[Path]:
         """Search paths."""
-        blobs = self.bucket.list_blobs(
+        blobs: Iterator[Blob] = self.bucket.list_blobs(
             page_token=page_id,
             prefix=str(prefix)
         )
