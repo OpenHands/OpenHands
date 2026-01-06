@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from server.sharing.filesystem_shared_event_service import (
+from server.sharing.shared_event_service_impl import (
     SharedEventServiceImpl,
 )
 from server.sharing.shared_conversation_info_service import (

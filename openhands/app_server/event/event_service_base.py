@@ -1,0 +1,123 @@
+import asyncio
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from datetime import datetime
+from pathlib import Path
+from uuid import UUID
+
+from openhands.agent_server.models import EventPage, EventSortOrder
+from openhands.agent_server.sockets import page_iterator
+from openhands.app_server.event.event_service import EventService
+from openhands.app_server.event_callback.event_callback_models import EventKind
+from openhands.sdk import Event
+
+
+@dataclass
+class EventServiceBase(EventService, ABC):
+    """Event Service for getting events - the only check on permissions for events is
+    in the strict prefix for storage.
+    Uses pattern `self.path / conversation_id.hex / f"{event_id.hex}.json`
+    """
+    path: Path
+
+    @abstractmethod
+    def _load_event(self, path: Path) -> Event | None:
+        """Get the event at the path given."""
+
+    @abstractmethod
+    def _store_event(self, path: Path, event: Event):
+        """Store the event given at the path given."""
+
+    @abstractmethod
+    def _search_paths(self, prefix: Path) -> list[Path]:
+        """Search paths."""
+
+    async def get_event(self, conversation_id: UUID,  event_id: UUID) -> Event | None:
+        """Get the event with the given id, or None if not found."""
+        path = self.path / conversation_id.hex / f"{event_id.hex}.json"
+        loop = asyncio.get_running_loop()
+        event: Event = await loop.run_in_executor(None, self._load_event, path)
+        return event
+
+    async def search_events(
+        self,
+        conversation_id: UUID,
+        kind__eq: EventKind | None = None,
+        timestamp__gte: datetime | None = None,
+        timestamp__lt: datetime | None = None,
+        sort_order: EventSortOrder = EventSortOrder.TIMESTAMP,
+        page_id: str | None = None,
+        limit: int = 100,
+    ) -> EventPage:
+        """Search events matching the given filters."""
+        #TODO: Apply paging and limit here...
+        loop = asyncio.get_running_loop()
+        prefix = self.path / conversation_id.hex
+        paths = await loop.run_in_executor(None, self._search_paths, prefix)
+        start_offset = 0
+        if page_id:
+            start_offset = int(page_id)
+            paths = paths[start_offset:]
+        if len(paths) > limit:
+            paths = paths[:limit]
+            next_page_id = str(start_offset + limit)
+
+        items = []
+        for path in paths:
+            event: Event = await loop.run_in_executor(None, self._load_event, path)
+            if not event:
+                continue
+            if kind__eq and event.kind != kind__eq:
+                continue
+            if timestamp__gte and event.timestamp < timestamp__gte:
+                continue
+            if timestamp__lt and event.timestamp >= timestamp__lt:
+                continue
+            items.append(event)
+        return EventPage(items, next_page_id=next_page_id)
+
+    async def count_events(
+        self,
+        conversation_id: UUID,
+        kind__eq: EventKind | None = None,
+        timestamp__gte: datetime | None = None,
+        timestamp__lt: datetime | None = None,
+    ) -> int:
+        """Count events matching the given filters."""
+        # If we are not filtering, we can simply count the paths
+        if not (kind__eq or timestamp__gte or timestamp__lt):
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, self._count_events_no_filter, conversation_id)
+            return result
+
+        events = page_iterator(
+            self.search_events,
+            conversation_id=conversation_id,
+            kind__eq=kind__eq,
+            timestamp__gte=timestamp__gte,
+            timestamp__lt=timestamp__lt,
+        )
+        result = sum(1 for event in events)
+        return result
+
+    def _count_events_no_filter(self, conversation_id: UUID) -> int:
+        prefix = prefix = self.path / conversation_id.hex
+        paths = page_iterator(self._search_paths, prefix)
+        result = sum(1 for path in paths)
+        return result
+
+    async def save_event(self, conversation_id: UUID, event: Event):
+        if isinstance(event.id, str):
+            id_hex = event.id.replace('-', '')
+        else:
+            id_hex = event.id.hex
+        path = self.path / conversation_id.hex / f"{id_hex}.json"
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._store_event, path, event)
+
+    async def batch_get_events(self, conversation_id: UUID, event_ids: list[UUID]) -> list[Event | None]:
+        """Given a list of ids, get events (Or none for any which were not found)."""
+        return await asyncio.gather(
+            *[self.get_event(conversation_id, event_id) for event_id in event_ids]
+        )
+

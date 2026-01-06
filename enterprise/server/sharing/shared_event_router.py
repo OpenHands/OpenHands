@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from server.sharing.filesystem_shared_event_service import (
+from server.sharing.shared_event_service_impl import (
     SharedEventServiceImplInjector,
 )
 from server.sharing.shared_event_service import SharedEventService
@@ -104,7 +104,7 @@ async def count_shared_events(
 @router.get('')
 async def batch_get_shared_events(
     conversation_id: Annotated[
-        UUID,
+        str,
         Query(title='Conversation ID to get events for'),
     ],
     id: Annotated[list[str], Query()],
@@ -112,15 +112,15 @@ async def batch_get_shared_events(
 ) -> list[Event | None]:
     """Get a batch of events for a shared conversation given their ids, returning null for any missing event."""
     assert len(id) <= 100
-    events = await shared_event_service.batch_get_shared_events(conversation_id, id)
+    events = await shared_event_service.batch_get_shared_events(UUID(conversation_id), id)
     return events
 
 
 @router.get('/{conversation_id}/{event_id}')
 async def get_shared_event(
-    conversation_id: UUID,
+    conversation_id: str,
     event_id: str,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> Event | None:
     """Get a single event from a shared conversation by conversation_id and event_id."""
-    return await shared_event_service.get_shared_event(conversation_id, event_id)
+    return await shared_event_service.get_shared_event(UUID(conversation_id), event_id)

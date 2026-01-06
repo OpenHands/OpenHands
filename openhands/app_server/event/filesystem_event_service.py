@@ -1,87 +1,45 @@
-"""Filesystem-based EventService implementation."""
 
-import json
+
+
 from dataclasses import dataclass
+import glob
+import logging
 from pathlib import Path
 from typing import AsyncGenerator
-from uuid import UUID
-
 from fastapi import Request
-
-from openhands.app_server.app_conversation.app_conversation_info_service import (
-    AppConversationInfoService,
-)
-from openhands.app_server.errors import OpenHandsError
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
-from openhands.app_server.event.filesystem_event_service_base import (
-    FilesystemEventServiceBase,
-)
-from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.event.event_service_base import EventServiceBase
 from openhands.sdk import Event
+
+from openhands.app_server.services.injector import InjectorState
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
-class FilesystemEventService(FilesystemEventServiceBase, EventService):
-    """Filesystem-based implementation of EventService.
+class FilesystemEventService(EventServiceBase):
+    """Event service based on file system"""
+    limit: int = 500
 
-    Events are stored in files with the naming format:
-    {conversation_id}/{YYYYMMDDHHMMSS}_{kind}_{id.hex}
+    def _load_event(self, path: Path) -> Event | None:
+        try:
+            content = path.read_text(str(path))
+            content = Event.model_validate_json(content)
+            return content
+        except Exception as e:
+            _logger.exception("Error reading event", stack_info=True)
+            return None
 
-    Uses an AppConversationInfoService to lookup conversations
-    """
+    def _store_event(self, path: Path, event: Event):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = event.model_dump_json(indent=2)
+        path.write_text(content)
 
-    app_conversation_info_service: AppConversationInfoService
-    events_dir: Path
-
-    def _ensure_events_dir(self, conversation_id: UUID | None = None) -> Path:
-        """Ensure the events directory exists."""
-        if conversation_id:
-            events_path = self.events_dir / str(conversation_id)
-        else:
-            events_path = self.events_dir
-        events_path.mkdir(parents=True, exist_ok=True)
-        return events_path
-
-    def _save_event_to_file(self, conversation_id: UUID, event: Event) -> None:
-        """Save an event to a file."""
-        events_path = self._ensure_events_dir(conversation_id)
-        filename = self._get_event_filename(conversation_id, event)
-        filepath = events_path / filename
-
-        with open(filepath, 'w') as f:
-            # Use model_dump with mode='json' to handle UUID serialization
-            data = event.model_dump(mode='json')
-            f.write(json.dumps(data, indent=2))
-
-    async def save_event(self, conversation_id: UUID, event: Event):
-        """Save an event. Internal method intended not be part of the REST api."""
-        conversation = (
-            await self.app_conversation_info_service.get_app_conversation_info(
-                conversation_id
-            )
-        )
-        if not conversation:
-            # This is either an illegal state or somebody is trying to hack
-            raise OpenHandsError('No such conversation: {conversaiont_id}')
-        self._save_event_to_file(conversation_id, event)
-
-    async def _filter_files_by_conversation(self, files: list[Path]) -> list[Path]:
-        conversation_ids = list(self._get_conversation_ids(files))
-        conversations = (
-            await self.app_conversation_info_service.batch_get_app_conversation_info(
-                conversation_ids
-            )
-        )
-        permitted_conversation_ids = set()
-        for conversation in conversations:
-            if conversation:
-                permitted_conversation_ids.add(conversation.id)
-        result = [
-            file
-            for file in files
-            if self._get_conversation_id(file) in permitted_conversation_ids
-        ]
-        return result
+    def _search_paths(self, prefix: Path, page_id: str | None = None) -> list[Path]:
+        search_path = f'{prefix}*'
+        files = glob.glob(str(search_path))
+        paths = [Path(file) for file in files]
+        return paths
 
 
 class FilesystemEventServiceInjector(EventServiceInjector):
@@ -89,16 +47,20 @@ class FilesystemEventServiceInjector(EventServiceInjector):
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[EventService, None]:
         from openhands.app_server.config import (
-            get_app_conversation_info_service,
             get_global_config,
+            get_user_context,
         )
 
-        async with get_app_conversation_info_service(
+        async with get_user_context(
             state, request
-        ) as app_conversation_info_service:
-            persistence_dir = get_global_config().persistence_dir
+        ) as user_context:
+            # Set up a service with a path {persistence_dir}/{user_id}/v1_conversations
+            path = get_global_config().persistence_dir
 
-            yield FilesystemEventService(
-                app_conversation_info_service=app_conversation_info_service,
-                events_dir=persistence_dir / 'v1' / 'events',
-            )
+            user_id = await user_context.get_user_id()
+            if user_id:
+                path /= user_id
+
+            path /= 'v1_conversations'
+
+            yield FilesystemEventService(path=path)
