@@ -128,9 +128,7 @@ class EventServiceBase(EventService, ABC):
         if not (kind__eq or timestamp__gte or timestamp__lt):
             conversation_path = await self.get_conversation_path(conversation_id)
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None, self._count_events_no_filter, conversation_path
-            )
+            result = await self._count_events_no_filter(conversation_path)
             return result
 
         events = page_iterator(
@@ -143,9 +141,11 @@ class EventServiceBase(EventService, ABC):
         result = sum(1 for event in events)
         return result
 
-    def _count_events_no_filter(self, conversation_path: Path) -> int:
+    async def _count_events_no_filter(self, conversation_path: Path) -> int:
         paths = page_iterator(self._search_paths, conversation_path)
-        result = sum(1 for path in paths)
+        result = 0
+        async for _ in paths:
+            result += 1
         return result
 
     async def save_event(self, conversation_id: UUID, event: Event):
