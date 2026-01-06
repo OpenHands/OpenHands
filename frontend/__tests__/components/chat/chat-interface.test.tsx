@@ -92,7 +92,7 @@ const renderWithQueryClient = (
 
 beforeEach(() => {
   useParamsMock.mockReturnValue({ conversationId: "test-conversation-id" });
-  (useConversationId as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+  vi.mocked(useConversationId).mockReturnValue({
     conversationId: "test-conversation-id",
   });
 });
