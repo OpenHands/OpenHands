@@ -20,9 +20,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Add v1 column
-    op.add_column('slack_conversation', sa.Column('v1', sa.Boolean(), nullable=True))
+    op.add_column(
+        'slack_conversation', sa.Column('v1_enabled', sa.Boolean(), nullable=True)
+    )
 
 
 def downgrade() -> None:
     # Drop v1 column
-    op.drop_column('slack_conversation', 'v1')
+    op.drop_column('slack_conversation', 'v1_enabled')

@@ -9,4 +9,4 @@ class SlackConversation(Base):  # type: ignore
     channel_id = Column(String, nullable=False)
     keycloak_user_id = Column(String, nullable=False)
     parent_id = Column(String, nullable=True, index=True)
-    v1 = Column(Boolean, nullable=True)
+    v1_enabled = Column(Boolean, nullable=True)

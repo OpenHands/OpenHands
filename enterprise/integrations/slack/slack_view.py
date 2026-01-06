@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
@@ -180,7 +180,7 @@ class SlackNewConversationView(SlackViewInterface):
                 'Attempting to start conversation without confirming selected repo from user'
             )
 
-    async def save_slack_convo(self, is_v1: bool = False):
+    async def save_slack_convo(self, v1_enabled: bool = False):
         if self.slack_to_openhands_user:
             user_info: SlackUser = self.slack_to_openhands_user
 
@@ -191,7 +191,7 @@ class SlackNewConversationView(SlackViewInterface):
                     'conversation_id': self.conversation_id,
                     'keycloak_user_id': user_info.keycloak_user_id,
                     'parent_id': self.thread_ts or self.message_ts,
-                    'v1': is_v1,
+                    'v1_enabled': v1_enabled,
                 },
             )
             slack_conversation = SlackConversation(
@@ -200,7 +200,7 @@ class SlackNewConversationView(SlackViewInterface):
                 keycloak_user_id=user_info.keycloak_user_id,
                 parent_id=self.thread_ts
                 or self.message_ts,  # conversations can start in a thread reply as well; we should always references the parent's (root level msg's) message ID
-                v1=is_v1,
+                v1_enabled=v1_enabled,
             )
             await slack_conversation_store.create_slack_conversation(slack_conversation)
 
@@ -230,7 +230,7 @@ class SlackNewConversationView(SlackViewInterface):
 
         if self.v1_enabled:
             # Use V1 app conversation service
-            await self._create_v1_conversation(jinja, provider_tokens, user_secrets)
+            await self._create_v1_conversation(jinja)
             return self.conversation_id
         else:
             # Use existing V0 conversation service
@@ -268,11 +268,9 @@ class SlackNewConversationView(SlackViewInterface):
 
         self.conversation_id = agent_loop_info.conversation_id
         logger.info(f'[Slack]: Created V0 conversation: {self.conversation_id}')
-        await self.save_slack_convo(is_v1=False)
+        await self.save_slack_convo(v1_enabled=False)
 
-    async def _create_v1_conversation(
-        self, jinja: Environment, provider_tokens, user_secrets
-    ) -> None:
+    async def _create_v1_conversation(self, jinja: Environment) -> None:
         """Create conversation using the new V1 app conversation system."""
         user_instructions, conversation_instructions = self._get_instructions(jinja)
 
@@ -286,6 +284,7 @@ class SlackNewConversationView(SlackViewInterface):
 
         # Determine git provider from repository
         git_provider = None
+        provider_tokens = await self.saas_user_auth.get_provider_tokens()
         if self.selected_repo and provider_tokens:
             provider_handler = ProviderHandler(provider_tokens)
             repository = await provider_handler.verify_repo_provider(self.selected_repo)
@@ -295,8 +294,9 @@ class SlackNewConversationView(SlackViewInterface):
         injector_state = InjectorState()
 
         # Create the V1 conversation start request with the callback processor
+        self.conversation_id = uuid4().hex
         start_request = AppConversationStartRequest(
-            conversation_id=self.conversation_id,
+            conversation_id=UUID(self.conversation_id),
             system_message_suffix=conversation_instructions,
             initial_message=initial_message,
             selected_repository=self.selected_repo,
@@ -325,7 +325,7 @@ class SlackNewConversationView(SlackViewInterface):
                     )
 
         logger.info(f'[Slack V1]: Created new conversation: {self.conversation_id}')
-        await self.save_slack_convo(is_v1=True)
+        await self.save_slack_convo(v1_enabled=True)
 
     def get_callback_id(self) -> str:
         return f'slack_{self.channel_id}_{self.message_ts}'
