@@ -73,6 +73,7 @@ class SlackUnkownUserView(SlackViewInterface):
     send_summary_instruction: bool
     conversation_id: str
     team_id: str
+    v1_enabled: bool
 
     def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         raise NotImplementedError
@@ -99,6 +100,7 @@ class SlackNewConversationView(SlackViewInterface):
     send_summary_instruction: bool
     conversation_id: str
     team_id: str
+    v1_enabled: bool
 
     def _get_initial_prompt(self, text: str, blocks: list[dict]):
         bot_id = self._get_bot_id(blocks)
@@ -569,7 +571,7 @@ class SlackFactory:
                     'channel_id': channel_id,
                 },
             )
-            raise Exception('Did not slack team')
+            raise Exception('Did not find slack team')
 
         # Determine if this is a known slack user by openhands
         if not slack_user or not saas_user_auth or not channel_id:

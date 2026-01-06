@@ -313,7 +313,7 @@ class SlackManager(Manager):
                 # Only add SlackCallbackProcessor for new conversations (not updates) and non-v1 conversations
                 if (
                     not isinstance(slack_view, SlackUpdateExistingConversationView)
-                    and not slack_view.v1
+                    and not slack_view.v1_enabled
                 ):
                     # We don't re-subscribe for follow up messages from slack.
                     # Summaries are generated for every messages anyways, we only need to do
@@ -337,7 +337,7 @@ class SlackManager(Manager):
                     logger.info(
                         f'[Slack] Skipping callback processor for existing conversation update {conversation_id}'
                     )
-                elif slack_view.v1:
+                elif slack_view.v1_enabled:
                     logger.info(
                         f'[Slack] Skipping callback processor for v1 conversation {conversation_id}'
                     )

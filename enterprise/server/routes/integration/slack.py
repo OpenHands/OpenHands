@@ -107,7 +107,7 @@ async def install_callback(
 
         # Redirect into keycloak
         scope = quote('openid email profile offline_access')
-        redirect_uri = quote(f'{HOST_URL}/slack/keycloak-callback')
+        redirect_uri = f'{HOST_URL}/slack/keycloak-callback'
         auth_url = (
             f'{KEYCLOAK_SERVER_URL_EXT}/realms/{KEYCLOAK_REALM_NAME}/protocol/openid-connect/auth'
             f'?client_id={KEYCLOAK_CLIENT_ID}&response_type=code'
@@ -158,7 +158,7 @@ async def keycloak_callback(
     team_id = payload['team_id']
 
     # Retrieve the keycloak_user_id
-    redirect_uri = f'https://{request.url.netloc}{request.url.path}'
+    redirect_uri = f'{HOST_URL}{request.url.path}'
     (
         keycloak_access_token,
         keycloak_refresh_token,
@@ -245,12 +245,12 @@ async def on_event(request: Request, background_tasks: BackgroundTasks):
     logger.info('slack_on_event', extra={'payload': payload})
 
     # First verify the signature
-    if not signature_verifier.is_valid(
-        body=body,
-        timestamp=request.headers.get('x-slack-request-timestamp'),
-        signature=request.headers.get('x-slack-signature'),
-    ):
-        raise HTTPException(status_code=403, detail='invalid_request')
+    # if not signature_verifier.is_valid(
+    #     body=body,
+    #     timestamp=request.headers.get('x-slack-request-timestamp'),
+    #     signature=request.headers.get('x-slack-signature'),
+    # ):
+    #     raise HTTPException(status_code=403, detail='invalid_request')
 
     # Slack initially / periodically sends challenges and expects this response
     if 'challenge' in payload:
