@@ -151,7 +151,7 @@ class GoogleCloudSharedEventServiceInjector(SharedEventServiceInjector):
             storage_client: Client = storage.Client()
             bucket: Bucket = storage_client.bucket(bucket_name)
 
-            service = GoogleCloudSharedEventServiceInjector(
+            service = GoogleCloudSharedEventService(
                 shared_conversation_info_service=shared_conversation_info_service,
                 bucket=bucket
             )

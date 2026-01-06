@@ -42,7 +42,7 @@ class GoogleCloudEventService(EventServiceBase):
 
     def _store_event(self, path: Path, event: Event):
         """Store the event given at the path given."""
-        blob: Blob = self.bucket.blob(path)
+        blob: Blob = self.bucket.blob(str(path))
         data = event.model_dump(mode='json')
         with blob.open('w') as f:
             f.write(json.dumps(data, indent=2))
