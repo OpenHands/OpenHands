@@ -34,11 +34,6 @@ class SlackViewInterface(SummaryExtractionTracker, ABC):
         pass
 
     @abstractmethod
-    def get_callback_id(self) -> str:
-        """Unique callback id for subscribription made to EventStream for fetching agent summary"""
-        pass
-
-    @abstractmethod
     def get_response_msg(self) -> str:
         pass
 

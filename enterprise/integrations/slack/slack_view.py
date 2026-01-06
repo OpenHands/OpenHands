@@ -80,9 +80,6 @@ class SlackUnkownUserView(SlackViewInterface):
     async def create_or_update_conversation(self, jinja_env: Environment):
         raise NotImplementedError
 
-    def get_callback_id(self) -> str:
-        raise NotImplementedError
-
     def get_response_msg(self) -> str:
         raise NotImplementedError
 
@@ -326,9 +323,6 @@ class SlackNewConversationView(SlackViewInterface):
 
         logger.info(f'[Slack V1]: Created new conversation: {self.conversation_id}')
         await self.save_slack_convo(v1_enabled=True)
-
-    def get_callback_id(self) -> str:
-        return f'slack_{self.channel_id}_{self.message_ts}'
 
     def get_response_msg(self) -> str:
         user_info: SlackUser = self.slack_to_openhands_user
