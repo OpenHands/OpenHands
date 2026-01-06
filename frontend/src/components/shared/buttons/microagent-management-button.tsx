@@ -1,6 +1,7 @@
+import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { TooltipButton } from "./tooltip-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import RobotIcon from "#/icons/robot.svg?react";
 
 interface MicroagentManagementButtonProps {
@@ -15,14 +16,21 @@ export function MicroagentManagementButton({
   const microagentManagement = t(I18nKey.MICROAGENT_MANAGEMENT$TITLE);
 
   return (
-    <TooltipButton
-      tooltip={microagentManagement}
-      ariaLabel={microagentManagement}
-      navLinkTo="/microagent-management"
-      testId="microagent-management-button"
-      disabled={disabled}
-    >
-      <RobotIcon width={28} height={28} />
-    </TooltipButton>
+    <StyledTooltip content={microagentManagement}>
+      <NavLink
+        to="/microagent-management"
+        data-testid="microagent-management-button"
+        aria-label={microagentManagement}
+        tabIndex={disabled ? -1 : 0}
+        onClick={(e) => {
+          if (disabled) {
+            e.preventDefault();
+          }
+        }}
+        className={disabled ? "pointer-events-none opacity-50" : undefined}
+      >
+        <RobotIcon width={28} height={28} />
+      </NavLink>
+    </StyledTooltip>
   );
 }

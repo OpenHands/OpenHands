@@ -4,7 +4,6 @@ import { usePostHog } from "posthog-js/react";
 import { useParams, useNavigate } from "react-router";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import useMetricsStore from "#/stores/metrics-store";
-import { isSystemMessage, isActionOrObservation } from "#/types/core/guards";
 import { ConversationStatus } from "#/types/conversation-status";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { useDeleteConversation } from "./mutation/use-delete-conversation";
@@ -18,9 +17,13 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
-import { isV0Event } from "#/types/v1/type-guards";
+
 import { useActiveConversation } from "./query/use-active-conversation";
 import { useDownloadConversation } from "./use-download-conversation";
+import {
+  adaptSystemMessage,
+  SystemMessageForModal,
+} from "#/utils/system-message-adapter";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -56,10 +59,8 @@ export function useConversationNameContextMenu({
     React.useState(false);
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
-  const systemMessage = events
-    .filter(isV0Event)
-    .filter(isActionOrObservation)
-    .find(isSystemMessage);
+  const systemMessage: SystemMessageForModal | null =
+    adaptSystemMessage(events);
 
   const handleDelete = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
