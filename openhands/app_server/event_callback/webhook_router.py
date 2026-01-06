@@ -1,4 +1,4 @@
-"""Event Callback router for OpenHands Server."""
+"""Event Callback router for OpenHands App Server."""
 
 import asyncio
 import importlib
