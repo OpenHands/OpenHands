@@ -14,6 +14,7 @@ from keycloak.exceptions import (
     KeycloakAuthenticationError,
     KeycloakConnectionError,
     KeycloakError,
+    KeycloakPostError,
 )
 from server.auth.constants import (
     BITBUCKET_APP_CLIENT_ID,
@@ -43,6 +44,7 @@ from storage.offline_token_store import OfflineTokenStore
 from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
 
 from openhands.integrations.service_types import ProviderType
+from openhands.server.types import SessionExpiredError
 from openhands.utils.http_session import httpx_verify_option
 
 
@@ -464,6 +466,14 @@ class TokenManager:
             return await self.get_idp_token(tokens['access_token'], idp)
         except KeycloakConnectionError:
             logger.exception('KeycloakConnectionError when refreshing token')
+            raise
+        except KeycloakPostError as e:
+            error_message = str(e)
+            if 'invalid_grant' in error_message or 'session not found' in error_message:
+                logger.warning(f'User session expired or invalid: {error_message}')
+                raise SessionExpiredError(
+                    'Your session has expired. Please login again.'
+                ) from e
             raise
 
     @retry(

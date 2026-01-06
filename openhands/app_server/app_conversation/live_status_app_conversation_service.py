@@ -72,6 +72,10 @@ from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.app_server.utils.llm_metadata import (
+    get_llm_metadata,
+    should_set_litellm_extra_body,
+)
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
@@ -892,6 +896,63 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return agent
 
+    def _update_agent_with_llm_metadata(
+        self,
+        agent: Agent,
+        conversation_id: UUID,
+        user_id: str | None,
+    ) -> Agent:
+        """Update agent's LLM and condenser LLM with litellm_extra_body metadata.
+
+        This adds tracing metadata (conversation_id, user_id, etc.) to the LLM
+        for analytics and debugging purposes. Only applies to openhands/ models.
+
+        Args:
+            agent: The agent to update
+            conversation_id: The conversation ID
+            user_id: The user ID (can be None)
+
+        Returns:
+            Updated agent with LLM metadata
+        """
+        updates: dict[str, Any] = {}
+
+        # Update main LLM if it's an openhands model
+        if should_set_litellm_extra_body(agent.llm.model):
+            llm_metadata = get_llm_metadata(
+                model_name=agent.llm.model,
+                llm_type=agent.llm.usage_id or 'agent',
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
+            updated_llm = agent.llm.model_copy(
+                update={'litellm_extra_body': {'metadata': llm_metadata}}
+            )
+            updates['llm'] = updated_llm
+
+        # Update condenser LLM if it exists and is an openhands model
+        if agent.condenser and hasattr(agent.condenser, 'llm'):
+            condenser_llm = agent.condenser.llm
+            if should_set_litellm_extra_body(condenser_llm.model):
+                condenser_metadata = get_llm_metadata(
+                    model_name=condenser_llm.model,
+                    llm_type=condenser_llm.usage_id or 'condenser',
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                )
+                updated_condenser_llm = condenser_llm.model_copy(
+                    update={'litellm_extra_body': {'metadata': condenser_metadata}}
+                )
+                updated_condenser = agent.condenser.model_copy(
+                    update={'llm': updated_condenser_llm}
+                )
+                updates['condenser'] = updated_condenser
+
+        # Return updated agent if there are changes
+        if updates:
+            return agent.model_copy(update=updates)
+        return agent
+
     async def _finalize_conversation_request(
         self,
         agent: Agent,
@@ -929,6 +990,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         agent = ExperimentManagerImpl.run_agent_variant_tests__v1(
             user.id, conversation_id, agent
         )
+
+        # Update agent's LLM with litellm_extra_body metadata for tracing
+        # This is done after experiment variants to ensure the final LLM config is used
+        agent = self._update_agent_with_llm_metadata(agent, conversation_id, user.id)
 
         # Load and merge skills if remote workspace is available
         if remote_workspace:

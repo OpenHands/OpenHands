@@ -709,7 +709,7 @@ class GithubFactory:
                     payload['installation']['id']
                 ).token
 
-            with Github(access_token) as gh:
+            with Github(auth=Auth.Token(access_token)) as gh:
                 repo = gh.get_repo(selected_repo)
                 login = (
                     payload['organization']['login']
@@ -846,7 +846,7 @@ class GithubFactory:
                 access_token = integration.get_access_token(installation_id).token
 
             head_ref = None
-            with Github(access_token) as gh:
+            with Github(auth=Auth.Token(access_token)) as gh:
                 repo = gh.get_repo(selected_repo)
                 pull_request = repo.get_pull(issue_number)
                 head_ref = pull_request.head.ref
