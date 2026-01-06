@@ -1,17 +1,18 @@
 import React from "react";
 
-// Fixed pattern to prevent layout shifts during initial message loading
 const SKELETON_PATTERN = [
-  { width: "w-[25%]", height: "h-4", align: "justify-end" }, // User
-  { width: "w-[60%]", height: "h-4", align: "justify-start" }, // Agent
-  { width: "w-[45%]", height: "h-4", align: "justify-start" }, // Agent
-  { width: "w-[85%]", height: "h-20", align: "justify-start" }, // Large block for Action/Terminal outputs
-  { width: "w-[35%]", height: "h-4", align: "justify-end" }, // User
-  { width: "w-[50%]", height: "h-4", align: "justify-start" }, // Agent
+  { width: "w-[25%]", height: "h-4", align: "justify-end" },
+  { width: "w-[60%]", height: "h-4", align: "justify-start" },
+  { width: "w-[45%]", height: "h-4", align: "justify-start" },
+  { width: "w-[65%]", height: "h-20", align: "justify-start" },
+  { width: "w-[35%]", height: "h-4", align: "justify-end" },
+  { width: "w-[50%]", height: "h-4", align: "justify-start" },
+  { width: "w-[30%]", height: "h-4", align: "justify-end" },
+  { width: "w-[75%]", height: "h-4", align: "justify-start" },
+  { width: "w-[55%]", height: "h-4", align: "justify-start" },
 ];
 
 function SkeletonBlock({ width, height }: { width: string; height: string }) {
-  // Using low opacity foreground for a subtle fading effect during transitions
   return (
     <div
       className={`rounded-md bg-foreground/5 animate-pulse ${width} ${height}`}
@@ -22,7 +23,7 @@ function SkeletonBlock({ width, height }: { width: string; height: string }) {
 export function ChatMessagesSkeleton() {
   return (
     <div
-      className="flex flex-col gap-6 p-4 w-full"
+      className="flex flex-col gap-6 p-4 w-full h-full overflow-hidden"
       data-testid="chat-messages-skeleton"
       aria-label="Loading conversation"
     >

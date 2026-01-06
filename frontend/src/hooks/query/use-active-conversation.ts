@@ -1,16 +1,15 @@
 import { useEffect } from "react";
-import { useParams } from "react-router";
+import { useConversationId } from "#/hooks/use-conversation-id";
 import { useUserConversation } from "./use-user-conversation";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 
 export const useActiveConversation = () => {
-  const { conversationId } = useParams<{ conversationId?: string }>();
+  const { conversationId } = useConversationId();
 
   // Don't poll if this is a task ID (format: "task-{uuid}")
   // Task polling is handled by useTaskPolling hook
-  const isTaskId = conversationId?.startsWith("task-");
-  const actualConversationId =
-    !conversationId || isTaskId ? null : conversationId;
+  const isTaskId = conversationId.startsWith("task-");
+  const actualConversationId = isTaskId ? null : conversationId;
 
   const userConversation = useUserConversation(
     actualConversationId,
@@ -25,10 +24,10 @@ export const useActiveConversation = () => {
   );
 
   useEffect(() => {
-    const conversation = actualConversationId ? userConversation.data : null;
+    const conversation = userConversation.data;
     ConversationService.setCurrentConversation(conversation || null);
   }, [
-    actualConversationId,
+    conversationId,
     userConversation.isFetched,
     userConversation?.data?.status,
   ]);

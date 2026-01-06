@@ -603,7 +603,9 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setMainConnectionState("CLOSED");
-        if (event.code !== 1000) {
+        // Only show error message if we've previously connected successfully
+        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
+        if (event.code !== 1000 && hasConnectedRefMain.current) {
           setErrorMessage(
             `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
           );
@@ -611,7 +613,10 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setMainConnectionState("CLOSED");
-        setErrorMessage("Failed to connect to server");
+        // Only show error message if we've previously connected successfully
+        if (hasConnectedRefMain.current) {
+          setErrorMessage("Failed to connect to server");
+        }
       },
       onMessage: handleMainMessage,
     };
@@ -670,7 +675,9 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setPlanningConnectionState("CLOSED");
-        if (event.code !== 1000) {
+        // Only show error message if we've previously connected successfully
+        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
+        if (event.code !== 1000 && hasConnectedRefPlanning.current) {
           setErrorMessage(
             `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
           );
@@ -678,7 +685,10 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
-        setErrorMessage("Failed to connect to server");
+        // Only show error message if we've previously connected successfully
+        if (hasConnectedRefPlanning.current) {
+          setErrorMessage("Failed to connect to server");
+        }
       },
       onMessage: handlePlanningMessage,
     };
