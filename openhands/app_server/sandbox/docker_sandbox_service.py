@@ -426,8 +426,23 @@ class DockerSandboxService(SandboxService):
 class DockerSandboxServiceInjector(SandboxServiceInjector):
     """Dependency injector for docker sandbox services."""
 
-    container_url_pattern: str = 'http://localhost:{port}'
-    host_port: int = 3000
+    container_url_pattern: str = Field(
+        default='http://localhost:{port}',
+        description=(
+            'URL pattern for exposed sandbox ports. Use {port} as placeholder. '
+            'For remote access, set to your server IP (e.g., http://192.168.1.100:{port}). '
+            'Configure via OH_SANDBOX_CONTAINER_URL_PATTERN environment variable.'
+        ),
+    )
+    host_port: int = Field(
+        default=3000,
+        description=(
+            'The port on which the main OpenHands app server is running. '
+            'Used for webhook callbacks from agent-server containers. '
+            'If running OpenHands on a non-default port, set this to match. '
+            'Configure via OH_SANDBOX_HOST_PORT environment variable.'
+        ),
+    )
     container_name_prefix: str = 'oh-agent-server-'
     max_num_sandboxes: int = Field(
         default=5,

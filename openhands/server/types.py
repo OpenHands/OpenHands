@@ -53,3 +53,9 @@ class LLMAuthenticationError(ValueError):
     """Raised when there is an issue with LLM authentication."""
 
     pass
+
+
+class SessionExpiredError(ValueError):
+    """Raised when the user's authentication session has expired."""
+
+    pass

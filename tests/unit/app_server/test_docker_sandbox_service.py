@@ -973,3 +973,116 @@ class TestExposedPort:
         port = ExposedPort(name='test', description='Test port')
         with pytest.raises(ValueError):  # Should raise validation error
             port.name = 'new_name'
+
+
+class TestDockerSandboxServiceInjector:
+    """Test cases for DockerSandboxServiceInjector configuration."""
+
+    def test_default_values(self):
+        """Test default configuration values."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector()
+        assert injector.host_port == 3000
+        assert injector.container_url_pattern == 'http://localhost:{port}'
+
+    def test_custom_host_port(self):
+        """Test custom host_port configuration."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(host_port=4000)
+        assert injector.host_port == 4000
+
+    def test_custom_container_url_pattern(self):
+        """Test custom container_url_pattern configuration."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(
+            container_url_pattern='http://192.168.1.100:{port}'
+        )
+        assert injector.container_url_pattern == 'http://192.168.1.100:{port}'
+
+    def test_custom_configuration_combined(self):
+        """Test combined custom configuration for remote access."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(
+            host_port=4000,
+            container_url_pattern='http://192.168.1.100:{port}',
+        )
+        assert injector.host_port == 4000
+        assert injector.container_url_pattern == 'http://192.168.1.100:{port}'
+
+
+class TestDockerSandboxServiceInjectorFromEnv:
+    """Test cases for DockerSandboxServiceInjector environment variable configuration."""
+
+    def test_config_from_env_with_sandbox_host_port(self):
+        """Test that SANDBOX_HOST_PORT environment variable is respected."""
+        import os
+        from unittest.mock import patch
+
+        env_vars = {
+            'SANDBOX_HOST_PORT': '4000',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=False):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            assert config.sandbox.host_port == 4000
+
+    def test_config_from_env_with_sandbox_container_url_pattern(self):
+        """Test that SANDBOX_CONTAINER_URL_PATTERN environment variable is respected."""
+        import os
+        from unittest.mock import patch
+
+        env_vars = {
+            'SANDBOX_CONTAINER_URL_PATTERN': 'http://192.168.1.100:{port}',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=False):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'
+
+    def test_config_from_env_with_both_sandbox_vars(self):
+        """Test that both SANDBOX_HOST_PORT and SANDBOX_CONTAINER_URL_PATTERN work together."""
+        import os
+        from unittest.mock import patch
+
+        env_vars = {
+            'SANDBOX_HOST_PORT': '4000',
+            'SANDBOX_CONTAINER_URL_PATTERN': 'http://192.168.1.100:{port}',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=False):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            assert config.sandbox.host_port == 4000
+            assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'

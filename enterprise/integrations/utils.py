@@ -47,6 +47,27 @@ ENABLE_PROACTIVE_CONVERSATION_STARTERS = (
     os.getenv('ENABLE_PROACTIVE_CONVERSATION_STARTERS', 'false').lower() == 'true'
 )
 
+
+def get_session_expired_message(username: str | None = None) -> str:
+    """Get a user-friendly session expired message.
+
+    Used by integrations to notify users when their Keycloak offline session
+    has expired.
+
+    Args:
+        username: Optional username to mention in the message. If provided,
+                  the message will include @username prefix (used by Git providers
+                  like GitHub, GitLab, Slack). If None, returns a generic message
+                  (used by Jira, Jira DC, Linear).
+
+    Returns:
+        A formatted session expired message
+    """
+    if username:
+        return f'@{username} your session has expired. Please login again at [OpenHands Cloud]({HOST_URL}) and try again.'
+    return f'Your session has expired. Please login again at [OpenHands Cloud]({HOST_URL}) and try again.'
+
+
 # Toggle for solvability report feature
 ENABLE_SOLVABILITY_ANALYSIS = (
     os.getenv('ENABLE_SOLVABILITY_ANALYSIS', 'false').lower() == 'true'

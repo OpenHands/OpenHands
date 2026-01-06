@@ -14,6 +14,7 @@ from integrations.slack.slack_view import (
 from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
+    get_session_expired_message,
 )
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
@@ -29,7 +30,11 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
 from openhands.integrations.service_types import Repository
 from openhands.server.shared import config, server_config
-from openhands.server.types import LLMAuthenticationError, MissingSettingsError
+from openhands.server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
 from openhands.server.user_auth.user_auth import UserAuth
 
 authorize_url_generator = AuthorizeUrlGenerator(
@@ -351,6 +356,13 @@ class SlackManager(Manager):
                 )
 
                 msg_info = f'@{user_info.slack_display_name} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
+
+            except SessionExpiredError as e:
+                logger.warning(
+                    f'[Slack] Session expired for user {user_info.slack_display_name}: {str(e)}'
+                )
+
+                msg_info = get_session_expired_message(user_info.slack_display_name)
 
             except StartingConvoException as e:
                 msg_info = str(e)
