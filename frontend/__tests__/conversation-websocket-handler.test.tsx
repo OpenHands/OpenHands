@@ -11,6 +11,7 @@ import {
 import { screen, waitFor, render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
@@ -78,13 +79,22 @@ function renderWithWebSocketContext(
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <ConversationWebSocketProvider
-        conversationId={conversationId}
-        conversationUrl={conversationUrl}
-        sessionApiKey={sessionApiKey}
-      >
-        {children}
-      </ConversationWebSocketProvider>
+      <MemoryRouter initialEntries={["/test-conversation-default"]}>
+        <Routes>
+          <Route
+            path="/:conversationId"
+            element={
+              <ConversationWebSocketProvider
+                conversationId={conversationId}
+                conversationUrl={conversationUrl}
+                sessionApiKey={sessionApiKey}
+              >
+                {children}
+              </ConversationWebSocketProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
