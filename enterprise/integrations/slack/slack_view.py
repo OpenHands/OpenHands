@@ -35,13 +35,11 @@ from openhands.integrations.provider import ProviderHandler, ProviderType
 from openhands.sdk import TextContent
 from openhands.server.services.conversation_service import (
     create_new_conversation,
-    initialize_conversation,
     setup_init_conversation_settings,
 )
 from openhands.server.shared import ConversationStoreImpl, config, conversation_manager
 from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
-    ConversationMetadata,
     ConversationTrigger,
 )
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
@@ -226,41 +224,18 @@ class SlackNewConversationView(SlackViewInterface):
         user_secrets = await self.saas_user_auth.get_secrets()
 
         # Check if V1 conversations are enabled for this user
-        v1_enabled = await is_v1_enabled_for_slack_resolver(
+        self.v1_enabled = await is_v1_enabled_for_slack_resolver(
             self.slack_to_openhands_user.keycloak_user_id
         )
 
-        if v1_enabled:
-            try:
-                # Use V1 app conversation service
-                self.v1 = True
-                await self._create_v1_conversation(jinja, provider_tokens, user_secrets)
-                return self.conversation_id
-
-            except Exception as e:
-                logger.error(
-                    f'Error creating V1 conversation, falling back to V0: {e}',
-                    exc_info=True,
-                )
-                # Reset v1 flag since we're falling back to v0
-                self.v1 = False
-
-        # Use existing V0 conversation service
-        self.v1 = False
-        await self._create_v0_conversation(jinja, provider_tokens, user_secrets)
-        return self.conversation_id
-
-    async def initialize_new_conversation(self) -> ConversationMetadata:
-        conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
-            user_id=self.slack_to_openhands_user.keycloak_user_id,
-            conversation_id=None,
-            selected_repository=self.selected_repo,
-            selected_branch=None,
-            conversation_trigger=ConversationTrigger.SLACK,
-        )
-
-        self.conversation_id = conversation_metadata.conversation_id
-        return conversation_metadata
+        if self.v1_enabled:
+            # Use V1 app conversation service
+            await self._create_v1_conversation(jinja, provider_tokens, user_secrets)
+            return self.conversation_id
+        else:
+            # Use existing V0 conversation service
+            await self._create_v0_conversation(jinja, provider_tokens, user_secrets)
+            return self.conversation_id
 
     async def _create_v0_conversation(
         self, jinja: Environment, provider_tokens, user_secrets
@@ -299,7 +274,6 @@ class SlackNewConversationView(SlackViewInterface):
         self, jinja: Environment, provider_tokens, user_secrets
     ) -> None:
         """Create conversation using the new V1 app conversation system."""
-        await self.initialize_new_conversation()
         user_instructions, conversation_instructions = self._get_instructions(jinja)
 
         # Create the initial message request
@@ -619,6 +593,7 @@ class SlackFactory:
                 send_summary_instruction=False,
                 conversation_id='',
                 team_id=team_id,
+                v1_enabled=False,
             )
 
         conversation: SlackConversation | None = call_async_from_sync(
@@ -649,6 +624,7 @@ class SlackFactory:
                 conversation_id=conversation.conversation_id,
                 slack_conversation=conversation,
                 team_id=team_id,
+                v1_enabled=False,
             )
 
         elif SlackFactory.did_user_select_repo_from_form(message):
@@ -666,6 +642,7 @@ class SlackFactory:
                 send_summary_instruction=True,
                 conversation_id='',
                 team_id=team_id,
+                v1_enabled=False,
             )
 
         else:
@@ -683,4 +660,5 @@ class SlackFactory:
                 send_summary_instruction=True,
                 conversation_id='',
                 team_id=team_id,
+                v1_enabled=False,
             )
