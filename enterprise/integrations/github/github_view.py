@@ -113,7 +113,6 @@ class GithubIssue(ResolverViewInterface):
     title: str
     description: str
     previous_comments: list[Comment]
-    saas_user_auth: UserAuth | None
     v1_enabled: bool
 
     def _get_branch_name(self) -> str | None:
@@ -279,7 +278,7 @@ class GithubIssue(ResolverViewInterface):
         )
 
         # Set up the GitHub user context for the V1 system
-        github_user_context = ResolverUserContext(saas_user_auth=self.saas_user_auth)
+        github_user_context = ResolverUserContext(saas_user_auth=saas_user_auth)
         setattr(injector_state, USER_CONTEXT_ATTR, github_user_context)
 
         async with get_app_conversation_service(
@@ -742,7 +741,7 @@ class GithubFactory:
 
     @staticmethod
     async def create_github_view_from_payload(
-        message: Message, keycloak_user_id: str, saas_user_auth: UserAuth
+        message: Message, keycloak_user_id: str
     ) -> ResolverViewInterface:
         """Create the appropriate class (GithubIssue or GithubPRComment) based on the payload.
         Also return metadata about the event (e.g., action type).
@@ -779,7 +778,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                saas_user_auth=saas_user_auth,
                 v1_enabled=False,
             )
 
@@ -806,7 +804,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                saas_user_auth=saas_user_auth,
                 v1_enabled=False,
             )
 
@@ -849,7 +846,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                saas_user_auth=saas_user_auth,
                 v1_enabled=False,
             )
 
@@ -884,7 +880,6 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                saas_user_auth=saas_user_auth,
                 v1_enabled=False,
             )
 

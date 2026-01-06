@@ -176,12 +176,8 @@ class GithubManager(Manager):
                 user_id, ProviderType.GITHUB
             )
 
-            saas_user_auth = await get_saas_user_auth(
-                keyloak_user_id, self.token_manager
-            )
-
             github_view = await GithubFactory.create_github_view_from_payload(
-                message, keyloak_user_id, saas_user_auth
+                message, keyloak_user_id
             )
             logger.info(
                 f'[GitHub] Creating job for {github_view.user_info.username} in {github_view.full_repo_name}#{github_view.issue_number}'
