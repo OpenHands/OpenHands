@@ -1,7 +1,7 @@
 """add v1 column to slack conversation table
 
-Revision ID: 084
-Revises: 083
+Revision ID: 086
+Revises: 085
 Create Date: 2025-12-02 15:30:00.000000
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '084'
-down_revision: Union[str, None] = '083'
+revision: str = '086'
+down_revision: Union[str, None] = '085'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
