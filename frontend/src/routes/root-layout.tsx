@@ -15,6 +15,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { AuthModal } from "#/components/features/waitlist/auth-modal";
 import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
+import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
@@ -26,10 +27,12 @@ import { useAutoLogin } from "#/hooks/use-auto-login";
 import { useAuthCallback } from "#/hooks/use-auth-callback";
 import { useReoTracking } from "#/hooks/use-reo-tracking";
 import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
+import { useEmailVerification } from "#/hooks/use-email-verification";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { MaintenanceBanner } from "#/components/features/maintenance/maintenance-banner";
 import { cn, isMobileDevice } from "#/utils/utils";
+import { useAppTitle } from "#/hooks/use-app-title";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -65,6 +68,7 @@ export function ErrorBoundary() {
 }
 
 export default function MainApp() {
+  const appTitle = useAppTitle();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isOnTosPage = useIsOnTosPage();
@@ -91,6 +95,13 @@ export default function MainApp() {
   const effectiveGitHubAuthUrl = isOnTosPage ? null : gitHubAuthUrl;
 
   const [consentFormIsOpen, setConsentFormIsOpen] = React.useState(false);
+  const {
+    emailVerificationModalOpen,
+    setEmailVerificationModalOpen,
+    emailVerified,
+    hasDuplicatedEmail,
+    userId,
+  } = useEmailVerification();
 
   // Auto-login if login method is stored in local storage
   useAutoLogin();
@@ -106,16 +117,16 @@ export default function MainApp() {
 
   React.useEffect(() => {
     // Don't change language when on TOS page
-    if (!isOnTosPage && settings?.LANGUAGE) {
-      i18n.changeLanguage(settings.LANGUAGE);
+    if (!isOnTosPage && settings?.language) {
+      i18n.changeLanguage(settings.language);
     }
-  }, [settings?.LANGUAGE, isOnTosPage]);
+  }, [settings?.language, isOnTosPage]);
 
   React.useEffect(() => {
     // Don't show consent form when on TOS page
     if (!isOnTosPage) {
       const consentFormModalIsOpen =
-        settings?.USER_CONSENTS_TO_ANALYTICS === null;
+        settings?.user_consents_to_analytics === null;
 
       setConsentFormIsOpen(consentFormModalIsOpen);
     }
@@ -134,10 +145,10 @@ export default function MainApp() {
   }, [isOnTosPage]);
 
   React.useEffect(() => {
-    if (settings?.IS_NEW_USER && config.data?.APP_MODE === "saas") {
+    if (settings?.is_new_user && config.data?.APP_MODE === "saas") {
       displaySuccessToast(t(I18nKey.BILLING$YOURE_IN));
     }
-  }, [settings?.IS_NEW_USER, config.data?.APP_MODE]);
+  }, [settings?.is_new_user, config.data?.APP_MODE]);
 
   React.useEffect(() => {
     // Don't do any redirects when on TOS page
@@ -214,6 +225,7 @@ export default function MainApp() {
         isMobileDevice() && "overflow-hidden",
       )}
     >
+      <title>{appTitle}</title>
       <Sidebar />
 
       <div className="flex flex-col w-full h-[calc(100%-50px)] md:h-full gap-3">
@@ -236,9 +248,19 @@ export default function MainApp() {
           appMode={config.data?.APP_MODE}
           providersConfigured={config.data?.PROVIDERS_CONFIGURED}
           authUrl={config.data?.AUTH_URL}
+          emailVerified={emailVerified}
+          hasDuplicatedEmail={hasDuplicatedEmail}
         />
       )}
       {renderReAuthModal && <ReauthModal />}
+      {emailVerificationModalOpen && (
+        <EmailVerificationModal
+          onClose={() => {
+            setEmailVerificationModalOpen(false);
+          }}
+          userId={userId}
+        />
+      )}
       {config.data?.APP_MODE === "oss" && consentFormIsOpen && (
         <AnalyticsConsentFormModal
           onClose={() => {
@@ -249,7 +271,7 @@ export default function MainApp() {
 
       {config.data?.FEATURE_FLAGS.ENABLE_BILLING &&
         config.data?.APP_MODE === "saas" &&
-        settings?.IS_NEW_USER && <SetupPaymentModal />}
+        settings?.is_new_user && <SetupPaymentModal />}
     </div>
   );
 }

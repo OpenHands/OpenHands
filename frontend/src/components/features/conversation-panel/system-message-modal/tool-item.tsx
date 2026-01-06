@@ -1,6 +1,7 @@
 import { Typography } from "#/ui/typography";
 import { ToolParameters } from "./tool-parameters";
 import { ToggleButton } from "./toggle-button";
+import { ChatCompletionToolParam } from "#/types/v1/core";
 
 interface FunctionData {
   name?: string;
@@ -17,7 +18,7 @@ interface ToolData {
 }
 
 interface ToolItemProps {
-  tool: Record<string, unknown>;
+  tool: Record<string, unknown> | ChatCompletionToolParam;
   index: number;
   isExpanded: boolean;
   onToggle: (index: number) => void;

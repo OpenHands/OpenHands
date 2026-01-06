@@ -20,13 +20,13 @@ export function EmailVerificationGuard({
     if (isLoading) return;
 
     // If EMAIL_VERIFIED is explicitly false (not undefined or null)
-    if (settings?.EMAIL_VERIFIED === false) {
+    if (settings?.email_verified === false) {
       // Allow access to /settings/user but redirect from any other page
       if (pathname !== "/settings/user") {
         navigate("/settings/user", { replace: true });
       }
     }
-  }, [settings?.EMAIL_VERIFIED, pathname, navigate, isLoading]);
+  }, [settings?.email_verified, pathname, navigate, isLoading]);
 
   return children;
 }

@@ -139,6 +139,7 @@ class TestExperimentManagerIntegration:
 
         mock_agent = Mock(spec=Agent)
         mock_agent.llm = mock_llm
+        mock_agent.condenser = None  # No condenser for this test
         mock_agent.system_prompt_filename = 'default_system_prompt.j2'
         mock_agent.model_copy = Mock(return_value=mock_agent)
 
@@ -153,6 +154,7 @@ class TestExperimentManagerIntegration:
                     llm_api_key=None,
                     confirmation_mode=False,
                     condenser_max_size=None,
+                    security_analyzer=None,
                 )
 
             async def get_secrets(self):
@@ -175,12 +177,15 @@ class TestExperimentManagerIntegration:
         jwt_service = Mock()
         httpx_client = Mock()
 
+        event_service = Mock()
+
         service = LiveStatusAppConversationService(
             init_git_in_empty_workspace=False,
             user_context=user_context,
             app_conversation_info_service=app_conversation_info_service,
             app_conversation_start_task_service=app_conversation_start_task_service,
             event_callback_service=event_callback_service,
+            event_service=event_service,
             sandbox_service=sandbox_service,
             sandbox_spec_service=sandbox_spec_service,
             jwt_service=jwt_service,
@@ -188,6 +193,7 @@ class TestExperimentManagerIntegration:
             sandbox_startup_poll_frequency=1,
             httpx_client=httpx_client,
             web_url=None,
+            openhands_provider_base_url=None,
             access_token_hard_timeout=None,
         )
 
@@ -203,7 +209,7 @@ class TestExperimentManagerIntegration:
         with (
             patch.object(
                 service,
-                '_setup_secrets_for_git_provider',
+                '_setup_secrets_for_git_providers',
                 return_value={},
             ),
             patch.object(

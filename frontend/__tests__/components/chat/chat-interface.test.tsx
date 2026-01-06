@@ -24,11 +24,10 @@ import { useGetTrajectory } from "#/hooks/mutation/use-get-trajectory";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
 import { OpenHandsAction } from "#/types/core/actions";
 import { useEventStore } from "#/stores/use-event-store";
+import { useAgentState } from "#/hooks/use-agent-state";
+import { AgentState } from "#/types/agent-state";
 
-// Mock the hooks
 vi.mock("#/context/ws-client-provider");
-vi.mock("#/stores/error-message-store");
-vi.mock("#/stores/optimistic-user-message-store");
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-get-trajectory");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
@@ -60,6 +59,12 @@ vi.mock("#/hooks/use-conversation-name-context-menu", () => ({
     handleRename: vi.fn(),
     handleDelete: vi.fn(),
   }),
+}));
+
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: vi.fn(() => ({
+    curAgentState: AgentState.AWAITING_USER_INPUT,
+  })),
 }));
 
 // Helper function to render with Router context
@@ -102,24 +107,20 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    // Default mock implementations
     (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       send: vi.fn(),
       isLoadingMessages: false,
       parsedEvents: [],
     });
-    (
-      useOptimisticUserMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setOptimisticUserMessage: vi.fn(),
-      getOptimisticUserMessage: vi.fn(() => null),
+
+    useOptimisticUserMessageStore.setState({
+      optimisticUserMessage: null,
     });
-    (
-      useErrorMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setErrorMessage: vi.fn(),
-      removeErrorMessage: vi.fn(),
+
+    useErrorMessageStore.setState({
+      errorMessage: null,
     });
+
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: { APP_MODE: "local" },
     });
@@ -204,11 +205,8 @@ describe("ChatInterface - Chat Suggestions", () => {
   });
 
   test("should hide chat suggestions when there is an optimistic user message", () => {
-    (
-      useOptimisticUserMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setOptimisticUserMessage: vi.fn(),
-      getOptimisticUserMessage: vi.fn(() => "Optimistic message"),
+    useOptimisticUserMessageStore.setState({
+      optimisticUserMessage: "Optimistic message",
     });
 
     renderWithQueryClient(<ChatInterface />, queryClient);
@@ -240,24 +238,19 @@ describe("ChatInterface - Empty state", () => {
   });
 
   beforeEach(() => {
-    // Reset mocks to ensure empty state
     (useWsClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       send: sendMock,
       status: "CONNECTED",
       isLoadingMessages: false,
       parsedEvents: [],
     });
-    (
-      useOptimisticUserMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setOptimisticUserMessage: vi.fn(),
-      getOptimisticUserMessage: vi.fn(() => null),
+
+    useOptimisticUserMessageStore.setState({
+      optimisticUserMessage: null,
     });
-    (
-      useErrorMessageStore as unknown as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      setErrorMessage: vi.fn(),
-      removeErrorMessage: vi.fn(),
+
+    useErrorMessageStore.setState({
+      errorMessage: null,
     });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: { APP_MODE: "local" },
@@ -357,6 +350,28 @@ describe("ChatInterface - Empty state", () => {
       );
     },
   );
+});
+
+describe('ChatInterface - Status Indicator', () => {
+  it("should render ChatStatusIndicator when agent is not awaiting user input / conversation is NOT ready", () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.LOADING,
+    });
+
+    renderChatInterfaceWithRouter();
+
+    expect(screen.getByTestId("chat-status-indicator")).toBeInTheDocument();
+  });
+
+  it("should NOT render ChatStatusIndicator when agent is awaiting user input / conversation is ready", () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+    });
+
+    renderChatInterfaceWithRouter();
+
+    expect(screen.queryByTestId("chat-status-indicator")).not.toBeInTheDocument();
+  });
 });
 
 describe.skip("ChatInterface - General functionality", () => {

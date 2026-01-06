@@ -9,7 +9,7 @@ function ConfirmationModeEnabled() {
 
   const { data: settings } = useSettings();
 
-  if (!settings?.CONFIRMATION_MODE) {
+  if (!settings?.confirmation_mode) {
     return null;
   }
 

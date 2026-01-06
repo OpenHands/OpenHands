@@ -36,7 +36,7 @@ export interface ThinkObservation extends ObservationBase<"ThinkObservation"> {
   /**
    * Confirmation message. DEFAULT: "Your thought has been logged."
    */
-  content: string;
+  content: Array<TextContent | ImageContent>;
 }
 
 export interface BrowserObservation extends ObservationBase<"BrowserObservation"> {

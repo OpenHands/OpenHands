@@ -4,8 +4,8 @@ from openhands.app_server.services.injector import Injector
 from openhands.app_server.user.user_models import (
     UserInfo,
 )
-from openhands.integrations.provider import ProviderType
-from openhands.sdk.conversation.secret_source import SecretSource
+from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.sdk.secret import SecretSource
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
 
@@ -25,6 +25,10 @@ class UserContext(ABC):
     @abstractmethod
     async def get_authenticated_git_url(self, repository: str) -> str:
         """Get the provider tokens for the user"""
+
+    @abstractmethod
+    async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
+        """Get the latest tokens for all provider types"""
 
     @abstractmethod
     async def get_latest_token(self, provider_type: ProviderType) -> str | None:

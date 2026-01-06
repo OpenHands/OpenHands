@@ -3,7 +3,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "../settings/brand-button";
 import { getProviderName, constructPullRequestUrl } from "#/utils/utils";
 import { Provider } from "#/types/settings";
-import { useMicroagentManagementStore } from "#/state/microagent-management-store";
+import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 
 export function MicroagentManagementReviewPr() {
   const { t } = useTranslation();

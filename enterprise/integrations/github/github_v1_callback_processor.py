@@ -3,7 +3,8 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from github import Github, GithubIntegration
+from github import Auth, Github, GithubIntegration
+from integrations.utils import CONVERSATION_URL, get_summary_instruction
 from pydantic import Field
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
@@ -20,8 +21,6 @@ from openhands.app_server.event_callback.util import (
     ensure_conversation_found,
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
-    get_conversation_url,
-    get_prompt_template,
 )
 from openhands.sdk import Event
 from openhands.sdk.event import ConversationStateUpdateEvent
@@ -34,7 +33,6 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
 
     github_view_data: dict[str, Any] = Field(default_factory=dict)
     should_request_summary: bool = Field(default=True)
-    should_extract: bool = Field(default=True)
     inline_pr_comment: bool = Field(default=False)
 
     async def __call__(
@@ -64,7 +62,12 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         self.should_request_summary = False
 
         try:
+            _logger.info(f'[GitHub V1] Requesting summary {conversation_id}')
             summary = await self._request_summary(conversation_id)
+            _logger.info(
+                f'[GitHub V1] Posting summary {conversation_id}',
+                extra={'summary': summary},
+            )
             await self._post_summary_to_github(summary)
 
             return EventCallbackResult(
@@ -87,7 +90,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 ):
                     await self._post_summary_to_github(
                         f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                        f'[See the conversation]({get_conversation_url().format(conversation_id)})'
+                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
                         'for more information.'
                     )
             except Exception as post_error:
@@ -119,8 +122,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
             raise ValueError('GitHub App credentials are not configured')
 
         github_integration = GithubIntegration(
-            GITHUB_APP_CLIENT_ID,
-            GITHUB_APP_PRIVATE_KEY,
+            auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY),
         )
         token_data = github_integration.get_access_token(installation_id)
         return token_data.token
@@ -279,7 +281,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
 
             # Prepare message based on agent state
-            message_content = get_prompt_template('summary_prompt.j2')
+            message_content = get_summary_instruction()
 
             # Ask the agent and return the response text
             return await self._ask_question(

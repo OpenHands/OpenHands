@@ -2,7 +2,7 @@ import React from "react";
 import { cn } from "#/utils/utils";
 import { CopyToClipboardButton } from "#/components/shared/buttons/copy-to-clipboard-button";
 import { OpenHandsSourceType } from "#/types/core/base";
-import { TooltipButton } from "#/components/shared/buttons/tooltip-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 
 interface ChatMessageProps {
@@ -53,7 +53,7 @@ export function ChatMessage({
       className={cn(
         "rounded-xl relative w-fit max-w-full last:mb-4",
         "flex flex-col gap-2",
-        type === "user" && " p-4 bg-tertiary self-end",
+        type === "user" && "p-4 bg-tertiary self-end",
         type === "agent" && "mt-6 w-full max-w-full bg-transparent",
         isFromPlanningAgent && "border border-[#597ff4] bg-tertiary p-4",
       )}
@@ -67,21 +67,16 @@ export function ChatMessage({
       >
         {actions?.map((action, index) =>
           action.tooltip ? (
-            <TooltipButton
-              key={index}
-              tooltip={action.tooltip}
-              ariaLabel={action.tooltip}
-              placement="top"
-            >
+            <StyledTooltip key={index} content={action.tooltip} placement="top">
               <button
                 type="button"
                 onClick={action.onClick}
                 className="button-base p-1 cursor-pointer"
-                aria-label={`Action ${index + 1}`}
+                aria-label={action.tooltip}
               >
                 {action.icon}
               </button>
-            </TooltipButton>
+            </StyledTooltip>
           ) : (
             <button
               key={index}
@@ -112,6 +107,7 @@ export function ChatMessage({
       >
         <MarkdownRenderer includeStandard>{message}</MarkdownRenderer>
       </div>
+
       {children}
     </article>
   );

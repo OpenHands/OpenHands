@@ -67,11 +67,17 @@ def get_default_persistence_dir() -> Path:
 def get_default_web_url() -> str | None:
     """Get legacy web host parameter.
 
-    If present, we assume we are running under https."""
+    If present, we assume we are running under https.
+    """
     web_host = os.getenv('WEB_HOST')
     if not web_host:
         return None
     return f'https://{web_host}'
+
+
+def get_openhands_provider_base_url() -> str | None:
+    """Return the base URL for the OpenHands provider, if configured."""
+    return os.getenv('OPENHANDS_PROVIDER_BASE_URL') or None
 
 
 def _get_default_lifespan():
@@ -87,6 +93,10 @@ class AppServerConfig(OpenHandsModel):
     web_url: str | None = Field(
         default_factory=get_default_web_url,
         description='The URL where OpenHands is running (e.g., http://localhost:3000)',
+    )
+    openhands_provider_base_url: str | None = Field(
+        default_factory=get_openhands_provider_base_url,
+        description='Base URL for the OpenHands provider',
     )
     # Dependency Injection Injectors
     event: EventServiceInjector | None = None
@@ -166,7 +176,17 @@ def config_from_env() -> AppServerConfig:
         elif os.getenv('RUNTIME') in ('local', 'process'):
             config.sandbox = ProcessSandboxServiceInjector()
         else:
-            config.sandbox = DockerSandboxServiceInjector()
+            # Support legacy environment variables for Docker sandbox configuration
+            docker_sandbox_kwargs: dict = {}
+            if os.getenv('SANDBOX_HOST_PORT'):
+                docker_sandbox_kwargs['host_port'] = int(
+                    os.environ['SANDBOX_HOST_PORT']
+                )
+            if os.getenv('SANDBOX_CONTAINER_URL_PATTERN'):
+                docker_sandbox_kwargs['container_url_pattern'] = os.environ[
+                    'SANDBOX_CONTAINER_URL_PATTERN'
+                ]
+            config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
 
     if config.sandbox_spec is None:
         if os.getenv('RUNTIME') == 'remote':

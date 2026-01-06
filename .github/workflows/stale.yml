@@ -9,6 +9,7 @@ on:
 jobs:
   stale:
     runs-on: blacksmith-4vcpu-ubuntu-2204
+    if: github.repository == 'OpenHands/OpenHands'
     steps:
       - uses: actions/stale@v9
         with:

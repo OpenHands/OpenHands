@@ -5,8 +5,8 @@ from fastapi import Request
 from openhands.app_server.errors import OpenHandsError
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import ProviderType
-from openhands.sdk.conversation.secret_source import SecretSource
+from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
+from openhands.sdk.secret import SecretSource
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,9 @@ class SpecifyUserContext(UserContext):
         raise NotImplementedError()
 
     async def get_authenticated_git_url(self, repository: str) -> str:
+        raise NotImplementedError()
+
+    async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
         raise NotImplementedError()
 
     async def get_latest_token(self, provider_type: ProviderType) -> str | None:

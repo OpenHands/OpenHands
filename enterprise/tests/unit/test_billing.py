@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import stripe
 from fastapi import HTTPException, Request, status
-from httpx import HTTPStatusError, Response
+from httpx import Response
 from integrations.stripe_service import has_payment_method
 from server.routes.billing import (
     CreateBillingSessionResponse,
@@ -78,8 +78,6 @@ def mock_subscription_request():
 
 @pytest.mark.asyncio
 async def test_get_credits_lite_llm_error():
-    mock_request = Request(scope={'type': 'http', 'state': {'user_id': 'mock_user'}})
-
     mock_response = Response(
         status_code=500, json={'error': 'Internal Server Error'}, request=MagicMock()
     )
@@ -88,11 +86,12 @@ async def test_get_credits_lite_llm_error():
 
     with patch('integrations.stripe_service.STRIPE_API_KEY', 'mock_key'):
         with patch('httpx.AsyncClient', return_value=mock_client):
-            with pytest.raises(HTTPStatusError) as exc_info:
-                await get_credits(mock_request)
+            with pytest.raises(HTTPException) as exc_info:
+                await get_credits('mock_user')
+            assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
             assert (
-                exc_info.value.response.status_code
-                == status.HTTP_500_INTERNAL_SERVER_ERROR
+                exc_info.value.detail
+                == 'Failed to retrieve credit balance from billing service'
             )
 
 

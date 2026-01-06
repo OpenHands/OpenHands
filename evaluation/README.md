@@ -1,5 +1,10 @@
 # Evaluation
 
+> [!WARNING]
+> **This directory is deprecated.** Our new benchmarks are located at [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks).
+>
+> If you have already implemented a benchmark in this directory and would like to contribute it, we are happy to have the contribution. However, if you are starting anew, please use the new location.
+
 This folder contains code and resources to run experiments and evaluations.
 
 ## For Benchmark Users

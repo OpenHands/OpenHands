@@ -76,6 +76,8 @@ from openhands.utils.async_utils import (
     call_sync_from_async,
 )
 
+DISABLE_VSCODE_PLUGIN = os.getenv('DISABLE_VSCODE_PLUGIN', 'false').lower() == 'true'
+
 
 def _default_env_vars(sandbox_config: SandboxConfig) -> dict[str, str]:
     ret = {}
@@ -153,9 +155,11 @@ class Runtime(FileEditRuntimeMixin):
         self.plugins = (
             copy.deepcopy(plugins) if plugins is not None and len(plugins) > 0 else []
         )
+
         # add VSCode plugin if not in headless mode
-        if not headless_mode:
+        if not headless_mode and not DISABLE_VSCODE_PLUGIN:
             self.plugins.append(VSCodeRequirement())
+        logger.info(f'Loaded plugins for runtime {self.sid}: {self.plugins}')
 
         self.status_callback = status_callback
         self.attach_to_existing = attach_to_existing

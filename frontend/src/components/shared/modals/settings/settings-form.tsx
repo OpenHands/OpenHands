@@ -41,11 +41,11 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
         onClose();
 
         posthog.capture("settings_saved", {
-          LLM_MODEL: newSettings.LLM_MODEL,
-          LLM_API_KEY_SET: newSettings.LLM_API_KEY_SET ? "SET" : "UNSET",
-          SEARCH_API_KEY_SET: newSettings.SEARCH_API_KEY ? "SET" : "UNSET",
+          LLM_MODEL: newSettings.llm_model,
+          LLM_API_KEY_SET: newSettings.llm_api_key_set ? "SET" : "UNSET",
+          SEARCH_API_KEY_SET: newSettings.search_api_key ? "SET" : "UNSET",
           REMOTE_RUNTIME_RESOURCE_FACTOR:
-            newSettings.REMOTE_RUNTIME_RESOURCE_FACTOR,
+            newSettings.remote_runtime_resource_factor,
         });
       },
     });
@@ -67,7 +67,7 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
     }
   };
 
-  const isLLMKeySet = settings.LLM_API_KEY_SET;
+  const isLLMKeySet = settings.llm_api_key_set;
 
   return (
     <div>
@@ -80,7 +80,7 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
         <div className="flex flex-col gap-[17px]">
           <ModelSelector
             models={organizeModelsAndProviders(models)}
-            currentModel={settings.LLM_MODEL}
+            currentModel={settings.llm_model}
             wrapperClassName="!flex-col !gap-[17px]"
             labelClassName={SETTINGS_FORM.LABEL_CLASSNAME}
           />
