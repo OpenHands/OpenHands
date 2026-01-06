@@ -136,15 +136,9 @@ class GoogleCloudSharedEventServiceInjector(SharedEventServiceInjector):
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[SharedEventService, None]:
         # Define inline to prevent circular lookup
-        from openhands.app_server.config import (
-            get_db_session,
-            get_event_service,
-        )
+        from openhands.app_server.config import get_db_session
 
-        async with (
-            get_db_session(state, request) as db_session,
-            get_event_service(state, request) as event_service,
-        ):
+        async with get_db_session(state, request) as db_session:
             shared_conversation_info_service = SQLSharedConversationInfoService(
                 db_session=db_session
             )
