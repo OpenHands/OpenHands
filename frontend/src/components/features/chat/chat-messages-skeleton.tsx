@@ -1,38 +1,36 @@
 import React from "react";
 
-function MessageSkeleton({ type }: { type: "user" | "agent" }) {
+// Pola tetap untuk menghindari layout shift (Robert's concern)
+const SKELETON_PATTERN = [
+  { width: "w-[25%]", height: "h-4", align: "justify-end" }, // User
+  { width: "w-[60%]", height: "h-4", align: "justify-start" }, // Agent
+  { width: "w-[45%]", height: "h-4", align: "justify-start" }, // Agent
+  { width: "w-[85%]", height: "h-20", align: "justify-start" }, // Action/Terminal (Paul's blocky request)
+  { width: "w-[35%]", height: "h-4", align: "justify-end" }, // User
+  { width: "w-[50%]", height: "h-4", align: "justify-start" }, // Agent
+];
+
+function SkeletonBlock({ width, height }: { width: string; height: string }) {
+  // bg-foreground/5 untuk efek pudar (Stephan's request)
   return (
     <div
-      className={`rounded-xl flex flex-col gap-2 w-[60%] max-w-[400px] ${
-        type === "user"
-          ? "p-4 bg-tertiary self-end"
-          : "mt-6 w-full bg-transparent"
-      }`}
-    >
-      <div className="h-3 w-full skeleton !rounded-sm" />
-      <div className="h-3 w-[70%] skeleton !rounded-sm" />
-    </div>
-  );
-}
-
-function EventSkeleton() {
-  return (
-    <div className="flex flex-col gap-2 border-l-2 pl-2 my-2 py-2 border-neutral-300 w-full">
-      <div className="h-3 w-[40%] skeleton !rounded-sm" />
-    </div>
+      className={`rounded-md bg-foreground/5 animate-pulse ${width} ${height}`}
+    />
   );
 }
 
 export function ChatMessagesSkeleton() {
   return (
     <div
-      className="flex flex-col gap-4 w-full"
+      className="flex flex-col gap-6 p-4 w-full"
       data-testid="chat-messages-skeleton"
+      aria-label="Loading conversation"
     >
-      <MessageSkeleton type="user" />
-      <MessageSkeleton type="agent" />
-      <EventSkeleton />
-      <EventSkeleton />
+      {SKELETON_PATTERN.map((item, i) => (
+        <div key={i} className={`flex w-full ${item.align}`}>
+          <SkeletonBlock width={item.width} height={item.height} />
+        </div>
+      ))}
     </div>
   );
 }
