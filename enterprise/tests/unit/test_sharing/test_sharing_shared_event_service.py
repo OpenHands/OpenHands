@@ -226,7 +226,7 @@ class TestSharedEventService:
 
         shared_event_service.get_event_service.assert_called_once_with(conversation_id)
         mock_event_service.count_events.assert_called_once_with(
-            conversation_id__eq=conversation_id,
+            conversation_id=conversation_id,
             kind__eq='ActionEvent',
             timestamp__gte=None,
             timestamp__lt=None,
