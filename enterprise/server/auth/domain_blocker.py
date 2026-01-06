@@ -1,20 +1,13 @@
-from server.auth.constants import BLOCKED_EMAIL_DOMAINS
+from storage.blocked_email_domain_store import BlockedEmailDomainStore
+from storage.database import session_maker
 
 from openhands.core.logger import openhands_logger as logger
 
 
 class DomainBlocker:
-    def __init__(self) -> None:
+    def __init__(self, store: BlockedEmailDomainStore) -> None:
         logger.debug('Initializing DomainBlocker')
-        self.blocked_domains: list[str] = BLOCKED_EMAIL_DOMAINS
-        if self.blocked_domains:
-            logger.info(
-                f'Successfully loaded {len(self.blocked_domains)} blocked email domains: {self.blocked_domains}'
-            )
-
-    def is_active(self) -> bool:
-        """Check if domain blocking is enabled"""
-        return bool(self.blocked_domains)
+        self.store = store
 
     def _extract_domain(self, email: str) -> str | None:
         """Extract and normalize email domain from email address"""
@@ -31,16 +24,16 @@ class DomainBlocker:
             return None
 
     def is_domain_blocked(self, email: str) -> bool:
-        """Check if email domain is blocked
+        """Check if email domain is blocked by querying the database directly via SQL.
 
         Supports blocking:
         - Exact domains: 'example.com' blocks 'user@example.com'
         - Subdomains: 'example.com' blocks 'user@subdomain.example.com'
         - TLDs: '.us' blocks 'user@company.us' and 'user@subdomain.company.us'
-        """
-        if not self.is_active():
-            return False
 
+        The blocking logic is handled efficiently in SQL, avoiding the need to load
+        all blocked domains into memory.
+        """
         if not email:
             logger.debug('No email provided for domain check')
             return False
@@ -50,26 +43,25 @@ class DomainBlocker:
             logger.debug(f'Could not extract domain from email: {email}')
             return False
 
-        # Check if domain matches any blocked pattern
-        for blocked_pattern in self.blocked_domains:
-            if blocked_pattern.startswith('.'):
-                # TLD pattern (e.g., '.us') - check if domain ends with it
-                if domain.endswith(blocked_pattern):
-                    logger.warning(
-                        f'Email domain {domain} is blocked by TLD pattern {blocked_pattern} for email: {email}'
-                    )
-                    return True
+        try:
+            # Query database directly via SQL to check if domain is blocked
+            is_blocked = self.store.is_domain_blocked(domain)
+
+            if is_blocked:
+                logger.warning(f'Email domain {domain} is blocked for email: {email}')
             else:
-                # Full domain pattern (e.g., 'example.com')
-                # Block exact match or subdomains
-                if domain == blocked_pattern or domain.endswith(f'.{blocked_pattern}'):
-                    logger.warning(
-                        f'Email domain {domain} is blocked by domain pattern {blocked_pattern} for email: {email}'
-                    )
-                    return True
+                logger.debug(f'Email domain {domain} is not blocked')
 
-        logger.debug(f'Email domain {domain} is not blocked')
-        return False
+            return is_blocked
+        except Exception as e:
+            logger.error(
+                f'Error checking if domain is blocked for email {email}: {e}',
+                exc_info=True,
+            )
+            # Fail-safe: if database query fails, don't block (allow auth to proceed)
+            return False
 
 
-domain_blocker = DomainBlocker()
+# Initialize store and domain blocker
+_store = BlockedEmailDomainStore(session_maker=session_maker)
+domain_blocker = DomainBlocker(store=_store)

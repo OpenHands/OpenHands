@@ -151,7 +151,7 @@ async def keycloak_callback(
 
     # Check if email domain is blocked
     email = user_info.get('email')
-    if email and domain_blocker.is_active() and domain_blocker.is_domain_blocked(email):
+    if email and domain_blocker.is_domain_blocked(email):
         logger.warning(
             f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
         )

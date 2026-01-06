@@ -317,7 +317,7 @@ async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     email_verified = access_token_payload['email_verified']
 
     # Check if email domain is blocked
-    if email and domain_blocker.is_active() and domain_blocker.is_domain_blocked(email):
+    if email and domain_blocker.is_domain_blocked(email):
         logger.warning(
             f'Blocked authentication attempt for existing user with email: {email}'
         )
