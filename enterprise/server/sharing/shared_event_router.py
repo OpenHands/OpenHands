@@ -128,4 +128,6 @@ async def get_shared_event(
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> Event | None:
     """Get a single event from a shared conversation by conversation_id and event_id."""
-    return await shared_event_service.get_shared_event(UUID(conversation_id), UUID(event_id))
+    return await shared_event_service.get_shared_event(
+        UUID(conversation_id), UUID(event_id)
+    )
