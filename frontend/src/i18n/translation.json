@@ -14863,6 +14863,22 @@
     "de": "Läuft",
     "uk": "Працює"
   },
+  "COMMON$WAITING_FOR_SANDBOX": {
+    "en": "Waiting for sandbox",
+    "ja": "サンドボックスを待機中",
+    "zh-CN": "等待沙盒",
+    "zh-TW": "等待沙盒",
+    "ko-KR": "샌드박스를 기다리는 중",
+    "no": "Venter på sandkasse",
+    "it": "In attesa del sandbox",
+    "pt": "Aguardando sandbox",
+    "es": "Esperando el sandbox",
+    "ar": "في انتظار البيئة المعزولة",
+    "fr": "En attente du bac à sable",
+    "tr": "Sandbox bekleniyor",
+    "de": "Warten auf Sandbox",
+    "uk": "Очікування пісочниці"
+  },
   "COMMON$SELECT_GIT_PROVIDER": {
     "en": "Select Git provider",
     "ja": "Gitプロバイダーを選択",
