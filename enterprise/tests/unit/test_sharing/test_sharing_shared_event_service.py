@@ -51,9 +51,9 @@ def sample_public_conversation():
     """Create a sample public conversation."""
     return SharedConversation(
         id=uuid4(),
-        created_by_user_id="test_user",
-        sandbox_id="test_sandbox",
-        title="Test Public Conversation",
+        created_by_user_id='test_user',
+        sandbox_id='test_sandbox',
+        title='Test Public Conversation',
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
         metrics=MetricsSnapshot(
@@ -151,7 +151,7 @@ class TestSharedEventService:
         # Call the method
         result = await shared_event_service.search_shared_events(
             conversation_id=conversation_id,
-            kind__eq="ActionEvent",
+            kind__eq='ActionEvent',
             limit=10,
         )
 
@@ -162,7 +162,7 @@ class TestSharedEventService:
         shared_event_service.get_event_service.assert_called_once_with(conversation_id)
         mock_event_service.search_events.assert_called_once_with(
             conversation_id=conversation_id,
-            kind__eq="ActionEvent",
+            kind__eq='ActionEvent',
             timestamp__gte=None,
             timestamp__lt=None,
             sort_order=EventSortOrder.TIMESTAMP,
@@ -218,7 +218,7 @@ class TestSharedEventService:
         # Call the method
         result = await shared_event_service.count_shared_events(
             conversation_id=conversation_id,
-            kind__eq="ActionEvent",
+            kind__eq='ActionEvent',
         )
 
         # Verify the result
@@ -227,7 +227,7 @@ class TestSharedEventService:
         shared_event_service.get_event_service.assert_called_once_with(conversation_id)
         mock_event_service.count_events.assert_called_once_with(
             conversation_id__eq=conversation_id,
-            kind__eq="ActionEvent",
+            kind__eq='ActionEvent',
             timestamp__gte=None,
             timestamp__lt=None,
             sort_order=EventSortOrder.TIMESTAMP,
@@ -338,17 +338,17 @@ class TestSharedEventService:
         )
 
         # Mock the event service to return events
-        mock_event_page = EventPage(items=[], next_page_id="next_page")
+        mock_event_page = EventPage(items=[], next_page_id='next_page')
         mock_event_service.search_events.return_value = mock_event_page
 
         # Call the method with all parameters
         result = await shared_event_service.search_shared_events(
             conversation_id=conversation_id,
-            kind__eq="ObservationEvent",
+            kind__eq='ObservationEvent',
             timestamp__gte=timestamp_gte,
             timestamp__lt=timestamp_lt,
             sort_order=EventSortOrder.TIMESTAMP_DESC,
-            page_id="current_page",
+            page_id='current_page',
             limit=50,
         )
 
@@ -357,10 +357,10 @@ class TestSharedEventService:
 
         mock_event_service.search_events.assert_called_once_with(
             conversation_id=conversation_id,
-            kind__eq="ObservationEvent",
+            kind__eq='ObservationEvent',
             timestamp__gte=timestamp_gte,
             timestamp__lt=timestamp_lt,
             sort_order=EventSortOrder.TIMESTAMP_DESC,
-            page_id="current_page",
+            page_id='current_page',
             limit=50,
         )
