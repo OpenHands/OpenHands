@@ -56,6 +56,10 @@ from openhands.utils.async_utils import call_sync_from_async
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 
 
+async def is_v1_enabled_for_github_resolver(user_id: str) -> bool:
+    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_GITHUB_RESOLVER
+
+
 async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     """Get the user's proactive conversation setting.
 
@@ -161,9 +165,9 @@ class GithubIssue(ResolverViewInterface):
     async def initialize_new_conversation(self) -> ConversationMetadata:
         # FIXME: Handle if initialize_conversation returns None
 
-        self.v1_enabled = await get_user_v1_enabled_setting(
+        self.v1_enabled = await is_v1_enabled_for_github_resolver(
             self.user_info.keycloak_user_id
-        ) and ENABLE_V1_GITHUB_RESOLVER
+        )
 
         logger.info(
             f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'

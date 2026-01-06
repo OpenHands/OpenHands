@@ -380,8 +380,6 @@ class TestGithubV1CallbackProcessor:
         )
         conversation_id = uuid4()
 
-        mock_get_prompt_template.return_value = 'Please provide a summary'
-
         await _setup_happy_path_services(
             mock_get_app_conversation_info_service,
             mock_get_sandbox_service,
@@ -427,8 +425,6 @@ class TestGithubV1CallbackProcessor:
         mock_sandbox_info,
     ):
         conversation_id = uuid4()
-
-        mock_get_prompt_template.return_value = 'Please provide a summary'
 
         await _setup_happy_path_services(
             mock_get_app_conversation_info_service,
@@ -750,8 +746,6 @@ class TestGithubV1CallbackProcessor:
         mock_sandbox_info,
     ):
         conversation_id = uuid4()
-
-        mock_get_prompt_template.return_value = 'Please provide a summary'
 
         # happy-ish path, except httpx error
         mock_httpx_client = await _setup_happy_path_services(

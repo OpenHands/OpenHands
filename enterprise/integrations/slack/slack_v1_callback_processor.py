@@ -20,8 +20,6 @@ from openhands.app_server.event_callback.util import (
     ensure_conversation_found,
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
-    get_conversation_url,
-    get_prompt_template,
 )
 from openhands.sdk import Event
 from openhands.sdk.event import ConversationStateUpdateEvent

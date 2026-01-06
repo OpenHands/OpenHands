@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from integrations.models import Message
-from integrations.resolver_user_context import ResolverUserContext
+from integrations.resolver_context import ResolverUserContext
 from integrations.slack.slack_types import SlackViewInterface, StartingConvoException
 from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProcessor
 from integrations.utils import (
