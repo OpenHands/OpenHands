@@ -63,11 +63,12 @@ class GoogleCloudSharedEventService(SharedEventService):
             bucket=bucket,
             prefix=Path('users'),
             user_id=shared_conversation_info.created_by_user_id,
+            app_conversation_info_service=None,
             app_conversation_info_load_tasks={},
         )
 
     async def get_shared_event(
-        self, conversation_id: UUID, event_id: str
+        self, conversation_id: UUID, event_id: UUID
     ) -> Event | None:
         """Given a conversation_id and event_id, retrieve an event if the conversation is shared."""
         # First check if the conversation is shared
@@ -123,7 +124,7 @@ class GoogleCloudSharedEventService(SharedEventService):
 
         # If conversation is shared, count events for this conversation
         return await event_service.count_events(
-            conversation_id__eq=conversation_id,
+            conversation_id=conversation_id,
             kind__eq=kind__eq,
             timestamp__gte=timestamp__gte,
             timestamp__lt=timestamp__lt,

@@ -114,8 +114,9 @@ async def batch_get_shared_events(
 ) -> list[Event | None]:
     """Get a batch of events for a shared conversation given their ids, returning null for any missing event."""
     assert len(id) <= 100
+    event_ids = [UUID(id_) for id_ in id]
     events = await shared_event_service.batch_get_shared_events(
-        UUID(conversation_id), id
+        UUID(conversation_id), event_ids
     )
     return events
 
@@ -127,4 +128,4 @@ async def get_shared_event(
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> Event | None:
     """Get a single event from a shared conversation by conversation_id and event_id."""
-    return await shared_event_service.get_shared_event(UUID(conversation_id), event_id)
+    return await shared_event_service.get_shared_event(UUID(conversation_id), UUID(event_id))
