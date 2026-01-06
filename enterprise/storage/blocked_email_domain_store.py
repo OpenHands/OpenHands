@@ -25,18 +25,19 @@ class BlockedEmailDomainStore:
             # SQL query that handles both TLD patterns and full domain patterns
             # TLD patterns (starting with '.'): check if domain ends with the pattern
             # Full domain patterns: check for exact match or subdomain match
+            # All comparisons are case-insensitive using LOWER() to ensure consistent matching
             query = text("""
                 SELECT EXISTS(
                     SELECT 1
                     FROM blocked_email_domains
                     WHERE
-                        -- TLD pattern (e.g., '.us') - check if domain ends with it
-                        (domain LIKE '.%' AND :domain LIKE '%' || domain) OR
+                        -- TLD pattern (e.g., '.us') - check if domain ends with it (case-insensitive)
+                        (LOWER(domain) LIKE '.%' AND LOWER(:domain) LIKE '%' || LOWER(domain)) OR
                         -- Full domain pattern (e.g., 'example.com')
-                        -- Block exact match or subdomains
-                        (domain NOT LIKE '.%' AND (
-                            :domain = domain OR
-                            :domain LIKE '%.' || domain
+                        -- Block exact match or subdomains (case-insensitive)
+                        (LOWER(domain) NOT LIKE '.%' AND (
+                            LOWER(:domain) = LOWER(domain) OR
+                            LOWER(:domain) LIKE '%.' || LOWER(domain)
                         ))
                 )
             """)
