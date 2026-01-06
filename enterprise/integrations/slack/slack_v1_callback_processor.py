@@ -3,6 +3,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
+from integrations.utils import CONVERSATION_URL, get_summary_instruction
 from pydantic import Field
 from slack_sdk import WebClient
 from storage.slack_team_store import SlackTeamStore
@@ -68,7 +69,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
             try:
                 await self._post_summary_to_slack(
                     f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                    f'[See the conversation]({get_conversation_url().format(conversation_id)})'
+                    f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
                     'for more information.'
                 )
             except Exception as post_error:
@@ -261,7 +262,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
 
             # Prepare message based on agent state
-            message_content = get_prompt_template('summary_prompt.j2')
+            message_content = get_summary_instruction()
 
             # Ask the agent and return the response text
             return await self._ask_question(
