@@ -19,7 +19,6 @@ class UserSettings(Base):  # type: ignore
     remote_runtime_resource_factor = Column(Integer, nullable=True)
     enable_default_condenser = Column(Boolean, nullable=False, default=True)
     condenser_max_size = Column(Integer, nullable=True)
-    condenser_keep_first = Column(Integer, nullable=True)
     user_consents_to_analytics = Column(Boolean, nullable=True)
     billing_margin = Column(Float, nullable=True, default=DEFAULT_BILLING_MARGIN)
     enable_sound_notifications = Column(Boolean, nullable=True, default=False)

@@ -369,15 +369,13 @@ class AppConversationServiceBase(AppConversationService, ABC):
         llm: LLM,
         agent_type: AgentType,
         condenser_max_size: int | None,
-        condenser_keep_first: int | None = None,
     ) -> LLMSummarizingCondenser:
         """Create a condenser based on user settings and agent type.
 
         Args:
             llm: The LLM instance to use for condensation
             agent_type: Type of agent (PLAN or DEFAULT)
-            condenser_max_size: Maximum number of events before condensation
-            condenser_keep_first: Number of initial events to always keep
+            condenser_max_size: condenser_max_size setting
 
         Returns:
             Configured LLMSummarizingCondenser instance
@@ -394,11 +392,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 }
             ),
         }
-        # Only override if user has custom values
+        # Only override max_size if user has a custom value
         if condenser_max_size is not None:
             condenser_kwargs['max_size'] = condenser_max_size
-        if condenser_keep_first is not None:
-            condenser_kwargs['keep_first'] = condenser_keep_first
 
         condenser = LLMSummarizingCondenser(**condenser_kwargs)
 
