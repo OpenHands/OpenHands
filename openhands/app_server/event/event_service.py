@@ -17,7 +17,7 @@ class EventService(ABC):
     """Event Service for getting events."""
 
     @abstractmethod
-    async def get_event(self, conversation_id: UUID,  event_id: UUID) -> Event | None:
+    async def get_event(self, conversation_id: UUID, event_id: UUID) -> Event | None:
         """Given an id, retrieve an event."""
 
     @abstractmethod
@@ -47,7 +47,9 @@ class EventService(ABC):
     async def save_event(self, conversation_id: UUID, event: Event):
         """Save an event. Internal method intended not be part of the REST api."""
 
-    async def batch_get_events(self, conversation_id: UUID, event_ids: list[UUID]) -> list[Event | None]:
+    async def batch_get_events(
+        self, conversation_id: UUID, event_ids: list[UUID]
+    ) -> list[Event | None]:
         """Given a list of ids, get events (Or none for any which were not found)."""
         return await asyncio.gather(
             *[self.get_event(conversation_id, event_id) for event_id in event_ids]

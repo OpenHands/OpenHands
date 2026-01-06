@@ -15,13 +15,11 @@ from pathlib import Path
 from typing import AsyncGenerator
 from uuid import UUID
 
+from fastapi import Request
 from google.cloud import storage
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
-
-from fastapi import Request
 from more_itertools import bucket
-from openhands.app_server.event.google_cloud_event_service import GoogleCloudEventService
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
@@ -35,6 +33,9 @@ from server.sharing.sql_shared_conversation_info_service import (
 
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.app_server.event.event_service import EventService
+from openhands.app_server.event.google_cloud_event_service import (
+    GoogleCloudEventService,
+)
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.app_server.services.injector import InjectorState
 from openhands.sdk import Event
@@ -58,11 +59,12 @@ class GoogleCloudSharedEventService(SharedEventService):
         if shared_conversation_info is None:
             return None
 
-        path = Path('users') / shared_conversation_info.created_by_user_id / 'v1_conversations'
-        return GoogleCloudEventService(
-            bucket=bucket,
-            path=path
+        path = (
+            Path('users')
+            / shared_conversation_info.created_by_user_id
+            / 'v1_conversations'
         )
+        return GoogleCloudEventService(bucket=bucket, path=path)
 
     async def get_shared_event(
         self, conversation_id: UUID, event_id: str
@@ -113,7 +115,7 @@ class GoogleCloudSharedEventService(SharedEventService):
         sort_order: EventSortOrder = EventSortOrder.TIMESTAMP,
     ) -> int:
         """Count events for a specific shared conversation."""
-       # First check if the conversation is shared
+        # First check if the conversation is shared
         event_service = await self.get_event_service(conversation_id)
         if event_service is None:
             # Return empty page if conversation is not shared
@@ -153,6 +155,6 @@ class GoogleCloudSharedEventServiceInjector(SharedEventServiceInjector):
 
             service = GoogleCloudSharedEventService(
                 shared_conversation_info_service=shared_conversation_info_service,
-                bucket=bucket
+                bucket=bucket,
             )
             yield service

@@ -1,14 +1,18 @@
 import asyncio
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.agent_server.sockets import page_iterator
-from openhands.app_server.app_conversation.app_conversation_info_service import AppConversationInfoService
-from openhands.app_server.app_conversation.app_conversation_models import AppConversationInfo
+from openhands.app_server.app_conversation.app_conversation_info_service import (
+    AppConversationInfoService,
+)
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationInfo,
+)
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
@@ -19,10 +23,13 @@ class EventServiceBase(EventService, ABC):
     """Event Service for getting events - the only check on permissions for events is
     in the strict prefix for storage.
     """
+
     prefix: Path
     user_id: str | None
     app_conversation_info_service: AppConversationInfoService | None
-    app_conversation_info_load_tasks: dict[UUID, asyncio.Task[AppConversationInfo | None]]
+    app_conversation_info_load_tasks: dict[
+        UUID, asyncio.Task[AppConversationInfo | None]
+    ]
 
     @abstractmethod
     def _load_event(self, path: Path) -> Event | None:
@@ -37,14 +44,18 @@ class EventServiceBase(EventService, ABC):
         """Search paths."""
 
     async def get_conversation_path(self, conversation_id: UUID) -> Path:
-        """ Get a path for a conversation. Ensure user_id is included if possible."""
+        """Get a path for a conversation. Ensure user_id is included if possible."""
         path = self.prefix
         if self.user_id:
             path /= self.user_id
         elif self.app_conversation_info_service:
             task = self.app_conversation_info_load_tasks.get(conversation_id)
             if task is None:
-                task = asyncio.create_task(self.app_conversation_info_service.get_app_conversation_info(conversation_id))
+                task = asyncio.create_task(
+                    self.app_conversation_info_service.get_app_conversation_info(
+                        conversation_id
+                    )
+                )
                 self.app_conversation_info_load_tasks[conversation_id] = task
             conversation_info = await task
             if conversation_info and conversation_info.created_by_user_id:
@@ -52,10 +63,10 @@ class EventServiceBase(EventService, ABC):
         path = path / 'v1_conversations' / conversation_id.hex
         return path
 
-    async def get_event(self, conversation_id: UUID,  event_id: UUID) -> Event | None:
+    async def get_event(self, conversation_id: UUID, event_id: UUID) -> Event | None:
         """Get the event with the given id, or None if not found."""
         conversation_path = await self.get_conversation_path(conversation_id)
-        path = conversation_path / f"{event_id.hex}.json"
+        path = conversation_path / f'{event_id.hex}.json'
         loop = asyncio.get_running_loop()
         event: Event = await loop.run_in_executor(None, self._load_event, path)
         return event
@@ -92,7 +103,7 @@ class EventServiceBase(EventService, ABC):
         if sort_order:
             items.sort(
                 key=lambda e: e.timestamp,
-                reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC)
+                reverse=(sort_order == EventSortOrder.TIMESTAMP_DESC),
             )
 
         start_offset = 0
@@ -117,7 +128,9 @@ class EventServiceBase(EventService, ABC):
         if not (kind__eq or timestamp__gte or timestamp__lt):
             conversation_path = await self.get_conversation_path(conversation_id)
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, self._count_events_no_filter, conversation_path)
+            result = await loop.run_in_executor(
+                None, self._count_events_no_filter, conversation_path
+            )
             return result
 
         events = page_iterator(
@@ -140,13 +153,14 @@ class EventServiceBase(EventService, ABC):
             id_hex = event.id.replace('-', '')
         else:
             id_hex = event.id.hex
-        path = (await self.get_conversation_path(conversation_id)) / f"{id_hex}.json"
+        path = (await self.get_conversation_path(conversation_id)) / f'{id_hex}.json'
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._store_event, path, event)
 
-    async def batch_get_events(self, conversation_id: UUID, event_ids: list[UUID]) -> list[Event | None]:
+    async def batch_get_events(
+        self, conversation_id: UUID, event_ids: list[UUID]
+    ) -> list[Event | None]:
         """Given a list of ids, get events (Or none for any which were not found)."""
         return await asyncio.gather(
             *[self.get_event(conversation_id, event_id) for event_id in event_ids]
         )
-

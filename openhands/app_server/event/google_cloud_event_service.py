@@ -25,6 +25,7 @@ _logger = logging.getLogger(__name__)
 @dataclass
 class GoogleCloudEventService(EventServiceBase):
     """Google Cloud Storage-based implementation of EventService."""
+
     bucket: Bucket
 
     def _load_event(self, path: Path) -> Event | None:
@@ -51,8 +52,7 @@ class GoogleCloudEventService(EventServiceBase):
     def _search_paths(self, prefix: Path, page_id: str | None = None) -> list[Path]:
         """Search paths."""
         blobs: Iterator[Blob] = self.bucket.list_blobs(
-            page_token=page_id,
-            prefix=str(prefix)
+            page_token=page_id, prefix=str(prefix)
         )
         paths = list(Path(blob.name) for blob in blobs)
         return paths
@@ -71,7 +71,9 @@ class GoogleCloudEventServiceInjector(EventServiceInjector):
 
         async with (
             get_user_context(state, request) as user_context,
-            get_app_conversation_info_service(state, request) as app_conversation_info_service
+            get_app_conversation_info_service(
+                state, request
+            ) as app_conversation_info_service,
         ):
             user_id = await user_context.get_user_id()
 

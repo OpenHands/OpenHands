@@ -1,17 +1,15 @@
-
-
-
-from dataclasses import dataclass
 import glob
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncGenerator
+
 from fastapi import Request
+
 from openhands.app_server.event.event_service import EventService, EventServiceInjector
 from openhands.app_server.event.event_service_base import EventServiceBase
-from openhands.sdk import Event
-
 from openhands.app_server.services.injector import InjectorState
+from openhands.sdk import Event
 
 _logger = logging.getLogger(__name__)
 
@@ -19,6 +17,7 @@ _logger = logging.getLogger(__name__)
 @dataclass
 class FilesystemEventService(EventServiceBase):
     """Event service based on file system"""
+
     limit: int = 500
 
     def _load_event(self, path: Path) -> Event | None:
@@ -26,8 +25,8 @@ class FilesystemEventService(EventServiceBase):
             content = path.read_text(str(path))
             content = Event.model_validate_json(content)
             return content
-        except Exception as e:
-            _logger.exception("Error reading event", stack_info=True)
+        except Exception:
+            _logger.exception('Error reading event', stack_info=True)
             return None
 
     def _store_event(self, path: Path, event: Event):
@@ -47,14 +46,16 @@ class FilesystemEventServiceInjector(EventServiceInjector):
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[EventService, None]:
         from openhands.app_server.config import (
+            get_app_conversation_info_service,
             get_global_config,
             get_user_context,
-            get_app_conversation_info_service
         )
 
         async with (
             get_user_context(state, request) as user_context,
-            get_app_conversation_info_service(state, request) as app_conversation_info_service
+            get_app_conversation_info_service(
+                state, request
+            ) as app_conversation_info_service,
         ):
             # Set up a service with a path {persistence_dir}/{user_id}/v1_conversations
             prefix = get_global_config().persistence_dir

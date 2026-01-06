@@ -5,7 +5,9 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from server.sharing.google_cloud_shared_event_service import GoogleCloudSharedEventServiceInjector
+from server.sharing.google_cloud_shared_event_service import (
+    GoogleCloudSharedEventServiceInjector,
+)
 from server.sharing.shared_event_service import SharedEventService
 
 from openhands.agent_server.models import EventPage, EventSortOrder
@@ -13,7 +15,9 @@ from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
 
 router = APIRouter(prefix='/api/shared-events', tags=['Sharing'])
-shared_event_service_dependency = Depends(GoogleCloudSharedEventServiceInjector().depends)
+shared_event_service_dependency = Depends(
+    GoogleCloudSharedEventServiceInjector().depends
+)
 
 
 # Read methods
@@ -110,7 +114,9 @@ async def batch_get_shared_events(
 ) -> list[Event | None]:
     """Get a batch of events for a shared conversation given their ids, returning null for any missing event."""
     assert len(id) <= 100
-    events = await shared_event_service.batch_get_shared_events(UUID(conversation_id), id)
+    events = await shared_event_service.batch_get_shared_events(
+        UUID(conversation_id), id
+    )
     return events
 
 
