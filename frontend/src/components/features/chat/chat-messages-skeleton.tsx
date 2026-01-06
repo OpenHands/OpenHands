@@ -1,17 +1,17 @@
 import React from "react";
 
-// Pola tetap untuk menghindari layout shift (Robert's concern)
+// Fixed pattern to prevent layout shifts during initial message loading
 const SKELETON_PATTERN = [
   { width: "w-[25%]", height: "h-4", align: "justify-end" }, // User
   { width: "w-[60%]", height: "h-4", align: "justify-start" }, // Agent
   { width: "w-[45%]", height: "h-4", align: "justify-start" }, // Agent
-  { width: "w-[85%]", height: "h-20", align: "justify-start" }, // Action/Terminal (Paul's blocky request)
+  { width: "w-[85%]", height: "h-20", align: "justify-start" }, // Large block for Action/Terminal outputs
   { width: "w-[35%]", height: "h-4", align: "justify-end" }, // User
   { width: "w-[50%]", height: "h-4", align: "justify-start" }, // Agent
 ];
 
 function SkeletonBlock({ width, height }: { width: string; height: string }) {
-  // bg-foreground/5 untuk efek pudar (Stephan's request)
+  // Using low opacity foreground for a subtle fading effect during transitions
   return (
     <div
       className={`rounded-md bg-foreground/5 animate-pulse ${width} ${height}`}
