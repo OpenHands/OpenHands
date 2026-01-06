@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from server.sharing.shared_event_service_impl import (
+from server.sharing.google_cloud_shared_event_service import (
     SharedEventServiceImplInjector,
 )
 from server.sharing.shared_event_service import SharedEventService

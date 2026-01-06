@@ -12,7 +12,7 @@ from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
 
-router = APIRouter(prefix='conversation/{conversation_id}/events', tags=['Events'])
+router = APIRouter(prefix='/conversation/{conversation_id}/events', tags=['Events'])
 event_service_dependency = depends_event_service()
 
 
