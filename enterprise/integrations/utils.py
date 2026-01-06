@@ -79,7 +79,10 @@ ENABLE_V1_GITHUB_RESOLVER = (
 )
 
 
-OPENHANDS_RESOLVER_TEMPLATES_DIR = 'openhands/integrations/templates/resolver/'
+OPENHANDS_RESOLVER_TEMPLATES_DIR = (
+    os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
+    or 'openhands/integrations/templates/resolver/'
+)
 jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
 
 

@@ -310,7 +310,7 @@ class GithubManager(Manager):
                     f'[GitHub] Created conversation {conversation_id} for user {user_info.username}'
                 )
 
-                if not github_view.v1:
+                if not github_view.v1_enabled:
                     # Create a GithubCallbackProcessor
                     processor = GithubCallbackProcessor(
                         github_view=github_view,

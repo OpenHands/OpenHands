@@ -793,7 +793,7 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
         # This is primarily used for local development rather than production
         config = get_global_config()
         web_url = config.web_url
-        if web_url is None:
+        if web_url is None or 'localhost' in web_url:
             global polling_task
             if polling_task is None:
                 polling_task = asyncio.create_task(

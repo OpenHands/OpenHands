@@ -14,6 +14,7 @@ from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.integrations.service_types import ProviderType
 from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
+from openhands.sdk.utils.models import OpenHandsModel
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 
@@ -91,7 +92,7 @@ class AppConversationPage(BaseModel):
     next_page_id: str | None = None
 
 
-class AppConversationStartRequest(BaseModel):
+class AppConversationStartRequest(OpenHandsModel):
     """Start conversation request object.
 
     Although a user can go directly to the sandbox and start conversations, they
@@ -142,7 +143,7 @@ class AppConversationStartTaskSortOrder(Enum):
     UPDATED_AT_DESC = 'UPDATED_AT_DESC'
 
 
-class AppConversationStartTask(BaseModel):
+class AppConversationStartTask(OpenHandsModel):
     """Object describing the start process for an app conversation.
 
     Because starting an app conversation can be slow (And can involve starting a sandbox),
@@ -167,7 +168,7 @@ class AppConversationStartTask(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
-class AppConversationStartTaskPage(BaseModel):
+class AppConversationStartTaskPage(OpenHandsModel):
     items: list[AppConversationStartTask]
     next_page_id: str | None = None
 

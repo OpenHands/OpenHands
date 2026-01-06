@@ -1,11 +1,12 @@
 import logging
-import os
 from typing import Any
 from uuid import UUID
 
 import httpx
 from github import Auth, Github, GithubIntegration
+from integrations.utils import CONVERSATION_URL, get_summary_instruction
 from pydantic import Field
+from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
@@ -20,8 +21,6 @@ from openhands.app_server.event_callback.util import (
     ensure_conversation_found,
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
-    get_conversation_url,
-    get_prompt_template,
 )
 from openhands.sdk import Event
 from openhands.sdk.event import ConversationStateUpdateEvent
@@ -34,7 +33,6 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
 
     github_view_data: dict[str, Any] = Field(default_factory=dict)
     should_request_summary: bool = Field(default=True)
-    should_extract: bool = Field(default=True)
     inline_pr_comment: bool = Field(default=False)
 
     async def __call__(
@@ -64,7 +62,12 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         self.should_request_summary = False
 
         try:
+            _logger.info(f'[GitHub V1] Requesting summary {conversation_id}')
             summary = await self._request_summary(conversation_id)
+            _logger.info(
+                f'[GitHub V1] Posting summary {conversation_id}',
+                extra={'summary': summary},
+            )
             await self._post_summary_to_github(summary)
 
             return EventCallbackResult(
@@ -82,12 +85,12 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 # Check if we have installation ID and credentials before posting
                 if (
                     self.github_view_data.get('installation_id')
-                    and os.getenv('GITHUB_APP_CLIENT_ID')
-                    and os.getenv('GITHUB_APP_PRIVATE_KEY')
+                    and GITHUB_APP_CLIENT_ID
+                    and GITHUB_APP_PRIVATE_KEY
                 ):
                     await self._post_summary_to_github(
                         f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                        f'[See the conversation]({get_conversation_url().format(conversation_id)})'
+                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
                         'for more information.'
                     )
             except Exception as post_error:
@@ -115,16 +118,11 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 f'Missing installation ID for GitHub payload: {self.github_view_data}'
             )
 
-        github_app_client_id = os.getenv('GITHUB_APP_CLIENT_ID', '').strip()
-        github_app_private_key = os.getenv('GITHUB_APP_PRIVATE_KEY', '').replace(
-            '\\n', '\n'
-        )
-
-        if not github_app_client_id or not github_app_private_key:
+        if not GITHUB_APP_CLIENT_ID or not GITHUB_APP_PRIVATE_KEY:
             raise ValueError('GitHub App credentials are not configured')
 
         github_integration = GithubIntegration(
-            auth=Auth.AppAuth(github_app_client_id, github_app_private_key),
+            auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY),
         )
         token_data = github_integration.get_access_token(installation_id)
         return token_data.token
@@ -274,16 +272,16 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert sandbox.session_api_key is not None, (
-                f'No session API key for sandbox: {sandbox.id}'
-            )
+            assert (
+                sandbox.session_api_key is not None
+            ), f'No session API key for sandbox: {sandbox.id}'
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
 
             # Prepare message based on agent state
-            message_content = get_prompt_template('summary_prompt.j2')
+            message_content = get_summary_instruction()
 
             # Ask the agent and return the response text
             return await self._ask_question(
