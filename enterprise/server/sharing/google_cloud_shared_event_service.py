@@ -50,7 +50,7 @@ class GoogleCloudSharedEventService(SharedEventService):
     shared_conversation_info_service: SharedConversationInfoService
     bucket: Bucket
 
-    async def get_event_service(self, conversation_id: UUID) -> EventService:
+    async def get_event_service(self, conversation_id: UUID) -> EventService | None:
         shared_conversation_info = (
             await self.shared_conversation_info_service.get_shared_conversation_info(
                 conversation_id
@@ -59,12 +59,12 @@ class GoogleCloudSharedEventService(SharedEventService):
         if shared_conversation_info is None:
             return None
 
-        path = (
-            Path('users')
-            / shared_conversation_info.created_by_user_id
-            / 'v1_conversations'
+        return GoogleCloudEventService(
+            bucket=bucket,
+            prefix=Path('users'),
+            user_id=shared_conversation_info.created_by_user_id,
+            app_conversation_info_load_tasks={},
         )
-        return GoogleCloudEventService(bucket=bucket, path=path)
 
     async def get_shared_event(
         self, conversation_id: UUID, event_id: str
