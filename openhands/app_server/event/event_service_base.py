@@ -127,7 +127,6 @@ class EventServiceBase(EventService, ABC):
         # If we are not filtering, we can simply count the paths
         if not (kind__eq or timestamp__gte or timestamp__lt):
             conversation_path = await self.get_conversation_path(conversation_id)
-            loop = asyncio.get_running_loop()
             result = await self._count_events_no_filter(conversation_path)
             return result
 
