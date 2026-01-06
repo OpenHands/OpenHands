@@ -42,7 +42,6 @@ class SharedEventService(ABC):
         kind__eq: EventKind | None = None,
         timestamp__gte: datetime | None = None,
         timestamp__lt: datetime | None = None,
-        sort_order: EventSortOrder = EventSortOrder.TIMESTAMP,
     ) -> int:
         """Count events for a specific shared conversation."""
 

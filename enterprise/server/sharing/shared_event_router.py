@@ -87,10 +87,6 @@ async def count_shared_events(
         datetime | None,
         Query(title='Optional filter by timestamp less than'),
     ] = None,
-    sort_order: Annotated[
-        EventSortOrder,
-        Query(title='Sort order for results'),
-    ] = EventSortOrder.TIMESTAMP,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> int:
     """Count events for a shared conversation matching the given filters."""
@@ -99,7 +95,6 @@ async def count_shared_events(
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
-        sort_order=sort_order,
     )
 
 

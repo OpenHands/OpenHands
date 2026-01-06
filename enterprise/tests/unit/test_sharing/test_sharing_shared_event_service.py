@@ -230,7 +230,6 @@ class TestSharedEventService:
             kind__eq='ActionEvent',
             timestamp__gte=None,
             timestamp__lt=None,
-            sort_order=EventSortOrder.TIMESTAMP,
         )
 
     async def test_count_shared_events_returns_zero_for_private_conversation(
