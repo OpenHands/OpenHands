@@ -8,6 +8,7 @@ from uuid import UUID
 from openhands.agent_server.models import EventPage, EventSortOrder
 from openhands.agent_server.sockets import page_iterator
 from openhands.app_server.app_conversation.app_conversation_info_service import AppConversationInfoService
+from openhands.app_server.app_conversation.app_conversation_models import AppConversationInfo
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
@@ -21,6 +22,7 @@ class EventServiceBase(EventService, ABC):
     prefix: Path
     user_id: str | None
     app_conversation_info_service: AppConversationInfoService | None
+    app_conversation_info_load_tasks: dict[UUID, asyncio.Task[AppConversationInfo | None]]
 
     @abstractmethod
     def _load_event(self, path: Path) -> Event | None:
@@ -40,7 +42,11 @@ class EventServiceBase(EventService, ABC):
         if self.user_id:
             path /= self.user_id
         elif self.app_conversation_info_service:
-            conversation_info = await self.app_conversation_info_service.get_app_conversation_info(conversation_id)
+            task = self.app_conversation_info_load_tasks.get(conversation_id)
+            if task is None:
+                task = asyncio.create_task(self.app_conversation_info_service.get_app_conversation_info(conversation_id))
+                self.app_conversation_info_load_tasks[conversation_id] = task
+            conversation_info = await task
             if conversation_info and conversation_info.created_by_user_id:
                 path /= conversation_info.created_by_user_id
         path = path / 'v1_conversations' / conversation_id.hex

@@ -84,4 +84,5 @@ class GoogleCloudEventServiceInjector(EventServiceInjector):
                 user_id=user_id,
                 app_conversation_info_service=app_conversation_info_service,
                 bucket=bucket,
+                app_conversation_info_load_tasks={},
             )

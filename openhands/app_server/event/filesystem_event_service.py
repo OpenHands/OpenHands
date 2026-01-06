@@ -63,5 +63,6 @@ class FilesystemEventServiceInjector(EventServiceInjector):
             yield FilesystemEventService(
                 prefix=prefix,
                 user_id=user_id,
-                app_conversation_info_service=app_conversation_info_service
+                app_conversation_info_service=app_conversation_info_service,
+                app_conversation_info_load_tasks={},
             )
