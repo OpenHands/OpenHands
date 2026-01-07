@@ -13,8 +13,8 @@ from integrations.resolver_context import ResolverUserContext
 from integrations.types import ResolverViewInterface, UserData
 from integrations.utils import (
     ENABLE_PROACTIVE_CONVERSATION_STARTERS,
-    HOST,
     ENABLE_V1_GITHUB_RESOLVER,
+    HOST,
     HOST_URL,
     get_oh_labels,
     get_user_v1_enabled_setting,
