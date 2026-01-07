@@ -913,12 +913,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         user_id: str | None,
     ) -> Agent:
         """Update agent's LLM and condenser LLM with litellm_extra_body metadata.
+
         This adds tracing metadata (conversation_id, user_id, etc.) to the LLM
         for analytics and debugging purposes. Only applies to openhands/ models.
+
         Args:
             agent: The agent to update
             conversation_id: The conversation ID
             user_id: The user ID (can be None)
+
         Returns:
             Updated agent with LLM metadata
         """
