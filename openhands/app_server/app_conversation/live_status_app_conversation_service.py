@@ -419,10 +419,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             return []
         except Exception:
             # Not getting a status is not a fatal error - we just mark the conversation as stopped
-
-            return []
-        except Exception:
-            # Not getting a status is not a fatal error - we just mark the conversation as stopped
             _logger.exception(
                 f'Error getting conversation status from sandbox {sandbox.id}',
                 stack_info=True,
