@@ -70,12 +70,17 @@ export function ErrorBoundary() {
 export default function MainApp() {
   const appTitle = useAppTitle();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const isOnTosPage = useIsOnTosPage();
   const { data: settings } = useSettings();
   const { error } = useBalance();
   const { migrateUserConsent } = useMigrateUserConsent();
   const { t } = useTranslation();
+
+  // Check for reCAPTCHA blocked error in URL
+  const searchParams = new URLSearchParams(location.search);
+  const recaptchaBlocked = searchParams.get("recaptcha_blocked") === "true";
 
   const config = useConfig();
   const {
@@ -250,6 +255,7 @@ export default function MainApp() {
           authUrl={config.data?.AUTH_URL}
           emailVerified={emailVerified}
           hasDuplicatedEmail={hasDuplicatedEmail}
+          recaptchaBlocked={recaptchaBlocked}
         />
       )}
       {renderReAuthModal && <ReauthModal />}

@@ -44,6 +44,7 @@ coredis = "^4.22.0"
 httpx = "*"
 scikit-learn = "^1.7.0"
 shap = "^0.48.0"
+google-cloud-recaptcha-enterprise = "^1.24.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "0.8.3"

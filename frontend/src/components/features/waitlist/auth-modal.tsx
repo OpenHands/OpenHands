@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
@@ -14,6 +14,8 @@ import { GetConfigResponse } from "#/api/option-service/option.types";
 import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-notice";
+import { useRecaptcha } from "#/hooks/use-recaptcha";
+import { useConfig } from "#/hooks/query/use-config";
 
 interface AuthModalProps {
   githubAuthUrl: string | null;
@@ -22,6 +24,7 @@ interface AuthModalProps {
   providersConfigured?: Provider[];
   emailVerified?: boolean;
   hasDuplicatedEmail?: boolean;
+  recaptchaBlocked?: boolean;
 }
 
 export function AuthModal({
@@ -31,9 +34,55 @@ export function AuthModal({
   providersConfigured,
   emailVerified = false,
   hasDuplicatedEmail = false,
+  recaptchaBlocked = false,
 }: AuthModalProps) {
   const { t } = useTranslation();
   const { trackLoginButtonClick } = useTracking();
+  const { data: config } = useConfig();
+
+  // reCAPTCHA - only need token generation, verification happens at backend callback
+  const { isReady: recaptchaReady, executeRecaptcha } = useRecaptcha({
+    siteKey: config?.RECAPTCHA_SITE_KEY,
+  });
+
+  const handleAuthRedirect = useCallback(
+    async (redirectUrl: string, provider: Provider) => {
+      trackLoginButtonClick({ provider });
+
+      if (!config?.RECAPTCHA_SITE_KEY || !recaptchaReady) {
+        // No reCAPTCHA or token generation failed - redirect normally
+        window.location.href = redirectUrl;
+        return;
+      }
+
+      // If reCAPTCHA is configured, encode token in OAuth state
+      try {
+        const token = await executeRecaptcha("LOGIN");
+        if (token) {
+          const url = new URL(redirectUrl);
+          const currentState =
+            url.searchParams.get("state") || window.location.origin;
+
+          // Encode state with reCAPTCHA token for backend verification
+          const stateData = {
+            redirect_url: currentState,
+            recaptcha_token: token,
+          };
+          url.searchParams.set("state", btoa(JSON.stringify(stateData)));
+          window.location.href = url.toString();
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("reCAPTCHA token generation failed:", err);
+      }
+    },
+    [
+      config?.RECAPTCHA_SITE_KEY,
+      recaptchaReady,
+      executeRecaptcha,
+      trackLoginButtonClick,
+    ],
+  );
 
   const gitlabAuthUrl = useAuthUrl({
     appMode: appMode || null,
@@ -61,40 +110,31 @@ export function AuthModal({
 
   const handleGitHubAuth = () => {
     if (githubAuthUrl) {
-      trackLoginButtonClick({ provider: "github" });
-      // Always start the OIDC flow, let the backend handle TOS check
-      window.location.href = githubAuthUrl;
+      handleAuthRedirect(githubAuthUrl, "github");
     }
   };
 
   const handleGitLabAuth = () => {
     if (gitlabAuthUrl) {
-      trackLoginButtonClick({ provider: "gitlab" });
-      // Always start the OIDC flow, let the backend handle TOS check
-      window.location.href = gitlabAuthUrl;
+      handleAuthRedirect(gitlabAuthUrl, "gitlab");
     }
   };
 
   const handleBitbucketAuth = () => {
     if (bitbucketAuthUrl) {
-      trackLoginButtonClick({ provider: "bitbucket" });
-      // Always start the OIDC flow, let the backend handle TOS check
-      window.location.href = bitbucketAuthUrl;
+      handleAuthRedirect(bitbucketAuthUrl, "bitbucket");
     }
   };
 
   const handleAzureDevOpsAuth = () => {
     if (azureDevOpsAuthUrl) {
-      // Always start the OIDC flow, let the backend handle TOS check
-      window.location.href = azureDevOpsAuthUrl;
+      handleAuthRedirect(azureDevOpsAuthUrl, "azure_devops");
     }
   };
 
   const handleEnterpriseSsoAuth = () => {
     if (enterpriseSsoUrl) {
-      trackLoginButtonClick({ provider: "enterprise_sso" });
-      // Always start the OIDC flow, let the backend handle TOS check
-      window.location.href = enterpriseSsoUrl;
+      handleAuthRedirect(enterpriseSsoUrl, "enterprise_sso");
     }
   };
 
@@ -138,6 +178,11 @@ export function AuthModal({
         {hasDuplicatedEmail && (
           <div className="text-center text-danger text-sm mt-2 mb-2">
             {t(I18nKey.AUTH$DUPLICATE_EMAIL_ERROR)}
+          </div>
+        )}
+        {recaptchaBlocked && (
+          <div className="text-center text-danger text-sm mt-2 mb-2">
+            {t(I18nKey.AUTH$VERIFICATION_FAILED)}
           </div>
         )}
         <div className="flex flex-col gap-2 w-full items-center text-center">
