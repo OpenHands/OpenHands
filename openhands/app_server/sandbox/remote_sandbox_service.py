@@ -3,6 +3,7 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Union
+from uuid import UUID
 
 import base62
 import httpx
@@ -729,7 +730,9 @@ async def refresh_conversation(
             return EventPage.model_validate(response.json())
 
         async for event in page_iterator(fetch_events_page):
-            existing = await event_service.get_event(event.id)
+            existing = await event_service.get_event(
+                app_conversation_info.id, UUID(event.id)
+            )
             if existing is None:
                 await event_service.save_event(app_conversation_info.id, event)
                 await event_callback_service.execute_callbacks(

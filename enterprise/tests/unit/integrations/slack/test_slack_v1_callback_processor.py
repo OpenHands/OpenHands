@@ -189,12 +189,12 @@ class TestSlackV1CallbackProcessor:
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_app_conversation_info_service')
-    @patch('integrations.slack.slack_v1_callback_processor.get_prompt_template')
+    @patch('integrations.slack.slack_v1_callback_processor.get_summary_instruction')
     @patch('integrations.slack.slack_v1_callback_processor.WebClient')
     async def test_successful_end_to_end_flow(
         self,
         mock_web_client,
-        mock_get_prompt_template,
+        mock_get_summary_instruction,
         mock_get_app_conversation_info_service,
         mock_get_sandbox_service,
         mock_get_httpx_client,
@@ -213,8 +213,8 @@ class TestSlackV1CallbackProcessor:
         mock_store.get_team_bot_token.return_value = 'xoxb-test-token'
         mock_slack_team_store.return_value = mock_store
 
-        # Mock prompt template
-        mock_get_prompt_template.return_value = 'Please provide a summary'
+        # Mock summary instruction
+        mock_get_summary_instruction.return_value = 'Please provide a summary'
 
         # Mock services
         mock_app_conversation_info_service = AsyncMock()
@@ -373,10 +373,10 @@ class TestSlackV1CallbackProcessor:
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_app_conversation_info_service')
-    @patch('integrations.slack.slack_v1_callback_processor.get_prompt_template')
+    @patch('integrations.slack.slack_v1_callback_processor.get_summary_instruction')
     async def test_agent_server_error_scenarios(
         self,
-        mock_get_prompt_template,
+        mock_get_summary_instruction,
         mock_get_app_conversation_info_service,
         mock_get_sandbox_service,
         mock_get_httpx_client,
@@ -397,8 +397,8 @@ class TestSlackV1CallbackProcessor:
         mock_store.get_team_bot_token.return_value = 'xoxb-test-token'
         mock_slack_team_store.return_value = mock_store
 
-        # Mock prompt template
-        mock_get_prompt_template.return_value = 'Please provide a summary'
+        # Mock summary instruction
+        mock_get_summary_instruction.return_value = 'Please provide a summary'
 
         # Mock services
         mock_app_conversation_info_service = AsyncMock()

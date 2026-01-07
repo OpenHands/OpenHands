@@ -70,6 +70,7 @@ def slack_new_conversation_view(mock_slack_user, mock_user_auth):
         send_summary_instruction=True,
         conversation_id='',
         team_id='T1234567890',
+        v1_enabled=False,
     )
 
 
@@ -82,7 +83,7 @@ def slack_update_conversation_view_v0(mock_slack_user, mock_user_auth):
         channel_id='C1234567890',
         keycloak_user_id='test-user-123',
         parent_id='1234567890.123456',
-        v1=False,
+        v1_enabled=False,
     )
     return SlackUpdateExistingConversationView(
         bot_access_token='xoxb-test-token',
@@ -99,6 +100,7 @@ def slack_update_conversation_view_v0(mock_slack_user, mock_user_auth):
         conversation_id=conversation_id,
         slack_conversation=mock_conversation,
         team_id='T1234567890',
+        v1_enabled=False,
     )
 
 
@@ -111,7 +113,7 @@ def slack_update_conversation_view_v1(mock_slack_user, mock_user_auth):
         channel_id='C1234567890',
         keycloak_user_id='test-user-123',
         parent_id='1234567890.123456',
-        v1=True,
+        v1_enabled=True,
     )
     return SlackUpdateExistingConversationView(
         bot_access_token='xoxb-test-token',
@@ -128,6 +130,7 @@ def slack_update_conversation_view_v1(mock_slack_user, mock_user_auth):
         conversation_id=conversation_id,
         slack_conversation=mock_conversation,
         team_id='T1234567890',
+        v1_enabled=True,
     )
 
 
@@ -140,36 +143,29 @@ class TestV1V0DecisionLogic:
     """Test the decision logic for choosing between V1 and V0 conversations based on user setting."""
 
     @pytest.mark.parametrize(
-        'v1_enabled,v1_creation_fails,expected_v1_flag',
+        'v1_enabled,expected_v1_flag',
         [
-            (True, False, True),  # V1 enabled and succeeds
-            (True, True, False),  # V1 enabled but fails, fallback to V0
-            (False, False, False),  # V1 disabled, use V0
+            (True, True),  # V1 enabled, use V1
+            (False, False),  # V1 disabled, use V0
         ],
     )
-    @patch('integrations.slack.slack_view.get_user_v1_enabled_setting')
+    @patch('integrations.slack.slack_view.is_v1_enabled_for_slack_resolver')
     @patch.object(SlackNewConversationView, '_create_v1_conversation')
     @patch.object(SlackNewConversationView, '_create_v0_conversation')
     async def test_v1_v0_decision_logic(
         self,
         mock_create_v0,
         mock_create_v1,
-        mock_get_v1_setting,
+        mock_is_v1_enabled,
         slack_new_conversation_view,
         mock_jinja_env,
         v1_enabled,
-        v1_creation_fails,
         expected_v1_flag,
     ):
         """Test the decision logic for V1 vs V0 conversation creation based on user setting."""
         # Setup mocks
-        mock_get_v1_setting.return_value = v1_enabled
-
-        if v1_creation_fails:
-            mock_create_v1.side_effect = RuntimeError('V1 creation failed')
-        else:
-            mock_create_v1.return_value = None
-
+        mock_is_v1_enabled.return_value = v1_enabled
+        mock_create_v1.return_value = None
         mock_create_v0.return_value = None
 
         # Execute
@@ -179,14 +175,11 @@ class TestV1V0DecisionLogic:
 
         # Verify
         assert result == slack_new_conversation_view.conversation_id
-        assert slack_new_conversation_view.v1 == expected_v1_flag
+        assert slack_new_conversation_view.v1_enabled == expected_v1_flag
 
         if v1_enabled:
             mock_create_v1.assert_called_once()
-            if v1_creation_fails:
-                mock_create_v0.assert_called_once()
-            else:
-                mock_create_v0.assert_not_called()
+            mock_create_v0.assert_not_called()
         else:
             mock_create_v1.assert_not_called()
             mock_create_v0.assert_called_once()
