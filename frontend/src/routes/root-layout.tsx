@@ -9,13 +9,10 @@ import {
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import i18n from "#/i18n";
-import { useGitHubAuthUrl } from "#/hooks/use-github-auth-url";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
-import { AuthModal } from "#/components/features/waitlist/auth-modal";
 import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
-import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
@@ -27,11 +24,11 @@ import { useAutoLogin } from "#/hooks/use-auto-login";
 import { useAuthCallback } from "#/hooks/use-auth-callback";
 import { useReoTracking } from "#/hooks/use-reo-tracking";
 import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
-import { useEmailVerification } from "#/hooks/use-email-verification";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { MaintenanceBanner } from "#/components/features/maintenance/maintenance-banner";
 import { cn, isMobileDevice } from "#/utils/utils";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
 
 export function ErrorBoundary() {
@@ -81,27 +78,11 @@ export default function MainApp() {
   const {
     data: isAuthed,
     isFetching: isFetchingAuth,
+    isLoading: isAuthLoading,
     isError: isAuthError,
   } = useIsAuthed();
 
-  // Always call the hook, but we'll only use the result when not on TOS page
-  const gitHubAuthUrl = useGitHubAuthUrl({
-    appMode: config.data?.APP_MODE || null,
-    gitHubClientId: config.data?.GITHUB_CLIENT_ID || null,
-    authUrl: config.data?.AUTH_URL,
-  });
-
-  // When on TOS page, we don't use the GitHub auth URL
-  const effectiveGitHubAuthUrl = isOnTosPage ? null : gitHubAuthUrl;
-
   const [consentFormIsOpen, setConsentFormIsOpen] = React.useState(false);
-  const {
-    emailVerificationModalOpen,
-    setEmailVerificationModalOpen,
-    emailVerified,
-    hasDuplicatedEmail,
-    userId,
-  } = useEmailVerification();
 
   // Auto-login if login method is stored in local storage
   useAutoLogin();
@@ -200,13 +181,33 @@ export default function MainApp() {
     setLoginMethodExists(checkLoginMethodExists());
   }, [isAuthed, checkLoginMethodExists]);
 
-  const renderAuthModal =
-    !isAuthed &&
-    !isAuthError &&
-    !isFetchingAuth &&
-    !isOnTosPage &&
-    config.data?.APP_MODE === "saas" &&
-    !loginMethodExists; // Don't show auth modal if login method exists in local storage
+  const shouldRedirectToLogin =
+    config.isLoading ||
+    isAuthLoading ||
+    isFetchingAuth ||
+    (!isAuthed &&
+      !isAuthError &&
+      !isOnTosPage &&
+      config.data?.APP_MODE === "saas" &&
+      !loginMethodExists);
+
+  React.useEffect(() => {
+    if (shouldRedirectToLogin) {
+      const returnTo = pathname !== "/" ? pathname : "";
+      const loginUrl = returnTo
+        ? `/login?returnTo=${encodeURIComponent(returnTo)}`
+        : "/login";
+      navigate(loginUrl, { replace: true });
+    }
+  }, [shouldRedirectToLogin, pathname, navigate]);
+
+  if (shouldRedirectToLogin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-base">
+        <LoadingSpinner size="large" />
+      </div>
+    );
+  }
 
   const renderReAuthModal =
     !isAuthed &&
@@ -242,25 +243,7 @@ export default function MainApp() {
         </div>
       </div>
 
-      {renderAuthModal && (
-        <AuthModal
-          githubAuthUrl={effectiveGitHubAuthUrl}
-          appMode={config.data?.APP_MODE}
-          providersConfigured={config.data?.PROVIDERS_CONFIGURED}
-          authUrl={config.data?.AUTH_URL}
-          emailVerified={emailVerified}
-          hasDuplicatedEmail={hasDuplicatedEmail}
-        />
-      )}
       {renderReAuthModal && <ReauthModal />}
-      {emailVerificationModalOpen && (
-        <EmailVerificationModal
-          onClose={() => {
-            setEmailVerificationModalOpen(false);
-          }}
-          userId={userId}
-        />
-      )}
       {config.data?.APP_MODE === "oss" && consentFormIsOpen && (
         <AnalyticsConsentFormModal
           onClose={() => {

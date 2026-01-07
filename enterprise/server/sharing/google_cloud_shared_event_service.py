@@ -20,7 +20,6 @@ from fastapi import Request
 from google.cloud import storage
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
-from more_itertools import bucket
 from pydantic import Field
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
@@ -62,7 +61,7 @@ class GoogleCloudSharedEventService(SharedEventService):
             return None
 
         return GoogleCloudEventService(
-            bucket=bucket,
+            bucket=self.bucket,
             prefix=Path('users'),
             user_id=shared_conversation_info.created_by_user_id,
             app_conversation_info_service=None,
