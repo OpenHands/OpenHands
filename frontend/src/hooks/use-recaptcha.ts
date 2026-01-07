@@ -1,19 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 
-declare global {
-  interface Window {
-    grecaptcha: {
-      enterprise: {
-        ready: (callback: () => void) => void;
-        execute: (
-          siteKey: string,
-          options: { action: string },
-        ) => Promise<string>;
-      };
-    };
-  }
-}
-
 const RECAPTCHA_SCRIPT_URL = "https://www.google.com/recaptcha/enterprise.js";
 
 interface UseRecaptchaOptions {
@@ -51,7 +37,7 @@ export function useRecaptcha({
     script.defer = true;
 
     script.onload = () => {
-      window.grecaptcha.enterprise.ready(() => {
+      window.grecaptcha?.enterprise.ready(() => {
         setIsReady(true);
         setIsLoading(false);
       });
@@ -67,7 +53,7 @@ export function useRecaptcha({
 
   const executeRecaptcha = useCallback(
     async (action: string): Promise<string | null> => {
-      if (!siteKey || !isReady) return null;
+      if (!siteKey || !isReady || !window.grecaptcha?.enterprise) return null;
 
       try {
         const token = await window.grecaptcha.enterprise.execute(siteKey, {

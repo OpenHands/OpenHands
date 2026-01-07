@@ -4,14 +4,13 @@ from dataclasses import dataclass
 
 from google.cloud import recaptchaenterprise_v1
 from server.auth.constants import (
+    RECAPTCHA_BLOCK_THRESHOLD,
     RECAPTCHA_HMAC_SECRET,
     RECAPTCHA_PROJECT_ID,
     RECAPTCHA_SITE_KEY,
 )
 
 from openhands.core.logger import openhands_logger as logger
-
-BLOCK_THRESHOLD = 0.3
 
 
 @dataclass
@@ -116,7 +115,7 @@ class RecaptchaService:
             valid=valid,
             action_valid=action_valid,
             reason_codes=reason_codes,
-            allowed=valid and action_valid and score >= BLOCK_THRESHOLD,
+            allowed=valid and action_valid and score >= RECAPTCHA_BLOCK_THRESHOLD,
         )
 
 

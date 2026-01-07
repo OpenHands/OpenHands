@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
@@ -45,44 +45,39 @@ export function AuthModal({
     siteKey: config?.RECAPTCHA_SITE_KEY,
   });
 
-  const handleAuthRedirect = useCallback(
-    async (redirectUrl: string, provider: Provider) => {
-      trackLoginButtonClick({ provider });
+  const handleAuthRedirect = async (
+    redirectUrl: string,
+    provider: Provider,
+  ) => {
+    trackLoginButtonClick({ provider });
 
-      if (!config?.RECAPTCHA_SITE_KEY || !recaptchaReady) {
-        // No reCAPTCHA or token generation failed - redirect normally
-        window.location.href = redirectUrl;
-        return;
+    if (!config?.RECAPTCHA_SITE_KEY || !recaptchaReady) {
+      // No reCAPTCHA or token generation failed - redirect normally
+      window.location.href = redirectUrl;
+      return;
+    }
+
+    // If reCAPTCHA is configured, encode token in OAuth state
+    try {
+      const token = await executeRecaptcha("LOGIN");
+      if (token) {
+        const url = new URL(redirectUrl);
+        const currentState =
+          url.searchParams.get("state") || window.location.origin;
+
+        // Encode state with reCAPTCHA token for backend verification
+        const stateData = {
+          redirect_url: currentState,
+          recaptcha_token: token,
+        };
+        url.searchParams.set("state", btoa(JSON.stringify(stateData)));
+        window.location.href = url.toString();
       }
-
-      // If reCAPTCHA is configured, encode token in OAuth state
-      try {
-        const token = await executeRecaptcha("LOGIN");
-        if (token) {
-          const url = new URL(redirectUrl);
-          const currentState =
-            url.searchParams.get("state") || window.location.origin;
-
-          // Encode state with reCAPTCHA token for backend verification
-          const stateData = {
-            redirect_url: currentState,
-            recaptcha_token: token,
-          };
-          url.searchParams.set("state", btoa(JSON.stringify(stateData)));
-          window.location.href = url.toString();
-        }
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("reCAPTCHA token generation failed:", err);
-      }
-    },
-    [
-      config?.RECAPTCHA_SITE_KEY,
-      recaptchaReady,
-      executeRecaptcha,
-      trackLoginButtonClick,
-    ],
-  );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("reCAPTCHA token generation failed:", err);
+    }
+  };
 
   const gitlabAuthUrl = useAuthUrl({
     appMode: appMode || null,
