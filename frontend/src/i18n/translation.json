@@ -12111,6 +12111,22 @@
     "de": "Für diese E-Mail-Adresse existiert bereits ein Konto.",
     "uk": "Обліковий запис з цією електронною адресою вже існує."
   },
+  "AUTH$LETS_GET_STARTED": {
+    "en": "Let's get started",
+    "ja": "始めましょう",
+    "zh-CN": "让我们开始吧",
+    "zh-TW": "讓我們開始吧",
+    "ko-KR": "시작해 봅시다",
+    "no": "La oss komme i gang",
+    "it": "Iniziamo",
+    "pt": "Vamos começar",
+    "es": "Empecemos",
+    "ar": "لنبدأ",
+    "fr": "Commençons",
+    "tr": "Başlayalım",
+    "de": "Lass uns anfangen",
+    "uk": "Почнімо"
+  },
   "COMMON$TERMS_OF_SERVICE": {
     "en": "Terms of Service",
     "ja": "利用規約",
