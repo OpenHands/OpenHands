@@ -380,7 +380,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         Returns:
             Configured LLMSummarizingCondenser instance
         """
-        # LLMSummarizingCondenser has defaults: max_size=120, keep_first=4
+        # LLMSummarizingCondenser SDK defaults: max_size=240, keep_first=2
         condenser_kwargs = {
             'llm': llm.model_copy(
                 update={

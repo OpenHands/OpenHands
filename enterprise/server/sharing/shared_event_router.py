@@ -5,8 +5,8 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from server.sharing.filesystem_shared_event_service import (
-    SharedEventServiceImplInjector,
+from server.sharing.google_cloud_shared_event_service import (
+    GoogleCloudSharedEventServiceInjector,
 )
 from server.sharing.shared_event_service import SharedEventService
 
@@ -15,7 +15,9 @@ from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
 
 router = APIRouter(prefix='/api/shared-events', tags=['Sharing'])
-shared_event_service_dependency = Depends(SharedEventServiceImplInjector().depends)
+shared_event_service_dependency = Depends(
+    GoogleCloudSharedEventServiceInjector().depends
+)
 
 
 # Read methods
@@ -85,10 +87,6 @@ async def count_shared_events(
         datetime | None,
         Query(title='Optional filter by timestamp less than'),
     ] = None,
-    sort_order: Annotated[
-        EventSortOrder,
-        Query(title='Sort order for results'),
-    ] = EventSortOrder.TIMESTAMP,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> int:
     """Count events for a shared conversation matching the given filters."""
@@ -97,14 +95,13 @@ async def count_shared_events(
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
-        sort_order=sort_order,
     )
 
 
 @router.get('')
 async def batch_get_shared_events(
     conversation_id: Annotated[
-        UUID,
+        str,
         Query(title='Conversation ID to get events for'),
     ],
     id: Annotated[list[str], Query()],
@@ -112,15 +109,20 @@ async def batch_get_shared_events(
 ) -> list[Event | None]:
     """Get a batch of events for a shared conversation given their ids, returning null for any missing event."""
     assert len(id) <= 100
-    events = await shared_event_service.batch_get_shared_events(conversation_id, id)
+    event_ids = [UUID(id_) for id_ in id]
+    events = await shared_event_service.batch_get_shared_events(
+        UUID(conversation_id), event_ids
+    )
     return events
 
 
 @router.get('/{conversation_id}/{event_id}')
 async def get_shared_event(
-    conversation_id: UUID,
+    conversation_id: str,
     event_id: str,
     shared_event_service: SharedEventService = shared_event_service_dependency,
 ) -> Event | None:
     """Get a single event from a shared conversation by conversation_id and event_id."""
-    return await shared_event_service.get_shared_event(conversation_id, event_id)
+    return await shared_event_service.get_shared_event(
+        UUID(conversation_id), UUID(event_id)
+    )

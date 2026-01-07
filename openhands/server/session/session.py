@@ -234,7 +234,7 @@ class WebSession:
             # The order matters: with the browser output first, the summarizer
             # will only see the most recent browser output, which should keep
             # the summarization cost down.
-            max_events_for_condenser = settings.condenser_max_size or 120
+            max_events_for_condenser = settings.condenser_max_size or 240
             default_condenser_config = CondenserPipelineConfig(
                 condensers=[
                     ConversationWindowCondenserConfig(),
