@@ -456,22 +456,24 @@ class TestGoogleCloudSharedEventServiceInjector:
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
 
-        with patch(
-            'server.sharing.google_cloud_shared_event_service.storage.Client',
-            return_value=mock_storage_client,
-        ):
-            with patch(
+        with (
+            patch(
+                'server.sharing.google_cloud_shared_event_service.storage.Client',
+                return_value=mock_storage_client,
+            ),
+            patch(
                 'openhands.app_server.config.get_db_session',
                 return_value=mock_db_context,
-            ):
-                # Call the inject method
-                async for service in injector.inject(mock_state, mock_request):
-                    # Verify the service is an instance of GoogleCloudSharedEventService
-                    assert isinstance(service, GoogleCloudSharedEventService)
-                    assert service.bucket == mock_bucket
+            ),
+        ):
+            # Call the inject method
+            async for service in injector.inject(mock_state, mock_request):
+                # Verify the service is an instance of GoogleCloudSharedEventService
+                assert isinstance(service, GoogleCloudSharedEventService)
+                assert service.bucket == mock_bucket
 
-                # Verify the storage client was called with the correct bucket name
-                mock_storage_client.bucket.assert_called_once_with('test-bucket')
+            # Verify the storage client was called with the correct bucket name
+            mock_storage_client.bucket.assert_called_once_with('test-bucket')
 
     async def test_injector_uses_bucket_name_from_instance(self):
         """Test that the injector uses the bucket_name from the instance."""
@@ -493,20 +495,22 @@ class TestGoogleCloudSharedEventServiceInjector:
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
 
-        with patch(
-            'server.sharing.google_cloud_shared_event_service.storage.Client',
-            return_value=mock_storage_client,
-        ):
-            with patch(
+        with (
+            patch(
+                'server.sharing.google_cloud_shared_event_service.storage.Client',
+                return_value=mock_storage_client,
+            ),
+            patch(
                 'openhands.app_server.config.get_db_session',
                 return_value=mock_db_context,
-            ):
-                # Call the inject method
-                async for service in injector.inject(mock_state, mock_request):
-                    pass
+            ),
+        ):
+            # Call the inject method
+            async for service in injector.inject(mock_state, mock_request):
+                pass
 
-                # Verify the storage client was called with the custom bucket name
-                mock_storage_client.bucket.assert_called_once_with('my-custom-bucket')
+            # Verify the storage client was called with the custom bucket name
+            mock_storage_client.bucket.assert_called_once_with('my-custom-bucket')
 
     async def test_injector_creates_sql_shared_conversation_info_service(self):
         """Test that the injector creates SQLSharedConversationInfoService with db_session."""
@@ -528,31 +532,29 @@ class TestGoogleCloudSharedEventServiceInjector:
         mock_bucket = MagicMock()
         mock_storage_client.bucket.return_value = mock_bucket
 
-        with patch(
-            'server.sharing.google_cloud_shared_event_service.storage.Client',
-            return_value=mock_storage_client,
-        ):
-            with patch(
+        with (
+            patch(
+                'server.sharing.google_cloud_shared_event_service.storage.Client',
+                return_value=mock_storage_client,
+            ),
+            patch(
                 'openhands.app_server.config.get_db_session',
                 return_value=mock_db_context,
-            ):
-                with patch(
-                    'server.sharing.google_cloud_shared_event_service.SQLSharedConversationInfoService'
-                ) as mock_sql_service_class:
-                    mock_sql_service = MagicMock()
-                    mock_sql_service_class.return_value = mock_sql_service
+            ),
+            patch(
+                'server.sharing.google_cloud_shared_event_service.SQLSharedConversationInfoService'
+            ) as mock_sql_service_class,
+        ):
+            mock_sql_service = MagicMock()
+            mock_sql_service_class.return_value = mock_sql_service
 
-                    # Call the inject method
-                    async for service in injector.inject(mock_state, mock_request):
-                        # Verify the service has the correct shared_conversation_info_service
-                        assert (
-                            service.shared_conversation_info_service == mock_sql_service
-                        )
+            # Call the inject method
+            async for service in injector.inject(mock_state, mock_request):
+                # Verify the service has the correct shared_conversation_info_service
+                assert service.shared_conversation_info_service == mock_sql_service
 
-                    # Verify SQLSharedConversationInfoService was created with db_session
-                    mock_sql_service_class.assert_called_once_with(
-                        db_session=mock_db_session
-                    )
+            # Verify SQLSharedConversationInfoService was created with db_session
+            mock_sql_service_class.assert_called_once_with(db_session=mock_db_session)
 
     async def test_injector_works_without_request(self):
         """Test that the injector works when request is None."""

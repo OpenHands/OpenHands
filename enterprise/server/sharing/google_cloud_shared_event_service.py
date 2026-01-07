@@ -133,7 +133,9 @@ class GoogleCloudSharedEventService(SharedEventService):
 
 
 class GoogleCloudSharedEventServiceInjector(SharedEventServiceInjector):
-    bucket_name: str | None = Field(default_factory=lambda: os.environ.get('FILE_STORE_PATH'))
+    bucket_name: str | None = Field(
+        default_factory=lambda: os.environ.get('FILE_STORE_PATH')
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
