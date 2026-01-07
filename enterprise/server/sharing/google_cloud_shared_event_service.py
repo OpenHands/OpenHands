@@ -9,6 +9,7 @@ This implementation provides read-only access to events from shared conversation
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -131,6 +132,8 @@ class GoogleCloudSharedEventService(SharedEventService):
 
 
 class GoogleCloudSharedEventServiceInjector(SharedEventServiceInjector):
+    bucket_name: str = os.environ.get('FILE_STORE_PATH')
+
     async def inject(
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[SharedEventService, None]:
