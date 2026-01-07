@@ -107,6 +107,7 @@ class EventServiceBase(EventService, ABC):
             )
 
         start_offset = 0
+        next_page_id = None
         if page_id:
             start_offset = int(page_id)
             paths = paths[start_offset:]
