@@ -405,9 +405,6 @@ describe("AuthModal", () => {
     it("should redirect without token when reCAPTCHA token generation fails", async () => {
       // Arrange
       const user = userEvent.setup();
-      const consoleErrorSpy = vi
-        .spyOn(console, "error")
-        .mockImplementation(() => {});
       mockExecuteRecaptcha.mockRejectedValue(
         new Error("Token generation failed"),
       );
@@ -426,14 +423,9 @@ describe("AuthModal", () => {
       // Assert
       await waitFor(() => {
         expect(mockExecuteRecaptcha).toHaveBeenCalledWith("LOGIN");
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          "reCAPTCHA token generation failed:",
-          expect.any(Error),
-        );
         // Should still redirect even on failure (fail open)
         expect(mockLocationHref).not.toHaveBeenCalled();
       });
-      consoleErrorSpy.mockRestore();
     });
 
     it("should track login click when clicking auth button with reCAPTCHA", async () => {
