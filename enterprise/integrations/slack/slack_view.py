@@ -416,7 +416,6 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
         )
         from openhands.app_server.event_callback.util import (
             ensure_conversation_found,
-            ensure_running_sandbox,
             get_agent_server_url_from_sandbox,
         )
         from openhands.app_server.services.injector import InjectorState
@@ -447,21 +446,18 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 app_conversation_info.sandbox_id
             )
 
-            try:
-                running_sandbox = ensure_running_sandbox(
-                    sandbox, app_conversation_info.sandbox_id
-                )
-            except RuntimeError as e:
-                if sandbox and sandbox.status == SandboxStatus.PAUSED:
-                    logger.info('[Slack V1]: Attmpting to resume paused sandbox')
-                    await sandbox_service.resume_sandbox(
-                        app_conversation_info.sandbox_id
-                    )
-                    running_sandbox = ensure_running_sandbox(
-                        sandbox, app_conversation_info.sandbox_id
-                    )
-                else:
-                    raise e
+            if sandbox and sandbox.status == SandboxStatus.PAUSED:
+                # Resume paused sandbox and wait for it to be running
+                logger.info('[Slack V1]: Attempting to resume paused sandbox')
+                await sandbox_service.resume_sandbox(app_conversation_info.sandbox_id)
+
+            # Wait for sandbox to be running (handles both fresh start and resume)
+            running_sandbox = await sandbox_service.wait_for_sandbox_running(
+                app_conversation_info.sandbox_id,
+                timeout=120,
+                poll_interval=2,
+                httpx_client=httpx_client,
+            )
 
             assert (
                 running_sandbox.session_api_key is not None
