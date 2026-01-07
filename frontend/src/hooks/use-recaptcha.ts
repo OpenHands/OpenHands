@@ -6,7 +6,7 @@ interface UseRecaptchaOptions {
   siteKey?: string;
 }
 
-interface UseRecaptchaReturn {
+export interface UseRecaptchaReturn {
   isReady: boolean;
   isLoading: boolean;
   error: Error | null;
