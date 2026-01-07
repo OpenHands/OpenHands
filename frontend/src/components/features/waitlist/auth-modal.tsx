@@ -16,6 +16,7 @@ import { useTracking } from "#/hooks/use-tracking";
 import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-notice";
 import { useRecaptcha } from "#/hooks/use-recaptcha";
 import { useConfig } from "#/hooks/query/use-config";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface AuthModalProps {
   githubAuthUrl: string | null;
@@ -74,8 +75,7 @@ export function AuthModal({
         window.location.href = url.toString();
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("reCAPTCHA token generation failed:", err);
+      displayErrorToast(t(I18nKey.AUTH$RECAPTCHA_ERROR));
     }
   };
 
@@ -177,7 +177,7 @@ export function AuthModal({
         )}
         {recaptchaBlocked && (
           <div className="text-center text-danger text-sm mt-2 mb-2">
-            {t(I18nKey.AUTH$VERIFICATION_FAILED)}
+            {t(I18nKey.AUTH$RECAPTCHA_ERROR)}
           </div>
         )}
         <div className="flex flex-col gap-2 w-full items-center text-center">

@@ -336,7 +336,7 @@ describe("AuthModal", () => {
       renderAuthModalWithQueryClient({ recaptchaBlocked: true });
 
       // Assert
-      expect(screen.getByText("AUTH$VERIFICATION_FAILED")).toBeInTheDocument();
+      expect(screen.getByText("AUTH$RECAPTCHA_ERROR")).toBeInTheDocument();
     });
 
     it("should redirect without token when reCAPTCHA is not configured", async () => {

@@ -12111,21 +12111,21 @@
     "de": "Für diese E-Mail-Adresse existiert bereits ein Konto.",
     "uk": "Обліковий запис з цією електронною адресою вже існує."
   },
-  "AUTH$VERIFICATION_FAILED": {
-    "en": "Verification failed. Please try again.",
-    "ja": "認証に失敗しました。もう一度お試しください。",
-    "zh-CN": "验证失败。请重试。",
-    "zh-TW": "驗證失敗。請重試。",
-    "ko-KR": "인증에 실패했습니다. 다시 시도해 주세요.",
-    "no": "Verifisering mislyktes. Vennligst prøv igjen.",
-    "it": "Verifica fallita. Per favore riprova.",
-    "pt": "Falha na verificação. Por favor, tente novamente.",
-    "es": "La verificación falló. Por favor, inténtelo de nuevo.",
-    "ar": "فشل التحقق. يرجى المحاولة مرة أخرى.",
-    "fr": "La vérification a échoué. Veuillez réessayer.",
-    "tr": "Doğrulama başarısız oldu. Lütfen tekrar deneyin.",
-    "de": "Verifizierung fehlgeschlagen. Bitte versuchen Sie es erneut.",
-    "uk": "Перевірка не вдалася. Будь ласка, спробуйте ще раз."
+  "AUTH$RECAPTCHA_ERROR": {
+    "en": "reCAPTCHA verification failed. Please try again.",
+    "ja": "reCAPTCHA認証に失敗しました。もう一度お試しください。",
+    "zh-CN": "reCAPTCHA验证失败。请重试。",
+    "zh-TW": "reCAPTCHA驗證失敗。請重試。",
+    "ko-KR": "reCAPTCHA 인증에 실패했습니다. 다시 시도해 주세요.",
+    "no": "reCAPTCHA-verifisering mislyktes. Vennligst prøv igjen.",
+    "it": "Verifica reCAPTCHA fallita. Per favore riprova.",
+    "pt": "Falha na verificação reCAPTCHA. Por favor, tente novamente.",
+    "es": "La verificación reCAPTCHA falló. Por favor, inténtelo de nuevo.",
+    "ar": "فشل التحقق من reCAPTCHA. يرجى المحاولة مرة أخرى.",
+    "fr": "La vérification reCAPTCHA a échoué. Veuillez réessayer.",
+    "tr": "reCAPTCHA doğrulaması başarısız oldu. Lütfen tekrar deneyin.",
+    "de": "reCAPTCHA-Verifizierung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "uk": "Перевірка reCAPTCHA не вдалася. Будь ласка, спробуйте ще раз."
   },
   "COMMON$TERMS_OF_SERVICE": {
     "en": "Terms of Service",

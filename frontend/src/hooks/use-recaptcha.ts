@@ -1,4 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const RECAPTCHA_SCRIPT_URL = "https://www.google.com/recaptcha/enterprise.js";
 
@@ -16,6 +19,7 @@ export interface UseRecaptchaReturn {
 export function useRecaptcha({
   siteKey,
 }: UseRecaptchaOptions): UseRecaptchaReturn {
+  const { t } = useTranslation();
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -61,12 +65,11 @@ export function useRecaptcha({
         });
         return token;
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("reCAPTCHA execution failed:", err);
+        displayErrorToast(t(I18nKey.AUTH$RECAPTCHA_ERROR));
         return null;
       }
     },
-    [siteKey, isReady],
+    [siteKey, isReady, t],
   );
 
   return { isReady, isLoading, error, executeRecaptcha };
