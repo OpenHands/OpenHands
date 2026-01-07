@@ -245,12 +245,12 @@ async def on_event(request: Request, background_tasks: BackgroundTasks):
     logger.info('slack_on_event', extra={'payload': payload})
 
     # First verify the signature
-    # if not signature_verifier.is_valid(
-    #     body=body,
-    #     timestamp=request.headers.get('x-slack-request-timestamp'),
-    #     signature=request.headers.get('x-slack-signature'),
-    # ):
-    #     raise HTTPException(status_code=403, detail='invalid_request')
+    if not signature_verifier.is_valid(
+        body=body,
+        timestamp=request.headers.get('x-slack-request-timestamp'),
+        signature=request.headers.get('x-slack-signature'),
+    ):
+        raise HTTPException(status_code=403, detail='invalid_request')
 
     # Slack initially / periodically sends challenges and expects this response
     if 'challenge' in payload:
