@@ -22,7 +22,7 @@ class FilesystemEventService(EventServiceBase):
 
     def _load_event(self, path: Path) -> Event | None:
         try:
-            content = path.read_text(str(path))
+            content = path.read_text()
             content = Event.model_validate_json(content)
             return content
         except Exception:
