@@ -21,6 +21,7 @@ from google.cloud import storage
 from google.cloud.storage.bucket import Bucket
 from google.cloud.storage.client import Client
 from more_itertools import bucket
+from pydantic import Field
 from server.sharing.shared_conversation_info_service import (
     SharedConversationInfoService,
 )
@@ -132,7 +133,7 @@ class GoogleCloudSharedEventService(SharedEventService):
 
 
 class GoogleCloudSharedEventServiceInjector(SharedEventServiceInjector):
-    bucket_name: str = os.environ.get('FILE_STORE_PATH')
+    bucket_name: str = Field(default_factory=lambda: os.environ['FILE_STORE_PATH'])
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
