@@ -238,6 +238,10 @@ test-frontend:
 	@echo "$(YELLOW)Running tests for frontend...$(RESET)"
 	@cd frontend && npm run test
 
+test-frontend-e2e:
+	@echo "$(YELLOW)Running end-to-end tests for frontend...$(RESET)"
+	@cd frontend && npm run test:e2e
+
 test:
 	@$(MAKE) -s test-frontend
 
@@ -367,5 +371,5 @@ help:
 	@echo "  $(GREEN)help$(RESET)                - Display this help message, providing information on available targets."
 
 # Phony targets
-.PHONY: build check-dependencies check-system check-python check-npm check-nodejs check-docker check-poetry install-python-dependencies install-frontend-dependencies install-pre-commit-hooks lint-backend lint-frontend lint test-frontend test build-frontend start-backend start-frontend _run_setup run run-wsl setup-config setup-config-prompts setup-config-basic openhands-cloud-run docker-dev docker-run clean help
+.PHONY: build check-dependencies check-system check-python check-npm check-nodejs check-docker check-poetry install-python-dependencies install-frontend-dependencies install-pre-commit-hooks lint-backend lint-frontend lint test-frontend test-frontend-e2e test build-frontend start-backend start-frontend _run_setup run run-wsl setup-config setup-config-prompts setup-config-basic openhands-cloud-run docker-dev docker-run clean help
 .PHONY: kind
