@@ -1,17 +1,7 @@
 from datetime import datetime
-from unittest.mock import MagicMock, patch
 
-# Mock GCP client before any imports that might use recaptcha_service
-# This prevents DefaultCredentialsError in CI environments
-_gcp_client_patcher = patch(
-    'server.auth.recaptcha_service.recaptchaenterprise_v1.RecaptchaEnterpriseServiceClient'
-)
-_mock_gcp_client_class = _gcp_client_patcher.start()
-_mock_gcp_client = MagicMock()
-_mock_gcp_client_class.return_value = _mock_gcp_client
-
-import pytest  # noqa: E402
-from server.constants import CURRENT_USER_SETTINGS_VERSION  # noqa: E402
+import pytest
+from server.constants import CURRENT_USER_SETTINGS_VERSION
 from server.maintenance_task_processor.user_version_upgrade_processor import (
     UserVersionUpgradeProcessor,
 )

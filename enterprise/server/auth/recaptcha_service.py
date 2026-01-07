@@ -28,9 +28,16 @@ class RecaptchaService:
     """Service for creating reCAPTCHA Enterprise assessments."""
 
     def __init__(self):
-        self.client = recaptchaenterprise_v1.RecaptchaEnterpriseServiceClient()
+        self._client = None
         self.project_id = RECAPTCHA_PROJECT_ID
         self.site_key = RECAPTCHA_SITE_KEY
+
+    @property
+    def client(self):
+        """Lazily initialize the reCAPTCHA client to avoid credential errors at import time."""
+        if self._client is None:
+            self._client = recaptchaenterprise_v1.RecaptchaEnterpriseServiceClient()
+        return self._client
 
     def hash_account_id(self, email: str) -> str:
         """Hash email using SHA256-HMAC for Account Defender.
