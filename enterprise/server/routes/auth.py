@@ -191,7 +191,7 @@ async def keycloak_callback(
                 action='LOGIN',
                 user_ip=user_ip,
                 user_agent=user_agent,
-                email=email,  # Account Defender: include hashed email
+                email=email,
             )
 
             if not result.allowed:
@@ -254,7 +254,7 @@ async def keycloak_callback(
                     )
 
                 # Redirect to home page with query parameter indicating the issue
-                home_url = f'{request.base_url}?duplicated_email=true'
+                home_url = f'{request.base_url}/login?duplicated_email=true'
                 return RedirectResponse(home_url, status_code=302)
         except Exception as e:
             # Log error but allow signup to proceed (fail open)
@@ -271,9 +271,7 @@ async def keycloak_callback(
         from server.routes.email import verify_email
 
         await verify_email(request=request, user_id=user_id, is_auth_flow=True)
-        redirect_url = (
-            f'{request.base_url}?email_verification_required=true&user_id={user_id}'
-        )
+        redirect_url = f'{request.base_url}login?email_verification_required=true&user_id={user_id}'
         response = RedirectResponse(redirect_url, status_code=302)
         return response
 

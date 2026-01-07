@@ -84,7 +84,8 @@ async def test_verify_email_with_auth_flow(mock_request):
     call_args = mock_keycloak_admin.a_send_verify_email.call_args
     assert call_args.kwargs['user_id'] == user_id
     assert (
-        call_args.kwargs['redirect_uri'] == 'http://localhost:8000?email_verified=true'
+        call_args.kwargs['redirect_uri']
+        == 'http://localhost:8000/login?email_verified=true'
     )
     assert 'client_id' in call_args.kwargs
 
