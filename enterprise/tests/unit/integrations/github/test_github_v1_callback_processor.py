@@ -240,9 +240,11 @@ class TestGithubV1CallbackProcessor:
 
         mock_get_summary_instruction.return_value = 'Please provide a summary'
 
-        # Auth.AppAuth mock
+        # Auth.AppAuth and Auth.Token mock
         mock_app_auth_instance = MagicMock()
         mock_auth.AppAuth.return_value = mock_app_auth_instance
+        mock_token_auth_instance = MagicMock()
+        mock_auth.Token.return_value = mock_token_auth_instance
 
         # GitHub integration
         mock_token_data = MagicMock()
@@ -277,7 +279,8 @@ class TestGithubV1CallbackProcessor:
         mock_github_integration.assert_called_once_with(auth=mock_app_auth_instance)
         mock_integration_instance.get_access_token.assert_called_once_with(12345)
 
-        mock_github.assert_called_once_with('test_access_token')
+        mock_auth.Token.assert_called_once_with('test_access_token')
+        mock_github.assert_called_once_with(auth=mock_token_auth_instance)
         mock_github_client.get_repo.assert_called_once_with('test-owner/test-repo')
         mock_repo.get_issue.assert_called_once_with(number=42)
         mock_issue.create_comment.assert_called_once_with('Test summary from agent')
@@ -662,9 +665,10 @@ class TestGithubV1CallbackProcessor:
         mock_github_integration.assert_called_once_with(auth=mock_app_auth_instance)
         mock_integration_instance.get_access_token.assert_called_once_with(12345)
 
+    @patch('integrations.github.github_v1_callback_processor.Auth')
     @patch('integrations.github.github_v1_callback_processor.Github')
     async def test_post_summary_to_github_issue_comment(
-        self, mock_github, github_callback_processor
+        self, mock_github, mock_auth, github_callback_processor
     ):
         mock_github_client = MagicMock()
         mock_repo = MagicMock()
@@ -673,6 +677,9 @@ class TestGithubV1CallbackProcessor:
         mock_github_client.get_repo.return_value = mock_repo
         mock_github.return_value.__enter__.return_value = mock_github_client
 
+        mock_token_auth = MagicMock()
+        mock_auth.Token.return_value = mock_token_auth
+
         with patch.object(
             github_callback_processor,
             '_get_installation_access_token',
@@ -680,14 +687,16 @@ class TestGithubV1CallbackProcessor:
         ):
             await github_callback_processor._post_summary_to_github('Test summary')
 
-        mock_github.assert_called_once_with('test_token')
+        mock_auth.Token.assert_called_once_with('test_token')
+        mock_github.assert_called_once_with(auth=mock_token_auth)
         mock_github_client.get_repo.assert_called_once_with('test-owner/test-repo')
         mock_repo.get_issue.assert_called_once_with(number=42)
         mock_issue.create_comment.assert_called_once_with('Test summary')
 
+    @patch('integrations.github.github_v1_callback_processor.Auth')
     @patch('integrations.github.github_v1_callback_processor.Github')
     async def test_post_summary_to_github_pr_comment(
-        self, mock_github, github_callback_processor_inline
+        self, mock_github, mock_auth, github_callback_processor_inline
     ):
         mock_github_client = MagicMock()
         mock_repo = MagicMock()
@@ -695,6 +704,9 @@ class TestGithubV1CallbackProcessor:
         mock_repo.get_pull.return_value = mock_pr
         mock_github_client.get_repo.return_value = mock_repo
         mock_github.return_value.__enter__.return_value = mock_github_client
+
+        mock_token_auth = MagicMock()
+        mock_auth.Token.return_value = mock_token_auth
 
         with patch.object(
             github_callback_processor_inline,
@@ -705,7 +717,8 @@ class TestGithubV1CallbackProcessor:
                 'Test summary'
             )
 
-        mock_github.assert_called_once_with('test_token')
+        mock_auth.Token.assert_called_once_with('test_token')
+        mock_github.assert_called_once_with(auth=mock_token_auth)
         mock_github_client.get_repo.assert_called_once_with('test-owner/test-repo')
         mock_repo.get_pull.assert_called_once_with(42)
         mock_pr.create_review_comment_reply.assert_called_once_with(
