@@ -4,8 +4,18 @@ import pytest
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
-from server.auth.saas_user_auth import SaasUserAuth
-from server.routes.email import (
+
+# Mock GCP client before importing modules that use it
+# This prevents DefaultCredentialsError in CI environments
+_gcp_client_patcher = patch(
+    'server.auth.recaptcha_service.recaptchaenterprise_v1.RecaptchaEnterpriseServiceClient'
+)
+_mock_gcp_client_class = _gcp_client_patcher.start()
+_mock_gcp_client = MagicMock()
+_mock_gcp_client_class.return_value = _mock_gcp_client
+
+from server.auth.saas_user_auth import SaasUserAuth  # noqa: E402
+from server.routes.email import (  # noqa: E402
     ResendEmailVerificationRequest,
     resend_email_verification,
     verified_email,

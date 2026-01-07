@@ -7,9 +7,19 @@ import pytest
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
-from server.auth.auth_error import AuthError
-from server.auth.saas_user_auth import SaasUserAuth
-from server.routes.auth import (
+
+# Mock GCP client before importing modules that use it
+# This prevents DefaultCredentialsError in CI environments
+_gcp_client_patcher = patch(
+    'server.auth.recaptcha_service.recaptchaenterprise_v1.RecaptchaEnterpriseServiceClient'
+)
+_mock_gcp_client_class = _gcp_client_patcher.start()
+_mock_gcp_client = MagicMock()
+_mock_gcp_client_class.return_value = _mock_gcp_client
+
+from server.auth.auth_error import AuthError  # noqa: E402
+from server.auth.saas_user_auth import SaasUserAuth  # noqa: E402
+from server.routes.auth import (  # noqa: E402
     _extract_recaptcha_state,
     authenticate,
     keycloak_callback,
@@ -18,7 +28,7 @@ from server.routes.auth import (
     set_response_cookie,
 )
 
-from openhands.integrations.service_types import ProviderType
+from openhands.integrations.service_types import ProviderType  # noqa: E402
 
 
 @pytest.fixture
