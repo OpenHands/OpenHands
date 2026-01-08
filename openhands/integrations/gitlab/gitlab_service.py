@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 
 from pydantic import SecretStr
 
@@ -75,8 +76,14 @@ class GitLabService(
         return ProviderType.GITLAB.value
 
 
-gitlab_service_cls = os.environ.get(
-    'OPENHANDS_GITLAB_SERVICE_CLS',
-    'openhands.integrations.gitlab.gitlab_service.GitLabService',
-)
-GitLabServiceImpl = get_impl(GitLabService, gitlab_service_cls)
+@lru_cache()
+def get_gitlab_service_impl() -> type[GitLabService]:
+    """Lazily resolve the GitLab service implementation to avoid circular imports.
+
+    This function is cached to avoid repeated imports of the same class.
+    """
+    gitlab_service_cls = os.environ.get(
+        'OPENHANDS_GITLAB_SERVICE_CLS',
+        'openhands.integrations.gitlab.gitlab_service.GitLabService',
+    )
+    return get_impl(GitLabService, gitlab_service_cls)

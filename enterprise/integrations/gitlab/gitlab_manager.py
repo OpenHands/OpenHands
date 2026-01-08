@@ -23,7 +23,7 @@ from server.auth.token_manager import TokenManager
 from server.utils.conversation_callback_utils import register_callback_processor
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.integrations.gitlab.gitlab_service import get_gitlab_service_impl
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.server.types import (
     LLMAuthenticationError,
@@ -70,7 +70,7 @@ class GitlabManager(Manager):
         # Importing here prevents circular import
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
+        gitlab_service: SaaSGitLabService = get_gitlab_service_impl()(
             external_auth_id=keycloak_user_id
         )
 
@@ -134,7 +134,7 @@ class GitlabManager(Manager):
         # Importing here prevents circular import
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
+        gitlab_service: SaaSGitLabService = get_gitlab_service_impl()(
             external_auth_id=keycloak_user_id
         )
 

@@ -10,7 +10,7 @@ from storage.database import session_maker
 from storage.saas_secrets_store import SaasSecretsStore
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.integrations.gitlab.gitlab_service import get_gitlab_service_impl
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderType
 from openhands.integrations.service_types import Comment
 from openhands.server.services.conversation_service import create_new_conversation
@@ -43,7 +43,7 @@ class GitlabIssue(ResolverViewInterface):
     is_mr: bool
 
     async def _load_resolver_context(self):
-        gitlab_service = GitLabServiceImpl(
+        gitlab_service = get_gitlab_service_impl()(
             external_auth_id=self.user_info.keycloak_user_id
         )
 
@@ -192,7 +192,7 @@ class GitlabInlineMRComment(GitlabMRComment):
     line_number: int
 
     async def _load_resolver_context(self):
-        gitlab_service = GitLabServiceImpl(
+        gitlab_service = get_gitlab_service_impl()(
             external_auth_id=self.user_info.keycloak_user_id
         )
 

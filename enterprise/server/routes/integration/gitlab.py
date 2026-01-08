@@ -20,7 +20,7 @@ from storage.gitlab_webhook import GitlabWebhook
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.integrations.gitlab.gitlab_service import get_gitlab_service_impl
 from openhands.server.shared import sio
 from openhands.server.user_auth import get_user_id
 
@@ -139,7 +139,7 @@ async def get_gitlab_resources(
     """
     try:
         # Get GitLab service for the user
-        gitlab_service = GitLabServiceImpl(external_auth_id=user_id)
+        gitlab_service = get_gitlab_service_impl()(external_auth_id=user_id)
 
         if not isinstance(gitlab_service, SaaSGitLabService):
             raise HTTPException(
@@ -275,7 +275,7 @@ async def reinstall_gitlab_webhook(
     """
     try:
         # Get GitLab service for the user
-        gitlab_service = GitLabServiceImpl(external_auth_id=user_id)
+        gitlab_service = get_gitlab_service_impl()(external_auth_id=user_id)
 
         if not isinstance(gitlab_service, SaaSGitLabService):
             raise HTTPException(

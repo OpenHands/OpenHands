@@ -24,7 +24,7 @@ from openhands.integrations.azure_devops.azure_devops_service import (
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketServiceImpl
 from openhands.integrations.forgejo.forgejo_service import ForgejoServiceImpl
 from openhands.integrations.github.github_service import GithubServiceImpl
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.integrations.gitlab.gitlab_service import get_gitlab_service_impl
 from openhands.integrations.service_types import (
     AuthenticationError,
     Branch,
@@ -126,7 +126,7 @@ class ProviderHandler:
 
         self.service_class_map: dict[ProviderType, type[GitService]] = {
             ProviderType.GITHUB: GithubServiceImpl,
-            ProviderType.GITLAB: GitLabServiceImpl,
+            ProviderType.GITLAB: get_gitlab_service_impl(),
             ProviderType.BITBUCKET: BitBucketServiceImpl,
             ProviderType.FORGEJO: ForgejoServiceImpl,
             ProviderType.AZURE_DEVOPS: AzureDevOpsServiceImpl,

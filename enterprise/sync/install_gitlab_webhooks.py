@@ -14,7 +14,7 @@ from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.integrations.gitlab.gitlab_service import get_gitlab_service_impl
 from openhands.integrations.service_types import GitService
 
 CHUNK_SIZE = 100
@@ -165,7 +165,7 @@ class VerifyWebhookStatus:
                     webhook
                 )
 
-                gitlab_service_impl = GitLabServiceImpl(external_auth_id=user_id)
+                gitlab_service_impl = get_gitlab_service_impl()(external_auth_id=user_id)
 
                 if not isinstance(gitlab_service_impl, SaaSGitLabService):
                     raise Exception('Only SaaSGitLabService is supported')

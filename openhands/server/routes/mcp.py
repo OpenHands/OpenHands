@@ -13,7 +13,7 @@ from openhands.integrations.azure_devops.azure_devops_service import (
 )
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketServiceImpl
 from openhands.integrations.github.github_service import GithubServiceImpl
-from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
+from openhands.integrations.gitlab.gitlab_service import get_gitlab_service_impl
 from openhands.integrations.provider import ProviderToken
 from openhands.integrations.service_types import GitService, ProviderType
 from openhands.server.shared import ConversationStoreImpl, config, server_config
@@ -187,7 +187,7 @@ async def create_mr(
         else ProviderToken()
     )
 
-    gitlab_service = GitLabServiceImpl(
+    gitlab_service = get_gitlab_service_impl()(
         user_id=github_token.user_id,
         external_auth_id=user_id,
         external_auth_token=access_token,
