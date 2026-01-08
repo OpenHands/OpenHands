@@ -127,20 +127,16 @@ describe("websocket-url utilities", () => {
   });
 
   describe("buildWebSocketUrl", () => {
-    it("should return null when conversationId is undefined", () => {
-      const result = buildWebSocketUrl(
-        undefined,
-        "https://example.com/api/conversations/123",
-      );
-      expect(result).toBeNull();
-    });
-
-    it("should return null when conversationId is empty string", () => {
-      const result = buildWebSocketUrl(
-        "",
-        "https://example.com/api/conversations/123",
-      );
-      expect(result).toBeNull();
+    it("should return null when conversationId is undefined or empty", () => {
+      expect(
+        buildWebSocketUrl(
+          undefined,
+          "https://example.com/api/conversations/123",
+        ),
+      ).toBeNull();
+      expect(
+        buildWebSocketUrl("", "https://example.com/api/conversations/123"),
+      ).toBeNull();
     });
 
     it("should build WebSocket URL without path prefix", () => {
