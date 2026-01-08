@@ -112,7 +112,9 @@ async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
     try:
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=15.0
+        ) as client:
             user_json = await _get_litellm_user(client, user_id)
             credits = calculate_credits(user_json['user_info'])
         return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))

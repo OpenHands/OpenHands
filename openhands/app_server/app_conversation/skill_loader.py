@@ -134,7 +134,9 @@ async def _is_gitlab_repository(repo_name: str, user_context: UserContext) -> bo
     """
     try:
         provider_handler = await user_context.get_provider_handler()  # type: ignore[attr-defined]
-        repository = await provider_handler.verify_repo_provider(repo_name)
+        repository = await provider_handler.verify_repo_provider(
+            repo_name, is_optional=True
+        )
         return repository.git_provider == ProviderType.GITLAB
     except Exception:
         # If we can't determine the provider, assume it's not GitLab
@@ -156,7 +158,9 @@ async def _is_azure_devops_repository(
     """
     try:
         provider_handler = await user_context.get_provider_handler()  # type: ignore[attr-defined]
-        repository = await provider_handler.verify_repo_provider(repo_name)
+        repository = await provider_handler.verify_repo_provider(
+            repo_name, is_optional=True
+        )
         return repository.git_provider == ProviderType.AZURE_DEVOPS
     except Exception:
         # If we can't determine the provider, assume it's not Azure DevOps
