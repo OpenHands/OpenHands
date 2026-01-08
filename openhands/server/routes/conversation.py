@@ -291,8 +291,8 @@ async def add_event(
 ):
     """Add an event to a conversation.
 
-        For V1 conversations, events are managed through the sandbox webhook system.
-        Use ``POST /api/v1/webhooks/events/{conversation_id}`` for event callbacks.
+    For V1 conversations, events are managed through the sandbox webhook system.
+    Use ``POST /api/v1/webhooks/events/{conversation_id}`` for event callbacks.
     """
     data = await request.json()
     await conversation_manager.send_event_to_conversation(conversation.sid, data)

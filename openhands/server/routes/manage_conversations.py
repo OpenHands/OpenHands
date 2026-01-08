@@ -338,8 +338,8 @@ async def search_conversations(
 ) -> ConversationInfoResultSet:
     """Search and list conversations with pagination support.
 
-        Use the V1 endpoint ``GET /api/v1/app-conversations/search`` instead, which provides
-        enhanced filtering, sorting, and pagination capabilities.
+    Use the V1 endpoint ``GET /api/v1/app-conversations/search`` instead, which provides
+    enhanced filtering, sorting, and pagination capabilities.
     """
     # Parse combined page_id to extract separate page_ids for each source
     v0_page_id = None
@@ -473,8 +473,8 @@ async def get_conversation(
 ) -> ConversationInfo | None:
     """Get a single conversation by ID.
 
-        Use the V1 endpoint ``GET /api/v1/app-conversations?ids={conversation_id}`` instead,
-        which supports batch retrieval of conversations by their IDs.
+    Use the V1 endpoint ``GET /api/v1/app-conversations?ids={conversation_id}`` instead,
+    which supports batch retrieval of conversations by their IDs.
     """
     try:
         # Shim to add V1 conversations
@@ -518,8 +518,8 @@ async def delete_conversation(
 ) -> bool:
     """Delete a conversation by ID.
 
-        For V1 conversations, use ``DELETE /api/v1/sandboxes/{sandbox_id}`` to delete the
-        associated sandbox, which will clean up the conversation resources.
+    For V1 conversations, use ``DELETE /api/v1/sandboxes/{sandbox_id}`` to delete the
+    associated sandbox, which will clean up the conversation resources.
     """
     set_db_session_keep_open(request.state, True)
     set_httpx_client_keep_open(request.state, True)
