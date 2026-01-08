@@ -5,7 +5,8 @@ import hashlib
 import json
 import os
 from base64 import b64decode, b64encode
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import httpx
 from cryptography.fernet import Fernet
@@ -25,7 +26,11 @@ from server.constants import (
 from server.logger import logger
 from sqlalchemy.orm import sessionmaker
 from storage.database import session_maker
+from storage.distributed_lock import DistributedLock
 from storage.user_settings import UserSettings
+
+if TYPE_CHECKING:
+    import redis
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings
@@ -40,6 +45,7 @@ class SaasSettingsStore(SettingsStore):
     user_id: str
     session_maker: sessionmaker
     config: OpenHandsConfig
+    redis_client: redis.Redis | None = field(default=None)
 
     def get_user_settings_by_keycloak_id(
         self, keycloak_user_id: str, session=None
@@ -131,7 +137,22 @@ class SaasSettingsStore(SettingsStore):
                 session.add(settings)
             session.commit()
 
-    async def create_default_settings(self, user_settings: UserSettings | None):
+    async def create_default_settings(
+        self, user_settings: UserSettings | None
+    ) -> Settings | None:
+        """Create default settings for a user, with distributed lock protection.
+
+        This method uses a Redis-based distributed lock to prevent race conditions
+        when multiple concurrent requests try to create settings for the same user.
+        If another process holds the lock, this method waits for completion and then
+        loads the created settings instead of creating duplicates.
+
+        Args:
+            user_settings: Existing UserSettings from database, or None for new users
+
+        Returns:
+            Settings object if successful, None otherwise
+        """
         logger.info(
             'saas_settings_store:create_default_settings:start',
             extra={'user_id': self.user_id},
@@ -149,6 +170,67 @@ class SaasSettingsStore(SettingsStore):
                 extra={'user_id': self.user_id},
             )
             return None
+
+        # Use distributed lock to prevent concurrent creation of same user's settings
+        lock = DistributedLock(
+            key=f'user_settings:{self.user_id}',
+            timeout_seconds=30,
+            retry_delay_seconds=0.2,
+            max_wait_seconds=15.0,
+            redis_client=self.redis_client,
+        )
+
+        acquired = await lock.acquire(wait=True)
+        try:
+            if acquired:
+                # We have the lock - proceed with creating settings
+                logger.info(
+                    'saas_settings_store:create_default_settings:lock_acquired',
+                    extra={'user_id': self.user_id},
+                )
+                return await self._create_default_settings_internal(user_settings)
+            else:
+                # Another process is creating settings - wait and load instead
+                logger.info(
+                    'saas_settings_store:create_default_settings:lock_not_acquired',
+                    extra={'user_id': self.user_id},
+                )
+                return await self._load_settings_after_lock_wait()
+        finally:
+            if acquired:
+                await lock.release()
+
+    async def _load_settings_after_lock_wait(self) -> Settings | None:
+        """Load settings after waiting for another process to complete creation.
+
+        Called when we couldn't acquire the lock, meaning another process is
+        creating settings. We reload from the database to get their result.
+        """
+        with self.session_maker() as session:
+            db_settings = self.get_user_settings_by_keycloak_id(self.user_id, session)
+            if db_settings and db_settings.user_version == CURRENT_USER_SETTINGS_VERSION:
+                logger.info(
+                    'saas_settings_store:create_default_settings:loaded_after_wait',
+                    extra={'user_id': self.user_id},
+                )
+                kwargs = {
+                    c.name: getattr(db_settings, c.name)
+                    for c in UserSettings.__table__.columns
+                    if c.name in Settings.model_fields
+                }
+                self._decrypt_kwargs(kwargs)
+                return Settings(**kwargs)
+
+            logger.warning(
+                'saas_settings_store:create_default_settings:no_settings_after_wait',
+                extra={'user_id': self.user_id},
+            )
+            return None
+
+    async def _create_default_settings_internal(
+        self, user_settings: UserSettings | None
+    ) -> Settings | None:
+        """Internal method to create default settings (called with lock held)."""
         settings: Settings | None = None
         if user_settings is None:
             settings = Settings(
@@ -395,9 +477,10 @@ class SaasSettingsStore(SettingsStore):
         cls,
         config: OpenHandsConfig,
         user_id: str,  # type: ignore[override]
+        redis_client: redis.Redis | None = None,
     ) -> SaasSettingsStore:
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
-        return SaasSettingsStore(user_id, session_maker, config)
+        return SaasSettingsStore(user_id, session_maker, config, redis_client)
 
     def _decrypt_kwargs(self, kwargs: dict):
         fernet = self._fernet()

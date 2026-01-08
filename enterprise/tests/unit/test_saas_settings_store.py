@@ -85,7 +85,12 @@ def mock_config():
 
 @pytest.fixture
 def settings_store(session_maker, mock_config):
-    store = SaasSettingsStore('user-id', session_maker, mock_config)
+    # Create a mock Redis client that always allows lock acquisition
+    mock_redis = MagicMock()
+    mock_redis.set.return_value = True
+    mock_redis.eval.return_value = 1
+
+    store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)
 
     # Patch the store method directly to filter out email and email_verified
     original_load = store.load
@@ -1346,3 +1351,221 @@ async def test_update_settings_skips_billing_margin_migration_when_already_v4(
         call_args = mock_client.return_value.__aenter__.return_value.post.call_args[1]
         assert call_args['json']['max_budget'] == max_budget
         assert call_args['json']['spend'] == spend
+
+
+# Tests for distributed lock functionality in create_default_settings
+
+
+@pytest.fixture
+def mock_redis_client():
+    """Create a mock Redis client for testing."""
+    client = MagicMock()
+    client.set.return_value = True
+    client.eval.return_value = 1
+    return client
+
+
+@pytest.fixture
+def settings_store_with_redis(session_maker, mock_config, mock_redis_client):
+    """Create a settings store with mock Redis client."""
+    return SaasSettingsStore('user-id', session_maker, mock_config, mock_redis_client)
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_acquires_lock(
+    session_maker, mock_config, mock_litellm_api, mock_stripe, mock_github_user
+):
+    """Test that create_default_settings acquires a distributed lock."""
+    mock_redis = MagicMock()
+    mock_redis.set.return_value = True
+    mock_redis.eval.return_value = 1
+
+    store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)
+
+    with (
+        patch(
+            'storage.saas_settings_store.REQUIRE_PAYMENT',
+            False,
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        await store.create_default_settings(None)
+
+        # Verify lock was acquired (set was called with nx=True)
+        mock_redis.set.assert_called()
+        call_args = mock_redis.set.call_args
+        assert 'user_settings:user-id' in call_args[0][0]
+        assert call_args[1]['nx'] is True
+
+        # Verify lock was released
+        mock_redis.eval.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_returns_none_when_no_user_id():
+    """Test that create_default_settings returns None when user_id is empty."""
+    config = MagicMock()
+    config.jwt_secret = SecretStr('test_secret')
+
+    store = SaasSettingsStore('', MagicMock(), config)
+
+    result = await store.create_default_settings(None)
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_lock_not_acquired_loads_existing(
+    session_maker, mock_config
+):
+    """Test that when lock cannot be acquired, existing settings are loaded."""
+    mock_redis = MagicMock()
+    # Lock acquisition fails (returns False)
+    mock_redis.set.return_value = False
+
+    store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)
+
+    # Create existing settings in the database
+    with session_maker() as session:
+        existing_settings = UserSettings(
+            keycloak_user_id='user-id',
+            user_version=CURRENT_USER_SETTINGS_VERSION,
+            language='en',
+            agent='CodeActAgent',
+        )
+        session.add(existing_settings)
+        session.commit()
+
+    with (
+        patch(
+            'storage.saas_settings_store.REQUIRE_PAYMENT',
+            False,
+        ),
+    ):
+        result = await store.create_default_settings(None)
+
+        # Should return the existing settings loaded from DB
+        assert result is not None
+        assert result.language == 'en'
+        assert result.agent == 'CodeActAgent'
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_lock_not_acquired_no_existing(
+    session_maker, mock_config
+):
+    """Test that when lock not acquired and no settings exist, returns None."""
+    mock_redis = MagicMock()
+    # Lock acquisition fails
+    mock_redis.set.return_value = False
+
+    store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)
+
+    with (
+        patch(
+            'storage.saas_settings_store.REQUIRE_PAYMENT',
+            False,
+        ),
+    ):
+        result = await store.create_default_settings(None)
+
+        # Should return None since no existing settings
+        assert result is None
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_releases_lock_on_success(
+    session_maker, mock_config, mock_litellm_api, mock_stripe, mock_github_user
+):
+    """Test that lock is released after successful settings creation."""
+    mock_redis = MagicMock()
+    mock_redis.set.return_value = True
+    mock_redis.eval.return_value = 1
+
+    store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)
+
+    with (
+        patch(
+            'storage.saas_settings_store.REQUIRE_PAYMENT',
+            False,
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+    ):
+        await store.create_default_settings(None)
+
+        # Verify lock was released (eval was called for Lua script)
+        mock_redis.eval.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_releases_lock_on_failure(
+    session_maker, mock_config
+):
+    """Test that lock is released even when settings creation fails."""
+    mock_redis = MagicMock()
+    mock_redis.set.return_value = True
+    mock_redis.eval.return_value = 1
+
+    store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)
+
+    with (
+        patch(
+            'storage.saas_settings_store.REQUIRE_PAYMENT',
+            False,
+        ),
+        patch(
+            'storage.saas_settings_store.LITE_LLM_API_KEY',
+            None,  # This will cause update_settings_with_litellm_default to return None
+        ),
+    ):
+        result = await store.create_default_settings(None)
+
+        # Result should be None due to litellm failure
+        assert result is None
+
+        # Lock should still be released
+        mock_redis.eval.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_with_payment_required_no_payment(
+    session_maker, mock_config
+):
+    """Test that create_default_settings returns None when payment required but not available."""
+    mock_redis = MagicMock()
+    store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)
+
+    with (
+        patch('storage.saas_settings_store.REQUIRE_PAYMENT', True),
+        patch(
+            'integrations.stripe_service.has_payment_method',
+            AsyncMock(return_value=False),
+        ),
+    ):
+        result = await store.create_default_settings(None)
+
+        # Should return None without even trying to acquire lock
+        assert result is None
+        mock_redis.set.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_load_settings_after_lock_wait_with_old_version(session_maker, mock_config):
+    """Test that _load_settings_after_lock_wait returns None for old version settings."""
+    mock_redis = MagicMock()
+    store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)
+
+    # Create settings with old version
+    with session_maker() as session:
+        old_settings = UserSettings(
+            keycloak_user_id='user-id',
+            user_version=CURRENT_USER_SETTINGS_VERSION - 1,  # Old version
+            language='en',
+        )
+        session.add(old_settings)
+        session.commit()
+
+    result = await store._load_settings_after_lock_wait()
+
+    # Should return None because version is not current
+    assert result is None
