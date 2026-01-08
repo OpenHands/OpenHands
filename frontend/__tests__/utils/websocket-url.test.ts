@@ -4,7 +4,7 @@ import {
   extractPathPrefix,
   buildHttpBaseUrl,
   buildWebSocketUrl,
-} from "@/utils/websocket-url";
+} from "#/utils/websocket-url";
 
 describe("websocket-url utilities", () => {
   beforeEach(() => {
