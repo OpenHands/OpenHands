@@ -1,6 +1,5 @@
 import asyncio
 
-from integrations.gitlab.gitlab_service import SaaSGitLabService
 from pydantic import SecretStr
 
 from openhands.core.logger import openhands_logger as logger
@@ -19,6 +18,12 @@ def schedule_gitlab_repo_sync(
 
     async def _run():
         try:
+            # Lazy import to avoid circular dependency:
+            # middleware -> gitlab_sync -> integrations.gitlab.gitlab_service
+            # -> openhands.integrations.gitlab.gitlab_service -> get_impl
+            # -> integrations.gitlab.gitlab_service (circular)
+            from integrations.gitlab.gitlab_service import SaaSGitLabService
+
             service = SaaSGitLabService(
                 external_auth_id=user_id, external_auth_token=keycloak_access_token
             )
