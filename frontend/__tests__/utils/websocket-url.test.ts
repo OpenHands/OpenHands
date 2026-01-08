@@ -82,24 +82,11 @@ describe("websocket-url utilities", () => {
       expect(result).not.toMatch(/\/$/);
     });
 
-    it("should return empty string for relative URLs", () => {
-      const result = extractPathPrefix("/api/conversations/123");
-      expect(result).toBe("");
-    });
-
-    it("should return empty string for null", () => {
-      const result = extractPathPrefix(null);
-      expect(result).toBe("");
-    });
-
-    it("should return empty string for undefined", () => {
-      const result = extractPathPrefix(undefined);
-      expect(result).toBe("");
-    });
-
-    it("should return empty string for invalid URL", () => {
-      const result = extractPathPrefix("not-a-valid-url");
-      expect(result).toBe("");
+    it("should return empty string for relative URLs, null, undefined, or invalid URL", () => {
+      expect(extractPathPrefix("/api/conversations/123")).toBe("");
+      expect(extractPathPrefix(null)).toBe("");
+      expect(extractPathPrefix(undefined)).toBe("");
+      expect(extractPathPrefix("not-a-valid-url")).toBe("");
     });
 
     it("should handle URL with only root path before /api/conversations", () => {
