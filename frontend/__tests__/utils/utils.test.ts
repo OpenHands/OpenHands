@@ -99,9 +99,7 @@ describe("getStatusText", () => {
       t,
     });
 
-    expect(result).toBe(
-     t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION),
-    );
+    expect(result).toBe(t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION));
   });
 
   it("returns READY translation when task is ready", () => {

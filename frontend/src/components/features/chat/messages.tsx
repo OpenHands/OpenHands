@@ -1,6 +1,5 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
 import { OpenHandsAction } from "#/types/core/actions";
 import { OpenHandsObservation } from "#/types/core/observations";
 import {
@@ -13,7 +12,6 @@ import {
 import { EventMessage } from "./event-message";
 import { ChatMessage } from "./chat-message";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
-import { LaunchMicroagentModal } from "./microagent/launch-microagent-modal";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useCreateConversationAndSubscribeMultiple } from "#/hooks/use-create-conversation-and-subscribe-multiple";
@@ -25,6 +23,7 @@ import { AgentState } from "#/types/agent-state";
 import { getFirstPRUrl } from "#/utils/parse-pr-url";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useModalStore } from "#/stores/modal-store";
 
 const isErrorEvent = (evt: unknown): evt is { error: true; message: string } =>
   typeof evt === "object" &&
@@ -63,11 +62,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const [selectedEventId, setSelectedEventId] = React.useState<number | null>(
       null,
     );
-    const [showLaunchMicroagentModal, setShowLaunchMicroagentModal] =
-      React.useState(false);
     const [microagentStatuses, setMicroagentStatuses] = React.useState<
       EventMicroagentStatus[]
     >([]);
+    const openModal = useModalStore((state) => state.openModal);
 
     const { t } = useTranslation();
 
@@ -185,46 +183,70 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       [setMicroagentStatuses, unsubscribeFromConversation],
     );
 
-    const handleLaunchMicroagent = (
-      query: string,
-      target: string,
-      triggers: string[],
-    ) => {
-      const conversationInstructions = `Target file: ${target}\n\nDescription: ${query}\n\nTriggers: ${triggers.join(", ")}`;
-      if (
-        !conversation?.selected_repository ||
-        !conversation.selected_branch ||
-        !conversation.git_provider ||
-        !selectedEventId
-      ) {
-        return;
-      }
+    const closeModal = useModalStore((state) => state.closeModal);
 
-      createConversationAndSubscribe({
-        query,
-        conversationInstructions,
-        repository: {
-          name: conversation.selected_repository,
-          branch: conversation.selected_branch,
-          gitProvider: conversation.git_provider,
-        },
-        onSuccessCallback: (newConversationId: string) => {
-          setShowLaunchMicroagentModal(false);
-          // Update status with conversation ID - start with WAITING
-          setMicroagentStatuses((prev) => [
-            ...prev.filter((status) => status.eventId !== selectedEventId),
-            {
-              eventId: selectedEventId,
-              conversationId: newConversationId,
-              status: MicroagentStatus.WAITING,
-            },
-          ]);
-        },
-        onEventCallback: (socketEvent: unknown, newConversationId: string) => {
-          handleMicroagentEvent(socketEvent, newConversationId);
-        },
-      });
-    };
+    const handleLaunchMicroagent = React.useCallback(
+      (query: string, target: string, triggers: string[]) => {
+        const conversationInstructions = `Target file: ${target}\n\nDescription: ${query}\n\nTriggers: ${triggers.join(", ")}`;
+        if (
+          !conversation?.selected_repository ||
+          !conversation.selected_branch ||
+          !conversation.git_provider ||
+          !selectedEventId
+        ) {
+          return;
+        }
+
+        createConversationAndSubscribe({
+          query,
+          conversationInstructions,
+          repository: {
+            name: conversation.selected_repository,
+            branch: conversation.selected_branch,
+            gitProvider: conversation.git_provider,
+          },
+          onSuccessCallback: (newConversationId: string) => {
+            closeModal();
+            // Update status with conversation ID - start with WAITING
+            setMicroagentStatuses((prev) => [
+              ...prev.filter((status) => status.eventId !== selectedEventId),
+              {
+                eventId: selectedEventId,
+                conversationId: newConversationId,
+                status: MicroagentStatus.WAITING,
+              },
+            ]);
+          },
+          onEventCallback: (
+            socketEvent: unknown,
+            newConversationId: string,
+          ) => {
+            handleMicroagentEvent(socketEvent, newConversationId);
+          },
+        });
+      },
+      [
+        conversation,
+        selectedEventId,
+        createConversationAndSubscribe,
+        closeModal,
+        handleMicroagentEvent,
+      ],
+    );
+
+    const handleOpenLaunchMicroagentModal = React.useCallback(
+      (eventId: number) => {
+        setSelectedEventId(eventId);
+        openModal("launch-microagent", {
+          eventId,
+          selectedRepo:
+            conversation?.selected_repository?.split("/").pop() || "",
+          onLaunch: handleLaunchMicroagent,
+          isLoading: isPending,
+        });
+      },
+      [conversation, openModal, handleLaunchMicroagent, isPending],
+    );
 
     return (
       <>
@@ -244,12 +266,9 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               conversation?.selected_repository && !isV1Conversation
                 ? [
                     {
-                      icon: (
-                        <MemoryIcon className="w-[14px] h-[14px] text-white" />
-                      ),
+                      icon: <MemoryIcon className="w-3.5 h-3.5 text-white" />,
                       onClick: () => {
-                        setSelectedEventId(message.id);
-                        setShowLaunchMicroagentModal(true);
+                        handleOpenLaunchMicroagentModal(message.id);
                       },
                       tooltip: t("MICROAGENT$ADD_TO_MEMORY"),
                     },
@@ -263,22 +282,6 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         {optimisticUserMessage && (
           <ChatMessage type="user" message={optimisticUserMessage} />
         )}
-        {conversation?.selected_repository &&
-          !isV1Conversation &&
-          showLaunchMicroagentModal &&
-          selectedEventId &&
-          createPortal(
-            <LaunchMicroagentModal
-              onClose={() => setShowLaunchMicroagentModal(false)}
-              onLaunch={handleLaunchMicroagent}
-              selectedRepo={
-                conversation.selected_repository.split("/").pop() || ""
-              }
-              eventId={selectedEventId}
-              isLoading={isPending}
-            />,
-            document.getElementById("modal-portal-exit") || document.body,
-          )}
       </>
     );
   },

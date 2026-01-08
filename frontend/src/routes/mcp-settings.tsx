@@ -8,9 +8,9 @@ import { I18nKey } from "#/i18n/declaration";
 
 import { MCPServerList } from "#/components/features/settings/mcp-settings/mcp-server-list";
 import { MCPServerForm } from "#/components/features/settings/mcp-settings/mcp-server-form";
-import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { MCPConfig } from "#/types/settings";
+import { useModalStore } from "#/stores/modal-store";
 
 type MCPServerType = "sse" | "stdio" | "shttp";
 
@@ -32,14 +32,13 @@ function MCPSettingsScreen() {
   const { mutate: deleteMcpServer } = useDeleteMcpServer();
   const { mutate: addMcpServer } = useAddMcpServer();
   const { mutate: updateMcpServer } = useUpdateMcpServer();
+  const openModal = useModalStore((state) => state.openModal);
+  const closeModal = useModalStore((state) => state.closeModal);
 
   const [view, setView] = useState<"list" | "add" | "edit">("list");
   const [editingServer, setEditingServer] = useState<MCPServerConfig | null>(
     null,
   );
-  const [confirmationModalIsVisible, setConfirmationModalIsVisible] =
-    useState(false);
-  const [serverToDelete, setServerToDelete] = useState<string | null>(null);
 
   const mcpConfig: MCPConfig = settings?.mcp_config || {
     sse_servers: [],
@@ -97,7 +96,7 @@ function MCPSettingsScreen() {
   const handleDeleteServer = (serverId: string) => {
     deleteMcpServer(serverId, {
       onSuccess: () => {
-        setConfirmationModalIsVisible(false);
+        closeModal();
       },
     });
   };
@@ -108,20 +107,12 @@ function MCPSettingsScreen() {
   };
 
   const handleDeleteClick = (serverId: string) => {
-    setServerToDelete(serverId);
-    setConfirmationModalIsVisible(true);
-  };
-
-  const handleConfirmDelete = () => {
-    if (serverToDelete) {
-      handleDeleteServer(serverToDelete);
-      setServerToDelete(null);
-    }
-  };
-
-  const handleCancelDelete = () => {
-    setConfirmationModalIsVisible(false);
-    setServerToDelete(null);
+    openModal("confirmation", {
+      text: t(I18nKey.SETTINGS$MCP_CONFIRM_DELETE),
+      onConfirm: () => {
+        handleDeleteServer(serverId);
+      },
+    });
   };
 
   if (isLoading) {
@@ -177,14 +168,6 @@ function MCPSettingsScreen() {
             setView("list");
             setEditingServer(null);
           }}
-        />
-      )}
-
-      {confirmationModalIsVisible && (
-        <ConfirmationModal
-          text={t(I18nKey.SETTINGS$MCP_CONFIRM_DELETE)}
-          onConfirm={handleConfirmDelete}
-          onCancel={handleCancelDelete}
         />
       )}
     </div>

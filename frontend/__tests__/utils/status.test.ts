@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getStatusCode, getIndicatorColor, IndicatorColor } from "#/utils/status";
+import {
+  getStatusCode,
+  getIndicatorColor,
+  IndicatorColor,
+} from "#/utils/status";
 import { AgentState } from "#/types/agent-state";
 import { I18nKey } from "#/i18n/declaration";
 

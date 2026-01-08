@@ -9,12 +9,10 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { CreateApiKeyModal } from "./create-api-key-modal";
-import { DeleteApiKeyModal } from "./delete-api-key-modal";
-import { NewApiKeyModal } from "./new-api-key-modal";
 import { useApiKeys } from "#/hooks/query/use-api-keys";
 import { useLlmApiKey } from "#/hooks/query/use-llm-api-key";
 import { useRefreshLlmApiKey } from "#/hooks/mutation/use-refresh-llm-api-key";
+import { useModalStore } from "#/stores/modal-store";
 
 interface LlmApiKeyManagerProps {
   llmApiKey: { key: string | null } | undefined;
@@ -177,10 +175,7 @@ function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
         <tbody>
           {apiKeys.map((key) => (
             <tr key={key.id} className="border-t border-tertiary">
-              <td
-                className="p-3 text-sm truncate max-w-[160px]"
-                title={key.name}
-              >
+              <td className="p-3 text-sm truncate max-w-40" title={key.name}>
                 {key.name}
               </td>
               <td className="p-3 text-sm">{formatDate(key.created_at)}</td>
@@ -208,111 +203,78 @@ export function ApiKeysManager() {
   const { data: apiKeys = [], isLoading, error } = useApiKeys();
   const { data: llmApiKey, isLoading: isLoadingLlmKey } = useLlmApiKey();
   const refreshLlmApiKey = useRefreshLlmApiKey();
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [keyToDelete, setKeyToDelete] = useState<ApiKey | null>(null);
-  const [newlyCreatedKey, setNewlyCreatedKey] =
-    useState<CreateApiKeyResponse | null>(null);
-  const [showNewKeyModal, setShowNewKeyModal] = useState(false);
+  const openModal = useModalStore((state) => state.openModal);
 
   // Display error toast if the query fails
   if (error) {
     displayErrorToast(t(I18nKey.ERROR$GENERIC));
   }
 
-  const handleKeyCreated = (newKey: CreateApiKeyResponse) => {
-    setNewlyCreatedKey(newKey);
-    setCreateModalOpen(false);
-    setShowNewKeyModal(true);
-  };
-
-  const handleCloseCreateModal = () => {
-    setCreateModalOpen(false);
-  };
-
-  const handleCloseDeleteModal = () => {
-    setDeleteModalOpen(false);
-    setKeyToDelete(null);
-  };
-
-  const handleCloseNewKeyModal = () => {
-    setShowNewKeyModal(false);
-    setNewlyCreatedKey(null);
+  const handleOpenCreateModal = () => {
+    openModal("create-api-key", {
+      onKeyCreated: (newKey: CreateApiKeyResponse) => {
+        // Open the new key modal after creation
+        openModal("new-api-key", {
+          newlyCreatedKey: newKey,
+        });
+      },
+    });
   };
 
   const handleDeleteKey = (key: ApiKey) => {
-    setKeyToDelete(key);
-    setDeleteModalOpen(true);
+    openModal("delete-api-key", {
+      keyToDelete: key,
+      onDeleted: () => {
+        // No-op - modal closes automatically and query refetches
+      },
+    });
   };
 
   return (
-    <>
-      <div className="flex flex-col gap-6">
-        <LlmApiKeyManager
-          llmApiKey={llmApiKey}
-          isLoadingLlmKey={isLoadingLlmKey}
-          refreshLlmApiKey={refreshLlmApiKey}
-        />
+    <div className="flex flex-col gap-6">
+      <LlmApiKeyManager
+        llmApiKey={llmApiKey}
+        isLoadingLlmKey={isLoadingLlmKey}
+        refreshLlmApiKey={refreshLlmApiKey}
+      />
 
-        <h3 className="text-xl font-medium text-white">
-          {t(I18nKey.SETTINGS$OPENHANDS_API_KEYS)}
-        </h3>
+      <h3 className="text-xl font-medium text-white">
+        {t(I18nKey.SETTINGS$OPENHANDS_API_KEYS)}
+      </h3>
 
-        <div className="flex items-center justify-between">
-          <BrandButton
-            type="button"
-            variant="primary"
-            onClick={() => setCreateModalOpen(true)}
-          >
-            {t(I18nKey.SETTINGS$CREATE_API_KEY)}
-          </BrandButton>
-        </div>
-
-        <p className="text-sm text-gray-300">
-          <Trans
-            i18nKey={I18nKey.SETTINGS$API_KEYS_DESCRIPTION}
-            components={{
-              a: (
-                <a
-                  href="https://docs.all-hands.dev/usage/cloud/cloud-api"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:underline"
-                >
-                  API documentation
-                </a>
-              ),
-            }}
-          />
-        </p>
-
-        <ApiKeysTable
-          apiKeys={apiKeys}
-          isLoading={isLoading}
-          onDeleteKey={handleDeleteKey}
-        />
+      <div className="flex items-center justify-between">
+        <BrandButton
+          type="button"
+          variant="primary"
+          onClick={handleOpenCreateModal}
+        >
+          {t(I18nKey.SETTINGS$CREATE_API_KEY)}
+        </BrandButton>
       </div>
 
-      {/* Create API Key Modal */}
-      <CreateApiKeyModal
-        isOpen={createModalOpen}
-        onClose={handleCloseCreateModal}
-        onKeyCreated={handleKeyCreated}
-      />
+      <p className="text-sm text-gray-300">
+        <Trans
+          i18nKey={I18nKey.SETTINGS$API_KEYS_DESCRIPTION}
+          components={{
+            a: (
+              <a
+                href="https://docs.all-hands.dev/usage/cloud/cloud-api"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:underline"
+              >
+                API documentation
+              </a>
+            ),
+          }}
+        />
+      </p>
 
-      {/* Delete API Key Modal */}
-      <DeleteApiKeyModal
-        isOpen={deleteModalOpen}
-        keyToDelete={keyToDelete}
-        onClose={handleCloseDeleteModal}
+      <ApiKeysTable
+        apiKeys={apiKeys}
+        isLoading={isLoading}
+        onDeleteKey={handleDeleteKey}
       />
-
-      {/* Show New API Key Modal */}
-      <NewApiKeyModal
-        isOpen={showNewKeyModal}
-        newlyCreatedKey={newlyCreatedKey}
-        onClose={handleCloseNewKeyModal}
-      />
-    </>
+    </div>
   );
 }

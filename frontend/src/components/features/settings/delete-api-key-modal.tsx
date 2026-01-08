@@ -8,19 +8,19 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { ApiKeyModalBase } from "./api-key-modal-base";
 import { useDeleteApiKey } from "#/hooks/mutation/use-delete-api-key";
+import { ApiKeyModalBase } from "./api-key-modal-base";
 
 interface DeleteApiKeyModalProps {
-  isOpen: boolean;
   keyToDelete: ApiKey | null;
   onClose: () => void;
+  onDeleted: () => void;
 }
 
 export function DeleteApiKeyModal({
-  isOpen,
   keyToDelete,
   onClose,
+  onDeleted,
 }: DeleteApiKeyModalProps) {
   const { t } = useTranslation();
   const deleteApiKeyMutation = useDeleteApiKey();
@@ -31,6 +31,7 @@ export function DeleteApiKeyModal({
     try {
       await deleteApiKeyMutation.mutateAsync(keyToDelete.id);
       displaySuccessToast(t(I18nKey.SETTINGS$API_KEY_DELETED));
+      onDeleted();
       onClose();
     } catch {
       displayErrorToast(t(I18nKey.ERROR$GENERIC));
@@ -68,7 +69,6 @@ export function DeleteApiKeyModal({
 
   return (
     <ApiKeyModalBase
-      isOpen={isOpen && !!keyToDelete}
       title={t(I18nKey.SETTINGS$DELETE_API_KEY)}
       footer={modalFooter}
     >

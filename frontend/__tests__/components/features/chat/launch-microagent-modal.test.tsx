@@ -20,14 +20,14 @@ vi.mock("#/hooks/use-handle-runtime-active", () => ({
 vi.mock("#/hooks/query/use-microagent-prompt", () => ({
   useMicroagentPrompt: vi.fn().mockReturnValue({
     data: "Generated prompt",
-    isLoading: false
+    isLoading: false,
   }),
 }));
 
 // Mock the useGetMicroagents hook
 vi.mock("#/hooks/query/use-get-microagents", () => ({
   useGetMicroagents: vi.fn().mockReturnValue({
-    data: ["file1", "file2"]
+    data: ["file1", "file2"],
   }),
 }));
 
@@ -37,15 +37,19 @@ vi.mock("react-i18next", () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
         [I18nKey.MICROAGENT$ADD_TO_MICROAGENT]: "Add to Microagent",
-        [I18nKey.MICROAGENT$WHAT_TO_REMEMBER]: "What would you like your microagent to remember?",
+        [I18nKey.MICROAGENT$WHAT_TO_REMEMBER]:
+          "What would you like your microagent to remember?",
         [I18nKey.MICROAGENT$WHERE_TO_PUT]: "Where should we put it?",
         [I18nKey.MICROAGENT$ADD_TRIGGERS]: "Add triggers for the microagent",
-        [I18nKey.MICROAGENT$DESCRIBE_WHAT_TO_ADD]: "Describe what you want to add to the Microagent...",
-        [I18nKey.MICROAGENT$SELECT_FILE_OR_CUSTOM]: "Select a microagent file or enter a custom value",
-        [I18nKey.MICROAGENT$TYPE_TRIGGER_SPACE]: "Type a trigger and press Space to add it",
+        [I18nKey.MICROAGENT$DESCRIBE_WHAT_TO_ADD]:
+          "Describe what you want to add to the Microagent...",
+        [I18nKey.MICROAGENT$SELECT_FILE_OR_CUSTOM]:
+          "Select a microagent file or enter a custom value",
+        [I18nKey.MICROAGENT$TYPE_TRIGGER_SPACE]:
+          "Type a trigger and press Space to add it",
         [I18nKey.MICROAGENT$LOADING_PROMPT]: "Loading prompt...",
         [I18nKey.MICROAGENT$CANCEL]: "Cancel",
-        [I18nKey.MICROAGENT$LAUNCH]: "Launch"
+        [I18nKey.MICROAGENT$LAUNCH]: "Launch",
       };
       return translations[key] || key;
     },

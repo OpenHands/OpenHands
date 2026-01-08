@@ -46,7 +46,10 @@ describe("AccountSettingsContextMenu", () => {
     );
 
     const documentationLink = screen.getByText("SIDEBAR$DOCS").closest("a");
-    expect(documentationLink).toHaveAttribute("href", "https://docs.openhands.dev");
+    expect(documentationLink).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev",
+    );
     expect(documentationLink).toHaveAttribute("target", "_blank");
     expect(documentationLink).toHaveAttribute("rel", "noopener noreferrer");
   });

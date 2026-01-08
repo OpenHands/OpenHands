@@ -2,7 +2,6 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
-import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { BrandButton } from "../settings/brand-button";
 import GitHubLogo from "#/assets/branding/github-logo.svg?react";
@@ -125,98 +124,96 @@ export function AuthModal({
     !providersConfigured || providersConfigured.length === 0;
 
   return (
-    <ModalBackdrop>
-      <ModalBody className="border border-tertiary">
-        <OpenHandsLogo width={68} height={46} />
-        {emailVerified && (
-          <div className="flex flex-col gap-2 w-full items-center text-center">
-            <p className="text-sm text-muted-foreground">
-              {t(I18nKey.AUTH$EMAIL_VERIFIED_PLEASE_LOGIN)}
-            </p>
-          </div>
-        )}
-        {hasDuplicatedEmail && (
-          <div className="text-center text-danger text-sm mt-2 mb-2">
-            {t(I18nKey.AUTH$DUPLICATE_EMAIL_ERROR)}
-          </div>
-        )}
+    <ModalBody className="border border-tertiary">
+      <OpenHandsLogo width={68} height={46} />
+      {emailVerified && (
         <div className="flex flex-col gap-2 w-full items-center text-center">
-          <h1 className="text-2xl font-bold">
-            {t(I18nKey.AUTH$SIGN_IN_WITH_IDENTITY_PROVIDER)}
-          </h1>
+          <p className="text-sm text-muted-foreground">
+            {t(I18nKey.AUTH$EMAIL_VERIFIED_PLEASE_LOGIN)}
+          </p>
         </div>
-
-        <div className="flex flex-col gap-3 w-full">
-          {noProvidersConfigured ? (
-            <div className="text-center p-4 text-muted-foreground">
-              {t(I18nKey.AUTH$NO_PROVIDERS_CONFIGURED)}
-            </div>
-          ) : (
-            <>
-              {showGithub && (
-                <BrandButton
-                  type="button"
-                  variant="primary"
-                  onClick={handleGitHubAuth}
-                  className="w-full font-semibold"
-                  startContent={<GitHubLogo width={20} height={20} />}
-                >
-                  {t(I18nKey.GITHUB$CONNECT_TO_GITHUB)}
-                </BrandButton>
-              )}
-
-              {showGitlab && (
-                <BrandButton
-                  type="button"
-                  variant="primary"
-                  onClick={handleGitLabAuth}
-                  className="w-full font-semibold"
-                  startContent={<GitLabLogo width={20} height={20} />}
-                >
-                  {t(I18nKey.GITLAB$CONNECT_TO_GITLAB)}
-                </BrandButton>
-              )}
-
-              {showBitbucket && (
-                <BrandButton
-                  type="button"
-                  variant="primary"
-                  onClick={handleBitbucketAuth}
-                  className="w-full font-semibold"
-                  startContent={<BitbucketLogo width={20} height={20} />}
-                >
-                  {t(I18nKey.BITBUCKET$CONNECT_TO_BITBUCKET)}
-                </BrandButton>
-              )}
-
-              {showAzureDevOps && (
-                <BrandButton
-                  type="button"
-                  variant="primary"
-                  onClick={handleAzureDevOpsAuth}
-                  className="w-full font-semibold"
-                  startContent={<AzureDevOpsLogo width={20} height={20} />}
-                >
-                  {t(I18nKey.AZURE_DEVOPS$CONNECT_ACCOUNT)}
-                </BrandButton>
-              )}
-
-              {showEnterpriseSso && (
-                <BrandButton
-                  type="button"
-                  variant="primary"
-                  onClick={handleEnterpriseSsoAuth}
-                  className="w-full font-semibold"
-                >
-                  {t(I18nKey.ENTERPRISE_SSO$CONNECT_TO_ENTERPRISE_SSO)}
-                </BrandButton>
-              )}
-            </>
-          )}
+      )}
+      {hasDuplicatedEmail && (
+        <div className="text-center text-danger text-sm mt-2 mb-2">
+          {t(I18nKey.AUTH$DUPLICATE_EMAIL_ERROR)}
         </div>
+      )}
+      <div className="flex flex-col gap-2 w-full items-center text-center">
+        <h1 className="text-2xl font-bold">
+          {t(I18nKey.AUTH$SIGN_IN_WITH_IDENTITY_PROVIDER)}
+        </h1>
+      </div>
 
-        <TermsAndPrivacyNotice />
-      </ModalBody>
-    </ModalBackdrop>
+      <div className="flex flex-col gap-3 w-full">
+        {noProvidersConfigured ? (
+          <div className="text-center p-4 text-muted-foreground">
+            {t(I18nKey.AUTH$NO_PROVIDERS_CONFIGURED)}
+          </div>
+        ) : (
+          <>
+            {showGithub && (
+              <BrandButton
+                type="button"
+                variant="primary"
+                onClick={handleGitHubAuth}
+                className="w-full font-semibold"
+                startContent={<GitHubLogo width={20} height={20} />}
+              >
+                {t(I18nKey.GITHUB$CONNECT_TO_GITHUB)}
+              </BrandButton>
+            )}
+
+            {showGitlab && (
+              <BrandButton
+                type="button"
+                variant="primary"
+                onClick={handleGitLabAuth}
+                className="w-full font-semibold"
+                startContent={<GitLabLogo width={20} height={20} />}
+              >
+                {t(I18nKey.GITLAB$CONNECT_TO_GITLAB)}
+              </BrandButton>
+            )}
+
+            {showBitbucket && (
+              <BrandButton
+                type="button"
+                variant="primary"
+                onClick={handleBitbucketAuth}
+                className="w-full font-semibold"
+                startContent={<BitbucketLogo width={20} height={20} />}
+              >
+                {t(I18nKey.BITBUCKET$CONNECT_TO_BITBUCKET)}
+              </BrandButton>
+            )}
+
+            {showAzureDevOps && (
+              <BrandButton
+                type="button"
+                variant="primary"
+                onClick={handleAzureDevOpsAuth}
+                className="w-full font-semibold"
+                startContent={<AzureDevOpsLogo width={20} height={20} />}
+              >
+                {t(I18nKey.AZURE_DEVOPS$CONNECT_ACCOUNT)}
+              </BrandButton>
+            )}
+
+            {showEnterpriseSso && (
+              <BrandButton
+                type="button"
+                variant="primary"
+                onClick={handleEnterpriseSsoAuth}
+                className="w-full font-semibold"
+              >
+                {t(I18nKey.ENTERPRISE_SSO$CONNECT_TO_ENTERPRISE_SSO)}
+              </BrandButton>
+            )}
+          </>
+        )}
+      </div>
+
+      <TermsAndPrivacyNotice />
+    </ModalBody>
   );
 }

@@ -638,10 +638,7 @@ describe("GitLab Webhook Manager Integration", () => {
     // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    const getResourcesSpy = vi.spyOn(
-      integrationService,
-      "getGitLabResources",
-    );
+    const getResourcesSpy = vi.spyOn(integrationService, "getGitLabResources");
 
     getConfigSpy.mockResolvedValue({
       ...VALID_SAAS_CONFIG,

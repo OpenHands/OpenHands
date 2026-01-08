@@ -19,7 +19,11 @@ describe("convertRawProvidersToList", () => {
       azure_devops: "test-token",
     };
 
-    expect(convertRawProvidersToList(example1)).toEqual(["github", "gitlab", "azure_devops"]);
+    expect(convertRawProvidersToList(example1)).toEqual([
+      "github",
+      "gitlab",
+      "azure_devops",
+    ]);
     expect(convertRawProvidersToList(example2)).toEqual(["github"]);
     expect(convertRawProvidersToList(example3)).toEqual(["gitlab"]);
     expect(convertRawProvidersToList(example4)).toEqual(["azure_devops"]);

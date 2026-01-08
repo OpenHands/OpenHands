@@ -1,7 +1,6 @@
 import React from "react";
 import { FaCircleInfo } from "react-icons/fa6";
 import { useTranslation } from "react-i18next";
-import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { BrandButton } from "../../settings/brand-button";
 import { SettingsDropdownInput } from "../../settings/settings-dropdown-input";
@@ -67,10 +66,10 @@ export function LaunchMicroagentModal({
   };
 
   return (
-    <ModalBackdrop onClose={onClose}>
+    <>
       {!runtimeActive && <LoadingMicroagentBody />}
       {runtimeActive && (
-        <ModalBody className="items-start w-[728px]">
+        <ModalBody className="items-start w-182">
           <div className="flex items-center justify-between w-full">
             <h2 className="font-bold text-[20px] leading-6 -tracking-[0.01em] flex items-center gap-2">
               {t("MICROAGENT$ADD_TO_MICROAGENT")}
@@ -174,6 +173,6 @@ export function LaunchMicroagentModal({
           </form>
         </ModalBody>
       )}
-    </ModalBackdrop>
+    </>
   );
 }

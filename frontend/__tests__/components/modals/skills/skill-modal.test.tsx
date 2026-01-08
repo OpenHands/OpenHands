@@ -20,13 +20,7 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 }));
 
 describe("SkillsModal - Refresh Button", () => {
-  const mockOnClose = vi.fn();
   const conversationId = "test-conversation-id";
-
-  const defaultProps = {
-    onClose: mockOnClose,
-    conversationId,
-  };
 
   const mockSkills = [
     {
@@ -64,7 +58,7 @@ describe("SkillsModal - Refresh Button", () => {
 
   describe("Refresh Button Rendering", () => {
     it("should render the refresh button with correct text and test ID", async () => {
-      renderWithProviders(<SkillsModal {...defaultProps} />);
+      renderWithProviders(<SkillsModal />);
 
       // Wait for the component to load and render the refresh button
       const refreshButton = await screen.findByTestId("refresh-skills");
@@ -78,7 +72,7 @@ describe("SkillsModal - Refresh Button", () => {
       const user = userEvent.setup();
       const refreshSpy = vi.spyOn(ConversationService, "getMicroagents");
 
-      renderWithProviders(<SkillsModal {...defaultProps} />);
+      renderWithProviders(<SkillsModal />);
 
       // Wait for the component to load and render the refresh button
       const refreshButton = await screen.findByTestId("refresh-skills");
@@ -158,7 +152,7 @@ describe("useConversationSkills - V1 API Integration", () => {
       });
 
       // Act
-      renderWithProviders(<SkillsModal onClose={vi.fn()} />);
+      renderWithProviders(<SkillsModal />);
 
       // Assert
       await screen.findByText("V0 Test Agent");
@@ -195,7 +189,7 @@ describe("useConversationSkills - V1 API Integration", () => {
       });
 
       // Act
-      renderWithProviders(<SkillsModal onClose={vi.fn()} />);
+      renderWithProviders(<SkillsModal />);
 
       // Assert
       const agentName = await screen.findByText("V0 Test Agent");
@@ -233,7 +227,7 @@ describe("useConversationSkills - V1 API Integration", () => {
       });
 
       // Act
-      renderWithProviders(<SkillsModal onClose={vi.fn()} />);
+      renderWithProviders(<SkillsModal />);
 
       // Assert
       await screen.findByText("V1 Test Skill");
@@ -270,7 +264,7 @@ describe("useConversationSkills - V1 API Integration", () => {
       });
 
       // Act
-      renderWithProviders(<SkillsModal onClose={vi.fn()} />);
+      renderWithProviders(<SkillsModal />);
 
       // Assert
       const skillName = await screen.findByText("V1 Test Skill");
@@ -308,7 +302,7 @@ describe("useConversationSkills - V1 API Integration", () => {
         });
 
       // Act
-      renderWithProviders(<SkillsModal onClose={vi.fn()} />);
+      renderWithProviders(<SkillsModal />);
 
       // Assert
       await screen.findByText("V1 Test Skill");
@@ -353,7 +347,7 @@ describe("useConversationSkills - V1 API Integration", () => {
 
       // Act - Initial render with v1_enabled: false
       const { rerender } = renderWithProviders(
-        <SkillsModal onClose={vi.fn()} />,
+        <SkillsModal />,
       );
 
       // Assert - v0 API called initially
@@ -384,7 +378,7 @@ describe("useConversationSkills - V1 API Integration", () => {
       });
 
       // Act - Force re-render
-      rerender(<SkillsModal onClose={vi.fn()} />);
+      rerender(<SkillsModal />);
 
       // Assert - v1 API should be called after settings change
       await screen.findByText("V1 Test Skill");

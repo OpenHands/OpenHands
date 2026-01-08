@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next";
-import React from "react";
 import { usePostHog } from "posthog-js/react";
 import { useParams, useNavigate } from "react-router";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
@@ -24,6 +23,7 @@ import {
   adaptSystemMessage,
   SystemMessageForModal,
 } from "#/utils/system-message-adapter";
+import { useModalStore } from "#/stores/modal-store";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -50,13 +50,8 @@ export function useConversationNameContextMenu({
   const { data: conversation } = useActiveConversation();
   const metrics = useMetricsStore();
 
-  const [metricsModalVisible, setMetricsModalVisible] = React.useState(false);
-  const [systemModalVisible, setSystemModalVisible] = React.useState(false);
-  const [skillsModalVisible, setSkillsModalVisible] = React.useState(false);
-  const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
-    React.useState(false);
-  const [confirmStopModalVisible, setConfirmStopModalVisible] =
-    React.useState(false);
+  const openModal = useModalStore((state) => state.openModal);
+  const closeModal = useModalStore((state) => state.closeModal);
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const systemMessage: SystemMessageForModal | null =
@@ -65,38 +60,39 @@ export function useConversationNameContextMenu({
   const handleDelete = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setConfirmDeleteModalVisible(true);
+    openModal("confirm-delete", {
+      conversationTitle: conversation?.title,
+      onConfirm: () => {
+        if (conversationId) {
+          deleteConversation(
+            { conversationId },
+            {
+              onSuccess: () => {
+                if (conversationId === currentConversationId) {
+                  navigate("/");
+                }
+              },
+            },
+          );
+        }
+        closeModal();
+      },
+    });
     onContextMenuToggle?.(false);
   };
 
   const handleStop = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setConfirmStopModalVisible(true);
+    openModal("confirm-stop", {
+      onConfirm: () => {
+        if (conversationId) {
+          stopConversation({ conversationId });
+        }
+        closeModal();
+      },
+    });
     onContextMenuToggle?.(false);
-  };
-
-  const handleConfirmDelete = () => {
-    if (conversationId) {
-      deleteConversation(
-        { conversationId },
-        {
-          onSuccess: () => {
-            if (conversationId === currentConversationId) {
-              navigate("/");
-            }
-          },
-        },
-      );
-    }
-    setConfirmDeleteModalVisible(false);
-  };
-
-  const handleConfirmStop = () => {
-    if (conversationId) {
-      stopConversation({ conversationId });
-    }
-    setConfirmStopModalVisible(false);
   };
 
   const handleEdit = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -171,19 +167,19 @@ export function useConversationNameContextMenu({
 
   const handleDisplayCost = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setMetricsModalVisible(true);
+    openModal("metrics", {});
     onContextMenuToggle?.(false);
   };
 
   const handleShowAgentTools = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setSystemModalVisible(true);
+    openModal("system-message", { systemMessage });
     onContextMenuToggle?.(false);
   };
 
   const handleShowSkills = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setSkillsModalVisible(true);
+    openModal("skills", {});
     onContextMenuToggle?.(false);
   };
 
@@ -229,20 +225,6 @@ export function useConversationNameContextMenu({
     handleShowSkills,
     handleTogglePublic,
     handleCopyShareLink,
-    handleConfirmDelete,
-    handleConfirmStop,
-
-    // Modal states
-    metricsModalVisible,
-    setMetricsModalVisible,
-    systemModalVisible,
-    setSystemModalVisible,
-    skillsModalVisible,
-    setSkillsModalVisible,
-    confirmDeleteModalVisible,
-    setConfirmDeleteModalVisible,
-    confirmStopModalVisible,
-    setConfirmStopModalVisible,
 
     // Data
     metrics,

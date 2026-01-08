@@ -17,7 +17,7 @@ describe("CopyToClipboardButton", () => {
         isDisabled={false}
         onClick={() => {}}
         mode="copy"
-      />
+      />,
     );
 
     const button = screen.getByTestId("copy-to-clipboard");
@@ -31,7 +31,7 @@ describe("CopyToClipboardButton", () => {
         isDisabled={false}
         onClick={() => {}}
         mode="copied"
-      />
+      />,
     );
 
     const button = screen.getByTestId("copy-to-clipboard");

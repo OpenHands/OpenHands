@@ -9,8 +9,6 @@ import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import { renderWithProviders, createAxiosError } from "../../../../test-utils";
 
 describe("EmailVerificationModal", () => {
-  const mockOnClose = vi.fn();
-
   const resendEmailVerificationSpy = vi.spyOn(
     emailService,
     "resendEmailVerification",
@@ -28,7 +26,7 @@ describe("EmailVerificationModal", () => {
 
   it("should render the email verification message", () => {
     // Arrange & Act
-    renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);
+    renderWithRouter(<EmailVerificationModal />);
 
     // Assert
     expect(
@@ -38,7 +36,7 @@ describe("EmailVerificationModal", () => {
 
   it("should render the TermsAndPrivacyNotice component", () => {
     // Arrange & Act
-    renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);
+    renderWithRouter(<EmailVerificationModal />);
 
     // Assert
     const termsSection = screen.getByTestId("terms-and-privacy-notice");
@@ -47,7 +45,7 @@ describe("EmailVerificationModal", () => {
 
   it("should render resend verification button", () => {
     // Arrange & Act
-    renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);
+    renderWithRouter(<EmailVerificationModal />);
 
     // Assert
     expect(
@@ -62,7 +60,7 @@ describe("EmailVerificationModal", () => {
       message: "Email verification message sent",
     });
     renderWithRouter(
-      <EmailVerificationModal onClose={mockOnClose} userId={userId} />,
+      <EmailVerificationModal userId={userId} />,
     );
 
     // Act
@@ -83,7 +81,7 @@ describe("EmailVerificationModal", () => {
     resendEmailVerificationSpy.mockResolvedValue({
       message: "Email verification message sent",
     });
-    renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);
+    renderWithRouter(<EmailVerificationModal />);
 
     // Act
     const resendButton = screen.getByText("SETTINGS$RESEND_VERIFICATION");
@@ -103,7 +101,7 @@ describe("EmailVerificationModal", () => {
       detail: "Too many requests. Please wait 2 minutes before trying again.",
     });
     resendEmailVerificationSpy.mockRejectedValue(rateLimitError);
-    renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);
+    renderWithRouter(<EmailVerificationModal />);
 
     // Act
     const resendButton = screen.getByText("SETTINGS$RESEND_VERIFICATION");
@@ -123,7 +121,7 @@ describe("EmailVerificationModal", () => {
       error: "Internal server error",
     });
     resendEmailVerificationSpy.mockRejectedValue(genericError);
-    renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);
+    renderWithRouter(<EmailVerificationModal />);
 
     // Act
     const resendButton = screen.getByText("SETTINGS$RESEND_VERIFICATION");
@@ -144,7 +142,7 @@ describe("EmailVerificationModal", () => {
       resolvePromise = resolve;
     });
     resendEmailVerificationSpy.mockReturnValue(pendingPromise);
-    renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);
+    renderWithRouter(<EmailVerificationModal />);
 
     // Act
     const resendButton = screen.getByText("SETTINGS$RESEND_VERIFICATION");
@@ -166,7 +164,7 @@ describe("EmailVerificationModal", () => {
     resendEmailVerificationSpy.mockResolvedValue({
       message: "Email verification message sent",
     });
-    renderWithRouter(<EmailVerificationModal onClose={mockOnClose} />);
+    renderWithRouter(<EmailVerificationModal />);
 
     // Act
     const resendButton = screen.getByText("SETTINGS$RESEND_VERIFICATION");

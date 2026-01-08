@@ -7,13 +7,11 @@ import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { ApiKeyModalBase } from "./api-key-modal-base";
 
 interface NewApiKeyModalProps {
-  isOpen: boolean;
   newlyCreatedKey: CreateApiKeyResponse | null;
   onClose: () => void;
 }
 
 export function NewApiKeyModal({
-  isOpen,
   newlyCreatedKey,
   onClose,
 }: NewApiKeyModalProps) {
@@ -45,7 +43,6 @@ export function NewApiKeyModal({
 
   return (
     <ApiKeyModalBase
-      isOpen={isOpen && !!newlyCreatedKey}
       title={t(I18nKey.SETTINGS$API_KEY_CREATED)}
       width="600px"
       footer={modalFooter}

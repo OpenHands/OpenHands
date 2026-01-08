@@ -58,17 +58,20 @@ describe("WsClientProvider", () => {
     vi.clearAllMocks();
     vi.mock("#/hooks/query/use-active-conversation", () => ({
       useActiveConversation: () => {
-        return { data: {
-        conversation_id: "1",
-        title: "Conversation 1",
-        selected_repository: null,
-        last_updated_at: "2021-10-01T12:00:00Z",
-        created_at: "2021-10-01T12:00:00Z",
-        status: "RUNNING" as const,
-        runtime_status: "STATUS$READY",
-        url: null,
-        session_api_key: null,
-      }}},
+        return {
+          data: {
+            conversation_id: "1",
+            title: "Conversation 1",
+            selected_repository: null,
+            last_updated_at: "2021-10-01T12:00:00Z",
+            created_at: "2021-10-01T12:00:00Z",
+            status: "RUNNING" as const,
+            runtime_status: "STATUS$READY",
+            url: null,
+            session_api_key: null,
+          },
+        };
+      },
     }));
   });
 

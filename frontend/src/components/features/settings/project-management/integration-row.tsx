@@ -6,10 +6,8 @@ import { useLinkIntegration } from "#/hooks/mutation/use-link-integration";
 import { useUnlinkIntegration } from "#/hooks/mutation/use-unlink-integration";
 import { useConfigureIntegration } from "#/hooks/mutation/use-configure-integration";
 import { I18nKey } from "#/i18n/declaration";
-import {
-  ConfigureButton,
-  ConfigureModal,
-} from "#/components/features/settings/project-management/configure-modal";
+import { ConfigureButton } from "#/components/features/settings/project-management/configure-modal";
+import { useModalStore } from "#/stores/modal-store";
 
 interface IntegrationRowProps {
   platform: "jira" | "jira-dc" | "linear";
@@ -22,50 +20,52 @@ export function IntegrationRow({
   platformName,
   "data-testid": dataTestId,
 }: IntegrationRowProps) {
-  const [isConfigureModalOpen, setConfigureModalOpen] = React.useState(false);
   const { t } = useTranslation();
+  const openModal = useModalStore((state) => state.openModal);
+  const closeModal = useModalStore((state) => state.closeModal);
 
   const { data: integrationData, isLoading: isStatusLoading } =
     useIntegrationStatus(platform);
 
   const linkMutation = useLinkIntegration(platform, {
     onSettled: () => {
-      setConfigureModalOpen(false);
+      closeModal();
     },
   });
 
   const unlinkMutation = useUnlinkIntegration(platform, {
     onSettled: () => {
-      setConfigureModalOpen(false);
+      closeModal();
     },
   });
 
   const configureMutation = useConfigureIntegration(platform, {
     onSettled: () => {
-      setConfigureModalOpen(false);
+      closeModal();
     },
   });
 
   const handleConfigure = () => {
-    setConfigureModalOpen(true);
-  };
-
-  const handleLink = (workspace: string) => {
-    linkMutation.mutate(workspace);
-  };
-
-  const handleUnlink = () => {
-    unlinkMutation.mutate();
-  };
-
-  const handleConfigureConfirm = (data: {
-    workspace: string;
-    webhookSecret: string;
-    serviceAccountEmail: string;
-    serviceAccountApiKey: string;
-    isActive: boolean;
-  }) => {
-    configureMutation.mutate(data);
+    openModal("configure-integration", {
+      platform,
+      platformName,
+      integrationData: integrationData || undefined,
+      onConfirm: (data: {
+        workspace: string;
+        webhookSecret: string;
+        serviceAccountEmail: string;
+        serviceAccountApiKey: string;
+        isActive: boolean;
+      }) => {
+        configureMutation.mutate(data);
+      },
+      onLink: (workspace: string) => {
+        linkMutation.mutate(workspace);
+      },
+      onUnlink: () => {
+        unlinkMutation.mutate();
+      },
+    });
   };
 
   const isLoading =
@@ -95,16 +95,6 @@ export function IntegrationRow({
           data-testid={`${platform}-configure-button`}
         />
       </div>
-      <ConfigureModal
-        isOpen={isConfigureModalOpen}
-        onClose={() => setConfigureModalOpen(false)}
-        onConfirm={handleConfigureConfirm}
-        onLink={handleLink}
-        onUnlink={handleUnlink}
-        platformName={platformName}
-        platform={platform}
-        integrationData={integrationData}
-      />
     </div>
   );
 }

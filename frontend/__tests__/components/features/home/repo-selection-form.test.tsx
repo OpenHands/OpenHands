@@ -129,7 +129,7 @@ const mockOnRepoSelection = vi.fn();
 const renderForm = (
   storeOverrides: Partial<{
     recentRepositories: GitRepository[];
-    lastSelectedProvider: 'gitlab' | null;
+    lastSelectedProvider: "gitlab" | null;
   }> = {},
 ) => {
   // Set up the store state before rendering

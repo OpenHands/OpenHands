@@ -359,7 +359,7 @@ describe("ChatInterface - Empty state", () => {
   );
 });
 
-describe('ChatInterface - Status Indicator', () => {
+describe("ChatInterface - Status Indicator", () => {
   it("should render ChatStatusIndicator when agent is not awaiting user input / conversation is NOT ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.LOADING,
@@ -377,7 +377,9 @@ describe('ChatInterface - Status Indicator', () => {
 
     renderChatInterfaceWithRouter();
 
-    expect(screen.queryByTestId("chat-status-indicator")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-status-indicator"),
+    ).not.toBeInTheDocument();
   });
 });
 

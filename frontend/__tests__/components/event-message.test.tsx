@@ -42,7 +42,7 @@ describe("EventMessage", () => {
         isAwaitingUserConfirmation={false}
         isLastMessage={true}
         isInLast10Actions={true}
-      />
+      />,
     );
 
     expect(screen.getByLabelText("Rate 1 stars")).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe("EventMessage", () => {
         isAwaitingUserConfirmation={false}
         isLastMessage={true}
         isInLast10Actions={true}
-      />
+      />,
     );
 
     expect(screen.getByLabelText("Rate 1 stars")).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe("EventMessage", () => {
         isAwaitingUserConfirmation={false}
         isLastMessage={true}
         isInLast10Actions={true}
-      />
+      />,
     );
 
     expect(screen.getByLabelText("Rate 1 stars")).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("EventMessage", () => {
         isAwaitingUserConfirmation={false}
         isLastMessage={false}
         isInLast10Actions={false}
-      />
+      />,
     );
 
     expect(screen.queryByLabelText("Rate 1 stars")).not.toBeInTheDocument();
@@ -155,7 +155,7 @@ describe("EventMessage", () => {
         isAwaitingUserConfirmation={false}
         isLastMessage={false}
         isInLast10Actions={true}
-      />
+      />,
     );
 
     expect(screen.getByLabelText("Rate 1 stars")).toBeInTheDocument();
@@ -183,7 +183,7 @@ describe("EventMessage", () => {
         isAwaitingUserConfirmation={false}
         isLastMessage={false}
         isInLast10Actions={false}
-      />
+      />,
     );
 
     expect(screen.queryByLabelText("Rate 1 stars")).not.toBeInTheDocument();

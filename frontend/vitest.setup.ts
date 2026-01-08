@@ -37,11 +37,24 @@ vi.mock("zustand");
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "bypass" });
   vi.stubGlobal("ResizeObserver", MockResizeObserver);
+
+  // Create modal portal element for tests
+  if (!document.getElementById("modal-portal-exit")) {
+    const portalDiv = document.createElement("div");
+    portalDiv.id = "modal-portal-exit";
+    document.body.appendChild(portalDiv);
+  }
 });
 afterEach(() => {
   server.resetHandlers();
   // Cleanup the document body after each test
   cleanup();
+
+  // Clear modal portal content after each test
+  const portal = document.getElementById("modal-portal-exit");
+  if (portal) {
+    portal.innerHTML = "";
+  }
 });
 afterAll(() => {
   server.close();

@@ -8,7 +8,6 @@ import { createChatMessage } from "#/services/chat-service";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { isOpenHandsAction, isActionOrObservation } from "#/types/core/guards";
-import { FeedbackModal } from "../feedback/feedback-modal";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { TypingIndicator } from "./typing-indicator";
 import { useWsClient } from "#/context/ws-client-provider";
@@ -48,6 +47,7 @@ import {
   isConversationStateUpdateEvent,
 } from "#/types/v1/type-guards";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useModalStore } from "#/stores/modal-store";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
@@ -89,10 +89,7 @@ export function ChatInterface() {
 
   const { curAgentState } = useAgentState();
 
-  const [feedbackPolarity, setFeedbackPolarity] = React.useState<
-    "positive" | "negative"
-  >("positive");
-  const [feedbackModalIsOpen, setFeedbackModalIsOpen] = React.useState(false);
+  const openModal = useModalStore((state) => state.openModal);
   const { selectedRepository, replayJson } = useInitialQueryStore();
   const params = useParams();
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();
@@ -226,8 +223,7 @@ export function ChatInterface() {
   const onClickShareFeedbackActionButton = async (
     polarity: "positive" | "negative",
   ) => {
-    setFeedbackModalIsOpen(true);
-    setFeedbackPolarity(polarity);
+    openModal("feedback", { polarity });
   };
 
   // Create a ScrollProvider with the scroll hook values
@@ -346,14 +342,6 @@ export function ChatInterface() {
 
           <InteractiveChatBox onSubmit={handleSendMessage} />
         </div>
-
-        {config?.APP_MODE !== "saas" && !isV1Conversation && (
-          <FeedbackModal
-            isOpen={feedbackModalIsOpen}
-            onClose={() => setFeedbackModalIsOpen(false)}
-            polarity={feedbackPolarity}
-          />
-        )}
       </div>
     </ScrollProvider>
   );

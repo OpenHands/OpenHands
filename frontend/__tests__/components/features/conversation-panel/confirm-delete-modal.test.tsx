@@ -20,7 +20,7 @@ describe("ConfirmDeleteModal", () => {
     renderWithProviders(
       <ConfirmDeleteModal
         onConfirm={vi.fn()}
-        onCancel={vi.fn()}
+        onClose={vi.fn()}
         conversationTitle="My Test Conversation"
       />,
     );

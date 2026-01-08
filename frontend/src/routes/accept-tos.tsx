@@ -5,7 +5,6 @@ import { I18nKey } from "#/i18n/declaration";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 import { TOSCheckbox } from "#/components/features/waitlist/tos-checkbox";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { useAcceptTos } from "#/hooks/mutation/use-accept-tos";
 
 export default function AcceptTOS() {
@@ -26,7 +25,7 @@ export default function AcceptTOS() {
   };
 
   return (
-    <ModalBackdrop>
+    <div className="bg-black/80 fixed inset-0 flex items-center justify-center">
       <div className="border border-tertiary p-8 rounded-lg max-w-md w-full flex flex-col gap-6 items-center bg-base-secondary">
         <OpenHandsLogo width={68} height={46} />
 
@@ -51,6 +50,6 @@ export default function AcceptTOS() {
           {isSubmitting ? t(I18nKey.HOME$LOADING) : t(I18nKey.TOS$CONTINUE)}
         </BrandButton>
       </div>
-    </ModalBackdrop>
+    </div>
   );
 }

@@ -9,9 +9,9 @@ import {
   SecretListItemSkeleton,
 } from "#/components/features/settings/secrets-settings/secret-list-item";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { GetSecretsResponse } from "#/api/secrets-service.types";
 import { I18nKey } from "#/i18n/declaration";
+import { useModalStore } from "#/stores/modal-store";
 
 function SecretsSettingsScreen() {
   const queryClient = useQueryClient();
@@ -19,6 +19,8 @@ function SecretsSettingsScreen() {
 
   const { data: secrets, isLoading: isLoadingSecrets } = useGetSecrets();
   const { mutate: deleteSecret } = useDeleteSecret();
+  const openModal = useModalStore((state) => state.openModal);
+  const closeModal = useModalStore((state) => state.closeModal);
 
   const [view, setView] = React.useState<
     "list" | "add-secret-form" | "edit-secret-form"
@@ -26,8 +28,6 @@ function SecretsSettingsScreen() {
   const [selectedSecret, setSelectedSecret] = React.useState<string | null>(
     null,
   );
-  const [confirmationModalIsVisible, setConfirmationModalIsVisible] =
-    React.useState(false);
 
   const deleteSecretOptimistically = (secret: string) => {
     queryClient.setQueryData<GetSecretsResponse["custom_secrets"]>(
@@ -47,18 +47,20 @@ function SecretsSettingsScreen() {
     deleteSecretOptimistically(secret);
     deleteSecret(secret, {
       onSettled: () => {
-        setConfirmationModalIsVisible(false);
+        closeModal();
       },
       onError: revertOptimisticUpdate,
     });
   };
 
-  const onConfirmDeleteSecret = () => {
-    if (selectedSecret) handleDeleteSecret(selectedSecret);
-  };
-
-  const onCancelDeleteSecret = () => {
-    setConfirmationModalIsVisible(false);
+  const handleOpenDeleteConfirmation = (secretName: string) => {
+    setSelectedSecret(secretName);
+    openModal("confirmation", {
+      text: t("SECRETS$CONFIRM_DELETE_KEY"),
+      onConfirm: () => {
+        handleDeleteSecret(secretName);
+      },
+    });
   };
 
   return (
@@ -110,8 +112,7 @@ function SecretsSettingsScreen() {
                     setSelectedSecret(secret.name);
                   }}
                   onDelete={() => {
-                    setConfirmationModalIsVisible(true);
-                    setSelectedSecret(secret.name);
+                    handleOpenDeleteConfirmation(secret.name);
                   }}
                 />
               ))}
@@ -125,14 +126,6 @@ function SecretsSettingsScreen() {
           mode={view === "add-secret-form" ? "add" : "edit"}
           selectedSecret={selectedSecret}
           onCancel={() => setView("list")}
-        />
-      )}
-
-      {confirmationModalIsVisible && (
-        <ConfirmationModal
-          text={t("SECRETS$CONFIRM_DELETE_KEY")}
-          onConfirm={onConfirmDeleteSecret}
-          onCancel={onCancelDeleteSecret}
         />
       )}
     </div>

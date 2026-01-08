@@ -5,12 +5,13 @@ import { useConfig } from "#/hooks/query/use-config";
 import { useGitHubAuthUrl } from "#/hooks/use-github-auth-url";
 import { useEmailVerification } from "#/hooks/use-email-verification";
 import { LoginContent } from "#/components/features/auth/login-content";
-import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
+import { useModalStore } from "#/stores/modal-store";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/";
+  const { openModal } = useModalStore();
 
   const config = useConfig();
   const { data: isAuthed, isLoading: isAuthLoading } = useIsAuthed();
@@ -18,7 +19,7 @@ export default function LoginPage() {
     emailVerified,
     hasDuplicatedEmail,
     emailVerificationModalOpen,
-    setEmailVerificationModalOpen,
+    userId,
   } = useEmailVerification();
 
   const gitHubAuthUrl = useGitHubAuthUrl({
@@ -41,6 +42,13 @@ export default function LoginPage() {
     }
   }, [isAuthed, isAuthLoading, navigate, returnTo]);
 
+  // Show email verification modal when needed
+  React.useEffect(() => {
+    if (emailVerificationModalOpen) {
+      openModal("email-verification", { userId });
+    }
+  }, [emailVerificationModalOpen, userId, openModal]);
+
   if (isAuthLoading || config.isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
@@ -55,28 +63,18 @@ export default function LoginPage() {
   }
 
   return (
-    <>
-      <main
-        className="min-h-screen flex items-center justify-center bg-base p-4"
-        data-testid="login-page"
-      >
-        <LoginContent
-          githubAuthUrl={gitHubAuthUrl}
-          appMode={config.data?.APP_MODE}
-          authUrl={config.data?.AUTH_URL}
-          providersConfigured={config.data?.PROVIDERS_CONFIGURED}
-          emailVerified={emailVerified}
-          hasDuplicatedEmail={hasDuplicatedEmail}
-        />
-      </main>
-
-      {emailVerificationModalOpen && (
-        <EmailVerificationModal
-          onClose={() => {
-            setEmailVerificationModalOpen(false);
-          }}
-        />
-      )}
-    </>
+    <main
+      className="min-h-screen flex items-center justify-center bg-base p-4"
+      data-testid="login-page"
+    >
+      <LoginContent
+        githubAuthUrl={gitHubAuthUrl}
+        appMode={config.data?.APP_MODE}
+        authUrl={config.data?.AUTH_URL}
+        providersConfigured={config.data?.PROVIDERS_CONFIGURED}
+        emailVerified={emailVerified}
+        hasDuplicatedEmail={hasDuplicatedEmail}
+      />
+    </main>
   );
 }

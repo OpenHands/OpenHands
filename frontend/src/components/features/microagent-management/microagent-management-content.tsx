@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MicroagentManagementSidebar } from "./microagent-management-sidebar";
 import { MicroagentManagementMain } from "./microagent-management-main";
-import { MicroagentManagementUpsertMicroagentModal } from "./microagent-management-upsert-microagent-modal";
 import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { useCreateConversationAndSubscribeMultiple } from "#/hooks/use-create-conversation-and-subscribe-multiple";
 import {
@@ -19,7 +18,6 @@ import {
 import { GitRepository } from "#/types/git";
 import { queryClient } from "#/query-client-config";
 import { Provider } from "#/types/settings";
-import { MicroagentManagementLearnThisRepoModal } from "./microagent-management-learn-this-repo-modal";
 import {
   displaySuccessToast,
   displayErrorToast,
@@ -27,6 +25,7 @@ import {
 import { getFirstPRUrl } from "#/utils/parse-pr-url";
 import { I18nKey } from "#/i18n/declaration";
 import { useUserProviders } from "#/hooks/use-user-providers";
+import { useModalStore } from "#/stores/modal-store";
 
 // Handle error events
 const isErrorEvent = (evt: unknown): evt is { error: true; message: string } =>
@@ -105,6 +104,8 @@ export function MicroagentManagementContent() {
     setLearnThisRepoModalVisible,
   } = useMicroagentManagementStore();
 
+  const { openModal, closeModal } = useModalStore();
+
   const { providers } = useUserProviders();
 
   const { t } = useTranslation();
@@ -124,6 +125,7 @@ export function MicroagentManagementContent() {
   }, []);
 
   const hideUpsertMicroagentModal = (isUpdate: boolean = false) => {
+    closeModal();
     if (isUpdate) {
       setUpdateMicroagentModalVisible(false);
     } else {
@@ -259,6 +261,7 @@ export function MicroagentManagementContent() {
   };
 
   const hideLearnThisRepoModal = () => {
+    closeModal();
     setLearnThisRepoModalVisible(false);
   };
 
@@ -292,29 +295,27 @@ export function MicroagentManagementContent() {
     });
   };
 
-  const renderModals = () => (
-    <>
-      {(addMicroagentModalVisible || updateMicroagentModalVisible) && (
-        <MicroagentManagementUpsertMicroagentModal
-          onConfirm={(formData) =>
-            handleUpsertMicroagent(formData, updateMicroagentModalVisible)
-          }
-          onCancel={() =>
-            hideUpsertMicroagentModal(updateMicroagentModalVisible)
-          }
-          isLoading={isPending}
-          isUpdate={updateMicroagentModalVisible}
-        />
-      )}
-      {learnThisRepoModalVisible && (
-        <MicroagentManagementLearnThisRepoModal
-          onCancel={hideLearnThisRepoModal}
-          onConfirm={handleLearnThisRepoConfirm}
-          isLoading={isPending}
-        />
-      )}
-    </>
-  );
+  // Open upsert microagent modal when visibility changes
+  useEffect(() => {
+    if (addMicroagentModalVisible || updateMicroagentModalVisible) {
+      openModal("upsert-microagent", {
+        onConfirm: (formData: MicroagentFormData) =>
+          handleUpsertMicroagent(formData, updateMicroagentModalVisible),
+        isLoading: isPending,
+        isUpdate: updateMicroagentModalVisible,
+      });
+    }
+  }, [addMicroagentModalVisible, updateMicroagentModalVisible]);
+
+  // Open learn this repo modal when visibility changes
+  useEffect(() => {
+    if (learnThisRepoModalVisible) {
+      openModal("learn-this-repo", {
+        onConfirm: handleLearnThisRepoConfirm,
+        isLoading: isPending,
+      });
+    }
+  }, [learnThisRepoModalVisible]);
 
   const providersAreSet = providers.length > 0;
 
@@ -332,7 +333,6 @@ export function MicroagentManagementContent() {
         <div className="w-full rounded-lg border border-[#525252] bg-[#24272E] flex-1 min-h-[494px]">
           <MicroagentManagementMain />
         </div>
-        {renderModals()}
       </div>
     );
   }
@@ -343,7 +343,6 @@ export function MicroagentManagementContent() {
       <div className="flex-1">
         <MicroagentManagementMain />
       </div>
-      {renderModals()}
     </div>
   );
 }

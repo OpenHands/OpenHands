@@ -9,6 +9,7 @@ import { GetSecretsResponse } from "#/api/secrets-service.types";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { ModalRoot } from "#/components/shared/modals/modal";
 
 const MOCK_GET_SECRETS_RESPONSE: GetSecretsResponse["custom_secrets"] = [
   {
@@ -49,6 +50,7 @@ const renderSecretsSettings = () => {
         }
       >
         {children}
+        <ModalRoot />
       </QueryClientProvider>
     ),
   });

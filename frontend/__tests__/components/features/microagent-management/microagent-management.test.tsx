@@ -13,6 +13,7 @@ import { GitRepository } from "#/types/git";
 import { RepositoryMicroagent } from "#/types/microagent-management";
 import { Conversation } from "#/api/open-hands.types";
 import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
+import { ModalRoot } from "#/components/shared/modals/modal";
 
 // Mock hooks
 const mockUseUserProviders = vi.fn();
@@ -68,7 +69,12 @@ describe("MicroagentManagement", () => {
   ]);
 
   const renderMicroagentManagement = (config?: QueryClientConfig) =>
-    renderWithProviders(<RouterStub />);
+    renderWithProviders(
+      <>
+        <RouterStub />
+        <ModalRoot />
+      </>,
+    );
 
   // Common test data
   const testRepository = {
@@ -83,7 +89,12 @@ describe("MicroagentManagement", () => {
   // Helper function to render with custom Zustand store state
   const renderWithCustomStore = (storeOverrides: Partial<any>) => {
     useMicroagentManagementStore.setState(storeOverrides);
-    return renderWithProviders(<RouterStub />);
+    return renderWithProviders(
+      <>
+        <RouterStub />
+        <ModalRoot />
+      </>,
+    );
   };
 
   // Helper function to render with update modal visible

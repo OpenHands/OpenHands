@@ -4,9 +4,7 @@ import React from "react";
 import { usePostHog } from "posthog-js/react";
 import { I18nKey } from "#/i18n/declaration";
 import { organizeModelsAndProviders } from "#/utils/organize-models-and-providers";
-import { DangerModal } from "../confirmation-modals/danger-modal";
 import { extractSettings } from "#/utils/settings-utils";
-import { ModalBackdrop } from "../modal-backdrop";
 import { ModelSelector } from "./model-selector";
 import { Settings } from "#/types/settings";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -14,6 +12,7 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { HelpLink } from "#/ui/help-link";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { SETTINGS_FORM } from "#/utils/constants";
+import { useModalStore } from "#/stores/modal-store";
 
 interface SettingsFormProps {
   settings: Settings;
@@ -24,14 +23,12 @@ interface SettingsFormProps {
 export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
   const posthog = usePostHog();
   const { mutate: saveUserSettings } = useSaveSettings();
+  const { openModal } = useModalStore();
 
   const location = useLocation();
   const { t } = useTranslation();
 
   const formRef = React.useRef<HTMLFormElement>(null);
-
-  const [confirmEndSessionModalOpen, setConfirmEndSessionModalOpen] =
-    React.useState(false);
 
   const handleFormSubmission = async (formData: FormData) => {
     const newSettings = extractSettings(formData);
@@ -61,7 +58,9 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
     const formData = new FormData(event.currentTarget);
 
     if (location.pathname.startsWith("/conversations/")) {
-      setConfirmEndSessionModalOpen(true);
+      openModal("end-session", {
+        onConfirm: handleConfirmEndSession,
+      });
     } else {
       handleFormSubmission(formData);
     }
@@ -116,25 +115,6 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
           </BrandButton>
         </div>
       </form>
-
-      {confirmEndSessionModalOpen && (
-        <ModalBackdrop>
-          <DangerModal
-            title={t(I18nKey.MODAL$END_SESSION_TITLE)}
-            description={t(I18nKey.MODAL$END_SESSION_MESSAGE)}
-            buttons={{
-              danger: {
-                text: t(I18nKey.BUTTON$END_SESSION),
-                onClick: handleConfirmEndSession,
-              },
-              cancel: {
-                text: t(I18nKey.BUTTON$CANCEL),
-                onClick: () => setConfirmEndSessionModalOpen(false),
-              },
-            }}
-          />
-        </ModalBackdrop>
-      )}
     </div>
   );
 }

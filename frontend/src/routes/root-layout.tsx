@@ -12,12 +12,9 @@ import i18n from "#/i18n";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
-import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
-import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
 import { useBalance } from "#/hooks/query/use-balance";
-import { SetupPaymentModal } from "#/components/features/payment/setup-payment-modal";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
 import { useAutoLogin } from "#/hooks/use-auto-login";
@@ -30,6 +27,8 @@ import { MaintenanceBanner } from "#/components/features/maintenance/maintenance
 import { cn, isMobileDevice } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
+import { useModalStore } from "#/stores/modal-store";
+import { ModalRoot } from "#/components/shared/modals/modal";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -73,6 +72,7 @@ export default function MainApp() {
   const { error } = useBalance();
   const { migrateUserConsent } = useMigrateUserConsent();
   const { t } = useTranslation();
+  const { openModal, closeModal } = useModalStore();
 
   const config = useConfig();
   const {
@@ -81,8 +81,6 @@ export default function MainApp() {
     isLoading: isAuthLoading,
     isError: isAuthError,
   } = useIsAuthed();
-
-  const [consentFormIsOpen, setConsentFormIsOpen] = React.useState(false);
 
   // Auto-login if login method is stored in local storage
   useAutoLogin();
@@ -96,6 +94,9 @@ export default function MainApp() {
   // Sync PostHog opt-in/out state with backend setting on mount
   useSyncPostHogConsent();
 
+  // Track if analytics consent modal has been opened this session
+  const analyticsConsentOpened = React.useRef(false);
+
   React.useEffect(() => {
     // Don't change language when on TOS page
     if (!isOnTosPage && settings?.language) {
@@ -105,13 +106,16 @@ export default function MainApp() {
 
   React.useEffect(() => {
     // Don't show consent form when on TOS page
-    if (!isOnTosPage) {
-      const consentFormModalIsOpen =
+    if (!isOnTosPage && config.data?.APP_MODE === "oss") {
+      const shouldShowConsentForm =
         settings?.user_consents_to_analytics === null;
 
-      setConsentFormIsOpen(consentFormModalIsOpen);
+      if (shouldShowConsentForm && !analyticsConsentOpened.current) {
+        analyticsConsentOpened.current = true;
+        openModal("analytics-consent", {});
+      }
     }
-  }, [settings, isOnTosPage]);
+  }, [settings, isOnTosPage, config.data?.APP_MODE, openModal]);
 
   React.useEffect(() => {
     // Don't migrate user consent when on TOS page
@@ -119,11 +123,11 @@ export default function MainApp() {
       // Migrate user consent to the server if it was previously stored in localStorage
       migrateUserConsent({
         handleAnalyticsWasPresentInLocalStorage: () => {
-          setConsentFormIsOpen(false);
+          closeModal();
         },
       });
     }
-  }, [isOnTosPage]);
+  }, [isOnTosPage, closeModal]);
 
   React.useEffect(() => {
     if (settings?.is_new_user && config.data?.APP_MODE === "saas") {
@@ -201,6 +205,37 @@ export default function MainApp() {
     }
   }, [shouldRedirectToLogin, pathname, navigate]);
 
+  // Track if reauth modal has been opened this session
+  const reauthModalOpened = React.useRef(false);
+  const shouldShowReAuthModal =
+    !isAuthed &&
+    !isAuthError &&
+    !isFetchingAuth &&
+    !isOnTosPage &&
+    config.data?.APP_MODE === "saas" &&
+    loginMethodExists;
+
+  React.useEffect(() => {
+    if (shouldShowReAuthModal && !reauthModalOpened.current) {
+      reauthModalOpened.current = true;
+      openModal("reauth", {});
+    }
+  }, [shouldShowReAuthModal, openModal]);
+
+  // Track if setup payment modal has been opened this session
+  const setupPaymentOpened = React.useRef(false);
+  const shouldShowSetupPayment =
+    config.data?.FEATURE_FLAGS.ENABLE_BILLING &&
+    config.data?.APP_MODE === "saas" &&
+    settings?.is_new_user;
+
+  React.useEffect(() => {
+    if (shouldShowSetupPayment && !setupPaymentOpened.current) {
+      setupPaymentOpened.current = true;
+      openModal("setup-payment", {});
+    }
+  }, [shouldShowSetupPayment, openModal]);
+
   if (shouldRedirectToLogin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
@@ -209,52 +244,34 @@ export default function MainApp() {
     );
   }
 
-  const renderReAuthModal =
-    !isAuthed &&
-    !isAuthError &&
-    !isFetchingAuth &&
-    !isOnTosPage &&
-    config.data?.APP_MODE === "saas" &&
-    loginMethodExists;
-
   return (
-    <div
-      data-testid="root-layout"
-      className={cn(
-        "h-screen lg:min-w-[1024px] flex flex-col md:flex-row bg-base",
-        pathname === "/" ? "p-0" : "p-0 md:p-3 md:pl-0",
-        isMobileDevice() && "overflow-hidden",
-      )}
-    >
-      <title>{appTitle}</title>
-      <Sidebar />
-
-      <div className="flex flex-col w-full h-[calc(100%-50px)] md:h-full gap-3">
-        {config.data?.MAINTENANCE && (
-          <MaintenanceBanner startTime={config.data.MAINTENANCE.startTime} />
+    <>
+      <div
+        data-testid="root-layout"
+        className={cn(
+          "h-screen lg:min-w-[1024px] flex flex-col md:flex-row bg-base",
+          pathname === "/" ? "p-0" : "p-0 md:p-3 md:pl-0",
+          isMobileDevice() && "overflow-hidden",
         )}
-        <div
-          id="root-outlet"
-          className="flex-1 relative overflow-auto custom-scrollbar"
-        >
-          <EmailVerificationGuard>
-            <Outlet />
-          </EmailVerificationGuard>
+      >
+        <title>{appTitle}</title>
+        <Sidebar />
+
+        <div className="flex flex-col w-full h-[calc(100%-50px)] md:h-full gap-3">
+          {config.data?.MAINTENANCE && (
+            <MaintenanceBanner startTime={config.data.MAINTENANCE.startTime} />
+          )}
+          <div
+            id="root-outlet"
+            className="flex-1 relative overflow-auto custom-scrollbar"
+          >
+            <EmailVerificationGuard>
+              <Outlet />
+            </EmailVerificationGuard>
+          </div>
         </div>
       </div>
-
-      {renderReAuthModal && <ReauthModal />}
-      {config.data?.APP_MODE === "oss" && consentFormIsOpen && (
-        <AnalyticsConsentFormModal
-          onClose={() => {
-            setConsentFormIsOpen(false);
-          }}
-        />
-      )}
-
-      {config.data?.FEATURE_FLAGS.ENABLE_BILLING &&
-        config.data?.APP_MODE === "saas" &&
-        settings?.is_new_user && <SetupPaymentModal />}
-    </div>
+      <ModalRoot />
+    </>
   );
 }

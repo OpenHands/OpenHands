@@ -23,7 +23,9 @@ describe("LikertScale", () => {
     renderWithProviders(<LikertScale eventId={1} />);
 
     // Check that the rating prompt is displayed with proper translation key
-    expect(screen.getByText(I18nKey.FEEDBACK$RATE_AGENT_PERFORMANCE)).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.FEEDBACK$RATE_AGENT_PERFORMANCE),
+    ).toBeInTheDocument();
   });
 
   it("should show localized feedback reasons when rating is 3 or below", async () => {
@@ -35,15 +37,27 @@ describe("LikertScale", () => {
 
     // Wait for reasons to appear
     await waitFor(() => {
-      expect(screen.getByText(I18nKey.FEEDBACK$SELECT_REASON)).toBeInTheDocument();
+      expect(
+        screen.getByText(I18nKey.FEEDBACK$SELECT_REASON),
+      ).toBeInTheDocument();
     });
 
     // Check that all feedback reasons are properly localized
-    expect(screen.getByText(I18nKey.FEEDBACK$REASON_MISUNDERSTOOD_INSTRUCTION)).toBeInTheDocument();
-    expect(screen.getByText(I18nKey.FEEDBACK$REASON_FORGOT_CONTEXT)).toBeInTheDocument();
-    expect(screen.getByText(I18nKey.FEEDBACK$REASON_UNNECESSARY_CHANGES)).toBeInTheDocument();
-    expect(screen.getByText(I18nKey.FEEDBACK$REASON_SHOULD_ASK_FIRST)).toBeInTheDocument();
-    expect(screen.getByText(I18nKey.FEEDBACK$REASON_DIDNT_FINISH_JOB)).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.FEEDBACK$REASON_MISUNDERSTOOD_INSTRUCTION),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.FEEDBACK$REASON_FORGOT_CONTEXT),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.FEEDBACK$REASON_UNNECESSARY_CHANGES),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.FEEDBACK$REASON_SHOULD_ASK_FIRST),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.FEEDBACK$REASON_DIDNT_FINISH_JOB),
+    ).toBeInTheDocument();
     expect(screen.getByText(I18nKey.FEEDBACK$REASON_OTHER)).toBeInTheDocument();
   });
 
@@ -56,17 +70,21 @@ describe("LikertScale", () => {
 
     // Wait for countdown to appear
     await waitFor(() => {
-      expect(screen.getByText(I18nKey.FEEDBACK$SELECT_REASON_COUNTDOWN)).toBeInTheDocument();
+      expect(
+        screen.getByText(I18nKey.FEEDBACK$SELECT_REASON_COUNTDOWN),
+      ).toBeInTheDocument();
     });
   });
 
   it("should show thank you message after submission", () => {
     renderWithProviders(
-      <LikertScale eventId={1} initiallySubmitted={true} initialRating={4} />
+      <LikertScale eventId={1} initiallySubmitted={true} initialRating={4} />,
     );
 
     // Check that thank you message is displayed with proper translation key
-    expect(screen.getByText(I18nKey.FEEDBACK$THANK_YOU_FOR_FEEDBACK)).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.FEEDBACK$THANK_YOU_FOR_FEEDBACK),
+    ).toBeInTheDocument();
   });
 
   it("should render all 5 star rating buttons", () => {
@@ -91,7 +109,9 @@ describe("LikertScale", () => {
 
     // Wait a bit to ensure reasons don't appear
     await waitFor(() => {
-      expect(screen.queryByText(I18nKey.FEEDBACK$SELECT_REASON)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(I18nKey.FEEDBACK$SELECT_REASON),
+      ).not.toBeInTheDocument();
     });
   });
 });

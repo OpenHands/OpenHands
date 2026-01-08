@@ -6,8 +6,6 @@ import ToolsIcon from "#/icons/tools.svg?react";
 import { ToolsContextMenu } from "./tools-context-menu";
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { SystemMessageModal } from "../conversation-panel/system-message-modal";
-import { SkillsModal } from "../conversation-panel/skills-modal";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -15,21 +13,13 @@ export function Tools() {
   const { data: conversation } = useActiveConversation();
   const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
 
-  const {
-    handleShowAgentTools,
-    handleShowSkills,
-    systemModalVisible,
-    setSystemModalVisible,
-    skillsModalVisible,
-    setSkillsModalVisible,
-    systemMessage,
-    shouldShowAgentTools,
-  } = useConversationNameContextMenu({
-    conversationId,
-    conversationStatus: conversation?.status,
-    showOptions: true, // Enable all options for conversation name
-    onContextMenuToggle: setContextMenuOpen,
-  });
+  const { handleShowAgentTools, handleShowSkills, shouldShowAgentTools } =
+    useConversationNameContextMenu({
+      conversationId,
+      conversationStatus: conversation?.status,
+      showOptions: true, // Enable all options for conversation name
+      onContextMenuToggle: setContextMenuOpen,
+    });
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -55,18 +45,6 @@ export function Tools() {
           onShowAgentTools={handleShowAgentTools}
           shouldShowAgentTools={shouldShowAgentTools}
         />
-      )}
-
-      {/* System Message Modal */}
-      <SystemMessageModal
-        isOpen={systemModalVisible}
-        onClose={() => setSystemModalVisible(false)}
-        systemMessage={systemMessage || null}
-      />
-
-      {/* Skills Modal */}
-      {skillsModalVisible && (
-        <SkillsModal onClose={() => setSkillsModalVisible(false)} />
       )}
     </div>
   );

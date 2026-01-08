@@ -9,17 +9,15 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { ApiKeyModalBase } from "./api-key-modal-base";
 import { useCreateApiKey } from "#/hooks/mutation/use-create-api-key";
+import { ApiKeyModalBase } from "./api-key-modal-base";
 
 interface CreateApiKeyModalProps {
-  isOpen: boolean;
   onClose: () => void;
   onKeyCreated: (newKey: CreateApiKeyResponse) => void;
 }
 
 export function CreateApiKeyModal({
-  isOpen,
   onClose,
   onKeyCreated,
 }: CreateApiKeyModalProps) {
@@ -78,7 +76,6 @@ export function CreateApiKeyModal({
 
   return (
     <ApiKeyModalBase
-      isOpen={isOpen}
       title={t(I18nKey.SETTINGS$CREATE_API_KEY)}
       footer={modalFooter}
     >

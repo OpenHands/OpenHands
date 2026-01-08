@@ -47,7 +47,6 @@ describe("Translations", () => {
 
       await i18n.changeLanguage("zh-CN");
       expect(i18n.language).toBe("zh-CN");
-
     } finally {
       // Restore the original language
       await i18n.changeLanguage(originalLanguage);

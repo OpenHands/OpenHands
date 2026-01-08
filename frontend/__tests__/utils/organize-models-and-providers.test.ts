@@ -50,9 +50,7 @@ test("organizeModelsAndProviders", () => {
     },
     anthropic: {
       separator: "/",
-      models: [
-        "claude-3-5-sonnet-20241022",
-      ],
+      models: ["claude-3-5-sonnet-20241022"],
     },
     other: {
       separator: "",
