@@ -7,7 +7,6 @@ import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from time import time
 from typing import Any, AsyncGenerator, Sequence
 from uuid import UUID, uuid4
 
@@ -477,7 +476,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self, task: AppConversationStartTask
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Wait for sandbox to start and return info."""
-        # Get the sandbox
+        # Get or create the sandbox
         if not task.request.sandbox_id:
             sandbox = await self.sandbox_service.start_sandbox()
             task.sandbox_id = sandbox.id
@@ -489,45 +488,34 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 raise SandboxError(f'Sandbox not found: {task.request.sandbox_id}')
             sandbox = sandbox_info
 
-        # Update the listener
+        # Update the listener with sandbox info
         task.status = AppConversationStartTaskStatus.WAITING_FOR_SANDBOX
         task.sandbox_id = sandbox.id
         yield task
 
+        # Resume if paused
         if sandbox.status == SandboxStatus.PAUSED:
             await self.sandbox_service.resume_sandbox(sandbox.id)
+
+        # Check for immediate error states
         if sandbox.status in (None, SandboxStatus.ERROR):
             raise SandboxError(f'Sandbox status: {sandbox.status}')
-        if sandbox.status == SandboxStatus.RUNNING:
-            # There are still bugs in the remote runtime - they report running while still just
-            # starting resulting in a race condition. Manually check that it is actually
-            # running.
-            if await self._check_agent_server_alive(sandbox):
-                return
-        if sandbox.status != SandboxStatus.STARTING:
+
+        # For non-STARTING/RUNNING states (except PAUSED which we just resumed), fail fast
+        if sandbox.status not in (
+            SandboxStatus.STARTING,
+            SandboxStatus.RUNNING,
+            SandboxStatus.PAUSED,
+        ):
             raise SandboxError(f'Sandbox not startable: {sandbox.id}')
 
-        start = time()
-        while time() - start <= self.sandbox_startup_timeout:
-            await asyncio.sleep(self.sandbox_startup_poll_frequency)
-            sandbox_info = await self.sandbox_service.get_sandbox(sandbox.id)
-            if sandbox_info is None:
-                raise SandboxError(f'Sandbox not found: {sandbox.id}')
-            if sandbox.status not in (SandboxStatus.STARTING, SandboxStatus.RUNNING):
-                raise SandboxError(f'Sandbox not startable: {sandbox.id}')
-            if sandbox_info.status == SandboxStatus.RUNNING:
-                # There are still bugs in the remote runtime - they report running while still just
-                # starting resulting in a race condition. Manually check that it is actually
-                # running.
-                if await self._check_agent_server_alive(sandbox_info):
-                    return
-        raise SandboxError(f'Sandbox failed to start: {sandbox.id}')
-
-    async def _check_agent_server_alive(self, sandbox_info: SandboxInfo) -> bool:
-        agent_server_url = self._get_agent_server_url(sandbox_info)
-        url = f'{agent_server_url.rstrip("/")}/alive'
-        response = await self.httpx_client.get(url)
-        return response.is_success
+        # Use shared wait_for_sandbox_running utility to poll for ready state
+        await self.sandbox_service.wait_for_sandbox_running(
+            sandbox.id,
+            timeout=self.sandbox_startup_timeout,
+            poll_interval=self.sandbox_startup_poll_frequency,
+            httpx_client=self.httpx_client,
+        )
 
     def _get_agent_server_url(self, sandbox: SandboxInfo) -> str:
         """Get agent server url for running sandbox."""
