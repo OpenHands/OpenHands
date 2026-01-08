@@ -188,7 +188,7 @@ async def _determine_org_repo_path(
     """
     repo_parts = selected_repository.split('/')
 
-    # Determine repository type zzzz
+    # Determine repository type
     is_azure_devops = await _is_azure_devops_repository(
         selected_repository, user_context
     )
@@ -607,7 +607,7 @@ async def load_org_skills(
             f'Starting org-level skill loading for repository: {selected_repository}'
         )
 
-        # Validate repository path zzzzz
+        # Validate repository path
         if not _validate_repository_for_org_skills(selected_repository):
             return []
 
