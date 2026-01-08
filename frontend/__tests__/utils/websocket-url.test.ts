@@ -113,7 +113,11 @@ describe("websocket-url utilities", () => {
     });
 
     it("should use http protocol when window.location.protocol is http:", () => {
-      window.location.protocol = "http:";
+      vi.stubGlobal("location", {
+        host: "localhost:3001",
+        protocol: "http:",
+      });
+
       const result = buildHttpBaseUrl(
         "http://localhost:3000/api/conversations/123",
       );
