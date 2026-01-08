@@ -45,19 +45,10 @@ describe("websocket-url utilities", () => {
       expect(result).toBe("localhost:3001");
     });
 
-    it("should return window.location.host for null", () => {
-      const result = extractBaseHost(null);
-      expect(result).toBe("localhost:3001");
-    });
-
-    it("should return window.location.host for undefined", () => {
-      const result = extractBaseHost(undefined);
-      expect(result).toBe("localhost:3001");
-    });
-
-    it("should return window.location.host for invalid URL", () => {
-      const result = extractBaseHost("not-a-valid-url");
-      expect(result).toBe("localhost:3001");
+    it("should return window.location.host for null, undefined, or invalid URL", () => {
+      expect(extractBaseHost(null)).toBe("localhost:3001");
+      expect(extractBaseHost(undefined)).toBe("localhost:3001");
+      expect(extractBaseHost("not-a-valid-url")).toBe("localhost:3001");
     });
   });
 
