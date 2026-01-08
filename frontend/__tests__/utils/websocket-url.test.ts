@@ -7,21 +7,15 @@ import {
 } from "@/utils/websocket-url";
 
 describe("websocket-url utilities", () => {
-  // Mock window.location for tests
-  const originalLocation = window.location;
-
   beforeEach(() => {
-    // @ts-ignore - we're mocking window.location
-    delete window.location;
-    window.location = {
-      ...originalLocation,
+    vi.stubGlobal("location", {
       host: "localhost:3001",
       protocol: "https:",
-    } as Location;
+    });
   });
 
   afterEach(() => {
-    window.location = originalLocation;
+    vi.unstubAllGlobals();
   });
 
   describe("extractBaseHost", () => {
