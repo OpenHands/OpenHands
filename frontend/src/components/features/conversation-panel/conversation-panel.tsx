@@ -18,6 +18,7 @@ import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
+import { cleanupOrphanedConversationStorage } from "#/utils/conversation-local-storage";
 
 interface ConversationPanelProps {
   onClose: () => void;
@@ -62,6 +63,15 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
 
   // Flatten all pages into a single array of conversations
   const conversations = data?.pages.flatMap((page) => page.results) ?? [];
+
+  React.useEffect(() => {
+    if (conversations.length > 0) {
+      const activeConversationIds = conversations.map(
+        (conversation) => conversation.conversation_id,
+      );
+      cleanupOrphanedConversationStorage(activeConversationIds);
+    }
+  }, [conversations]);
 
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: pauseConversationSandbox } =
