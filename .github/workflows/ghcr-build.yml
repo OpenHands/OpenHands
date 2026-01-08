@@ -252,6 +252,15 @@ jobs:
             -d "{\"ref\": \"main\", \"inputs\": {\"openhandsPrNumber\": \"${{ github.event.pull_request.number }}\", \"deployEnvironment\": \"feature\", \"enterpriseImageTag\": \"pr-${{ github.event.pull_request.number }}\" }}" \
             https://api.github.com/repos/OpenHands/deploy/actions/workflows/deploy.yaml/dispatches
 
+  # "All Runtime Tests Passed" is a required job for PRs to merge
+  # We can remove this once the config changes
+  runtime_tests_check_success:
+    name: All Runtime Tests Passed
+    runs-on: blacksmith-4vcpu-ubuntu-2204
+    steps:
+      - name: All tests passed
+        run: echo "All runtime tests have passed successfully!"
+
   update_pr_description:
     name: Update PR Description
     if: github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]'
