@@ -20,6 +20,7 @@ import {
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
 import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { CONVERSATION_STORAGE_KEYS } from "#/utils/conversation-local-storage";
 
 export function ConversationTabs() {
   const { conversationId } = useConversationId();
@@ -32,21 +33,20 @@ export function ConversationTabs() {
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Persist selectedTab and isRightPanelShown in localStorage per conversation
   const [persistedSelectedTab, setPersistedSelectedTab] =
     useLocalStorage<ConversationTab | null>(
-      `conversation-selected-tab-${conversationId}`,
+      CONVERSATION_STORAGE_KEYS.selectedTab(conversationId),
       "editor",
     );
 
   const [persistedIsRightPanelShown, setPersistedIsRightPanelShown] =
     useLocalStorage<boolean>(
-      `conversation-right-panel-shown-${conversationId}`,
+      CONVERSATION_STORAGE_KEYS.rightPanelShown(conversationId),
       true,
     );
 
   const [persistedUnpinnedTabs] = useLocalStorage<string[]>(
-    `conversation-unpinned-tabs-${conversationId}`,
+    CONVERSATION_STORAGE_KEYS.unpinnedTabs(conversationId),
     [],
   );
 
