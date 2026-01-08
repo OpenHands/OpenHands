@@ -138,7 +138,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         issue_number = self.github_view_data['issue_number']
 
         if self.inline_pr_comment:
-            with Github(installation_token) as github_client:
+            with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(full_repo_name)
                 pr = repo.get_pull(issue_number)
                 pr.create_review_comment_reply(
@@ -146,7 +146,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 )
             return
 
-        with Github(installation_token) as github_client:
+        with Github(auth=Auth.Token(installation_token)) as github_client:
             repo = github_client.get_repo(full_repo_name)
             issue = repo.get_issue(number=issue_number)
             issue.create_comment(summary)
