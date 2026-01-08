@@ -23,17 +23,19 @@ export function ThoughtEventMessage({
     .join("\n");
 
   // Check if there's reasoning content to display
-  const hasReasoningContent = event.reasoning_content && event.reasoning_content.trim().length > 0;
-  const hasThinkingBlocks = event.thinking_blocks && event.thinking_blocks.length > 0;
+  const hasReasoningContent =
+    event.reasoning_content && event.reasoning_content.trim().length > 0;
+  const hasThinkingBlocks =
+    event.thinking_blocks && event.thinking_blocks.length > 0;
 
- if (!thoughtContent && !hasReasoningContent && !hasThinkingBlocks) {
+  if (!thoughtContent && !hasReasoningContent && !hasThinkingBlocks) {
     return null;
   }
 
- if (!thoughtContent && (hasReasoningContent || hasThinkingBlocks)) {
+  if (!thoughtContent && (hasReasoningContent || hasThinkingBlocks)) {
     return <ReasoningContent event={event} />;
   }
-return (
+  return (
     <div>
       <ChatMessage type="agent" message={thoughtContent} actions={actions} />
       <ReasoningContent event={event} />
