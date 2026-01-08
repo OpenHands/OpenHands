@@ -16,7 +16,6 @@ import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
-import { useBalance } from "#/hooks/query/use-balance";
 import { SetupPaymentModal } from "#/components/features/payment/setup-payment-modal";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
@@ -70,7 +69,6 @@ export default function MainApp() {
   const { pathname } = useLocation();
   const isOnTosPage = useIsOnTosPage();
   const { data: settings } = useSettings();
-  const { error } = useBalance();
   const { migrateUserConsent } = useMigrateUserConsent();
   const { t } = useTranslation();
 
@@ -130,14 +128,6 @@ export default function MainApp() {
       displaySuccessToast(t(I18nKey.BILLING$YOURE_IN));
     }
   }, [settings?.is_new_user, config.data?.APP_MODE]);
-
-  React.useEffect(() => {
-    // Don't do any redirects when on TOS page
-    // Don't allow users to use the app if it 402s
-    if (!isOnTosPage && error?.status === 402 && pathname !== "/") {
-      navigate("/");
-    }
-  }, [error?.status, pathname, isOnTosPage]);
 
   // Function to check if login method exists in local storage
   const checkLoginMethodExists = React.useCallback(() => {
@@ -221,7 +211,7 @@ export default function MainApp() {
     <div
       data-testid="root-layout"
       className={cn(
-        "h-screen lg:min-w-[1024px] flex flex-col md:flex-row bg-base",
+        "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base",
         pathname === "/" ? "p-0" : "p-0 md:p-3 md:pl-0",
         isMobileDevice() && "overflow-hidden",
       )}
