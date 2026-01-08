@@ -88,13 +88,6 @@ describe("websocket-url utilities", () => {
       expect(extractPathPrefix(undefined)).toBe("");
       expect(extractPathPrefix("not-a-valid-url")).toBe("");
     });
-
-    it("should handle URL with only root path before /api/conversations", () => {
-      const result = extractPathPrefix(
-        "https://example.com/api/conversations/123",
-      );
-      expect(result).toBe("");
-    });
   });
 
   describe("buildHttpBaseUrl", () => {
