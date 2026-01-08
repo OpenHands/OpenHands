@@ -165,7 +165,9 @@ class VerifyWebhookStatus:
                     webhook
                 )
 
-                gitlab_service_impl = get_gitlab_service_impl()(external_auth_id=user_id)
+                gitlab_service_impl = get_gitlab_service_impl()(
+                    external_auth_id=user_id
+                )
 
                 if not isinstance(gitlab_service_impl, SaaSGitLabService):
                     raise Exception('Only SaaSGitLabService is supported')

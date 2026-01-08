@@ -344,7 +344,9 @@ class TestReinstallGitLabWebhook:
 
     @pytest.mark.asyncio
     @patch('server.routes.integration.gitlab.get_gitlab_service_impl')
-    async def test_reinstall_webhook_non_saas_service(self, mock_get_gitlab_service_impl):
+    async def test_reinstall_webhook_non_saas_service(
+        self, mock_get_gitlab_service_impl
+    ):
         """Test reinstallation with non-SaaS GitLab service."""
         # Arrange
         user_id = 'test_user_id'
