@@ -13,6 +13,8 @@ import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import { useConversationId } from "#/hooks/use-conversation-id";
+import { CONVERSATION_STORAGE_KEYS } from "#/utils/conversation-local-storage";
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -25,8 +27,9 @@ export function ConversationTabsContextMenu({
 }: ConversationTabsContextMenuProps) {
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { t } = useTranslation();
+  const { conversationId } = useConversationId();
   const [unpinnedTabs, setUnpinnedTabs] = useLocalStorage<string[]>(
-    "conversation-unpinned-tabs",
+    CONVERSATION_STORAGE_KEYS.unpinnedTabs(conversationId),
     [],
   );
 
