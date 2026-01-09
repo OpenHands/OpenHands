@@ -13,7 +13,7 @@ export function MetricsModal() {
   const metrics = useMetricsStore();
 
   return (
-    <ModalBody className="items-start border border-tertiary">
+    <ModalBody className="items-center border border-tertiary">
       <BaseModalTitle title={t(I18nKey.CONVERSATION$METRICS_INFO)} />
       <div className="space-y-4 w-full">
         {(metrics?.cost !== null || metrics?.usage !== null) && (
