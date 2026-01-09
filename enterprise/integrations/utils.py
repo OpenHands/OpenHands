@@ -6,7 +6,9 @@ import re
 from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader
+from server.config import get_config
 from server.constants import WEB_HOST
+from storage.database import session_maker
 from storage.repository_store import RepositoryStore
 from storage.stored_repository import StoredRepository
 from storage.user_repo_map import UserRepositoryMap
@@ -25,6 +27,7 @@ from openhands.events.event_store_abc import EventStoreABC
 from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.integrations.service_types import Repository
 from openhands.storage.data_models.conversation_status import ConversationStatus
+from openhands.utils.async_utils import call_sync_from_async
 
 if TYPE_CHECKING:
     from openhands.server.conversation_manager.conversation_manager import (
@@ -36,7 +39,7 @@ if TYPE_CHECKING:
 HOST = WEB_HOST
 # ---- DO NOT REMOVE ----
 
-HOST_URL = f'https://{HOST}'
+HOST_URL = f'https://{HOST}' if 'localhost' not in HOST else f'http://{HOST}'
 GITHUB_WEBHOOK_URL = f'{HOST_URL}/integration/github/events'
 GITLAB_WEBHOOK_URL = f'{HOST_URL}/integration/gitlab/events'
 conversation_prefix = 'conversations/{}'
@@ -78,6 +81,9 @@ ENABLE_V1_GITHUB_RESOLVER = (
     os.getenv('ENABLE_V1_GITHUB_RESOLVER', 'false').lower() == 'true'
 )
 
+ENABLE_V1_SLACK_RESOLVER = (
+    os.getenv('ENABLE_V1_SLACK_RESOLVER', 'false').lower() == 'true'
+)
 
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
@@ -108,6 +114,37 @@ def get_summary_instruction():
     summary_instruction_template = jinja_env.get_template('summary_prompt.j2')
     summary_instruction = summary_instruction_template.render()
     return summary_instruction
+
+
+async def get_user_v1_enabled_setting(user_id: str | None) -> bool:
+    """Get the user's V1 conversation API setting.
+
+    Args:
+        user_id: The keycloak user ID
+
+    Returns:
+        True if V1 conversations are enabled for this user, False otherwise
+    """
+
+    # If no user ID is provided, we can't check user settings
+    if not user_id:
+        return False
+
+    from storage.saas_settings_store import SaasSettingsStore
+
+    config = get_config()
+    settings_store = SaasSettingsStore(
+        user_id=user_id, session_maker=session_maker, config=config
+    )
+
+    settings = await call_sync_from_async(
+        settings_store.get_user_settings_by_keycloak_id, user_id
+    )
+
+    if not settings or settings.v1_enabled is None:
+        return False
+
+    return settings.v1_enabled
 
 
 def has_exact_mention(text: str, mention: str) -> bool:

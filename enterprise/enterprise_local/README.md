@@ -107,7 +107,7 @@ export REDIS_PORT=6379
 
 ### 2. Build OpenHands
 
-Develop on [Openhands](https://github.com/All-Hands-AI/OpenHands) locally. When ready, run the following inside Openhands repo (not the Deploy repo)
+Develop on [Openhands](https://github.com/OpenHands/OpenHands) locally. When ready, run the following inside Openhands repo (not the Deploy repo)
 
 ```
 docker build -f containers/app/Dockerfile -t openhands .
