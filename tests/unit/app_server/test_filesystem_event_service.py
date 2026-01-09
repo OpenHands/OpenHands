@@ -46,7 +46,9 @@ def service_no_user(temp_dir: Path) -> FilesystemEventService:
 
 def create_token_event() -> TokenEvent:
     """Helper to create a TokenEvent for testing."""
-    return TokenEvent(source='agent', prompt_token_ids=[1, 2], response_token_ids=[3, 4])
+    return TokenEvent(
+        source='agent', prompt_token_ids=[1, 2], response_token_ids=[3, 4]
+    )
 
 
 def create_pause_event() -> PauseEvent:
@@ -75,7 +77,9 @@ class TestFilesystemEventServiceSearchEvents:
         assert result.next_page_id is None
 
     @pytest.mark.asyncio
-    async def test_search_events_empty_conversation(self, service: FilesystemEventService):
+    async def test_search_events_empty_conversation(
+        self, service: FilesystemEventService
+    ):
         """Test that search_events returns empty page for a conversation with no events."""
         conversation_id = uuid4()
 
@@ -139,7 +143,9 @@ class TestFilesystemEventServiceSearchEvents:
         assert timestamps == sorted(timestamps, reverse=True)
 
     @pytest.mark.asyncio
-    async def test_search_events_returns_event_page(self, service: FilesystemEventService):
+    async def test_search_events_returns_event_page(
+        self, service: FilesystemEventService
+    ):
         """Test that search_events returns an EventPage with correct structure."""
         conversation_id = uuid4()
         events = [create_token_event() for _ in range(3)]
