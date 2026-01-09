@@ -203,8 +203,12 @@ class DockerSandboxService(SandboxService):
                 raise
             except Exception as exc:
                 # If the server is
-                if sandbox_info.created_at < utc_now() - timedelta(seconds=self.startup_grace_seconds):
-                    _logger.info(f'Sandbox server not running: {app_server_url} : {exc}')
+                if sandbox_info.created_at < utc_now() - timedelta(
+                    seconds=self.startup_grace_seconds
+                ):
+                    _logger.info(
+                        f'Sandbox server not running: {app_server_url} : {exc}'
+                    )
                     sandbox_info.status = SandboxStatus.ERROR
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None
@@ -506,7 +510,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
         description=(
             'Number of seconds were no response from the agent server is acceptable'
             'before it is considered an error'
-        )
+        ),
     )
 
     async def inject(
