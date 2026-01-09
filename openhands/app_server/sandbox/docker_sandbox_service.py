@@ -539,4 +539,5 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
                 extra_hosts=self.extra_hosts,
+                startup_grace_seconds=self.startup_grace_seconds,
             )
