@@ -38,7 +38,7 @@ interface ConversationNameContextMenuProps {
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onTogglePublic?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onCopyShareLink?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  shareUrl?: string;
   position?: "top" | "bottom";
 }
 
@@ -54,7 +54,7 @@ export function ConversationNameContextMenu({
   onDownloadViaVSCode,
   onTogglePublic,
   onDownloadConversation,
-  onCopyShareLink,
+  shareUrl,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
   const { width } = useWindowSize();
@@ -209,16 +209,18 @@ export function ConversationNameContextMenu({
               />
               <span>{t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}</span>
             </div>
-            {conversation?.public && onCopyShareLink && (
-              <button
-                type="button"
-                data-testid="copy-share-link-button"
-                onClick={onCopyShareLink}
+            {conversation?.public && shareUrl && (
+              <a
+                data-testid="open-share-link-button"
+                href={shareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="p-1 hover:bg-[#717888] rounded"
-                title={t(I18nKey.BUTTON$COPY_TO_CLIPBOARD)}
+                title={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
               >
                 <LinkIcon width={16} height={16} />
-              </button>
+              </a>
             )}
           </div>
         </ContextMenuListItem>

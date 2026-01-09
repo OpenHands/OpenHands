@@ -37,7 +37,7 @@ export function ConversationName() {
     handleShowSkills,
     handleExportConversation,
     handleTogglePublic,
-    handleCopyShareLink,
+    getShareUrl,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -187,9 +187,9 @@ export function ConversationName() {
                     ? handleTogglePublic
                     : undefined
                 }
-                onCopyShareLink={
+                shareUrl={
                   ENABLE_PUBLIC_CONVERSATION_SHARING()
-                    ? handleCopyShareLink
+                    ? getShareUrl()
                     : undefined
                 }
                 onDownloadConversation={
