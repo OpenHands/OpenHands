@@ -1,8 +1,7 @@
 import { create } from "zustand";
 import { SystemMessageForModal } from "#/utils/system-message-adapter";
 import { ApiKey, CreateApiKeyResponse } from "#/api/api-keys";
-import { GetConfigResponse } from "#/api/option-service/option.types";
-import { Provider, Settings } from "#/types/settings";
+import { Settings } from "#/types/settings";
 import {
   LearnThisRepoFormData,
   MicroagentFormData,
@@ -108,14 +107,6 @@ interface ModalCoreProps {
   };
 
   // Auth modals
-  auth: {
-    githubAuthUrl: string | null;
-    appMode?: GetConfigResponse["APP_MODE"] | null;
-    authUrl?: GetConfigResponse["AUTH_URL"];
-    providersConfigured?: Provider[];
-    emailVerified?: boolean;
-    hasDuplicatedEmail?: boolean;
-  };
   reauth: Record<string, never>; // No props needed
   "email-verification": {
     userId?: string | null;
@@ -139,7 +130,6 @@ export type ModalConfigMap = {
 export type ModalType = keyof ModalConfigMap;
 
 export interface ModalInstance<T extends ModalType = ModalType> {
-  id: string;
   type: T;
   props: ModalConfigMap[T];
 }
@@ -164,7 +154,7 @@ interface ModalActions {
     options?: OpenModalOptions,
   ) => void;
   closeModal: () => void;
-  closeModalById: (id: string) => void;
+  closeModalByType: (type: ModalType) => void;
   closeAllModals: () => void;
   replaceModal: <T extends ModalType>(
     type: T,
@@ -192,10 +182,7 @@ export const useModalStore = create<ModalStore>((set, get) => ({
       }
 
       return {
-        modalStack: [
-          ...state.modalStack,
-          { id: crypto.randomUUID(), type, props },
-        ],
+        modalStack: [...state.modalStack, { type, props }],
       };
     }),
 
@@ -204,18 +191,15 @@ export const useModalStore = create<ModalStore>((set, get) => ({
       modalStack: state.modalStack.slice(0, -1),
     })),
 
-  closeModalById: (id) =>
+  closeModalByType: (type) =>
     set((state) => ({
-      modalStack: state.modalStack.filter((m) => m.id !== id),
+      modalStack: state.modalStack.filter((m) => m.type !== type),
     })),
 
   closeAllModals: () => set({ modalStack: [] }),
 
   replaceModal: (type, props) =>
     set((state) => ({
-      modalStack: [
-        ...state.modalStack.slice(0, -1),
-        { id: crypto.randomUUID(), type, props },
-      ],
+      modalStack: [...state.modalStack.slice(0, -1), { type, props }],
     })),
 }));

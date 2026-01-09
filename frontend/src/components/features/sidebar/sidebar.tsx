@@ -34,9 +34,10 @@ export function Sidebar() {
   const { pathname } = useLocation();
 
   React.useEffect(() => {
-    if (location.pathname === "/settings") {
-      // Do nothing - on settings page
-    } else if (
+    // Skip settings-related logic on the settings page
+    if (location.pathname === "/settings") return;
+
+    if (
       !isFetchingSettings &&
       settingsIsError &&
       settingsError?.status !== 404

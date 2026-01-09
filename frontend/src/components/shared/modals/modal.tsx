@@ -23,7 +23,6 @@ import { LaunchMicroagentModal } from "#/components/features/chat/microagent/lau
 import { MicroagentManagementLearnThisRepoModal } from "#/components/features/microagent-management/microagent-management-learn-this-repo-modal";
 import { MicroagentManagementUpsertMicroagentModal } from "#/components/features/microagent-management/microagent-management-upsert-microagent-modal";
 import { ConfigureModal } from "#/components/features/settings/project-management/configure-modal";
-import { AuthModal } from "#/components/features/waitlist/auth-modal";
 import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
 import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
@@ -179,19 +178,6 @@ function renderModal(modal: ModalInstance, onClose: () => void, t: TFunction) {
         />
       );
     }
-    case "auth": {
-      const props = modal.props as ModalConfigMap["auth"];
-      return (
-        <AuthModal
-          githubAuthUrl={props.githubAuthUrl}
-          appMode={props.appMode}
-          authUrl={props.authUrl}
-          providersConfigured={props.providersConfigured}
-          emailVerified={props.emailVerified}
-          hasDuplicatedEmail={props.hasDuplicatedEmail}
-        />
-      );
-    }
     case "reauth": {
       return <ReauthModal />;
     }
@@ -258,7 +244,7 @@ export function ModalRoot() {
 
         return (
           <div
-            key={modal.id}
+            key={modal.type}
             className="fixed inset-0 flex items-center justify-center"
             style={{ zIndex }}
           >
