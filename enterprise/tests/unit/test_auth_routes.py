@@ -1637,7 +1637,7 @@ class TestKeycloakCallbackRecaptcha:
             # Check that reCAPTCHA error was logged (may be called multiple times due to other errors)
             recaptcha_error_calls = [
                 call
-                for call in mock_logger.error.call_args_list
+                for call in mock_logger.exception.call_args_list
                 if 'reCAPTCHA verification error' in str(call)
             ]
             assert len(recaptcha_error_calls) > 0

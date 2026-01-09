@@ -8,6 +8,7 @@ from server.auth.constants import (
     RECAPTCHA_HMAC_SECRET,
     RECAPTCHA_PROJECT_ID,
     RECAPTCHA_SITE_KEY,
+    SUSPICIOUS_LABELS,
 )
 
 from openhands.core.logger import openhands_logger as logger
@@ -21,6 +22,7 @@ class AssessmentResult:
     valid: bool
     action_valid: bool
     reason_codes: list[str]
+    account_defender_labels: list[str]
     allowed: bool
 
 
@@ -106,6 +108,24 @@ class RecaptchaService:
         action_valid = token_properties.action == action
         reason_codes = [str(r) for r in risk_analysis.reasons]
 
+        # Extract Account Defender labels
+        account_defender_labels = []
+        if response.account_defender_assessment:
+            account_defender_labels = [
+                str(label) for label in response.account_defender_assessment.labels
+            ]
+
+        # Check if any suspicious labels are present
+        has_suspicious_labels = bool(set(account_defender_labels) & SUSPICIOUS_LABELS)
+
+        # Block if: invalid token, wrong action, low score, OR suspicious Account Defender labels
+        allowed = (
+            valid
+            and action_valid
+            and score >= RECAPTCHA_BLOCK_THRESHOLD
+            and not has_suspicious_labels
+        )
+
         logger.info(
             'recaptcha_assessment',
             extra={
@@ -113,6 +133,9 @@ class RecaptchaService:
                 'valid': valid,
                 'action_valid': action_valid,
                 'reasons': reason_codes,
+                'account_defender_labels': account_defender_labels,
+                'has_suspicious_labels': has_suspicious_labels,
+                'allowed': allowed,
                 'user_ip': user_ip,
             },
         )
@@ -122,7 +145,8 @@ class RecaptchaService:
             valid=valid,
             action_valid=action_valid,
             reason_codes=reason_codes,
-            allowed=valid and action_valid and score >= RECAPTCHA_BLOCK_THRESHOLD,
+            account_defender_labels=account_defender_labels,
+            allowed=allowed,
         )
 
 

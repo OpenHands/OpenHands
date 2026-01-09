@@ -65,7 +65,7 @@ export function useRecaptcha({
         });
         return token;
       } catch (err) {
-        displayErrorToast(t(I18nKey.AUTH$RECAPTCHA_ERROR));
+        displayErrorToast(t(I18nKey.AUTH$RECAPTCHA_BLOCKED));
         return null;
       }
     },

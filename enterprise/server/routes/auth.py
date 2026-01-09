@@ -204,11 +204,11 @@ async def keycloak_callback(
                     },
                 )
                 # Redirect to home with error parameter
-                error_url = f'{request.base_url}?recaptcha_blocked=true'
+                error_url = f'{request.base_url}login?recaptcha_blocked=true'
                 return RedirectResponse(error_url, status_code=302)
 
         except Exception as e:
-            logger.error(f'reCAPTCHA verification error at callback: {e}')
+            logger.exception(f'reCAPTCHA verification error at callback: {e}')
             # Fail open - continue with login if reCAPTCHA service unavailable
 
     # Check if email domain is blocked

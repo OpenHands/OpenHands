@@ -82,7 +82,7 @@ export function LoginContent({
         window.location.href = url.toString();
       }
     } catch (err) {
-      displayErrorToast(t(I18nKey.AUTH$RECAPTCHA_ERROR));
+      displayErrorToast(t(I18nKey.AUTH$RECAPTCHA_BLOCKED));
     }
   };
 
@@ -147,8 +147,8 @@ export function LoginContent({
         </p>
       )}
       {recaptchaBlocked && (
-        <p className="text-sm text-danger text-center">
-          {t(I18nKey.AUTH$RECAPTCHA_ERROR)}
+        <p className="text-sm text-danger text-center max-w-125">
+          {t(I18nKey.AUTH$RECAPTCHA_BLOCKED)}
         </p>
       )}
 
