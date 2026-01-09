@@ -1,7 +1,7 @@
 """bump condenser defaults: max_size 120->240
 
-Revision ID: 086
-Revises: 085
+Revision ID: 087
+Revises: 086
 Create Date: 2026-01-05
 
 """
@@ -13,8 +13,8 @@ from alembic import op
 from sqlalchemy.sql import column, table
 
 # revision identifiers, used by Alembic.
-revision: str = '086'
-down_revision: Union[str, None] = '085'
+revision: str = '087'
+down_revision: Union[str, None] = '086'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
