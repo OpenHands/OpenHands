@@ -418,7 +418,7 @@ async def get_microagents(
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
-            content={'microagents': [m.dict() for m in microagents]},
+            content={'microagents': [m.model_dump() for m in microagents]},
         )
     except Exception as e:
         logger.error(f'Error getting microagents: {e}')
