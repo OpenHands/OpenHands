@@ -1,13 +1,19 @@
+export const LOCAL_STORAGE_KEYS = {
+  CONVERSATION_SELECTED_TAB: "conversation-selected-tab",
+  CONVERSATION_RIGHT_PANEL_SHOWN: "conversation-right-panel-shown",
+  CONVERSATION_UNPINNED_TABS: "conversation-unpinned-tabs",
+} as const;
+
 const CONVERSATION_STORAGE_KEYS = [
-  "conversation-selected-tab-",
-  "conversation-right-panel-shown-",
-  "conversation-unpinned-tabs-",
+  LOCAL_STORAGE_KEYS.CONVERSATION_SELECTED_TAB,
+  LOCAL_STORAGE_KEYS.CONVERSATION_RIGHT_PANEL_SHOWN,
+  LOCAL_STORAGE_KEYS.CONVERSATION_UNPINNED_TABS,
 ];
 
 export function clearConversationLocalStorage(conversationId: string) {
   try {
     CONVERSATION_STORAGE_KEYS.forEach((prefix) => {
-      localStorage.removeItem(`${prefix}${conversationId}`);
+      localStorage.removeItem(`${prefix}-${conversationId}`);
     });
   } catch (err) {
     console.warn(
