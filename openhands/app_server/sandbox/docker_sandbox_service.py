@@ -210,6 +210,8 @@ class DockerSandboxService(SandboxService):
                         f'Sandbox server not running: {app_server_url} : {exc}'
                     )
                     sandbox_info.status = SandboxStatus.ERROR
+                else:
+                    sandbox_info.status = SandboxStatus.STARTING
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None
         return sandbox_info
