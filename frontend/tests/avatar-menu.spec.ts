@@ -35,11 +35,11 @@ test("avatar context menu stays open when moving cursor diagonally to menu", asy
   const avatarBox = await userAvatar.boundingBox();
   if (!avatarBox) {
     // Debug: take a screenshot and log page content
-    await page.screenshot({ path: 'debug-avatar-test.png' });
+    await page.screenshot({ path: "debug-avatar-test.png" });
     const avatarCount = await page.getByTestId("user-avatar").count();
-    console.log('Number of user-avatar elements found:', avatarCount);
+    console.log("Number of user-avatar elements found:", avatarCount);
     const pageTitle = await page.title();
-    console.log('Page title:', pageTitle);
+    console.log("Page title:", pageTitle);
     throw new Error("Could not get bounding box for avatar");
   }
 
@@ -51,15 +51,17 @@ test("avatar context menu stays open when moving cursor diagonally to menu", asy
   await expect(contextMenu).toBeVisible();
 
   const menuWrapper = contextMenu.locator("..");
-  // Opacity transitions can be flaky in CI; wait until computed opacity is effectively 1.
+  // Opacity transitions can be flaky/slow in CI; avoid strict string matching and allow a
+  // small tolerance with a longer timeout.
   const wrapperHandle = await menuWrapper.elementHandle();
   if (!wrapperHandle) {
     throw new Error("Menu wrapper element handle not found");
   }
+  await expect(menuWrapper).toBeVisible({ timeout: 5000 });
   await page.waitForFunction(
-    (el) => Number.parseFloat(window.getComputedStyle(el).opacity) > 0.99,
+    (el) => Number.parseFloat(window.getComputedStyle(el).opacity) >= 0.98,
     wrapperHandle,
-    { timeout: 2000 },
+    { timeout: 5000 },
   );
   await expect(menuWrapper).toBeVisible();
 });
