@@ -22,7 +22,7 @@ interface TaskGroupSkeletonProps {
 function TaskGroupSkeleton({ items = 3 }: TaskGroupSkeletonProps) {
   return (
     <div data-testid="task-group-skeleton">
-      <div className="py-3 border-b border-[#717888] pt-3.5">
+      <div className="py-3 border-b border-stroke pt-3.5">
         <div className="h-3 w-40 skeleton !rounded-sm" />
       </div>
 
