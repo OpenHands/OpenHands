@@ -11,7 +11,10 @@ import { useUnifiedPauseConversationSandbox } from "./mutation/use-unified-stop-
 import { useGetTrajectory } from "./mutation/use-get-trajectory";
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { downloadTrajectory } from "#/utils/download-trajectory";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 
@@ -199,11 +202,24 @@ export function useConversationNameContextMenu({
     // Don't close menu - let user see the toggle state change
   };
 
-  const getShareUrl = () => {
+  const shareUrl = React.useMemo(() => {
     if (conversationId) {
       return `${window.location.origin}/shared/conversations/${conversationId}`;
     }
     return "";
+  }, [conversationId]);
+
+  const handleCopyShareLink = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!shareUrl) {
+      onContextMenuToggle?.(false);
+      return;
+    }
+
+    navigator.clipboard.writeText(shareUrl);
+    displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
   };
 
   return {
@@ -218,7 +234,8 @@ export function useConversationNameContextMenu({
     handleShowAgentTools,
     handleShowSkills,
     handleTogglePublic,
-    getShareUrl,
+    handleCopyShareLink,
+    shareUrl,
     handleConfirmDelete,
     handleConfirmStop,
 
