@@ -115,7 +115,7 @@ class EventServiceBase(EventService, ABC):
             paths = paths[:limit]
             next_page_id = str(start_offset + limit)
 
-        return EventPage(items, next_page_id=next_page_id)
+        return EventPage(items=items, next_page_id=next_page_id)
 
     async def count_events(
         self,

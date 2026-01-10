@@ -1127,7 +1127,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         if info is None:
             return None
-        for field_name in request.model_fields:
+        for field_name in AppConversationUpdateRequest.model_fields:
             value = getattr(request, field_name)
             setattr(info, field_name, value)
         info = await self.app_conversation_info_service.save_app_conversation_info(info)

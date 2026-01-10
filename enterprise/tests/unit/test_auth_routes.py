@@ -1,3 +1,5 @@
+import base64
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
@@ -8,6 +10,7 @@ from pydantic import SecretStr
 from server.auth.auth_error import AuthError
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import (
+    _extract_recaptcha_state,
     authenticate,
     keycloak_callback,
     keycloak_offline_callback,
@@ -934,3 +937,764 @@ async def test_keycloak_callback_no_email_in_user_info(mock_request):
         assert result.status_code == 302
         # Should not check for duplicate when email is missing
         mock_token_manager.check_duplicate_base_email.assert_not_called()
+
+
+class TestExtractRecaptchaState:
+    """Tests for _extract_recaptcha_state() helper function."""
+
+    def test_should_extract_redirect_url_and_token_from_new_json_format(self):
+        """Test extraction from new base64-encoded JSON format."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        # Act
+        redirect_url, token = _extract_recaptcha_state(encoded_state)
+
+        # Assert
+        assert redirect_url == 'https://example.com'
+        assert token == 'test-token'
+
+    def test_should_handle_old_format_plain_redirect_url(self):
+        """Test handling of old format (plain redirect URL string)."""
+        # Arrange
+        state = 'https://example.com'
+
+        # Act
+        redirect_url, token = _extract_recaptcha_state(state)
+
+        # Assert
+        assert redirect_url == 'https://example.com'
+        assert token is None
+
+    def test_should_handle_none_state(self):
+        """Test handling of None state."""
+        # Arrange
+        state = None
+
+        # Act
+        redirect_url, token = _extract_recaptcha_state(state)
+
+        # Assert
+        assert redirect_url == ''
+        assert token is None
+
+    def test_should_handle_invalid_base64_gracefully(self):
+        """Test handling of invalid base64/JSON (fallback to old format)."""
+        # Arrange
+        state = 'not-valid-base64!!!'
+
+        # Act
+        redirect_url, token = _extract_recaptcha_state(state)
+
+        # Assert
+        assert redirect_url == state
+        assert token is None
+
+    def test_should_handle_missing_redirect_url_in_json(self):
+        """Test handling when redirect_url is missing in JSON."""
+        # Arrange
+        state_data = {'recaptcha_token': 'test-token'}
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        # Act
+        redirect_url, token = _extract_recaptcha_state(encoded_state)
+
+        # Assert
+        assert redirect_url == ''
+        assert token == 'test-token'
+
+
+class TestKeycloakCallbackRecaptcha:
+    """Tests for reCAPTCHA integration in keycloak_callback()."""
+
+    @pytest.mark.asyncio
+    async def test_should_verify_recaptcha_and_allow_login_when_score_is_high(
+        self, mock_request
+    ):
+        """Test that login proceeds when reCAPTCHA score is high."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.allowed = True
+        mock_assessment_result.score = 0.9
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.user_verifier') as mock_verifier,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.posthog'),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        ):
+            mock_session = MagicMock()
+            mock_session_maker.return_value.__enter__.return_value = mock_session
+            mock_query = MagicMock()
+            mock_session.query.return_value = mock_query
+            mock_query.filter.return_value = mock_query
+            mock_user_settings = MagicMock()
+            mock_user_settings.accepted_tos = '2025-01-01'
+            mock_query.first.return_value = mock_user_settings
+
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                    'identity_provider': 'github',
+                    'email_verified': True,
+                }
+            )
+            mock_token_manager.store_idp_tokens = AsyncMock()
+            mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_verifier.is_active.return_value = True
+            mock_verifier.is_user_allowed.return_value = True
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Patch the module-level recaptcha_service instance
+            mock_recaptcha_service.create_assessment.return_value = (
+                mock_assessment_result
+            )
+
+            # Act
+            result = await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            assert isinstance(result, RedirectResponse)
+            assert result.status_code == 302
+            mock_recaptcha_service.create_assessment.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_should_block_login_when_recaptcha_score_is_low(self, mock_request):
+        """Test that login is blocked and redirected when reCAPTCHA score is low."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.allowed = False
+        mock_assessment_result.score = 0.2
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+        ):
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                }
+            )
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Patch the module-level recaptcha_service instance
+            mock_recaptcha_service.create_assessment.return_value = (
+                mock_assessment_result
+            )
+
+            # Act
+            result = await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            assert isinstance(result, RedirectResponse)
+            assert result.status_code == 302
+            assert 'recaptcha_blocked=true' in result.headers['location']
+
+    @pytest.mark.asyncio
+    async def test_should_extract_ip_from_x_forwarded_for_header(self, mock_request):
+        """Test that IP is extracted from X-Forwarded-For header when present."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        mock_request.headers = {'X-Forwarded-For': '192.168.1.1, 10.0.0.1'}
+        mock_request.client = None
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.allowed = True
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.user_verifier') as mock_verifier,
+            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.posthog'),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        ):
+            mock_session = MagicMock()
+            mock_session_maker.return_value.__enter__.return_value = mock_session
+            mock_query = MagicMock()
+            mock_session.query.return_value = mock_query
+            mock_query.filter.return_value = mock_query
+            mock_user_settings = MagicMock()
+            mock_user_settings.accepted_tos = '2025-01-01'
+            mock_query.first.return_value = mock_user_settings
+
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                    'identity_provider': 'github',
+                    'email_verified': True,
+                }
+            )
+            mock_token_manager.store_idp_tokens = AsyncMock()
+            mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_verifier.is_active.return_value = True
+            mock_verifier.is_user_allowed.return_value = True
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Patch the module-level recaptcha_service instance
+            mock_recaptcha_service.create_assessment.return_value = (
+                mock_assessment_result
+            )
+
+            # Act
+            await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            call_args = mock_recaptcha_service.create_assessment.call_args
+            assert call_args[1]['user_ip'] == '192.168.1.1'
+
+    @pytest.mark.asyncio
+    async def test_should_use_client_host_when_x_forwarded_for_missing(
+        self, mock_request
+    ):
+        """Test that client.host is used when X-Forwarded-For is missing."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        mock_request.headers = {}
+        mock_request.client = MagicMock()
+        mock_request.client.host = '192.168.1.2'
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.allowed = True
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.user_verifier') as mock_verifier,
+            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.posthog'),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        ):
+            mock_session = MagicMock()
+            mock_session_maker.return_value.__enter__.return_value = mock_session
+            mock_query = MagicMock()
+            mock_session.query.return_value = mock_query
+            mock_query.filter.return_value = mock_query
+            mock_user_settings = MagicMock()
+            mock_user_settings.accepted_tos = '2025-01-01'
+            mock_query.first.return_value = mock_user_settings
+
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                    'identity_provider': 'github',
+                    'email_verified': True,
+                }
+            )
+            mock_token_manager.store_idp_tokens = AsyncMock()
+            mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_verifier.is_active.return_value = True
+            mock_verifier.is_user_allowed.return_value = True
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Patch the module-level recaptcha_service instance
+            mock_recaptcha_service.create_assessment.return_value = (
+                mock_assessment_result
+            )
+
+            # Act
+            await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            call_args = mock_recaptcha_service.create_assessment.call_args
+            assert call_args[1]['user_ip'] == '192.168.1.2'
+
+    @pytest.mark.asyncio
+    async def test_should_use_unknown_ip_when_client_is_none(self, mock_request):
+        """Test that 'unknown' IP is used when client is None."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        mock_request.headers = {}
+        mock_request.client = None
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.allowed = True
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.user_verifier') as mock_verifier,
+            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.posthog'),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        ):
+            mock_session = MagicMock()
+            mock_session_maker.return_value.__enter__.return_value = mock_session
+            mock_query = MagicMock()
+            mock_session.query.return_value = mock_query
+            mock_query.filter.return_value = mock_query
+            mock_user_settings = MagicMock()
+            mock_user_settings.accepted_tos = '2025-01-01'
+            mock_query.first.return_value = mock_user_settings
+
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                    'identity_provider': 'github',
+                    'email_verified': True,
+                }
+            )
+            mock_token_manager.store_idp_tokens = AsyncMock()
+            mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_verifier.is_active.return_value = True
+            mock_verifier.is_user_allowed.return_value = True
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Patch the module-level recaptcha_service instance
+            mock_recaptcha_service.create_assessment.return_value = (
+                mock_assessment_result
+            )
+
+            # Act
+            await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            call_args = mock_recaptcha_service.create_assessment.call_args
+            assert call_args[1]['user_ip'] == 'unknown'
+
+    @pytest.mark.asyncio
+    async def test_should_include_email_in_assessment_when_available(
+        self, mock_request
+    ):
+        """Test that email is included in assessment when available."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.allowed = True
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.user_verifier') as mock_verifier,
+            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.posthog'),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        ):
+            mock_session = MagicMock()
+            mock_session_maker.return_value.__enter__.return_value = mock_session
+            mock_query = MagicMock()
+            mock_session.query.return_value = mock_query
+            mock_query.filter.return_value = mock_query
+            mock_user_settings = MagicMock()
+            mock_user_settings.accepted_tos = '2025-01-01'
+            mock_query.first.return_value = mock_user_settings
+
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                    'identity_provider': 'github',
+                    'email_verified': True,
+                }
+            )
+            mock_token_manager.store_idp_tokens = AsyncMock()
+            mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_verifier.is_active.return_value = True
+            mock_verifier.is_user_allowed.return_value = True
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Patch the module-level recaptcha_service instance
+            mock_recaptcha_service.create_assessment.return_value = (
+                mock_assessment_result
+            )
+
+            # Act
+            await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            call_args = mock_recaptcha_service.create_assessment.call_args
+            assert call_args[1]['email'] == 'user@example.com'
+
+    @pytest.mark.asyncio
+    async def test_should_skip_recaptcha_when_site_key_not_configured(
+        self, mock_request
+    ):
+        """Test that reCAPTCHA is skipped when RECAPTCHA_SITE_KEY is not configured."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', ''),
+            patch('server.routes.auth.user_verifier') as mock_verifier,
+            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.posthog'),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        ):
+            mock_session = MagicMock()
+            mock_session_maker.return_value.__enter__.return_value = mock_session
+            mock_query = MagicMock()
+            mock_session.query.return_value = mock_query
+            mock_query.filter.return_value = mock_query
+            mock_user_settings = MagicMock()
+            mock_user_settings.accepted_tos = '2025-01-01'
+            mock_query.first.return_value = mock_user_settings
+
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                    'identity_provider': 'github',
+                    'email_verified': True,
+                }
+            )
+            mock_token_manager.store_idp_tokens = AsyncMock()
+            mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_verifier.is_active.return_value = True
+            mock_verifier.is_user_allowed.return_value = True
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Act
+            await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            mock_recaptcha_service.create_assessment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_should_skip_recaptcha_when_token_is_missing(self, mock_request):
+        """Test that reCAPTCHA is skipped when token is missing from state."""
+        # Arrange
+        state = 'https://example.com'  # Old format without token
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.user_verifier') as mock_verifier,
+            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.posthog'),
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        ):
+            mock_session = MagicMock()
+            mock_session_maker.return_value.__enter__.return_value = mock_session
+            mock_query = MagicMock()
+            mock_session.query.return_value = mock_query
+            mock_query.filter.return_value = mock_query
+            mock_user_settings = MagicMock()
+            mock_user_settings.accepted_tos = '2025-01-01'
+            mock_query.first.return_value = mock_user_settings
+
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                    'identity_provider': 'github',
+                    'email_verified': True,
+                }
+            )
+            mock_token_manager.store_idp_tokens = AsyncMock()
+            mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_verifier.is_active.return_value = True
+            mock_verifier.is_user_allowed.return_value = True
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Act
+            await keycloak_callback(code='test_code', state=state, request=mock_request)
+
+            # Assert
+            mock_recaptcha_service.create_assessment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_should_fail_open_when_recaptcha_service_throws_exception(
+        self, mock_request
+    ):
+        """Test that login proceeds (fail open) when reCAPTCHA service throws exception."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.user_verifier') as mock_verifier,
+            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.set_response_cookie'),
+            patch('server.routes.auth.posthog'),
+            patch('server.routes.auth.logger') as mock_logger,
+        ):
+            mock_session = MagicMock()
+            mock_session_maker.return_value.__enter__.return_value = mock_session
+            mock_query = MagicMock()
+            mock_session.query.return_value = mock_query
+            mock_query.filter.return_value = mock_query
+            mock_user_settings = MagicMock()
+            mock_user_settings.accepted_tos = '2025-01-01'
+            mock_query.first.return_value = mock_user_settings
+
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                    'identity_provider': 'github',
+                    'email_verified': True,
+                }
+            )
+            mock_token_manager.store_idp_tokens = AsyncMock()
+            mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_verifier.is_active.return_value = True
+            mock_verifier.is_user_allowed.return_value = True
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            mock_recaptcha_service.create_assessment.side_effect = Exception(
+                'Service error'
+            )
+
+            # Act
+            result = await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            assert isinstance(result, RedirectResponse)
+            # Check that reCAPTCHA error was logged (may be called multiple times due to other errors)
+            recaptcha_error_calls = [
+                call
+                for call in mock_logger.exception.call_args_list
+                if 'reCAPTCHA verification error' in str(call)
+            ]
+            assert len(recaptcha_error_calls) > 0
+
+    @pytest.mark.asyncio
+    async def test_should_log_warning_when_recaptcha_blocks_user(self, mock_request):
+        """Test that warning is logged when reCAPTCHA blocks user."""
+        # Arrange
+        state_data = {
+            'redirect_url': 'https://example.com',
+            'recaptcha_token': 'test-token',
+        }
+        encoded_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode()
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.allowed = False
+        mock_assessment_result.score = 0.2
+
+        with (
+            patch('server.routes.auth.token_manager') as mock_token_manager,
+            patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
+            patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
+            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch('server.routes.auth.logger') as mock_logger,
+            patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        ):
+            mock_token_manager.get_keycloak_tokens = AsyncMock(
+                return_value=('test_access_token', 'test_refresh_token')
+            )
+            mock_token_manager.get_user_info = AsyncMock(
+                return_value={
+                    'sub': 'test_user_id',
+                    'preferred_username': 'test_user',
+                    'email': 'user@example.com',
+                }
+            )
+            mock_token_manager.check_duplicate_base_email = AsyncMock(
+                return_value=False
+            )
+
+            mock_domain_blocker.is_domain_blocked.return_value = False
+
+            # Patch the module-level recaptcha_service instance
+            mock_recaptcha_service.create_assessment.return_value = (
+                mock_assessment_result
+            )
+
+            # Act
+            await keycloak_callback(
+                code='test_code', state=encoded_state, request=mock_request
+            )
+
+            # Assert
+            mock_logger.warning.assert_called_once()
+            call_kwargs = mock_logger.warning.call_args
+            assert call_kwargs[0][0] == 'recaptcha_blocked_at_callback'
+            assert call_kwargs[1]['extra']['score'] == 0.2
+            assert call_kwargs[1]['extra']['user_id'] == 'test_user_id'
