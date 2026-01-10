@@ -9,7 +9,10 @@ describe("ErrorMessageBanner", () => {
     const onDismiss = vi.fn();
 
     render(
-      <ErrorMessageBanner message="Something went wrong" onDismiss={onDismiss} />
+      <ErrorMessageBanner
+        message="Something went wrong"
+        onDismiss={onDismiss}
+      />,
     );
 
     await user.click(screen.getByLabelText("BUTTON$CLOSE"));
@@ -29,5 +32,3 @@ describe("ErrorMessageBanner", () => {
     expect(toggle).toHaveTextContent("COMMON$VIEW_LESS");
   });
 });
-
-
