@@ -9,31 +9,85 @@
   preferredstrategy: "pseudoelements";
 }
 
-/* OLD TAILWIND STYLES */
+/* THEME COLOR TOKENS */
 @theme {
+  /* Core brand colors */
   --color-primary: #c9b974;
   --color-logo: #cfb755;
+
+  /* Base/background colors */
   --color-base: #0d0f11;
   --color-base-secondary: #24272e;
-  --color-danger: #e76a5e;
-  --color-success: #a5e75e;
-  --color-basic: #9099ac;
   --color-tertiary: #454545;
   --color-tertiary-light: #b7bdc2;
+
+  /* Content/text colors */
   --color-content: #ecedee;
   --color-content-2: #f9fbfe;
+  --color-basic: #9099ac;
+
+  /* Text shades - for various text emphasis levels */
+  --color-muted: #a3a3a3;
+  --color-subtle: #8d95a9;
+  --color-dim: #959cb2;
+  --color-faint: #a1a1a1;
+
+  /* Border/stroke colors */
+  --color-stroke: #717888;
+  --color-stroke-alt: #525252;
+  --color-stroke-muted: #727987;
+
+  /* Surface/background variants */
+  --color-surface: #25272d;
+  --color-surface-alt: #26282d;
+  --color-surface-hover: #5c5d62;
+  --color-surface-disabled: #2d2f36;
+  --color-surface-input: #363636;
+
+  /* Status/feedback colors */
+  --color-danger: #e76a5e;
+  --color-success: #a5e75e;
+  --color-warning: #ffd600;
+  --color-info: #597ff4;
+  --color-error: #ff684e;
+  --color-running: #1fbd53;
+  --color-busy: #ffd43b;
+  --color-stopped: #3c3c49;
+
+  /* Status variants */
+  --color-success-bright: #bcff8c;
+  --color-danger-surface: #4a0709;
+  --color-danger-ring: #ff0006;
+
+  /* Overlay/tooltip colors */
+  --color-tooltip: #1a1a1a;
+
+  /* Interactive element colors */
+  --color-star: #facc15;
+
+  /* Editor/code colors */
+  --color-editor-text: #c4cbda;
+  --color-code-surface: #2a3038;
+  --color-code-text: #e6edf3;
+  --color-code-border: #30363d;
+
+  /* Neutral/misc colors */
+  --color-neutral-dark: #3c3c4a;
+  --color-neutral-muted: #afb8c133;
+  --color-surface-strong: #292929;
+  --color-surface-muted: #393939;
 }
 
 .button-base {
-  @apply bg-tertiary border border-neutral-600 rounded-xs;
+  @apply bg-tertiary border border-stroke-alt rounded-xs;
 }
 
 .skeleton {
-  @apply bg-gray-400 rounded-md animate-pulse;
+  @apply bg-muted rounded-md animate-pulse;
 }
 
 .skeleton-round {
-  @apply bg-gray-400 rounded-full animate-pulse;
+  @apply bg-muted rounded-full animate-pulse;
 }
 
 .heading {
@@ -348,5 +402,10 @@
 }
 
 .api-configuration-modal {
-  box-shadow: 0 183px 51px 0 rgba(0, 0, 0, 0.00), 0 117px 47px 0 rgba(0, 0, 0, 0.01), 0 66px 40px 0 rgba(0, 0, 0, 0.03), 0 29px 29px 0 rgba(0, 0, 0, 0.04), 0 7px 16px 0 rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 183px 51px 0 rgba(0, 0, 0, 0),
+    0 117px 47px 0 rgba(0, 0, 0, 0.01),
+    0 66px 40px 0 rgba(0, 0, 0, 0.03),
+    0 29px 29px 0 rgba(0, 0, 0, 0.04),
+    0 7px 16px 0 rgba(0, 0, 0, 0.05);
 }

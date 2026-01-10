@@ -19,7 +19,7 @@ function LoadingSpinner({ className }: LoadingSpinnerProps) {
     <div className="flex items-center justify-center">
       <div
         className={cn(
-          "animate-spin rounded-full border-4 border-gray-200 border-t-blue-500",
+          "animate-spin rounded-full border-4 border-muted border-t-info",
           className,
         )}
         role="status"
@@ -138,7 +138,7 @@ export function FileDiffViewer({ path, type }: FileDiffViewerProps) {
     <div data-testid="file-diff-viewer-outer" className="w-full flex flex-col">
       <div
         className={cn(
-          "flex justify-between items-center px-2.5 py-3.5 border border-neutral-600 rounded-xl hover:cursor-pointer",
+          "flex justify-between items-center px-2.5 py-3.5 border border-stroke-alt rounded-xl hover:cursor-pointer",
           !isCollapsed && !isLoading && "border-b-0 rounded-b-none",
         )}
         onClick={() => setIsCollapsed((prev) => !prev)}
@@ -159,7 +159,7 @@ export function FileDiffViewer({ path, type }: FileDiffViewerProps) {
       </div>
       {isSuccess && !isCollapsed && (
         <div
-          className="w-full border border-neutral-600 overflow-hidden"
+          className="w-full border border-stroke-alt overflow-hidden"
           style={{ height: `${editorHeight}px` }}
         >
           <DiffEditor

@@ -193,18 +193,18 @@ export function LikertScale({
   const getButtonClass = (rating: number) => {
     if (isSubmitted) {
       return selectedRating && selectedRating >= rating
-        ? "text-yellow-400 cursor-not-allowed"
-        : "text-gray-300 opacity-50 cursor-not-allowed";
+        ? "text-star cursor-not-allowed"
+        : "text-muted opacity-50 cursor-not-allowed";
     }
 
     return selectedRating && selectedRating >= rating
-      ? "text-yellow-400"
-      : "text-gray-300";
+      ? "text-star"
+      : "text-muted";
   };
 
   return (
     <div className="mt-3 flex flex-col gap-1">
-      <div className="text-sm text-gray-500 mb-1">
+      <div className="text-sm text-dim mb-1">
         {isSubmitted
           ? t(I18nKey.FEEDBACK$THANK_YOU_FOR_FEEDBACK)
           : t(I18nKey.FEEDBACK$RATE_AGENT_PERFORMANCE)}
@@ -221,7 +221,7 @@ export function LikertScale({
                 "oh-star text-xl transition-all",
                 getButtonClass(rating),
                 !isSubmitted &&
-                  "hover:text-yellow-400 [&:has(~.oh-star:hover)]:text-yellow-400",
+                  "hover:text-star [&:has(~.oh-star:hover)]:text-star",
               )}
               aria-label={`Rate ${rating} stars`}
             >
@@ -233,20 +233,18 @@ export function LikertScale({
             selectedReason &&
             selectedRating &&
             selectedRating <= 3 && (
-              <span className="text-sm text-gray-500 italic">
-                {selectedReason}
-              </span>
+              <span className="text-sm text-dim italic">{selectedReason}</span>
             )}
         </span>
       </div>
 
       {showReasons && !isSubmitted && (
         <div className="mt-1 flex flex-col gap-1">
-          <div className="text-xs text-gray-500 mb-1">
+          <div className="text-xs text-dim mb-1">
             {t(I18nKey.FEEDBACK$SELECT_REASON)}
           </div>
           {countdown > 0 && (
-            <div className="text-xs text-gray-400 mb-1 italic">
+            <div className="text-xs text-muted mb-1 italic">
               {t(I18nKey.FEEDBACK$SELECT_REASON_COUNTDOWN, {
                 countdown,
               })}
@@ -258,7 +256,7 @@ export function LikertScale({
                 type="button"
                 key={reason}
                 onClick={() => handleReasonClick(reason)}
-                className="text-sm text-left py-1 px-2 rounded hover:bg-gray-700 transition-colors"
+                className="text-sm text-left py-1 px-2 rounded hover:bg-surface-hover transition-colors"
               >
                 {reason}
               </button>

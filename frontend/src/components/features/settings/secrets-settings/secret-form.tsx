@@ -148,7 +148,7 @@ export function SecretForm({
         placeholder={t("SECRETS$API_KEY_EXAMPLE")}
         pattern="^\S*$"
       />
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-error text-sm">{error}</p>}
 
       {mode === "add" && (
         <label className="flex flex-col gap-2.5 w-full max-w-[680px]">
@@ -159,8 +159,8 @@ export function SecretForm({
             required
             className={cn(
               "resize-none",
-              "bg-tertiary border border-[#717888] rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
-              "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+              "bg-tertiary border border-stroke rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
+              "disabled:bg-surface-disabled disabled:border-surface-disabled disabled:cursor-not-allowed",
             )}
             rows={8}
           />
@@ -178,8 +178,8 @@ export function SecretForm({
           defaultValue={secretDescription}
           className={cn(
             "resize-none",
-            "bg-tertiary border border-[#717888] rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
-            "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+            "bg-tertiary border border-stroke rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt",
+            "disabled:bg-surface-disabled disabled:border-surface-disabled disabled:cursor-not-allowed",
           )}
         />
       </label>

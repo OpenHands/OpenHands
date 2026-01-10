@@ -44,7 +44,7 @@ function EmailInputSection({
             onChange={onEmailChange}
             className={`text-base text-white p-2 bg-base-tertiary rounded-sm border ${
               isEmailChanged && !isEmailValid
-                ? "border-red-500"
+                ? "border-error"
                 : "border-tertiary"
             } flex-grow`}
             placeholder={t("SETTINGS$USER_EMAIL_LOADING")}
@@ -54,7 +54,7 @@ function EmailInputSection({
 
         {isEmailChanged && !isEmailValid && (
           <div
-            className="text-red-500 text-sm mt-1"
+            className="text-error text-sm mt-1"
             data-testid="email-validation-error"
           >
             {t("SETTINGS$INVALID_EMAIL_FORMAT")}
@@ -97,7 +97,7 @@ function VerificationAlert() {
   const { t } = useTranslation();
   return (
     <div
-      className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-sm mt-4"
+      className="bg-danger-surface border border-danger-ring text-white px-4 py-3 rounded-sm mt-4"
       role="alert"
     >
       <p className="font-bold">{t("SETTINGS$EMAIL_VERIFICATION_REQUIRED")}</p>

@@ -41,7 +41,7 @@ export function FeedbackForm({ onClose, polarity }: FeedbackFormProps) {
         <span>{message}</span>
         <a
           data-testid="toast-share-url"
-          className="text-blue-500 underline"
+          className="text-info underline"
           onClick={() => onPressToast(password)}
           href={link}
           target="_blank"
@@ -51,9 +51,7 @@ export function FeedbackForm({ onClose, polarity }: FeedbackFormProps) {
         </a>
         <span onClick={() => onPressToast(password)} className="cursor-pointer">
           {t(I18nKey.FEEDBACK$PASSWORD)}: {password}{" "}
-          <span className="text-gray-500">
-            ({t(I18nKey.FEEDBACK$COPY_LABEL)})
-          </span>
+          <span className="text-dim">({t(I18nKey.FEEDBACK$COPY_LABEL)})</span>
         </span>
       </div>,
       { duration: 10000 },
@@ -104,7 +102,7 @@ export function FeedbackForm({ onClose, polarity }: FeedbackFormProps) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6 w-full">
       <label className="flex flex-col gap-2">
-        <span className="text-xs text-neutral-400">
+        <span className="text-xs text-muted">
           {t(I18nKey.FEEDBACK$EMAIL_LABEL)}
         </span>
         <input
@@ -116,7 +114,7 @@ export function FeedbackForm({ onClose, polarity }: FeedbackFormProps) {
         />
       </label>
 
-      <div className="flex gap-4 text-neutral-400">
+      <div className="flex gap-4 text-muted">
         <label className="flex gap-2 cursor-pointer">
           <input
             name="permissions"
@@ -154,7 +152,7 @@ export function FeedbackForm({ onClose, polarity }: FeedbackFormProps) {
         </BrandButton>
       </div>
       {isPending && (
-        <p className="text-sm text-center text-neutral-400">
+        <p className="text-sm text-center text-muted">
           {t(I18nKey.FEEDBACK$SUBMITTING_MESSAGE)}
         </p>
       )}

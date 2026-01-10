@@ -78,7 +78,7 @@ export function GenericDropdownMenu<T>({
     <div className="relative">
       <div
         className={cn(
-          "absolute z-10 w-full bg-[#454545] border border-[#727987] rounded-lg shadow-none",
+          "absolute z-10 w-full bg-tertiary border border-stroke-muted rounded-lg shadow-none",
           "focus:outline-none mt-1 z-[9999]",
           stickyTopItem || stickyFooterItem ? "max-h-60" : "max-h-60",
         )}
@@ -115,7 +115,7 @@ export function GenericDropdownMenu<T>({
                     )}
                     {numberOfRecentItems > 0 &&
                       index === numberOfRecentItems - 1 && (
-                        <div className="border-b border-[#727987] bg-[#454545] pb-1 mb-1 h-[1px]" />
+                        <div className="border-b border-stroke-muted bg-tertiary pb-1 mb-1 h-[1px]" />
                       )}
                   </React.Fragment>
                 );
@@ -124,7 +124,7 @@ export function GenericDropdownMenu<T>({
           )}
         </ul>
         {stickyFooterItem && (
-          <div className="border-t border-[#727987] bg-[#454545] p-1 rounded-b-lg">
+          <div className="border-t border-stroke-muted bg-tertiary p-1 rounded-b-lg">
             {stickyFooterItem}
           </div>
         )}

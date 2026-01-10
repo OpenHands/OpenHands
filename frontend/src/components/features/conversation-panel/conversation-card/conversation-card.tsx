@@ -123,8 +123,8 @@ export function ConversationCard({
       data-context-menu-open={contextMenuOpen.toString()}
       onClick={onClick}
       className={cn(
-        "relative h-auto w-full p-3.5 border-b border-neutral-600 cursor-pointer",
-        "data-[context-menu-open=false]:hover:bg-[#454545]",
+        "relative h-auto w-full p-3.5 border-b border-stroke-alt cursor-pointer",
+        "data-[context-menu-open=false]:hover:bg-tertiary",
       )}
     >
       <div className="flex items-center justify-between w-full">
