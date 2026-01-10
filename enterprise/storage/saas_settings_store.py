@@ -19,6 +19,7 @@ from server.constants import (
     LITE_LLM_API_URL,
     LITE_LLM_TEAM_ID,
     REQUIRE_PAYMENT,
+    USER_SETTINGS_VERSION_TO_MODEL,
     get_default_litellm_model,
 )
 from server.logger import logger
@@ -202,6 +203,53 @@ class SaasSettingsStore(SettingsStore):
             )
             return None
 
+    def _has_custom_settings(
+        self, settings: Settings, old_user_version: int | None
+    ) -> bool:
+        """
+        Check if user has custom LLM settings that should be preserved.
+        Returns True if user customized either model or base_url.
+
+        Args:
+            settings: The user's current settings
+            old_user_version: The user's old settings version, if any
+
+        Returns:
+            True if user has custom settings, False if using old defaults
+        """
+        # Normalize values
+        user_model = (
+            settings.llm_model.strip()
+            if settings.llm_model and settings.llm_model.strip()
+            else None
+        )
+        user_base_url = (
+            settings.llm_base_url.strip()
+            if settings.llm_base_url and settings.llm_base_url.strip()
+            else None
+        )
+
+        # Custom base_url = definitely custom settings (BYOK)
+        if user_base_url and user_base_url != LITE_LLM_API_URL:
+            return True
+
+        # No model set = using defaults
+        if not user_model:
+            return False
+
+        # Check if model matches old version's default
+        if (
+            old_user_version
+            and old_user_version < CURRENT_USER_SETTINGS_VERSION
+            and old_user_version in USER_SETTINGS_VERSION_TO_MODEL
+        ):
+            old_default_base = USER_SETTINGS_VERSION_TO_MODEL[old_user_version]
+            user_model_base = user_model.split('/')[-1]
+            if user_model_base == old_default_base:
+                return False  # Matches old default
+
+        return True  # Custom model
+
     async def update_settings_with_litellm_default(
         self, settings: Settings
     ) -> Settings | None:
@@ -213,6 +261,17 @@ class SaasSettingsStore(SettingsStore):
             return None
         local_deploy = os.environ.get('LOCAL_DEPLOYMENT', None)
         key = LITE_LLM_API_KEY
+
+        # Check if user has custom settings
+        has_custom = self._has_custom_settings(settings, settings.user_version)
+
+        # Determine model to use (needed before LiteLLM user creation)
+        llm_model_to_use = (
+            settings.llm_model
+            if has_custom and settings.llm_model
+            else get_default_litellm_model()
+        )
+
         if not local_deploy:
             # Get user info to add to litellm
             token_manager = TokenManager()
@@ -226,14 +285,21 @@ class SaasSettingsStore(SettingsStore):
                     'x-goog-api-key': LITE_LLM_API_KEY,
                 },
             ) as client:
-                # Get the previous max budget to prevent accidental loss
-                # In Litellm a get always succeeds, regardless of whether the user actually exists
+                # Get the previous max budget to prevent accidental loss.
+                #
+                # LiteLLM v1.80+ returns 404 for non-existent users (previously returned empty user_info)
                 response = await client.get(
                     f'{LITE_LLM_API_URL}/user/info?user_id={self.user_id}'
                 )
-                response.raise_for_status()
-                response_json = response.json()
-                user_info = response_json.get('user_info') or {}
+                user_info: dict
+                if response.status_code == 404:
+                    # New user - doesn't exist in LiteLLM yet (v1.80+ behavior)
+                    user_info = {}
+                else:
+                    # For any other status, use standard error handling
+                    response.raise_for_status()
+                    response_json = response.json()
+                    user_info = response_json.get('user_info') or {}
                 logger.info(
                     f'creating_litellm_user: {self.user_id}; prev_max_budget: {user_info.get("max_budget")}; prev_metadata: {user_info.get("metadata")}'
                 )
@@ -276,7 +342,7 @@ class SaasSettingsStore(SettingsStore):
 
                 # Create the new litellm user
                 response = await self._create_user_in_lite_llm(
-                    client, email, max_budget, spend
+                    client, email, max_budget, spend, llm_model_to_use
                 )
                 if not response.is_success:
                     logger.warning(
@@ -285,7 +351,7 @@ class SaasSettingsStore(SettingsStore):
                     )
                     # Litellm insists on unique email addresses - it is possible the email address was registered with a different user.
                     response = await self._create_user_in_lite_llm(
-                        client, None, max_budget, spend
+                        client, None, max_budget, spend, llm_model_to_use
                     )
 
                 # User failed to create in litellm - this is an unforseen error state...
@@ -311,11 +377,17 @@ class SaasSettingsStore(SettingsStore):
                     extra={'user_id': self.user_id},
                 )
 
+        if has_custom:
+            settings.llm_model = settings.llm_model or get_default_litellm_model()
+            settings.llm_base_url = settings.llm_base_url or LITE_LLM_API_URL
+            settings.llm_api_key = settings.llm_api_key or SecretStr(key)
+        else:
+            settings.llm_model = get_default_litellm_model()
+            settings.llm_base_url = LITE_LLM_API_URL
+            settings.llm_api_key = SecretStr(key)
+
         settings.agent = 'CodeActAgent'
-        # Use the model corresponding to the current user settings version
-        settings.llm_model = get_default_litellm_model()
-        settings.llm_api_key = SecretStr(key)
-        settings.llm_base_url = LITE_LLM_API_URL
+
         return settings
 
     @classmethod
@@ -398,7 +470,12 @@ class SaasSettingsStore(SettingsStore):
             )
 
     async def _create_user_in_lite_llm(
-        self, client: httpx.AsyncClient, email: str | None, max_budget: int, spend: int
+        self,
+        client: httpx.AsyncClient,
+        email: str | None,
+        max_budget: int,
+        spend: int,
+        llm_model: str,
     ):
         response = await client.post(
             f'{LITE_LLM_API_URL}/user/new',
@@ -413,7 +490,7 @@ class SaasSettingsStore(SettingsStore):
                 'send_invite_email': False,
                 'metadata': {
                     'version': CURRENT_USER_SETTINGS_VERSION,
-                    'model': get_default_litellm_model(),
+                    'model': llm_model,
                 },
                 'key_alias': f'OpenHands Cloud - user {self.user_id}',
             },

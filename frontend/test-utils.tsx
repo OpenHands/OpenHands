@@ -8,13 +8,17 @@ import i18n from "i18next";
 import { vi } from "vitest";
 import { AxiosError } from "axios";
 
+export const useParamsMock = vi.fn(() => ({
+  conversationId: "test-conversation-id",
+}));
+
 // Mock useParams before importing components
 vi.mock("react-router", async () => {
   const actual =
     await vi.importActual<typeof import("react-router")>("react-router");
   return {
     ...actual,
-    useParams: () => ({ conversationId: "test-conversation-id" }),
+    useParams: useParamsMock,
   };
 });
 
@@ -69,6 +73,26 @@ export const createAxiosNotFoundErrorObject = () =>
       status: 404,
       statusText: "Not Found",
       data: { message: "Settings not found" },
+      headers: {},
+      // @ts-expect-error - we only need the response object for this test
+      config: {},
+    },
+  );
+
+export const createAxiosError = (
+  status: number,
+  statusText: string,
+  data: unknown,
+) =>
+  new AxiosError(
+    `Request failed with status code ${status}`,
+    "ERR_BAD_REQUEST",
+    undefined,
+    undefined,
+    {
+      status,
+      statusText,
+      data,
       headers: {},
       // @ts-expect-error - we only need the response object for this test
       config: {},

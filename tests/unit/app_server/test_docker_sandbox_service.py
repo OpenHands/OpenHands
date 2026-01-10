@@ -444,6 +444,138 @@ class TestDockerSandboxService:
         ):
             await service.start_sandbox()
 
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_with_extra_hosts(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test that extra_hosts are passed to container creation."""
+        # Setup
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value']
+            },
+            'NetworkSettings': {'Ports': {}},
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service with extra_hosts
+        service_with_extra_hosts = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            extra_hosts={
+                'host.docker.internal': 'host-gateway',
+                'custom.host': '192.168.1.100',
+            },
+            docker_client=mock_docker_client,
+        )
+
+        with (
+            patch.object(
+                service_with_extra_hosts, '_find_unused_port', return_value=12345
+            ),
+            patch.object(
+                service_with_extra_hosts, 'pause_old_sandboxes', return_value=[]
+            ),
+        ):
+            # Execute
+            await service_with_extra_hosts.start_sandbox()
+
+        # Verify extra_hosts was passed to container creation
+        mock_docker_client.containers.run.assert_called_once()
+        call_args = mock_docker_client.containers.run.call_args
+        assert call_args[1]['extra_hosts'] == {
+            'host.docker.internal': 'host-gateway',
+            'custom.host': '192.168.1.100',
+        }
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_without_extra_hosts(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test that extra_hosts is None when not configured."""
+        # Setup
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value']
+            },
+            'NetworkSettings': {'Ports': {}},
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service without extra_hosts (empty dict)
+        service_without_extra_hosts = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            extra_hosts={},
+            docker_client=mock_docker_client,
+        )
+
+        with (
+            patch.object(
+                service_without_extra_hosts, '_find_unused_port', return_value=12345
+            ),
+            patch.object(
+                service_without_extra_hosts, 'pause_old_sandboxes', return_value=[]
+            ),
+        ):
+            # Execute
+            await service_without_extra_hosts.start_sandbox()
+
+        # Verify extra_hosts is None when empty dict is provided
+        mock_docker_client.containers.run.assert_called_once()
+        call_args = mock_docker_client.containers.run.call_args
+        assert call_args[1]['extra_hosts'] is None
+
     async def test_resume_sandbox_from_paused(self, service):
         """Test resuming a paused sandbox."""
         # Setup
@@ -841,3 +973,116 @@ class TestExposedPort:
         port = ExposedPort(name='test', description='Test port')
         with pytest.raises(ValueError):  # Should raise validation error
             port.name = 'new_name'
+
+
+class TestDockerSandboxServiceInjector:
+    """Test cases for DockerSandboxServiceInjector configuration."""
+
+    def test_default_values(self):
+        """Test default configuration values."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector()
+        assert injector.host_port == 3000
+        assert injector.container_url_pattern == 'http://localhost:{port}'
+
+    def test_custom_host_port(self):
+        """Test custom host_port configuration."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(host_port=4000)
+        assert injector.host_port == 4000
+
+    def test_custom_container_url_pattern(self):
+        """Test custom container_url_pattern configuration."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(
+            container_url_pattern='http://192.168.1.100:{port}'
+        )
+        assert injector.container_url_pattern == 'http://192.168.1.100:{port}'
+
+    def test_custom_configuration_combined(self):
+        """Test combined custom configuration for remote access."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(
+            host_port=4000,
+            container_url_pattern='http://192.168.1.100:{port}',
+        )
+        assert injector.host_port == 4000
+        assert injector.container_url_pattern == 'http://192.168.1.100:{port}'
+
+
+class TestDockerSandboxServiceInjectorFromEnv:
+    """Test cases for DockerSandboxServiceInjector environment variable configuration."""
+
+    def test_config_from_env_with_sandbox_host_port(self):
+        """Test that SANDBOX_HOST_PORT environment variable is respected."""
+        import os
+        from unittest.mock import patch
+
+        env_vars = {
+            'SANDBOX_HOST_PORT': '4000',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=False):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            assert config.sandbox.host_port == 4000
+
+    def test_config_from_env_with_sandbox_container_url_pattern(self):
+        """Test that SANDBOX_CONTAINER_URL_PATTERN environment variable is respected."""
+        import os
+        from unittest.mock import patch
+
+        env_vars = {
+            'SANDBOX_CONTAINER_URL_PATTERN': 'http://192.168.1.100:{port}',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=False):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'
+
+    def test_config_from_env_with_both_sandbox_vars(self):
+        """Test that both SANDBOX_HOST_PORT and SANDBOX_CONTAINER_URL_PATTERN work together."""
+        import os
+        from unittest.mock import patch
+
+        env_vars = {
+            'SANDBOX_HOST_PORT': '4000',
+            'SANDBOX_CONTAINER_URL_PATTERN': 'http://192.168.1.100:{port}',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=False):
+            # Clear the global config to force reload
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+
+            config = config_from_env()
+            assert config.sandbox is not None
+            assert config.sandbox.host_port == 4000
+            assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'

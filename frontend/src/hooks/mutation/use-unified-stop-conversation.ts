@@ -9,7 +9,6 @@ import {
   pauseV1ConversationSandbox,
   stopV0Conversation,
   updateConversationStatusInCache,
-  invalidateConversationQueries,
 } from "./conversation-mutation-utils";
 
 /**
@@ -75,9 +74,6 @@ export const useUnifiedPauseConversationSandbox = () => {
           context.previousConversations,
         );
       }
-    },
-    onSettled: (_, __, variables) => {
-      invalidateConversationQueries(queryClient, variables.conversationId);
     },
     onSuccess: (_, variables, context) => {
       if (context?.toastId) {

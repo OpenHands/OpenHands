@@ -31,7 +31,7 @@ class AuthUserContext(UserContext):
 
     async def get_user_id(self) -> str | None:
         # If you have an auth object here you are logged in. If user_id is None
-        # it means we are in OSS mode.
+        # it means we are in OpenHands (OSS mode).
         user_id = await self.user_auth.get_user_id()
         return user_id
 
@@ -81,7 +81,12 @@ class AuthUserContext(UserContext):
         secrets = await self.user_auth.get_secrets()
         if secrets:
             for name, custom_secret in secrets.custom_secrets.items():
-                results[name] = StaticSecret(value=custom_secret.secret)
+                results[name] = StaticSecret(
+                    value=custom_secret.secret,
+                    description=custom_secret.description
+                    if custom_secret.description
+                    else None,
+                )
 
         return results
 

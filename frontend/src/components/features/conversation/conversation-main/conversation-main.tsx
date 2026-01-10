@@ -1,7 +1,7 @@
 import { useWindowSize } from "@uidotdev/usehooks";
 import { MobileLayout } from "./mobile-layout";
 import { DesktopLayout } from "./desktop-layout";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 
 export function ConversationMain() {
   const { width } = useWindowSize();

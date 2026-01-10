@@ -1,4 +1,4 @@
-"""Runtime Containers router for OpenHands Server."""
+"""Runtime Containers router for OpenHands App Server."""
 
 from typing import Annotated
 

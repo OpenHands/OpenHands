@@ -16,7 +16,8 @@ from openhands.app_server.sandbox.sandbox_spec_models import (
 from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     SandboxSpecServiceInjector,
-    get_default_agent_server_image,
+    get_agent_server_env,
+    get_agent_server_image,
 )
 from openhands.app_server.services.injector import InjectorState
 
@@ -34,7 +35,7 @@ def get_docker_client() -> docker.DockerClient:
 def get_default_sandbox_specs():
     return [
         SandboxSpecInfo(
-            id=get_default_agent_server_image(),
+            id=get_agent_server_image(),
             command=['--port', '8000'],
             initial_env={
                 'OPENVSCODE_SERVER_ROOT': '/openhands/.openvscode-server',
@@ -44,6 +45,7 @@ def get_default_sandbox_specs():
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
                 'PYTHONUNBUFFERED': '1',
                 'ENV_LOG_LEVEL': '20',
+                **get_agent_server_env(),
             },
             working_dir='/workspace/project',
         )

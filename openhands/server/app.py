@@ -1,3 +1,11 @@
+# IMPORTANT: LEGACY V0 CODE
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import contextlib
 import warnings
 from contextlib import asynccontextmanager
@@ -36,7 +44,7 @@ from openhands.server.shared import conversation_manager, server_config
 from openhands.server.types import AppMode
 from openhands.version import get_version
 
-mcp_app = mcp_server.http_app(path='/mcp')
+mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
 
 
 def combine_lifespans(*lifespans):
@@ -88,7 +96,7 @@ app.include_router(conversation_api_router)
 app.include_router(manage_conversation_api_router)
 app.include_router(settings_router)
 app.include_router(secrets_router)
-if server_config.app_mode == AppMode.OSS:
+if server_config.app_mode == AppMode.OPENHANDS:
     app.include_router(git_api_router)
 if server_config.enable_v1:
     app.include_router(v1_router.router)

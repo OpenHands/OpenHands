@@ -1,6 +1,6 @@
 from types import MappingProxyType
 
-from github import Github, GithubIntegration
+from github import Auth, Github, GithubIntegration
 from integrations.github.data_collector import GitHubDataCollector
 from integrations.github.github_solvability import summarize_issue_solvability
 from integrations.github.github_view import (
@@ -21,6 +21,7 @@ from integrations.utils import (
     CONVERSATION_URL,
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
+    get_session_expired_message,
 )
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
@@ -31,7 +32,11 @@ from server.utils.conversation_callback_utils import register_callback_processor
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.server.types import LLMAuthenticationError, MissingSettingsError
+from openhands.server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
 from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.async_utils import call_sync_from_async
 
@@ -43,7 +48,7 @@ class GithubManager(Manager):
         self.token_manager = token_manager
         self.data_collector = data_collector
         self.github_integration = GithubIntegration(
-            GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
+            auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
         )
 
         self.jinja_env = Environment(
@@ -77,7 +82,7 @@ class GithubManager(Manager):
             reaction: The reaction to add (e.g. "eyes", "+1", "-1", "laugh", "confused", "heart", "hooray", "rocket")
             installation_token: GitHub installation access token for API access
         """
-        with Github(installation_token) as github_client:
+        with Github(auth=Auth.Token(installation_token)) as github_client:
             repo = github_client.get_repo(github_view.full_repo_name)
             # Add reaction based on view type
             if isinstance(github_view, GithubInlinePRComment):
@@ -199,7 +204,7 @@ class GithubManager(Manager):
         outgoing_message = message.message
 
         if isinstance(github_view, GithubInlinePRComment):
-            with Github(installation_token) as github_client:
+            with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
                 pr = repo.get_pull(github_view.issue_number)
                 pr.create_review_comment_reply(
@@ -211,7 +216,7 @@ class GithubManager(Manager):
             or isinstance(github_view, GithubIssueComment)
             or isinstance(github_view, GithubIssue)
         ):
-            with Github(installation_token) as github_client:
+            with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
                 issue = repo.get_issue(number=github_view.issue_number)
                 issue.create_comment(outgoing_message)
@@ -305,7 +310,7 @@ class GithubManager(Manager):
                     f'[GitHub] Created conversation {conversation_id} for user {user_info.username}'
                 )
 
-                if not github_view.v1:
+                if not github_view.v1_enabled:
                     # Create a GithubCallbackProcessor
                     processor = GithubCallbackProcessor(
                         github_view=github_view,
@@ -341,6 +346,13 @@ class GithubManager(Manager):
                 )
 
                 msg_info = f'@{user_info.username} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
+
+            except SessionExpiredError as e:
+                logger.warning(
+                    f'[GitHub] Session expired for user {user_info.username}: {str(e)}'
+                )
+
+                msg_info = get_session_expired_message(user_info.username)
 
             msg = self.create_outgoing_message(msg_info)
             await self.send_message(msg, github_view)

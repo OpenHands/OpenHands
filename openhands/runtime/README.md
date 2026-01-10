@@ -3,7 +3,7 @@
 ## Introduction
 
 The OpenHands Runtime folder contains the core components responsible for executing actions and managing the runtime environment for the OpenHands project. This README provides an overview of the main components and their interactions.
-You can learn more about how the runtime works in the [Docker Runtime](https://docs.all-hands.dev/usage/architecture/runtime) documentation.
+You can learn more about how the runtime works in the [Docker Runtime](https://docs.openhands.dev/usage/architecture/runtime) documentation.
 
 ## Main Components
 

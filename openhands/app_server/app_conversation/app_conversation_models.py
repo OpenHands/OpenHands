@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from openhands.agent_server.models import SendMessageRequest
+from openhands.agent_server.models import OpenHandsModel, SendMessageRequest
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
@@ -44,6 +44,8 @@ class AppConversationInfo(BaseModel):
 
     parent_conversation_id: OpenHandsUUID | None = None
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
+
+    public: bool | None = None
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -89,7 +91,7 @@ class AppConversationPage(BaseModel):
     next_page_id: str | None = None
 
 
-class AppConversationStartRequest(BaseModel):
+class AppConversationStartRequest(OpenHandsModel):
     """Start conversation request object.
 
     Although a user can go directly to the sandbox and start conversations, they
@@ -114,6 +116,12 @@ class AppConversationStartRequest(BaseModel):
     parent_conversation_id: OpenHandsUUID | None = None
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
 
+    public: bool | None = None
+
+
+class AppConversationUpdateRequest(BaseModel):
+    public: bool
+
 
 class AppConversationStartTaskStatus(Enum):
     WORKING = 'WORKING'
@@ -134,7 +142,7 @@ class AppConversationStartTaskSortOrder(Enum):
     UPDATED_AT_DESC = 'UPDATED_AT_DESC'
 
 
-class AppConversationStartTask(BaseModel):
+class AppConversationStartTask(OpenHandsModel):
     """Object describing the start process for an app conversation.
 
     Because starting an app conversation can be slow (And can involve starting a sandbox),
@@ -159,7 +167,7 @@ class AppConversationStartTask(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
-class AppConversationStartTaskPage(BaseModel):
+class AppConversationStartTaskPage(OpenHandsModel):
     items: list[AppConversationStartTask]
     next_page_id: str | None = None
 

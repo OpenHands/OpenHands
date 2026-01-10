@@ -1,10 +1,12 @@
+<!-- Ideally you should open a PR when it is ready for review. Draft PRs will not be reviewed -->
+
 ## Summary of PR
 
-<!-- Summarize what the PR does, explaining any non-trivial design decisions. -->
+<!-- Summarize what the PR does -->
 
 ## Change Type
 
-<!-- Choose the types that apply to your PR and remove the rest. -->
+<!-- Choose the types that apply to your PR -->
 
 - [ ] Bug fix
 - [ ] New feature
