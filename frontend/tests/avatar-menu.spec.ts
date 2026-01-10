@@ -26,8 +26,20 @@ test("avatar context menu stays open when moving cursor diagonally to menu", asy
   const userAvatar = page.getByTestId("user-avatar");
   await expect(userAvatar).toBeVisible();
 
+  // Ensure the avatar is in the viewport
+  await userAvatar.scrollIntoViewIfNeeded();
+
+  // Wait a bit more for the avatar to be fully rendered
+  await page.waitForTimeout(100);
+
   const avatarBox = await userAvatar.boundingBox();
   if (!avatarBox) {
+    // Debug: take a screenshot and log page content
+    await page.screenshot({ path: 'debug-avatar-test.png' });
+    const avatarCount = await page.getByTestId("user-avatar").count();
+    console.log('Number of user-avatar elements found:', avatarCount);
+    const pageTitle = await page.title();
+    console.log('Page title:', pageTitle);
     throw new Error("Could not get bounding box for avatar");
   }
 
