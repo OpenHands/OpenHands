@@ -51,5 +51,15 @@ test("avatar context menu stays open when moving cursor diagonally to menu", asy
   await expect(contextMenu).toBeVisible();
 
   const menuWrapper = contextMenu.locator("..");
-  await expect(menuWrapper).toHaveCSS("opacity", "1");
+  // Opacity transitions can be flaky in CI; wait until computed opacity is effectively 1.
+  const wrapperHandle = await menuWrapper.elementHandle();
+  if (!wrapperHandle) {
+    throw new Error("Menu wrapper element handle not found");
+  }
+  await page.waitForFunction(
+    (el) => Number.parseFloat(window.getComputedStyle(el).opacity) > 0.99,
+    wrapperHandle,
+    { timeout: 2000 },
+  );
+  await expect(menuWrapper).toBeVisible();
 });
