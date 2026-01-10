@@ -17,6 +17,7 @@ export default function LoginPage() {
   const {
     emailVerified,
     hasDuplicatedEmail,
+    recaptchaBlocked,
     emailVerificationModalOpen,
     setEmailVerificationModalOpen,
   } = useEmailVerification();
@@ -67,6 +68,7 @@ export default function LoginPage() {
           providersConfigured={config.data?.PROVIDERS_CONFIGURED}
           emailVerified={emailVerified}
           hasDuplicatedEmail={hasDuplicatedEmail}
+          recaptchaBlocked={recaptchaBlocked}
         />
       </main>
 

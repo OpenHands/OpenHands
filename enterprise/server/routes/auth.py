@@ -1,3 +1,5 @@
+import base64
+import json
 import warnings
 from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
@@ -12,10 +14,12 @@ from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
     KEYCLOAK_SERVER_URL_EXT,
+    RECAPTCHA_SITE_KEY,
     ROLE_CHECK_ENABLED,
 )
 from server.auth.domain_blocker import domain_blocker
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
+from server.auth.recaptcha_service import recaptcha_service
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from server.config import get_config, sign_token
@@ -98,6 +102,24 @@ def get_cookie_samesite(request: Request) -> Literal['lax', 'strict']:
     )
 
 
+def _extract_recaptcha_state(state: str | None) -> tuple[str, str | None]:
+    """Extract redirect URL and reCAPTCHA token from OAuth state.
+
+    Returns:
+        Tuple of (redirect_url, recaptcha_token). Token may be None.
+    """
+    if not state:
+        return '', None
+
+    try:
+        # Try to decode as JSON (new format with reCAPTCHA)
+        state_data = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
+        return state_data.get('redirect_url', ''), state_data.get('recaptcha_token')
+    except Exception:
+        # Old format - state is just the redirect URL
+        return state, None
+
+
 @oauth_router.get('/keycloak/callback')
 async def keycloak_callback(
     request: Request,
@@ -106,7 +128,11 @@ async def keycloak_callback(
     error: Optional[str] = None,
     error_description: Optional[str] = None,
 ):
-    redirect_url: str = state if state else str(request.base_url)
+    # Extract redirect URL and reCAPTCHA token from state
+    redirect_url, recaptcha_token = _extract_recaptcha_state(state)
+    if not redirect_url:
+        redirect_url = str(request.base_url)
+
     if not code:
         # check if this is a forward from the account linking page
         if (
@@ -149,8 +175,43 @@ async def keycloak_callback(
     email = user_info.get('email')
     user_id = user_info['sub']
 
+    # reCAPTCHA verification with Account Defender
+    if RECAPTCHA_SITE_KEY and recaptcha_token:
+        user_ip = request.client.host if request.client else 'unknown'
+        user_agent = request.headers.get('User-Agent', '')
+
+        # Handle X-Forwarded-For for proxied requests
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            user_ip = forwarded_for.split(',')[0].strip()
+
+        try:
+            result = recaptcha_service.create_assessment(
+                token=recaptcha_token,
+                action='LOGIN',
+                user_ip=user_ip,
+                user_agent=user_agent,
+                email=email,
+            )
+
+            if not result.allowed:
+                logger.warning(
+                    'recaptcha_blocked_at_callback',
+                    extra={
+                        'user_ip': user_ip,
+                        'score': result.score,
+                        'user_id': user_id,
+                    },
+                )
+                # Redirect to home with error parameter
+                error_url = f'{request.base_url}login?recaptcha_blocked=true'
+                return RedirectResponse(error_url, status_code=302)
+
+        except Exception as e:
+            logger.exception(f'reCAPTCHA verification error at callback: {e}')
+            # Fail open - continue with login if reCAPTCHA service unavailable
+
     # Check if email domain is blocked
-    email = user_info.get('email')
     if email and domain_blocker.is_domain_blocked(email):
         logger.warning(
             f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
