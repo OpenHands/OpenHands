@@ -19,9 +19,7 @@ export function ErrorMessageBanner({
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   const isI18nKey = i18n.exists(message);
-  const displayTextForLength = isI18nKey
-    ? String(t(message))
-    : message;
+  const displayTextForLength = isI18nKey ? String(t(message)) : message;
   const shouldShowToggle =
     displayTextForLength.length > DEFAULT_MAX_COLLAPSED_CHARS;
 
