@@ -96,7 +96,7 @@ app.include_router(conversation_api_router)
 app.include_router(manage_conversation_api_router)
 app.include_router(settings_router)
 app.include_router(secrets_router)
-if server_config.app_mode == AppMode.OSS:
+if server_config.app_mode == AppMode.OPENHANDS:
     app.include_router(git_api_router)
 if server_config.enable_v1:
     app.include_router(v1_router.router)

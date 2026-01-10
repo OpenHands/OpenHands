@@ -12,8 +12,11 @@ from typing import Any, ClassVar, Protocol
 
 
 class AppMode(Enum):
-    OSS = 'oss'
+    OPENHANDS = 'oss'
     SAAS = 'saas'
+
+    # Backwards-compatible alias (deprecated): prefer AppMode.OPENHANDS
+    OSS = 'oss'
 
 
 class SessionMiddlewareInterface(Protocol):
@@ -48,5 +51,11 @@ class MissingSettingsError(ValueError):
 
 class LLMAuthenticationError(ValueError):
     """Raised when there is an issue with LLM authentication."""
+
+    pass
+
+
+class SessionExpiredError(ValueError):
+    """Raised when the user's authentication session has expired."""
 
     pass

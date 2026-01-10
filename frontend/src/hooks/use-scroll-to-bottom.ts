@@ -61,11 +61,7 @@ export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
         setAutoscroll(true);
         setHitBottom(true);
 
-        // Use smooth scrolling but with a fast duration
-        dom.scrollTo({
-          top: dom.scrollHeight,
-          behavior: "smooth",
-        });
+        dom.scrollTop = dom.scrollHeight;
       });
     }
   }, [scrollRef]);
@@ -77,11 +73,7 @@ export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
     if (autoscroll) {
       const dom = scrollRef.current;
       if (dom) {
-        // Scroll to bottom - this will trigger on any DOM change
-        dom.scrollTo({
-          top: dom.scrollHeight,
-          behavior: "smooth",
-        });
+        dom.scrollTop = dom.scrollHeight;
       }
     }
   }); // No dependency array - runs after every render to follow new content

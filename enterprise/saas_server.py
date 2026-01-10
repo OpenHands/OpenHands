@@ -18,7 +18,6 @@ from server.auth.constants import (  # noqa: E402
 )
 from server.constants import PERMITTED_CORS_ORIGINS  # noqa: E402
 from server.logger import logger  # noqa: E402
-from server.metrics import metrics_app  # noqa: E402
 from server.middleware import SetAuthCookieMiddleware  # noqa: E402
 from server.rate_limit import setup_rate_limit_handler  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
@@ -60,9 +59,6 @@ patch_mcp_server()
 def is_saas():
     return {'saas': True}
 
-
-# This requires a trailing slash to access, like /api/metrics/
-base_app.mount('/internal/metrics', metrics_app())
 
 base_app.include_router(readiness_router)  # Add routes for readiness checks
 base_app.include_router(api_router)  # Add additional route for github auth

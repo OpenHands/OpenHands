@@ -18,7 +18,7 @@ class SharedEventService(ABC):
 
     @abstractmethod
     async def get_shared_event(
-        self, conversation_id: UUID, event_id: str
+        self, conversation_id: UUID, event_id: UUID
     ) -> Event | None:
         """Given a conversation_id and event_id, retrieve an event if the conversation is shared."""
 
@@ -42,12 +42,11 @@ class SharedEventService(ABC):
         kind__eq: EventKind | None = None,
         timestamp__gte: datetime | None = None,
         timestamp__lt: datetime | None = None,
-        sort_order: EventSortOrder = EventSortOrder.TIMESTAMP,
     ) -> int:
         """Count events for a specific shared conversation."""
 
     async def batch_get_shared_events(
-        self, conversation_id: UUID, event_ids: list[str]
+        self, conversation_id: UUID, event_ids: list[UUID]
     ) -> list[Event | None]:
         """Given a conversation_id and list of event_ids, get events if the conversation is shared."""
         return await asyncio.gather(

@@ -1,4 +1,4 @@
-"""Sandboxed Conversation router for OpenHands Server."""
+"""Sandboxed Conversation router for OpenHands App Server."""
 
 import asyncio
 import logging

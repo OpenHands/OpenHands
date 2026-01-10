@@ -166,7 +166,7 @@ async def verify_email(request: Request, user_id: str, is_auth_flow: bool = Fals
     keycloak_admin = get_keycloak_admin()
     scheme = 'http' if request.url.hostname == 'localhost' else 'https'
     if is_auth_flow:
-        redirect_uri = f'{scheme}://{request.url.netloc}?email_verified=true'
+        redirect_uri = f'{scheme}://{request.url.netloc}/login?email_verified=true'
     else:
         redirect_uri = f'{scheme}://{request.url.netloc}/api/email/verified'
     logger.info(f'Redirect URI: {redirect_uri}')

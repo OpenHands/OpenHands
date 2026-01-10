@@ -1,4 +1,4 @@
-"""User router for OpenHands Server. For the moment, this simply implements the /me endpoint."""
+"""User router for OpenHands App Server. For the moment, this simply implements the /me endpoint."""
 
 from fastapi import APIRouter, HTTPException, status
 

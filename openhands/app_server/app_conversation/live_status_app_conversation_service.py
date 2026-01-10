@@ -7,7 +7,6 @@ import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from time import time
 from typing import Any, AsyncGenerator, Sequence
 from uuid import UUID, uuid4
 
@@ -71,6 +70,10 @@ from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
+)
+from openhands.app_server.utils.llm_metadata import (
+    get_llm_metadata,
+    should_set_litellm_extra_body,
 )
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
@@ -407,6 +410,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_info = _conversation_info_type_adapter.validate_python(data)
             conversation_info = [c for c in conversation_info if c]
             return conversation_info
+        except httpx.HTTPStatusError as exc:
+            # The runtime API stops idle sandboxes all the time and they return a 503.
+            # This is normal and should not be logged.
+            if not exc.response or exc.response.status_code != 503:
+                _logger.exception(
+                    f'Error getting conversation status from sandbox {sandbox.id}',
+                    exc_info=True,
+                    stack_info=True,
+                )
+            return []
         except Exception:
             # Not getting a status is not a fatal error - we just mark the conversation as stopped
             _logger.exception(
@@ -463,7 +476,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self, task: AppConversationStartTask
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Wait for sandbox to start and return info."""
-        # Get the sandbox
+        # Get or create the sandbox
         if not task.request.sandbox_id:
             sandbox = await self.sandbox_service.start_sandbox()
             task.sandbox_id = sandbox.id
@@ -475,45 +488,34 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 raise SandboxError(f'Sandbox not found: {task.request.sandbox_id}')
             sandbox = sandbox_info
 
-        # Update the listener
+        # Update the listener with sandbox info
         task.status = AppConversationStartTaskStatus.WAITING_FOR_SANDBOX
         task.sandbox_id = sandbox.id
         yield task
 
+        # Resume if paused
         if sandbox.status == SandboxStatus.PAUSED:
             await self.sandbox_service.resume_sandbox(sandbox.id)
+
+        # Check for immediate error states
         if sandbox.status in (None, SandboxStatus.ERROR):
             raise SandboxError(f'Sandbox status: {sandbox.status}')
-        if sandbox.status == SandboxStatus.RUNNING:
-            # There are still bugs in the remote runtime - they report running while still just
-            # starting resulting in a race condition. Manually check that it is actually
-            # running.
-            if await self._check_agent_server_alive(sandbox):
-                return
-        if sandbox.status != SandboxStatus.STARTING:
+
+        # For non-STARTING/RUNNING states (except PAUSED which we just resumed), fail fast
+        if sandbox.status not in (
+            SandboxStatus.STARTING,
+            SandboxStatus.RUNNING,
+            SandboxStatus.PAUSED,
+        ):
             raise SandboxError(f'Sandbox not startable: {sandbox.id}')
 
-        start = time()
-        while time() - start <= self.sandbox_startup_timeout:
-            await asyncio.sleep(self.sandbox_startup_poll_frequency)
-            sandbox_info = await self.sandbox_service.get_sandbox(sandbox.id)
-            if sandbox_info is None:
-                raise SandboxError(f'Sandbox not found: {sandbox.id}')
-            if sandbox.status not in (SandboxStatus.STARTING, SandboxStatus.RUNNING):
-                raise SandboxError(f'Sandbox not startable: {sandbox.id}')
-            if sandbox_info.status == SandboxStatus.RUNNING:
-                # There are still bugs in the remote runtime - they report running while still just
-                # starting resulting in a race condition. Manually check that it is actually
-                # running.
-                if await self._check_agent_server_alive(sandbox_info):
-                    return
-        raise SandboxError(f'Sandbox failed to start: {sandbox.id}')
-
-    async def _check_agent_server_alive(self, sandbox_info: SandboxInfo) -> bool:
-        agent_server_url = self._get_agent_server_url(sandbox_info)
-        url = f'{agent_server_url.rstrip("/")}/alive'
-        response = await self.httpx_client.get(url)
-        return response.is_success
+        # Use shared wait_for_sandbox_running utility to poll for ready state
+        await self.sandbox_service.wait_for_sandbox_running(
+            sandbox.id,
+            timeout=self.sandbox_startup_timeout,
+            poll_interval=self.sandbox_startup_poll_frequency,
+            httpx_client=self.httpx_client,
+        )
 
     def _get_agent_server_url(self, sandbox: SandboxInfo) -> str:
         """Get agent server url for running sandbox."""
@@ -892,6 +894,63 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return agent
 
+    def _update_agent_with_llm_metadata(
+        self,
+        agent: Agent,
+        conversation_id: UUID,
+        user_id: str | None,
+    ) -> Agent:
+        """Update agent's LLM and condenser LLM with litellm_extra_body metadata.
+
+        This adds tracing metadata (conversation_id, user_id, etc.) to the LLM
+        for analytics and debugging purposes. Only applies to openhands/ models.
+
+        Args:
+            agent: The agent to update
+            conversation_id: The conversation ID
+            user_id: The user ID (can be None)
+
+        Returns:
+            Updated agent with LLM metadata
+        """
+        updates: dict[str, Any] = {}
+
+        # Update main LLM if it's an openhands model
+        if should_set_litellm_extra_body(agent.llm.model):
+            llm_metadata = get_llm_metadata(
+                model_name=agent.llm.model,
+                llm_type=agent.llm.usage_id or 'agent',
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
+            updated_llm = agent.llm.model_copy(
+                update={'litellm_extra_body': {'metadata': llm_metadata}}
+            )
+            updates['llm'] = updated_llm
+
+        # Update condenser LLM if it exists and is an openhands model
+        if agent.condenser and hasattr(agent.condenser, 'llm'):
+            condenser_llm = agent.condenser.llm
+            if should_set_litellm_extra_body(condenser_llm.model):
+                condenser_metadata = get_llm_metadata(
+                    model_name=condenser_llm.model,
+                    llm_type=condenser_llm.usage_id or 'condenser',
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                )
+                updated_condenser_llm = condenser_llm.model_copy(
+                    update={'litellm_extra_body': {'metadata': condenser_metadata}}
+                )
+                updated_condenser = agent.condenser.model_copy(
+                    update={'llm': updated_condenser_llm}
+                )
+                updates['condenser'] = updated_condenser
+
+        # Return updated agent if there are changes
+        if updates:
+            return agent.model_copy(update=updates)
+        return agent
+
     async def _finalize_conversation_request(
         self,
         agent: Agent,
@@ -929,6 +988,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         agent = ExperimentManagerImpl.run_agent_variant_tests__v1(
             user.id, conversation_id, agent
         )
+
+        # Update agent's LLM with litellm_extra_body metadata for tracing
+        # This is done after experiment variants to ensure the final LLM config is used
+        agent = self._update_agent_with_llm_metadata(agent, conversation_id, user.id)
 
         # Load and merge skills if remote workspace is available
         if remote_workspace:
@@ -1064,7 +1127,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         if info is None:
             return None
-        for field_name in request.model_fields:
+        for field_name in AppConversationUpdateRequest.model_fields:
             value = getattr(request, field_name)
             setattr(info, field_name, value)
         info = await self.app_conversation_info_service.save_app_conversation_info(info)

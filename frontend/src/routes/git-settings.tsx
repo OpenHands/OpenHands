@@ -6,11 +6,13 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { useLogout } from "#/hooks/mutation/use-logout";
 import { GitHubTokenInput } from "#/components/features/settings/git-settings/github-token-input";
 import { GitLabTokenInput } from "#/components/features/settings/git-settings/gitlab-token-input";
+import { GitLabWebhookManager } from "#/components/features/settings/git-settings/gitlab-webhook-manager";
 import { BitbucketTokenInput } from "#/components/features/settings/git-settings/bitbucket-token-input";
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
 import { ForgejoTokenInput } from "#/components/features/settings/git-settings/forgejo-token-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
 import { InstallSlackAppAnchor } from "#/components/features/settings/git-settings/install-slack-app-anchor";
+import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import {
   displayErrorToast,
@@ -21,6 +23,7 @@ import { GitSettingInputsSkeleton } from "#/components/features/settings/git-set
 import { useAddGitProviders } from "#/hooks/mutation/use-add-git-providers";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { ProjectManagementIntegration } from "#/components/features/settings/project-management/project-management-integration";
+import { Typography } from "#/ui/typography";
 
 function GitSettingsScreen() {
   const { t } = useTranslation();
@@ -177,6 +180,33 @@ function GitSettingsScreen() {
                   {t(I18nKey.SETTINGS$GITHUB)}
                 </h3>
                 <ConfigureGitHubRepositoriesAnchor slug={config.APP_SLUG!} />
+              </div>
+              <div className="w-1/2 border-b border-gray-200" />
+            </>
+          )}
+
+          {shouldRenderExternalConfigureButtons && !isLoading && (
+            <>
+              <div className="mt-6 flex flex-col gap-4 pb-8">
+                <Typography.H3 className="text-xl">
+                  {t(I18nKey.SETTINGS$GITLAB)}
+                </Typography.H3>
+                <div className="flex items-center">
+                  <DebugStackframeDot
+                    className="w-6 h-6 shrink-0"
+                    color={isGitLabTokenSet ? "#BCFF8C" : "#FF684E"}
+                  />
+                  <Typography.Text
+                    className="text-sm text-gray-400"
+                    testId="gitlab-status-text"
+                  >
+                    {t(I18nKey.COMMON$STATUS)}:{" "}
+                    {isGitLabTokenSet
+                      ? t(I18nKey.STATUS$CONNECTED)
+                      : t(I18nKey.SETTINGS$GITLAB_NOT_CONNECTED)}
+                  </Typography.Text>
+                </div>
+                {isGitLabTokenSet && <GitLabWebhookManager />}
               </div>
               <div className="w-1/2 border-b border-gray-200" />
             </>

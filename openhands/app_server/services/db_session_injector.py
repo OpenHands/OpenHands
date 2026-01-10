@@ -1,4 +1,4 @@
-"""Database configuration and session management for OpenHands Server."""
+"""Database configuration and session management for OpenHands App Server."""
 
 import asyncio
 import logging

@@ -11,6 +11,7 @@ import {
 import { screen, waitFor, render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
@@ -78,13 +79,22 @@ function renderWithWebSocketContext(
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <ConversationWebSocketProvider
-        conversationId={conversationId}
-        conversationUrl={conversationUrl}
-        sessionApiKey={sessionApiKey}
-      >
-        {children}
-      </ConversationWebSocketProvider>
+      <MemoryRouter initialEntries={["/test-conversation-default"]}>
+        <Routes>
+          <Route
+            path="/:conversationId"
+            element={
+              <ConversationWebSocketProvider
+                conversationId={conversationId}
+                conversationUrl={conversationUrl}
+                sessionApiKey={sessionApiKey}
+              >
+                {children}
+              </ConversationWebSocketProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -295,11 +305,13 @@ describe("Conversation WebSocket Handler", () => {
     });
 
     it("should set error message store on WebSocket connection errors", async () => {
-      // Set up MSW to simulate connection error
+      // Simulate a connect-then-fail sequence (the MSW server auto-connects by default).
+      // This should surface an error message because the app has previously connected.
       mswServer.use(
         wsLink.addEventListener("connection", ({ client }) => {
-          // Simulate connection error by closing immediately
-          client.close(1006, "Connection failed");
+          setTimeout(() => {
+            client.close(1006, "Connection failed");
+          }, 50);
         }),
       );
 
@@ -314,14 +326,13 @@ describe("Conversation WebSocket Handler", () => {
       // Initially should show "none"
       expect(screen.getByTestId("error-message")).toHaveTextContent("none");
 
-      // Wait for connection error and error message to be set
+      // Wait for disconnect
       await waitFor(() => {
         expect(screen.getByTestId("connection-state")).toHaveTextContent(
           "CLOSED",
         );
       });
 
-      // Should set error message on connection failure
       await waitFor(() => {
         expect(screen.getByTestId("error-message")).not.toHaveTextContent(
           "none",
@@ -378,17 +389,15 @@ describe("Conversation WebSocket Handler", () => {
     it("should clear error message store when connection is restored", async () => {
       let connectionAttempt = 0;
 
-      // Set up MSW to fail first connection, then succeed on retry
+      // Fail once (after connect), then allow reconnection to stay open.
       mswServer.use(
-        wsLink.addEventListener("connection", ({ client, server }) => {
+        wsLink.addEventListener("connection", ({ client }) => {
           connectionAttempt += 1;
 
           if (connectionAttempt === 1) {
-            // First attempt fails
-            client.close(1006, "Initial connection failed");
-          } else {
-            // Second attempt succeeds
-            server.connect();
+            setTimeout(() => {
+              client.close(1006, "Initial connection failed");
+            }, 50);
           }
         }),
       );
@@ -404,7 +413,7 @@ describe("Conversation WebSocket Handler", () => {
       // Initially should show "none"
       expect(screen.getByTestId("error-message")).toHaveTextContent("none");
 
-      // Wait for first connection failure and error message
+      // Wait for first failure
       await waitFor(() => {
         expect(screen.getByTestId("connection-state")).toHaveTextContent(
           "CLOSED",
@@ -417,12 +426,16 @@ describe("Conversation WebSocket Handler", () => {
         );
       });
 
-      // Simulate reconnection attempt (this would normally be triggered by the WebSocket context)
-      // For now, we'll just verify the pattern - when connection is restored, error should clear
-      // This test will fail until the WebSocket handler implements the clear logic
-
-      // Note: This test demonstrates the expected behavior but may need adjustment
-      // based on how the actual reconnection logic is implemented
+      // Wait for reconnect to happen and verify error clears on successful connection
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("connection-state")).toHaveTextContent(
+            "OPEN",
+          );
+          expect(screen.getByTestId("error-message")).toHaveTextContent("none");
+        },
+        { timeout: 5000 },
+      );
     });
 
     it("should not create duplicate events when WebSocket reconnects with resend_all=true", async () => {
