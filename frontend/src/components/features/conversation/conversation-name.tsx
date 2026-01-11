@@ -38,6 +38,7 @@ export function ConversationName() {
     handleExportConversation,
     handleTogglePublic,
     handleCopyShareLink,
+    shareUrl,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -193,6 +194,9 @@ export function ConversationName() {
                   ENABLE_PUBLIC_CONVERSATION_SHARING()
                     ? handleTogglePublic
                     : undefined
+                }
+                shareUrl={
+                  ENABLE_PUBLIC_CONVERSATION_SHARING() ? shareUrl : undefined
                 }
                 onCopyShareLink={
                   ENABLE_PUBLIC_CONVERSATION_SHARING()

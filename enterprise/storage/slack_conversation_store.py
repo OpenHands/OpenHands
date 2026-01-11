@@ -14,8 +14,7 @@ class SlackConversationStore:
     async def get_slack_conversation(
         self, channel_id: str, parent_id: str
     ) -> SlackConversation | None:
-        """
-        Get a slack conversation by channel_id and message_ts.
+        """Get a slack conversation by channel_id and message_ts.
         Both parameters are required to match for a conversation to be returned.
         """
         with session_maker() as session:

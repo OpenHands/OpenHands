@@ -21,20 +21,16 @@ class SlackViewInterface(SummaryExtractionTracker, ABC):
     send_summary_instruction: bool
     conversation_id: str
     team_id: str
+    v1_enabled: bool
 
     @abstractmethod
     def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
-        "Instructions passed when conversation is first initialized"
+        """Instructions passed when conversation is first initialized"""
         pass
 
     @abstractmethod
     async def create_or_update_conversation(self, jinja_env: Environment):
-        "Create a new conversation"
-        pass
-
-    @abstractmethod
-    def get_callback_id(self) -> str:
-        "Unique callback id for subscribription made to EventStream for fetching agent summary"
+        """Create a new conversation"""
         pass
 
     @abstractmethod
@@ -43,6 +39,4 @@ class SlackViewInterface(SummaryExtractionTracker, ABC):
 
 
 class StartingConvoException(Exception):
-    """
-    Raised when trying to send message to a conversation that's is still starting up
-    """
+    """Raised when trying to send message to a conversation that's is still starting up"""
