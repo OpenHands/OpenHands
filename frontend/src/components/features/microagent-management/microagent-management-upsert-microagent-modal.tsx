@@ -108,7 +108,7 @@ export function MicroagentManagementUpsertMicroagentModal({
         <div className="flex flex-col gap-2 w-full">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <h2 className="text-white text-xl font-medium">{modalTitle}</h2>
+              <h2 className="text-content text-xl font-medium">{modalTitle}</h2>
               <a
                 href="https://docs.all-hands.dev/usage/prompting/microagents-overview#microagents-overview"
                 target="_blank"
@@ -118,10 +118,10 @@ export function MicroagentManagementUpsertMicroagentModal({
               </a>
             </div>
             <button type="button" onClick={onCancel} className="cursor-pointer">
-              <XIcon width={24} height={24} color="#F9FBFE" />
+              <XIcon width={24} height={24} color="var(--color-content-2)" />
             </button>
           </div>
-          <span className="text-white text-sm font-normal">
+          <span className="text-content text-sm font-normal">
             {modalDescription}
           </span>
         </div>
@@ -169,7 +169,7 @@ export function MicroagentManagementUpsertMicroagentModal({
               placeholder={t("MICROAGENT$TYPE_TRIGGER_SPACE")}
               onChange={setTriggers}
             />
-            <span className="text-xs text-white/50 font-normal">
+            <span className="text-xs text-muted font-normal">
               {t(
                 I18nKey.MICROAGENT_MANAGEMENT$HELP_TEXT_DESCRIBING_VALID_TRIGGERS,
               )}

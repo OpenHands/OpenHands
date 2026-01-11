@@ -7,6 +7,6 @@ interface BannerMessageProps {
 
 export function BannerMessage({ message, className }: BannerMessageProps) {
   return (
-    <p className={cn("text-xs font-medium text-black", className)}>{message}</p>
+    <p className={cn("text-xs font-medium text-base", className)}>{message}</p>
   );
 }

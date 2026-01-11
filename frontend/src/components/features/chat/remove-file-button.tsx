@@ -17,7 +17,7 @@ export function RemoveFileButton({ onClick }: RemoveFileButtonProps) {
         isMobile && "opacity-100",
       )}
     >
-      <CloseIcon width={10} height={10} color="#ffffff" />
+      <CloseIcon width={10} height={10} color="white" />
     </button>
   );
 }

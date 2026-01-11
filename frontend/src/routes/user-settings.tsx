@@ -42,11 +42,11 @@ function EmailInputSection({
             type="email"
             value={email}
             onChange={onEmailChange}
-            className={`text-base text-white p-2 bg-base-tertiary rounded-sm border ${
+            className={`text-base text-content p-2 bg-base-tertiary rounded-sm border ${
               isEmailChanged && !isEmailValid
                 ? "border-error"
                 : "border-tertiary"
-            } flex-grow`}
+            } grow`}
             placeholder={t("SETTINGS$USER_EMAIL_LOADING")}
             data-testid="email-input"
           />
@@ -66,7 +66,7 @@ function EmailInputSection({
             type="button"
             onClick={onSaveEmail}
             disabled={!isEmailChanged || isSaving || !isEmailValid}
-            className="px-4 py-2 rounded-sm bg-primary text-white hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:text-base"
+            className="px-4 py-2 rounded-sm bg-primary text-content hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:text-base"
             data-testid="save-email-button"
           >
             {isSaving ? t("SETTINGS$SAVING") : t("SETTINGS$SAVE")}
@@ -77,7 +77,7 @@ function EmailInputSection({
               type="button"
               onClick={onResendVerification}
               disabled={isResendingVerification}
-              className="px-4 py-2 rounded-sm bg-primary text-white hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:text-base"
+              className="px-4 py-2 rounded-sm bg-primary text-content hover:opacity-80 disabled:opacity-30 disabled:cursor-not-allowed disabled:text-base"
               data-testid="resend-verification-button"
             >
               {isResendingVerification
@@ -97,7 +97,7 @@ function VerificationAlert() {
   const { t } = useTranslation();
   return (
     <div
-      className="bg-danger-surface border border-danger-ring text-white px-4 py-3 rounded-sm mt-4"
+      className="bg-danger-surface border border-danger-ring text-content px-4 py-3 rounded-sm mt-4"
       role="alert"
     >
       <p className="font-bold">{t("SETTINGS$EMAIL_VERIFICATION_REQUIRED")}</p>

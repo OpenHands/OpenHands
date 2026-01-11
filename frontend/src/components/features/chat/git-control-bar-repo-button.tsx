@@ -36,7 +36,7 @@ export function GitControlBarRepoButton({
         "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-[100px] flex-1 truncate relative",
         hasRepository
           ? "border border-stroke-alt bg-transparent hover:border-tertiary cursor-pointer"
-          : "border border-[rgba(71,74,84,0.50)] bg-transparent cursor-not-allowed min-w-[170px]",
+          : "border border-glass-disabled bg-transparent cursor-not-allowed min-w-[170px]",
       )}
     >
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
@@ -50,7 +50,7 @@ export function GitControlBarRepoButton({
         )}
       </div>
       <div
-        className="font-normal text-white text-sm leading-5 truncate flex-1 min-w-0"
+        className="font-normal text-content text-sm leading-5 truncate flex-1 min-w-0"
         title={buttonText}
       >
         {buttonText}

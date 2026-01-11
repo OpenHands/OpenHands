@@ -16,7 +16,7 @@ export function BudgetUsageText({
 
   return (
     <div className="flex justify-end">
-      <span className="text-xs text-neutral-400">
+      <span className="text-xs text-muted">
         {t(I18nKey.CONVERSATION$BUDGET_USAGE_FORMAT, {
           currentCost: `$${currentCost.toFixed(4)}`,
           maxBudget: `$${maxBudget.toFixed(4)}`,

@@ -15,8 +15,8 @@ export function ConversationStatusBadges({
 
   if (conversationStatus === "ARCHIVED") {
     return (
-      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-neutral text-white text-xs font-medium rounded-full opacity-60">
-        <FaArchive size={10} className="text-white" />
+      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-neutral text-content text-xs font-medium rounded-full opacity-60">
+        <FaArchive size={10} className="text-content" />
         <span>{t(I18nKey.COMMON$ARCHIVED)}</span>
       </span>
     );
@@ -24,8 +24,8 @@ export function ConversationStatusBadges({
 
   if (conversationStatus === "ERROR") {
     return (
-      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-danger text-white text-xs font-medium rounded-full">
-        <CircleErrorIcon className="text-white w-3 h-3" />
+      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-danger text-content text-xs font-medium rounded-full">
+        <CircleErrorIcon className="text-content w-3 h-3" />
         <span>{t(I18nKey.COMMON$ERROR)}</span>
       </span>
     );

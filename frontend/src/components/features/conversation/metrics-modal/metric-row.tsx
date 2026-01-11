@@ -14,7 +14,7 @@ export function MetricRow({
   valueClassName = "font-semibold",
 }: MetricRowProps) {
   return (
-    <div className="flex justify-between items-center border-b border-neutral-700 pb-2">
+    <div className="flex justify-between items-center border-b border-stroke-alt pb-2">
       <span className={labelClassName}>{label}</span>
       <span className={valueClassName}>{value}</span>
     </div>

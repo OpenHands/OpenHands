@@ -17,7 +17,7 @@ function ConfirmationModeEnabled() {
     <Tooltip
       content={t(I18nKey.COMMON$CONFIRMATION_MODE_ENABLED)}
       closeDelay={100}
-      className="bg-white text-black hover:bg-transparent"
+      className="bg-content text-base hover:bg-transparent"
     >
       <div className="flex items-center justify-center w-[26px] h-[26px] rounded-lg bg-surface">
         <LockIcon width={15} height={15} />

@@ -25,7 +25,7 @@ export function SettingsNavigation({
       {/* Mobile backdrop */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-base bg-opacity-50 z-40 md:hidden"
           onClick={onCloseMobileMenu}
         />
       )}

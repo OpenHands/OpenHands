@@ -245,7 +245,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 ? [
                     {
                       icon: (
-                        <MemoryIcon className="w-[14px] h-[14px] text-white" />
+                        <MemoryIcon className="w-[14px] h-[14px] text-content" />
                       ),
                       onClick: () => {
                         setSelectedEventId(message.id);

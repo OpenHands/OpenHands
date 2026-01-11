@@ -10,7 +10,7 @@ export function ProjectManagementIntegration() {
 
   return (
     <div className="flex flex-col gap-4 w-1/4">
-      <h3 className="text-xl font-medium text-white">
+      <h3 className="text-xl font-medium text-content">
         {t(I18nKey.PROJECT_MANAGEMENT$TITLE)}
       </h3>
       <div className="flex flex-col gap-4">

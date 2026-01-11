@@ -7,7 +7,7 @@ interface EllipsisButtonProps {
 
 export function EllipsisButton({
   onClick,
-  fill = "#a3a3a3",
+  fill = "var(--color-muted)",
 }: EllipsisButtonProps) {
   return (
     <button

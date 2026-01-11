@@ -28,7 +28,7 @@ export function MicroagentManagementRepositories({
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-8">
         <Spinner size="sm" />
-        <span className="text-sm text-white">
+        <span className="text-sm text-content">
           {t("HOME$SEARCHING_REPOSITORIES")}
         </span>
       </div>
@@ -78,7 +78,7 @@ export function MicroagentManagementRepositories({
           base: "shadow-none bg-transparent cursor-pointer px-0",
           trigger: "cursor-pointer gap-2 py-3",
           indicator:
-            "flex items-center justify-center p-0.5 pr-[3px] text-white hover:bg-tertiary rounded transition-colors duration-200 rotate-180",
+            "flex items-center justify-center p-0.5 pr-[3px] text-content hover:bg-tertiary rounded transition-colors duration-200 rotate-180",
         }}
         selectionMode="multiple"
       >

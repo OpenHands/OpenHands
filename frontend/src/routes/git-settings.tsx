@@ -176,12 +176,12 @@ function GitSettingsScreen() {
           {shouldRenderExternalConfigureButtons && !isLoading && (
             <>
               <div className="pb-1 flex flex-col">
-                <h3 className="text-xl font-medium text-white">
+                <h3 className="text-xl font-medium text-content">
                   {t(I18nKey.SETTINGS$GITHUB)}
                 </h3>
                 <ConfigureGitHubRepositoriesAnchor slug={config.APP_SLUG!} />
               </div>
-              <div className="w-1/2 border-b border-gray-200" />
+              <div className="w-1/2 border-b border-stroke" />
             </>
           )}
 
@@ -194,10 +194,14 @@ function GitSettingsScreen() {
                 <div className="flex items-center">
                   <DebugStackframeDot
                     className="w-6 h-6 shrink-0"
-                    color={isGitLabTokenSet ? "#BCFF8C" : "#FF684E"}
+                    color={
+                      isGitLabTokenSet
+                        ? "var(--color-success-bright)"
+                        : "var(--color-error)"
+                    }
                   />
                   <Typography.Text
-                    className="text-sm text-gray-400"
+                    className="text-sm text-muted"
                     testId="gitlab-status-text"
                   >
                     {t(I18nKey.COMMON$STATUS)}:{" "}
@@ -208,19 +212,19 @@ function GitSettingsScreen() {
                 </div>
                 {isGitLabTokenSet && <GitLabWebhookManager />}
               </div>
-              <div className="w-1/2 border-b border-gray-200" />
+              <div className="w-1/2 border-b border-stroke" />
             </>
           )}
 
           {shouldRenderExternalConfigureButtons && !isLoading && (
             <>
               <div className="pb-1 mt-6 flex flex-col">
-                <h3 className="text-xl font-medium text-white">
+                <h3 className="text-xl font-medium text-content">
                   {t(I18nKey.SETTINGS$SLACK)}
                 </h3>
                 <InstallSlackAppAnchor />
               </div>
-              <div className="w-1/2 border-b border-gray-200" />
+              <div className="w-1/2 border-b border-stroke" />
             </>
           )}
 

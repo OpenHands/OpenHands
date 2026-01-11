@@ -20,14 +20,14 @@ export function SuggestionItem({ suggestion, onClick }: SuggestionItemProps) {
     switch (suggestion.label) {
       case "INCREASE_TEST_COVERAGE":
         return (
-          <TachometerFastIcon width={24} height={24} className="text-white" />
+          <TachometerFastIcon width={24} height={24} className="text-content" />
         );
       case "AUTO_MERGE_PRS":
-        return <PrStatusIcon width={19} height={20} className="text-white" />;
+        return <PrStatusIcon width={19} height={20} className="text-content" />;
       case "FIX_README":
-        return <DocumentIcon width={24} height={24} className="text-white" />;
+        return <DocumentIcon width={24} height={24} className="text-content" />;
       case "CLEAN_DEPENDENCIES":
-        return <WaterIcon width={24} height={24} className="text-white" />;
+        return <WaterIcon width={24} height={24} className="text-content" />;
       default:
         return null;
     }

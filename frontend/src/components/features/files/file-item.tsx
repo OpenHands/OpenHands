@@ -13,7 +13,7 @@ export function FileItem({ filename, onRemove }: FileItemProps) {
       className="flex flex-row gap-x-1 items-center justify-start py-1"
     >
       <FaFile className="h-4 w-4" />
-      <code className="text-sm flex-1 text-white truncate">{filename}</code>
+      <code className="text-sm flex-1 text-content truncate">{filename}</code>
       {onRemove && <RemoveButton onClick={onRemove} />}
     </div>
   );

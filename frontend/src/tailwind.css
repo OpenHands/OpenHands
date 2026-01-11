@@ -76,6 +76,36 @@
   --color-neutral-muted: #afb8c133;
   --color-surface-strong: #292929;
   --color-surface-muted: #393939;
+
+  /* Brand/Accessory colors (Extracted) */
+  --color-brand-github: #9E28B0;
+  --color-brand-gitlab: #FC6B0E;
+  --color-brand-bitbucket: #2684FF;
+  --color-accent-purple: #8480FF;
+  --color-accent-purple-hover: #6C63FF;
+  --color-gold-surface: #7F7445;
+  --color-gold-dark: #3a3c45;
+  --color-gold-text: #ffeeaa;
+  --color-placeholder-blue: #d0d9fa;
+  --color-icon-light: #d4d4d4;
+  --color-icon-blue-grey: #b1b9d3;
+  --color-glass-disabled: rgba(71, 74, 84, 0.50);
+
+  /* Additional semantic tokens */
+  --color-warning-surface: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-text: #92400e;
+  --color-info-dark: #1e3a8a;
+
+  /* Status text/bg variants */
+  --color-success-dark: #166534; /* green-800 */
+  --color-success-light: #bbf7d0; /* green-200 */
+  --color-warning-dark: #854d0e; /* yellow-800 */
+  --color-warning-light: #fef08a; /* yellow-200 */
+  --color-warning-text: #9a3412; /* orange-800 for dark orange */
+
+  /* Standard yellow for status indicators */
+  --color-yellow: #eab308; /* yellow-500 */
 }
 
 .button-base {

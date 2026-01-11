@@ -17,7 +17,7 @@ export function MicroagentManagementAccordionTitle({
 
         <StyledTooltip content={repository.full_name} placement="bottom">
           <span
-            className="text-white text-base font-normal bg-transparent p-0 min-w-0 h-auto cursor-pointer truncate max-w-[194px] translate-y-[-1px]"
+            className="text-content font-normal bg-transparent p-0 min-w-0 h-auto cursor-pointer truncate max-w-[194px] translate-y-[-1px]"
             data-testid="repository-name-tooltip"
           >
             {repository.full_name}

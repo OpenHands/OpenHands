@@ -18,7 +18,7 @@ export function ChatSendButton({
       className={cn(
         "flex items-center justify-center rounded-full border border-white size-[35px]",
         disabled
-          ? "cursor-not-allowed border-neutral-600"
+          ? "cursor-not-allowed border-stroke-alt"
           : "cursor-pointer hover:bg-dim",
         buttonClassName,
       )}
@@ -27,7 +27,7 @@ export function ChatSendButton({
       onClick={handleSubmit}
       disabled={disabled}
     >
-      <ArrowUp color={disabled ? "#959CB2" : "white"} />
+      <ArrowUp color={disabled ? "var(--color-dim)" : "white"} />
     </button>
   );
 }

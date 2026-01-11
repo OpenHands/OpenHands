@@ -34,7 +34,7 @@ export default function AcceptTOS() {
           <h1 className="text-2xl font-bold">
             {t(I18nKey.TOS$ACCEPT_TERMS_OF_SERVICE)}
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted">
             {t(I18nKey.TOS$ACCEPT_TERMS_DESCRIPTION)}
           </p>
         </div>

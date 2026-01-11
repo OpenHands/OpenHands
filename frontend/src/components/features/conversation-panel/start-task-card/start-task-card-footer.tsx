@@ -38,9 +38,7 @@ export function StartTaskCardFooter({
       </div>
 
       {/* Task Detail */}
-      {detail && (
-        <div className="text-xs text-neutral-500 truncate">{detail}</div>
-      )}
+      {detail && <div className="text-xs text-muted truncate">{detail}</div>}
     </div>
   );
 }

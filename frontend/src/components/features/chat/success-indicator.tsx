@@ -19,7 +19,7 @@ export function SuccessIndicator({ status }: SuccessIndicatorProps) {
       {status === "timeout" && (
         <FaClock
           data-testid="status-icon"
-          className="h-4 w-4 ml-2 inline fill-yellow-500"
+          className="h-4 w-4 ml-2 inline fill-warning"
         />
       )}
     </span>

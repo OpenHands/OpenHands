@@ -14,13 +14,13 @@ export function GitLabWebhookManagerState({
   className,
   titleKey,
   messageKey,
-  messageColor = "text-gray-400",
+  messageColor = "text-muted",
 }: GitLabWebhookManagerStateProps) {
   const { t } = useTranslation();
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      <Typography.H3 className="text-lg font-medium text-white">
+      <Typography.H3 className="text-lg font-medium text-content">
         {t(titleKey)}
       </Typography.H3>
       <Typography.Text className={cn("text-sm", messageColor)}>

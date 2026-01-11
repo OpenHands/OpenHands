@@ -9,7 +9,7 @@ const helpLinkVariants = cva("", {
     },
     linkColor: {
       default: "",
-      white: "text-white",
+      white: "text-content",
     },
   },
   defaultVariants: {

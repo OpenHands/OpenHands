@@ -23,7 +23,7 @@ export function ChatAddFileButton({
     >
       <PaperclipIcon
         className="block max-w-none w-[13px] h-[25px]"
-        color={disabled ? "#959CB2" : "white"}
+        color={disabled ? "var(--color-dim)" : "white"}
       />
     </button>
   );

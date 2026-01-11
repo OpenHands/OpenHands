@@ -52,7 +52,7 @@ export function ToolItem({ tool, index, isExpanded, onToggle }: ToolItemProps) {
       {isExpanded && (
         <div className="px-2 pb-3 pt-1">
           <div className="mt-2 mb-3">
-            <Typography.Text className="text-sm whitespace-pre-wrap text-gray-300 leading-relaxed">
+            <Typography.Text className="text-sm whitespace-pre-wrap text-content leading-relaxed">
               {String(description)}
             </Typography.Text>
           </div>

@@ -21,8 +21,8 @@ export function GenericEventMessage({
   const [showDetails, setShowDetails] = React.useState(initiallyExpanded);
 
   return (
-    <div className="flex flex-col gap-2 border-l-2 pl-2 my-2 py-2 border-neutral-300 text-sm w-full">
-      <div className="flex items-center justify-between font-bold text-neutral-300">
+    <div className="flex flex-col gap-2 border-l-2 pl-2 my-2 py-2 border-stroke text-sm w-full">
+      <div className="flex items-center justify-between font-bold text-muted">
         <div>
           {title}
           {details && (
@@ -32,9 +32,9 @@ export function GenericEventMessage({
               className="cursor-pointer text-left"
             >
               {showDetails ? (
-                <ArrowUp className="h-4 w-4 ml-2 inline fill-neutral-300" />
+                <ArrowUp className="h-4 w-4 ml-2 inline fill-icon-light" />
               ) : (
-                <ArrowDown className="h-4 w-4 ml-2 inline fill-neutral-300" />
+                <ArrowDown className="h-4 w-4 ml-2 inline fill-icon-light" />
               )}
             </button>
           )}

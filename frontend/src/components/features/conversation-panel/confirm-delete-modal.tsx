@@ -25,7 +25,7 @@ export function ConfirmDeleteModal({
     <Trans
       i18nKey={I18nKey.CONVERSATION$DELETE_WARNING_WITH_TITLE}
       values={{ title: conversationTitle }}
-      components={{ title: <span className="text-white" /> }}
+      components={{ title: <span className="text-content" /> }}
     />
   ) : (
     t(I18nKey.CONVERSATION$DELETE_WARNING)

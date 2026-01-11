@@ -289,7 +289,7 @@ export function ConfigureModal({
                     href="https://docs.all-hands.dev/usage/cloud/openhands-cloud"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline"
+                    className="text-accent hover:underline"
                   >
                     Check the document for more information
                   </a>
@@ -308,7 +308,7 @@ export function ConfigureModal({
                     href="https://docs.all-hands.dev/usage/cloud/openhands-cloud"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-500 underline"
+                    className="text-accent underline"
                   >
                     Check the document for more information
                   </a>
@@ -350,7 +350,7 @@ export function ConfigureModal({
               )}
             </div>
             {workspaceError && (
-              <p className="text-red-500 text-sm mt-2">{workspaceError}</p>
+              <p className="text-danger text-sm mt-2">{workspaceError}</p>
             )}
           </div>
 
@@ -368,7 +368,7 @@ export function ConfigureModal({
                   type="password"
                 />
                 {webhookSecretError && (
-                  <p className="text-red-500 text-sm mt-2">
+                  <p className="text-danger text-sm mt-2">
                     {webhookSecretError}
                   </p>
                 )}
@@ -387,7 +387,7 @@ export function ConfigureModal({
                   type="email"
                 />
                 {emailError && (
-                  <p className="text-red-500 text-sm mt-2">{emailError}</p>
+                  <p className="text-danger text-sm mt-2">{emailError}</p>
                 )}
               </div>
               <div>
@@ -404,7 +404,7 @@ export function ConfigureModal({
                   type="password"
                 />
                 {apiKeyError && (
-                  <p className="text-red-500 text-sm mt-2">{apiKeyError}</p>
+                  <p className="text-danger text-sm mt-2">{apiKeyError}</p>
                 )}
               </div>
               <div className="mt-4">

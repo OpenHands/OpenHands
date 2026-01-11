@@ -35,9 +35,9 @@ export function BrandButton({
         "w-fit p-2 text-sm rounded-sm disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-80 cursor-pointer",
         variant === "primary" && "bg-primary text-base",
         variant === "secondary" && "border border-primary text-primary",
-        variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
+        variant === "danger" && "bg-danger text-content hover:bg-danger-dark",
         variant === "ghost-danger" &&
-          "bg-transparent text-red-600 underline hover:text-red-700 hover:no-underline font-medium",
+          "bg-transparent text-danger underline hover:text-danger-dark hover:no-underline font-medium",
         startContent && "flex items-center justify-center gap-2",
         className,
       )}

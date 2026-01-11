@@ -21,7 +21,7 @@ export function ContextMenuListItem({
       onClick={onClick}
       disabled={isDisabled}
       className={cn(
-        "text-sm px-4 h-10 w-full text-start hover:bg-white/10 cursor-pointer",
+        "text-sm px-4 h-10 w-full text-start hover:bg-surface-hover cursor-pointer",
         "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent text-nowrap",
         className,
       )}

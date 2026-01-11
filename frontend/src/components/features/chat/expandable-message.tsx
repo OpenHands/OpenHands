@@ -122,7 +122,7 @@ export function ExpandableMessage({
     <div
       className={cn(
         "flex gap-2 items-center justify-start border-l-2 pl-2 my-2 py-2",
-        type === "error" ? "border-danger" : "border-neutral-300",
+        type === "error" ? "border-danger" : "border-stroke",
       )}
     >
       <div className="text-sm w-full">
@@ -130,7 +130,7 @@ export function ExpandableMessage({
           <span
             className={cn(
               "font-bold",
-              type === "error" ? "text-danger" : "text-neutral-300",
+              type === "error" ? "text-danger" : "text-muted",
             )}
           >
             {translationId && i18n.exists(translationId) ? (
@@ -155,14 +155,14 @@ export function ExpandableMessage({
                 <ArrowUp
                   className={cn(
                     "h-4 w-4 ml-2 inline",
-                    type === "error" ? "fill-danger" : "fill-neutral-300",
+                    type === "error" ? "fill-danger" : "fill-icon-light",
                   )}
                 />
               ) : (
                 <ArrowDown
                   className={cn(
                     "h-4 w-4 ml-2 inline",
-                    type === "error" ? "fill-danger" : "fill-neutral-300",
+                    type === "error" ? "fill-danger" : "fill-icon-light",
                   )}
                 />
               )}

@@ -294,7 +294,7 @@ export function MCPServerForm({
         />
       )}
 
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-danger text-sm">{error}</p>}
 
       {(serverType === "sse" || serverType === "shttp") && (
         <>

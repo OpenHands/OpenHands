@@ -56,7 +56,7 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
         />
 
         {isAgentReady && (
-          <Typography.Text className="text-sm text-gray-400">
+          <Typography.Text className="text-sm text-muted">
             {t(I18nKey.SKILLS_MODAL$WARNING)}
           </Typography.Text>
         )}

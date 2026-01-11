@@ -18,14 +18,14 @@ export function BudgetDisplay({ cost, maxBudgetPerTask }: BudgetDisplayProps) {
   }
 
   return (
-    <div className="border-b border-neutral-700">
+    <div className="border-b border-stroke-alt">
       {maxBudgetPerTask !== null && maxBudgetPerTask > 0 ? (
         <>
           <BudgetProgressBar currentCost={cost} maxBudget={maxBudgetPerTask} />
           <BudgetUsageText currentCost={cost} maxBudget={maxBudgetPerTask} />
         </>
       ) : (
-        <span className="text-xs text-neutral-400">
+        <span className="text-xs text-muted">
           {t(I18nKey.CONVERSATION$NO_BUDGET_LIMIT)}
         </span>
       )}

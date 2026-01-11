@@ -26,7 +26,7 @@ export function ChatInputGrip({
       <div
         ref={gripRef}
         className={cn(
-          "absolute top-[4px] left-0 w-full h-[3px] bg-white cursor-ns-resize z-10 transition-opacity duration-200",
+          "absolute top-[4px] left-0 w-full h-[3px] bg-content cursor-ns-resize z-10 transition-opacity duration-200",
           isGripVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100",
         )}
         onMouseDown={handleGripMouseDown}

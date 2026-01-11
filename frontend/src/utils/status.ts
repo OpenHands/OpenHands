@@ -8,12 +8,12 @@ import { V1AppConversationStartTaskStatus } from "#/api/conversation-service/v1-
 import { isTaskPolling } from "./utils";
 
 export enum IndicatorColor {
-  BLUE = "bg-blue-500",
-  GREEN = "bg-green-500",
-  ORANGE = "bg-orange-500",
-  YELLOW = "bg-yellow-500",
-  RED = "bg-red-500",
-  DARK_ORANGE = "bg-orange-800",
+  BLUE = "bg-info",
+  GREEN = "bg-success",
+  ORANGE = "bg-warning",
+  YELLOW = "bg-yellow",
+  RED = "bg-danger",
+  DARK_ORANGE = "bg-warning-text",
 }
 
 export const AGENT_STATUS_MAP: {

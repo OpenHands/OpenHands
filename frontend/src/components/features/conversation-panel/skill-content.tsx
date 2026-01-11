@@ -12,7 +12,7 @@ export function SkillContent({ content }: SkillContentProps) {
 
   return (
     <div className="mt-2">
-      <Typography.Text className="text-sm font-semibold text-gray-300 mb-2">
+      <Typography.Text className="text-sm font-semibold text-content mb-2">
         {t(I18nKey.COMMON$CONTENT)}
       </Typography.Text>
       <Pre

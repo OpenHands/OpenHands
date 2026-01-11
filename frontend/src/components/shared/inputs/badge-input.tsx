@@ -57,7 +57,7 @@ export function BadgeInput({
               onClick={() => removeBadge(index)}
               className="cursor-pointer"
             >
-              <XIcon width={14} height={14} className="text-black" />
+              <XIcon width={14} height={14} className="text-base" />
             </button>
           </BrandBadge>
         </div>

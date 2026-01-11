@@ -16,18 +16,18 @@ export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
       <button
         type="button"
         onClick={() => onToggle(skill.name)}
-        className="w-full py-3 px-2 text-left flex items-center justify-between hover:bg-gray-700 transition-colors"
+        className="w-full py-3 px-2 text-left flex items-center justify-between hover:bg-surface-hover transition-colors"
       >
         <div className="flex items-center">
-          <Typography.Text className="font-bold text-gray-100">
+          <Typography.Text className="font-bold text-content">
             {skill.name}
           </Typography.Text>
         </div>
         <div className="flex items-center">
-          <Typography.Text className="px-2 py-1 text-xs rounded-full bg-gray-800 mr-2">
+          <Typography.Text className="px-2 py-1 text-xs rounded-full bg-surface-alt mr-2">
             {skill.type === "repo" ? "Repository" : "Knowledge"}
           </Typography.Text>
-          <Typography.Text className="text-gray-300">
+          <Typography.Text className="text-muted">
             {isExpanded ? (
               <ChevronDown size={18} />
             ) : (

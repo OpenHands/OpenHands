@@ -18,14 +18,14 @@ export function ToggleButton({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full py-3 px-2 text-left flex items-center justify-between hover:bg-gray-700 transition-colors ${className || ""}`}
+      className={`w-full py-3 px-2 text-left flex items-center justify-between hover:bg-surface-hover transition-colors ${className || ""}`}
     >
       <div className="flex items-center">
-        <Typography.Text className="font-bold text-gray-100">
+        <Typography.Text className="font-bold text-content">
           {title}
         </Typography.Text>
       </div>
-      <Typography.Text className="text-gray-300">
+      <Typography.Text className="text-muted">
         {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
       </Typography.Text>
     </button>

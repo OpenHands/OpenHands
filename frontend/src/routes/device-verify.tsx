@@ -72,7 +72,7 @@ export default function DeviceVerify() {
         <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
           <div className="text-center">
             <div
-              className={`mb-4 ${verificationResult.success ? "text-green-600" : "text-red-600"}`}
+              className={`mb-4 ${verificationResult.success ? "text-success" : "text-danger"}`}
             >
               {verificationResult.success ? (
                 <svg
@@ -155,10 +155,10 @@ export default function DeviceVerify() {
               {userCode}
             </p>
           </div>
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="mb-6 p-4 bg-warning-surface border border-warning-border rounded-lg">
             <div className="flex items-start">
               <svg
-                className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0"
+                className="w-5 h-5 text-warning-text mt-0.5 mr-2 shrink-0"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -171,10 +171,10 @@ export default function DeviceVerify() {
                 />
               </svg>
               <div>
-                <p className="text-sm font-medium text-yellow-800 mb-1">
+                <p className="text-sm font-medium text-warning-text mb-1">
                   Security Notice
                 </p>
-                <p className="text-sm text-yellow-700">
+                <p className="text-sm text-warning-text">
                   Only authorize this device if you initiated this request from
                   your CLI or application.
                 </p>

@@ -8,7 +8,7 @@ interface ErrorMessageBannerProps {
 
 export function ErrorMessageBanner({ message }: ErrorMessageBannerProps) {
   return (
-    <div className="w-full rounded-lg p-2 text-black border border-red-800 bg-red-500">
+    <div className="w-full rounded-lg p-2 text-content border border-danger bg-danger">
       {i18n.exists(message) ? (
         <Trans
           i18nKey={message}

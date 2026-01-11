@@ -83,7 +83,7 @@ export function CreateApiKeyModal({
       footer={modalFooter}
     >
       <div data-testid="create-api-key-modal">
-        <p className="text-sm text-gray-300">
+        <p className="text-sm text-muted">
           {t(I18nKey.SETTINGS$CREATE_API_KEY_DESCRIPTION)}
         </p>
         <SettingsInput

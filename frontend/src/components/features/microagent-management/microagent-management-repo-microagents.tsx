@@ -110,7 +110,7 @@ export function MicroagentManagementRepoMicroagents({
       {/* Render microagents */}
       {hasMicroagents && (
         <div className="flex flex-col">
-          <span className="text-md text-white font-medium leading-5 mb-4">
+          <span className="text-md text-content font-medium leading-5 mb-4">
             {t(I18nKey.MICROAGENT_MANAGEMENT$EXISTING_MICROAGENTS)}
           </span>
           {microagents?.map((microagent) => (
@@ -127,7 +127,7 @@ export function MicroagentManagementRepoMicroagents({
       {/* Render conversations */}
       {hasConversations && (
         <div className={cn("flex flex-col", hasMicroagents && "mt-4")}>
-          <span className="text-md text-white font-medium leading-5 mb-4">
+          <span className="text-md text-content font-medium leading-5 mb-4">
             {t(I18nKey.COMMON$IN_PROGRESS)}
           </span>
           {conversations?.map((conversation) => (

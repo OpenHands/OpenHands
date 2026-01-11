@@ -15,10 +15,10 @@ export function MicroagentManagementViewMicroagent() {
   return (
     <div className="flex flex-col w-full h-full p-6 overflow-auto">
       <MicroagentManagementViewMicroagentHeader />
-      <span className="text-white text-2xl font-medium pb-2">
+      <span className="text-content text-2xl font-medium pb-2">
         {microagent.name}
       </span>
-      <span className="text-white text-lg font-medium pb-6">
+      <span className="text-content text-lg font-medium pb-6">
         {microagent.path}
       </span>
       <div className="flex-1">

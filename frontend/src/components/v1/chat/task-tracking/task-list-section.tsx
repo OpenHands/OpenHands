@@ -17,7 +17,7 @@ export function TaskListSection({ taskList }: TaskListSectionProps) {
       {/* Header Tabs */}
       <div className="flex gap-1 items-center border-b border-stroke-alt h-[41px] px-2 shrink-0">
         <LessonPlanIcon className="shrink-0 w-4.5 h-4.5 text-subtle" />
-        <Typography.Text className="text-[11px] text-nowrap text-white tracking-[0.11px] font-medium leading-[16px] whitespace-pre">
+        <Typography.Text className="text-[11px] text-nowrap text-content tracking-[0.11px] font-medium leading-[16px] whitespace-pre">
           {t(I18nKey.COMMON$TASKS)}
         </Typography.Text>
       </div>

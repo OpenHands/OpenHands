@@ -15,7 +15,7 @@ export function ChatActionTooltip({
     <StyledTooltip
       content={tooltip}
       placement="bottom"
-      tooltipClassName="bg-white text-black text-xs font-medium leading-5"
+      tooltipClassName="bg-content text-base text-xs font-medium leading-5"
     >
       <span data-aria-label={ariaLabel}>{children}</span>
     </StyledTooltip>

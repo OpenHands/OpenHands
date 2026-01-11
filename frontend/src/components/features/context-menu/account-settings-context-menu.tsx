@@ -47,7 +47,7 @@ export function AccountSettingsContextMenu({
             className="flex items-center gap-2 p-2 hover:bg-surface-hover rounded h-[30px]"
           >
             {icon}
-            <span className="text-white text-sm">{t(text)}</span>
+            <span className="text-content text-sm">{t(text)}</span>
           </ContextMenuListItem>
         </Link>
       ))}
@@ -65,7 +65,9 @@ export function AccountSettingsContextMenu({
           className="flex items-center gap-2 p-2 hover:bg-surface-hover rounded h-[30px]"
         >
           <DocumentIcon width={16} height={16} />
-          <span className="text-white text-sm">{t(I18nKey.SIDEBAR$DOCS)}</span>
+          <span className="text-content text-sm">
+            {t(I18nKey.SIDEBAR$DOCS)}
+          </span>
         </ContextMenuListItem>
       </a>
 
@@ -74,7 +76,7 @@ export function AccountSettingsContextMenu({
         className="flex items-center gap-2 p-2 hover:bg-surface-hover rounded h-[30px]"
       >
         <LogOutIcon width={16} height={16} />
-        <span className="text-white text-sm">
+        <span className="text-content text-sm">
           {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
         </span>
       </ContextMenuListItem>

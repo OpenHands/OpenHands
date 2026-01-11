@@ -22,7 +22,7 @@ export function GitControlBarTooltipWrapper({
       content={tooltipMessage}
       placement="top"
       showArrow
-      tooltipClassName="bg-white text-black"
+      tooltipClassName="bg-content text-base"
     >
       <span data-testid={testId} className="hover:opacity-100">
         {children}

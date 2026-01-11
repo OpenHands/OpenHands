@@ -22,12 +22,11 @@ export function MicroagentManagementSidebarTabs({
         aria-label="Options"
         classNames={{
           base: "py-6",
-          tabList:
-            "w-full bg-transparent border border-[#ffffff40] rounded-[6px]",
+          tabList: "w-full bg-transparent border border-white/25 rounded-[6px]",
           tab: "px-2 h-[22px]",
-          tabContent: "text-white text-[12px] font-normal",
+          tabContent: "text-content text-[12px] font-normal",
           panel: "p-0",
-          cursor: "bg-[#C9B97480] rounded-sm",
+          cursor: "bg-primary/50 rounded-sm",
         }}
       >
         <Tab key="personal" title={t(I18nKey.COMMON$PERSONAL)}>

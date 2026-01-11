@@ -22,13 +22,13 @@ export function TaskItem({ task }: TaskItemProps) {
   const icon = useMemo(() => {
     switch (task.status) {
       case "todo":
-        return <CircleIcon className="w-4 h-4 text-white" />;
+        return <CircleIcon className="w-4 h-4 text-content" />;
       case "in_progress":
-        return <LoadingIcon className="w-4 h-4 text-white animate-spin" />;
+        return <LoadingIcon className="w-4 h-4 text-content animate-spin" />;
       case "done":
         return <CheckCircleIcon className="w-4 h-4 text-muted" />;
       default:
-        return <CircleIcon className="w-4 h-4 text-white" />;
+        return <CircleIcon className="w-4 h-4 text-content" />;
     }
   }, [task.status]);
 
@@ -42,7 +42,10 @@ export function TaskItem({ task }: TaskItemProps) {
       <div className="shrink-0">{icon}</div>
       <div className="flex flex-col items-start justify-center leading-[20px] text-nowrap whitespace-pre font-normal">
         <Typography.Text
-          className={cn("text-[12px] text-white", isDoneStatus && "text-muted")}
+          className={cn(
+            "text-[12px] text-content",
+            isDoneStatus && "text-muted",
+          )}
         >
           {task.title}
         </Typography.Text>

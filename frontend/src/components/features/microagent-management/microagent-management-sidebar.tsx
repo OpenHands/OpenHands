@@ -242,7 +242,7 @@ export function MicroagentManagementSidebar({
       {isLoading || isUserAndOrgLevelRepositoryLoading ? (
         <div className="flex flex-col items-center justify-center gap-4 flex-1">
           <Spinner size="sm" />
-          <span className="text-sm text-white">
+          <span className="text-sm text-content">
             {t("HOME$LOADING_REPOSITORIES")}
           </span>
         </div>
@@ -254,7 +254,7 @@ export function MicroagentManagementSidebar({
           {isFetchingNextPage && !debouncedSearchQuery && (
             <div className="flex justify-center pt-2">
               <Spinner size="sm" />
-              <span className="text-sm text-white ml-2">
+              <span className="text-sm text-content ml-2">
                 {t("HOME$LOADING_MORE_REPOSITORIES")}
               </span>
             </div>

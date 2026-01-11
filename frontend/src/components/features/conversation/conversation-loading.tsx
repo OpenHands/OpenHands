@@ -8,7 +8,7 @@ export function ConversationLoading() {
   return (
     <div className="bg-surface border border-stroke-alt rounded-xl flex flex-col items-center justify-center h-full w-full">
       <LoaderCircle className="animate-spin w-16 h-16" color="white" />
-      <span className="text-2xl font-normal leading-5 text-white p-4">
+      <span className="text-2xl font-normal leading-5 text-content p-4">
         {t(I18nKey.HOME$LOADING)}
       </span>
     </div>

@@ -16,14 +16,14 @@ export function WebhookStatusBadge({
   if (installationResult) {
     if (installationResult.success) {
       return (
-        <Typography.Text className="px-2 py-1 text-xs rounded bg-green-500/20 text-green-400">
+        <Typography.Text className="px-2 py-1 text-xs rounded bg-success/20 text-success">
           {t(I18nKey.GITLAB$WEBHOOK_STATUS_INSTALLED)}
         </Typography.Text>
       );
     }
     return (
       <span title={installationResult.error || undefined}>
-        <Typography.Text className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-400">
+        <Typography.Text className="px-2 py-1 text-xs rounded bg-danger/20 text-danger">
           {t(I18nKey.GITLAB$WEBHOOK_STATUS_FAILED)}
         </Typography.Text>
       </span>
@@ -32,14 +32,14 @@ export function WebhookStatusBadge({
 
   if (webhookInstalled) {
     return (
-      <Typography.Text className="px-2 py-1 text-xs rounded bg-green-500/20 text-green-400">
+      <Typography.Text className="px-2 py-1 text-xs rounded bg-success/20 text-success">
         {t(I18nKey.GITLAB$WEBHOOK_STATUS_INSTALLED)}
       </Typography.Text>
     );
   }
 
   return (
-    <Typography.Text className="px-2 py-1 text-xs rounded bg-gray-500/20 text-gray-400">
+    <Typography.Text className="px-2 py-1 text-xs rounded bg-dim/20 text-muted">
       {t(I18nKey.GITLAB$WEBHOOK_STATUS_NOT_INSTALLED)}
     </Typography.Text>
   );

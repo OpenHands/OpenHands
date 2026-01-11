@@ -102,11 +102,11 @@ export function ConversationTabsContextMenu({
             className="flex items-center gap-2 p-2 hover:bg-surface-hover rounded h-[30px]"
           >
             <Icon className="w-4 h-4" />
-            <span className="text-white text-sm">{t(i18nKey)}</span>
+            <span className="text-content text-sm">{t(i18nKey)}</span>
             {pinned ? (
-              <PillFillIcon className="w-7 h-7 ml-auto flex-shrink-0 text-white -mr-[5px]" />
+              <PillFillIcon className="w-7 h-7 ml-auto shrink-0 text-content -mr-[5px]" />
             ) : (
-              <PillIcon className="w-4.5 h-4.5 ml-auto flex-shrink-0 text-white" />
+              <PillIcon className="w-4.5 h-4.5 ml-auto shrink-0 text-content" />
             )}
           </ContextMenuListItem>
         );

@@ -26,7 +26,7 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
     >
       <div className="flex items-center gap-2 pl-1">
         <ConversationStatusIndicator conversationStatus={conversation.status} />
-        <span className="text-xs text-white leading-6 font-normal">
+        <span className="text-xs text-content leading-6 font-normal">
           {conversation.title}
         </span>
       </div>

@@ -23,14 +23,14 @@ export function ContextWindowSection({
           {t(I18nKey.CONVERSATION$CONTEXT_WINDOW)}
         </span>
       </div>
-      <div className="w-full h-1.5 bg-neutral-700 rounded-full overflow-hidden">
+      <div className="w-full h-1.5 bg-dim rounded-full overflow-hidden">
         <div
-          className="h-full bg-blue-500 transition-all duration-300"
+          className="h-full bg-info transition-all duration-300"
           style={{ width: `${progressWidth}%` }}
         />
       </div>
       <div className="flex justify-end">
-        <span className="text-xs text-neutral-400">
+        <span className="text-xs text-muted">
           {perTurnToken.toLocaleString()} / {contextWindow.toLocaleString()} (
           {usagePercentage.toFixed(2)}% {t(I18nKey.CONVERSATION$USED)})
         </span>

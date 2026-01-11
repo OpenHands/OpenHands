@@ -26,11 +26,11 @@ export function ConversationTabNav({
         "flex items-center gap-2 rounded-md cursor-pointer",
         "pl-1.5 pr-2 py-1",
         "text-subtle bg-base",
-        isActive && "bg-surface text-white",
+        isActive && "bg-surface text-content",
         isActive
-          ? "hover:text-white hover:bg-tertiary"
-          : "hover:text-white hover:bg-base",
-        isActive ? "focus-within:text-white" : "focus-within:text-subtle",
+          ? "hover:text-content hover:bg-tertiary"
+          : "hover:text-content hover:bg-base",
+        isActive ? "focus-within:text-content" : "focus-within:text-subtle",
         className,
       )}
     >

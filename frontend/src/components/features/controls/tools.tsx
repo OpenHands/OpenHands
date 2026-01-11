@@ -43,8 +43,8 @@ export function Tools() {
         className="flex items-center gap-1 cursor-pointer"
         onClick={handleClick}
       >
-        <ToolsIcon width={18} height={18} color="#959CB2" />
-        <span className="text-sm font-normal leading-5 text-white">
+        <ToolsIcon width={18} height={18} color="var(--color-dim)" />
+        <span className="text-sm font-normal leading-5 text-content">
           {t(I18nKey.MICROAGENTS_MODAL$TOOLS)}
         </span>
       </div>

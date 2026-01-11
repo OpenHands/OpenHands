@@ -86,7 +86,7 @@ export function GitLabWebhookManager({ className }: GitLabWebhookManagerProps) {
         className={className}
         titleKey={I18nKey.GITLAB$WEBHOOK_MANAGER_TITLE}
         messageKey={I18nKey.GITLAB$WEBHOOK_MANAGER_ERROR}
-        messageColor="text-red-400"
+        messageColor="text-danger"
       />
     );
   }
@@ -104,34 +104,34 @@ export function GitLabWebhookManager({ className }: GitLabWebhookManagerProps) {
   return (
     <div className={cn("flex flex-col gap-4", className)}>
       <div className="flex items-center justify-between">
-        <Typography.H3 className="text-lg font-medium text-white">
+        <Typography.H3 className="text-lg font-medium text-content">
           {t(I18nKey.GITLAB$WEBHOOK_MANAGER_TITLE)}
         </Typography.H3>
       </div>
 
-      <Typography.Text className="text-sm text-gray-400">
+      <Typography.Text className="text-sm text-muted">
         {t(I18nKey.GITLAB$WEBHOOK_MANAGER_DESCRIPTION)}
       </Typography.Text>
 
-      <div className="border border-neutral-700 rounded-lg overflow-hidden">
+      <div className="border border-stroke-alt rounded-lg overflow-hidden">
         <table className="w-full">
-          <thead className="bg-neutral-800">
+          <thead className="bg-surface-alt">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                 {t(I18nKey.GITLAB$WEBHOOK_COLUMN_RESOURCE)}
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                 {t(I18nKey.GITLAB$WEBHOOK_COLUMN_TYPE)}
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                 {t(I18nKey.GITLAB$WEBHOOK_COLUMN_STATUS)}
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                 {t(I18nKey.GITLAB$WEBHOOK_COLUMN_ACTION)}
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-700">
+          <tbody className="divide-y divide-stroke-alt">
             {resources.map((resource) => {
               const key = getResourceKey(resource);
               const result = installationResults.get(key);
@@ -140,20 +140,20 @@ export function GitLabWebhookManager({ className }: GitLabWebhookManagerProps) {
               return (
                 <tr
                   key={key}
-                  className="hover:bg-neutral-800/50 transition-colors"
+                  className="hover:bg-surface-hover transition-colors"
                 >
                   <td className="px-4 py-3">
                     <div className="flex flex-col">
-                      <Typography.Text className="text-sm font-medium text-white">
+                      <Typography.Text className="text-sm font-medium text-content">
                         {resource.name}
                       </Typography.Text>
-                      <Typography.Text className="text-xs text-gray-400">
+                      <Typography.Text className="text-xs text-muted">
                         {resource.full_path}
                       </Typography.Text>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <Typography.Text className="text-sm text-gray-300 capitalize">
+                    <Typography.Text className="text-sm text-content capitalize">
                       {resource.type}
                     </Typography.Text>
                   </td>
@@ -164,7 +164,7 @@ export function GitLabWebhookManager({ className }: GitLabWebhookManagerProps) {
                         installationResult={result}
                       />
                       {result?.error && (
-                        <Typography.Text className="text-xs text-red-400">
+                        <Typography.Text className="text-xs text-danger">
                           {result.error}
                         </Typography.Text>
                       )}

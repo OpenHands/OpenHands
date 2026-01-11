@@ -40,7 +40,7 @@ export function MicroagentManagementAddMicroagentButton({
       tabIndex={0}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      className="translate-y-[-1px] text-sm font-normal leading-5 text-[#8480FF] cursor-pointer hover:text-[#6C63FF] transition-colors duration-200"
+      className="translate-y-[-1px] text-sm font-normal leading-5 text-accent-purple cursor-pointer hover:text-accent-purple-hover transition-colors duration-200"
       data-testid="add-microagent-button"
     >
       {t(I18nKey.COMMON$ADD_MICROAGENT)}

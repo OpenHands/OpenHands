@@ -599,12 +599,12 @@ export const getStatusIcon = (status: string) => {
  */
 export const getStatusClassName = (status: string) => {
   if (status === "done") {
-    return "bg-green-800 text-green-200";
+    return "bg-success-dark text-success-light";
   }
   if (status === "in_progress") {
-    return "bg-yellow-800 text-yellow-200";
+    return "bg-warning-dark text-warning-light";
   }
-  return "bg-gray-700 text-gray-300";
+  return "bg-surface-hover text-muted";
 };
 
 /**
@@ -725,27 +725,27 @@ export const getStatusColor = (options: {
 
   // Show pausing status
   if (isPausing) {
-    return "#FFD600";
+    return "var(--color-warning)";
   }
 
   // Show task status if we're polling a task
   if (isTask && taskStatus) {
     if (taskStatus === "ERROR") {
-      return "#FF684E";
+      return "var(--color-error)";
     }
-    return "#FFD600";
+    return "var(--color-warning)";
   }
 
   if (isStartingStatus) {
-    return "#FFD600";
+    return "var(--color-warning)";
   }
   if (isStopStatus) {
-    return "#ffffff";
+    return "var(--color-content-2)";
   }
   if (curAgentState === AgentState.ERROR) {
-    return "#FF684E";
+    return "var(--color-error)";
   }
-  return "#BCFF8C";
+  return "var(--color-success-bright)";
 };
 
 interface GetStatusTextArgs {

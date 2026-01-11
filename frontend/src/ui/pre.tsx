@@ -17,11 +17,11 @@ const preVariants = cva("whitespace-pre-wrap", {
     },
     background: {
       default: "",
-      dark: "bg-gray-900",
+      dark: "bg-code-surface",
     },
     textColor: {
       default: "",
-      light: "text-gray-300",
+      light: "text-content",
     },
     padding: {
       default: "",

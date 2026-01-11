@@ -12,7 +12,7 @@ export function RemoveButton({ onClick, className }: RemoveButtonProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        "bg-neutral-400 rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
+        "bg-dim rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
         className,
       )}
     >

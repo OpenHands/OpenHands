@@ -37,7 +37,7 @@ export function SettingsModal({ onClose, settings }: SettingsModalProps) {
           suffix="."
           size="settings"
           linkColor="white"
-          suffixClassName="text-white"
+          suffixClassName="text-content"
         />
 
         {aiConfigOptions.isLoading && (

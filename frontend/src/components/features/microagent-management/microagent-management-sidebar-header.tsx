@@ -8,10 +8,10 @@ export function MicroagentManagementSidebarHeader() {
 
   return (
     <div>
-      <h1 className="text-white text-[28px] font-bold">
+      <h1 className="text-content text-[28px] font-bold">
         {t(I18nKey.MICROAGENT_MANAGEMENT$DESCRIPTION)}
       </h1>
-      <p className="text-white text-sm font-normal leading-[20px] pt-2">
+      <p className="text-content text-sm font-normal leading-[20px] pt-2">
         {t(I18nKey.MICROAGENT_MANAGEMENT$USE_MICROAGENTS)}
         <a
           href={DOCUMENTATION_URL.MICROAGENTS.MICROAGENTS_OVERVIEW}

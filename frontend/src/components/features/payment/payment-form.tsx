@@ -43,7 +43,7 @@ export function PaymentForm() {
     >
       <div
         className={cn(
-          "flex items-center justify-between w-[680px] bg-[#7F7445] rounded-sm px-3 py-2",
+          "flex items-center justify-between w-[680px] bg-gold-surface rounded-sm px-3 py-2",
           "text-[28px] leading-8 -tracking-[0.02em] font-bold",
         )}
       >

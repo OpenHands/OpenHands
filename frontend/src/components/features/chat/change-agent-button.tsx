@@ -118,7 +118,7 @@ export function ChangeAgentButton() {
     if (isExecutionAgent) {
       return <CodeTagIcon width={18} height={18} className="text-subtle" />;
     }
-    return <LessonPlanIcon width={18} height={18} className="text-white" />;
+    return <LessonPlanIcon width={18} height={18} className="text-content" />;
   }, [isExecutionAgent]);
 
   if (!shouldUsePlanningAgent) {
@@ -141,11 +141,11 @@ export function ChangeAgentButton() {
       >
         <div className="flex items-center gap-1 pl-1.5">
           {buttonIcon}
-          <Typography.Text className="text-white text-2.75 not-italic font-normal leading-5">
+          <Typography.Text className="text-content text-2.75 not-italic font-normal leading-5">
             {buttonLabel}
           </Typography.Text>
         </div>
-        <ChevronDownSmallIcon width={24} height={24} className="text-white" />
+        <ChevronDownSmallIcon width={24} height={24} className="text-content" />
       </button>
       {contextMenuOpen && (
         <ChangeAgentContextMenu

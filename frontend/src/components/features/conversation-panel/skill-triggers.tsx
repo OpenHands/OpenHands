@@ -15,14 +15,14 @@ export function SkillTriggers({ triggers }: SkillTriggersProps) {
 
   return (
     <div className="mt-2 mb-3">
-      <Typography.Text className="text-sm font-semibold text-gray-300 mb-2">
+      <Typography.Text className="text-sm font-semibold text-muted mb-2">
         {t(I18nKey.COMMON$TRIGGERS)}
       </Typography.Text>
       <div className="flex flex-wrap gap-1">
         {triggers.map((trigger) => (
           <Typography.Text
             key={trigger}
-            className="px-2 py-1 text-xs rounded-full bg-blue-900"
+            className="px-2 py-1 text-xs rounded-full bg-info-dark"
           >
             {trigger}
           </Typography.Text>

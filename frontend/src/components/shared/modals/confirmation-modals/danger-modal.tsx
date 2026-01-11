@@ -32,7 +32,7 @@ export function DangerModal({
         {
           text: buttons.cancel.text,
           onClick: buttons.cancel.onClick,
-          className: "bg-neutral-500",
+          className: "bg-tertiary",
         },
       ]}
     />

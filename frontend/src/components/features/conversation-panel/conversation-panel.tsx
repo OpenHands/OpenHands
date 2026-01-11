@@ -155,7 +155,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
       )}
       {!isFetching && conversations?.length === 0 && !startTasks?.length && (
         <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-neutral-400">
+          <p className="text-muted">
             {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
           </p>
         </div>

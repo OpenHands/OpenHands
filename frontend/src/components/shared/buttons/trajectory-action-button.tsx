@@ -29,7 +29,7 @@ export function TrajectoryActionButton({
       <Tooltip
         content={tooltip}
         closeDelay={100}
-        className="bg-white text-black hover:bg-transparent"
+        className="bg-content text-base hover:bg-transparent"
       >
         {button}
       </Tooltip>

@@ -21,11 +21,11 @@ export function MicroagentManagementLearnThisRepo({
 
   return (
     <div
-      className="flex items-center justify-center rounded-lg bg-white/5 border border-dashed border-white/30 p-4 hover:bg-white/20 hover:border-primary transition-all duration-300 cursor-pointer"
+      className="flex items-center justify-center rounded-lg bg-surface/5 border border-dashed border-stroke-muted p-4 hover:bg-surface-hover hover:border-primary transition-all duration-300 cursor-pointer"
       onClick={handleClick}
       data-testid="learn-this-repo-trigger"
     >
-      <span className="text-[16px] font-normal text-[#8480FF]">
+      <span className="text-[16px] font-normal text-accent-purple">
         {t(I18nKey.MICROAGENT_MANAGEMENT$LEARN_THIS_REPO)}
       </span>
     </div>

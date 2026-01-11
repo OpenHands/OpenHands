@@ -55,7 +55,7 @@ export function GitToolsSubmenu({ onClose }: GitToolsSubmenuProps) {
   return (
     <ContextMenu
       testId="git-tools-submenu"
-      className="text-white bg-tertiary rounded-[6px] py-[6px] px-1 flex flex-col gap-2 w-max"
+      className="text-content bg-tertiary rounded-[6px] py-[6px] px-1 flex flex-col gap-2 w-max"
     >
       <ContextMenuListItem
         testId="git-pull-button"

@@ -87,7 +87,7 @@ export function MaintenanceBanner({ startTime }: MaintenanceBannerProps) {
     >
       <div className="flex items-center">
         <div className="shrink-0">
-          <FaTriangleExclamation className="text-white align-middle" />
+          <FaTriangleExclamation className="text-content align-middle" />
         </div>
         <div className="ml-3">
           <p className="text-sm font-medium">

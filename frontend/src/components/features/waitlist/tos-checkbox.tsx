@@ -16,7 +16,7 @@ export function TOSCheckbox({ onChange }: TOSCheckboxProps) {
           href="https://www.all-hands.dev/tos"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline underline-offset-2 text-blue-500 hover:text-blue-700"
+          className="underline underline-offset-2 text-accent hover:text-accent-hover"
         >
           {t(I18nKey.TOS$TERMS)}
         </a>
