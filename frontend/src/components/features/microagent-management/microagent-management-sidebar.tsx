@@ -189,7 +189,7 @@ export function MicroagentManagementSidebar({
   return (
     <div
       className={cn(
-        "w-[418px] h-full max-h-full overflow-y-auto overflow-x-hidden border-r border-[#525252] bg-[#24272E] rounded-tl-lg rounded-bl-lg py-10 px-6 flex flex-col custom-scrollbar-always",
+        "w-[418px] h-full max-h-full overflow-y-auto overflow-x-hidden border-r border-stroke-alt bg-surface-alt rounded-tl-lg rounded-bl-lg py-10 px-6 flex flex-col custom-scrollbar-always",
         isSmallerScreen && "w-full border-none",
       )}
       onScroll={handleScroll}
@@ -226,8 +226,8 @@ export function MicroagentManagementSidebar({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
-              "bg-tertiary border border-[#717888] bg-[#454545] w-full rounded-sm p-2 placeholder:text-tertiary-alt",
-              "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed h-10 box-shadow-none outline-none",
+              "bg-tertiary border border-stroke w-full rounded-sm p-2 placeholder:text-tertiary-alt",
+              "disabled:bg-surface-disabled disabled:border-surface-disabled disabled:cursor-not-allowed h-10 box-shadow-none outline-none",
               "pr-10", // Space for spinner
             )}
           />

@@ -155,7 +155,7 @@ export function LoginContent({
         )}
       </div>
 
-      <TermsAndPrivacyNotice className="max-w-[320px] text-[#A3A3A3]" />
+      <TermsAndPrivacyNotice className="max-w-[320px] text-muted" />
     </div>
   );
 }

@@ -12,8 +12,8 @@ export function LoadingMicroagentTextarea() {
       placeholder={t("MICROAGENT$LOADING_PROMPT")}
       rows={6}
       className={cn(
-        "bg-tertiary border border-[#717888] w-full rounded p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
-        "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+        "bg-tertiary border border-stroke w-full rounded p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
+        "disabled:bg-surface-disabled disabled:border-surface-disabled disabled:cursor-not-allowed",
       )}
     />
   );

@@ -37,7 +37,7 @@ export function ConversationCardFooter({
         <NoRepository />
       )}
       {(createdAt ?? lastUpdatedAt) && (
-        <p className="text-xs text-[#A3A3A3] flex-1 text-right">
+        <p className="text-xs text-muted flex-1 text-right">
           <time>
             {`${formatTimeDelta(lastUpdatedAt ?? createdAt)} ${t(I18nKey.CONVERSATION$AGO)}`}
           </time>

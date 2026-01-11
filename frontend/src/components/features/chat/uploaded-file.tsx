@@ -17,22 +17,22 @@ export function UploadedFile({
   const fileExtension = getFileExtension(file.name);
 
   return (
-    <div className="group flex gap-2 rounded-lg bg-[#525252] max-w-[160px] px-3 py-1 relative">
+    <div className="group flex gap-2 rounded-lg bg-stroke-alt max-w-[160px] px-3 py-1 relative">
       <div className="flex flex-col justify-center gap-0.25">
         <RemoveFileButton onClick={onRemove} />
         <div className="flex items-center gap-2 w-full">
           <span
             className={cn(
               "text-sm font-normal leading-5 flex-1 max-w-[136px] truncate",
-              isLoading ? "max-w-[108px] text-[#A7A7A7]" : "text-white",
+              isLoading ? "max-w-[108px] text-muted" : "text-white",
             )}
           >
             {file.name}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <FileIcon width={12} height={12} color="#A7A7A7" />
-          <span className="text-[9px] font-normal leading-5 text-[#A7A7A7]">
+          <FileIcon width={12} height={12} className="text-muted" />
+          <span className="text-[9px] font-normal leading-5 text-muted">
             {fileExtension}
           </span>
         </div>

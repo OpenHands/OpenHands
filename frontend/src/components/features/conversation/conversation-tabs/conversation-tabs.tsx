@@ -210,7 +210,7 @@ export function ConversationTabs() {
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           className={cn(
             "p-1 pl-0 rounded-md cursor-pointer",
-            "text-[#9299AA] bg-[#0D0F11]",
+            "text-subtle bg-base",
           )}
           aria-label={t(I18nKey.COMMON$MORE_OPTIONS)}
         >

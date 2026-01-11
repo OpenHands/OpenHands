@@ -21,7 +21,7 @@ export function MicroagentManagementLearnThisRepo({
 
   return (
     <div
-      className="flex items-center justify-center rounded-lg bg-[#ffffff0d] border border-dashed border-[#ffffff4d] p-4 hover:bg-[#ffffff33] hover:border-[#C9B974] transition-all duration-300 cursor-pointer"
+      className="flex items-center justify-center rounded-lg bg-white/5 border border-dashed border-white/30 p-4 hover:bg-white/20 hover:border-primary transition-all duration-300 cursor-pointer"
       onClick={handleClick}
       data-testid="learn-this-repo-trigger"
     >

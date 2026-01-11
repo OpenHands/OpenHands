@@ -26,23 +26,23 @@ export function ConversationRepoLink({
   return (
     <div className="flex items-center gap-3 flex-1">
       <div className="flex items-center gap-1">
-        {Icon && <Icon size={14} className="text-[#A3A3A3]" />}
+        {Icon && <Icon size={14} className="text-muted" />}
         {selectedRepository.git_provider === "azure_devops" && (
-          <AzureDevOpsLogo className="text-[#A3A3A3] w-[14px] h-[14px]" />
+          <AzureDevOpsLogo className="text-muted w-[14px] h-[14px]" />
         )}
         <span
           data-testid="conversation-card-selected-repository"
-          className="text-xs text-[#A3A3A3] whitespace-nowrap overflow-hidden text-ellipsis max-w-44"
+          className="text-xs text-muted whitespace-nowrap overflow-hidden text-ellipsis max-w-44"
         >
           {selectedRepository.selected_repository}
         </span>
       </div>
       <div className="flex items-center gap-1">
-        <FaCodeBranch size={12} className="text-[#A3A3A3]" />
+        <FaCodeBranch size={12} className="text-muted" />
 
         <span
           data-testid="conversation-card-selected-branch"
-          className="text-xs text-[#A3A3A3] whitespace-nowrap overflow-hidden text-ellipsis max-w-24"
+          className="text-xs text-muted whitespace-nowrap overflow-hidden text-ellipsis max-w-24"
         >
           {selectedRepository.selected_branch}
         </span>

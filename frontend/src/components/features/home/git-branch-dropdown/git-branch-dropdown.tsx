@@ -201,10 +201,10 @@ export function GitBranchDropdown({
             disabled: disabled || !repository,
             placeholder,
             className: cn(
-              "w-full px-3 py-2 border border-[#727987] rounded-sm shadow-none h-[42px] min-h-[42px] max-h-[42px]",
-              "bg-[#454545] text-[#A3A3A3] placeholder:text-[#A3A3A3]",
-              "focus:outline-none focus:ring-0 focus:border-[#727987]",
-              "disabled:bg-[#363636] disabled:cursor-not-allowed disabled:opacity-60",
+              "w-full px-3 py-2 border border-stroke-muted rounded-sm shadow-none h-[42px] min-h-[42px] max-h-[42px]",
+              "bg-tertiary text-muted placeholder:text-muted",
+              "focus:outline-none focus:ring-0 focus:border-stroke-muted",
+              "disabled:bg-surface-input disabled:cursor-not-allowed disabled:opacity-60",
               "pl-7 pr-16 text-sm font-normal leading-5", // Space for clear and toggle buttons
             ),
           })}

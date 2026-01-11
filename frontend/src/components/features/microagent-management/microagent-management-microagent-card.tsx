@@ -95,14 +95,14 @@ export function MicroagentManagementMicroagentCard({
   return (
     <div
       className={cn(
-        "rounded-lg bg-[#ffffff0d] border border-[#ffffff33] p-4 cursor-pointer hover:bg-[#ffffff33] hover:border-[#C9B974] transition-all duration-300",
-        isCardSelected && "bg-[#ffffff33] border-[#C9B974]",
+        "rounded-lg bg-white/5 border border-white/20 p-4 cursor-pointer hover:bg-white/20 hover:border-primary transition-all duration-300",
+        isCardSelected && "bg-white/20 border-primary",
       )}
       onClick={onMicroagentCardClicked}
     >
       <div className="flex flex-col items-start gap-2">
         {statusText && (
-          <div className="px-[6px] py-[2px] text-[11px] font-medium bg-[#C9B97433] text-white rounded-2xl">
+          <div className="px-[6px] py-[2px] text-[11px] font-medium bg-primary/20 text-white rounded-2xl">
             {statusText}
           </div>
         )}

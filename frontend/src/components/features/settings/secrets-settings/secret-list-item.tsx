@@ -2,7 +2,7 @@ import { FaPencil, FaTrash } from "react-icons/fa6";
 
 export function SecretListItemSkeleton() {
   return (
-    <div className="border-t border-[#717888] last-of-type:border-b max-w-[830px] pr-2.5 py-[13px] flex items-center justify-between">
+    <div className="border-t border-stroke last-of-type:border-b max-w-[830px] pr-2.5 py-[13px] flex items-center justify-between">
       <div className="flex items-center justify-between w-1/3">
         <span className="skeleton h-4 w-1/2" />
         <span className="skeleton h-4 w-1/4" />

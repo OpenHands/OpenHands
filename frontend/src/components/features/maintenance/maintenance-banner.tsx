@@ -80,13 +80,13 @@ export function MaintenanceBanner({ startTime }: MaintenanceBannerProps) {
     <div
       data-testid="maintenance-banner"
       className={cn(
-        "bg-primary text-[#0D0F11] p-4 rounded",
+        "bg-primary text-base p-4 rounded",
         "flex flex-row items-center justify-between m-1",
         pathname === "/" && "mt-3 mr-3",
       )}
     >
       <div className="flex items-center">
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <FaTriangleExclamation className="text-white align-middle" />
         </div>
         <div className="ml-3">
@@ -101,7 +101,7 @@ export function MaintenanceBanner({ startTime }: MaintenanceBannerProps) {
         data-testid="dismiss-button"
         onClick={() => setDismissedAt(localTime)}
         className={cn(
-          "bg-[#0D0F11] rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
+          "bg-base rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
         )}
       >
         <CloseIcon />

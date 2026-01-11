@@ -91,7 +91,7 @@ export function ConversationTabsContextMenu({
       ref={ref}
       alignment="right"
       position="bottom"
-      className="mt-2 w-fit z-[9999]"
+      className="mt-2 w-fit z-9999"
     >
       {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
         const pinned = isTabPinned(tab);
@@ -99,7 +99,7 @@ export function ConversationTabsContextMenu({
           <ContextMenuListItem
             key={tab}
             onClick={() => handleTabClick(tab)}
-            className="flex items-center gap-2 p-2 hover:bg-[#5C5D62] rounded h-[30px]"
+            className="flex items-center gap-2 p-2 hover:bg-surface-hover rounded h-[30px]"
           >
             <Icon className="w-4 h-4" />
             <span className="text-white text-sm">{t(i18nKey)}</span>

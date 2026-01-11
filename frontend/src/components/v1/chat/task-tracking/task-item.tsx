@@ -18,13 +18,13 @@ export function TaskItem({ task }: TaskItemProps) {
   const icon = useMemo(() => {
     switch (task.status) {
       case "todo":
-        return <CircleIcon className="w-4 h-4 text-[#ffffff]" />;
+        return <CircleIcon className="w-4 h-4 text-white" />;
       case "in_progress":
-        return <LoadingIcon className="w-4 h-4 text-[#ffffff] animate-spin" />;
+        return <LoadingIcon className="w-4 h-4 text-white animate-spin" />;
       case "done":
-        return <CheckCircleIcon className="w-4 h-4 text-[#A3A3A3]" />;
+        return <CheckCircleIcon className="w-4 h-4 text-muted" />;
       default:
-        return <CircleIcon className="w-4 h-4 text-[#ffffff]" />;
+        return <CircleIcon className="w-4 h-4 text-white" />;
     }
   }, [task.status]);
 
@@ -38,14 +38,11 @@ export function TaskItem({ task }: TaskItemProps) {
       <div className="shrink-0">{icon}</div>
       <div className="flex flex-col items-start justify-center leading-[20px] text-nowrap whitespace-pre font-normal">
         <Typography.Text
-          className={cn(
-            "text-[12px] text-white",
-            isDoneStatus && "text-[#A3A3A3]",
-          )}
+          className={cn("text-[12px] text-white", isDoneStatus && "text-muted")}
         >
           {task.title}
         </Typography.Text>
-        <Typography.Text className="text-[10px] text-[#A3A3A3]">
+        <Typography.Text className="text-[10px] text-muted">
           {t(I18nKey.TASK_TRACKING_OBSERVATION$TASK_NOTES)}: {task.notes}
         </Typography.Text>
       </div>

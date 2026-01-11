@@ -214,7 +214,7 @@ export function ConversationNameContextMenu({
                 type="button"
                 data-testid="copy-share-link-button"
                 onClick={onCopyShareLink}
-                className="p-1 hover:bg-[#717888] rounded"
+                className="p-1 hover:bg-neutral rounded"
                 title={t(I18nKey.BUTTON$COPY_TO_CLIPBOARD)}
               >
                 <LinkIcon width={16} height={16} />

@@ -88,7 +88,7 @@ export function LaunchMicroagentModal({
             </button>
           </div>
 
-          <Typography.Text className="text-sm text-[#A3A3A3] font-normal leading-5">
+          <Typography.Text className="text-sm text-muted font-normal leading-5">
             {t("MICROAGENT$DEFINITION")}
           </Typography.Text>
 
@@ -112,8 +112,8 @@ export function LaunchMicroagentModal({
                   placeholder={t("MICROAGENT$DESCRIBE_WHAT_TO_ADD")}
                   rows={6}
                   className={cn(
-                    "bg-tertiary border border-[#717888] w-full rounded p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
-                    "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+                    "bg-tertiary border border-stroke w-full rounded p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
+                    "disabled:bg-surface-disabled disabled:border-surface-disabled disabled:cursor-not-allowed",
                   )}
                 />
               )}

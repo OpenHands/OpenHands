@@ -35,11 +35,11 @@ export function GitControlBarRepoButton({
       className={cn(
         "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-[100px] flex-1 truncate relative",
         hasRepository
-          ? "border border-[#525252] bg-transparent hover:border-[#454545] cursor-pointer"
+          ? "border border-stroke-alt bg-transparent hover:border-tertiary cursor-pointer"
           : "border border-[rgba(71,74,84,0.50)] bg-transparent cursor-not-allowed min-w-[170px]",
       )}
     >
-      <div className="w-3 h-3 flex items-center justify-center flex-shrink-0">
+      <div className="w-3 h-3 flex items-center justify-center shrink-0">
         {hasRepository ? (
           <GitProviderIcon
             gitProvider={gitProvider as Provider}

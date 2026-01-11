@@ -14,7 +14,7 @@ export function BranchLoadingState({
     <div
       data-testid="branch-dropdown-loading"
       className={cn(
-        "flex items-center gap-2 max-w-[500px] h-10 px-3 bg-tertiary border border-[#717888] rounded-sm",
+        "flex items-center gap-2 max-w-[500px] h-10 px-3 bg-tertiary border border-stroke rounded-sm",
         wrapperClassName,
       )}
     >

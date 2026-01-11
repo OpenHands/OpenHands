@@ -696,7 +696,7 @@ function LlmSettingsScreen() {
                 <StyledTooltip
                   content={t(I18nKey.SETTINGS$CONFIRMATION_MODE_TOOLTIP)}
                 >
-                  <span className="text-[#9099AC] hover:text-white cursor-help">
+                  <span className="text-subtle hover:text-white cursor-help">
                     <QuestionCircleIcon width={16} height={16} />
                   </span>
                 </StyledTooltip>

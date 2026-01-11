@@ -43,13 +43,13 @@ export function BadgeInput({
   return (
     <div
       className={cn(
-        "bg-tertiary border border-[#717888] rounded w-full p-2 placeholder:italic placeholder:text-tertiary-alt",
+        "bg-tertiary border border-stroke rounded w-full p-2 placeholder:italic placeholder:text-tertiary-alt",
         "flex flex-wrap items-center gap-2",
       )}
     >
       {value.map((badge, index) => (
         <div key={index}>
-          <BrandBadge className="flex items-center gap-0.5 py-1 px-2.5 text-sm text-[#0D0F11] font-semibold leading-[16px]">
+          <BrandBadge className="flex items-center gap-0.5 py-1 px-2.5 text-sm text-base font-semibold leading-[16px]">
             {badge}
             <button
               data-testid="remove-button"
@@ -57,7 +57,7 @@ export function BadgeInput({
               onClick={() => removeBadge(index)}
               className="cursor-pointer"
             >
-              <XIcon width={14} height={14} color="#000000" />
+              <XIcon width={14} height={14} className="text-black" />
             </button>
           </BrandBadge>
         </div>
@@ -69,7 +69,7 @@ export function BadgeInput({
         placeholder={value.length === 0 ? placeholder : ""}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        className="flex-grow outline-none bg-transparent"
+        className="grow outline-none bg-transparent"
       />
     </div>
   );

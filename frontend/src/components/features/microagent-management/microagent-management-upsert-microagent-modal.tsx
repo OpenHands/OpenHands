@@ -144,8 +144,8 @@ export function MicroagentManagementUpsertMicroagentModal({
               placeholder={t(I18nKey.MICROAGENT_MANAGEMENT$DESCRIBE_WHAT_TO_DO)}
               rows={6}
               className={cn(
-                "bg-tertiary border border-[#717888] bg-[#454545] w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
-                "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+                "bg-tertiary border border-stroke w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
+                "disabled:bg-surface-disabled disabled:border-surface-disabled disabled:cursor-not-allowed",
               )}
             />
           </label>
@@ -169,7 +169,7 @@ export function MicroagentManagementUpsertMicroagentModal({
               placeholder={t("MICROAGENT$TYPE_TRIGGER_SPACE")}
               onChange={setTriggers}
             />
-            <span className="text-xs text-[#ffffff80] font-normal">
+            <span className="text-xs text-white/50 font-normal">
               {t(
                 I18nKey.MICROAGENT_MANAGEMENT$HELP_TEXT_DESCRIBING_VALID_TRIGGERS,
               )}

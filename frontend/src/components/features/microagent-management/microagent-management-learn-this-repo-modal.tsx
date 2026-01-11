@@ -81,7 +81,7 @@ export function MicroagentManagementLearnThisRepoModal({
               className="cursor-pointer"
               data-testid="modal-close-button"
             >
-              <XIcon width={24} height={24} color="#F9FBFE" />
+              <XIcon width={24} height={24} className="text-white" />
             </button>
           </div>
           <span
@@ -114,8 +114,8 @@ export function MicroagentManagementLearnThisRepoModal({
               )}
               rows={6}
               className={cn(
-                "bg-tertiary border border-[#717888] bg-[#454545] w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
-                "disabled:bg-[#2D2F36] disabled:border-[#2D2F36] disabled:cursor-not-allowed",
+                "bg-tertiary border border-stroke w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt resize-none",
+                "disabled:bg-surface-disabled disabled:border-surface-disabled disabled:cursor-not-allowed",
               )}
             />
           </label>

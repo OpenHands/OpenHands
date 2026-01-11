@@ -29,10 +29,10 @@ export function PlanPreview({
   }
 
   return (
-    <div className="bg-[#25272d] border border-[#597FF4] rounded-[12px] w-full mb-4 mt-2">
+    <div className="bg-surface border border-primary rounded-[12px] w-full mb-4 mt-2">
       {/* Header */}
-      <div className="border-b border-[#525252] flex h-[41px] items-center px-2 gap-1">
-        <LessonPlanIcon width={18} height={18} color="#9299aa" />
+      <div className="border-b border-stroke flex h-[41px] items-center px-2 gap-1">
+        <LessonPlanIcon width={18} height={18} className="text-subtle" />
         <Typography.Text className="font-medium text-[11px] text-white tracking-[0.11px] leading-4">
           {t(I18nKey.COMMON$PLAN_MD)}
         </Typography.Text>
@@ -56,14 +56,14 @@ export function PlanPreview({
         </h3>
         <p className="text-[15px] text-white leading-[29px]">
           {description}
-          <Typography.Text className="text-[#4a67bd] cursor-pointer hover:underline ml-1">
+          <Typography.Text className="text-primary cursor-pointer hover:underline ml-1">
             {t(I18nKey.COMMON$READ_MORE)}
           </Typography.Text>
         </p>
       </div>
 
       {/* Footer */}
-      <div className="border-t border-[#525252] flex h-[54px] items-center justify-start px-4">
+      <div className="border-t border-stroke flex h-[54px] items-center justify-start px-4">
         <button
           type="button"
           onClick={onBuildClick}
