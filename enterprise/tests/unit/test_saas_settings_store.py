@@ -981,7 +981,7 @@ async def test_has_custom_settings_matches_old_default_model(settings_store):
         ),
     ):
         settings = Settings(
-            llm_model='litellm_proxy/prod/claude-3-5-sonnet-20241022',
+            llm_model='litellm_proxy/claude-3-5-sonnet-20241022',
             llm_base_url='http://default.url',
         )
 
@@ -1116,7 +1116,7 @@ async def test_update_settings_upgrades_user_from_old_defaults(
 ):
     # Arrange: User with old version using old defaults
     old_version = 1
-    old_model = 'litellm_proxy/prod/claude-3-5-sonnet-20241022'
+    old_model = 'litellm_proxy/claude-3-5-sonnet-20241022'
     settings = Settings(llm_model=old_model, llm_base_url=LITE_LLM_API_URL)
 
     # Use a consistent test URL
@@ -1137,7 +1137,7 @@ async def test_update_settings_upgrades_user_from_old_defaults(
         patch('storage.saas_settings_store.LITE_LLM_API_URL', test_base_url),
         patch(
             'storage.saas_settings_store.get_default_litellm_model',
-            return_value='litellm_proxy/prod/claude-opus-4-5-20251101',
+            return_value='litellm_proxy/claude-opus-4-5-20251101',
         ),
         patch(
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
@@ -1168,9 +1168,7 @@ async def test_update_settings_upgrades_user_from_old_defaults(
 
         # Assert: Settings upgraded to new defaults
         assert updated_settings is not None
-        assert (
-            updated_settings.llm_model == 'litellm_proxy/prod/claude-opus-4-5-20251101'
-        )
+        assert updated_settings.llm_model == 'litellm_proxy/claude-opus-4-5-20251101'
         assert updated_settings.llm_base_url == test_base_url
 
 
