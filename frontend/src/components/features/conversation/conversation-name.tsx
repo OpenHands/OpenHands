@@ -38,6 +38,7 @@ export function ConversationName() {
     handleExportConversation,
     handleTogglePublic,
     handleCopyShareLink,
+    shareUrl,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -91,6 +92,10 @@ export function ConversationName() {
   };
 
   const handleKeyUp = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input)
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
     if (event.key === "Enter") {
       event.currentTarget.blur();
     }
@@ -186,6 +191,9 @@ export function ConversationName() {
                   ENABLE_PUBLIC_CONVERSATION_SHARING()
                     ? handleTogglePublic
                     : undefined
+                }
+                shareUrl={
+                  ENABLE_PUBLIC_CONVERSATION_SHARING() ? shareUrl : undefined
                 }
                 onCopyShareLink={
                   ENABLE_PUBLIC_CONVERSATION_SHARING()

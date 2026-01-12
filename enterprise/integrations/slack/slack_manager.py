@@ -16,9 +16,8 @@ from integrations.utils import (
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
 )
+from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
-from pydantic import SecretStr
-from server.auth.saas_user_auth import SaasUserAuth
 from server.constants import SLACK_CLIENT_ID
 from server.utils.conversation_callback_utils import register_callback_processor
 from slack_sdk.oauth import AuthorizeUrlGenerator
@@ -59,17 +58,6 @@ class SlackManager(Manager):
         if message.source != SourceType.SLACK:
             raise ValueError(f'Unexpected message source {message.source}')
 
-    async def _get_user_auth(self, keycloak_user_id: str) -> UserAuth:
-        offline_token = await self.token_manager.load_offline_token(keycloak_user_id)
-        if offline_token is None:
-            logger.info('no_offline_token_found')
-
-        user_auth = SaasUserAuth(
-            user_id=keycloak_user_id,
-            refresh_token=SecretStr(offline_token),
-        )
-        return user_auth
-
     async def authenticate_user(
         self, slack_user_id: str
     ) -> tuple[SlackUser | None, UserAuth | None]:
@@ -86,7 +74,9 @@ class SlackManager(Manager):
 
         saas_user_auth = None
         if slack_user:
-            saas_user_auth = await self._get_user_auth(slack_user.keycloak_user_id)
+            saas_user_auth = await get_saas_user_auth(
+                slack_user.keycloak_user_id, self.token_manager
+            )
             # slack_view.saas_user_auth = await self._get_user_auth(slack_view.slack_to_openhands_user.keycloak_user_id)
 
         return slack_user, saas_user_auth
@@ -249,13 +239,11 @@ class SlackManager(Manager):
     async def is_job_requested(
         self, message: Message, slack_view: SlackViewInterface
     ) -> bool:
-        """
-        A job is always request we only receive webhooks for events associated with the slack bot
+        """A job is always request we only receive webhooks for events associated with the slack bot
         This method really just checks
             1. Is the user is authenticated
             2. Do we have the necessary information to start a job (either by inferring the selected repo, otherwise asking the user)
         """
-
         # Infer repo from user message is not needed; user selected repo from the form or is updating existing convo
         if isinstance(slack_view, SlackUpdateExistingConversationView):
             return True
@@ -322,10 +310,15 @@ class SlackManager(Manager):
                     f'[Slack] Created conversation {conversation_id} for user {user_info.slack_display_name}'
                 )
 
-                if not isinstance(slack_view, SlackUpdateExistingConversationView):
+                # Only add SlackCallbackProcessor for new conversations (not updates) and non-v1 conversations
+                if (
+                    not isinstance(slack_view, SlackUpdateExistingConversationView)
+                    and not slack_view.v1_enabled
+                ):
                     # We don't re-subscribe for follow up messages from slack.
                     # Summaries are generated for every messages anyways, we only need to do
                     # this subscription once for the event which kicked off the job.
+
                     processor = SlackCallbackProcessor(
                         slack_user_id=slack_view.slack_user_id,
                         channel_id=slack_view.channel_id,
@@ -339,6 +332,14 @@ class SlackManager(Manager):
 
                     logger.info(
                         f'[Slack] Created callback processor for conversation {conversation_id}'
+                    )
+                elif isinstance(slack_view, SlackUpdateExistingConversationView):
+                    logger.info(
+                        f'[Slack] Skipping callback processor for existing conversation update {conversation_id}'
+                    )
+                elif slack_view.v1_enabled:
+                    logger.info(
+                        f'[Slack] Skipping callback processor for v1 conversation {conversation_id}'
                     )
 
                 msg_info = slack_view.get_response_msg()

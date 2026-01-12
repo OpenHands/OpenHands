@@ -18,6 +18,7 @@ import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import LinkIcon from "#/icons/link-external.svg?react";
+import CopyIcon from "#/icons/copy.svg?react";
 import { ConversationNameContextMenuIconText } from "./conversation-name-context-menu-icon-text";
 import { CONTEXT_MENU_ICON_TEXT_CLASSNAME } from "#/utils/constants";
 
@@ -39,6 +40,7 @@ interface ConversationNameContextMenuProps {
   onTogglePublic?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onCopyShareLink?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  shareUrl?: string;
   position?: "top" | "bottom";
 }
 
@@ -55,6 +57,7 @@ export function ConversationNameContextMenu({
   onTogglePublic,
   onDownloadConversation,
   onCopyShareLink,
+  shareUrl,
   position = "bottom",
 }: ConversationNameContextMenuProps) {
   const { width } = useWindowSize();
@@ -200,25 +203,38 @@ export function ConversationNameContextMenu({
           onClick={onTogglePublic}
           className={contextMenuListItemClassName}
         >
-          <div className="flex items-center gap-2 justify-between w-full">
+          <div className="flex items-center gap-2 justify-between w-full hover:bg-[#5C5D62] rounded h-[30px]">
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={conversation?.public || false}
-                className="w-4 h-4 ml-2"
+                className="w-4 h-4 ml-2 cursor-pointer"
               />
               <span>{t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}</span>
             </div>
-            {conversation?.public && onCopyShareLink && (
-              <button
-                type="button"
-                data-testid="copy-share-link-button"
-                onClick={onCopyShareLink}
-                className="p-1 hover:bg-[#717888] rounded"
-                title={t(I18nKey.BUTTON$COPY_TO_CLIPBOARD)}
-              >
-                <LinkIcon width={16} height={16} />
-              </button>
+            {conversation?.public && shareUrl && onCopyShareLink && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="copy-share-link-button"
+                  onClick={onCopyShareLink}
+                  className="p-1 hover:bg-[#717888] rounded cursor-pointer"
+                  title={t(I18nKey.BUTTON$COPY_TO_CLIPBOARD)}
+                >
+                  <CopyIcon width={16} height={16} />
+                </button>
+                <a
+                  data-testid="open-share-link-button"
+                  href={shareUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-1 hover:bg-[#717888] rounded cursor-pointer"
+                  title={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
+                >
+                  <LinkIcon width={16} height={16} />
+                </a>
+              </div>
             )}
           </div>
         </ContextMenuListItem>
