@@ -33,19 +33,19 @@ from openhands.core.logger import openhands_logger as logger
 # Allowed source types for offloading (prevents path traversal via source_type)
 ALLOWED_SOURCE_TYPES = frozenset(
     {
-        "cmd",
-        "ipython",
-        "browser_dom",
-        "browser_axtree",
-        "browser_html",
-        "screenshot",
-        "mcp",
-        "file",
+        'cmd',
+        'ipython',
+        'browser_dom',
+        'browser_axtree',
+        'browser_html',
+        'screenshot',
+        'mcp',
+        'file',
     }
 )
 
 # Regex for valid session_id (alphanumeric, hyphens, underscores only)
-SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+SESSION_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
 
 if TYPE_CHECKING:
     from openhands.core.config.offload_config import OffloadConfig
@@ -154,7 +154,7 @@ Structure preview:
         # Verify the offload directory is within workspace (final path traversal check)
         if not self._is_path_within_workspace(self.offload_dir, workspace_path):
             raise ValueError(
-                f"Offload directory {self.offload_dir} is outside workspace {workspace_path}"
+                f'Offload directory {self.offload_dir} is outside workspace {workspace_path}'
             )
 
         # Track offloaded files for cleanup
@@ -169,7 +169,7 @@ Structure preview:
 
             # Now create the directory
             self.offload_dir.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"ContextOffloader initialized: {self.offload_dir}")
+            logger.debug(f'ContextOffloader initialized: {self.offload_dir}')
 
     def _run_retention_cleanup_on_init(self) -> None:
         """Run retention cleanup on initialization.
@@ -180,9 +180,9 @@ Structure preview:
         try:
             removed = self.cleanup_expired_files()
             if removed > 0:
-                logger.info(f"Startup cleanup removed {removed} expired offload files")
+                logger.info(f'Startup cleanup removed {removed} expired offload files')
         except Exception as e:
-            logger.warning(f"Retention cleanup on init failed: {e}")
+            logger.warning(f'Retention cleanup on init failed: {e}')
 
     @staticmethod
     def _sanitize_session_id(session_id: str) -> str:
@@ -198,16 +198,16 @@ Structure preview:
             ValueError: If session_id is invalid or empty after sanitization.
         """
         if not session_id:
-            raise ValueError("session_id cannot be empty")
+            raise ValueError('session_id cannot be empty')
 
         # Remove any path separators and dangerous characters
-        sanitized = session_id.replace("/", "").replace("\\", "").replace("..", "")
+        sanitized = session_id.replace('/', '').replace('\\', '').replace('..', '')
 
         # Validate format
         if not SESSION_ID_PATTERN.match(sanitized):
             # Fall back to a hash if the session_id contains invalid characters
             sanitized = hashlib.sha256(session_id.encode()).hexdigest()[:32]
-            logger.warning(f"Invalid session_id format, using hash: {sanitized}")
+            logger.warning(f'Invalid session_id format, using hash: {sanitized}')
 
         return sanitized
 
@@ -222,14 +222,14 @@ Structure preview:
             Sanitized offload directory path.
         """
         # Remove leading slashes (absolute path prevention)
-        sanitized = offload_dir.lstrip("/")
+        sanitized = offload_dir.lstrip('/')
 
         # Remove any .. path components
         parts = Path(sanitized).parts
-        safe_parts = [p for p in parts if p != ".."]
+        safe_parts = [p for p in parts if p != '..']
 
         if not safe_parts:
-            return ".openhands/context_offload"
+            return '.openhands/context_offload'
 
         return str(Path(*safe_parts))
 
@@ -269,9 +269,9 @@ Structure preview:
             # Log warning and fall back to generic type
             logger.warning(
                 f'Unknown source_type "{source_type}", using "file". '
-                f"Allowed types: {ALLOWED_SOURCE_TYPES}"
+                f'Allowed types: {ALLOWED_SOURCE_TYPES}'
             )
-            return "file"
+            return 'file'
         return source_type
 
     @property
@@ -320,7 +320,7 @@ Structure preview:
         max_bytes = self.config.max_total_size_mb * 1024 * 1024
         return (self._total_size_bytes + new_size_bytes) <= max_bytes
 
-    def _generate_filename(self, source_type: str, extension: str = "txt") -> Path:
+    def _generate_filename(self, source_type: str, extension: str = 'txt') -> Path:
         """Generate a unique filename for offloaded content.
 
         Args:
@@ -330,10 +330,10 @@ Structure preview:
         Returns:
             Path to the generated filename.
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         # Add a short random hash for uniqueness
-        random_hash = hashlib.md5(f"{timestamp}{source_type}".encode()).hexdigest()[:6]
-        filename = f"{source_type}_{timestamp}_{random_hash}.{extension}"
+        random_hash = hashlib.md5(f'{timestamp}{source_type}'.encode()).hexdigest()[:6]
+        filename = f'{source_type}_{timestamp}_{random_hash}.{extension}'
         return self.offload_dir / filename
 
     def offload_text(
@@ -357,25 +357,25 @@ Structure preview:
         """
         # Validate source_type to prevent path traversal
         safe_source_type = self._validate_source_type(source_type)
-        content_bytes = len(content.encode("utf-8"))
+        content_bytes = len(content.encode('utf-8'))
 
         # Check size limit
         if not self._check_size_limit(content_bytes):
             logger.warning(
-                f"Offload size limit reached ({self.config.max_total_size_mb}MB). "
-                "Skipping offload."
+                f'Offload size limit reached ({self.config.max_total_size_mb}MB). '
+                'Skipping offload.'
             )
-            raise IOError("Offload size limit exceeded")
+            raise IOError('Offload size limit exceeded')
 
-        file_path = self._generate_filename(safe_source_type, "txt")
+        file_path = self._generate_filename(safe_source_type, 'txt')
 
         try:
-            file_path.write_text(content, encoding="utf-8")
+            file_path.write_text(content, encoding='utf-8')
             self._offloaded_files.append(file_path)
             self._total_size_bytes += content_bytes
         except Exception as e:
-            logger.error(f"Failed to write offload file {file_path}: {e}")
-            raise IOError(f"Failed to offload: {e}") from e
+            logger.error(f'Failed to write offload file {file_path}: {e}')
+            raise IOError(f'Failed to offload: {e}') from e
 
         # Generate preview message
         preview_message = self._create_text_preview(
@@ -384,7 +384,7 @@ Structure preview:
         )
 
         logger.info(
-            f"Offloaded {safe_source_type} output: {len(content):,} chars -> {file_path}"
+            f'Offloaded {safe_source_type} output: {len(content):,} chars -> {file_path}'
         )
 
         return OffloadResult(
@@ -413,21 +413,21 @@ Structure preview:
         # Validate source_type to prevent path traversal
         safe_source_type = self._validate_source_type(source_type)
         content = json.dumps(data, indent=2, ensure_ascii=False)
-        content_bytes = len(content.encode("utf-8"))
+        content_bytes = len(content.encode('utf-8'))
 
         if not self._check_size_limit(content_bytes):
-            logger.warning("Offload size limit reached. Skipping JSON offload.")
-            raise IOError("Offload size limit exceeded")
+            logger.warning('Offload size limit reached. Skipping JSON offload.')
+            raise IOError('Offload size limit exceeded')
 
-        file_path = self._generate_filename(safe_source_type, "json")
+        file_path = self._generate_filename(safe_source_type, 'json')
 
         try:
-            file_path.write_text(content, encoding="utf-8")
+            file_path.write_text(content, encoding='utf-8')
             self._offloaded_files.append(file_path)
             self._total_size_bytes += content_bytes
         except Exception as e:
-            logger.error(f"Failed to write JSON offload file {file_path}: {e}")
-            raise IOError(f"Failed to offload JSON: {e}") from e
+            logger.error(f'Failed to write JSON offload file {file_path}: {e}')
+            raise IOError(f'Failed to offload JSON: {e}') from e
 
         # Generate structure preview
         structure_preview = self._create_json_structure_preview(data)
@@ -439,7 +439,7 @@ Structure preview:
         )
 
         logger.info(
-            f"Offloaded {safe_source_type} JSON: {content_bytes:,} bytes -> {file_path}"
+            f'Offloaded {safe_source_type} JSON: {content_bytes:,} bytes -> {file_path}'
         )
 
         return OffloadResult(
@@ -452,7 +452,7 @@ Structure preview:
     def offload_image(
         self,
         base64_data: str,
-        source_type: str = "screenshot",
+        source_type: str = 'screenshot',
     ) -> tuple[str, str]:
         """Offload image and create thumbnail for LLM vision.
 
@@ -468,27 +468,28 @@ Structure preview:
         safe_source_type = self._validate_source_type(source_type)
 
         try:
-            from PIL import Image
             import base64
             import io
 
+            from PIL import Image
+
             # Remove data URL prefix if present
-            if base64_data.startswith("data:"):
+            if base64_data.startswith('data:'):
                 # Format: data:image/png;base64,xxxxx
-                base64_data = base64_data.split(",", 1)[1]
+                base64_data = base64_data.split(',', 1)[1]
 
             # Decode image
             image_bytes = base64.b64decode(base64_data)
 
             if not self._check_size_limit(len(image_bytes)):
-                logger.warning("Offload size limit reached. Skipping image offload.")
-                return "", f"data:image/png;base64,{base64_data}"
+                logger.warning('Offload size limit reached. Skipping image offload.')
+                return '', f'data:image/png;base64,{base64_data}'
 
             image = Image.open(io.BytesIO(image_bytes))
 
             # Save full image
-            file_path = self._generate_filename(safe_source_type, "png")
-            image.save(file_path, "PNG")
+            file_path = self._generate_filename(safe_source_type, 'png')
+            image.save(file_path, 'PNG')
             self._offloaded_files.append(file_path)
             self._total_size_bytes += len(image_bytes)
 
@@ -503,23 +504,23 @@ Structure preview:
 
             # Convert thumbnail to base64 data URL
             buffer = io.BytesIO()
-            thumbnail.save(buffer, format="PNG", optimize=True)
-            thumbnail_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            thumbnail_data_url = f"data:image/png;base64,{thumbnail_base64}"
+            thumbnail.save(buffer, format='PNG', optimize=True)
+            thumbnail_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            thumbnail_data_url = f'data:image/png;base64,{thumbnail_base64}'
 
             logger.info(
-                f"Offloaded {safe_source_type}: {len(image_bytes):,} bytes -> {file_path}, "
-                f"thumbnail: {len(thumbnail_base64):,} chars"
+                f'Offloaded {safe_source_type}: {len(image_bytes):,} bytes -> {file_path}, '
+                f'thumbnail: {len(thumbnail_base64):,} chars'
             )
 
             return str(file_path), thumbnail_data_url
 
         except ImportError:
-            logger.warning("PIL not available. Skipping image offload.")
-            return "", f"data:image/png;base64,{base64_data}"
+            logger.warning('PIL not available. Skipping image offload.')
+            return '', f'data:image/png;base64,{base64_data}'
         except Exception as e:
-            logger.error(f"Failed to offload image: {e}")
-            return "", f"data:image/png;base64,{base64_data}"
+            logger.error(f'Failed to offload image: {e}')
+            return '', f'data:image/png;base64,{base64_data}'
 
     def _create_text_preview(self, content: str, file_path: str) -> str:
         """Create a preview message with head and tail content.
@@ -540,9 +541,9 @@ Structure preview:
 
         # If content is short enough, show all
         if total_lines <= head_count + tail_count:
-            preview = "\n".join(
-                f"  {i + 1}: {line[:max_chars]}"
-                + ("..." if len(line) > max_chars else "")
+            preview = '\n'.join(
+                f'  {i + 1}: {line[:max_chars]}'
+                + ('...' if len(line) > max_chars else '')
                 for i, line in enumerate(lines)
             )
             return self.OFFLOAD_MESSAGE_TEMPLATE_SHORT.format(
@@ -552,16 +553,16 @@ Structure preview:
             )
 
         # Head preview
-        head_preview = "\n".join(
-            f"  {i + 1}: {line[:max_chars]}" + ("..." if len(line) > max_chars else "")
+        head_preview = '\n'.join(
+            f'  {i + 1}: {line[:max_chars]}' + ('...' if len(line) > max_chars else '')
             for i, line in enumerate(lines[:head_count])
         )
 
         # Tail preview
         tail_start = total_lines - tail_count
-        tail_preview = "\n".join(
-            f"  {tail_start + i + 1}: {line[:max_chars]}"
-            + ("..." if len(line) > max_chars else "")
+        tail_preview = '\n'.join(
+            f'  {tail_start + i + 1}: {line[:max_chars]}'
+            + ('...' if len(line) > max_chars else '')
             for i, line in enumerate(lines[tail_start:])
         )
 
@@ -595,31 +596,31 @@ Structure preview:
         """
 
         def summarize(obj: object, depth: int = 0) -> str:
-            indent = "  " * depth
+            indent = '  ' * depth
             if depth > max_depth:
-                return f"{indent}..."
+                return f'{indent}...'
 
             if isinstance(obj, dict):
                 if not obj:
-                    return f"{indent}{{}}"
+                    return f'{indent}{{}}'
                 items = []
                 for i, (k, v) in enumerate(obj.items()):
                     if i >= max_keys:
-                        items.append(f"{indent}  ... ({len(obj) - max_keys} more keys)")
+                        items.append(f'{indent}  ... ({len(obj) - max_keys} more keys)')
                         break
                     val_summary = summarize(v, depth + 1).lstrip()
-                    items.append(f"{indent}  {k}: {val_summary}")
-                return "{\n" + "\n".join(items) + f"\n{indent}}}"
+                    items.append(f'{indent}  {k}: {val_summary}')
+                return '{\n' + '\n'.join(items) + f'\n{indent}}}'
 
             elif isinstance(obj, list):
                 if not obj:
-                    return "[]"
-                return f"[... {len(obj)} items]"
+                    return '[]'
+                return f'[... {len(obj)} items]'
 
             else:
                 s = str(obj)
                 if len(s) > 50:
-                    return s[:50] + "..."
+                    return s[:50] + '...'
                 return s
 
         return summarize(data)
@@ -631,7 +632,7 @@ Structure preview:
             Number of files removed.
         """
         if not self.config.cleanup_on_session_end:
-            logger.debug("Cleanup disabled. Retaining offloaded files.")
+            logger.debug('Cleanup disabled. Retaining offloaded files.')
             return 0
 
         removed = 0
@@ -641,7 +642,7 @@ Structure preview:
                     file_path.unlink()
                     removed += 1
             except Exception as e:
-                logger.warning(f"Failed to remove offloaded file {file_path}: {e}")
+                logger.warning(f'Failed to remove offloaded file {file_path}: {e}')
 
         # Try to remove empty directory
         try:
@@ -654,7 +655,7 @@ Structure preview:
         except Exception:
             pass  # Directory not empty or other issue
 
-        logger.info(f"Cleaned up {removed} offloaded files")
+        logger.info(f'Cleaned up {removed} offloaded files')
         self._offloaded_files.clear()
         self._total_size_bytes = 0
         return removed
@@ -695,10 +696,10 @@ Structure preview:
                         if file_mtime < cutoff_time:
                             file_path.unlink()
                             removed += 1
-                            logger.debug(f"Removed expired offload file: {file_path}")
+                            logger.debug(f'Removed expired offload file: {file_path}')
                     except Exception as e:
                         logger.warning(
-                            f"Failed to remove expired file {file_path}: {e}"
+                            f'Failed to remove expired file {file_path}: {e}'
                         )
 
                 # Remove empty session directories
@@ -709,12 +710,12 @@ Structure preview:
                     pass
 
         except Exception as e:
-            logger.warning(f"Error during retention cleanup: {e}")
+            logger.warning(f'Error during retention cleanup: {e}')
 
         if removed > 0:
             logger.info(
-                f"Retention cleanup: removed {removed} files older than "
-                f"{self.config.retention_hours} hours"
+                f'Retention cleanup: removed {removed} files older than '
+                f'{self.config.retention_hours} hours'
             )
 
         return removed
@@ -726,9 +727,9 @@ Structure preview:
             Dictionary with offload statistics.
         """
         return {
-            "enabled": self.config.enabled,
-            "files_count": len(self._offloaded_files),
-            "total_size_bytes": self._total_size_bytes,
-            "total_size_mb": round(self._total_size_bytes / (1024 * 1024), 2),
-            "offload_dir": str(self.offload_dir),
+            'enabled': self.config.enabled,
+            'files_count': len(self._offloaded_files),
+            'total_size_bytes': self._total_size_bytes,
+            'total_size_mb': round(self._total_size_bytes / (1024 * 1024), 2),
+            'offload_dir': str(self.offload_dir),
         }
