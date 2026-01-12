@@ -209,7 +209,12 @@ async def test_store_and_load_keycloak_user(settings_store):
 
 @pytest.mark.asyncio
 async def test_load_returns_default_when_not_found(
-    settings_store, mock_litellm_api, mock_stripe, mock_github_user, session_maker, mock_redis_client
+    settings_store,
+    mock_litellm_api,
+    mock_stripe,
+    mock_github_user,
+    session_maker,
+    mock_redis_client,
 ):
     file_store = MagicMock()
     file_store.read.side_effect = FileNotFoundError()
@@ -220,7 +225,9 @@ async def test_load_returns_default_when_not_found(
             MagicMock(return_value=file_store),
         ),
         patch('storage.saas_settings_store.session_maker', session_maker),
-        patch.object(settings_store, '_get_redis_client', return_value=mock_redis_client),
+        patch.object(
+            settings_store, '_get_redis_client', return_value=mock_redis_client
+        ),
     ):
         loaded_settings = await settings_store.load()
         assert loaded_settings is not None
@@ -285,7 +292,9 @@ async def test_create_default_settings_require_payment_enabled(
         patch(
             'integrations.stripe_service.session_maker', settings_store.session_maker
         ),
-        patch.object(settings_store, '_get_redis_client', return_value=mock_redis_client),
+        patch.object(
+            settings_store, '_get_redis_client', return_value=mock_redis_client
+        ),
     ):
         settings = await settings_store.create_default_settings(None)
         assert settings is None
@@ -293,7 +302,12 @@ async def test_create_default_settings_require_payment_enabled(
 
 @pytest.mark.asyncio
 async def test_create_default_settings_require_payment_disabled(
-    settings_store, mock_stripe, mock_github_user, mock_litellm_api, session_maker, mock_redis_client
+    settings_store,
+    mock_stripe,
+    mock_github_user,
+    mock_litellm_api,
+    session_maker,
+    mock_redis_client,
 ):
     # Even without payment method, should get default settings when REQUIRE_PAYMENT is False
     file_store = MagicMock()
@@ -309,7 +323,9 @@ async def test_create_default_settings_require_payment_disabled(
             MagicMock(return_value=file_store),
         ),
         patch('storage.saas_settings_store.session_maker', session_maker),
-        patch.object(settings_store, '_get_redis_client', return_value=mock_redis_client),
+        patch.object(
+            settings_store, '_get_redis_client', return_value=mock_redis_client
+        ),
     ):
         settings = await settings_store.create_default_settings(None)
         assert settings is not None
@@ -336,6 +352,7 @@ async def test_create_default_settings_waits_when_lock_held(
         sleep_called = True
         # Don't actually sleep - just verify it was called with correct delay
         from storage.saas_settings_store import _RETRY_LOAD_DELAY_SECONDS
+
         assert delay == _RETRY_LOAD_DELAY_SECONDS
 
     with (
