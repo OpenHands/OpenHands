@@ -430,6 +430,45 @@ class TestDockerSandboxService:
         ):
             await service.start_sandbox(sandbox_spec_id='nonexistent')
 
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_with_sandbox_id(
+        self, mock_urandom, mock_encodebytes, service
+    ):
+        """Test starting sandbox with a specified sandbox_id."""
+        # Setup - only need urandom for session key
+        mock_urandom.return_value = b'session_key'
+        mock_encodebytes.return_value = 'test_session_key'
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-custom_sandbox_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value']
+            },
+            'NetworkSettings': {'Ports': {}},
+        }
+
+        service.docker_client.containers.run.return_value = mock_container
+
+        with (
+            patch.object(service, '_find_unused_port', side_effect=[12345, 12346]),
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+        ):
+            # Execute with custom sandbox_id
+            result = await service.start_sandbox(sandbox_id='custom_sandbox_id')
+
+        # Verify
+        assert result is not None
+        assert result.id == 'oh-test-custom_sandbox_id'
+
+        # Verify container was created with the custom sandbox ID in the name
+        call_args = service.docker_client.containers.run.call_args
+        assert call_args[1]['name'] == 'oh-test-custom_sandbox_id'
+
     async def test_start_sandbox_docker_error(self, service):
         """Test handling of Docker errors during sandbox startup."""
         # Setup

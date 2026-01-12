@@ -294,7 +294,9 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return None
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Start a new sandbox."""
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
@@ -310,9 +312,13 @@ class DockerSandboxService(SandboxService):
             sandbox_spec = sandbox_spec_maybe
 
         # Generate container ID and session api key
-        container_name = (
-            f'{self.container_name_prefix}{base62.encodebytes(os.urandom(16))}'
-        )
+        # Use provided sandbox_id if available, otherwise generate a random one
+        if sandbox_id is not None:
+            container_name = f'{self.container_name_prefix}{sandbox_id}'
+        else:
+            container_name = (
+                f'{self.container_name_prefix}{base62.encodebytes(os.urandom(16))}'
+            )
         session_api_key = base62.encodebytes(os.urandom(32))
 
         # Prepare environment variables
