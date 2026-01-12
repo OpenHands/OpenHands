@@ -139,7 +139,7 @@ class SaasSettingsStore(SettingsStore):
                 session.add(settings)
             session.commit()
 
-    def _get_redis_client(self) -> aioredis.Redis | None:
+    def _get_redis_client(self):
         """Get the Redis client from the Socket.IO manager."""
         from openhands.server.shared import sio
 
