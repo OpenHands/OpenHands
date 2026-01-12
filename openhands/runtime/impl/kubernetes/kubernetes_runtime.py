@@ -511,7 +511,9 @@ class KubernetesRuntime(ActionExecutionClient):
                     ),
                     V1EnvVar(
                         name='OFFLOAD_BROWSER_SCREENSHOT_THUMBNAIL_WIDTH',
-                        value=str(self.config.offload.browser_screenshot_thumbnail_width),
+                        value=str(
+                            self.config.offload.browser_screenshot_thumbnail_width
+                        ),
                     ),
                     V1EnvVar(name='SESSION_ID', value=self.sid),
                 ]

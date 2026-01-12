@@ -208,15 +208,11 @@ class LocalRuntime(ActionExecutionClient):
                     'OFFLOAD_CLEANUP_ON_SESSION_END': str(
                         self.config.offload.cleanup_on_session_end
                     ),
-                    'OFFLOAD_RETENTION_HOURS': str(
-                        self.config.offload.retention_hours
-                    ),
+                    'OFFLOAD_RETENTION_HOURS': str(self.config.offload.retention_hours),
                     'OFFLOAD_MAX_TOTAL_SIZE_MB': str(
                         self.config.offload.max_total_size_mb
                     ),
-                    'OFFLOAD_BROWSER_DOM': str(
-                        self.config.offload.offload_browser_dom
-                    ),
+                    'OFFLOAD_BROWSER_DOM': str(self.config.offload.offload_browser_dom),
                     'OFFLOAD_BROWSER_AXTREE': str(
                         self.config.offload.offload_browser_axtree
                     ),
