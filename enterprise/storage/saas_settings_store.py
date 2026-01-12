@@ -48,7 +48,6 @@ class SaasSettingsStore(SettingsStore):
     user_id: str
     session_maker: sessionmaker
     config: OpenHandsConfig
-    redis_client: aioredis.Redis
 
     def get_user_settings_by_keycloak_id(
         self, keycloak_user_id: str, session=None
@@ -140,6 +139,11 @@ class SaasSettingsStore(SettingsStore):
                 session.add(settings)
             session.commit()
 
+    def _get_redis_client(self):
+        from openhands.server.shared import sio
+        redis_client = getattr(sio.manager, 'redis', None)
+        return redis_client
+
     async def create_default_settings(self, user_settings: UserSettings | None):
         logger.info(
             'saas_settings_store:create_default_settings:start',
@@ -150,8 +154,9 @@ class SaasSettingsStore(SettingsStore):
             return None
 
         # Prevent duplicate settings creation...
+        redis_client = self._get_redis_client()
         user_key = f"create_user:{self.user_id}"
-        proceed_with_create = await self.redis_client.set(user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS)
+        proceed_with_create = await redis_client.set(user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS)
         if not proceed_with_create:
             # The user is already being created in another thread / process
             await asyncio.sleep(_RETRY_LOAD_DELAY)
@@ -414,9 +419,7 @@ class SaasSettingsStore(SettingsStore):
         user_id: str,  # type: ignore[override]
     ) -> SaasSettingsStore:
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
-        from openhands.server.shared import sio
-        redis_client = getattr(sio.manager, 'redis', None)
-        return SaasSettingsStore(user_id, session_maker, config, redis_client)
+        return SaasSettingsStore(user_id, session_maker, config)
 
     def _decrypt_kwargs(self, kwargs: dict):
         fernet = self._fernet()
