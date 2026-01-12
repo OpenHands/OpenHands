@@ -147,7 +147,7 @@ async def get_remote_runtime_config(
     return JSONResponse(content=config)
 
 
-@app.get('/vscode-url')
+@app.get('/vscode-url', deprecated=True)
 async def get_vscode_url(
     conversation: ServerConversation = Depends(get_conversation),
 ) -> JSONResponse:
@@ -160,6 +160,9 @@ async def get_vscode_url(
 
     Returns:
         JSONResponse: A JSON response indicating the success of the operation.
+
+        For V1 conversations, the VSCode URL is available in the sandbox's ``exposed_urls``
+        field. Use ``GET /api/v1/sandboxes?id={sandbox_id}`` to retrieve sandbox information and use the name VSCODE.
     """
     try:
         runtime: Runtime = conversation.runtime
@@ -179,7 +182,7 @@ async def get_vscode_url(
         )
 
 
-@app.get('/web-hosts')
+@app.get('/web-hosts', deprecated=True)
 async def get_hosts(
     conversation: ServerConversation = Depends(get_conversation),
 ) -> JSONResponse:
@@ -192,6 +195,9 @@ async def get_hosts(
 
     Returns:
         JSONResponse: A JSON response indicating the success of the operation.
+
+        For V1 conversations, web hosts are available in the sandbox's ``exposed_urls``
+        field. Use ``GET /api/v1/sandboxes?id={sandbox_id}`` to retrieve sandbox information and use the name AGENT_SERVER.
     """
     try:
         runtime: Runtime = conversation.runtime
@@ -209,7 +215,7 @@ async def get_hosts(
         )
 
 
-@app.get('/events')
+@app.get('/events', deprecated=True)
 async def search_events(
     conversation_id: str,
     start_id: int = 0,
@@ -239,6 +245,10 @@ async def search_events(
     Raises:
         HTTPException: If conversation is not found or access is denied
         ValueError: If limit is less than 1 or greater than 100
+
+        Use the V1 endpoint ``GET /api/v1/events/search?conversation_id__eq={conversation_id}``
+        instead, which provides enhanced filtering by event kind, timestamp ranges,
+        and improved pagination.
     """
     if limit < 0 or limit > 100:
         raise HTTPException(
@@ -275,10 +285,15 @@ async def search_events(
     }
 
 
-@app.post('/events')
+@app.post('/events', deprecated=True)
 async def add_event(
     request: Request, conversation: ServerConversation = Depends(get_conversation)
 ):
+    """Add an event to a conversation.
+
+    For V1 conversations, events are managed through the sandbox webhook system.
+    Use ``POST /api/v1/webhooks/events/{conversation_id}`` for event callbacks.
+    """
     data = await request.json()
     await conversation_manager.send_event_to_conversation(conversation.sid, data)
     return JSONResponse({'success': True})
@@ -342,7 +357,7 @@ class MicroagentResponse(BaseModel):
     tools: list[str] = []
 
 
-@app.get('/microagents')
+@app.get('/microagents', deprecated=True)
 async def get_microagents(
     conversation: ServerConversation = Depends(get_conversation),
 ) -> JSONResponse:
@@ -352,6 +367,9 @@ async def get_microagents(
 
     Returns:
         JSONResponse: A JSON response containing the list of microagents.
+
+        Use the V1 endpoint ``GET /api/v1/app-conversations/{conversation_id}/skills`` instead,
+        which provides skill information including triggers and content for V1 conversations.
     """
     try:
         # Get the agent session for this conversation
