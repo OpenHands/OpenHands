@@ -29,7 +29,7 @@ from openhands_aci.editor.editor import OHEditor
 from openhands_aci.editor.exceptions import ToolError
 from openhands_aci.editor.results import ToolResult
 from openhands_aci.utils.diff import get_diff
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from uvicorn import run
@@ -288,7 +288,7 @@ class ActionExecutor:
                 logger.info(
                     f'Context offloader initialized with max_output_chars={offload_config.max_output_chars}'
                 )
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError, ValidationError) as e:
                 # If env var parsing fails, log warning and continue without offloading
                 logger.warning(
                     f'Failed to initialize context offloader due to invalid config: {e}. '

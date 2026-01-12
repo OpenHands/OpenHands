@@ -99,7 +99,8 @@ class TestContextOffloader:
         result = enabled_offloader.offload_text(content, source_type='cmd')
 
         assert isinstance(result, OffloadResult)
-        assert result.original_size == len(content)
+        # original_size is in bytes (UTF-8 encoded)
+        assert result.original_size == len(content.encode('utf-8'))
         assert result.offload_type == 'cmd'
         assert Path(result.file_path).exists()
 
@@ -110,6 +111,19 @@ class TestContextOffloader:
         # Verify preview message contains key info
         assert 'offloaded' in result.preview_message.lower()
         assert result.file_path in result.preview_message
+
+    def test_offload_text_unicode_bytes(self, enabled_offloader, temp_workspace):
+        """Test that original_size is bytes, not characters (important for Unicode)."""
+        # Unicode content: Chinese characters take 3 bytes each in UTF-8
+        content = '中文测试内容 ' * 200  # 7 chars per repeat, 200 repeats = 1400 chars
+        result = enabled_offloader.offload_text(content, source_type='cmd')
+
+        # original_size should be bytes, not characters
+        char_count = len(content)  # 1400 chars
+        byte_count = len(content.encode('utf-8'))  # Much larger due to UTF-8 encoding
+
+        assert result.original_size == byte_count
+        assert result.original_size > char_count  # Bytes > chars for Chinese text
 
     def test_offload_json(self, enabled_offloader, temp_workspace):
         """Test offloading JSON content."""

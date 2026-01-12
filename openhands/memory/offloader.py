@@ -57,7 +57,7 @@ class OffloadResult:
 
     Attributes:
         file_path: Path to the offloaded file.
-        original_size: Original size of the content in characters.
+        original_size: Original size of the content in bytes (UTF-8 encoded).
         preview_message: Message containing preview and retrieval instructions.
         offload_type: Type of offloaded content (e.g., "cmd", "browser_dom").
     """
@@ -384,12 +384,12 @@ Structure preview:
         )
 
         logger.info(
-            f'Offloaded {safe_source_type} output: {len(content):,} chars -> {file_path}'
+            f'Offloaded {safe_source_type} output: {content_bytes:,} bytes -> {file_path}'
         )
 
         return OffloadResult(
             file_path=str(file_path),
-            original_size=len(content),
+            original_size=content_bytes,
             preview_message=preview_message,
             offload_type=safe_source_type,
         )
@@ -402,6 +402,9 @@ Structure preview:
     ) -> OffloadResult:
         """Offload JSON data (like DOM/AXTree) to filesystem.
 
+        Uses streaming serialization to avoid building the full JSON string
+        in memory before checking size limits.
+
         Args:
             data: Dictionary to serialize and offload.
             source_type: Type of source (e.g., "browser_dom", "browser_axtree").
@@ -412,22 +415,31 @@ Structure preview:
         """
         # Validate source_type to prevent path traversal
         safe_source_type = self._validate_source_type(source_type)
-        content = json.dumps(data, indent=2, ensure_ascii=False)
-        content_bytes = len(content.encode('utf-8'))
-
-        if not self._check_size_limit(content_bytes):
-            logger.warning('Offload size limit reached. Skipping JSON offload.')
-            raise IOError('Offload size limit exceeded')
 
         file_path = self._generate_filename(safe_source_type, 'json')
 
+        # Stream JSON directly to file to avoid memory spike from full serialization
         try:
-            file_path.write_text(content, encoding='utf-8')
-            self._offloaded_files.append(file_path)
-            self._total_size_bytes += content_bytes
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
+            # Clean up partial file on error
+            if file_path.exists():
+                file_path.unlink()
             logger.error(f'Failed to write JSON offload file {file_path}: {e}')
             raise IOError(f'Failed to offload JSON: {e}') from e
+
+        # Check file size after writing (avoids pre-serialization memory spike)
+        content_bytes = file_path.stat().st_size
+
+        if not self._check_size_limit(content_bytes):
+            # Clean up file if it exceeds size limit
+            file_path.unlink()
+            logger.warning('Offload size limit reached. Skipping JSON offload.')
+            raise IOError('Offload size limit exceeded')
+
+        self._offloaded_files.append(file_path)
+        self._total_size_bytes += content_bytes
 
         # Generate structure preview
         structure_preview = self._create_json_structure_preview(data)
