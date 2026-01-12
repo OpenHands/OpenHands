@@ -311,14 +311,12 @@ class DockerSandboxService(SandboxService):
                 raise ValueError('Sandbox Spec not found')
             sandbox_spec = sandbox_spec_maybe
 
-        # Generate container ID and session api key
-        # Use provided sandbox_id if available, otherwise generate a random one
-        if sandbox_id is not None:
-            container_name = f'{self.container_name_prefix}{sandbox_id}'
-        else:
-            container_name = (
-                f'{self.container_name_prefix}{base62.encodebytes(os.urandom(16))}'
-            )
+        # Generate a sandbox id if none was provided
+        if sandbox_id is None:
+            sandbox_id = base62.encodebytes(os.urandom(16))
+
+        # Generate container name and session api key
+        container_name = f'{self.container_name_prefix}{sandbox_id}'
         session_api_key = base62.encodebytes(os.urandom(32))
 
         # Prepare environment variables
