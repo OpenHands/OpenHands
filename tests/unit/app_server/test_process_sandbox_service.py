@@ -197,7 +197,9 @@ class TestProcessSandboxService:
                 process_sandbox_service, '_wait_for_server_ready', return_value=True
             ),
             patch.object(
-                process_sandbox_service, '_get_process_status', return_value=SandboxStatus.RUNNING
+                process_sandbox_service,
+                '_get_process_status',
+                return_value=SandboxStatus.RUNNING,
             ),
         ):
             mock_process = MagicMock()
