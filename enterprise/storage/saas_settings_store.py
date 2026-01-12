@@ -12,7 +12,6 @@ import httpx
 from cryptography.fernet import Fernet
 from integrations import stripe_service
 from pydantic import SecretStr
-import redis.asyncio as aioredis
 from server.auth.token_manager import TokenManager
 from server.constants import (
     CURRENT_USER_SETTINGS_VERSION,
@@ -35,7 +34,6 @@ from openhands.storage import get_file_store
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.http_session import httpx_verify_option
-
 
 # The max posible time to wait for another process to finish creating a user before retrying
 _REDIS_CREATE_TIMEOUT_SECONDS = 30
@@ -141,6 +139,7 @@ class SaasSettingsStore(SettingsStore):
 
     def _get_redis_client(self):
         from openhands.server.shared import sio
+
         redis_client = getattr(sio.manager, 'redis', None)
         return redis_client
 
@@ -155,8 +154,10 @@ class SaasSettingsStore(SettingsStore):
 
         # Prevent duplicate settings creation...
         redis_client = self._get_redis_client()
-        user_key = f"create_user:{self.user_id}"
-        proceed_with_create = await redis_client.set(user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS)
+        user_key = f'create_user:{self.user_id}'
+        proceed_with_create = await redis_client.set(
+            user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
+        )
         if not proceed_with_create:
             # The user is already being created in another thread / process
             await asyncio.sleep(_RETRY_LOAD_DELAY)
