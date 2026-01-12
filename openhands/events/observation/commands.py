@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema import ObservationType
 from openhands.events.observation.observation import Observation
+
+if TYPE_CHECKING:
+    from openhands.memory.offloader import ContextOffloader
 
 CMD_OUTPUT_PS1_BEGIN = '\n###PS1JSON###\n'
 CMD_OUTPUT_PS1_END = '\n###PS1END###'
@@ -103,6 +108,9 @@ class CmdOutputObservation(Observation):
     metadata: CmdOutputMetadata = field(default_factory=CmdOutputMetadata)
     # Whether the command output should be hidden from the user
     hidden: bool = False
+    # Context offloading fields
+    offloaded_path: str | None = field(default=None)
+    original_size: int | None = field(default=None)
 
     def __init__(
         self,
@@ -111,13 +119,17 @@ class CmdOutputObservation(Observation):
         observation: str = ObservationType.RUN,
         metadata: dict[str, Any] | CmdOutputMetadata | None = None,
         hidden: bool = False,
+        offloader: ContextOffloader | None = None,
         **kwargs: Any,
     ) -> None:
-        # Truncate content before passing it to parent
-        # Hidden commands don't go through LLM/event stream, so no need to truncate
-        truncate = not hidden
-        if truncate:
-            content = self._maybe_truncate(content)
+        # Initialize offload fields
+        self.offloaded_path = kwargs.pop('offloaded_path', None)
+        self.original_size = kwargs.pop('original_size', None)
+
+        # Process content: try offload first, then truncate as fallback
+        # Hidden commands don't go through LLM/event stream, so no need to process
+        if not hidden:
+            content = self._process_content(content, offloader)
 
         super().__init__(content)
 
@@ -134,6 +146,37 @@ class CmdOutputObservation(Observation):
             self.metadata.exit_code = kwargs['exit_code']
         if 'command_id' in kwargs:
             self.metadata.pid = kwargs['command_id']
+
+    def _process_content(
+        self,
+        content: str,
+        offloader: ContextOffloader | None,
+    ) -> str:
+        """Process content: try offload first (lossless), then truncate (lossy).
+
+        Args:
+            content: The raw content to process.
+            offloader: Optional context offloader for saving large outputs.
+
+        Returns:
+            Processed content (either preview message or truncated content).
+        """
+        # Try offloading first (lossless - preserves full content in file)
+        if offloader is not None and offloader.should_offload(content):
+            try:
+                result = offloader.offload_text(
+                    content=content,
+                    source_type='cmd',
+                )
+                self.offloaded_path = result.file_path
+                self.original_size = result.original_size
+                return result.preview_message
+            except Exception as e:
+                # Offload failed, fall back to truncation
+                logger.warning(f'Offload failed, falling back to truncation: {e}')
+
+        # Fallback: truncate (lossy - loses middle content)
+        return self._maybe_truncate(content)
 
     @staticmethod
     def _maybe_truncate(content: str, max_size: int = MAX_CMD_OUTPUT_SIZE) -> str:
@@ -211,6 +254,30 @@ class IPythonRunCellObservation(Observation):
     code: str
     observation: str = ObservationType.RUN_IPYTHON
     image_urls: list[str] | None = None
+    # Context offloading fields
+    offloaded_path: str | None = field(default=None)
+    original_size: int | None = field(default=None)
+
+    def offload_content(self, offloader: ContextOffloader) -> None:
+        """Offload large content to filesystem if needed.
+
+        Args:
+            offloader: The context offloader instance.
+        """
+        if not offloader.enabled:
+            return
+
+        if offloader.should_offload(self.content):
+            try:
+                result = offloader.offload_text(
+                    content=self.content,
+                    source_type='ipython',
+                )
+                self.offloaded_path = result.file_path
+                self.original_size = result.original_size
+                self.content = result.preview_message
+            except Exception as e:
+                logger.warning(f'IPython offload failed: {e}')
 
     @property
     def error(self) -> bool:
@@ -228,4 +295,6 @@ class IPythonRunCellObservation(Observation):
         result = f'**IPythonRunCellObservation**\n{self.content}'
         if self.image_urls:
             result += f'\nImages: {len(self.image_urls)}'
+        if self.offloaded_path:
+            result += f'\nOffloaded to: {self.offloaded_path}'
         return result

@@ -275,6 +275,45 @@ class RemoteRuntime(ActionExecutionClient):
         if self.config.debug or os.environ.get('DEBUG', 'false').lower() == 'true':
             environment['DEBUG'] = 'true'
         environment.update(self.config.sandbox.runtime_startup_env_vars)
+        # Pass context offloading configuration to sandbox
+        if self.config.offload.enabled:
+            environment.update(
+                {
+                    'OFFLOAD_ENABLED': 'true',
+                    'OFFLOAD_MAX_OUTPUT_CHARS': str(
+                        self.config.offload.max_output_chars
+                    ),
+                    'OFFLOAD_DIR': self.config.offload.offload_dir,
+                    'OFFLOAD_PREVIEW_HEAD_LINES': str(
+                        self.config.offload.preview_head_lines
+                    ),
+                    'OFFLOAD_PREVIEW_TAIL_LINES': str(
+                        self.config.offload.preview_tail_lines
+                    ),
+                    'OFFLOAD_PREVIEW_MAX_LINE_CHARS': str(
+                        self.config.offload.preview_max_line_chars
+                    ),
+                    'OFFLOAD_CLEANUP_ON_SESSION_END': str(
+                        self.config.offload.cleanup_on_session_end
+                    ),
+                    'OFFLOAD_RETENTION_HOURS': str(
+                        self.config.offload.retention_hours
+                    ),
+                    'OFFLOAD_MAX_TOTAL_SIZE_MB': str(
+                        self.config.offload.max_total_size_mb
+                    ),
+                    'OFFLOAD_BROWSER_DOM': str(
+                        self.config.offload.offload_browser_dom
+                    ),
+                    'OFFLOAD_BROWSER_AXTREE': str(
+                        self.config.offload.offload_browser_axtree
+                    ),
+                    'OFFLOAD_BROWSER_SCREENSHOT_THUMBNAIL_WIDTH': str(
+                        self.config.offload.browser_screenshot_thumbnail_width
+                    ),
+                    'SESSION_ID': self.sid,
+                }
+            )
         start_request: dict[str, Any] = {
             'image': self.container_image,
             'command': command,

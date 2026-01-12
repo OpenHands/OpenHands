@@ -41,6 +41,13 @@ DELETE_FROM_TRAJECTORY_EXTRAS = {
     'last_browser_action_error',
     'focused_element_bid',
     'extra_element_properties',
+    # Note: The following offload-related fields are intentionally NOT deleted
+    # to preserve references for replay/debugging:
+    # - offloaded_path (CmdOutputObservation)
+    # - original_size (CmdOutputObservation)
+    # - dom_offloaded_path (BrowserOutputObservation)
+    # - axtree_offloaded_path (BrowserOutputObservation)
+    # - screenshot_thumbnail (BrowserOutputObservation)
 }
 
 DELETE_FROM_TRAJECTORY_EXTRAS_AND_SCREENSHOTS = DELETE_FROM_TRAJECTORY_EXTRAS | {
@@ -126,6 +133,20 @@ def event_to_dict(event: 'Event') -> dict:
     # Remove task_completed from serialization when it's None (backward compatibility)
     if 'task_completed' in props and props['task_completed'] is None:
         props.pop('task_completed')
+
+    # Remove offload-related fields when None (backward compatibility)
+    # These fields are only populated when content offloading is enabled
+    offload_fields = [
+        'offloaded_path',
+        'original_size',
+        'dom_offloaded_path',
+        'axtree_offloaded_path',
+        'screenshot_thumbnail',
+        'screenshot_path',
+    ]
+    for field in offload_fields:
+        if field in props and (props[field] is None or props[field] == ''):
+            props.pop(field)
     if 'action' in d:
         # Handle security_risk for actions - include it in args
         if 'security_risk' in props:

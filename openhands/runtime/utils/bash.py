@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import os
 import re
 import time
 import uuid
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import bashlex
 import libtmux
@@ -18,6 +20,9 @@ from openhands.events.observation.commands import (
 )
 from openhands.runtime.utils.bash_constants import TIMEOUT_MESSAGE_TEMPLATE
 from openhands.utils.shutdown_listener import should_continue
+
+if TYPE_CHECKING:
+    from openhands.memory.offloader import ContextOffloader
 
 RUNTIME_USERNAME = os.getenv('RUNTIME_USERNAME')
 SU_TO_USER = os.getenv('SU_TO_USER', 'true').lower() in (
@@ -192,12 +197,14 @@ class BashSession:
         username: str | None = None,
         no_change_timeout_seconds: int = 30,
         max_memory_mb: int | None = None,
+        offloader: ContextOffloader | None = None,
     ):
         self.NO_CHANGE_TIMEOUT_SECONDS = no_change_timeout_seconds
         self.work_dir = work_dir
         self.username = username
         self._initialized = False
         self.max_memory_mb = max_memory_mb
+        self.offloader = offloader
 
     def initialize(self) -> None:
         self.server = libtmux.Server()
@@ -380,6 +387,7 @@ class BashSession:
             command=command,
             metadata=metadata,
             hidden=hidden,
+            offloader=self.offloader,
         )
 
     def _handle_nochange_timeout_command(
@@ -412,6 +420,7 @@ class BashSession:
             content=command_output,
             command=command,
             metadata=metadata,
+            offloader=self.offloader,
         )
 
     def _handle_hard_timeout_command(
@@ -446,6 +455,7 @@ class BashSession:
             command=command,
             content=command_output,
             metadata=metadata,
+            offloader=self.offloader,
         )
 
     def _ready_for_next_command(self) -> None:
@@ -512,12 +522,14 @@ class BashSession:
                     content='ERROR: No previous running command to retrieve logs from.',
                     command='',
                     metadata=CmdOutputMetadata(),
+                    offloader=self.offloader,
                 )
             if is_input:
                 return CmdOutputObservation(
                     content='ERROR: No previous running command to interact with.',
                     command='',
                     metadata=CmdOutputMetadata(),
+                    offloader=self.offloader,
                 )
 
         # Check if the command is a single command or multiple commands
@@ -586,6 +598,7 @@ class BashSession:
                 content=command_output,
                 metadata=metadata,
                 hidden=getattr(action, 'hidden', False),
+                offloader=self.offloader,
             )
 
         # Send actual command/inputs to the pane

@@ -467,6 +467,56 @@ class KubernetesRuntime(ActionExecutionClient):
         for key, value in self.config.sandbox.runtime_startup_env_vars.items():
             environment.append(V1EnvVar(name=key, value=value))
 
+        # Pass context offloading configuration to sandbox
+        if self.config.offload.enabled:
+            environment.extend(
+                [
+                    V1EnvVar(name='OFFLOAD_ENABLED', value='true'),
+                    V1EnvVar(
+                        name='OFFLOAD_MAX_OUTPUT_CHARS',
+                        value=str(self.config.offload.max_output_chars),
+                    ),
+                    V1EnvVar(name='OFFLOAD_DIR', value=self.config.offload.offload_dir),
+                    V1EnvVar(
+                        name='OFFLOAD_PREVIEW_HEAD_LINES',
+                        value=str(self.config.offload.preview_head_lines),
+                    ),
+                    V1EnvVar(
+                        name='OFFLOAD_PREVIEW_TAIL_LINES',
+                        value=str(self.config.offload.preview_tail_lines),
+                    ),
+                    V1EnvVar(
+                        name='OFFLOAD_PREVIEW_MAX_LINE_CHARS',
+                        value=str(self.config.offload.preview_max_line_chars),
+                    ),
+                    V1EnvVar(
+                        name='OFFLOAD_CLEANUP_ON_SESSION_END',
+                        value=str(self.config.offload.cleanup_on_session_end),
+                    ),
+                    V1EnvVar(
+                        name='OFFLOAD_RETENTION_HOURS',
+                        value=str(self.config.offload.retention_hours),
+                    ),
+                    V1EnvVar(
+                        name='OFFLOAD_MAX_TOTAL_SIZE_MB',
+                        value=str(self.config.offload.max_total_size_mb),
+                    ),
+                    V1EnvVar(
+                        name='OFFLOAD_BROWSER_DOM',
+                        value=str(self.config.offload.offload_browser_dom),
+                    ),
+                    V1EnvVar(
+                        name='OFFLOAD_BROWSER_AXTREE',
+                        value=str(self.config.offload.offload_browser_axtree),
+                    ),
+                    V1EnvVar(
+                        name='OFFLOAD_BROWSER_SCREENSHOT_THUMBNAIL_WIDTH',
+                        value=str(self.config.offload.browser_screenshot_thumbnail_width),
+                    ),
+                    V1EnvVar(name='SESSION_ID', value=self.sid),
+                ]
+            )
+
         # Prepare volume mounts if workspace is configured
         volume_mounts = [
             V1VolumeMount(

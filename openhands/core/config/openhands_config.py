@@ -22,6 +22,7 @@ from openhands.core.config.extended_config import ExtendedConfig
 from openhands.core.config.kubernetes_config import KubernetesConfig
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
+from openhands.core.config.offload_config import OffloadConfig
 from openhands.core.config.sandbox_config import SandboxConfig
 from openhands.core.config.security_config import SecurityConfig
 
@@ -125,6 +126,7 @@ class OpenHandsConfig(BaseModel):
     mcp_host: str = Field(default=f'localhost:{os.getenv("port", 3000)}')
     mcp: MCPConfig = Field(default_factory=MCPConfig)
     kubernetes: KubernetesConfig = Field(default_factory=KubernetesConfig)
+    offload: OffloadConfig = Field(default_factory=OffloadConfig)
     git_user_name: str = Field(
         default='openhands', description='Git user name for commits made by the agent'
     )

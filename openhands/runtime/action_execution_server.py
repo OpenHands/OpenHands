@@ -63,6 +63,10 @@ from openhands.runtime.browser import browse
 from openhands.runtime.browser.browser_env import BrowserEnv
 from openhands.runtime.file_viewer_server import start_file_viewer_server
 
+# Import context offloader
+from openhands.core.config.offload_config import OffloadConfig
+from openhands.memory.offloader import ContextOffloader
+
 # Import our custom MCP Proxy Manager
 from openhands.runtime.mcp.proxy import MCPProxyManager
 from openhands.runtime.plugins import ALL_PLUGINS, JupyterPlugin, Plugin, VSCodePlugin
@@ -222,6 +226,70 @@ class ActionExecutor:
         )
         self.memory_monitor.start_monitoring()
 
+        # Initialize context offloader if enabled
+        self.offloader: ContextOffloader | None = None
+        offload_enabled = os.environ.get('OFFLOAD_ENABLED', 'False').lower() in [
+            'true',
+            '1',
+            'yes',
+        ]
+        if offload_enabled:
+            try:
+                offload_config = OffloadConfig(
+                    enabled=True,
+                    max_output_chars=int(os.environ.get('OFFLOAD_MAX_OUTPUT_CHARS', '25000')),
+                    offload_dir=os.environ.get(
+                        'OFFLOAD_DIR', '.openhands/context_offload'
+                    ),
+                    preview_head_lines=int(
+                        os.environ.get('OFFLOAD_PREVIEW_HEAD_LINES', '15')
+                    ),
+                    preview_tail_lines=int(
+                        os.environ.get('OFFLOAD_PREVIEW_TAIL_LINES', '5')
+                    ),
+                    preview_max_line_chars=int(
+                        os.environ.get('OFFLOAD_PREVIEW_MAX_LINE_CHARS', '200')
+                    ),
+                    cleanup_on_session_end=os.environ.get(
+                        'OFFLOAD_CLEANUP_ON_SESSION_END', 'True'
+                    ).lower()
+                    in ['true', '1', 'yes'],
+                    retention_hours=int(
+                        os.environ.get('OFFLOAD_RETENTION_HOURS', '24')
+                    ),
+                    max_total_size_mb=int(
+                        os.environ.get('OFFLOAD_MAX_TOTAL_SIZE_MB', '500')
+                    ),
+                    offload_browser_dom=os.environ.get(
+                        'OFFLOAD_BROWSER_DOM', 'True'
+                    ).lower()
+                    in ['true', '1', 'yes'],
+                    offload_browser_axtree=os.environ.get(
+                        'OFFLOAD_BROWSER_AXTREE', 'True'
+                    ).lower()
+                    in ['true', '1', 'yes'],
+                    browser_screenshot_thumbnail_width=int(
+                        os.environ.get('OFFLOAD_BROWSER_SCREENSHOT_THUMBNAIL_WIDTH', '400')
+                    ),
+                )
+                # Use a unique session ID for offload directory
+                session_id = os.environ.get('SESSION_ID', 'default')
+                self.offloader = ContextOffloader(
+                    config=offload_config,
+                    workspace_dir=work_dir,
+                    session_id=session_id,
+                )
+                logger.info(
+                    f'Context offloader initialized with max_output_chars={offload_config.max_output_chars}'
+                )
+            except (ValueError, TypeError) as e:
+                # If env var parsing fails, log warning and continue without offloading
+                logger.warning(
+                    f'Failed to initialize context offloader due to invalid config: {e}. '
+                    'Offloading will be disabled for this session.'
+                )
+                self.offloader = None
+
     @property
     def initial_cwd(self):
         return self._initial_cwd
@@ -284,6 +352,7 @@ class ActionExecutor:
                     os.environ.get('NO_CHANGE_TIMEOUT_SECONDS', 10)
                 ),
                 max_memory_mb=self.max_memory_gb * 1024 if self.max_memory_gb else None,
+                offloader=self.offloader,
             )
             bash_session.initialize()
             return bash_session
@@ -427,6 +496,9 @@ class ActionExecutor:
                     f'\n[Jupyter current working directory: {self.bash_session.cwd}]'
                 )
                 obs.content += f'\n[Jupyter Python interpreter: {_jupyter_plugin.python_interpreter_path}]'
+            # Offload large IPython output if offloader is enabled
+            if self.offloader is not None:
+                obs.offload_content(self.offloader)
             return obs
         else:
             raise RuntimeError(
@@ -594,7 +666,11 @@ class ActionExecutor:
                 'Browser functionality is not supported or disabled.'
             )
         await self._ensure_browser_ready()
-        return await browse(action, self.browser, self.initial_cwd)
+        observation = await browse(action, self.browser, self.initial_cwd)
+        # Offload large browser content if offloader is enabled
+        if self.offloader is not None and hasattr(observation, 'offload_large_content'):
+            observation.offload_large_content(self.offloader)
+        return observation
 
     async def browse_interactive(self, action: BrowseInteractiveAction) -> Observation:
         if self.browser is None:
@@ -603,6 +679,11 @@ class ActionExecutor:
             )
         await self._ensure_browser_ready()
         browser_observation = await browse(action, self.browser, self.initial_cwd)
+        # Offload large browser content if offloader is enabled
+        if self.offloader is not None and hasattr(
+            browser_observation, 'offload_large_content'
+        ):
+            browser_observation.offload_large_content(self.offloader)
         if not browser_observation.error:
             return browser_observation
         else:
@@ -648,6 +729,10 @@ class ActionExecutor:
             self.bash_session.close()
         if self.browser is not None:
             self.browser.close()
+        # Clean up offloaded files
+        if self.offloader is not None:
+            removed = self.offloader.cleanup()
+            logger.info(f'Cleaned up {removed} offloaded files')
 
 
 if __name__ == '__main__':
