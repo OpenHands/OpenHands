@@ -35,12 +35,8 @@ from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.http_session import httpx_verify_option
 
-<<<<<<< HEAD
-# The max posible time to wait for another process to finish creating a user before retrying
-=======
 
 # The max possible time to wait for another process to finish creating a user before retrying
->>>>>>> 9eaa6484f04696c3852dc1ea92adc6c6123ff2b3
 _REDIS_CREATE_TIMEOUT_SECONDS = 30
 # The delay to wait for another process to finish creating a user before trying to load again
 _RETRY_LOAD_DELAY_SECONDS = 2
