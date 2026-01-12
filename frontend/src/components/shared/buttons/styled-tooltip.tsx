@@ -24,10 +24,7 @@ export function StyledTooltip({
       content={content}
       closeDelay={closeDelay}
       placement={placement}
-      className={cn(
-        "bg-white text-black hover:bg-transparent",
-        tooltipClassName,
-      )}
+      className={cn("bg-white text-black", tooltipClassName)}
       showArrow={showArrow}
     >
       <div className="inline-flex">{children}</div>
