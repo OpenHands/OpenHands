@@ -1,6 +1,5 @@
 """Tests for distributed_lock module."""
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest

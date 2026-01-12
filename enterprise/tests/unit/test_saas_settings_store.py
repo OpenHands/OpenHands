@@ -1550,7 +1550,9 @@ async def test_create_default_settings_with_payment_required_no_payment(
 
 
 @pytest.mark.asyncio
-async def test_load_settings_after_lock_wait_with_old_version(session_maker, mock_config):
+async def test_load_settings_after_lock_wait_with_old_version(
+    session_maker, mock_config
+):
     """Test that _load_settings_after_lock_wait returns None for old version settings."""
     mock_redis = MagicMock()
     store = SaasSettingsStore('user-id', session_maker, mock_config, mock_redis)

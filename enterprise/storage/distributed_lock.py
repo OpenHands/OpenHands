@@ -143,7 +143,9 @@ class DistributedLock:
         """
 
         try:
-            result = self.redis_client.eval(release_script, 1, self.key, self._lock_value)
+            result = self.redis_client.eval(
+                release_script, 1, self.key, self._lock_value
+            )
             self._acquired = False
             if result:
                 logger.debug(

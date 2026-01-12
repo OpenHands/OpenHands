@@ -208,7 +208,10 @@ class SaasSettingsStore(SettingsStore):
         """
         with self.session_maker() as session:
             db_settings = self.get_user_settings_by_keycloak_id(self.user_id, session)
-            if db_settings and db_settings.user_version == CURRENT_USER_SETTINGS_VERSION:
+            if (
+                db_settings
+                and db_settings.user_version == CURRENT_USER_SETTINGS_VERSION
+            ):
                 logger.info(
                     'saas_settings_store:create_default_settings:loaded_after_wait',
                     extra={'user_id': self.user_id},
