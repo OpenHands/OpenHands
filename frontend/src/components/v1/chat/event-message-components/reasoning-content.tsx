@@ -13,6 +13,86 @@ interface ReasoningContentProps {
   event: ActionEvent;
 }
 
+interface ThinkingBlockItemProps {
+  block: ThinkingBlock;
+  index: number;
+}
+
+interface RedactedThinkingBlockItemProps {
+  block: RedactedThinkingBlock;
+  index: number;
+}
+
+interface ThinkingBlocksListProps {
+  blocks: (ThinkingBlock | RedactedThinkingBlock)[];
+}
+
+interface ReasoningContentSectionProps {
+  content: string;
+}
+
+function ThinkingBlockItem({ block, index }: ThinkingBlockItemProps) {
+  return (
+    <div className="mb-2">
+      <div className="text-xs text-gray-500 mb-1">
+        Thinking Block {index + 1}
+      </div>
+      <div className="bg-gray-50 dark:bg-gray-800 rounded p-2 text-sm">
+        <MarkdownRenderer includeStandard>{block.thinking}</MarkdownRenderer>
+      </div>
+    </div>
+  );
+}
+
+function RedactedThinkingBlockItem({
+  block: _block, // eslint-disable-line @typescript-eslint/no-unused-vars
+  index,
+}: RedactedThinkingBlockItemProps) {
+  return (
+    <div className="mb-2">
+      <div className="text-xs text-gray-500 mb-1">
+        Redacted Thinking Block {index + 1}
+      </div>
+      <div className="bg-gray-50 dark:bg-gray-800 rounded p-2 text-sm italic text-gray-600">
+        [Redacted thinking content]
+      </div>
+    </div>
+  );
+}
+
+function ThinkingBlocksList({ blocks }: ThinkingBlocksListProps) {
+  return (
+    <>
+      {blocks.map((block, index) => {
+        if (block.type === "thinking") {
+          return <ThinkingBlockItem key={index} block={block} index={index} />;
+        }
+        if (block.type === "redacted_thinking") {
+          return (
+            <RedactedThinkingBlockItem
+              key={index}
+              block={block}
+              index={index}
+            />
+          );
+        }
+        return null;
+      })}
+    </>
+  );
+}
+
+function ReasoningContentSection({ content }: ReasoningContentSectionProps) {
+  return (
+    <div className="mb-3">
+      <div className="text-xs text-gray-500 mb-1">Reasoning Content</div>
+      <div className="bg-gray-50 dark:bg-gray-800 rounded p-3 text-sm">
+        <MarkdownRenderer includeStandard>{content}</MarkdownRenderer>
+      </div>
+    </div>
+  );
+}
+
 export function ReasoningContent({ event }: ReasoningContentProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -25,42 +105,6 @@ export function ReasoningContent({ event }: ReasoningContentProps) {
   if (!hasReasoningContent && !hasThinkingBlocks) {
     return null;
   }
-
-  const renderThinkingBlocks = () => {
-    if (!hasThinkingBlocks) return null;
-
-    return event.thinking_blocks.map(
-      (block: ThinkingBlock | RedactedThinkingBlock, index) => {
-        if (block.type === "thinking") {
-          return (
-            <div key={index} className="mb-2">
-              <div className="text-xs text-gray-500 mb-1">
-                Thinking Block {index + 1}
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded p-2 text-sm">
-                <MarkdownRenderer includeStandard>
-                  {block.thinking}
-                </MarkdownRenderer>
-              </div>
-            </div>
-          );
-        }
-        if (block.type === "redacted_thinking") {
-          return (
-            <div key={index} className="mb-2">
-              <div className="text-xs text-gray-500 mb-1">
-                Redacted Thinking Block {index + 1}
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded p-2 text-sm italic text-gray-600">
-                [Redacted thinking content]
-              </div>
-            </div>
-          );
-        }
-        return null;
-      },
-    );
-  };
 
   return (
     <div className="mb-2">
@@ -80,22 +124,13 @@ export function ReasoningContent({ event }: ReasoningContentProps) {
       {isExpanded && (
         <div className="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
           {hasReasoningContent && (
-            <div className="mb-3">
-              <div className="text-xs text-gray-500 mb-1">
-                Reasoning Content
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded p-3 text-sm">
-                <MarkdownRenderer includeStandard>
-                  {event.reasoning_content || ""}
-                </MarkdownRenderer>
-              </div>
-            </div>
+            <ReasoningContentSection content={event.reasoning_content || ""} />
           )}
 
           {hasThinkingBlocks && (
             <div>
               <div className="text-xs text-gray-500 mb-2">Thinking Blocks</div>
-              {renderThinkingBlocks()}
+              <ThinkingBlocksList blocks={event.thinking_blocks} />
             </div>
           )}
         </div>
