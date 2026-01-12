@@ -3,6 +3,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { X } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
 
 interface ErrorMessageBannerProps {
   message: string;
@@ -24,14 +25,6 @@ export function ErrorMessageBanner({
     displayTextForLength.length > DEFAULT_MAX_COLLAPSED_CHARS;
 
   const isCollapsed = shouldShowToggle && !isExpanded;
-  const clampStyle: React.CSSProperties | undefined = isCollapsed
-    ? {
-        display: "-webkit-box",
-        WebkitLineClamp: 3,
-        WebkitBoxOrient: "vertical",
-        overflow: "hidden",
-      }
-    : undefined;
 
   return (
     <div
@@ -40,8 +33,10 @@ export function ErrorMessageBanner({
     >
       <div className="min-w-0 flex-1">
         <div
-          className="whitespace-pre-wrap break-words"
-          style={clampStyle}
+          className={cn(
+            "whitespace-pre-wrap break-words",
+            isCollapsed && "line-clamp-3",
+          )}
           data-testid="error-message-banner-content"
         >
           {isI18nKey ? (
