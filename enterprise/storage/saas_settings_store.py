@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import binascii
 import hashlib
 import json
@@ -11,6 +12,7 @@ import httpx
 from cryptography.fernet import Fernet
 from integrations import stripe_service
 from pydantic import SecretStr
+import redis.asyncio as aioredis
 from server.auth.token_manager import TokenManager
 from server.constants import (
     CURRENT_USER_SETTINGS_VERSION,
@@ -35,11 +37,18 @@ from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.http_session import httpx_verify_option
 
 
+# The max posible time to wait for another process to finish creating a user before retrying
+_REDIS_CREATE_TIMEOUT_SECONDS = 30
+# The delay to wait for another process to finish creating a user before trying to load again
+_RETRY_LOAD_DELAY = 2
+
+
 @dataclass
 class SaasSettingsStore(SettingsStore):
     user_id: str
     session_maker: sessionmaker
     config: OpenHandsConfig
+    redis_client: aioredis.Redis
 
     def get_user_settings_by_keycloak_id(
         self, keycloak_user_id: str, session=None
@@ -139,6 +148,14 @@ class SaasSettingsStore(SettingsStore):
         # You must log in before you get default settings
         if not self.user_id:
             return None
+
+        # Prevent duplicate settings creation...
+        user_key = f"create_user:{self.user_id}"
+        proceed_with_create = await self.redis_client.set(user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS)
+        if not proceed_with_create:
+            # The user is already being created in another thread / process
+            await asyncio.sleep(_RETRY_LOAD_DELAY)
+            return self.load()
 
         # Only users that have specified a payment method get default settings
         if REQUIRE_PAYMENT and not await stripe_service.has_payment_method(
@@ -397,7 +414,9 @@ class SaasSettingsStore(SettingsStore):
         user_id: str,  # type: ignore[override]
     ) -> SaasSettingsStore:
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
-        return SaasSettingsStore(user_id, session_maker, config)
+        from openhands.server.shared import sio
+        redis_client = getattr(sio.manager, 'redis', None)
+        return SaasSettingsStore(user_id, session_maker, config, redis_client)
 
     def _decrypt_kwargs(self, kwargs: dict):
         fernet = self._fernet()
