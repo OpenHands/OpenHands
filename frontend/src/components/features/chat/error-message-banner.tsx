@@ -28,13 +28,13 @@ export function ErrorMessageBanner({
 
   return (
     <div
-      className="w-full rounded-lg p-2 text-black border border-red-800 bg-red-500 flex gap-2 items-start"
+      className="w-full rounded-lg p-2 border border-[#FF0006] bg-[#4A0709] flex gap-2 items-start text-white"
       data-testid="error-message-banner"
     >
       <div className="min-w-0 flex-1">
         <div
           className={cn(
-            "whitespace-pre-wrap break-words",
+            "whitespace-pre-wrap wrap-break-words",
             isCollapsed && "line-clamp-3",
           )}
           data-testid="error-message-banner-content"
@@ -76,7 +76,7 @@ export function ErrorMessageBanner({
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 rounded-md p-1 hover:bg-black/10"
+          className="shrink-0 rounded-md p-1 hover:bg-black/10 cursor-pointer"
           aria-label={t(I18nKey.BUTTON$CLOSE)}
           data-testid="error-message-banner-dismiss"
         >
