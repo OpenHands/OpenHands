@@ -667,8 +667,9 @@ function LlmSettingsScreen() {
                   )?.toString()}
                   onChange={(value) => handleCondenserMaxSizeIsDirty(value)}
                   isDisabled={!settings.enable_default_condenser}
+                  className="w-full max-w-[680px] capitalize"
                 />
-                <p className="text-xs text-tertiary-alt mt-1">
+                <p className="text-xs text-tertiary-alt mt-6">
                   {t(I18nKey.SETTINGS$CONDENSER_MAX_SIZE_TOOLTIP)}
                 </p>
               </div>

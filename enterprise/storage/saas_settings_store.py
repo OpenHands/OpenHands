@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import binascii
 import hashlib
 import json
@@ -33,6 +34,13 @@ from openhands.storage import get_file_store
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.http_session import httpx_verify_option
+
+# The max possible time to wait for another process to finish creating a user before retrying
+_REDIS_CREATE_TIMEOUT_SECONDS = 30
+# The delay to wait for another process to finish creating a user before trying to load again
+_RETRY_LOAD_DELAY_SECONDS = 2
+# Redis key prefix for user creation locks
+_REDIS_USER_CREATION_KEY_PREFIX = 'create_user:'
 
 
 @dataclass
@@ -131,6 +139,32 @@ class SaasSettingsStore(SettingsStore):
                 session.add(settings)
             session.commit()
 
+    def _get_redis_client(self):
+        """Get the Redis client from the Socket.IO manager."""
+        from openhands.server.shared import sio
+
+        return getattr(sio.manager, 'redis', None)
+
+    async def _acquire_user_creation_lock(self) -> bool:
+        """Attempt to acquire a distributed lock for user creation.
+
+        Returns True if the lock was acquired or if Redis is unavailable (fallback to no locking).
+        Returns False if another process holds the lock.
+        """
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            logger.warning(
+                'saas_settings_store:_acquire_user_creation_lock:no_redis_client',
+                extra={'user_id': self.user_id},
+            )
+            return True  # Proceed without locking if Redis is unavailable
+
+        user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{self.user_id}'
+        lock_acquired = await redis_client.set(
+            user_key, 1, nx=True, ex=_REDIS_CREATE_TIMEOUT_SECONDS
+        )
+        return bool(lock_acquired)
+
     async def create_default_settings(self, user_settings: UserSettings | None):
         logger.info(
             'saas_settings_store:create_default_settings:start',
@@ -139,6 +173,16 @@ class SaasSettingsStore(SettingsStore):
         # You must log in before you get default settings
         if not self.user_id:
             return None
+
+        # Prevent duplicate settings creation using distributed lock
+        if not await self._acquire_user_creation_lock():
+            # The user is already being created in another thread / process
+            logger.info(
+                'saas_settings_store:create_default_settings:waiting_for_lock',
+                extra={'user_id': self.user_id},
+            )
+            await asyncio.sleep(_RETRY_LOAD_DELAY_SECONDS)
+            return await self.load()
 
         # Only users that have specified a payment method get default settings
         if REQUIRE_PAYMENT and not await stripe_service.has_payment_method(

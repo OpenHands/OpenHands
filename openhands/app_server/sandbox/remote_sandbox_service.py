@@ -383,7 +383,9 @@ class RemoteSandboxService(SandboxService):
 
         return None
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
             # Enforce sandbox limits by cleaning up old sandboxes
@@ -402,8 +404,9 @@ class RemoteSandboxService(SandboxService):
                     raise ValueError('Sandbox Spec not found')
                 sandbox_spec = sandbox_spec_maybe
 
-            # Create a unique id
-            sandbox_id = base62.encodebytes(os.urandom(16))
+            # Create a unique id, use provided sandbox_id if available
+            if sandbox_id is None:
+                sandbox_id = base62.encodebytes(os.urandom(16))
 
             # get user id
             user_id = await self.user_context.get_user_id()
