@@ -25,7 +25,7 @@ email_validator==2.2.0
 fastapi==0.115.12
 fastapi-cli==0.0.7
 fastrlock==0.8.3
-filelock==3.18.0
+filelock==3.20.3
 frozenlist==1.6.0
 fsspec==2025.3.2
 gguf==0.16.2
