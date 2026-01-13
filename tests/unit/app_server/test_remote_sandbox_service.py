@@ -451,6 +451,34 @@ class TestSandboxLifecycle:
             await remote_sandbox_service.start_sandbox('non-existent-spec')
 
     @pytest.mark.asyncio
+    async def test_start_sandbox_with_sandbox_id(
+        self, remote_sandbox_service, mock_sandbox_spec_service
+    ):
+        """Test starting sandbox with a specified sandbox_id."""
+        # Setup
+        mock_response = MagicMock()
+        mock_response.json.return_value = create_runtime_data(
+            session_id='custom_sandbox_id'
+        )
+        remote_sandbox_service.httpx_client.request.return_value = mock_response
+        remote_sandbox_service.pause_old_sandboxes = AsyncMock(return_value=[])
+
+        # Mock database operations
+        remote_sandbox_service.db_session.add = MagicMock()
+        remote_sandbox_service.db_session.commit = AsyncMock()
+
+        # Execute with custom sandbox_id - should not need base62 encoding
+        sandbox_info = await remote_sandbox_service.start_sandbox(
+            sandbox_id='custom_sandbox_id'
+        )
+
+        # Verify the custom sandbox_id is used
+        assert sandbox_info.id == 'custom_sandbox_id'
+        # Verify the stored sandbox used the custom ID
+        add_call_args = remote_sandbox_service.db_session.add.call_args[0][0]
+        assert add_call_args.id == 'custom_sandbox_id'
+
+    @pytest.mark.asyncio
     async def test_start_sandbox_http_error(self, remote_sandbox_service):
         """Test sandbox start with HTTP error."""
         # Setup
