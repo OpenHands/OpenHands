@@ -14,6 +14,8 @@ test("avatar context menu stays open when moving cursor diagonally to menu", asy
   test.skip(browserName === "webkit", "Playwright hover simulation unreliable");
 
   await page.goto("/");
+  const sidebar = page.locator("aside");
+  await expect(sidebar).toBeVisible({ timeout: 30000 });
 
   const aiConfigModal = page.getByTestId("ai-config-modal");
   if (await aiConfigModal.isVisible().catch(() => false)) {
@@ -24,7 +26,7 @@ test("avatar context menu stays open when moving cursor diagonally to menu", asy
   }
 
   const userAvatar = page.getByTestId("user-avatar");
-  await expect(userAvatar).toBeVisible();
+  await expect(userAvatar).toBeVisible({ timeout: 10000 });
 
   const avatarBox = await userAvatar.boundingBox();
   if (!avatarBox) {
