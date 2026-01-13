@@ -19,6 +19,7 @@ def test_kubernetes_config_defaults():
     assert config.node_selector_key is None
     assert config.node_selector_val is None
     assert config.tolerations_yaml is None
+    assert config.kubeconfig_path is None
     assert config.privileged is False
 
 
@@ -37,6 +38,7 @@ def test_kubernetes_config_custom_values():
         node_selector_key='zone',
         node_selector_val='us-east-1',
         tolerations_yaml='- key: special\n  value: true',
+        kubeconfig_path='/path/to/kubeconfig',
         privileged=True,
     )
 
@@ -52,6 +54,7 @@ def test_kubernetes_config_custom_values():
     assert config.node_selector_key == 'zone'
     assert config.node_selector_val == 'us-east-1'
     assert config.tolerations_yaml == '- key: special\n  value: true'
+    assert config.kubeconfig_path == '/path/to/kubeconfig'
     assert config.privileged is True
 
 
@@ -60,3 +63,18 @@ def test_kubernetes_config_validation():
     # Test that extra fields are not allowed
     with pytest.raises(ValidationError):
         KubernetesConfig(extra_field='not allowed')
+
+
+def test_kubernetes_config_kubeconfig_path():
+    """Test that KubernetesConfig properly handles kubeconfig_path."""
+    # Test with kubeconfig_path specified
+    config_with_path = KubernetesConfig(kubeconfig_path='/custom/kubeconfig')
+    assert config_with_path.kubeconfig_path == '/custom/kubeconfig'
+
+    # Test with None kubeconfig_path (default)
+    config_default = KubernetesConfig()
+    assert config_default.kubeconfig_path is None
+
+    # Test with empty string
+    config_empty = KubernetesConfig(kubeconfig_path='')
+    assert config_empty.kubeconfig_path == ''

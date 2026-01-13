@@ -52,8 +52,19 @@ OpenHands provides extensive configuration options for Kubernetes deployments un
 - Ingress and networking settings
 - Runtime Pod Security settings
 - Resource limits and requests
+- Kubeconfig for out-of-cluster usage
 
 For a complete list of available Kubernetes configuration options, refer to the `[kubernetes]` section in the `config.template.toml` file in the repository root.
+
+**Kubeconfig Support**
+
+When running OpenHands outside of a Kubernetes cluster (e.g., for local development with KIND), you can specify a kubeconfig file to connect to your cluster:
+
+```toml
+[kubernetes]
+# ... other settings ...
+kubeconfig_path = "/path/to/your/kubeconfig"
+```
 
 ## Local Development Setup
 

@@ -24,6 +24,7 @@ class KubernetesConfig(BaseModel):
         node_selector_key: Optional node selector key for pod scheduling
         node_selector_val: Optional node selector value for pod scheduling
         tolerations_yaml: Optional YAML string defining pod tolerations
+        kubeconfig_path: Optional path to kubeconfig file for out-of-cluster usage
     """
 
     namespace: str = Field(
@@ -63,6 +64,10 @@ class KubernetesConfig(BaseModel):
     )
     tolerations_yaml: str | None = Field(
         default=None, description='Optional YAML string defining pod tolerations'
+    )
+    kubeconfig_path: str | None = Field(
+        default=None,
+        description='Optional path to kubeconfig file for out-of-cluster usage',
     )
     privileged: bool = Field(
         default=False,

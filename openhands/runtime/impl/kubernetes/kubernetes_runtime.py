@@ -1,4 +1,3 @@
-from functools import lru_cache
 from typing import Callable
 from uuid import UUID
 
@@ -94,7 +93,7 @@ class KubernetesRuntime(ActionExecutionClient):
     ):
         if not KubernetesRuntime._shutdown_listener_id:
             KubernetesRuntime._shutdown_listener_id = add_shutdown_listener(
-                lambda: KubernetesRuntime._cleanup_k8s_resources(
+                lambda: self._cleanup_k8s_resources(
                     namespace=self._k8s_namespace,
                     remove_pvc=True,
                     conversation_id=self.sid,
@@ -113,6 +112,7 @@ class KubernetesRuntime(ActionExecutionClient):
 
         self._k8s_config = self.config.kubernetes
         self._k8s_namespace = self._k8s_config.namespace
+        KubernetesRuntime._k8s_config = self._k8s_config
         KubernetesRuntime._namespace = self._k8s_namespace
 
         # Initialize ports with default values in the required range
@@ -322,74 +322,178 @@ class KubernetesRuntime(ActionExecutionClient):
         )
         raise TimeoutError(f'Pod {self.pod_name} is not in Running state yet.')
 
-    @staticmethod
-    @lru_cache(maxsize=1)
-    def _init_kubernetes_client() -> tuple[client.CoreV1Api, client.NetworkingV1Api]:
+    @classmethod
+    def _init_kubernetes_client(
+        cls,
+    ) -> tuple[client.CoreV1Api, client.NetworkingV1Api]:
         """Initialize the Kubernetes client."""
         try:
-            config.load_incluster_config()  # Even local usage with mirrord technically uses an incluster config.
+            # This is a tricky situation - we need to access the config from a cached method
+            # We'll use the class variable that stores the config from the first instance
+            # This is a workaround to make the caching work while still supporting kubeconfig
+            if (
+                hasattr(KubernetesRuntime, '_k8s_config')
+                and KubernetesRuntime._k8s_config
+            ):
+                k8s_config = KubernetesRuntime._k8s_config
+                # If kubeconfig is provided in the config, use it
+                if k8s_config.kubeconfig_path:
+                    config.load_kube_config(config_file=k8s_config.kubeconfig_path)
+                    logger.info(
+                        f'Loaded kubeconfig from path: {k8s_config.kubeconfig_path}'
+                    )
+                else:
+                    # Fall back to in-cluster config
+                    config.load_incluster_config()  # Even local usage with mirrord technically uses an incluster config.
+                    logger.info('Using in-cluster Kubernetes configuration')
+            else:
+                # Fall back to in-cluster config if no config is available
+                config.load_incluster_config()  # Even local usage with mirrord technically uses an incluster config.
+                logger.info('Using in-cluster Kubernetes configuration (fallback)')
             return client.CoreV1Api(), client.NetworkingV1Api()
         except Exception as ex:
             logger.error(
-                'Failed to initialize Kubernetes client. Make sure you have kubectl configured correctly or are running in a Kubernetes cluster.',
+                f'Failed to initialize Kubernetes client: {ex}. '
+                'Make sure you are running in a Kubernetes cluster or have proper kubeconfig configured. '
+                'For local development with mirrord, ensure mirrord is properly set up.'
             )
             raise ex
 
-    @staticmethod
+    @classmethod
     def _cleanup_k8s_resources(
-        namespace: str, remove_pvc: bool = False, conversation_id: str = ''
+        cls, namespace: str, remove_pvc: bool = False, conversation_id: str = ''
     ):
         """Clean up Kubernetes resources with our prefix in the namespace.
 
         :param remove_pvc: If True, also remove persistent volume claims (defaults to False).
+        :param conversation_id: The conversation ID to clean up resources for.
         """
         try:
-            k8s_api, k8s_networking_api = KubernetesRuntime._init_kubernetes_client()
+            # Initialize Kubernetes client for cleanup (since this is a class method)
+            k8s_api, k8s_networking_api = cls._init_kubernetes_client()
 
-            pod_name = KubernetesRuntime._get_pod_name(conversation_id)
-            service_name = KubernetesRuntime._get_svc_name(pod_name)
-            vscode_service_name = KubernetesRuntime._get_vscode_svc_name(pod_name)
-            ingress_name = KubernetesRuntime._get_vscode_ingress_name(pod_name)
-            pvc_name = KubernetesRuntime._get_pvc_name(pod_name)
+            # Generate resource names
+            # If conversation_id is provided, use it; otherwise, we can't generate names
+            # This is a limitation of the class method approach
+            if conversation_id:
+                pod_name = cls._get_pod_name(conversation_id)
+                service_name = cls._get_svc_name(pod_name)
+                vscode_service_name = cls._get_vscode_svc_name(pod_name)
+                ingress_name = cls._get_vscode_ingress_name(pod_name)
+                pvc_name = cls._get_pvc_name(pod_name)
+            else:
+                # If no conversation_id is provided, we can't clean up specific resources
+                # This is a limitation of the class method approach
+                logger.warning(
+                    'No conversation_id provided for cleanup, skipping resource deletion'
+                )
+                return
+
+            # Attempt to delete all resources with better error handling
+            deleted_resources = []
 
             try:
+                # Delete PVC if requested
                 if remove_pvc:
-                    # Delete PVC if requested
                     k8s_api.delete_namespaced_persistent_volume_claim(
                         name=pvc_name,
                         namespace=namespace,
                         body=client.V1DeleteOptions(),
                     )
+                    deleted_resources.append(f'PVC {pvc_name}')
                     logger.info(f'Deleted PVC {pvc_name}')
+            except client.rest.ApiException as e:
+                if e.status != 404:  # 404 means resource doesn't exist, which is fine
+                    logger.warning(f'Failed to delete PVC {pvc_name}: {e}')
+                else:
+                    logger.debug(f'PVC {pvc_name} does not exist (already deleted)')
+            except Exception as e:
+                logger.error(f'Unexpected error deleting PVC {pvc_name}: {e}')
 
+            try:
+                # Delete pod
                 k8s_api.delete_namespaced_pod(
                     name=pod_name,
                     namespace=namespace,
                     body=client.V1DeleteOptions(),
                 )
+                deleted_resources.append(f'Pod {pod_name}')
                 logger.info(f'Deleted pod {pod_name}')
+            except client.rest.ApiException as e:
+                if e.status != 404:  # 404 means resource doesn't exist, which is fine
+                    logger.warning(f'Failed to delete pod {pod_name}: {e}')
+                else:
+                    logger.debug(f'Pod {pod_name} does not exist (already deleted)')
+            except Exception as e:
+                logger.error(f'Unexpected error deleting pod {pod_name}: {e}')
 
+            try:
+                # Delete main service
                 k8s_api.delete_namespaced_service(
                     name=service_name,
                     namespace=namespace,
                 )
+                deleted_resources.append(f'Service {service_name}')
                 logger.info(f'Deleted service {service_name}')
-                # Delete the vs code service
+            except client.rest.ApiException as e:
+                if e.status != 404:  # 404 means resource doesn't exist, which is fine
+                    logger.warning(f'Failed to delete service {service_name}: {e}')
+                else:
+                    logger.debug(
+                        f'Service {service_name} does not exist (already deleted)'
+                    )
+            except Exception as e:
+                logger.error(f'Unexpected error deleting service {service_name}: {e}')
+
+            try:
+                # Delete VSCode service
                 k8s_api.delete_namespaced_service(
                     name=vscode_service_name, namespace=namespace
                 )
+                deleted_resources.append(f'VSCode Service {vscode_service_name}')
                 logger.info(f'Deleted service {vscode_service_name}')
+            except client.rest.ApiException as e:
+                if e.status != 404:  # 404 means resource doesn't exist, which is fine
+                    logger.warning(
+                        f'Failed to delete VSCode service {vscode_service_name}: {e}'
+                    )
+                else:
+                    logger.debug(
+                        f'VSCode Service {vscode_service_name} does not exist (already deleted)'
+                    )
+            except Exception as e:
+                logger.error(
+                    f'Unexpected error deleting VSCode service {vscode_service_name}: {e}'
+                )
 
+            try:
+                # Delete ingress
                 k8s_networking_api.delete_namespaced_ingress(
                     name=ingress_name, namespace=namespace
                 )
+                deleted_resources.append(f'Ingress {ingress_name}')
                 logger.info(f'Deleted ingress {ingress_name}')
-            except client.rest.ApiException:
-                # Service might not exist, ignore
-                pass
-            logger.info('Cleaned up Kubernetes resources')
+            except client.rest.ApiException as e:
+                if e.status != 404:  # 404 means resource doesn't exist, which is fine
+                    logger.warning(f'Failed to delete ingress {ingress_name}: {e}')
+                else:
+                    logger.debug(
+                        f'Ingress {ingress_name} does not exist (already deleted)'
+                    )
+            except Exception as e:
+                logger.error(f'Unexpected error deleting ingress {ingress_name}: {e}')
+
+            if deleted_resources:
+                logger.info(
+                    f'Successfully cleaned up resources: {", ".join(deleted_resources)}'
+                )
+            else:
+                logger.info('No resources found to clean up')
+
         except Exception as e:
-            logger.error(f'Error cleaning up k8s resources: {e}')
+            logger.error(f'Error during Kubernetes resource cleanup: {e}')
+            # Re-raise the exception to ensure callers know cleanup failed
+            raise
 
     def _get_pvc_manifest(self):
         """Create a PVC manifest for the runtime pod."""

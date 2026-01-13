@@ -480,6 +480,9 @@ type = "noop"
 # Optional YAML string defining pod tolerations
 #tolerations_yaml = ""
 
+# Optional path to kubeconfig file for out-of-cluster usage
+#kubeconfig_path = ""
+
 # Run the runtime sandbox container in privileged mode for use with docker-in-docker
 #privileged = false
 
