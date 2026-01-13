@@ -1,4 +1,3 @@
-import { create } from "zustand";
 import { SystemMessageForModal } from "#/utils/system-message-adapter";
 import { ApiKey, CreateApiKeyResponse } from "#/api/api-keys";
 import { Settings } from "#/types/settings";
@@ -8,13 +7,12 @@ import {
 } from "#/types/microagent-management";
 
 // Base modal options that all modals can use
-interface BaseModalOptions {
+export interface BaseModalOptions {
   closeOnEscape?: boolean;
   closeOnBackdrop?: boolean;
 }
 
-// Integration data type for configure modal
-interface IntegrationData {
+export interface IntegrationData {
   id: number;
   keycloak_user_id: string;
   status: string;
@@ -26,7 +24,7 @@ interface IntegrationData {
   };
 }
 
-// Core props for each modal type (without BaseModalOptions)
+// Core props for each modal type
 interface ModalCoreProps {
   "confirm-delete": {
     conversationTitle?: string;
@@ -67,8 +65,6 @@ interface ModalCoreProps {
   "new-api-key": {
     newlyCreatedKey: CreateApiKeyResponse | null;
   };
-
-  // Microagent modals
   "launch-microagent": {
     eventId: number;
     selectedRepo: string;
@@ -84,13 +80,9 @@ interface ModalCoreProps {
     isLoading: boolean;
     isUpdate?: boolean;
   };
-
-  // End session confirmation (used by settings form)
   "end-session": {
     onConfirm: () => void;
   };
-
-  // Integration configure modal
   "configure-integration": {
     platform: "jira" | "jira-dc" | "linear";
     platformName: string;
@@ -105,17 +97,11 @@ interface ModalCoreProps {
     onLink: (workspace: string) => void;
     onUnlink: () => void;
   };
-
-  // Auth modals
   reauth: Record<string, never>; // No props needed
   "email-verification": {
     userId?: string | null;
   };
-
-  // Analytics consent modal
   "analytics-consent": Record<string, never>; // Uses form submission internally
-
-  // Payment modals
   "setup-payment": Record<string, never>; // No props needed
   "cancel-subscription": {
     endDate?: string;
@@ -134,20 +120,20 @@ export interface ModalInstance<T extends ModalType = ModalType> {
   props: ModalConfigMap[T];
 }
 
-interface OpenModalOptions {
+export interface OpenModalOptions {
   allowDuplicate?: boolean;
 }
 
-interface ModalState {
+export interface ModalState {
   modalStack: ModalInstance[];
 }
 
-interface ModalSelectors {
+export interface ModalSelectors {
   isOpen: () => boolean;
   topModal: () => ModalInstance | undefined;
 }
 
-interface ModalActions {
+export interface ModalActions {
   openModal: <T extends ModalType>(
     type: T,
     props: ModalConfigMap[T],
@@ -162,44 +148,4 @@ interface ModalActions {
   ) => void;
 }
 
-type ModalStore = ModalState & ModalSelectors & ModalActions;
-
-export const useModalStore = create<ModalStore>((set, get) => ({
-  modalStack: [],
-
-  // Selectors
-  isOpen: () => get().modalStack.length > 0,
-  topModal: () => get().modalStack.at(-1),
-
-  // Actions
-  openModal: (type, props, options) =>
-    set((state) => {
-      const topModal = state.modalStack.at(-1);
-
-      // Prevent duplicate unless explicitly allowed
-      if (!options?.allowDuplicate && topModal?.type === type) {
-        return state;
-      }
-
-      return {
-        modalStack: [...state.modalStack, { type, props }],
-      };
-    }),
-
-  closeModal: () =>
-    set((state) => ({
-      modalStack: state.modalStack.slice(0, -1),
-    })),
-
-  closeModalByType: (type) =>
-    set((state) => ({
-      modalStack: state.modalStack.filter((m) => m.type !== type),
-    })),
-
-  closeAllModals: () => set({ modalStack: [] }),
-
-  replaceModal: (type, props) =>
-    set((state) => ({
-      modalStack: [...state.modalStack.slice(0, -1), { type, props }],
-    })),
-}));
+export type ModalStore = ModalState & ModalSelectors & ModalActions;

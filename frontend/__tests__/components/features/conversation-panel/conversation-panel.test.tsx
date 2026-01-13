@@ -5,7 +5,7 @@ import { createRoutesStub } from "react-router";
 import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
-import { ModalRoot } from "#/components/shared/modals/modal";
+import { ModalRoot } from "#/components/shared/modals/modal-orchestrator";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { Conversation } from "#/api/open-hands.types";
 

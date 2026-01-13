@@ -11,7 +11,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/";
-  const { openModal } = useModalStore();
+  const openModal = useModalStore((state) => state.openModal);
 
   const config = useConfig();
   const { data: isAuthed, isLoading: isAuthLoading } = useIsAuthed();

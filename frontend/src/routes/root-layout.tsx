@@ -27,7 +27,7 @@ import { cn, isMobileDevice } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
 import { useModalStore } from "#/stores/modal-store";
-import { ModalRoot } from "#/components/shared/modals/modal";
+import { ModalRoot } from "#/components/shared/modals/modal-orchestrator";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -92,9 +92,6 @@ export default function MainApp() {
   // Sync PostHog opt-in/out state with backend setting on mount
   useSyncPostHogConsent();
 
-  // Track if analytics consent modal has been opened this session
-  const analyticsConsentOpened = React.useRef(false);
-
   React.useEffect(() => {
     // Don't change language when on TOS page
     if (!isOnTosPage && settings?.language) {
@@ -104,16 +101,15 @@ export default function MainApp() {
 
   React.useEffect(() => {
     // Don't show consent form when on TOS page
-    if (!isOnTosPage && config.data?.APP_MODE === "oss") {
+    if (!isOnTosPage) {
       const shouldShowConsentForm =
         settings?.user_consents_to_analytics === null;
 
-      if (shouldShowConsentForm && !analyticsConsentOpened.current) {
-        analyticsConsentOpened.current = true;
+      if (shouldShowConsentForm) {
         openModal("analytics-consent", {});
       }
     }
-  }, [settings, isOnTosPage, config.data?.APP_MODE, openModal]);
+  }, [settings, isOnTosPage, openModal]);
 
   React.useEffect(() => {
     // Don't migrate user consent when on TOS page

@@ -27,17 +27,16 @@ export function Sidebar() {
   } = useSettings();
   const { mutate: logout } = useLogout();
   const openModal = useModalStore((state) => state.openModal);
+  const closeModalByType = useModalStore((state) => state.closeModalByType);
 
   const [conversationPanelIsOpen, setConversationPanelIsOpen] =
     React.useState(false);
 
-  const { pathname } = useLocation();
-
   React.useEffect(() => {
     // Skip settings-related logic on the settings page
-    if (location.pathname === "/settings") return;
-
-    if (
+    if (location.pathname === "/settings") {
+      closeModalByType("settings");
+    } else if (
       !isFetchingSettings &&
       settingsIsError &&
       settingsError?.status !== 404
@@ -58,13 +57,14 @@ export function Sidebar() {
     config?.APP_MODE,
     openModal,
     settings,
+    closeModalByType,
   ]);
 
   return (
     <aside
       className={cn(
         "h-[54px] p-3 md:p-0 md:h-[40px] md:h-auto flex flex-row md:flex-col gap-1 bg-base md:w-[75px] md:min-w-[75px] sm:pt-0 sm:px-2 md:pt-[14px] md:px-0",
-        pathname === "/" && "md:pt-6.5 md:pb-3",
+        location.pathname === "/" && "md:pt-6.5 md:pb-3",
       )}
     >
       <nav className="flex flex-row md:flex-col items-center justify-between w-full h-auto md:w-auto md:h-full">

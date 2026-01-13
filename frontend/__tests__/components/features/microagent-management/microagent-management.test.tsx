@@ -13,7 +13,7 @@ import { GitRepository } from "#/types/git";
 import { RepositoryMicroagent } from "#/types/microagent-management";
 import { Conversation } from "#/api/open-hands.types";
 import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
-import { ModalRoot } from "#/components/shared/modals/modal";
+import { ModalRoot } from "#/components/shared/modals/modal-orchestrator";
 
 // Mock hooks
 const mockUseUserProviders = vi.fn();

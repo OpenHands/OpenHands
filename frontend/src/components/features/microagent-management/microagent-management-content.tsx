@@ -104,7 +104,8 @@ export function MicroagentManagementContent() {
     setLearnThisRepoModalVisible,
   } = useMicroagentManagementStore();
 
-  const { openModal, closeModal } = useModalStore();
+  const openModal = useModalStore((state) => state.openModal);
+  const closeModal = useModalStore((state) => state.closeModal);
 
   const { providers } = useUserProviders();
 

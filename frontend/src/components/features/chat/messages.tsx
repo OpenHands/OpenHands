@@ -66,6 +66,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       EventMicroagentStatus[]
     >([]);
     const openModal = useModalStore((state) => state.openModal);
+    const closeModal = useModalStore((state) => state.closeModal);
 
     const { t } = useTranslation();
 
@@ -182,8 +183,6 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       },
       [setMicroagentStatuses, unsubscribeFromConversation],
     );
-
-    const closeModal = useModalStore((state) => state.closeModal);
 
     const handleLaunchMicroagent = React.useCallback(
       (query: string, target: string, triggers: string[]) => {
