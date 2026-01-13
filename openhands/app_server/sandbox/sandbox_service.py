@@ -50,10 +50,14 @@ class SandboxService(ABC):
         return results
 
     @abstractmethod
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Begin the process of starting a sandbox.
 
         Return the info on the new sandbox. If no spec is selected, use the default.
+        If sandbox_id is provided, it will be used as the sandbox identifier instead
+        of generating a random one.
         """
 
     @abstractmethod
