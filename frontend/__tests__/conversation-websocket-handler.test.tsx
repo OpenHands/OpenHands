@@ -15,6 +15,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
+import { useErrorMessageStore } from "#/stores/error-message-store";
 import {
   createMockMessageEvent,
   createMockUserMessageEvent,
@@ -51,6 +52,8 @@ afterEach(() => {
   mswServer.resetHandlers();
   // Clean up any React components
   cleanup();
+  // Reset error message store to prevent state leakage between tests
+  useErrorMessageStore.getState().removeErrorMessage();
 });
 
 afterAll(async () => {
@@ -436,6 +439,64 @@ describe("Conversation WebSocket Handler", () => {
         },
         { timeout: 5000 },
       );
+    });
+
+    it("should clear error message when a successful event is received after an error", async () => {
+      // This test verifies that error banners disappear when follow-up messages
+      // are sent and received, matching V0 behavior where any non-error event
+      // clears the error message store.
+      const conversationId = "test-conversation-error-clear";
+
+      // Clear error message store before test
+      useErrorMessageStore.getState().removeErrorMessage();
+
+      // Set up MSW to mock event count API and send events
+      mswServer.use(
+        http.get(
+          `http://localhost:3000/api/conversations/${conversationId}/events/count`,
+          () => HttpResponse.json(2),
+        ),
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+
+          // Send an error event first
+          const mockAgentErrorEvent = createMockAgentErrorEvent();
+          client.send(JSON.stringify(mockAgentErrorEvent));
+
+          // Send a successful (non-error) event immediately after
+          // This simulates the user sending a follow-up message and receiving a response
+          const mockSuccessEvent = createMockMessageEvent({
+            id: "success-event-after-error",
+          });
+          client.send(JSON.stringify(mockSuccessEvent));
+        }),
+      );
+
+      // Verify error message store is initially empty
+      expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+
+      // Render with WebSocket context (minimal component just to trigger connection)
+      renderWithWebSocketContext(
+        <ConnectionStatusComponent />,
+        conversationId,
+        `http://localhost:3000/api/conversations/${conversationId}`,
+      );
+
+      // Wait for connection
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+
+      // Wait for both events to be received and error to be cleared
+      // The error was set by the first event (AgentErrorEvent),
+      // then cleared by the second successful event (MessageEvent).
+      // This is the expected behavior that matches V0.
+      await waitFor(() => {
+        expect(useEventStore.getState().events.length).toBe(2);
+        expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+      });
     });
 
     it("should not create duplicate events when WebSocket reconnects with resend_all=true", async () => {

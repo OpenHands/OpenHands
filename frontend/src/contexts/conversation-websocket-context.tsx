@@ -344,6 +344,9 @@ export function ConversationWebSocketProvider({
                 conversationId: conversationId || "unknown",
               });
             }
+          } else if (!isConversationErrorEvent(event)) {
+            // Clear error message on any successful (non-error) event
+            removeErrorMessage();
           }
 
           // Clear optimistic user message when a user message is confirmed
@@ -417,6 +420,7 @@ export function ConversationWebSocketProvider({
       isLoadingHistoryMain,
       expectedEventCountMain,
       setErrorMessage,
+      removeErrorMessage,
       removeOptimisticUserMessage,
       queryClient,
       conversationId,
@@ -424,6 +428,7 @@ export function ConversationWebSocketProvider({
       appendInput,
       appendOutput,
       updateMetricsFromStats,
+      trackCreditLimitReached,
     ],
   );
 
