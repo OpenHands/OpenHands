@@ -12,6 +12,7 @@ export type Provider = keyof typeof ProviderOptions;
 export type ProviderToken = {
   token: string;
   host: string | null;
+  username?: string | null; // Bitbucket username for git clone authentication
 };
 
 export type MCPSSEServer = {
@@ -66,4 +67,5 @@ export type Settings = {
   git_user_name?: string;
   git_user_email?: string;
   v1_enabled?: boolean;
+  bitbucket_username?: string;
 };

@@ -53,6 +53,8 @@ function GitSettingsScreen() {
     React.useState(false);
   const [bitbucketHostInputHasValue, setBitbucketHostInputHasValue] =
     React.useState(false);
+  const [bitbucketUsernameInputHasValue, setBitbucketUsernameInputHasValue] =
+    React.useState(false);
   const [azureDevOpsHostInputHasValue, setAzureDevOpsHostInputHasValue] =
     React.useState(false);
   const [forgejoHostInputHasValue, setForgejoHostInputHasValue] =
@@ -104,6 +106,9 @@ function GitSettingsScreen() {
     const bitbucketHost = (
       formData.get("bitbucket-host-input")?.toString() || ""
     ).trim();
+    const bitbucketUsername = (
+      formData.get("bitbucket-username-input")?.toString() || ""
+    ).trim();
     const azureDevOpsHost = (
       formData.get("azure-devops-host-input")?.toString() || ""
     ).trim();
@@ -112,10 +117,17 @@ function GitSettingsScreen() {
     ).trim();
 
     // Create providers object with all tokens
-    const providerTokens: Record<string, { token: string; host: string }> = {
+    const providerTokens: Record<
+      string,
+      { token: string; host: string; username?: string }
+    > = {
       github: { token: githubToken, host: githubHost },
       gitlab: { token: gitlabToken, host: gitlabHost },
-      bitbucket: { token: bitbucketToken, host: bitbucketHost },
+      bitbucket: {
+        token: bitbucketToken,
+        host: bitbucketHost,
+        username: bitbucketUsername,
+      },
       azure_devops: { token: azureDevOpsToken, host: azureDevOpsHost },
       forgejo: { token: forgejoToken, host: forgejoHost },
     };
@@ -141,6 +153,7 @@ function GitSettingsScreen() {
           setGithubHostInputHasValue(false);
           setGitlabHostInputHasValue(false);
           setBitbucketHostInputHasValue(false);
+          setBitbucketUsernameInputHasValue(false);
           setAzureDevOpsHostInputHasValue(false);
           setForgejoHostInputHasValue(false);
         },
@@ -157,6 +170,7 @@ function GitSettingsScreen() {
     !githubHostInputHasValue &&
     !gitlabHostInputHasValue &&
     !bitbucketHostInputHasValue &&
+    !bitbucketUsernameInputHasValue &&
     !azureDevOpsHostInputHasValue &&
     !forgejoHostInputHasValue;
   const shouldRenderExternalConfigureButtons = isSaas && config.APP_SLUG;
@@ -269,7 +283,11 @@ function GitSettingsScreen() {
                 onBitbucketHostChange={(value) => {
                   setBitbucketHostInputHasValue(!!value);
                 }}
+                onBitbucketUsernameChange={(value) => {
+                  setBitbucketUsernameInputHasValue(!!value);
+                }}
                 bitbucketHostSet={existingBitbucketHost}
+                bitbucketUsernameSet={settings?.bitbucket_username}
               />
             )}
 

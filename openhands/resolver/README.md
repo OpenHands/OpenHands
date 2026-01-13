@@ -93,9 +93,9 @@ pip install openhands-ai
       - 'read_repository'
       - 'write_repository'
 
-   - Create a Bitbucket access token
-      - Visit [Bitbucket's app passwords settings](https://bitbucket.org/account/settings/app-passwords/)
-      - Create an app password with these scopes:
+   - Create a Bitbucket API token
+      - Visit [Bitbucket's API tokens documentation](https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/)
+      - Create an API token with these scopes:
       - 'Repositories: Read'
       - 'Repositories: Write'
       - 'Pull requests: Read'
@@ -125,8 +125,10 @@ export GITLAB_TOKEN="your-gitlab-token"
 export GIT_USERNAME="your-gitlab-username"  # Optional, defaults to token owner
 
 # Bitbucket credentials if you're using Bitbucket repo
+# Note: For API tokens, use your Atlassian account email
+# Format: email:api_token
 
-export BITBUCKET_TOKEN="your-bitbucket-token"
+export BITBUCKET_TOKEN="your-atlassian-email:your-api-token"
 export GIT_USERNAME="your-bitbucket-username"  # Optional, defaults to token owner
 
 # Azure DevOps credentials if you're using Azure DevOps repo

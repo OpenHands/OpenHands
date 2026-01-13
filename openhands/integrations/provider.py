@@ -693,12 +693,22 @@ class ProviderHandler:
                         f'https://oauth2:{token_value}@{domain}/{repo_name}.git'
                     )
                 elif provider == ProviderType.BITBUCKET:
-                    # For Bitbucket, handle username:app_password format
+                    # Bitbucket API tokens require username:token for git operations
+                    # Get stored username from ProviderToken.user_id
+                    bitbucket_username = self.provider_tokens[provider].user_id
                     if ':' in token_value:
-                        # App token format: username:app_password
-                        remote_url = f'https://{token_value}@{domain}/{repo_name}.git'
+                        # email:token format - extract just the token
+                        _, token = token_value.split(':', 1)
+                        encoded_token = quote(token, safe='')
+                        if bitbucket_username:
+                            # Use the stored Bitbucket username
+                            encoded_username = quote(bitbucket_username, safe='')
+                            remote_url = f'https://{encoded_username}:{encoded_token}@{domain}/{repo_name}.git'
+                        else:
+                            # Fallback to static username if no username configured
+                            remote_url = f'https://x-bitbucket-api-token-auth:{encoded_token}@{domain}/{repo_name}.git'
                     else:
-                        # Access token format: use x-token-auth
+                        # Legacy access token format: use x-token-auth
                         remote_url = f'https://x-token-auth:{token_value}@{domain}/{repo_name}.git'
                 elif provider == ProviderType.AZURE_DEVOPS:
                     # Azure DevOps uses PAT with Basic auth

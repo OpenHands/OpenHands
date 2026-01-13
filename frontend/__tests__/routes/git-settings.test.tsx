@@ -306,7 +306,7 @@ describe("Form submission", () => {
     expect(saveProvidersSpy).toHaveBeenCalledWith({
       github: { token: "test-token", host: "" },
       gitlab: { token: "", host: "" },
-      bitbucket: { token: "", host: "" },
+      bitbucket: { token: "", host: "", username: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -329,7 +329,7 @@ describe("Form submission", () => {
     expect(saveProvidersSpy).toHaveBeenCalledWith({
       github: { token: "", host: "" },
       gitlab: { token: "test-token", host: "" },
-      bitbucket: { token: "", host: "" },
+      bitbucket: { token: "", host: "", username: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -352,7 +352,7 @@ describe("Form submission", () => {
     expect(saveProvidersSpy).toHaveBeenCalledWith({
       github: { token: "", host: "" },
       gitlab: { token: "", host: "" },
-      bitbucket: { token: "test-token", host: "" },
+      bitbucket: { token: "test-token", host: "", username: "" },
       azure_devops: { token: "", host: "" },
       forgejo: { token: "", host: "" },
     });
@@ -377,7 +377,7 @@ describe("Form submission", () => {
     expect(saveProvidersSpy).toHaveBeenCalledWith({
       github: { token: "", host: "" },
       gitlab: { token: "", host: "" },
-      bitbucket: { token: "", host: "" },
+      bitbucket: { token: "", host: "", username: "" },
       azure_devops: { token: "test-token", host: "" },
       forgejo: { token: "", host: "" },
     });

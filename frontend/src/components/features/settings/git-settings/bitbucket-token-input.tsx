@@ -8,18 +8,22 @@ import { cn } from "#/utils/utils";
 interface BitbucketTokenInputProps {
   onChange: (value: string) => void;
   onBitbucketHostChange: (value: string) => void;
+  onBitbucketUsernameChange: (value: string) => void;
   isBitbucketTokenSet: boolean;
   name: string;
   bitbucketHostSet: string | null | undefined;
+  bitbucketUsernameSet: string | null | undefined;
   className?: string;
 }
 
 export function BitbucketTokenInput({
   onChange,
   onBitbucketHostChange,
+  onBitbucketUsernameChange,
   isBitbucketTokenSet,
   name,
   bitbucketHostSet,
+  bitbucketUsernameSet,
   className,
 }: BitbucketTokenInputProps) {
   const { t } = useTranslation();
@@ -33,13 +37,30 @@ export function BitbucketTokenInput({
         label={t(I18nKey.BITBUCKET$TOKEN_LABEL)}
         type="password"
         className="w-full max-w-[680px]"
-        placeholder={isBitbucketTokenSet ? "<hidden>" : "username:app_password"}
+        placeholder={isBitbucketTokenSet ? "<hidden>" : "email:api_token"}
         startContent={
           isBitbucketTokenSet && (
             <KeyStatusIcon
               testId="bb-set-token-indicator"
               isSet={isBitbucketTokenSet}
             />
+          )
+        }
+      />
+
+      <SettingsInput
+        onChange={onBitbucketUsernameChange}
+        name="bitbucket-username-input"
+        testId="bitbucket-username-input"
+        label={t(I18nKey.BITBUCKET$USERNAME_LABEL)}
+        type="text"
+        className="w-full max-w-[680px]"
+        placeholder="your_bitbucket_username"
+        defaultValue={bitbucketUsernameSet || undefined}
+        startContent={
+          bitbucketUsernameSet &&
+          bitbucketUsernameSet.trim() !== "" && (
+            <KeyStatusIcon testId="bb-set-username-indicator" isSet />
           )
         }
       />

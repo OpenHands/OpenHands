@@ -266,33 +266,34 @@ class TestBitbucketProviderDomain(unittest.TestCase):
         url = await runtime._get_authenticated_git_url('workspace/repo', None)
         self.assertEqual(url, 'https://bitbucket.org/workspace/repo.git')
 
-        # Test with username:password format token
+        # Test with email:api_token format but WITH stored username
         git_provider_tokens = {
             ProviderType.BITBUCKET: ProviderToken(
-                token=SecretStr('username:app_password'), host='bitbucket.org'
+                token=SecretStr('user@example.com:api_token'),
+                host='bitbucket.org',
+                username='myusername',  # Bitbucket username
             )
         }
         url = await runtime._get_authenticated_git_url(
             'workspace/repo', git_provider_tokens
         )
-        # Bitbucket tokens with colon are used directly as username:password
         self.assertEqual(
-            url, 'https://username:app_password@bitbucket.org/workspace/repo.git'
+            url, 'https://myusername:api_token@bitbucket.org/workspace/repo.git'
         )
 
-        # Test with email:password format token (more realistic)
+        # Test with email:api_token format but WITHOUT stored username
         git_provider_tokens = {
             ProviderType.BITBUCKET: ProviderToken(
-                token=SecretStr('user@example.com:app_password'), host='bitbucket.org'
+                token=SecretStr('user@example.com:api_token'), host='bitbucket.org'
             )
         }
         url = await runtime._get_authenticated_git_url(
             'workspace/repo', git_provider_tokens
         )
-        # Email addresses in tokens are used as-is (no URL encoding in our implementation)
+        # Without username, falls back to x-bitbucket-api-token-auth static username
         self.assertEqual(
             url,
-            'https://user@example.com:app_password@bitbucket.org/workspace/repo.git',
+            'https://x-bitbucket-api-token-auth:api_token@bitbucket.org/workspace/repo.git',
         )
 
         # Test with simple token format (access token)
@@ -379,7 +380,7 @@ async def test_validate_provider_token_with_bitbucket_token():
         mock_bitbucket_service.return_value = bitbucket_instance
 
         # Test with a Bitbucket token
-        token = SecretStr('username:app_password')
+        token = SecretStr('user@example.com:api_token')
         result = await validate_provider_token(token)
 
         # Verify that all services were tried
@@ -401,7 +402,7 @@ async def test_check_provider_tokens_with_only_bitbucket():
     # Create provider tokens with only Bitbucket
     provider_tokens = {
         ProviderType.BITBUCKET: ProviderToken(
-            token=SecretStr('username:app_password'), host='bitbucket.org'
+            token=SecretStr('user@example.com:api_token'), host='bitbucket.org'
         ),
         ProviderType.GITHUB: ProviderToken(token=SecretStr(''), host='github.com'),
         ProviderType.GITLAB: ProviderToken(token=SecretStr(''), host='gitlab.com'),
@@ -421,7 +422,7 @@ async def test_check_provider_tokens_with_only_bitbucket():
 
         # Verify that the token passed to validate_provider_token was the Bitbucket token
         args, kwargs = mock_validate.call_args
-        assert args[0].get_secret_value() == 'username:app_password'
+        assert args[0].get_secret_value() == 'user@example.com:api_token'
 
         # Verify that no error message was returned
         assert result == ''
@@ -730,7 +731,7 @@ def test_initialize_repository_for_runtime_with_bitbucket_token(
     mock_call_async_from_sync.return_value = 'test-repo'
 
     # Set up environment with BITBUCKET_TOKEN
-    with patch.dict(os.environ, {'BITBUCKET_TOKEN': 'username:app_password'}):
+    with patch.dict(os.environ, {'BITBUCKET_TOKEN': 'user@example.com:api_token'}):
         result = initialize_repository_for_runtime(
             runtime=mock_runtime, selected_repository='openhands/test-repo'
         )
@@ -751,7 +752,7 @@ def test_initialize_repository_for_runtime_with_bitbucket_token(
     assert ProviderType.BITBUCKET in provider_tokens
     assert (
         provider_tokens[ProviderType.BITBUCKET].token.get_secret_value()
-        == 'username:app_password'
+        == 'user@example.com:api_token'
     )
 
     # Check that the repository was passed correctly
@@ -784,7 +785,7 @@ def test_initialize_repository_for_runtime_with_multiple_tokens(
         {
             'GITHUB_TOKEN': 'github_token_123',
             'GITLAB_TOKEN': 'gitlab_token_456',
-            'BITBUCKET_TOKEN': 'username:bitbucket_app_password',
+            'BITBUCKET_TOKEN': 'user@example.com:bitbucket_api_token',
         },
     ):
         result = initialize_repository_for_runtime(
@@ -818,7 +819,7 @@ def test_initialize_repository_for_runtime_with_multiple_tokens(
     )
     assert (
         provider_tokens[ProviderType.BITBUCKET].token.get_secret_value()
-        == 'username:bitbucket_app_password'
+        == 'user@example.com:bitbucket_api_token'
     )
 
 
