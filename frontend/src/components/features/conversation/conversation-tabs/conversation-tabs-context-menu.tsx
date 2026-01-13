@@ -13,6 +13,7 @@ import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import { useConversationId } from "#/hooks/use-conversation-id";
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -25,39 +26,21 @@ export function ConversationTabsContextMenu({
 }: ConversationTabsContextMenuProps) {
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { t } = useTranslation();
+  const { conversationId } = useConversationId();
+
   const [unpinnedTabs, setUnpinnedTabs] = useLocalStorage<string[]>(
-    "conversation-unpinned-tabs",
+    `conversation-unpinned-tabs-${conversationId}`,
     [],
   );
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   const tabConfig = [
-    {
-      tab: "editor",
-      icon: GitChanges,
-      i18nKey: I18nKey.COMMON$CHANGES,
-    },
-    {
-      tab: "vscode",
-      icon: VSCodeIcon,
-      i18nKey: I18nKey.COMMON$CODE,
-    },
-    {
-      tab: "terminal",
-      icon: TerminalIcon,
-      i18nKey: I18nKey.COMMON$TERMINAL,
-    },
-    {
-      tab: "served",
-      icon: ServerIcon,
-      i18nKey: I18nKey.COMMON$APP,
-    },
-    {
-      tab: "browser",
-      icon: GlobeIcon,
-      i18nKey: I18nKey.COMMON$BROWSER,
-    },
+    { tab: "editor", icon: GitChanges, i18nKey: I18nKey.COMMON$CHANGES },
+    { tab: "vscode", icon: VSCodeIcon, i18nKey: I18nKey.COMMON$CODE },
+    { tab: "terminal", icon: TerminalIcon, i18nKey: I18nKey.COMMON$TERMINAL },
+    { tab: "served", icon: ServerIcon, i18nKey: I18nKey.COMMON$APP },
+    { tab: "browser", icon: GlobeIcon, i18nKey: I18nKey.COMMON$BROWSER },
   ];
 
   if (shouldUsePlanningAgent) {
@@ -71,30 +54,22 @@ export function ConversationTabsContextMenu({
   if (!isOpen) return null;
 
   const handleTabClick = (tab: string) => {
-    const tabString = tab;
-    if (unpinnedTabs.includes(tabString)) {
-      // Tab is unpinned, pin it (remove from unpinned list)
-      setUnpinnedTabs(
-        unpinnedTabs.filter((unpinnedTab) => unpinnedTab !== tabString),
-      );
-    } else {
-      // Tab is pinned, unpin it (add to unpinned list)
-      setUnpinnedTabs([...unpinnedTabs, tabString]);
-    }
+    setUnpinnedTabs((prev) =>
+      prev.includes(tab)
+        ? prev.filter((tabItem) => tabItem !== tab)
+        : [...prev, tab],
+    );
   };
-
-  const isTabPinned = (tab: string) => !unpinnedTabs.includes(tab as string);
 
   return (
     <ContextMenu
-      testId="conversation-tabs-context-menu"
       ref={ref}
       alignment="right"
       position="bottom"
       className="mt-2 w-fit z-[9999]"
     >
       {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
-        const pinned = isTabPinned(tab);
+        const pinned = !unpinnedTabs.includes(tab);
         return (
           <ContextMenuListItem
             key={tab}
@@ -104,9 +79,9 @@ export function ConversationTabsContextMenu({
             <Icon className="w-4 h-4" />
             <span className="text-white text-sm">{t(i18nKey)}</span>
             {pinned ? (
-              <PillFillIcon className="w-7 h-7 ml-auto flex-shrink-0 text-white -mr-[5px]" />
+              <PillFillIcon className="w-7 h-7 ml-auto -mr-[5px]" />
             ) : (
-              <PillIcon className="w-4.5 h-4.5 ml-auto flex-shrink-0 text-white" />
+              <PillIcon className="w-4.5 h-4.5 ml-auto" />
             )}
           </ContextMenuListItem>
         );

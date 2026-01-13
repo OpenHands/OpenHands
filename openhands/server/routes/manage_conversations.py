@@ -229,7 +229,7 @@ class ProvidersSetModel(BaseModel):
     providers_set: list[ProviderType] | None = None
 
 
-@app.post('/conversations')
+@app.post('/conversations', deprecated=True)
 async def new_conversation(
     data: InitSessionRequest,
     user_id: str = Depends(get_user_id),
@@ -241,6 +241,9 @@ async def new_conversation(
 
     After successful initialization, the client should connect to the WebSocket
     using the returned conversation ID.
+
+        Use the V1 endpoint ``POST /api/v1/app-conversations`` instead, which provides
+        improved conversation management with sandbox lifecycle support.
     """
     logger.info(f'initializing_new_conversation:{data}')
     repository = data.repository
@@ -318,7 +321,7 @@ async def new_conversation(
         )
 
 
-@app.get('/conversations')
+@app.get('/conversations', deprecated=True)
 async def search_conversations(
     page_id: str | None = None,
     limit: int = 20,
@@ -333,6 +336,11 @@ async def search_conversations(
     conversation_store: ConversationStore = Depends(get_conversation_store),
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
 ) -> ConversationInfoResultSet:
+    """Search and list conversations with pagination support.
+
+    Use the V1 endpoint ``GET /api/v1/app-conversations/search`` instead, which provides
+    enhanced filtering, sorting, and pagination capabilities.
+    """
     # Parse combined page_id to extract separate page_ids for each source
     v0_page_id = None
     v1_page_id = None
@@ -457,12 +465,17 @@ async def search_conversations(
     return ConversationInfoResultSet(results=final_results, next_page_id=next_page_id)
 
 
-@app.get('/conversations/{conversation_id}')
+@app.get('/conversations/{conversation_id}', deprecated=True)
 async def get_conversation(
     conversation_id: str = Depends(validate_conversation_id),
     conversation_store: ConversationStore = Depends(get_conversation_store),
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
 ) -> ConversationInfo | None:
+    """Get a single conversation by ID.
+
+    Use the V1 endpoint ``GET /api/v1/app-conversations?ids={conversation_id}`` instead,
+    which supports batch retrieval of conversations by their IDs.
+    """
     try:
         # Shim to add V1 conversations
         try:
@@ -492,7 +505,7 @@ async def get_conversation(
         return None
 
 
-@app.delete('/conversations/{conversation_id}')
+@app.delete('/conversations/{conversation_id}', deprecated=True)
 async def delete_conversation(
     request: Request,
     conversation_id: str = Depends(validate_conversation_id),
@@ -503,6 +516,11 @@ async def delete_conversation(
     db_session: AsyncSession = db_session_dependency,
     httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> bool:
+    """Delete a conversation by ID.
+
+    For V1 conversations, use ``DELETE /api/v1/sandboxes/{sandbox_id}`` to delete the
+    associated sandbox, which will clean up the conversation resources.
+    """
     set_db_session_keep_open(request.state, True)
     set_httpx_client_keep_open(request.state, True)
 
@@ -715,7 +733,7 @@ async def _get_conversation_info(
         return None
 
 
-@app.post('/conversations/{conversation_id}/start')
+@app.post('/conversations/{conversation_id}/start', deprecated=True)
 async def start_conversation(
     providers_set: ProvidersSetModel,
     conversation_id: str = Depends(validate_conversation_id),
@@ -729,6 +747,10 @@ async def start_conversation(
     This endpoint calls the conversation_manager's maybe_start_agent_loop method
     to start a conversation. If the conversation is already running, it will
     return the existing agent loop info.
+
+        Use the V1 endpoint ``POST /api/v1/app-conversations`` instead, which combines
+        conversation creation and starting into a single operation with integrated
+        sandbox lifecycle management.
     """
     logger.info(
         f'Starting conversation: {conversation_id}',
@@ -792,7 +814,7 @@ async def start_conversation(
         )
 
 
-@app.post('/conversations/{conversation_id}/stop')
+@app.post('/conversations/{conversation_id}/stop', deprecated=True)
 async def stop_conversation(
     conversation_id: str = Depends(validate_conversation_id),
     user_id: str = Depends(get_user_id),
@@ -801,6 +823,10 @@ async def stop_conversation(
 
     This endpoint calls the conversation_manager's close_session method
     to stop a conversation.
+
+        Use the V1 endpoint ``POST /api/v1/sandboxes/{sandbox_id}/pause`` instead to pause
+        the sandbox execution, or ``DELETE /api/v1/sandboxes/{sandbox_id}`` to fully stop
+        and remove the sandbox.
     """
     logger.info(f'Stopping conversation: {conversation_id}')
 
@@ -1070,7 +1096,7 @@ async def _update_v0_conversation(
     return True
 
 
-@app.patch('/conversations/{conversation_id}')
+@app.patch('/conversations/{conversation_id}', deprecated=True)
 async def update_conversation(
     data: UpdateConversationRequest,
     conversation_id: str = Depends(validate_conversation_id),
@@ -1098,6 +1124,10 @@ async def update_conversation(
 
     Raises:
         HTTPException: If conversation is not found or user lacks permission
+
+        This endpoint is part of the legacy V0 API and will be removed in a future release.
+        Use the V1 endpoint ``PATCH /api/v1/app-conversations/{conversation_id}`` instead,
+        which provides the same functionality for updating conversation metadata.
     """
     logger.info(
         f'Updating conversation {conversation_id} with title: {data.title}',
