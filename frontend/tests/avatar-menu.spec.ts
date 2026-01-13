@@ -10,40 +10,39 @@ test("avatar context menu stays open when moving cursor diagonally to menu", asy
   page,
   browserName,
 }) => {
-  // WebKit: Playwright hover/mouse simulation is flaky for CSS hover-only menus.
+  // Skip on WebKit - Playwright's mouse.move() doesn't reliably trigger CSS hover states
   test.skip(browserName === "webkit", "Playwright hover simulation unreliable");
 
   await page.goto("/");
 
-  const aiConfigModal = page.getByTestId("ai-config-modal");
-  if (await aiConfigModal.isVisible().catch(() => false)) {
-    // In OSS mock mode, missing settings can open the AI-config modal; its backdrop
-    // intercepts pointer events and prevents hover interactions.
-    await page.getByTestId("save-settings-button").click();
-    await expect(aiConfigModal).toBeHidden();
-  }
-
+  // Get the user avatar button
   const userAvatar = page.getByTestId("user-avatar");
   await expect(userAvatar).toBeVisible();
 
-  // Ensure the avatar is in the viewport
-  await userAvatar.scrollIntoViewIfNeeded();
+  // Get avatar bounding box first
+  const avatarBox = await userAvatar.boundingBox();
+  if (!avatarBox) {
+    throw new Error("Could not get bounding box for avatar");
+  }
 
-  // Wait for the avatar to be fully rendered
-  await page.waitForTimeout(100);
+  // Use mouse.move to hover (not .hover() which may trigger click)
+  const avatarCenterX = avatarBox.x + avatarBox.width / 2;
+  const avatarCenterY = avatarBox.y + avatarBox.height / 2;
+  await page.mouse.move(avatarCenterX, avatarCenterY);
 
+  // The context menu should appear via CSS group-hover
   const contextMenu = page.getByTestId("account-settings-context-menu");
+  await expect(contextMenu).toBeVisible();
 
-  // Use click to reliably open the menu (component toggles state on click).
-  // This is more deterministic in headless CI than relying on CSS :hover.
-  await userAvatar.click();
+  // Move UP from the LEFT side of the avatar - simulating diagonal movement
+  // toward the menu (which is to the right). This exits the hover zone.
+  const leftX = avatarBox.x + 2;
+  const aboveY = avatarBox.y - 50;
+  await page.mouse.move(leftX, aboveY);
 
-  // Wait for the context menu to become visible with a generous timeout
-  await expect(contextMenu).toBeVisible({ timeout: 10000 });
-
-  // Validate the menu has non-zero dimensions (is actually rendered/interactable)
-  const menuBox = await contextMenu.boundingBox();
-  expect(menuBox).not.toBeNull();
-  expect(menuBox!.width).toBeGreaterThan(0);
-  expect(menuBox!.height).toBeGreaterThan(0);
+  // The menu uses opacity-0/opacity-100 for visibility via CSS.
+  // Use toHaveCSS which auto-retries, avoiding flaky waitForTimeout.
+  // The menu should remain visible (opacity 1) to allow diagonal access to it.
+  const menuWrapper = contextMenu.locator("..");
+  await expect(menuWrapper).toHaveCSS("opacity", "1");
 });
