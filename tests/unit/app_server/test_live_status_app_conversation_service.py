@@ -1,13 +1,22 @@
 """Unit tests for the methods in LiveStatusAppConversationService."""
 
+import io
+import json
+import zipfile
+from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import SecretStr
 
-from openhands.agent_server.models import SendMessageRequest, StartConversationRequest
+from openhands.agent_server.models import (
+    SendMessageRequest,
+    StartConversationRequest,
+)
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
+    AppConversationInfo,
     AppConversationStartRequest,
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
@@ -21,8 +30,8 @@ from openhands.app_server.sandbox.sandbox_models import (
 )
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
-from openhands.integrations.provider import ProviderType
-from openhands.sdk import Agent
+from openhands.integrations.provider import ProviderToken, ProviderType
+from openhands.sdk import Agent, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.workspace import LocalWorkspace
@@ -45,6 +54,7 @@ class TestLiveStatusAppConversationService:
         self.mock_app_conversation_info_service = Mock()
         self.mock_app_conversation_start_task_service = Mock()
         self.mock_event_callback_service = Mock()
+        self.mock_event_service = Mock()
         self.mock_httpx_client = Mock()
 
         # Create service instance
@@ -54,6 +64,7 @@ class TestLiveStatusAppConversationService:
             app_conversation_info_service=self.mock_app_conversation_info_service,
             app_conversation_start_task_service=self.mock_app_conversation_start_task_service,
             event_callback_service=self.mock_event_callback_service,
+            event_service=self.mock_event_service,
             sandbox_service=self.mock_sandbox_service,
             sandbox_spec_service=self.mock_sandbox_spec_service,
             jwt_service=self.mock_jwt_service,
@@ -104,10 +115,6 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_with_web_url(self):
         """Test _setup_secrets_for_git_providers with web URL (creates access token)."""
         # Arrange
-        from pydantic import SecretStr
-
-        from openhands.integrations.provider import ProviderToken
-
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
@@ -134,6 +141,9 @@ class TestLiveStatusAppConversationService:
             == 'https://test.example.com/api/v1/webhooks/secrets'
         )
         assert result['GITHUB_TOKEN'].headers['X-Access-Token'] == 'test_access_token'
+        # Verify descriptions are included
+        assert result['GITHUB_TOKEN'].description == 'GITHUB authentication token'
+        assert result['GITLAB_TOKEN'].description == 'GITLAB authentication token'
 
         # Should be called twice, once for each provider
         assert self.mock_jwt_service.create_jws_token.call_count == 2
@@ -142,10 +152,6 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_with_saas_mode(self):
         """Test _setup_secrets_for_git_providers with SaaS mode (includes keycloak cookie)."""
         # Arrange
-        from pydantic import SecretStr
-
-        from openhands.integrations.provider import ProviderToken
-
         self.service.app_mode = 'saas'
         self.service.keycloak_auth_cookie = 'test_cookie'
         base_secrets = {}
@@ -169,15 +175,13 @@ class TestLiveStatusAppConversationService:
         assert isinstance(lookup_secret, LookupSecret)
         assert 'Cookie' in lookup_secret.headers
         assert lookup_secret.headers['Cookie'] == 'keycloak_auth=test_cookie'
+        # Verify description is included
+        assert lookup_secret.description == 'GITLAB authentication token'
 
     @pytest.mark.asyncio
     async def test_setup_secrets_for_git_providers_without_web_url(self):
         """Test _setup_secrets_for_git_providers without web URL (uses static token)."""
         # Arrange
-        from pydantic import SecretStr
-
-        from openhands.integrations.provider import ProviderToken
-
         self.service.web_url = None
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
@@ -198,6 +202,8 @@ class TestLiveStatusAppConversationService:
         assert 'GITHUB_TOKEN' in result
         assert isinstance(result['GITHUB_TOKEN'], StaticSecret)
         assert result['GITHUB_TOKEN'].value.get_secret_value() == 'static_token_value'
+        # Verify description is included
+        assert result['GITHUB_TOKEN'].description == 'GITHUB authentication token'
         self.mock_user_context.get_latest_token.assert_called_once_with(
             ProviderType.GITHUB
         )
@@ -206,10 +212,6 @@ class TestLiveStatusAppConversationService:
     async def test_setup_secrets_for_git_providers_no_static_token(self):
         """Test _setup_secrets_for_git_providers when no static token is available."""
         # Arrange
-        from pydantic import SecretStr
-
-        from openhands.integrations.provider import ProviderToken
-
         self.service.web_url = None
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
@@ -229,6 +231,148 @@ class TestLiveStatusAppConversationService:
         # Assert
         assert 'GITHUB_TOKEN' not in result
         assert result == base_secrets
+
+    @pytest.mark.asyncio
+    async def test_setup_secrets_for_git_providers_descriptions_included(self):
+        """Test _setup_secrets_for_git_providers includes descriptions for all provider types."""
+        # Arrange
+        base_secrets = {}
+        self.mock_user_context.get_secrets.return_value = base_secrets
+        self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
+
+        # Mock provider tokens for multiple providers
+        provider_tokens = {
+            ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
+            ProviderType.GITLAB: ProviderToken(token=SecretStr('gitlab_token')),
+            ProviderType.BITBUCKET: ProviderToken(token=SecretStr('bitbucket_token')),
+        }
+        self.mock_user_context.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
+
+        # Act
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
+
+        # Assert - verify all secrets have correct descriptions
+        assert 'GITHUB_TOKEN' in result
+        assert isinstance(result['GITHUB_TOKEN'], LookupSecret)
+        assert result['GITHUB_TOKEN'].description == 'GITHUB authentication token'
+
+        assert 'GITLAB_TOKEN' in result
+        assert isinstance(result['GITLAB_TOKEN'], LookupSecret)
+        assert result['GITLAB_TOKEN'].description == 'GITLAB authentication token'
+
+        assert 'BITBUCKET_TOKEN' in result
+        assert isinstance(result['BITBUCKET_TOKEN'], LookupSecret)
+        assert result['BITBUCKET_TOKEN'].description == 'BITBUCKET authentication token'
+
+    @pytest.mark.asyncio
+    async def test_setup_secrets_for_git_providers_static_secret_description(self):
+        """Test _setup_secrets_for_git_providers includes description for StaticSecret."""
+        # Arrange
+        self.service.web_url = None
+        base_secrets = {}
+        self.mock_user_context.get_secrets.return_value = base_secrets
+        self.mock_user_context.get_latest_token.return_value = 'static_token_value'
+
+        # Mock provider tokens for multiple providers
+        provider_tokens = {
+            ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
+            ProviderType.GITLAB: ProviderToken(token=SecretStr('gitlab_token')),
+        }
+        self.mock_user_context.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
+
+        # Act
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
+
+        # Assert - verify StaticSecret objects have descriptions
+        assert 'GITHUB_TOKEN' in result
+        assert isinstance(result['GITHUB_TOKEN'], StaticSecret)
+        assert result['GITHUB_TOKEN'].description == 'GITHUB authentication token'
+
+        assert 'GITLAB_TOKEN' in result
+        assert isinstance(result['GITLAB_TOKEN'], StaticSecret)
+        assert result['GITLAB_TOKEN'].description == 'GITLAB authentication token'
+
+    @pytest.mark.asyncio
+    async def test_setup_secrets_for_git_providers_preserves_custom_secret_descriptions(
+        self,
+    ):
+        """Test _setup_secrets_for_git_providers preserves descriptions from custom secrets."""
+        # Arrange
+        # Mock custom secrets with descriptions
+        custom_secret_with_desc = StaticSecret(
+            value=SecretStr('custom_secret_value'),
+            description='Custom API key for external service',
+        )
+        custom_secret_no_desc = StaticSecret(
+            value=SecretStr('another_secret_value'),
+            description=None,
+        )
+        base_secrets = {
+            'CUSTOM_API_KEY': custom_secret_with_desc,
+            'ANOTHER_SECRET': custom_secret_no_desc,
+        }
+        self.mock_user_context.get_secrets.return_value = base_secrets
+        self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
+
+        # Mock provider tokens
+        provider_tokens = {
+            ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
+        }
+        self.mock_user_context.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
+
+        # Act
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
+
+        # Assert - verify custom secrets are preserved with their descriptions
+        assert 'CUSTOM_API_KEY' in result
+        assert isinstance(result['CUSTOM_API_KEY'], StaticSecret)
+        assert (
+            result['CUSTOM_API_KEY'].description
+            == 'Custom API key for external service'
+        )
+        assert (
+            result['CUSTOM_API_KEY'].value.get_secret_value() == 'custom_secret_value'
+        )
+
+        assert 'ANOTHER_SECRET' in result
+        assert isinstance(result['ANOTHER_SECRET'], StaticSecret)
+        assert result['ANOTHER_SECRET'].description is None
+        assert (
+            result['ANOTHER_SECRET'].value.get_secret_value() == 'another_secret_value'
+        )
+
+        # Verify git provider token is also included
+        assert 'GITHUB_TOKEN' in result
+        assert result['GITHUB_TOKEN'].description == 'GITHUB authentication token'
+
+    @pytest.mark.asyncio
+    async def test_setup_secrets_for_git_providers_custom_secret_empty_description(
+        self,
+    ):
+        """Test _setup_secrets_for_git_providers handles custom secrets with empty descriptions."""
+        # Arrange
+        custom_secret_empty_desc = StaticSecret(
+            value=SecretStr('secret_value'),
+            description='',  # Empty string description
+        )
+        base_secrets = {'MY_SECRET': custom_secret_empty_desc}
+        self.mock_user_context.get_secrets.return_value = base_secrets
+        self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
+
+        # Act
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
+
+        # Assert - empty description should be preserved as-is
+        assert 'MY_SECRET' in result
+        assert isinstance(result['MY_SECRET'], StaticSecret)
+        # Empty string description is preserved
+        assert result['MY_SECRET'].description == ''
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_model(self):
@@ -360,8 +504,6 @@ class TestLiveStatusAppConversationService:
     async def test_configure_llm_and_mcp_tavily_with_user_search_api_key(self):
         """Test _configure_llm_and_mcp adds tavily when user has search_api_key."""
         # Arrange
-        from pydantic import SecretStr
-
         self.mock_user.search_api_key = SecretStr('user_search_key')
         self.mock_user_context.get_mcp_api_key.return_value = 'mcp_api_key'
 
@@ -406,8 +548,6 @@ class TestLiveStatusAppConversationService:
     async def test_configure_llm_and_mcp_tavily_user_key_takes_precedence(self):
         """Test _configure_llm_and_mcp user search_api_key takes precedence over env key."""
         # Arrange
-        from pydantic import SecretStr
-
         self.mock_user.search_api_key = SecretStr('user_search_key')
         self.service.tavily_api_key = 'env_tavily_key'
         self.mock_user_context.get_mcp_api_key.return_value = None
@@ -476,8 +616,6 @@ class TestLiveStatusAppConversationService:
         Even in SAAS mode, if the user has their own search_api_key, tavily should be added.
         """
         # Arrange - simulate SAAS mode with user having their own search key
-        from pydantic import SecretStr
-
         self.service.app_mode = AppMode.SAAS.value
         self.service.tavily_api_key = None  # In SAAS mode, this should be None
         self.mock_user.search_api_key = SecretStr('user_search_key')
@@ -502,8 +640,6 @@ class TestLiveStatusAppConversationService:
     async def test_configure_llm_and_mcp_tavily_with_empty_user_search_key(self):
         """Test _configure_llm_and_mcp handles empty user search_api_key correctly."""
         # Arrange
-        from pydantic import SecretStr
-
         self.mock_user.search_api_key = SecretStr('')  # Empty string
         self.service.tavily_api_key = 'env_tavily_key'
         self.mock_user_context.get_mcp_api_key.return_value = None
@@ -527,8 +663,6 @@ class TestLiveStatusAppConversationService:
     async def test_configure_llm_and_mcp_tavily_with_whitespace_user_search_key(self):
         """Test _configure_llm_and_mcp handles whitespace-only user search_api_key correctly."""
         # Arrange
-        from pydantic import SecretStr
-
         self.mock_user.search_api_key = SecretStr('   ')  # Whitespace only
         self.service.tavily_api_key = 'env_tavily_key'
         self.mock_user_context.get_mcp_api_key.return_value = None
@@ -659,7 +793,15 @@ class TestLiveStatusAppConversationService:
         """Test _finalize_conversation_request with skills loading."""
         # Arrange
         mock_agent = Mock(spec=Agent)
+
+        # Create mock LLM with required attributes for _update_agent_with_llm_metadata
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
+        mock_llm.usage_id = 'agent'
+
         mock_updated_agent = Mock(spec=Agent)
+        mock_updated_agent.llm = mock_llm
+        mock_updated_agent.condenser = None  # No condenser
         mock_experiment_manager.run_agent_variant_tests__v1.return_value = (
             mock_updated_agent
         )
@@ -718,7 +860,15 @@ class TestLiveStatusAppConversationService:
         """Test _finalize_conversation_request without remote workspace (no skills)."""
         # Arrange
         mock_agent = Mock(spec=Agent)
+
+        # Create mock LLM with required attributes for _update_agent_with_llm_metadata
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
+        mock_llm.usage_id = 'agent'
+
         mock_updated_agent = Mock(spec=Agent)
+        mock_updated_agent.llm = mock_llm
+        mock_updated_agent.condenser = None  # No condenser
         mock_experiment_manager.run_agent_variant_tests__v1.return_value = (
             mock_updated_agent
         )
@@ -756,7 +906,15 @@ class TestLiveStatusAppConversationService:
         """Test _finalize_conversation_request when skills loading fails."""
         # Arrange
         mock_agent = Mock(spec=Agent)
+
+        # Create mock LLM with required attributes for _update_agent_with_llm_metadata
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
+        mock_llm.usage_id = 'agent'
+
         mock_updated_agent = Mock(spec=Agent)
+        mock_updated_agent.llm = mock_llm
+        mock_updated_agent.condenser = None  # No condenser
         mock_experiment_manager.run_agent_variant_tests__v1.return_value = (
             mock_updated_agent
         )
@@ -852,6 +1010,238 @@ class TestLiveStatusAppConversationService:
         self.service._finalize_conversation_request.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_export_conversation_success(self):
+        """Test successful download of conversation trajectory."""
+        # Arrange
+        conversation_id = uuid4()
+
+        # Mock conversation info
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.title = 'Test Conversation'
+        mock_conversation_info.created_at = datetime(2024, 1, 1, 12, 0, 0)
+        mock_conversation_info.updated_at = datetime(2024, 1, 1, 13, 0, 0)
+        mock_conversation_info.selected_repository = 'test/repo'
+        mock_conversation_info.git_provider = 'github'
+        mock_conversation_info.selected_branch = 'main'
+        mock_conversation_info.model_dump_json = Mock(
+            return_value='{"id": "test", "title": "Test Conversation"}'
+        )
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        # Mock events
+        mock_event1 = Mock(spec=Event)
+        mock_event1.id = uuid4()
+        mock_event1.model_dump = Mock(
+            return_value={'id': str(mock_event1.id), 'type': 'action'}
+        )
+
+        mock_event2 = Mock(spec=Event)
+        mock_event2.id = uuid4()
+        mock_event2.model_dump = Mock(
+            return_value={'id': str(mock_event2.id), 'type': 'observation'}
+        )
+
+        # Mock event service search_events to return paginated results
+        mock_event_page1 = Mock()
+        mock_event_page1.items = [mock_event1]
+        mock_event_page1.next_page_id = 'page2'
+
+        mock_event_page2 = Mock()
+        mock_event_page2.items = [mock_event2]
+        mock_event_page2.next_page_id = None
+
+        self.mock_event_service.search_events = AsyncMock(
+            side_effect=[mock_event_page1, mock_event_page2]
+        )
+
+        # Act
+        result = await self.service.export_conversation(conversation_id)
+
+        # Assert
+        assert result is not None
+        assert isinstance(result, bytes)  # Should be bytes
+
+        # Verify the zip file contents
+        with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
+            file_list = zipf.namelist()
+
+            # Should contain meta.json and event files
+            assert 'meta.json' in file_list
+            assert any(
+                f.startswith('event_') and f.endswith('.json') for f in file_list
+            )
+
+            # Check meta.json content
+            with zipf.open('meta.json') as meta_file:
+                meta_content = meta_file.read().decode('utf-8')
+                assert '"id": "test"' in meta_content
+                assert '"title": "Test Conversation"' in meta_content
+
+            # Check event files
+            event_files = [f for f in file_list if f.startswith('event_')]
+            assert len(event_files) == 2  # Should have 2 event files
+
+            # Verify event file content
+            with zipf.open(event_files[0]) as event_file:
+                event_content = json.loads(event_file.read().decode('utf-8'))
+                assert 'id' in event_content
+                assert 'type' in event_content
+
+        # Verify service calls
+        self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
+            conversation_id
+        )
+        assert self.mock_event_service.search_events.call_count == 2
+        mock_conversation_info.model_dump_json.assert_called_once_with(indent=2)
+
+    @pytest.mark.asyncio
+    async def test_export_conversation_conversation_not_found(self):
+        """Test download when conversation is not found."""
+        # Arrange
+        conversation_id = uuid4()
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=None
+        )
+
+        # Act & Assert
+        with pytest.raises(
+            ValueError, match=f'Conversation not found: {conversation_id}'
+        ):
+            await self.service.export_conversation(conversation_id)
+
+        # Verify service calls
+        self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
+            conversation_id
+        )
+        self.mock_event_service.search_events.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_export_conversation_empty_events(self):
+        """Test download with conversation that has no events."""
+        # Arrange
+        conversation_id = uuid4()
+
+        # Mock conversation info
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.title = 'Empty Conversation'
+        mock_conversation_info.model_dump_json = Mock(
+            return_value='{"id": "test", "title": "Empty Conversation"}'
+        )
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        # Mock empty event page
+        mock_event_page = Mock()
+        mock_event_page.items = []
+        mock_event_page.next_page_id = None
+
+        self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
+
+        # Act
+        result = await self.service.export_conversation(conversation_id)
+
+        # Assert
+        assert result is not None
+        assert isinstance(result, bytes)  # Should be bytes
+
+        # Verify the zip file contents
+        with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
+            file_list = zipf.namelist()
+
+            # Should only contain meta.json (no event files)
+            assert 'meta.json' in file_list
+            assert len([f for f in file_list if f.startswith('event_')]) == 0
+
+        # Verify service calls
+        self.mock_app_conversation_info_service.get_app_conversation_info.assert_called_once_with(
+            conversation_id
+        )
+        self.mock_event_service.search_events.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_export_conversation_large_pagination(self):
+        """Test download with multiple pages of events."""
+        # Arrange
+        conversation_id = uuid4()
+
+        # Mock conversation info
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.title = 'Large Conversation'
+        mock_conversation_info.model_dump_json = Mock(
+            return_value='{"id": "test", "title": "Large Conversation"}'
+        )
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        # Create multiple pages of events
+        events_per_page = 3
+        total_pages = 4
+        all_events = []
+
+        for page_num in range(total_pages):
+            page_events = []
+            for i in range(events_per_page):
+                mock_event = Mock(spec=Event)
+                mock_event.id = uuid4()
+                mock_event.model_dump = Mock(
+                    return_value={
+                        'id': str(mock_event.id),
+                        'type': f'event_page_{page_num}_item_{i}',
+                    }
+                )
+                page_events.append(mock_event)
+                all_events.append(mock_event)
+
+            mock_event_page = Mock()
+            mock_event_page.items = page_events
+            mock_event_page.next_page_id = (
+                f'page{page_num + 1}' if page_num < total_pages - 1 else None
+            )
+
+            if page_num == 0:
+                first_page = mock_event_page
+            elif page_num == 1:
+                second_page = mock_event_page
+            elif page_num == 2:
+                third_page = mock_event_page
+            else:
+                fourth_page = mock_event_page
+
+        self.mock_event_service.search_events = AsyncMock(
+            side_effect=[first_page, second_page, third_page, fourth_page]
+        )
+
+        # Act
+        result = await self.service.export_conversation(conversation_id)
+
+        # Assert
+        assert result is not None
+        assert isinstance(result, bytes)  # Should be bytes
+
+        # Verify the zip file contents
+        with zipfile.ZipFile(io.BytesIO(result), 'r') as zipf:
+            file_list = zipf.namelist()
+
+            # Should contain meta.json and all event files
+            assert 'meta.json' in file_list
+            event_files = [f for f in file_list if f.startswith('event_')]
+            assert (
+                len(event_files) == total_pages * events_per_page
+            )  # Should have all events
+
+        # Verify service calls - should call search_events for each page
+        assert self.mock_event_service.search_events.call_count == total_pages
+
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
     )
@@ -1072,8 +1462,6 @@ class TestLiveStatusAppConversationService:
     async def test_configure_llm_and_mcp_merges_system_and_custom_servers(self):
         """Test _configure_llm_and_mcp merges both system and custom MCP servers."""
         # Arrange
-        from pydantic import SecretStr
-
         from openhands.core.config.mcp_config import (
             MCPConfig,
             MCPSSEServerConfig,

@@ -13,7 +13,6 @@ STAGED_FILES=$(git diff --cached --name-only)
 # Check if any files match specific patterns
 has_frontend_changes=false
 has_backend_changes=false
-has_vscode_changes=false
 
 # Check each file individually to avoid issues with grep
 for file in $STAGED_FILES; do
@@ -21,17 +20,12 @@ for file in $STAGED_FILES; do
         has_frontend_changes=true
     elif [[ $file == openhands/* || $file == evaluation/* || $file == tests/* ]]; then
         has_backend_changes=true
-        # Check for VSCode extension changes (subset of backend changes)
-        if [[ $file == openhands/integrations/vscode/* ]]; then
-            has_vscode_changes=true
-        fi
     fi
 done
 
 echo "Analyzing changes..."
 echo "- Frontend changes: $has_frontend_changes"
 echo "- Backend changes: $has_backend_changes"
-echo "- VSCode extension changes: $has_vscode_changes"
 
 # Run frontend linting if needed
 if [ "$has_frontend_changes" = true ]; then
@@ -92,51 +86,6 @@ else
     echo "Skipping backend checks (no backend changes detected)."
 fi
 
-# Run VSCode extension checks if needed
-if [ "$has_vscode_changes" = true ]; then
-    # Check if we're in a CI environment
-    if [ -n "$CI" ]; then
-        echo "Skipping VSCode extension checks (CI environment detected)."
-        echo "WARNING: VSCode extension files have changed but checks are being skipped."
-        echo "Please run VSCode extension checks manually before submitting your PR."
-    else
-        echo "Running VSCode extension checks..."
-        if [ -d "openhands/integrations/vscode" ]; then
-            cd openhands/integrations/vscode || exit 1
-
-            echo "Running npm lint:fix..."
-            npm run lint:fix
-            if [ $? -ne 0 ]; then
-                echo "VSCode extension linting failed. Please fix the issues before committing."
-                EXIT_CODE=1
-            else
-                echo "VSCode extension linting passed!"
-            fi
-
-            echo "Running npm typecheck..."
-            npm run typecheck
-            if [ $? -ne 0 ]; then
-                echo "VSCode extension type checking failed. Please fix the issues before committing."
-                EXIT_CODE=1
-            else
-                echo "VSCode extension type checking passed!"
-            fi
-
-            echo "Running npm compile..."
-            npm run compile
-            if [ $? -ne 0 ]; then
-                echo "VSCode extension compilation failed. Please fix the issues before committing."
-                EXIT_CODE=1
-            else
-                echo "VSCode extension compilation passed!"
-            fi
-
-            cd ../../..
-        fi
-    fi
-else
-    echo "Skipping VSCode extension checks (no VSCode extension changes detected)."
-fi
 
 # If no specific code changes detected, run basic checks
 if [ "$has_frontend_changes" = false ] && [ "$has_backend_changes" = false ]; then

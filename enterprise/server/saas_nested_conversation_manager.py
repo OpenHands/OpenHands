@@ -12,6 +12,8 @@ from typing import Any, cast
 
 import httpx
 import socketio
+from pydantic import SecretStr
+from server.auth.token_manager import TokenManager
 from server.constants import PERMITTED_CORS_ORIGINS, WEB_HOST
 from server.utils.conversation_callback_utils import (
     process_event,
@@ -29,7 +31,11 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import MessageAction
 from openhands.events.event_store import EventStore
 from openhands.events.serialization.event import event_to_dict
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
+from openhands.integrations.provider import (
+    PROVIDER_TOKEN_TYPE,
+    ProviderHandler,
+    ProviderToken,
+)
 from openhands.runtime.impl.remote.remote_runtime import RemoteRuntime
 from openhands.runtime.plugins.vscode import VSCodeRequirement
 from openhands.runtime.runtime_status import RuntimeStatus
@@ -228,6 +234,102 @@ class SaasNestedConversationManager(ConversationManager):
             status=status,
         )
 
+    async def _refresh_provider_tokens_after_runtime_init(
+        self, settings: Settings, sid: str, user_id: str | None = None
+    ) -> Settings:
+        """Refresh provider tokens after runtime initialization.
+
+        During runtime initialization, tokens may be refreshed by Runtime.__init__().
+        This method retrieves the fresh tokens from the database and creates a new
+        settings object with updated tokens to avoid sending stale tokens to the
+        nested runtime.
+
+        The method handles two scenarios:
+        1. ProviderToken has user_id (IDP user ID, e.g., GitLab user ID)
+           → Uses get_idp_token_from_idp_user_id()
+        2. ProviderToken has no user_id but Keycloak user_id is available
+           → Uses load_offline_token() + get_idp_token_from_offline_token()
+
+        Args:
+            settings: The conversation settings that may contain provider tokens
+            sid: The session ID for logging purposes
+            user_id: The Keycloak user ID (optional, used as fallback when
+                     ProviderToken.user_id is not available)
+
+        Returns:
+            Updated settings with fresh provider tokens, or original settings
+            if no update is needed
+        """
+        if not isinstance(settings, ConversationInitData):
+            return settings
+
+        if not settings.git_provider_tokens:
+            return settings
+
+        token_manager = TokenManager()
+        updated_tokens = {}
+        tokens_refreshed = 0
+        tokens_failed = 0
+
+        for provider_type, provider_token in settings.git_provider_tokens.items():
+            fresh_token = None
+
+            try:
+                if provider_token.user_id:
+                    # Case 1: We have IDP user ID (e.g., GitLab user ID '32546706')
+                    # Get the token that was just refreshed during runtime initialization
+                    fresh_token = await token_manager.get_idp_token_from_idp_user_id(
+                        provider_token.user_id, provider_type
+                    )
+                elif user_id:
+                    # Case 2: We have Keycloak user ID but no IDP user ID
+                    # This happens in web UI flow where ProviderToken.user_id is None
+                    offline_token = await token_manager.load_offline_token(user_id)
+                    if offline_token:
+                        fresh_token = (
+                            await token_manager.get_idp_token_from_offline_token(
+                                offline_token, provider_type
+                            )
+                        )
+
+                if fresh_token:
+                    updated_tokens[provider_type] = ProviderToken(
+                        token=SecretStr(fresh_token),
+                        user_id=provider_token.user_id,
+                        host=provider_token.host,
+                    )
+                    tokens_refreshed += 1
+                else:
+                    # Keep original token if we couldn't get a fresh one
+                    updated_tokens[provider_type] = provider_token
+
+            except Exception as e:
+                # If refresh fails, use original token to prevent conversation startup failure
+                logger.warning(
+                    f'Failed to refresh {provider_type.value} token: {e}',
+                    extra={'session_id': sid, 'provider': provider_type.value},
+                    exc_info=True,
+                )
+                updated_tokens[provider_type] = provider_token
+                tokens_failed += 1
+
+        # Create new ConversationInitData with updated tokens
+        # We cannot modify the frozen field directly, so we create a new object
+        updated_settings = settings.model_copy(
+            update={'git_provider_tokens': MappingProxyType(updated_tokens)}
+        )
+
+        logger.info(
+            'Updated provider tokens after runtime creation',
+            extra={
+                'session_id': sid,
+                'providers': [p.value for p in updated_tokens.keys()],
+                'refreshed': tokens_refreshed,
+                'failed': tokens_failed,
+            },
+        )
+        return updated_settings
+
     async def _start_agent_loop(
         self, sid, settings, user_id, initial_user_msg=None, replay_json=None
     ):
@@ -248,6 +350,11 @@ class SaasNestedConversationManager(ConversationManager):
                 )
 
             session_api_key = runtime.session.headers['X-Session-API-Key']
+
+            # Update provider tokens with fresh ones after runtime creation
+            settings = await self._refresh_provider_tokens_after_runtime_init(
+                settings, sid, user_id
+            )
 
             await self._start_conversation(
                 sid,
@@ -333,7 +440,12 @@ class SaasNestedConversationManager(ConversationManager):
     async def _setup_provider_tokens(
         self, client: httpx.AsyncClient, api_url: str, settings: Settings
     ):
-        """Setup provider tokens for the nested conversation."""
+        """Setup provider tokens for the nested conversation.
+
+        Note: Token validation happens in the nested runtime. If tokens are revoked,
+        the nested runtime will return 401. The caller should handle token refresh
+        and retry if needed.
+        """
         provider_handler = self._get_provider_handler(settings)
         provider_tokens = provider_handler.provider_tokens
         if provider_tokens:

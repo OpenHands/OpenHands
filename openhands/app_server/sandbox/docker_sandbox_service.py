@@ -78,6 +78,7 @@ class DockerSandboxService(SandboxService):
     health_check_path: str | None
     httpx_client: httpx.AsyncClient
     max_num_sandboxes: int
+    extra_hosts: dict[str, str] = field(default_factory=dict)
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
 
     def _find_unused_port(self) -> int:
@@ -346,6 +347,12 @@ class DockerSandboxService(SandboxService):
                 working_dir=sandbox_spec.working_dir,
                 labels=labels,
                 detach=True,
+                # Use Docker's tini init process to ensure proper signal handling and reaping of
+                # zombie child processes.
+                init=True,
+                # Allow agent-server containers to resolve host.docker.internal
+                # and other custom hostnames for LAN deployments
+                extra_hosts=self.extra_hosts if self.extra_hosts else None,
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)
@@ -419,8 +426,23 @@ class DockerSandboxService(SandboxService):
 class DockerSandboxServiceInjector(SandboxServiceInjector):
     """Dependency injector for docker sandbox services."""
 
-    container_url_pattern: str = 'http://localhost:{port}'
-    host_port: int = 3000
+    container_url_pattern: str = Field(
+        default='http://localhost:{port}',
+        description=(
+            'URL pattern for exposed sandbox ports. Use {port} as placeholder. '
+            'For remote access, set to your server IP (e.g., http://192.168.1.100:{port}). '
+            'Configure via OH_SANDBOX_CONTAINER_URL_PATTERN environment variable.'
+        ),
+    )
+    host_port: int = Field(
+        default=3000,
+        description=(
+            'The port on which the main OpenHands app server is running. '
+            'Used for webhook callbacks from agent-server containers. '
+            'If running OpenHands on a non-default port, set this to match. '
+            'Configure via OH_SANDBOX_HOST_PORT environment variable.'
+        ),
+    )
     container_name_prefix: str = 'oh-agent-server-'
     max_num_sandboxes: int = Field(
         default=5,
@@ -466,6 +488,15 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'determine whether the server is running'
         ),
     )
+    extra_hosts: dict[str, str] = Field(
+        default_factory=lambda: {'host.docker.internal': 'host-gateway'},
+        description=(
+            'Extra hostname mappings to add to agent-server containers. '
+            'This allows containers to resolve hostnames like host.docker.internal '
+            'for LAN deployments and MCP connections. '
+            'Format: {"hostname": "ip_or_gateway"}'
+        ),
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -490,4 +521,5 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 health_check_path=self.health_check_path,
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
+                extra_hosts=self.extra_hosts,
             )

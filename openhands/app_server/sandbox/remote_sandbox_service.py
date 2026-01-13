@@ -3,6 +3,7 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Union
+from uuid import UUID
 
 import base62
 import httpx
@@ -187,7 +188,7 @@ class RemoteSandboxService(SandboxService):
             return SandboxStatus.MISSING
 
         status = None
-        pod_status = runtime['pod_status'].lower()
+        pod_status = (runtime.get('pod_status') or '').lower()
         if pod_status:
             status = POD_STATUS_MAPPING.get(pod_status, None)
 
@@ -356,7 +357,7 @@ class RemoteSandboxService(SandboxService):
                         StoredRemoteSandbox.id == runtime.get('session_id')
                     )
                     result = await self.db_session.execute(query)
-                    sandbox = result.first()
+                    sandbox = result.scalar_one_or_none()
                     if sandbox is None:
                         raise ValueError('sandbox_not_found')
                     return self._to_sandbox_info(sandbox, runtime)
@@ -729,7 +730,9 @@ async def refresh_conversation(
             return EventPage.model_validate(response.json())
 
         async for event in page_iterator(fetch_events_page):
-            existing = await event_service.get_event(event.id)
+            existing = await event_service.get_event(
+                app_conversation_info.id, UUID(event.id)
+            )
             if existing is None:
                 await event_service.save_event(app_conversation_info.id, event)
                 await event_callback_service.execute_callbacks(
@@ -790,7 +793,7 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
         # This is primarily used for local development rather than production
         config = get_global_config()
         web_url = config.web_url
-        if web_url is None:
+        if web_url is None or 'localhost' in web_url:
             global polling_task
             if polling_task is None:
                 polling_task = asyncio.create_task(

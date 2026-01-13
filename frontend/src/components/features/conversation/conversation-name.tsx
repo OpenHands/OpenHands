@@ -6,6 +6,7 @@ import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation"
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { ENABLE_PUBLIC_CONVERSATION_SHARING } from "#/utils/feature-flags";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
@@ -30,10 +31,13 @@ export function ConversationName() {
     handleDelete,
     handleStop,
     handleDownloadViaVSCode,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
     handleShowSkills,
     handleExportConversation,
+    handleTogglePublic,
+    handleCopyShareLink,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -50,6 +54,7 @@ export function ConversationName() {
     shouldShowStop,
     shouldShowDownload,
     shouldShowExport,
+    shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
     shouldShowSkills,
@@ -177,6 +182,21 @@ export function ConversationName() {
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
+                onTogglePublic={
+                  ENABLE_PUBLIC_CONVERSATION_SHARING()
+                    ? handleTogglePublic
+                    : undefined
+                }
+                onCopyShareLink={
+                  ENABLE_PUBLIC_CONVERSATION_SHARING()
+                    ? handleCopyShareLink
+                    : undefined
+                }
+                onDownloadConversation={
+                  shouldShowDownloadConversation
+                    ? handleDownloadConversation
+                    : undefined
+                }
                 position="bottom"
               />
             )}
@@ -194,7 +214,7 @@ export function ConversationName() {
       <SystemMessageModal
         isOpen={systemModalVisible}
         onClose={() => setSystemModalVisible(false)}
-        systemMessage={systemMessage ? systemMessage.args : null}
+        systemMessage={systemMessage || null}
       />
 
       {/* Skills Modal */}
@@ -207,6 +227,7 @@ export function ConversationName() {
         <ConfirmDeleteModal
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmDeleteModalVisible(false)}
+          conversationTitle={conversation?.title}
         />
       )}
 

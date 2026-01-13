@@ -673,7 +673,6 @@ async def test_saas_user_auth_from_signed_token_blocked_domain(mock_config):
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_active.return_value = True
         mock_domain_blocker.is_domain_blocked.return_value = True
 
         # Act & Assert
@@ -703,7 +702,6 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_active.return_value = True
         mock_domain_blocker.is_domain_blocked.return_value = False
 
         # Act
@@ -720,7 +718,7 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_config):
-    """Test that saas_user_auth_from_signed_token succeeds when domain blocking is not active."""
+    """Test that saas_user_auth_from_signed_token succeeds when email domain is not blocked."""
     # Arrange
     access_payload = {
         'sub': 'test_user_id',
@@ -737,7 +735,7 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_active.return_value = False
+        mock_domain_blocker.is_domain_blocked.return_value = False
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)
@@ -745,4 +743,4 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
         # Assert
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
-        mock_domain_blocker.is_domain_blocked.assert_not_called()
+        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')

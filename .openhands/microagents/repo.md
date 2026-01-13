@@ -150,9 +150,9 @@ Each integration follows a consistent pattern with service classes, storage mode
 
 **Important Notes:**
 - Enterprise code is licensed under Polyform Free Trial License (30-day limit)
-- The enterprise server extends the OSS server through dynamic imports
+- The enterprise server extends the OpenHands server through dynamic imports
 - Database changes require careful migration planning in `enterprise/migrations/`
-- Always test changes in both OSS and enterprise contexts
+- Always test changes in both OpenHands and enterprise contexts
 - Use the enterprise-specific Makefile commands for development
 
 **Enterprise Testing Best Practices:**
@@ -166,7 +166,7 @@ Each integration follows a consistent pattern with service classes, storage mode
 **Import Patterns:**
 - Use relative imports without `enterprise.` prefix in enterprise code
 - Example: `from storage.database import session_maker` not `from enterprise.storage.database import session_maker`
-- This ensures code works in both OSS and enterprise contexts
+- This ensures code works in both OpenHands and enterprise contexts
 
 **Test Structure:**
 - Place tests in `enterprise/tests/unit/` following the same structure as the source code

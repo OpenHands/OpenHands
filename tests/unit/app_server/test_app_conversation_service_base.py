@@ -320,9 +320,9 @@ def test_create_condenser_default_agent_with_none_max_size(mock_condenser_class)
         # Assert
         mock_condenser_class.assert_called_once()
         call_kwargs = mock_condenser_class.call_args[1]
-        # When condenser_max_size is None, max_size should not be passed (uses SDK default of 120)
+        # When condenser_max_size is None, max_size should not be passed (uses SDK default of 240)
         assert 'max_size' not in call_kwargs
-        # keep_first is never passed (uses SDK default of 4)
+        # keep_first is never passed (uses SDK default of 2)
         assert 'keep_first' not in call_kwargs
         assert call_kwargs['llm'].usage_id == 'condenser'
         mock_llm.model_copy.assert_called_once()
@@ -358,7 +358,7 @@ def test_create_condenser_default_agent_with_custom_max_size(mock_condenser_clas
         mock_condenser_class.assert_called_once()
         call_kwargs = mock_condenser_class.call_args[1]
         assert call_kwargs['max_size'] == 150  # Custom value should be used
-        # keep_first is never passed (uses SDK default of 4)
+        # keep_first is never passed (uses SDK default of 2)
         assert 'keep_first' not in call_kwargs
         assert call_kwargs['llm'].usage_id == 'condenser'
         mock_llm.model_copy.assert_called_once()
@@ -393,9 +393,9 @@ def test_create_condenser_plan_agent_with_none_max_size(mock_condenser_class):
         # Assert
         mock_condenser_class.assert_called_once()
         call_kwargs = mock_condenser_class.call_args[1]
-        # When condenser_max_size is None, max_size should not be passed (uses SDK default of 120)
+        # When condenser_max_size is None, max_size should not be passed (uses SDK default of 240)
         assert 'max_size' not in call_kwargs
-        # keep_first is never passed (uses SDK default of 4)
+        # keep_first is never passed (uses SDK default of 2)
         assert 'keep_first' not in call_kwargs
         assert call_kwargs['llm'].usage_id == 'planning_condenser'
         mock_llm.model_copy.assert_called_once()
@@ -431,7 +431,7 @@ def test_create_condenser_plan_agent_with_custom_max_size(mock_condenser_class):
         mock_condenser_class.assert_called_once()
         call_kwargs = mock_condenser_class.call_args[1]
         assert call_kwargs['max_size'] == 200  # Custom value should be used
-        # keep_first is never passed (uses SDK default of 4)
+        # keep_first is never passed (uses SDK default of 2)
         assert 'keep_first' not in call_kwargs
         assert call_kwargs['llm'].usage_id == 'planning_condenser'
         mock_llm.model_copy.assert_called_once()

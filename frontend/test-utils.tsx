@@ -8,13 +8,17 @@ import { AxiosError } from "axios";
 import userEvent from "@testing-library/user-event";
 import { INITIAL_MOCK_ORGS } from "#/mocks/org-handlers";
 
+export const useParamsMock = vi.fn(() => ({
+  conversationId: "test-conversation-id",
+}));
+
 // Mock useParams before importing components
 vi.mock("react-router", async () => {
   const actual =
     await vi.importActual<typeof import("react-router")>("react-router");
   return {
     ...actual,
-    useParams: () => ({ conversationId: "test-conversation-id" }),
+    useParams: useParamsMock,
     useRevalidator: () => ({
       revalidate: vi.fn(),
     }),
@@ -98,3 +102,23 @@ export const selectOrganization = async ({
   const option = await screen.findByText(targetOrg.name);
   await userEvent.click(option);
 };
+
+export const createAxiosError = (
+  status: number,
+  statusText: string,
+  data: unknown,
+) =>
+  new AxiosError(
+    `Request failed with status code ${status}`,
+    "ERR_BAD_REQUEST",
+    undefined,
+    undefined,
+    {
+      status,
+      statusText,
+      data,
+      headers: {},
+      // @ts-expect-error - we only need the response object for this test
+      config: {},
+    },
+  );

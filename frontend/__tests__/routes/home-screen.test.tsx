@@ -1,5 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
@@ -9,8 +9,48 @@ import { GitRepository } from "#/types/git";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import GitService from "#/api/git-service/git-service.api";
 import OptionService from "#/api/option-service/option-service.api";
+import AuthService from "#/api/auth-service/auth-service.api";
 import MainApp from "#/routes/root-layout";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { GetConfigResponse } from "#/api/option-service/option.types";
+
+const { DEFAULT_FEATURE_FLAGS, useIsAuthedMock, useConfigMock } = vi.hoisted(
+  () => {
+    const defaultFeatureFlags: GetConfigResponse["FEATURE_FLAGS"] = {
+      HIDE_BILLING: false,
+      ENABLE_BILLING: false,
+      HIDE_LLM_SETTINGS: false,
+      ENABLE_JIRA: false,
+      ENABLE_JIRA_DC: false,
+      ENABLE_LINEAR: false,
+    };
+
+    return {
+      DEFAULT_FEATURE_FLAGS: defaultFeatureFlags,
+      useIsAuthedMock: vi.fn().mockReturnValue({
+        data: true,
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+      }),
+      useConfigMock: vi.fn().mockReturnValue({
+        data: {
+          APP_MODE: "oss",
+          FEATURE_FLAGS: defaultFeatureFlags,
+        },
+        isLoading: false,
+      }),
+    };
+  },
+);
+
+vi.mock("#/hooks/query/use-is-authed", () => ({
+  useIsAuthed: () => useIsAuthedMock(),
+}));
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => useConfigMock(),
+}));
 
 const RouterStub = createRoutesStub([
   {
@@ -30,6 +70,10 @@ const RouterStub = createRoutesStub([
         path: "/settings",
       },
     ],
+  },
+  {
+    Component: () => <div data-testid="login-page" />,
+    path: "/login",
   },
 ]);
 
@@ -90,19 +134,55 @@ const MOCK_RESPOSITORIES: GitRepository[] = [
 
 describe("HomeScreen", () => {
   beforeEach(() => {
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    getSettingsSpy.mockResolvedValue({
+    vi.clearAllMocks();
+
+    useIsAuthedMock.mockReturnValue({
+      data: true,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+    });
+    useConfigMock.mockReturnValue({
+      data: { APP_MODE: "oss", FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS },
+      isLoading: false,
+    });
+
+    // Mock config to avoid SaaS redirect logic
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+      APP_MODE: "oss",
+      GITHUB_CLIENT_ID: "test-client-id",
+      POSTHOG_CLIENT_KEY: "test-posthog-key",
+      PROVIDERS_CONFIGURED: ["github"],
+      AUTH_URL: "https://auth.example.com",
+      FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS,
+    } as Awaited<ReturnType<typeof OptionService.getConfig>>);
+
+    vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
       provider_tokens_set: {
         github: "fake-token",
         gitlab: "fake-token",
       },
     });
+
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
   });
 
-  it("should render", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("should render", async () => {
     renderHomeScreen();
-    screen.getByTestId("home-screen");
+    await screen.findByTestId("home-screen");
   });
 
   it("should render the repository connector and suggested tasks sections", async () => {
@@ -353,12 +433,48 @@ describe("HomeScreen", () => {
 });
 
 describe("Settings 404", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
   const getConfigSpy = vi.spyOn(OptionService, "getConfig");
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    useIsAuthedMock.mockReturnValue({
+      data: true,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+    });
+    useConfigMock.mockReturnValue({
+      data: { APP_MODE: "oss", FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS },
+      isLoading: false,
+    });
+
+    getConfigSpy.mockResolvedValue({
+      APP_MODE: "oss",
+      GITHUB_CLIENT_ID: "test-client-id",
+      POSTHOG_CLIENT_KEY: "test-posthog-key",
+      PROVIDERS_CONFIGURED: ["github"],
+      AUTH_URL: "https://auth.example.com",
+      FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS,
+    } as Awaited<ReturnType<typeof OptionService.getConfig>>);
+
+    vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+    getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
+
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it("should open the settings modal if GET /settings fails with a 404", async () => {
     const error = createAxiosNotFoundErrorObject();
@@ -395,18 +511,15 @@ describe("Settings 404", () => {
   });
 
   it("should not open the settings modal if GET /settings fails but is SaaS mode", async () => {
+    useConfigMock.mockReturnValue({
+      data: { APP_MODE: "saas", FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS },
+      isLoading: false,
+    });
+
+    // @ts-expect-error - we only need APP_MODE for this test
     getConfigSpy.mockResolvedValue({
       APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test",
-      POSTHOG_CLIENT_KEY: "test",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: false,
-        HIDE_BILLING: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
-      },
+      FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS,
     });
     const error = createAxiosNotFoundErrorObject();
     getSettingsSpy.mockRejectedValue(error);
@@ -421,24 +534,58 @@ describe("Setup Payment modal", () => {
   const getConfigSpy = vi.spyOn(OptionService, "getConfig");
   const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
-  it("should only render if SaaS mode and is new user", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    useIsAuthedMock.mockReturnValue({
+      data: true,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+    });
+    useConfigMock.mockReturnValue({
+      data: {
+        APP_MODE: "saas",
+        FEATURE_FLAGS: { ...DEFAULT_FEATURE_FLAGS, ENABLE_BILLING: true },
+      },
+      isLoading: false,
+    });
+
     getConfigSpy.mockResolvedValue({
       APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test",
-      POSTHOG_CLIENT_KEY: "test",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: true,
-        HIDE_LLM_SETTINGS: false,
-        HIDE_BILLING: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
-      },
+      GITHUB_CLIENT_ID: "test-client-id",
+      POSTHOG_CLIENT_KEY: "test-posthog-key",
+      PROVIDERS_CONFIGURED: ["github"],
+      AUTH_URL: "https://auth.example.com",
+      FEATURE_FLAGS: { ...DEFAULT_FEATURE_FLAGS, ENABLE_BILLING: true },
+    } as Awaited<ReturnType<typeof OptionService.getConfig>>);
+
+    vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+    getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
+
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
     });
-    const error = createAxiosNotFoundErrorObject();
-    getSettingsSpy.mockRejectedValue(error);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("should only render if SaaS mode and is new user", async () => {
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      is_new_user: true,
+    });
 
     renderHomeScreen();
+
+    await screen.findByTestId("root-layout");
 
     const setupPaymentModal = await screen.findByTestId(
       "proceed-to-stripe-button",
