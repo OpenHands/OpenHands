@@ -19,7 +19,6 @@ interface ThinkingBlockItemProps {
 }
 
 interface RedactedThinkingBlockItemProps {
-  block: RedactedThinkingBlock;
   index: number;
 }
 
@@ -44,10 +43,7 @@ function ThinkingBlockItem({ block, index }: ThinkingBlockItemProps) {
   );
 }
 
-function RedactedThinkingBlockItem({
-  block: _block, // eslint-disable-line @typescript-eslint/no-unused-vars
-  index,
-}: RedactedThinkingBlockItemProps) {
+function RedactedThinkingBlockItem({ index }: RedactedThinkingBlockItemProps) {
   return (
     <div className="mb-2">
       <div className="text-xs text-gray-500 mb-1">
@@ -68,13 +64,7 @@ function ThinkingBlocksList({ blocks }: ThinkingBlocksListProps) {
           return <ThinkingBlockItem key={index} block={block} index={index} />;
         }
         if (block.type === "redacted_thinking") {
-          return (
-            <RedactedThinkingBlockItem
-              key={index}
-              block={block}
-              index={index}
-            />
-          );
+          return <RedactedThinkingBlockItem key={index} index={index} />;
         }
         return null;
       })}
