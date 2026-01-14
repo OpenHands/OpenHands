@@ -304,6 +304,36 @@ describe("Conversation WebSocket Handler", () => {
       });
     });
 
+    it("should show friendly i18n message for budget/credit errors", async () => {
+      // Create a mock AgentErrorEvent with budget-related error message
+      const mockBudgetErrorEvent = createMockAgentErrorEvent({
+        error:
+          "litellm.BadRequestError: Litellm_proxyException - ExceededBudget: User=xxx over budget.",
+      });
+
+      // Set up MSW to send the budget error event when connection is established
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.send(JSON.stringify(mockBudgetErrorEvent));
+        }),
+      );
+
+      // Render components that use both WebSocket and error message store
+      renderWithWebSocketContext(<ErrorMessageStoreComponent />);
+
+      // Initially should show "none"
+      expect(screen.getByTestId("error-message")).toHaveTextContent("none");
+
+      // Wait for connection and error event processing
+      // Should show the i18n key instead of raw error message
+      await waitFor(() => {
+        expect(screen.getByTestId("error-message")).toHaveTextContent(
+          "STATUS$ERROR_LLM_OUT_OF_CREDITS",
+        );
+      });
+    });
+
     it("should set error message store on WebSocket connection errors", async () => {
       // Simulate a connect-then-fail sequence (the MSW server auto-connects by default).
       // This should surface an error message because the app has previously connected.
