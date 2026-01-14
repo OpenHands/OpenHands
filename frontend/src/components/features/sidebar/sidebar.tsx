@@ -16,7 +16,7 @@ import { MicroagentManagementButton } from "#/components/shared/buttons/microage
 import { cn } from "#/utils/utils";
 
 export function Sidebar() {
-  const location = useLocation();
+  const { pathname } = useLocation();
   const user = useGitUser();
   const { data: config } = useConfig();
   const {
@@ -32,10 +32,8 @@ export function Sidebar() {
   const [conversationPanelIsOpen, setConversationPanelIsOpen] =
     React.useState(false);
 
-  const { pathname } = useLocation();
-
   React.useEffect(() => {
-    if (location.pathname === "/settings") {
+    if (pathname === "/settings") {
       setSettingsModalIsOpen(false);
     } else if (
       !isFetchingSettings &&
@@ -47,14 +45,20 @@ export function Sidebar() {
       displayErrorToast(
         "Something went wrong while fetching settings. Please reload the page.",
       );
-    } else if (config?.APP_MODE === "oss" && settingsError?.status === 404) {
+    } else if (
+      config?.APP_MODE === "oss" &&
+      settingsError?.status === 404 &&
+      !config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS
+    ) {
       setSettingsModalIsOpen(true);
     }
   }, [
-    settingsError?.status,
-    settingsError,
+    pathname,
     isFetchingSettings,
-    location.pathname,
+    settingsIsError,
+    settingsError,
+    config?.APP_MODE,
+    config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS,
   ]);
 
   return (
