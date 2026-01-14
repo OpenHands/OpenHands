@@ -1,10 +1,11 @@
 [build-system]
 build-backend = "poetry.core.masonry.api"
+# PEP 621 project metadata (for UV compatibility)
+# This section coexists with [tool.poetry] during the migration period
 requires = [ "poetry-core" ]
 
 [project]
 name = "openhands-ai"
-version = "1.1.0"
 description = "OpenHands: Code Less, Make More"
 readme = "README.md"
 license = "MIT"
@@ -15,6 +16,9 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+# Version is managed dynamically by poetry-dynamic-versioning
+dynamic = [ "version" ]
+
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
   "aiohttp>=3.9,!=3.11.13",
