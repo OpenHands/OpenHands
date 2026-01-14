@@ -20,4 +20,3 @@ export const ENABLE_TRAJECTORY_REPLAY = () =>
 export const USE_PLANNING_AGENT = () => loadFeatureFlag("USE_PLANNING_AGENT");
 export const ENABLE_PUBLIC_CONVERSATION_SHARING = () =>
   loadFeatureFlag("PUBLIC_CONVERSATION_SHARING");
-export const ENABLE_RECAPTCHA = () => loadFeatureFlag("RECAPTCHA");
