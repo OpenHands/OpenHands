@@ -30,6 +30,20 @@ GLOBAL_SKILLS_DIR = os.path.join(
 WORK_HOSTS_SKILL = """The user has access to the following hosts for accessing a web application,
 each of which has a corresponding port:"""
 
+WORK_HOSTS_SKILL_FOOTER = """
+When starting a web server, use the corresponding ports via environment variables:
+- $WORKER_1 for the first port
+- $WORKER_2 for the second port
+
+You should also set any options to allow iframes and CORS requests, and allow the
+server to be accessed from any host (e.g. 0.0.0.0).
+
+Example configurations:
+- Express: app.listen(process.env.WORKER_1 || 3000, '0.0.0.0')
+- Vite: In vite.config.js, set server.host=true, server.port=process.env.WORKER_1
+- Flask: app.run(host='0.0.0.0', port=int(os.environ.get('WORKER_1', 5000)))
+- Next.js: next dev -p $WORKER_1 -H 0.0.0.0"""
+
 
 def _find_and_load_global_skill_files(skill_dir: Path) -> list[Skill]:
     """Find and load all .md files from the global skills directory.
@@ -73,6 +87,7 @@ def load_sandbox_skills(sandbox: SandboxInfo) -> list[Skill]:
     content_list = [WORK_HOSTS_SKILL]
     for url in urls:
         content_list.append(f'* {url.url} (port {url.port})')
+    content_list.append(WORK_HOSTS_SKILL_FOOTER)
     content = '\n'.join(content_list)
     return [Skill(name='work_hosts', content=content, trigger=None)]
 
