@@ -1,5 +1,5 @@
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import GitService from "#/api/git-service/git-service.api";
 import V1GitService from "#/api/git-service/v1-git-service.api";
 import { useConversationId } from "#/hooks/use-conversation-id";
@@ -18,7 +18,7 @@ export const useUnifiedGetGitChanges = () => {
   const { data: conversation } = useActiveConversation();
   const [orderedChanges, setOrderedChanges] = React.useState<GitChange[]>([]);
   const previousDataRef = React.useRef<GitChange[] | null>(null);
-  const [forceUpdate, setForceUpdate] = React.useState(0);
+  const queryClient = useQueryClient();
   const runtimeIsReady = useRuntimeIsReady();
 
   const isV1Conversation = conversation?.conversation_version === "V1";
@@ -39,7 +39,6 @@ export const useUnifiedGetGitChanges = () => {
       isV1Conversation,
       conversationUrl,
       gitPath,
-      forceUpdate,
     ],
     queryFn: async () => {
       if (!conversationId) throw new Error("No conversation ID");
@@ -83,9 +82,24 @@ export const useUnifiedGetGitChanges = () => {
 
   const customRefetch = React.useCallback(async () => {
     previousDataRef.current = null;
-    setForceUpdate((prev) => prev + 1);
+    await queryClient.invalidateQueries({
+      queryKey: [
+        "file_changes",
+        conversationId,
+        isV1Conversation,
+        conversationUrl,
+        gitPath,
+      ],
+    });
     return result.refetch();
-  }, [result.refetch]);
+  }, [
+    queryClient,
+    conversationId,
+    isV1Conversation,
+    conversationUrl,
+    gitPath,
+    result.refetch,
+  ]);
 
   return {
     data: orderedChanges,
