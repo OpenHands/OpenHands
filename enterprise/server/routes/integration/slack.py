@@ -107,7 +107,7 @@ async def install_callback(
 
         # Redirect into keycloak
         scope = quote('openid email profile offline_access')
-        redirect_uri = quote(f'{HOST_URL}/slack/keycloak-callback')
+        redirect_uri = f'{HOST_URL}/slack/keycloak-callback'
         auth_url = (
             f'{KEYCLOAK_SERVER_URL_EXT}/realms/{KEYCLOAK_REALM_NAME}/protocol/openid-connect/auth'
             f'?client_id={KEYCLOAK_CLIENT_ID}&response_type=code'
@@ -158,7 +158,7 @@ async def keycloak_callback(
     team_id = payload['team_id']
 
     # Retrieve the keycloak_user_id
-    redirect_uri = f'https://{request.url.netloc}{request.url.path}'
+    redirect_uri = f'{HOST_URL}{request.url.path}'
     (
         keycloak_access_token,
         keycloak_refresh_token,

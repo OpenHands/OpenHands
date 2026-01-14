@@ -45,7 +45,7 @@ jobs:
                     "This issue has been labeled as **good first issue**, which means it's a great place to get started with the OpenHands project.\n\n" +
                     "If you're interested in working on it, feel free to! No need to ask for permission.\n\n" +
                     "Be sure to check out our [development setup guide](" + repoUrl + "/blob/main/Development.md) to get your environment set up, and follow our [contribution guidelines](" + repoUrl + "/blob/main/CONTRIBUTING.md) when you're ready to submit a fix.\n\n" +
-                    "Feel free to join our developer community on [Slack](https://all-hands.dev/joinslack). You can ask for [help](https://openhands-ai.slack.com/archives/C078L0FUGUX), [feedback](https://openhands-ai.slack.com/archives/C086ARSNMGA), and even ask for a [PR review](https://openhands-ai.slack.com/archives/C08D8FJ5771).\n\n" +
+                    "Feel free to join our developer community on [Slack](https://openhands.dev/joinslack). You can ask for [help](https://openhands-ai.slack.com/archives/C078L0FUGUX), [feedback](https://openhands-ai.slack.com/archives/C086ARSNMGA), and even ask for a [PR review](https://openhands-ai.slack.com/archives/C08D8FJ5771).\n\n" +
                     "🙌 Happy hacking! 🙌\n\n" +
                     "<!-- auto-comment:good-first-issue -->"
             });

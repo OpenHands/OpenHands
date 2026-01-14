@@ -5,7 +5,7 @@ interface Window {
     init: (config: { clientID: string }) => void;
     identify: (identity: {
       username: string;
-      type: "github" |"email";
+      type: "github" | "email";
       other_identities?: Array<{
         username: string;
         type: "github" | "email";
@@ -14,5 +14,14 @@ interface Window {
       lastname?: string;
       company?: string;
     }) => void;
+  };
+  grecaptcha?: {
+    enterprise: {
+      ready: (callback: () => void) => void;
+      execute: (
+        siteKey: string,
+        options: { action: string },
+      ) => Promise<string>;
+    };
   };
 }

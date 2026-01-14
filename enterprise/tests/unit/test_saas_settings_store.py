@@ -66,6 +66,15 @@ def mock_stripe():
 
 
 @pytest.fixture
+def mock_redis_client():
+    """Mock Redis client for testing create_default_settings locking."""
+    mock_redis = AsyncMock()
+    # By default, allow proceeding with create (lock acquired successfully)
+    mock_redis.set = AsyncMock(return_value=True)
+    return mock_redis
+
+
+@pytest.fixture
 def mock_github_user():
     with patch(
         'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
@@ -200,7 +209,12 @@ async def test_store_and_load_keycloak_user(settings_store):
 
 @pytest.mark.asyncio
 async def test_load_returns_default_when_not_found(
-    settings_store, mock_litellm_api, mock_stripe, mock_github_user, session_maker
+    settings_store,
+    mock_litellm_api,
+    mock_stripe,
+    mock_github_user,
+    session_maker,
+    mock_redis_client,
 ):
     file_store = MagicMock()
     file_store.read.side_effect = FileNotFoundError()
@@ -211,6 +225,9 @@ async def test_load_returns_default_when_not_found(
             MagicMock(return_value=file_store),
         ),
         patch('storage.saas_settings_store.session_maker', session_maker),
+        patch.object(
+            settings_store, '_get_redis_client', return_value=mock_redis_client
+        ),
     ):
         loaded_settings = await settings_store.load()
         assert loaded_settings is not None
@@ -263,7 +280,7 @@ async def test_create_default_settings_no_user_id():
 
 @pytest.mark.asyncio
 async def test_create_default_settings_require_payment_enabled(
-    settings_store, mock_stripe
+    settings_store, mock_stripe, mock_redis_client
 ):
     # Mock stripe_service.has_payment_method to return False
     with (
@@ -275,6 +292,9 @@ async def test_create_default_settings_require_payment_enabled(
         patch(
             'integrations.stripe_service.session_maker', settings_store.session_maker
         ),
+        patch.object(
+            settings_store, '_get_redis_client', return_value=mock_redis_client
+        ),
     ):
         settings = await settings_store.create_default_settings(None)
         assert settings is None
@@ -282,7 +302,12 @@ async def test_create_default_settings_require_payment_enabled(
 
 @pytest.mark.asyncio
 async def test_create_default_settings_require_payment_disabled(
-    settings_store, mock_stripe, mock_github_user, mock_litellm_api, session_maker
+    settings_store,
+    mock_stripe,
+    mock_github_user,
+    mock_litellm_api,
+    session_maker,
+    mock_redis_client,
 ):
     # Even without payment method, should get default settings when REQUIRE_PAYMENT is False
     file_store = MagicMock()
@@ -298,8 +323,56 @@ async def test_create_default_settings_require_payment_disabled(
             MagicMock(return_value=file_store),
         ),
         patch('storage.saas_settings_store.session_maker', session_maker),
+        patch.object(
+            settings_store, '_get_redis_client', return_value=mock_redis_client
+        ),
     ):
         settings = await settings_store.create_default_settings(None)
+        assert settings is not None
+        assert settings.language == 'en'
+
+
+@pytest.mark.asyncio
+async def test_create_default_settings_waits_when_lock_held(
+    settings_store, mock_stripe, mock_github_user, mock_litellm_api, session_maker
+):
+    """Test that create_default_settings waits and retries when another process holds the lock."""
+    file_store = MagicMock()
+    file_store.read.side_effect = FileNotFoundError()
+
+    # Create a mock Redis client that fails to acquire lock on first attempt, succeeds on second
+    mock_redis = AsyncMock()
+    mock_redis.set = AsyncMock(side_effect=[False, True])
+
+    # Track if sleep was called
+    sleep_called = False
+
+    async def mock_sleep(delay):
+        nonlocal sleep_called
+        sleep_called = True
+        # Don't actually sleep - just verify it was called with correct delay
+        from storage.saas_settings_store import _RETRY_LOAD_DELAY_SECONDS
+
+        assert delay == _RETRY_LOAD_DELAY_SECONDS
+
+    with (
+        patch('storage.saas_settings_store.REQUIRE_PAYMENT', False),
+        patch(
+            'stripe.Customer.list_payment_methods_async',
+            AsyncMock(return_value=MagicMock(data=[])),
+        ),
+        patch(
+            'storage.saas_settings_store.get_file_store',
+            MagicMock(return_value=file_store),
+        ),
+        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch.object(settings_store, '_get_redis_client', return_value=mock_redis),
+        patch('storage.saas_settings_store.asyncio.sleep', mock_sleep),
+    ):
+        settings = await settings_store.create_default_settings(None)
+        # Should have called sleep while waiting for lock
+        assert sleep_called
+        # Should eventually succeed and return settings
         assert settings is not None
         assert settings.language == 'en'
 
@@ -981,7 +1054,7 @@ async def test_has_custom_settings_matches_old_default_model(settings_store):
         ),
     ):
         settings = Settings(
-            llm_model='litellm_proxy/prod/claude-3-5-sonnet-20241022',
+            llm_model='litellm_proxy/claude-3-5-sonnet-20241022',
             llm_base_url='http://default.url',
         )
 
@@ -1116,7 +1189,7 @@ async def test_update_settings_upgrades_user_from_old_defaults(
 ):
     # Arrange: User with old version using old defaults
     old_version = 1
-    old_model = 'litellm_proxy/prod/claude-3-5-sonnet-20241022'
+    old_model = 'litellm_proxy/claude-3-5-sonnet-20241022'
     settings = Settings(llm_model=old_model, llm_base_url=LITE_LLM_API_URL)
 
     # Use a consistent test URL
@@ -1137,7 +1210,7 @@ async def test_update_settings_upgrades_user_from_old_defaults(
         patch('storage.saas_settings_store.LITE_LLM_API_URL', test_base_url),
         patch(
             'storage.saas_settings_store.get_default_litellm_model',
-            return_value='litellm_proxy/prod/claude-opus-4-5-20251101',
+            return_value='litellm_proxy/claude-opus-4-5-20251101',
         ),
         patch(
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
@@ -1168,9 +1241,7 @@ async def test_update_settings_upgrades_user_from_old_defaults(
 
         # Assert: Settings upgraded to new defaults
         assert updated_settings is not None
-        assert (
-            updated_settings.llm_model == 'litellm_proxy/prod/claude-opus-4-5-20251101'
-        )
+        assert updated_settings.llm_model == 'litellm_proxy/claude-opus-4-5-20251101'
         assert updated_settings.llm_base_url == test_base_url
 
 
