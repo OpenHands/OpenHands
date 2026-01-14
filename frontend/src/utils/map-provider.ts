@@ -26,6 +26,8 @@ export const MAP_PROVIDER = {
   openhands: "OpenHands",
   lemonade: "Lemonade",
   clarifai: "Clarifai",
+  zai: "Z.AI",
+  zai_coding: "Z.AI Coding Plan",
 };
 
 export const mapProvider = (provider: string) =>

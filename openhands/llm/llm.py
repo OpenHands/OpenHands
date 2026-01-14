@@ -141,6 +141,17 @@ class LLM(RetryMixin, DebugMixin):
                 f'Rewrote openhands/{model_name} to {self.config.model} with base URL {self.config.base_url}'
             )
 
+        # Handle Z.AI Coding Plan provider - uses different API endpoint than general Z.AI
+        # General API: https://api.z.ai/api/paas/v4
+        # Coding Plan API: https://api.z.ai/api/coding/paas/v4
+        if self.config.model.startswith('zai_coding/'):
+            model_name = self.config.model.removeprefix('zai_coding/')
+            self.config.model = f'zai/{model_name}'
+            self.config.base_url = 'https://api.z.ai/api/coding/paas/v4'
+            logger.debug(
+                f'Rewrote zai_coding/{model_name} to {self.config.model} with base URL {self.config.base_url}'
+            )
+
         features = get_features(self.config.model)
         if features.supports_reasoning_effort:
             # For Gemini models, only map 'low' to optimized thinking budget
