@@ -71,9 +71,6 @@ RATE_LIMIT_SAFETY_MARGIN = 0.9
 # Set up Resend API
 resend.api_key = RESEND_API_KEY
 
-print("resend module", resend)
-print("has contacts", hasattr(resend, "Contacts"))
-
 
 class RateLimiter:
     """Thread-safe rate limiter for API calls.
@@ -210,9 +207,9 @@ def get_resend_contacts(audience_id: str) -> Dict[str, Dict[str, Any]]:
     Raises:
         ResendAPIError: If the API call fails.
     """
-    print("getting resend contacts")
-    print("has resend contacts", hasattr(resend, "Contacts"))
     try:
+        # Wait for rate limiter before making API call
+        resend_rate_limiter.wait()
         contacts = resend.Contacts.list(audience_id).get("data", [])
         # Create a dictionary mapping email addresses to contact data for
         # efficient lookup

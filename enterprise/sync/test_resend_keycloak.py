@@ -2,19 +2,23 @@
 
 These tests verify the RateLimiter class functionality in isolation,
 without requiring the full module dependencies (keycloak, server, etc.).
+
+Note: The RateLimiter class is duplicated here to enable testing without
+importing the full resend_keycloak module (which has dependencies on
+keycloak, server.auth, etc.). If the RateLimiter implementation changes,
+these tests should be updated accordingly.
 """
 
 import threading
 import time
 from typing import Optional
 
-import pytest
-
 
 class RateLimiter:
     """Thread-safe rate limiter for API calls.
 
-    Copy of the class for testing in isolation.
+    This is a copy of the class from resend_keycloak.py for testing in isolation.
+    Keep in sync with the original implementation.
     """
 
     def __init__(self, requests_per_second: float, safety_margin: float = 0.9):
