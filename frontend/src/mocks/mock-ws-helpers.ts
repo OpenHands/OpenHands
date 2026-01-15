@@ -7,6 +7,7 @@ import {
 import { AgentStateChangeObservation } from "#/types/core/observations";
 import { MessageEvent } from "#/types/v1/core";
 import { AgentErrorEvent } from "#/types/v1/core/events/observation-event";
+import { ConversationErrorEvent } from "#/types/v1/core/events/conversation-state-event";
 import { MockSessionMessaage } from "./session-history.mock";
 
 export const generateAgentStateChangeObservation = (
@@ -235,4 +236,20 @@ export const createMockBrowserNavigateActionEvent = (
   },
   llm_response_id: "llm-response-789",
   security_risk: { level: "low" },
+});
+
+/**
+ * Creates a mock ConversationErrorEvent for testing conversation-level error handling
+ * These are infrastructure/authentication errors that should show error banners
+ */
+export const createMockConversationErrorEvent = (
+  overrides: Partial<ConversationErrorEvent> = {},
+): ConversationErrorEvent => ({
+  id: "conversation-error-123",
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  kind: "ConversationErrorEvent",
+  code: "AuthenticationError",
+  detail: "Your session has expired. Please log in again.",
+  ...overrides,
 });

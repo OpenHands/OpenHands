@@ -19,7 +19,7 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import {
   createMockMessageEvent,
   createMockUserMessageEvent,
-  createMockAgentErrorEvent,
+  createMockConversationErrorEvent,
   createMockBrowserObservationEvent,
   createMockBrowserNavigateActionEvent,
   createMockExecuteBashActionEvent,
@@ -52,8 +52,9 @@ afterEach(() => {
   mswServer.resetHandlers();
   // Clean up any React components
   cleanup();
-  // Reset error message store to prevent state leakage between tests
+  // Reset stores to prevent state leakage between tests
   useErrorMessageStore.getState().removeErrorMessage();
+  useEventStore.getState().clearEvents();
 });
 
 afterAll(async () => {
@@ -280,16 +281,23 @@ describe("Conversation WebSocket Handler", () => {
 
   // 5. Error Handling Tests
   describe("Error Handling & Recovery", () => {
-    it("should update error message store on AgentErrorEvent", async () => {
-      // Create a mock AgentErrorEvent to send through WebSocket
-      const mockAgentErrorEvent = createMockAgentErrorEvent();
+    beforeEach(() => {
+      // Clear stores before each error handling test to prevent state leakage
+      useErrorMessageStore.getState().removeErrorMessage();
+      useEventStore.getState().clearEvents();
+    });
+
+    it("should update error message store on ConversationErrorEvent", async () => {
+      // ConversationErrorEvent represents infrastructure/authentication errors
+      // that should be shown as a banner to the user.
+      const mockConversationErrorEvent = createMockConversationErrorEvent();
 
       // Set up MSW to send the error event when connection is established
       mswServer.use(
         wsLink.addEventListener("connection", ({ client, server }) => {
           server.connect();
           // Send the mock error event after connection
-          client.send(JSON.stringify(mockAgentErrorEvent));
+          client.send(JSON.stringify(mockConversationErrorEvent));
         }),
       );
 
@@ -302,7 +310,7 @@ describe("Conversation WebSocket Handler", () => {
       // Wait for connection and error event processing
       await waitFor(() => {
         expect(screen.getByTestId("error-message")).toHaveTextContent(
-          "Failed to execute command: Permission denied",
+          "Your session has expired. Please log in again.",
         );
       });
     });
@@ -441,14 +449,11 @@ describe("Conversation WebSocket Handler", () => {
       );
     });
 
-    it("should clear error message when a successful event is received after an error", async () => {
+    it("should clear error message when a successful event is received after a ConversationErrorEvent", async () => {
       // This test verifies that error banners disappear when follow-up messages
-      // are sent and received, matching V0 behavior where any non-error event
-      // clears the error message store.
+      // are sent and received. Only ConversationErrorEvent sets the error banner,
+      // and any non-error event should clear it.
       const conversationId = "test-conversation-error-clear";
-
-      // Clear error message store before test
-      useErrorMessageStore.getState().removeErrorMessage();
 
       // Set up MSW to mock event count API and send events
       mswServer.use(
@@ -459,9 +464,9 @@ describe("Conversation WebSocket Handler", () => {
         wsLink.addEventListener("connection", ({ client, server }) => {
           server.connect();
 
-          // Send an error event first
-          const mockAgentErrorEvent = createMockAgentErrorEvent();
-          client.send(JSON.stringify(mockAgentErrorEvent));
+          // Send a ConversationErrorEvent first (this sets the error banner)
+          const mockConversationErrorEvent = createMockConversationErrorEvent();
+          client.send(JSON.stringify(mockConversationErrorEvent));
 
           // Send a successful (non-error) event immediately after
           // This simulates the user sending a follow-up message and receiving a response
@@ -490,9 +495,8 @@ describe("Conversation WebSocket Handler", () => {
       });
 
       // Wait for both events to be received and error to be cleared
-      // The error was set by the first event (AgentErrorEvent),
+      // The error was set by the first event (ConversationErrorEvent),
       // then cleared by the second successful event (MessageEvent).
-      // This is the expected behavior that matches V0.
       await waitFor(() => {
         expect(useEventStore.getState().events.length).toBe(2);
         expect(useErrorMessageStore.getState().errorMessage).toBeNull();
