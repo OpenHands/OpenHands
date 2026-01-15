@@ -2,6 +2,9 @@
 """Get git changes in the current working directory relative to the remote origin if possible.
 NOTE: Since this is run as a script, there should be no imports from project files!
 """
+# DEPRECATED: This module is part of the deprecated 'openhands.runtime' package.
+# It will be removed on April 1, 2025. Please migrate to the OpenHands SDK:
+# https://github.com/All-Hands-AI/openhands-sdk
 
 import glob
 import json

@@ -3,6 +3,9 @@
 This module provides a manager class for handling FastMCP proxy instances,
 including initialization, configuration, and mounting to FastAPI applications.
 """
+# DEPRECATED: This module is part of the deprecated 'openhands.runtime' package.
+# It will be removed on April 1, 2025. Please migrate to the OpenHands SDK:
+# https://github.com/All-Hands-AI/openhands-sdk
 
 import logging
 from typing import Any, Optional

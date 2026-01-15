@@ -1,4 +1,4 @@
-"""OpenHands Agent Hub - Agent implementations.
+"""OpenHands Core - Core functionality and configuration.
 
 .. deprecated:: 1.0.0
     This package is deprecated and will be removed on April 1, 2025.
@@ -9,30 +9,6 @@
     that the current V0 API can do.
 """
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 from openhands.utils.deprecation import warn_legacy_packages_deprecated
 
 warn_legacy_packages_deprecated()
-
-from openhands.agenthub import (  # noqa: E402
-    browsing_agent,
-    codeact_agent,
-    dummy_agent,
-    loc_agent,
-    readonly_agent,
-    visualbrowsing_agent,
-)
-from openhands.controller.agent import Agent  # noqa: E402
-
-__all__ = [
-    'Agent',
-    'codeact_agent',
-    'dummy_agent',
-    'browsing_agent',
-    'visualbrowsing_agent',
-    'readonly_agent',
-    'loc_agent',
-]

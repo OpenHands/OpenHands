@@ -3,6 +3,9 @@ in a PowerShell session using the pythonnet library to interact with the .NET
 PowerShell SDK directly. This aims to provide a more robust and integrated
 way to manage PowerShell processes compared to using temporary script files.
 """
+# DEPRECATED: This module is part of the deprecated 'openhands.runtime' package.
+# It will be removed on April 1, 2025. Please migrate to the OpenHands SDK:
+# https://github.com/All-Hands-AI/openhands-sdk
 
 import os
 import re

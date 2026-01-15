@@ -1,6 +1,9 @@
 """A tiny, isolated server that provides only the /view endpoint from the action execution server.
 This server has no authentication and only listens to localhost traffic.
 """
+# DEPRECATED: This module is part of the deprecated 'openhands.runtime' package.
+# It will be removed on April 1, 2025. Please migrate to the OpenHands SDK:
+# https://github.com/All-Hands-AI/openhands-sdk
 
 import os
 import threading

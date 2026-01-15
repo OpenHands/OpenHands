@@ -17,6 +17,9 @@ Note:
     Some functions (parse_audio, parse_video, parse_image) require OpenAI API credentials
     and are only available if the necessary environment variables are set.
 """
+# DEPRECATED: This module is part of the deprecated 'openhands.runtime' package.
+# It will be removed on April 1, 2025. Please migrate to the OpenHands SDK:
+# https://github.com/All-Hands-AI/openhands-sdk
 
 import base64
 from typing import Any
