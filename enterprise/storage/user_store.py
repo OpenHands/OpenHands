@@ -455,7 +455,7 @@ class UserStore:
         # Check if model matches old version's default
         if (
             old_user_version
-            and old_user_version < ORG_SETTINGS_VERSION
+            and old_user_version <= ORG_SETTINGS_VERSION
             and old_user_version in PERSONAL_WORKSPACE_VERSION_TO_MODEL
         ):
             old_default_base = PERSONAL_WORKSPACE_VERSION_TO_MODEL[old_user_version]
