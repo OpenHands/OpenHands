@@ -9,7 +9,6 @@ from pydantic import Field
 
 
 class DefaultWebClientConfigInjector(WebClientConfigInjector):
-    app_mode: AppMode = AppMode.OPENHANDS
     posthog_client_key: str | None = "phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA"
     feature_flags: WebClientFeatureFlags = Field(default_factory=WebClientFeatureFlags)
     providers_configured: list[ProviderType] = Field(default_factory=list)
@@ -19,8 +18,11 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     faulty_models: list[str] = Field(default_factory=list)
 
     async def get_web_client_config(self) -> WebClientConfig:
+        from openhands.app_server.config import get_global_config
+
+        config = get_global_config()
         result = WebClientConfig(
-            app_mode=self.app_mode,
+            app_mode=config.app_mode,
             posthog_client_key=self.posthog_client_key,
             feature_flags=self.feature_flags,
             providers_configured=self.providers_configured,

@@ -55,6 +55,7 @@ from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.sdk.utils.models import OpenHandsModel
+from openhands.server.types import AppMode
 
 
 def get_default_persistence_dir() -> Path:
@@ -122,6 +123,7 @@ class AppServerConfig(OpenHandsModel):
     )
     # Services
     lifespan: AppLifespanService | None = Field(default_factory=_get_default_lifespan)
+    app_mode: AppMode = AppMode.OPENHANDS
     web_client: WebClientConfigInjector = Field(
         default_factory=DefaultWebClientConfigInjector
     )
