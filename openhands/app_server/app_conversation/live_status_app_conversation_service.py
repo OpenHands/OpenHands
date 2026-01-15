@@ -581,43 +581,74 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Get all provider tokens from user authentication
         provider_tokens = await self.user_context.get_provider_tokens()
         if not provider_tokens:
+            _logger.debug('No provider tokens found for user %s', user.id)
             return secrets
 
         # Create secrets for each provider token
         for provider_type, provider_token in provider_tokens.items():
             if not provider_token.token:
+                _logger.debug(
+                    'Skipping provider %s for user %s: no token available',
+                    provider_type.name,
+                    user.id,
+                )
                 continue
 
             secret_name = f'{provider_type.name}_TOKEN'
             description = f'{provider_type.name} authentication token'
 
-            if self.web_url:
-                # Create an access token for web-based authentication
-                access_token = self.jwt_service.create_jws_token(
-                    payload={
-                        'user_id': user.id,
-                        'provider_type': provider_type.value,
-                    },
-                    expires_in=self.access_token_hard_timeout,
-                )
-                headers = {'X-Access-Token': access_token}
-
-                # Include keycloak_auth cookie in headers if app_mode is SaaS
-                if self.app_mode == 'saas' and self.keycloak_auth_cookie:
-                    headers['Cookie'] = f'keycloak_auth={self.keycloak_auth_cookie}'
-
-                secrets[secret_name] = LookupSecret(
-                    url=self.web_url + '/api/v1/webhooks/secrets',
-                    headers=headers,
-                    description=description,
-                )
-            else:
-                # Use static token for environments without web URL access
-                static_token = await self.user_context.get_latest_token(provider_type)
-                if static_token:
-                    secrets[secret_name] = StaticSecret(
-                        value=static_token, description=description
+            try:
+                if self.web_url:
+                    # Create an access token for web-based authentication
+                    access_token = self.jwt_service.create_jws_token(
+                        payload={
+                            'user_id': user.id,
+                            'provider_type': provider_type.value,
+                        },
+                        expires_in=self.access_token_hard_timeout,
                     )
+                    headers = {'X-Access-Token': access_token}
+
+                    # Include keycloak_auth cookie in headers if app_mode is SaaS
+                    if self.app_mode == 'saas' and self.keycloak_auth_cookie:
+                        headers['Cookie'] = f'keycloak_auth={self.keycloak_auth_cookie}'
+
+                    secrets[secret_name] = LookupSecret(
+                        url=self.web_url + '/api/v1/webhooks/secrets',
+                        headers=headers,
+                        description=description,
+                    )
+                    _logger.debug(
+                        'Added LookupSecret for %s (user %s)', secret_name, user.id
+                    )
+                else:
+                    # Use static token for environments without web URL access
+                    static_token = await self.user_context.get_latest_token(
+                        provider_type
+                    )
+                    if static_token:
+                        secrets[secret_name] = StaticSecret(
+                            value=static_token, description=description
+                        )
+                        _logger.debug(
+                            'Added StaticSecret for %s (user %s)', secret_name, user.id
+                        )
+                    else:
+                        _logger.warning(
+                            'Failed to get static token for %s (user %s): '
+                            'get_latest_token returned None',
+                            secret_name,
+                            user.id,
+                        )
+            except Exception as e:
+                _logger.error(
+                    'Failed to add secret %s for user %s: %s',
+                    secret_name,
+                    user.id,
+                    str(e),
+                    exc_info=True,
+                )
+                # Continue with other providers instead of failing entirely
 
         return secrets
 
