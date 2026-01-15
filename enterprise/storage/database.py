@@ -6,11 +6,6 @@ This is for backwards compatibility with V0.
 This module provides database engines and session makers by delegating to the
 centralized DbSessionInjector from app_server/config.py. This ensures a single
 source of truth for database connection configuration.
-
-Exports:
-    engine: Synchronous SQLAlchemy engine
-    session_maker: Synchronous session factory
-    a_session_maker: Async session factory
 """
 
 import contextlib
