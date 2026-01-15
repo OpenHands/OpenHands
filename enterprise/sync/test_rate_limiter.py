@@ -48,7 +48,7 @@ class TestRateLimiter:
 
         # Second call should wait for minimum interval (~0.556s)
         interval = second_call_time - first_call_time
-        assert interval >= 0.5, f"Expected interval >= 0.5s, got {interval}s"
+        assert interval >= 0.5, f'Expected interval >= 0.5s, got {interval}s'
 
     def test_rate_limiter_no_wait_after_sufficient_time(self):
         """Test that rate limiter doesn't wait if enough time has passed."""
@@ -63,7 +63,7 @@ class TestRateLimiter:
         elapsed = time.time() - start_time
 
         # Should not wait since we already waited 0.7s
-        assert elapsed < 0.1, f"Expected no wait, but waited {elapsed}s"
+        assert elapsed < 0.1, f'Expected no wait, but waited {elapsed}s'
 
     def test_rate_limiter_thread_safety(self):
         """Test that rate limiter is thread-safe."""
@@ -93,7 +93,7 @@ class TestRateLimiter:
             # Allow some tolerance for timing variations
             assert (
                 interval >= min_interval * 0.9
-            ), f"Interval {interval}s is less than expected {min_interval}s"
+            ), f'Interval {interval}s is less than expected {min_interval}s'
 
     def test_rate_limiter_with_different_rates(self):
         """Test rate limiter with different rate configurations."""
@@ -106,7 +106,7 @@ class TestRateLimiter:
         elapsed = time.time() - start
 
         # Should wait approximately 1 second
-        assert 0.9 <= elapsed <= 1.2, f"Expected ~1s wait, got {elapsed}s"
+        assert 0.9 <= elapsed <= 1.2, f'Expected ~1s wait, got {elapsed}s'
 
     def test_rate_limiter_safety_margin(self):
         """Test that safety margin is applied correctly."""
@@ -120,8 +120,8 @@ class TestRateLimiter:
         elapsed = time.time() - start
 
         # Should wait approximately 0.2 seconds
-        assert 0.15 <= elapsed <= 0.3, f"Expected ~0.2s wait, got {elapsed}s"
+        assert 0.15 <= elapsed <= 0.3, f'Expected ~0.2s wait, got {elapsed}s'
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])
