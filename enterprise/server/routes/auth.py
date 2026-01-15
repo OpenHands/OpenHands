@@ -176,7 +176,18 @@ async def keycloak_callback(
     user_id = user_info['sub']
 
     # reCAPTCHA verification with Account Defender
-    if RECAPTCHA_SITE_KEY and recaptcha_token:
+    if RECAPTCHA_SITE_KEY:
+        if not recaptcha_token:
+            logger.warning(
+                'recaptcha_token_missing',
+                extra={
+                    'user_id': user_id,
+                    'email': email,
+                },
+            )
+            error_url = f'{request.base_url}login?recaptcha_blocked=true'
+            return RedirectResponse(error_url, status_code=302)
+
         user_ip = request.client.host if request.client else 'unknown'
         user_agent = request.headers.get('User-Agent', '')
 

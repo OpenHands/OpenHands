@@ -272,6 +272,12 @@ class RemoteSandboxService(SandboxService):
             # we are probably in local development and the only url in use is localhost
             environment[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
 
+        # Add worker port environment variables so the agent knows which ports to use
+        # for web applications. These match the ports exposed via the WORKER_1 and
+        # WORKER_2 URLs.
+        environment[WORKER_1] = str(WORKER_1_PORT)
+        environment[WORKER_2] = str(WORKER_2_PORT)
+
         return environment
 
     async def search_sandboxes(
@@ -383,7 +389,9 @@ class RemoteSandboxService(SandboxService):
 
         return None
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
             # Enforce sandbox limits by cleaning up old sandboxes
@@ -402,8 +410,9 @@ class RemoteSandboxService(SandboxService):
                     raise ValueError('Sandbox Spec not found')
                 sandbox_spec = sandbox_spec_maybe
 
-            # Create a unique id
-            sandbox_id = base62.encodebytes(os.urandom(16))
+            # Create a unique id, use provided sandbox_id if available
+            if sandbox_id is None:
+                sandbox_id = base62.encodebytes(os.urandom(16))
 
             # get user id
             user_id = await self.user_context.get_user_id()
