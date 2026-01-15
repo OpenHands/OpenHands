@@ -13,18 +13,26 @@ Exports:
     a_session_maker: Async session factory
 """
 
-from openhands.app_server.config import get_global_config
+def _get_db_session_injector():
+    from openhands.app_server.config import get_global_config
 
-_config = get_global_config()
-_db_session_injector = _config.db_session
-engine = _db_session_injector.get_db_engine()
+    _config = get_global_config()
+    return _config.db_session
 
 
 def session_maker():
-    session_maker = _db_session_injector.get_session_maker()
-    return session_maker
+    db_session_injector = _get_db_session_injector()
+    session = db_session_injector.get_session_maker()
+    return session
 
 
 async def a_session_maker():
-    result = await _db_session_injector.get_async_session_maker()
-    return result
+    db_session_injector = _get_db_session_injector()
+    a_session = await db_session_injector.get_async_session_maker()
+    return a_session
+
+
+def get_engine():
+    db_session_injector = _get_db_session_injector()
+    engine = db_session_injector.get_db_engine()
+    return engine

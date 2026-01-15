@@ -13,7 +13,7 @@ from sqlalchemy import text
 # Add the parent directory to the path so we can import from storage
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from storage.database import engine
+from storage.database import get_engine
 
 
 def test_conversation_count_query():
@@ -28,6 +28,8 @@ def test_conversation_count_query():
             GROUP BY
                 user_id
         """)
+
+        engine = get_engine()
 
         with engine.connect() as connection:
             count_result = connection.execute(count_query)
