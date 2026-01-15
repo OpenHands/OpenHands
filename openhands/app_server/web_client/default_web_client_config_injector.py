@@ -3,16 +3,16 @@
 from datetime import datetime
 from openhands.app_server.web_client.web_client_config_injector import WebClientConfigInjector
 from openhands.app_server.web_client.web_client_models import WebClientConfig, WebClientFeatureFlags
+from openhands.integrations.service_types import ProviderType
 from openhands.server.types import AppMode
 from pydantic import Field
 
 
 class DefaultWebClientConfigInjector(WebClientConfigInjector):
     app_mode: AppMode = AppMode.OPENHANDS
-    github_client_id: str | None = None
     posthog_client_key: str | None = "phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA"
     feature_flags: WebClientFeatureFlags = Field(default_factory=WebClientFeatureFlags)
-    providers_configured: list[str] = Field(default_factory=list)
+    providers_configured: list[ProviderType] = Field(default_factory=list)
     maintenance_start_time: datetime | None = None
     auth_url: str | None = None
     recaptcha_site_key: str | None = None
@@ -21,8 +21,6 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     async def get_web_client_config(self) -> WebClientConfig:
         result = WebClientConfig(
             app_mode=self.app_mode,
-            app_slug=None,
-            github_client_id=self.github_client_id,
             posthog_client_key=self.posthog_client_key,
             feature_flags=self.feature_flags,
             providers_configured=self.providers_configured,
