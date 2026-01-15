@@ -48,7 +48,10 @@ from openhands.app_server.services.httpx_client_injector import HttpxClientInjec
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService, JwtServiceInjector
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
-from openhands.app_server.web_client_config.web_client_config_injector import (
+from openhands.app_server.web_client.default_web_client_config_injector import (
+    DefaultWebClientConfigInjector,
+)
+from openhands.app_server.web_client.web_client_config_injector import (
     WebClientConfigInjector,
 )
 from openhands.sdk.utils.models import OpenHandsModel
@@ -119,7 +122,9 @@ class AppServerConfig(OpenHandsModel):
     )
     # Services
     lifespan: AppLifespanService | None = Field(default_factory=_get_default_lifespan)
-    web_client: WebClientConfigInjector = Field(default_factory=WebClientConfigInjector)
+    web_client: WebClientConfigInjector = Field(
+        default_factory=DefaultWebClientConfigInjector
+    )
 
 
 def config_from_env() -> AppServerConfig:
