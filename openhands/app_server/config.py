@@ -195,6 +195,33 @@ def config_from_env() -> AppServerConfig:
                 docker_sandbox_kwargs['container_url_pattern'] = os.environ[
                     'SANDBOX_CONTAINER_URL_PATTERN'
                 ]
+            # Parse SANDBOX_VOLUMES and convert to VolumeMount objects
+            # This is set by the CLI's --mount-cwd flag
+            sandbox_volumes = os.getenv('SANDBOX_VOLUMES')
+            if sandbox_volumes:
+                from openhands.app_server.sandbox.docker_sandbox_service import (
+                    VolumeMount,
+                )
+
+                mounts = []
+                for mount_spec in sandbox_volumes.split(','):
+                    mount_spec = mount_spec.strip()
+                    if not mount_spec:
+                        continue
+                    parts = mount_spec.split(':')
+                    if len(parts) >= 2:
+                        host_path = parts[0]
+                        container_path = parts[1]
+                        mode = parts[2] if len(parts) > 2 else 'rw'
+                        mounts.append(
+                            VolumeMount(
+                                host_path=host_path,
+                                container_path=container_path,
+                                mode=mode,
+                            )
+                        )
+                if mounts:
+                    docker_sandbox_kwargs['mounts'] = mounts
             config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
 
     if config.sandbox_spec is None:

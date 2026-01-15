@@ -3,7 +3,7 @@ import logging
 import os
 import socket
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import AsyncGenerator
 
 import base62
@@ -39,6 +39,7 @@ from openhands.app_server.utils.docker_utils import (
 _logger = logging.getLogger(__name__)
 SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
+STARTUP_GRACE_SECONDS = 15
 
 
 class VolumeMount(BaseModel):
@@ -80,6 +81,7 @@ class DockerSandboxService(SandboxService):
     max_num_sandboxes: int
     extra_hosts: dict[str, str] = field(default_factory=dict)
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
+    startup_grace_seconds: int = STARTUP_GRACE_SECONDS
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -200,8 +202,16 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                _logger.info(f'Sandbox server not running: {app_server_url} : {exc}')
-                sandbox_info.status = SandboxStatus.ERROR
+                # If the server is
+                if sandbox_info.created_at < utc_now() - timedelta(
+                    seconds=self.startup_grace_seconds
+                ):
+                    _logger.info(
+                        f'Sandbox server not running: {app_server_url} : {exc}'
+                    )
+                    sandbox_info.status = SandboxStatus.ERROR
+                else:
+                    sandbox_info.status = SandboxStatus.STARTING
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None
         return sandbox_info
@@ -284,7 +294,9 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return None
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Start a new sandbox."""
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
@@ -299,10 +311,12 @@ class DockerSandboxService(SandboxService):
                 raise ValueError('Sandbox Spec not found')
             sandbox_spec = sandbox_spec_maybe
 
-        # Generate container ID and session api key
-        container_name = (
-            f'{self.container_name_prefix}{base62.encodebytes(os.urandom(16))}'
-        )
+        # Generate a sandbox id if none was provided
+        if sandbox_id is None:
+            sandbox_id = base62.encodebytes(os.urandom(16))
+
+        # Generate container name and session api key
+        container_name = f'{self.container_name_prefix}{sandbox_id}'
         session_api_key = base62.encodebytes(os.urandom(32))
 
         # Prepare environment variables
@@ -497,6 +511,13 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Format: {"hostname": "ip_or_gateway"}'
         ),
     )
+    startup_grace_seconds: int = Field(
+        default=STARTUP_GRACE_SECONDS,
+        description=(
+            'Number of seconds were no response from the agent server is acceptable'
+            'before it is considered an error'
+        ),
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
@@ -522,4 +543,5 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
                 extra_hosts=self.extra_hosts,
+                startup_grace_seconds=self.startup_grace_seconds,
             )

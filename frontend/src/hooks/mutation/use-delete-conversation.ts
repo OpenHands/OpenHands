@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { clearConversationStorage } from "#/utils/conversation-local-storage";
 
 export const useDeleteConversation = () => {
   const queryClient = useQueryClient();
@@ -25,6 +24,11 @@ export const useDeleteConversation = () => {
 
       return { previousConversations };
     },
+
+    onSuccess: (_, variables) => {
+      clearConversationLocalStorage(variables.conversationId);
+    },
+
     onError: (err, variables, context) => {
       if (context?.previousConversations) {
         queryClient.setQueryData(

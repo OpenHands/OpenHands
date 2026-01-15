@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
@@ -25,6 +25,25 @@ vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackLoginButtonClick: vi.fn(),
   }),
+}));
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => ({
+    data: undefined,
+  }),
+}));
+
+vi.mock("#/hooks/use-recaptcha", () => ({
+  useRecaptcha: () => ({
+    isReady: false,
+    isLoading: false,
+    error: null,
+    executeRecaptcha: vi.fn().mockResolvedValue(null),
+  }),
+}));
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: vi.fn(),
 }));
 
 describe("LoginContent", () => {
@@ -131,7 +150,10 @@ describe("LoginContent", () => {
     });
     await user.click(githubButton);
 
-    expect(window.location.href).toBe(mockUrl);
+    // Wait for async handleAuthRedirect to complete
+    await waitFor(() => {
+      expect(window.location.href).toBe(mockUrl);
+    });
   });
 
   it("should display email verified message when emailVerified is true", () => {

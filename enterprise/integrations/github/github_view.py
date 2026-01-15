@@ -17,6 +17,7 @@ from integrations.utils import (
     HOST,
     HOST_URL,
     get_oh_labels,
+    get_user_v1_enabled_setting,
     has_exact_mention,
 )
 from jinja2 import Environment
@@ -55,6 +56,10 @@ from openhands.utils.async_utils import call_sync_from_async
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 
 
+async def is_v1_enabled_for_github_resolver(user_id: str) -> bool:
+    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_GITHUB_RESOLVER
+
+
 async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     """Get the user's proactive conversation setting.
 
@@ -86,38 +91,6 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
         return False
 
     return settings.enable_proactive_conversation_starters
-
-
-async def get_user_v1_enabled_setting(user_id: str) -> bool:
-    """Get the user's V1 conversation API setting.
-
-    Args:
-        user_id: The keycloak user ID
-
-    Returns:
-        True if V1 conversations are enabled for this user, False otherwise
-
-    Note:
-        This function checks both the global environment variable kill switch AND
-        the user's individual setting. Both must be true for the function to return true.
-    """
-    # Check the global environment variable first
-    if not ENABLE_V1_GITHUB_RESOLVER:
-        return False
-
-    config = get_config()
-    settings_store = SaasSettingsStore(
-        user_id=user_id, session_maker=session_maker, config=config
-    )
-
-    settings = await call_sync_from_async(
-        settings_store.get_user_settings_by_keycloak_id, user_id
-    )
-
-    if not settings or settings.v1_enabled is None:
-        return False
-
-    return settings.v1_enabled
 
 
 # =================================================
@@ -191,9 +164,10 @@ class GithubIssue(ResolverViewInterface):
     async def initialize_new_conversation(self) -> ConversationMetadata:
         # FIXME: Handle if initialize_conversation returns None
 
-        self.v1_enabled = await get_user_v1_enabled_setting(
+        self.v1_enabled = await is_v1_enabled_for_github_resolver(
             self.user_info.keycloak_user_id
         )
+
         logger.info(
             f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'
         )
@@ -438,7 +412,7 @@ class GithubInlinePRComment(GithubPRComment):
 
     def _create_github_v1_callback_processor(self):
         """Create a V1 callback processor for GitHub integration."""
-        from openhands.app_server.event_callback.github_v1_callback_processor import (
+        from integrations.github.github_v1_callback_processor import (
             GithubV1CallbackProcessor,
         )
 

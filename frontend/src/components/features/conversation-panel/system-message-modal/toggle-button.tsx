@@ -17,6 +17,7 @@ export function ToggleButton({
   return (
     <button
       type="button"
+      data-testid="toggle-button"
       onClick={onClick}
       className={`w-full py-3 px-2 text-left flex items-center justify-between hover:bg-gray-700 transition-colors ${className || ""}`}
     >

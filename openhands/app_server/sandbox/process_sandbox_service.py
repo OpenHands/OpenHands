@@ -286,7 +286,9 @@ class ProcessSandboxService(SandboxService):
 
         return None
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Start a new sandbox."""
         # Get sandbox spec
         if sandbox_spec_id is None:
@@ -300,7 +302,9 @@ class ProcessSandboxService(SandboxService):
             sandbox_spec = sandbox_spec_maybe
 
         # Generate unique sandbox ID and session API key
-        sandbox_id = base62.encodebytes(os.urandom(16))
+        # Use provided sandbox_id if available, otherwise generate a random one
+        if sandbox_id is None:
+            sandbox_id = base62.encodebytes(os.urandom(16))
         session_api_key = base62.encodebytes(os.urandom(32))
 
         # Find available port
