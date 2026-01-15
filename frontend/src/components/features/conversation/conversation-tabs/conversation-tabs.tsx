@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocalStorage } from "@uidotdev/usehooks";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
 import ServerIcon from "#/icons/server.svg?react";
@@ -9,6 +8,7 @@ import VSCodeIcon from "#/icons/vscode.svg?react";
 import ThreeDotsVerticalIcon from "#/icons/three-dots-vertical.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { cn } from "#/utils/utils";
+import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import { ConversationTabNav } from "./conversation-tab-nav";
 import { ChatActionTooltip } from "../../chat/chat-action-tooltip";
 import { I18nKey } from "#/i18n/declaration";
@@ -32,23 +32,11 @@ export function ConversationTabs() {
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Persist selectedTab and isRightPanelShown in localStorage per conversation
-  const [persistedSelectedTab, setPersistedSelectedTab] =
-    useLocalStorage<ConversationTab | null>(
-      `conversation-selected-tab-${conversationId}`,
-      "editor",
-    );
-
-  const [persistedIsRightPanelShown, setPersistedIsRightPanelShown] =
-    useLocalStorage<boolean>(
-      `conversation-right-panel-shown-${conversationId}`,
-      true,
-    );
-
-  const [persistedUnpinnedTabs] = useLocalStorage<string[]>(
-    `conversation-unpinned-tabs-${conversationId}`,
-    [],
-  );
+  const {
+    state: persistedState,
+    setSelectedTab: setPersistedSelectedTab,
+    setRightPanelShown: setPersistedRightPanelShown,
+  } = useConversationLocalStorageState(conversationId);
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
@@ -61,13 +49,13 @@ export function ConversationTabs() {
   // Initialize Zustand state from localStorage on component mount
   useEffect(() => {
     // Initialize selectedTab from localStorage if available
-    setSelectedTab(persistedSelectedTab);
-    setHasRightPanelToggled(persistedIsRightPanelShown);
+    setSelectedTab(persistedState.selectedTab);
+    setHasRightPanelToggled(persistedState.rightPanelShown);
   }, [
     setSelectedTab,
     setHasRightPanelToggled,
-    persistedSelectedTab,
-    persistedIsRightPanelShown,
+    persistedState.selectedTab,
+    persistedState.rightPanelShown,
   ]);
 
   useEffect(() => {
@@ -89,13 +77,13 @@ export function ConversationTabs() {
     if (selectedTab === tab && isRightPanelShown) {
       // If clicking the same active tab, close the drawer
       setHasRightPanelToggled(false);
-      setPersistedIsRightPanelShown(false);
+      setPersistedRightPanelShown(false);
     } else {
       // If clicking a different tab or drawer is closed, open drawer and select tab
       onTabChange(tab);
       if (!isRightPanelShown) {
         setHasRightPanelToggled(true);
-        setPersistedIsRightPanelShown(true);
+        setPersistedRightPanelShown(true);
       }
     }
   };
@@ -166,7 +154,7 @@ export function ConversationTabs() {
 
   // Filter out unpinned tabs
   const visibleTabs = tabs.filter(
-    (tab) => !persistedUnpinnedTabs.includes(tab.tabValue),
+    (tab) => !persistedState.unpinnedTabs.includes(tab.tabValue),
   );
 
   return (
