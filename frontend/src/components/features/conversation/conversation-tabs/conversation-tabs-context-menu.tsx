@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { useLocalStorage } from "@uidotdev/usehooks";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useConversationId } from "#/hooks/use-conversation-id";
+import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
@@ -25,10 +26,9 @@ export function ConversationTabsContextMenu({
 }: ConversationTabsContextMenuProps) {
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { t } = useTranslation();
-  const [unpinnedTabs, setUnpinnedTabs] = useLocalStorage<string[]>(
-    "conversation-unpinned-tabs",
-    [],
-  );
+  const { conversationId } = useConversationId();
+  const { state, setUnpinnedTabs } =
+    useConversationLocalStorageState(conversationId);
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
@@ -72,18 +72,18 @@ export function ConversationTabsContextMenu({
 
   const handleTabClick = (tab: string) => {
     const tabString = tab;
-    if (unpinnedTabs.includes(tabString)) {
+    if (state.unpinnedTabs.includes(tabString)) {
       // Tab is unpinned, pin it (remove from unpinned list)
       setUnpinnedTabs(
-        unpinnedTabs.filter((unpinnedTab) => unpinnedTab !== tabString),
+        state.unpinnedTabs.filter((unpinnedTab) => unpinnedTab !== tabString),
       );
     } else {
       // Tab is pinned, unpin it (add to unpinned list)
-      setUnpinnedTabs([...unpinnedTabs, tabString]);
+      setUnpinnedTabs([...state.unpinnedTabs, tabString]);
     }
   };
 
-  const isTabPinned = (tab: string) => !unpinnedTabs.includes(tab as string);
+  const isTabPinned = (tab: string) => !state.unpinnedTabs.includes(tab);
 
   return (
     <ContextMenu
