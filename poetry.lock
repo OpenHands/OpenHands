@@ -1816,7 +1816,7 @@ files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
-markers = {main = "platform_system == \"Windows\" or os_name == \"nt\" or sys_platform == \"win32\"", dev = "os_name == \"nt\" or sys_platform == \"win32\"", runtime = "sys_platform == \"win32\"", test = "sys_platform == \"win32\""}
+markers = {main = "platform_system == \"Windows\" or sys_platform == \"win32\" or os_name == \"nt\"", dev = "os_name == \"nt\" or sys_platform == \"win32\"", runtime = "sys_platform == \"win32\"", test = "sys_platform == \"win32\""}
 
 [[package]]
 name = "comm"
@@ -3027,20 +3027,15 @@ files = [
 
 [[package]]
 name = "filelock"
-version = "3.18.0"
+version = "3.20.3"
 description = "A platform independent file lock."
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main", "dev", "evaluation"]
 files = [
-    {file = "filelock-3.18.0-py3-none-any.whl", hash = "sha256:c401f4f8377c4464e6db25fff06205fd89bdd83b65eb0488ed1b160f780e21de"},
-    {file = "filelock-3.18.0.tar.gz", hash = "sha256:adbc88eabb99d2fec8c9c1b229b171f18afa655400173ddc653d5d01501fb9f2"},
+    {file = "filelock-3.20.3-py3-none-any.whl", hash = "sha256:4b0dda527ee31078689fc205ec4f1c1bf7d56cf88b6dc9426c4f230e46c2dce1"},
+    {file = "filelock-3.20.3.tar.gz", hash = "sha256:18c57ee915c7ec61cff0ecf7f0f869936c7c30191bb0cf406f1341778d0834e1"},
 ]
-
-[package.extras]
-docs = ["furo (>=2024.8.6)", "sphinx (>=8.1.3)", "sphinx-autodoc-typehints (>=3)"]
-testing = ["covdefaults (>=2.3)", "coverage (>=7.6.10)", "diff-cover (>=9.2.1)", "pytest (>=8.3.4)", "pytest-asyncio (>=0.25.2)", "pytest-cov (>=6)", "pytest-mock (>=3.14)", "pytest-timeout (>=2.3.1)", "virtualenv (>=20.28.1)"]
-typing = ["typing-extensions (>=4.12.2) ; python_version < \"3.11\""]
 
 [[package]]
 name = "findpython"
@@ -7380,14 +7375,14 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.8.1"
+version = "1.8.2"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.8.1-py3-none-any.whl", hash = "sha256:c0dfe620184633a173094ffaa77b0d13124ea7bf84e7b534b1641e5fc5fd0256"},
-    {file = "openhands_agent_server-1.8.1.tar.gz", hash = "sha256:08adfe26d867ff0cb0c1e87bb0ad6e058c9a97374964ba6a9860ea35d32764a0"},
+    {file = "openhands_agent_server-1.8.2-py3-none-any.whl", hash = "sha256:e9abb2e0fe970715537d0e0fc1aea3dd64bb9e8b531f70cb72b3d4e486aaa46a"},
+    {file = "openhands_agent_server-1.8.2.tar.gz", hash = "sha256:43db2371ee84b100ac921396338dee74359fceeb5c9400c90530bcc5730144c3"},
 ]
 
 [package.dependencies]
@@ -7404,19 +7399,20 @@ wsproto = ">=1.2.0"
 
 [[package]]
 name = "openhands-sdk"
-version = "1.8.1"
+version = "1.8.2"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.8.1-py3-none-any.whl", hash = "sha256:133275f56321585c016b4718d56c8fc7bb834f4ef7cab1ef66b0c71c49d47d1d"},
-    {file = "openhands_sdk-1.8.1.tar.gz", hash = "sha256:9e2baa6c512ac4c2bc1c2c0bf8b1dbdb0267d794a8b86b7306a4656fc0cb8b0b"},
+    {file = "openhands_sdk-1.8.2-py3-none-any.whl", hash = "sha256:b4fad9581865ce222a3e6722384e4df56113db01bd34c2d2d408dfd9695365c0"},
+    {file = "openhands_sdk-1.8.2.tar.gz", hash = "sha256:5bfb17c8b9515210d121249deb1f3d0dc407c3737edc55b5e73330b4571d61e3"},
 ]
 
 [package.dependencies]
 deprecation = ">=2.1.0"
 fastmcp = ">=2.11.3"
+filelock = ">=3.20.1"
 httpx = ">=0.27.0"
 litellm = ">=1.80.10"
 lmnr = ">=0.7.24"
@@ -7431,14 +7427,14 @@ boto3 = ["boto3 (>=1.35.0)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.8.1"
+version = "1.8.2"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.8.1-py3-none-any.whl", hash = "sha256:9404b17edb8960d4af3a4439e6f68e37c92c59d0705f13096e4a8ff9b6ffc472"},
-    {file = "openhands_tools-1.8.1.tar.gz", hash = "sha256:e59fcd9ca3baa6266e92020646c4c5f5266f57761f434770cf0cd458b1a33cb0"},
+    {file = "openhands_tools-1.8.2-py3-none-any.whl", hash = "sha256:283f0c1fdd316914559cd16ade792383715478a8f5a73f7166daffc34bf9e5af"},
+    {file = "openhands_tools-1.8.2.tar.gz", hash = "sha256:eae416e3867f7cb595129a33a4b9237886c4b8a075d2bc7618da55963f2747d5"},
 ]
 
 [package.dependencies]
@@ -16846,4 +16842,4 @@ third-party-runtimes = ["daytona", "e2b-code-interpreter", "modal", "runloop-api
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "78c01d3e121d5f27a4120d043408ac0aa93fa95fe0c2c7d678161b08ccb582c1"
+content-hash = "eac8ac0f1f98b34526ce5e57a9dc50c68e295d51f13b4d5d2ecd0b507287121f"

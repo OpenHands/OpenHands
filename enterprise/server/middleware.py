@@ -166,6 +166,12 @@ class SetAuthCookieMiddleware:
         if path in ignore_paths:
             return False
 
+        # Allow public access to shared conversations and events
+        if path.startswith('/api/shared-conversations') or path.startswith(
+            '/api/shared-events'
+        ):
+            return False
+
         is_mcp = path.startswith('/mcp')
         is_api_route = path.startswith('/api')
         return is_api_route or is_mcp

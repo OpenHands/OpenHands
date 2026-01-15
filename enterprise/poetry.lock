@@ -1178,7 +1178,7 @@ files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
-markers = {main = "platform_system == \"Windows\" or os_name == \"nt\" or sys_platform == \"win32\"", dev = "os_name == \"nt\"", test = "platform_system == \"Windows\" or sys_platform == \"win32\""}
+markers = {main = "platform_system == \"Windows\" or sys_platform == \"win32\" or os_name == \"nt\"", dev = "os_name == \"nt\"", test = "platform_system == \"Windows\" or sys_platform == \"win32\""}
 
 [[package]]
 name = "comm"
@@ -2264,14 +2264,14 @@ files = [
 
 [[package]]
 name = "filelock"
-version = "3.19.1"
+version = "3.20.3"
 description = "A platform independent file lock."
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
-    {file = "filelock-3.19.1-py3-none-any.whl", hash = "sha256:d38e30481def20772f5baf097c122c3babc4fcdb7e14e57049eb9d88c6dc017d"},
-    {file = "filelock-3.19.1.tar.gz", hash = "sha256:66eda1888b0171c998b35be2bcc0f6d75c388a7ce20c3f3f37aa8e96c2dddf58"},
+    {file = "filelock-3.20.3-py3-none-any.whl", hash = "sha256:4b0dda527ee31078689fc205ec4f1c1bf7d56cf88b6dc9426c4f230e46c2dce1"},
+    {file = "filelock-3.20.3.tar.gz", hash = "sha256:18c57ee915c7ec61cff0ecf7f0f869936c7c30191bb0cf406f1341778d0834e1"},
 ]
 
 [[package]]
@@ -5858,14 +5858,14 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.8.1"
+version = "1.8.2"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_agent_server-1.8.1-py3-none-any.whl", hash = "sha256:c0dfe620184633a173094ffaa77b0d13124ea7bf84e7b534b1641e5fc5fd0256"},
-    {file = "openhands_agent_server-1.8.1.tar.gz", hash = "sha256:08adfe26d867ff0cb0c1e87bb0ad6e058c9a97374964ba6a9860ea35d32764a0"},
+    {file = "openhands_agent_server-1.8.2-py3-none-any.whl", hash = "sha256:e9abb2e0fe970715537d0e0fc1aea3dd64bb9e8b531f70cb72b3d4e486aaa46a"},
+    {file = "openhands_agent_server-1.8.2.tar.gz", hash = "sha256:43db2371ee84b100ac921396338dee74359fceeb5c9400c90530bcc5730144c3"},
 ]
 
 [package.dependencies]
@@ -5891,89 +5891,89 @@ files = []
 develop = true
 
 [package.dependencies]
-aiohttp = ">=3.9.0,!=3.11.13"
+aiohttp = ">=3.9,<3.11.13 || >3.11.13"
 anthropic = {version = "*", extras = ["vertex"]}
-anyio = "4.9.0"
-asyncpg = "^0.30.0"
-bashlex = "^0.18"
+anyio = "4.9"
+asyncpg = ">=0.30"
+bashlex = ">=0.18"
 boto3 = "*"
 browsergym-core = "0.13.3"
 deprecated = "*"
-deprecation = "^2.1.0"
+deprecation = ">=2.1"
 dirhash = "*"
 docker = "*"
 fastapi = "*"
-fastmcp = "^2.12.4"
-google-api-python-client = "^2.164.0"
+fastmcp = ">=2.12.4"
+google-api-python-client = ">=2.164"
 google-auth-httplib2 = "*"
 google-auth-oauthlib = "*"
 google-cloud-aiplatform = "*"
 google-genai = "*"
 html2text = "*"
-httpx-aiohttp = "^0.1.8"
-ipywidgets = "^8.1.5"
-jinja2 = "^3.1.6"
+httpx-aiohttp = ">=0.1.8"
+ipywidgets = ">=8.1.5"
+jinja2 = ">=3.1.6"
 joblib = "*"
 json-repair = "*"
-jupyter_kernel_gateway = "*"
-kubernetes = "^33.1.0"
+jupyter-kernel-gateway = "*"
+kubernetes = ">=33.1"
 libtmux = ">=0.46.2"
-litellm = ">=1.74.3, !=1.64.4, !=1.67.*"
-lmnr = "^0.7.20"
-memory-profiler = "^0.61.0"
+litellm = ">=1.74.3"
+lmnr = ">=0.7.20"
+memory-profiler = ">=0.61"
 numpy = "*"
-openai = "2.8.0"
+openai = "2.8"
 openhands-aci = "0.3.2"
-openhands-agent-server = "1.8.1"
-openhands-sdk = "1.8.1"
-openhands-tools = "1.8.1"
-opentelemetry-api = "^1.33.1"
-opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
-pathspec = "^0.12.1"
+openhands-agent-server = "1.8.2"
+openhands-sdk = "1.8.2"
+openhands-tools = "1.8.2"
+opentelemetry-api = ">=1.33.1"
+opentelemetry-exporter-otlp-proto-grpc = ">=1.33.1"
+pathspec = ">=0.12.1"
 pexpect = "*"
-pg8000 = "^1.31.5"
-pillow = "^11.3.0"
-playwright = "^1.55.0"
-poetry = "^2.1.2"
-prompt-toolkit = "^3.0.50"
-protobuf = "^5.0.0,<6.0.0"
+pg8000 = ">=1.31.5"
+pillow = ">=11.3"
+playwright = ">=1.55"
+poetry = ">=2.1.2"
+prompt-toolkit = ">=3.0.50"
+protobuf = ">=5,<6"
 psutil = "*"
-pybase62 = "^1.0.0"
-pygithub = "^2.5.0"
-pyjwt = "^2.9.0"
+pybase62 = ">=1"
+pygithub = ">=2.5"
+pyjwt = ">=2.9"
 pylatexenc = "*"
-pypdf = "^6.0.0"
+pypdf = ">=6"
 python-docx = "*"
 python-dotenv = "*"
-python-frontmatter = "^1.1.0"
+python-frontmatter = ">=1.1"
 python-jose = {version = ">=3.3", extras = ["cryptography"]}
-python-json-logger = "^3.2.1"
+python-json-logger = ">=3.2.1"
 python-multipart = "*"
 python-pptx = "*"
-python-socketio = "^5.11.4"
+python-socketio = ">=5.11.4"
 pythonnet = "*"
-pyyaml = "^6.0.2"
-qtconsole = "^5.6.1"
-rapidfuzz = "^3.9.0"
-redis = ">=5.2,<7.0"
-requests = "^2.32.5"
+pyyaml = ">=6.0.2"
+qtconsole = ">=5.6.1"
+rapidfuzz = ">=3.9"
+redis = ">=5.2,<7"
+requests = ">=2.32.5"
 setuptools = ">=78.1.1"
-shellingham = "^1.5.4"
-sqlalchemy = {version = "^2.0.40", extras = ["asyncio"]}
-sse-starlette = "^3.0.2"
-starlette = "^0.48.0"
-tenacity = ">=8.5,<10.0"
+shellingham = ">=1.5.4"
+sqlalchemy = {version = ">=2.0.40", extras = ["asyncio"]}
+sse-starlette = ">=3.0.2"
+starlette = ">=0.48"
+tenacity = ">=8.5,<10"
 termcolor = "*"
 toml = "*"
 tornado = ">=6.5"
 types-toml = "*"
-urllib3 = "^2.6.3"
+urllib3 = ">=2.6.3"
 uvicorn = "*"
-whatthepatch = "^1.0.6"
+whatthepatch = ">=1.0.6"
 zope-interface = "7.2"
 
 [package.extras]
-third-party-runtimes = ["daytona (==0.24.2)", "e2b-code-interpreter (>=2.0.0,<3.0.0)", "modal (>=0.66.26,<1.2.0)", "runloop-api-client (==0.50.0)"]
+third-party-runtimes = ["daytona (==0.24.2)", "e2b-code-interpreter (>=2)", "modal (>=0.66.26,<1.2)", "runloop-api-client (==0.50)"]
 
 [package.source]
 type = "directory"
@@ -5981,19 +5981,20 @@ url = ".."
 
 [[package]]
 name = "openhands-sdk"
-version = "1.8.1"
+version = "1.8.2"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_sdk-1.8.1-py3-none-any.whl", hash = "sha256:133275f56321585c016b4718d56c8fc7bb834f4ef7cab1ef66b0c71c49d47d1d"},
-    {file = "openhands_sdk-1.8.1.tar.gz", hash = "sha256:9e2baa6c512ac4c2bc1c2c0bf8b1dbdb0267d794a8b86b7306a4656fc0cb8b0b"},
+    {file = "openhands_sdk-1.8.2-py3-none-any.whl", hash = "sha256:b4fad9581865ce222a3e6722384e4df56113db01bd34c2d2d408dfd9695365c0"},
+    {file = "openhands_sdk-1.8.2.tar.gz", hash = "sha256:5bfb17c8b9515210d121249deb1f3d0dc407c3737edc55b5e73330b4571d61e3"},
 ]
 
 [package.dependencies]
 deprecation = ">=2.1.0"
 fastmcp = ">=2.11.3"
+filelock = ">=3.20.1"
 httpx = ">=0.27.0"
 litellm = ">=1.80.10"
 lmnr = ">=0.7.24"
@@ -6008,14 +6009,14 @@ boto3 = ["boto3 (>=1.35.0)"]
 
 [[package]]
 name = "openhands-tools"
-version = "1.8.1"
+version = "1.8.2"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_tools-1.8.1-py3-none-any.whl", hash = "sha256:9404b17edb8960d4af3a4439e6f68e37c92c59d0705f13096e4a8ff9b6ffc472"},
-    {file = "openhands_tools-1.8.1.tar.gz", hash = "sha256:e59fcd9ca3baa6266e92020646c4c5f5266f57761f434770cf0cd458b1a33cb0"},
+    {file = "openhands_tools-1.8.2-py3-none-any.whl", hash = "sha256:283f0c1fdd316914559cd16ade792383715478a8f5a73f7166daffc34bf9e5af"},
+    {file = "openhands_tools-1.8.2.tar.gz", hash = "sha256:eae416e3867f7cb595129a33a4b9237886c4b8a075d2bc7618da55963f2747d5"},
 ]
 
 [package.dependencies]

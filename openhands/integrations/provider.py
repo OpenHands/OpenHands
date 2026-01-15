@@ -675,6 +675,22 @@ class ProviderHandler:
             if provider != ProviderType.AZURE_DEVOPS:
                 domain = self.provider_tokens[provider].host or domain
 
+        # Detect protocol before normalizing domain
+        # Default to https, but preserve http if explicitly specified
+        protocol = 'https'
+        if domain and domain.strip().startswith('http://'):
+            # Check if insecure HTTP access is allowed
+            allow_insecure = os.environ.get(
+                'ALLOW_INSECURE_GIT_ACCESS', 'false'
+            ).lower() in ('true', '1', 'yes')
+            if not allow_insecure:
+                raise ValueError(
+                    'Attempting to connect to an insecure git repository over HTTP. '
+                    "If you'd like to allow this nonetheless, set "
+                    'ALLOW_INSECURE_GIT_ACCESS=true as an environment variable.'
+                )
+            protocol = 'http'
+
         # Normalize domain to prevent double protocols or path segments
         if domain:
             domain = domain.strip()
@@ -690,16 +706,18 @@ class ProviderHandler:
                 token_value = git_token.get_secret_value()
                 if provider == ProviderType.GITLAB:
                     remote_url = (
-                        f'https://oauth2:{token_value}@{domain}/{repo_name}.git'
+                        f'{protocol}://oauth2:{token_value}@{domain}/{repo_name}.git'
                     )
                 elif provider == ProviderType.BITBUCKET:
                     # For Bitbucket, handle username:app_password format
                     if ':' in token_value:
                         # App token format: username:app_password
-                        remote_url = f'https://{token_value}@{domain}/{repo_name}.git'
+                        remote_url = (
+                            f'{protocol}://{token_value}@{domain}/{repo_name}.git'
+                        )
                     else:
                         # Access token format: use x-token-auth
-                        remote_url = f'https://x-token-auth:{token_value}@{domain}/{repo_name}.git'
+                        remote_url = f'{protocol}://x-token-auth:{token_value}@{domain}/{repo_name}.git'
                 elif provider == ProviderType.AZURE_DEVOPS:
                     # Azure DevOps uses PAT with Basic auth
                     # Format: https://{anything}:{PAT}@dev.azure.com/{org}/{project}/_git/{repo}
@@ -759,11 +777,11 @@ class ProviderHandler:
                         )
                 else:
                     # GitHub, Forgejo
-                    remote_url = f'https://{token_value}@{domain}/{repo_name}.git'
+                    remote_url = f'{protocol}://{token_value}@{domain}/{repo_name}.git'
             else:
-                remote_url = f'https://{domain}/{repo_name}.git'
+                remote_url = f'{protocol}://{domain}/{repo_name}.git'
         else:
-            remote_url = f'https://{domain}/{repo_name}.git'
+            remote_url = f'{protocol}://{domain}/{repo_name}.git'
 
         return remote_url
 
