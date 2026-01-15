@@ -35,14 +35,14 @@ When starting a web server, use the corresponding ports via environment variable
 - $WORKER_1 for the first port
 - $WORKER_2 for the second port
 
-You should also set any options to allow iframes and CORS requests, and allow the
-server to be accessed from any host (e.g. 0.0.0.0).
+**CRITICAL: You MUST enable CORS and bind to 0.0.0.0.** Without CORS headers, the App tab cannot detect your server and will show an empty state.
 
-Example configurations:
-- Express: app.listen(process.env.WORKER_1 || 3000, '0.0.0.0')
-- Vite: In vite.config.js, set server.host=true, server.port=process.env.WORKER_1
-- Flask: app.run(host='0.0.0.0', port=int(os.environ.get('WORKER_1', 5000)))
-- Next.js: next dev -p $WORKER_1 -H 0.0.0.0"""
+Example (Flask):
+```python
+from flask_cors import CORS
+CORS(app)
+app.run(host='0.0.0.0', port=int(os.environ.get('WORKER_1', 12000)))
+```"""
 
 
 def _find_and_load_global_skill_files(skill_dir: Path) -> list[Skill]:
