@@ -13,6 +13,9 @@ Exports:
     a_session_maker: Async session factory
 """
 
+import contextlib
+
+
 def _get_db_session_injector():
     from openhands.app_server.config import get_global_config
 
@@ -22,14 +25,16 @@ def _get_db_session_injector():
 
 def session_maker():
     db_session_injector = _get_db_session_injector()
-    session = db_session_injector.get_session_maker()
-    return session
+    session_maker = db_session_injector.get_session_maker()
+    return session_maker()
 
 
+@contextlib.asynccontextmanager
 async def a_session_maker():
     db_session_injector = _get_db_session_injector()
-    a_session = await db_session_injector.get_async_session_maker()
-    return a_session
+    a_session_maker = await db_session_injector.get_async_session_maker()
+    async with a_session_maker() as session:
+        yield session
 
 
 def get_engine():
