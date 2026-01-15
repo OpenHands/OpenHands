@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { ConversationTabs } from "#/components/features/conversation/conversation-tabs/conversation-tabs";
+import { ConversationTabsContextMenu } from "#/components/features/conversation/conversation-tabs/conversation-tabs-context-menu";
 
 const TASK_CONVERSATION_ID = "task-ec03fb2ab8604517b24af632b058c2fd";
 const REAL_CONVERSATION_ID = "conv-abc123";
@@ -37,52 +38,28 @@ describe("ConversationTabs localStorage behavior", () => {
 
   describe("task-prefixed conversation IDs", () => {
     it("should not create localStorage entries for task-prefixed conversation IDs", () => {
-      // Issue: V1 conversations start with task-{uuid} in URL, creating localStorage entries
-      // that become orphaned when navigating to the real conversation ID.
-      // Desired behavior: Skip localStorage persistence for task-* IDs entirely.
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(TASK_CONVERSATION_ID),
+      });
 
-      render(<ConversationTabs />, { wrapper: createWrapper(TASK_CONVERSATION_ID) });
-
-      // No localStorage entries should be created for task-prefixed IDs
-      // Using consolidated key pattern
       expect(
         localStorage.getItem(`conversation-state-${TASK_CONVERSATION_ID}`),
-      ).toBeNull();
-
-      // Old individual keys should also not exist
-      expect(
-        localStorage.getItem(
-          `conversation-selected-tab-${TASK_CONVERSATION_ID}`,
-        ),
-      ).toBeNull();
-      expect(
-        localStorage.getItem(
-          `conversation-right-panel-shown-${TASK_CONVERSATION_ID}`,
-        ),
-      ).toBeNull();
-      expect(
-        localStorage.getItem(
-          `conversation-unpinned-tabs-${TASK_CONVERSATION_ID}`,
-        ),
       ).toBeNull();
     });
   });
 
   describe("consolidated localStorage key", () => {
-    it("should use a single consolidated key for all conversation state", async () => {
-      // Desired behavior: All conversation state should be stored in one key
-      // instead of multiple separate keys.
+    it("should use a single consolidated key for tab state", async () => {
       mockConversationId = REAL_CONVERSATION_ID;
       const user = userEvent.setup();
 
-      render(<ConversationTabs />, { wrapper: createWrapper(REAL_CONVERSATION_ID) });
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
 
-      // Click a tab to trigger a state change that persists to localStorage
-      // The Changes tab has visible text, so use that
       const changesTab = screen.getByText("COMMON$CHANGES");
       await user.click(changesTab);
 
-      // Should use consolidated key
       const consolidatedKey = `conversation-state-${REAL_CONVERSATION_ID}`;
       const storedState = localStorage.getItem(consolidatedKey);
       expect(storedState).not.toBeNull();
@@ -91,17 +68,23 @@ describe("ConversationTabs localStorage behavior", () => {
       expect(parsed).toHaveProperty("selectedTab");
       expect(parsed).toHaveProperty("rightPanelShown");
       expect(parsed).toHaveProperty("unpinnedTabs");
+    });
 
-      // Old individual keys should NOT exist
-      expect(
-        localStorage.getItem(`conversation-selected-tab-${REAL_CONVERSATION_ID}`),
-      ).toBeNull();
-      expect(
-        localStorage.getItem(`conversation-right-panel-shown-${REAL_CONVERSATION_ID}`),
-      ).toBeNull();
-      expect(
-        localStorage.getItem(`conversation-unpinned-tabs-${REAL_CONVERSATION_ID}`),
-      ).toBeNull();
+    it("should store unpinned tabs in consolidated key via context menu", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      const user = userEvent.setup();
+
+      render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+
+      const terminalItem = screen.getByText("COMMON$TERMINAL");
+      await user.click(terminalItem);
+
+      const consolidatedKey = `conversation-state-${REAL_CONVERSATION_ID}`;
+      const storedState = localStorage.getItem(consolidatedKey);
+      expect(storedState).not.toBeNull();
+
+      const parsed = JSON.parse(storedState!);
+      expect(parsed.unpinnedTabs).toContain("terminal");
     });
   });
 });
