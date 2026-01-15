@@ -2,9 +2,7 @@
 build-backend = "poetry.core.masonry.api"
 # PEP 621 project metadata (for UV compatibility)
 # This section coexists with [tool.poetry] during the migration period
-requires = [
-  "poetry-core",
-]
+requires = [ "poetry-core" ]
 
 [project]
 name = "openhands-ai"
@@ -21,9 +19,97 @@ classifiers = [
 # Version is managed dynamically by poetry-dynamic-versioning
 dynamic = [ "version" ]
 
+# Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
+dependencies = [
+  "aiohttp>=3.9,!=3.11.13",
+  "anthropic[vertex]",
+  "anyio==4.9",
+  "asyncpg>=0.30",
+  "bashlex>=0.18",
+  "boto3",
+  "browsergym-core==0.13.3",
+  "deprecated",
+  "deprecation>=2.1",
+  "dirhash",
+  "docker",
+  "fastapi",
+  "fastmcp>=2.12.4",
+  "google-api-python-client>=2.164",
+  "google-auth-httplib2",
+  "google-auth-oauthlib",
+  "google-cloud-aiplatform",
+  "google-genai",
+  "html2text",
+  "httpx-aiohttp>=0.1.8",
+  "ipywidgets>=8.1.5",
+  "jinja2>=3.1.6",
+  "joblib",
+  "json-repair",
+  "jupyter-kernel-gateway",
+  "kubernetes>=33.1",
+  "libtmux>=0.46.2",
+  "litellm!=1.64.4,!=1.67.*,>=1.74.3",
+  "lmnr>=0.7.20",
+  "memory-profiler>=0.61",
+  "numpy",
+  "openai==2.8",
+  "openhands-aci==0.3.2",
+  "openhands-agent-server==1.8.1",
+  "openhands-sdk==1.8.1",
+  "openhands-tools==1.8.1",
+  "opentelemetry-api>=1.33.1",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
+  "pathspec>=0.12.1",
+  "pexpect",
+  "pg8000>=1.31.5",
+  "pillow>=11.3",
+  "playwright>=1.55",
+  "poetry>=2.1.2",
+  "prompt-toolkit>=3.0.50",
+  "protobuf>=5,<6",
+  "psutil",
+  "pybase62>=1",
+  "pygithub>=2.5",
+  "pyjwt>=2.9",
+  "pylatexenc",
+  "pypdf>=6",
+  "python-docx",
+  "python-dotenv",
+  "python-frontmatter>=1.1",
+  "python-jose[cryptography]>=3.3",
+  "python-json-logger>=3.2.1",
+  "python-multipart",
+  "python-pptx",
+  "python-socketio>=5.11.4",
+  "pythonnet",
+  "pyyaml>=6.0.2",
+  "qtconsole>=5.6.1",
+  "rapidfuzz>=3.9",
+  "redis>=5.2,<7",
+  "requests>=2.32.5",
+  "setuptools>=78.1.1",
+  "shellingham>=1.5.4",
+  "sqlalchemy[asyncio]>=2.0.40",
+  "sse-starlette>=3.0.2",
+  "starlette>=0.48",
+  "tenacity>=8.5,<10",
+  "termcolor",
+  "toml",
+  "tornado>=6.5",
+  "types-toml",
+  "urllib3>=2.6.3",
+  "uvicorn",
+  "whatthepatch>=1.0.6",
+  "zope-interface==7.2",
+]
+
+optional-dependencies.third_party_runtimes = [
+  "daytona==0.24.2",
+  "e2b-code-interpreter>=2",
+  "modal>=0.66.26,<1.2",
+  "runloop-api-client==0.50",
+]
 urls.Homepage = "https://github.com/OpenHands/OpenHands"
-# PEP 735 dependency groups (for UV compatibility)
-# These coexist with [tool.poetry.group.*] during the migration period
 urls.Repository = "https://github.com/OpenHands/OpenHands"
 
 [dependency-groups]
