@@ -159,7 +159,7 @@ class TestGetWorkspaceNameFromPayload:
 
         workspace_name = jira_manager.get_workspace_name_from_payload(payload)
 
-        assert workspace_name == ''
+        assert workspace_name is None
 
     def test_get_workspace_name_with_missing_author_self(
         self,
@@ -179,7 +179,7 @@ class TestGetWorkspaceNameFromPayload:
 
         workspace_name = jira_manager.get_workspace_name_from_payload(payload)
 
-        assert workspace_name == ''
+        assert workspace_name is None
 
     def test_get_workspace_name_with_missing_user_self(
         self,
@@ -196,7 +196,7 @@ class TestGetWorkspaceNameFromPayload:
 
         workspace_name = jira_manager.get_workspace_name_from_payload(payload)
 
-        assert workspace_name == ''
+        assert workspace_name is None
 
 
 class TestParseWebhook:

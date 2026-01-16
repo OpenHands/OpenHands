@@ -132,13 +132,19 @@ async def verify_jira_signature(body: bytes, signature: str, payload: dict):
         )
 
     workspace_name = jira_manager.get_workspace_name_from_payload(payload)
+    if workspace_name is None:
+        logger.warning('[Jira] No workspace name found in webhook payload')
+        raise HTTPException(
+            status_code=403, detail='Workspace name not found in payload'
+        )
+
     workspace: (
         JiraWorkspace | None
     ) = await jira_manager.integration_store.get_workspace_by_name(workspace_name)
 
     if workspace is None:
         logger.warning(f'[Jira] Could not identify workspace {workspace_name}')
-        raise HTTPException(status_code=403, details='Unidentified workspace')
+        raise HTTPException(status_code=403, detail='Unidentified workspace')
 
     if workspace.status != 'active':
         logger.warning(
@@ -150,7 +156,7 @@ async def verify_jira_signature(body: bytes, signature: str, payload: dict):
             },
         )
 
-        raise HTTPException(status_code=403, details='Workspace is inactive')
+        raise HTTPException(status_code=403, detail='Workspace is inactive')
 
     webhook_secret = token_manager.decrypt_text(workspace.webhook_secret)
     expected_signature = hmac.new(
