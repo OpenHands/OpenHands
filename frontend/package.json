@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.12.0"
   },
   "dependencies": {
     "@heroui/react": "2.8.7",
@@ -121,7 +121,7 @@
   },
   "packageManager": "npm@10.5.0",
   "volta": {
-    "node": "22.0.0"
+    "node": "22.12.0"
   },
   "msw": {
     "workerDirectory": [

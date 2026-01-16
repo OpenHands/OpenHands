@@ -29,7 +29,9 @@ class ResolverUserContext(UserContext):
 
         return UserInfo(id=user_id)
 
-    async def get_authenticated_git_url(self, repository: str) -> str:
+    async def get_authenticated_git_url(
+        self, repository: str, is_optional: bool = False
+    ) -> str:
         # This would need to be implemented based on the git provider tokens
         # For now, return a basic HTTPS URL
         return f'https://github.com/{repository}.git'
