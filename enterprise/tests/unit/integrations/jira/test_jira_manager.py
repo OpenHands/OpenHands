@@ -373,12 +373,15 @@ class TestReceiveMessage:
         jira_manager.get_issue_details = AsyncMock(
             return_value=('Test Title', 'Test Description')
         )
-        jira_manager.is_job_requested = AsyncMock(return_value=True)
+        jira_manager.is_repository_specified = AsyncMock(return_value=True)
         jira_manager.start_job = AsyncMock()
 
         with patch(
             'integrations.jira.jira_manager.JiraFactory.create_jira_view_from_payload'
-        ) as mock_factory:
+        ) as mock_factory, patch(
+            'integrations.jira.jira_manager.JiraFactory.is_ticket_comment',
+            return_value=True,
+        ):
             mock_view = MagicMock(spec=JiraViewInterface)
             mock_factory.return_value = mock_view
 
@@ -536,14 +539,14 @@ class TestReceiveMessage:
             jira_manager._send_error_comment.assert_called_once()
 
 
-class TestIsJobRequested:
-    """Test job request validation."""
+class TestIsRepositorySpecified:
+    """Test repository specification validation."""
 
     @pytest.mark.asyncio
-    async def test_is_job_requested_new_conversation_with_repo_match(
+    async def test_is_repository_specified_new_conversation_with_repo_match(
         self, jira_manager, sample_job_context, sample_user_auth
     ):
-        """Test job request validation for new conversation with repository match."""
+        """Test repository validation for new conversation with repository match."""
         mock_view = MagicMock(spec=JiraNewConversationView)
         mock_view.saas_user_auth = sample_user_auth
         mock_view.job_context = sample_job_context
@@ -565,16 +568,16 @@ class TestIsJobRequested:
             mock_filter.return_value = (True, mock_repos)
 
             message = Message(source=SourceType.JIRA, message={})
-            result = await jira_manager.is_job_requested(message, mock_view)
+            result = await jira_manager.is_repository_specified(message, mock_view)
 
             assert result is True
             assert mock_view.selected_repo == 'company/repo'
 
     @pytest.mark.asyncio
-    async def test_is_job_requested_new_conversation_no_repo_match(
+    async def test_is_repository_specified_new_conversation_no_repo_match(
         self, jira_manager, sample_job_context, sample_user_auth
     ):
-        """Test job request validation for new conversation without repository match."""
+        """Test repository validation for new conversation without repository match."""
         mock_view = MagicMock(spec=JiraNewConversationView)
         mock_view.saas_user_auth = sample_user_auth
         mock_view.job_context = sample_job_context
@@ -597,14 +600,16 @@ class TestIsJobRequested:
             mock_filter.return_value = (False, [])
 
             message = Message(source=SourceType.JIRA, message={})
-            result = await jira_manager.is_job_requested(message, mock_view)
+            result = await jira_manager.is_repository_specified(message, mock_view)
 
             assert result is False
             jira_manager._send_repo_selection_comment.assert_called_once_with(mock_view)
 
     @pytest.mark.asyncio
-    async def test_is_job_requested_exception(self, jira_manager, sample_user_auth):
-        """Test job request validation when an exception occurs."""
+    async def test_is_repository_specified_exception(
+        self, jira_manager, sample_user_auth
+    ):
+        """Test repository validation when an exception occurs."""
         mock_view = MagicMock(spec=JiraNewConversationView)
         mock_view.saas_user_auth = sample_user_auth
         jira_manager._get_repositories = AsyncMock(
@@ -612,7 +617,7 @@ class TestIsJobRequested:
         )
 
         message = Message(source=SourceType.JIRA, message={})
-        result = await jira_manager.is_job_requested(message, mock_view)
+        result = await jira_manager.is_repository_specified(message, mock_view)
 
         assert result is False
 
