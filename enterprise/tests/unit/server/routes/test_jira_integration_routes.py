@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,6 +21,7 @@ from server.routes.integration.jira import (
     jira_events,
     unlink_workspace,
     validate_workspace_integration,
+    verify_jira_signature,
 )
 
 
@@ -392,6 +395,225 @@ async def test_jira_events_general_exception(mock_redis, mock_verify, mock_reque
         assert response.status_code == 500
         body = json.loads(response.body)
         assert 'Internal server error processing webhook' in body['error']
+
+
+# Test verify_jira_signature
+class TestVerifyJiraSignature:
+    """Test Jira webhook signature verification."""
+
+    @pytest.fixture
+    def sample_payload(self):
+        """Sample webhook payload with comment_created event."""
+        return {
+            'webhookEvent': 'comment_created',
+            'comment': {
+                'body': 'Test comment @openhands',
+                'author': {
+                    'emailAddress': 'user@test.com',
+                    'displayName': 'Test User',
+                    'self': 'https://test.atlassian.net/rest/api/2/user?accountId=123',
+                },
+            },
+            'issue': {
+                'id': '12345',
+                'key': 'TEST-123',
+                'self': 'https://test.atlassian.net/rest/api/2/issue/12345',
+            },
+        }
+
+    @pytest.fixture
+    def mock_workspace(self):
+        """Create a mock workspace."""
+        workspace = MagicMock()
+        workspace.id = 1
+        workspace.name = 'test.atlassian.net'
+        workspace.status = 'active'
+        workspace.webhook_secret = 'encrypted_secret'
+        return workspace
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'signature,expected_detail',
+        [
+            (None, 'x-hub-signature-256 header is missing!'),
+            ('', 'x-hub-signature-256 header is missing!'),
+        ],
+        ids=['signature_none', 'signature_empty'],
+    )
+    async def test_missing_signature(self, signature, expected_detail, sample_payload):
+        """Test that missing or empty signature raises HTTPException."""
+        body = json.dumps(sample_payload).encode()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_jira_signature(body, signature, sample_payload)
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == expected_detail
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'payload',
+        [
+            {'webhookEvent': 'unknown_event'},
+            {'webhookEvent': 'comment_created', 'comment': {}},
+            {'webhookEvent': 'comment_created', 'comment': {'author': {}}},
+            {'webhookEvent': 'jira:issue_updated', 'user': {}},
+            {},
+        ],
+        ids=[
+            'unknown_event',
+            'missing_author',
+            'missing_self_url',
+            'issue_updated_missing_self',
+            'empty_payload',
+        ],
+    )
+    @patch('server.routes.integration.jira.jira_manager')
+    async def test_workspace_name_not_found(self, mock_manager, payload):
+        """Test that missing workspace name in payload raises HTTPException."""
+        mock_manager.get_workspace_name_from_payload.return_value = None
+        body = json.dumps(payload).encode()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_jira_signature(body, 'valid_signature', payload)
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == 'Workspace name not found in payload'
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.jira.jira_manager')
+    async def test_workspace_not_found_in_database(self, mock_manager, sample_payload):
+        """Test that workspace not found in database raises HTTPException."""
+        mock_manager.get_workspace_name_from_payload.return_value = 'test.atlassian.net'
+        mock_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=None
+        )
+        body = json.dumps(sample_payload).encode()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_jira_signature(body, 'valid_signature', sample_payload)
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == 'Unidentified workspace'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'workspace_status',
+        ['inactive', 'disabled', 'pending'],
+        ids=['inactive', 'disabled', 'pending'],
+    )
+    @patch('server.routes.integration.jira.jira_manager')
+    async def test_workspace_not_active(
+        self, mock_manager, workspace_status, sample_payload, mock_workspace
+    ):
+        """Test that inactive workspace raises HTTPException."""
+        mock_workspace.status = workspace_status
+        mock_manager.get_workspace_name_from_payload.return_value = 'test.atlassian.net'
+        mock_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=mock_workspace
+        )
+        body = json.dumps(sample_payload).encode()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_jira_signature(body, 'valid_signature', sample_payload)
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == 'Workspace is inactive'
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.jira.token_manager')
+    @patch('server.routes.integration.jira.jira_manager')
+    async def test_signature_mismatch(
+        self, mock_manager, mock_token_mgr, sample_payload, mock_workspace
+    ):
+        """Test that signature mismatch raises HTTPException."""
+        mock_manager.get_workspace_name_from_payload.return_value = 'test.atlassian.net'
+        mock_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=mock_workspace
+        )
+        mock_token_mgr.decrypt_text.return_value = 'webhook_secret'
+        body = json.dumps(sample_payload).encode()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_jira_signature(body, 'invalid_signature', sample_payload)
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "Request signatures didn't match!"
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.jira.token_manager')
+    @patch('server.routes.integration.jira.jira_manager')
+    async def test_valid_signature(
+        self, mock_manager, mock_token_mgr, sample_payload, mock_workspace
+    ):
+        """Test that valid signature passes verification."""
+        webhook_secret = 'webhook_secret'
+        mock_manager.get_workspace_name_from_payload.return_value = 'test.atlassian.net'
+        mock_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=mock_workspace
+        )
+        mock_token_mgr.decrypt_text.return_value = webhook_secret
+
+        body = json.dumps(sample_payload).encode()
+        valid_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        # Should not raise any exception
+        result = await verify_jira_signature(body, valid_signature, sample_payload)
+        assert result is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'event_type,payload_key,author_key',
+        [
+            ('comment_created', 'comment', 'author'),
+            ('jira:issue_updated', 'user', None),
+        ],
+        ids=['comment_created', 'issue_updated'],
+    )
+    @patch('server.routes.integration.jira.token_manager')
+    @patch('server.routes.integration.jira.jira_manager')
+    async def test_valid_signature_different_events(
+        self,
+        mock_manager,
+        mock_token_mgr,
+        event_type,
+        payload_key,
+        author_key,
+        mock_workspace,
+    ):
+        """Test valid signature verification for different webhook events."""
+        webhook_secret = 'webhook_secret'
+        mock_manager.get_workspace_name_from_payload.return_value = 'test.atlassian.net'
+        mock_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=mock_workspace
+        )
+        mock_token_mgr.decrypt_text.return_value = webhook_secret
+
+        if event_type == 'comment_created':
+            payload = {
+                'webhookEvent': event_type,
+                'comment': {
+                    'body': 'Test',
+                    'author': {
+                        'self': 'https://test.atlassian.net/rest/api/2/user?id=1'
+                    },
+                },
+            }
+        else:
+            payload = {
+                'webhookEvent': event_type,
+                'user': {'self': 'https://test.atlassian.net/rest/api/2/user?id=1'},
+            }
+
+        body = json.dumps(payload).encode()
+        valid_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        result = await verify_jira_signature(body, valid_signature, payload)
+        assert result is None
 
 
 # Test create_jira_workspace error scenarios
