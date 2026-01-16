@@ -16,6 +16,7 @@ from server.auth.constants import JIRA_CLIENT_ID, JIRA_CLIENT_SECRET
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from server.constants import WEB_HOST
+from storage.jira_workspace import JiraWorkspace
 from storage.redis import create_redis_client
 
 from openhands.core.logger import openhands_logger as logger
@@ -124,19 +125,37 @@ jira_manager = JiraManager(token_manager)
 redis_client = create_redis_client()
 
 
-def verify_jira_signature(
-    payload: bytes, signature: str
-):
+async def verify_jira_signature(body: bytes, signature: str, payload: dict):
     if not signature:
         raise HTTPException(
             status_code=403, detail='x-hub-signature-256 header is missing!'
         )
 
-    workspace
+    workspace_name = jira_manager.get_workspace_name_from_payload(payload)
+    workspace: JiraWorkspace | None = (
+        jira_manager.integration_store.get_workspace_by_name(workspace_name)
+    )
+
+    if workspace is None:
+        logger.warning(f'[Jira] Could not identify workspace {workspace_name}')
+        raise HTTPException(status_code=403, details='Unidentified workspace')
+
+    if workspace.status != 'active':
+        logger.warning(
+            '[Jira] Workspace is inactive',
+            extra={
+                'jira_workspace_id': workspace.id,
+                'parsed_workspace_name': workspace.name,
+                'status': workspace.status,
+            },
+        )
+
+        raise HTTPException(status_code=403, details='Workspace is inactive')
 
     webhook_secret = token_manager.decrypt_text(workspace.webhook_secret)
-    expected_signature = hmac.new(webhook_secret.encode(), payload, hashlib.sha256).hexdigest()
-
+    expected_signature = hmac.new(
+        webhook_secret.encode(), body, hashlib.sha256
+    ).hexdigest()
 
     if not hmac.compare_digest(expected_signature, signature):
         raise HTTPException(status_code=403, detail="Request signatures didn't match!")
@@ -247,13 +266,12 @@ async def jira_events(
         )
 
     try:
-        signature_valid, signature, payload = await jira_manager.validate_request(
-            request
-        )
+        signature_header = request.headers.get('x-hub-signature')
+        signature = signature_header.split('=')[1] if signature_header else None
+        body = await request.body()
+        payload = await request.json()
 
-        if not signature_valid:
-            logger.warning('[Jira] Invalid webhook signature')
-            raise HTTPException(status_code=403, detail='Invalid webhook signature!')
+        await verify_jira_signature(body, signature, payload)
 
         # Check for duplicate requests using Redis
         key = f'jira:{signature}'
