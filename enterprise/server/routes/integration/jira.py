@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -120,6 +122,24 @@ jira_integration_router = APIRouter(prefix='/integration/jira')
 token_manager = TokenManager()
 jira_manager = JiraManager(token_manager)
 redis_client = create_redis_client()
+
+
+def verify_jira_signature(
+    payload: bytes, signature: str
+):
+    if not signature:
+        raise HTTPException(
+            status_code=403, detail='x-hub-signature-256 header is missing!'
+        )
+
+    workspace
+
+    webhook_secret = token_manager.decrypt_text(workspace.webhook_secret)
+    expected_signature = hmac.new(webhook_secret.encode(), payload, hashlib.sha256).hexdigest()
+
+
+    if not hmac.compare_digest(expected_signature, signature):
+        raise HTTPException(status_code=403, detail="Request signatures didn't match!")
 
 
 async def _handle_workspace_link_creation(
