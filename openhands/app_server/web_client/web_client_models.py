@@ -25,3 +25,4 @@ class WebClientConfig(DiscriminatedUnionMixin):
     auth_url: str | None
     recaptcha_site_key: str | None
     faulty_models: list[str]
+    error_message: str | None
