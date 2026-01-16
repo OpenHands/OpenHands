@@ -1126,6 +1126,7 @@ class TestDockerSandboxServiceInjectorFromEnv:
             assert config.sandbox.host_port == 4000
             assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'
 
+
 class TestDockerSandboxServiceHostNetwork:
     """Test cases for DockerSandboxService with host network mode."""
 
@@ -1151,7 +1152,10 @@ class TestDockerSandboxServiceHostNetwork:
         mock_container.attrs = {
             'Created': '2024-01-15T10:30:00.000000000Z',
             'Config': {
-                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value'],
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=test_session_key',
+                    'TEST_VAR=test_value',
+                ],
                 'WorkingDir': '/workspace',
             },
             'HostConfig': {'NetworkMode': 'host'},
@@ -1170,7 +1174,9 @@ class TestDockerSandboxServiceHostNetwork:
                 ExposedPort(
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
-                ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
+                ExposedPort(
+                    name=VSCODE, description='VSCode server', container_port=8001
+                ),
             ],
             health_check_path='/health',
             httpx_client=mock_httpx_client,
@@ -1223,7 +1229,10 @@ class TestDockerSandboxServiceHostNetwork:
         mock_container.attrs = {
             'Created': '2024-01-15T10:30:00.000000000Z',
             'Config': {
-                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value'],
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=test_session_key',
+                    'TEST_VAR=test_value',
+                ],
                 'WorkingDir': '/workspace',
             },
             'NetworkSettings': {
@@ -1246,7 +1255,9 @@ class TestDockerSandboxServiceHostNetwork:
                 ExposedPort(
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
-                ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
+                ExposedPort(
+                    name=VSCODE, description='VSCode server', container_port=8001
+                ),
             ],
             health_check_path='/health',
             httpx_client=mock_httpx_client,
@@ -1257,7 +1268,9 @@ class TestDockerSandboxServiceHostNetwork:
 
         with (
             patch.object(
-                service_without_host_network, '_find_unused_port', side_effect=[12345, 12346]
+                service_without_host_network,
+                '_find_unused_port',
+                side_effect=[12345, 12346],
             ),
             patch.object(
                 service_without_host_network, 'pause_old_sandboxes', return_value=[]
@@ -1293,7 +1306,10 @@ class TestDockerSandboxServiceHostNetwork:
         container.attrs = {
             'Created': '2024-01-15T10:30:00.000000000Z',
             'Config': {
-                'Env': ['OH_SESSION_API_KEYS_0=session_key_123', 'OTHER_VAR=other_value'],
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=session_key_123',
+                    'OTHER_VAR=other_value',
+                ],
                 'WorkingDir': '/workspace',
             },
             'HostConfig': {'NetworkMode': 'host'},
@@ -1310,7 +1326,9 @@ class TestDockerSandboxServiceHostNetwork:
                 ExposedPort(
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
-                ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
+                ExposedPort(
+                    name=VSCODE, description='VSCode server', container_port=8001
+                ),
             ],
             health_check_path='/health',
             httpx_client=mock_httpx_client,
@@ -1335,7 +1353,10 @@ class TestDockerSandboxServiceHostNetwork:
         assert agent_url.port == 8000
 
         vscode_url = next(url for url in result.exposed_urls if url.name == VSCODE)
-        assert vscode_url.url == 'http://localhost:8001/?tkn=session_key_123&folder=/workspace'
+        assert (
+            vscode_url.url
+            == 'http://localhost:8001/?tkn=session_key_123&folder=/workspace'
+        )
         assert vscode_url.port == 8001
 
     async def test_container_to_sandbox_info_bridge_network(
@@ -1350,7 +1371,10 @@ class TestDockerSandboxServiceHostNetwork:
         container.attrs = {
             'Created': '2024-01-15T10:30:00.000000000Z',
             'Config': {
-                'Env': ['OH_SESSION_API_KEYS_0=session_key_123', 'OTHER_VAR=other_value'],
+                'Env': [
+                    'OH_SESSION_API_KEYS_0=session_key_123',
+                    'OTHER_VAR=other_value',
+                ],
                 'WorkingDir': '/workspace',
             },
             'HostConfig': {'NetworkMode': 'bridge'},
@@ -1372,7 +1396,9 @@ class TestDockerSandboxServiceHostNetwork:
                 ExposedPort(
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
-                ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
+                ExposedPort(
+                    name=VSCODE, description='VSCode server', container_port=8001
+                ),
             ],
             health_check_path='/health',
             httpx_client=mock_httpx_client,
@@ -1398,7 +1424,10 @@ class TestDockerSandboxServiceHostNetwork:
         assert str(agent_url.port) == '12345'
 
         vscode_url = next(url for url in result.exposed_urls if url.name == VSCODE)
-        assert vscode_url.url == 'http://localhost:12346/?tkn=session_key_123&folder=/workspace'
+        assert (
+            vscode_url.url
+            == 'http://localhost:12346/?tkn=session_key_123&folder=/workspace'
+        )
         assert str(vscode_url.port) == '12346'
 
     def test_injector_use_host_network_default(self):
