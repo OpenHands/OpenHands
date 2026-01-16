@@ -79,7 +79,7 @@ from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
-from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
@@ -856,7 +856,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         system_message_suffix: str | None,
         mcp_config: dict,
         condenser_max_size: int | None,
-        secrets: dict | None = None,
+        secrets: dict[str, SecretValue] | None = None,
     ) -> Agent:
         """Create an agent with appropriate tools and context based on agent type.
 
@@ -966,7 +966,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         user: UserInfo,
         workspace: LocalWorkspace,
         initial_message: SendMessageRequest | None,
-        secrets: dict,
+        secrets: dict[str, SecretValue],
         sandbox: SandboxInfo,
         remote_workspace: AsyncRemoteWorkspace | None,
         selected_repository: str | None,

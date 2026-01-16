@@ -37,11 +37,12 @@ class ResolverUserContext(UserContext):
         return f'https://github.com/{repository}.git'
 
     async def get_latest_token(self, provider_type: ProviderType) -> str | None:
-        # Return the appropriate token from git_provider_tokens
-
+        # Return the appropriate token string from git_provider_tokens
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
         if provider_tokens:
-            return provider_tokens.get(provider_type)
+            provider_token = provider_tokens.get(provider_type)
+            if provider_token and provider_token.token:
+                return provider_token.token.get_secret_value()
         return None
 
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:

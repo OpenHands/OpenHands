@@ -48,7 +48,14 @@ from openhands.app_server.services.httpx_client_injector import HttpxClientInjec
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService, JwtServiceInjector
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
+from openhands.app_server.web_client.default_web_client_config_injector import (
+    DefaultWebClientConfigInjector,
+)
+from openhands.app_server.web_client.web_client_config_injector import (
+    WebClientConfigInjector,
+)
 from openhands.sdk.utils.models import OpenHandsModel
+from openhands.server.types import AppMode
 
 
 def get_default_persistence_dir() -> Path:
@@ -114,9 +121,12 @@ class AppServerConfig(OpenHandsModel):
             persistence_dir=get_default_persistence_dir()
         )
     )
-
     # Services
     lifespan: AppLifespanService | None = Field(default_factory=_get_default_lifespan)
+    app_mode: AppMode = AppMode.OPENHANDS
+    web_client: WebClientConfigInjector = Field(
+        default_factory=DefaultWebClientConfigInjector
+    )
 
 
 def config_from_env() -> AppServerConfig:
@@ -233,7 +243,20 @@ def config_from_env() -> AppServerConfig:
             config.sandbox_spec = DockerSandboxSpecServiceInjector()
 
     if config.app_conversation_info is None:
-        config.app_conversation_info = SQLAppConversationInfoServiceInjector()
+        # Use enterprise injector if running in SAAS mode
+        if 'saas' in (os.getenv('OPENHANDS_CONFIG_CLS') or '').lower():
+            try:
+                # Import enterprise injector dynamically
+                from enterprise.server.utils.saas_app_conversation_info_injector import (
+                    SaasAppConversationInfoServiceInjector,
+                )
+
+                config.app_conversation_info = SaasAppConversationInfoServiceInjector()
+            except ImportError:
+                # Fallback to OSS injector if enterprise module is not available
+                config.app_conversation_info = SQLAppConversationInfoServiceInjector()
+        else:
+            config.app_conversation_info = SQLAppConversationInfoServiceInjector()
 
     if config.app_conversation_start_task is None:
         config.app_conversation_start_task = (

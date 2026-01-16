@@ -67,9 +67,12 @@ async def get_security_analyzers() -> list[str]:
     return sorted(SecurityAnalyzers.keys())
 
 
-@app.get('/config', response_model=dict[str, Any])
+@app.get('/config', response_model=dict[str, Any], deprecated=True)
 async def get_config() -> dict[str, Any]:
     """Get current config.
+
+    This method has been replaced with the /v1/web-client/config endpoint,
+    and will be removed as part of the V0 cleanup on 2026-04-01
 
     Returns:
         dict[str, Any]: The current server configuration.
