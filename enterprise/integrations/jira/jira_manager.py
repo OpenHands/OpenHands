@@ -85,21 +85,19 @@ class JiraManager(Manager):
         return repos
 
     def get_workspace_name_from_payload(self, payload: dict) -> str:
-        """Verify Jira webhook signature."""
-        workspace_name = ''
-
+        """Extract workspace name from Jira webhook payload."""
         if payload.get('webhookEvent') == 'comment_created':
             selfUrl = payload.get('comment', {}).get('author', {}).get('self')
         elif payload.get('webhookEvent') == 'jira:issue_updated':
             selfUrl = payload.get('user', {}).get('self')
         else:
-            workspace_name = ''
+            return ''
+
+        if not selfUrl:
+            return ''
 
         parsedUrl = urlparse(selfUrl)
-        if parsedUrl.hostname:
-            workspace_name = parsedUrl.hostname
-
-        return workspace_name
+        return parsedUrl.hostname or ''
 
     def parse_webhook(self, payload: Dict) -> JobContext | None:
         event_type = payload.get('webhookEvent')
