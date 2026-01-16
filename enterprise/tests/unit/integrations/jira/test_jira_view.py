@@ -2,7 +2,7 @@
 Tests for Jira view classes and factory.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from integrations.jira.jira_types import StartingConvoException
