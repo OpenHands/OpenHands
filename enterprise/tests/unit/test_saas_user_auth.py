@@ -50,9 +50,7 @@ def create_mock_jwt_tokens(user_id='test_user_id', exp_offset=3600):
 @pytest.fixture
 def mock_token_manager():
     with patch('server.auth.saas_user_auth.token_manager') as mock_tm:
-        mock_tm.refresh = AsyncMock(
-            return_value=create_mock_jwt_tokens()
-        )
+        mock_tm.refresh = AsyncMock(return_value=create_mock_jwt_tokens())
         mock_tm.get_user_info_from_user_id = AsyncMock(
             return_value={
                 'federatedIdentities': [
