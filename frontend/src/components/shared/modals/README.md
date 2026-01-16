@@ -8,7 +8,7 @@ All modals in OpenHands are managed through a centralized Zustand store and rend
 
 - `src/stores/modal-store/modal-store.ts` - Zustand store managing modal stack
 - `src/stores/modal-store/types.ts` - Modal type definitions and props
-- `src/components/shared/modals/modal-root.tsx` - Single portal renderer with backdrop/ESC handling
+- `src/components/shared/modals/modal-orchestrator.tsx` - Single portal renderer with backdrop/ESC handling
 - Individual modal components (e.g., `settings-modal.tsx`, `feedback-modal.tsx`)
 
 ## Basic Usage
@@ -95,7 +95,7 @@ export function MyNewModal({ title, onConfirm }: MyNewModalProps) {
 
 ### 3. Register in ModalRoot
 
-In `src/components/shared/modals/modal-root.tsx`:
+In `src/components/shared/modals/modal-orchestrator.tsx`:
 
 ```typescript
 import { MyNewModal } from "./my-new-modal";

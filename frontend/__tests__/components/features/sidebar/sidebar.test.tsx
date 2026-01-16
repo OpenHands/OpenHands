@@ -10,6 +10,7 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { GetConfigResponse } from "#/api/option-service/option.types";
+import { ModalRoot } from "#/components/shared/modals/modal-orchestrator";
 
 // Helper to create mock config with sensible defaults
 const createMockConfig = (
@@ -40,14 +41,24 @@ const createMockConfig = (
 const ConversationRouterStub = createRoutesStub([
   {
     path: "/conversation/:conversationId",
-    Component: () => <Sidebar />,
+    Component: () => (
+      <>
+        <Sidebar />
+        <ModalRoot />
+      </>
+    ),
   },
 ]);
 
 const SettingsRouterStub = createRoutesStub([
   {
     path: "/settings",
-    Component: () => <Sidebar />,
+    Component: () => (
+      <>
+        <Sidebar />
+        <ModalRoot />
+      </>
+    ),
   },
 ]);
 
