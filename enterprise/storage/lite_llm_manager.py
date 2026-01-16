@@ -39,6 +39,7 @@ class LiteLlmManager:
         org_id: str,
         keycloak_user_id: str,
         oss_settings: Settings,
+        create_user: bool,
     ) -> Settings | None:
         logger.info(
             'SettingsStore:update_settings_with_litellm_default:start',
@@ -65,9 +66,10 @@ class LiteLlmManager:
                     client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
                 )
 
-                await LiteLlmManager._create_user(
-                    client, keycloak_user_info.get('email'), keycloak_user_id
-                )
+                if create_user:
+                    await LiteLlmManager._create_user(
+                        client, keycloak_user_info.get('email'), keycloak_user_id
+                    )
 
                 await LiteLlmManager._add_user_to_team(
                     client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET

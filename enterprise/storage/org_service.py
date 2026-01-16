@@ -58,7 +58,7 @@ class OrgService:
         """
         try:
             settings = await UserStore.create_default_settings(
-                org_id=str(org_id), user_id=user_id
+                org_id=str(org_id), user_id=user_id, create_user=False
             )
 
             if not settings:

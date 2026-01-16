@@ -113,7 +113,7 @@ class TestLiteLlmManager:
             with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None):
                 with patch('storage.lite_llm_manager.LITE_LLM_API_URL', None):
                     result = await LiteLlmManager.create_entries(
-                        'test-org-id', 'test-user-id', mock_settings
+                        'test-org-id', 'test-user-id', mock_settings, create_user=True
                     )
                     assert result is None
 
@@ -126,7 +126,7 @@ class TestLiteLlmManager:
                     'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
                 ):
                     result = await LiteLlmManager.create_entries(
-                        'test-org-id', 'test-user-id', mock_settings
+                        'test-org-id', 'test-user-id', mock_settings, create_user=True
                     )
 
                     assert result is not None
@@ -158,7 +158,10 @@ class TestLiteLlmManager:
                             mock_client.post.return_value = mock_response
 
                             result = await LiteLlmManager.create_entries(
-                                'test-org-id', 'test-user-id', mock_settings
+                                'test-org-id',
+                                'test-user-id',
+                                mock_settings,
+                                create_user=False,
                             )
 
                             assert result is not None
@@ -171,7 +174,7 @@ class TestLiteLlmManager:
 
                             # Verify API calls were made
                             assert (
-                                mock_client.post.call_count == 4
+                                mock_client.post.call_count == 3
                             )  # create_team, create_user, add_user_to_team, generate_key
 
     @pytest.mark.asyncio
