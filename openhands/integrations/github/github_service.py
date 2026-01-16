@@ -75,4 +75,30 @@ github_service_cls = os.environ.get(
     'OPENHANDS_GITHUB_SERVICE_CLS',
     'openhands.integrations.github.github_service.GitHubService',
 )
-GithubServiceImpl = get_impl(GitHubService, github_service_cls)
+
+# Lazy loading to avoid circular imports
+_github_service_impl = None
+
+
+def get_github_service_impl():
+    """Get the GitHub service implementation with lazy loading."""
+    global _github_service_impl
+    if _github_service_impl is None:
+        _github_service_impl = get_impl(GitHubService, github_service_cls)
+    return _github_service_impl
+
+
+# For backward compatibility, provide the implementation as a property
+class _GitHubServiceImplProxy:
+    """Proxy class to provide lazy loading for GithubServiceImpl."""
+
+    def __getattr__(self, name):
+        impl = get_github_service_impl()
+        return getattr(impl, name)
+
+    def __call__(self, *args, **kwargs):
+        impl = get_github_service_impl()
+        return impl(*args, **kwargs)
+
+
+GithubServiceImpl: type[GitHubService] = _GitHubServiceImplProxy()  # type: ignore[assignment]

@@ -64,4 +64,30 @@ bitbucket_service_cls = os.environ.get(
     'OPENHANDS_BITBUCKET_SERVICE_CLS',
     'openhands.integrations.bitbucket.bitbucket_service.BitBucketService',
 )
-BitBucketServiceImpl = get_impl(BitBucketService, bitbucket_service_cls)
+
+# Lazy loading to avoid circular imports
+_bitbucket_service_impl = None
+
+
+def get_bitbucket_service_impl():
+    """Get the BitBucket service implementation with lazy loading."""
+    global _bitbucket_service_impl
+    if _bitbucket_service_impl is None:
+        _bitbucket_service_impl = get_impl(BitBucketService, bitbucket_service_cls)
+    return _bitbucket_service_impl
+
+
+# For backward compatibility, provide the implementation as a property
+class _BitBucketServiceImplProxy:
+    """Proxy class to provide lazy loading for BitBucketServiceImpl."""
+
+    def __getattr__(self, name):
+        impl = get_bitbucket_service_impl()
+        return getattr(impl, name)
+
+    def __call__(self, *args, **kwargs):
+        impl = get_bitbucket_service_impl()
+        return impl(*args, **kwargs)
+
+
+BitBucketServiceImpl: type[BitBucketService] = _BitBucketServiceImplProxy()  # type: ignore[assignment]
