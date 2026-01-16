@@ -84,7 +84,7 @@ class JiraManager(Manager):
         )
         return repos
 
-    async def get_workspace_name_from_payload(self, payload: dict) -> str:
+    def get_workspace_name_from_payload(self, payload: dict) -> str:
         """Verify Jira webhook signature."""
         workspace_name = ''
 
