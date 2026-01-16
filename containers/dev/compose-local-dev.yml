@@ -1,0 +1,21 @@
+services:  
+  openhands-app:  
+    image: ghcr.io/openhands/openhands:dev  
+    container_name: openhands-app  
+    environment:  
+      - WEB_HOST=100.117.106.52:3000
+      - SANDBOX_CONTAINER_URL_PATTERN=http://100.117.106.52:{port}
+      - ALLOW_CORS_ORIGINS="http://100.117.106.52:*"
+      - OH_MCP_API_KEY=sk-oh-zyr0LhFEPHYGy4E7tBNs4y9qVqJG2jsH
+      - 'MCP_SHTTP_SERVERS=[{"url": "http://100.117.106.52:3000/mcp/mcp", "api_key": "sk-oh-zyr0LhFEPHYGy4E7tBNs4y9qVqJG2jsH"}]'
+      - SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/openhands/runtime:oh_v1.1.0_image_nikolaik_s_python-nodejs_tag_python3.12-nodejs22  
+      - LOG_ALL_EVENTS=true  
+      - OH_SANDBOX_KEEP_RUNTIME_ALIVE=true  
+      - OH_SANDBOX_PAUSE_CLOSED_RUNTIMES=true  
+    ports:  
+      - "3000:3000"  
+    volumes:  
+      - /var/run/docker.sock:/var/run/docker.sock  
+      - ~/.openhands:/.openhands  
+    extra_hosts:  
+      - "host.docker.internal:host-gateway"  
