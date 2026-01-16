@@ -1,5 +1,6 @@
 """Configuration for the OpenHands App Server."""
 
+import ipaddress
 import os
 from pathlib import Path
 from typing import AsyncContextManager
@@ -67,11 +68,30 @@ def get_default_persistence_dir() -> Path:
 def get_default_web_url() -> str | None:
     """Get legacy web host parameter.
 
-    If present, we assume we are running under https.
+    Use http for localhost, IPs and docker internal.
+    Otherwise default to https.
     """
     web_host = os.getenv('WEB_HOST')
     if not web_host:
         return None
+
+    if web_host.startswith('http://') or web_host.startswith('https://'):
+        return web_host
+
+    host_only = web_host.split(':')[0]
+
+    http_allowlist = ['localhost', '127.0.0.1', 'host.docker.internal']
+
+    is_ip = False
+    try:
+        ipaddress.ip_address(host_only)
+        is_ip = True
+    except ValueError:
+        is_ip = False
+
+    if host_only in http_allowlist or is_ip:
+        return f'http://{web_host}'
+
     return f'https://{web_host}'
 
 
