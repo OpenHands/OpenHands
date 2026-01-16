@@ -24,6 +24,7 @@ from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
+from server.auth.token_manager import TokenManager
 
 # The max possible time to wait for another process to finish creating a user before retrying
 _REDIS_CREATE_TIMEOUT_SECONDS = 30
@@ -347,8 +348,6 @@ class UserStore:
                 .first()
             )
             if user_settings:
-                from server.auth.token_manager import TokenManager
-
                 token_manager = TokenManager()
                 user_info = call_async_from_sync(
                     token_manager.get_user_info_from_user_id,
@@ -411,8 +410,6 @@ class UserStore:
                 .first()
             )
             if user_settings:
-                from server.auth.token_manager import TokenManager
-
                 token_manager = TokenManager()
                 user_info = await token_manager.get_user_info_from_user_id(user_id)
                 user = await UserStore.migrate_user(
