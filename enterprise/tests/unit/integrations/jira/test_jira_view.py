@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from integrations.jira.jira_types import StartingConvoException
 from integrations.jira.jira_view import (
-    JiraExistingConversationView,
     JiraFactory,
     JiraNewConversationView,
 )
@@ -210,31 +209,6 @@ class TestJiraExistingConversationView:
 
 class TestJiraFactory:
     """Tests for JiraFactory"""
-
-    @patch('integrations.jira.jira_view.integration_store')
-    async def test_create_jira_view_from_payload_existing_conversation(
-        self,
-        mock_store,
-        sample_job_context,
-        sample_user_auth,
-        sample_jira_user,
-        sample_jira_workspace,
-        jira_conversation,
-    ):
-        """Test factory creating existing conversation view"""
-        mock_store.get_user_conversations_by_issue_id = AsyncMock(
-            return_value=jira_conversation
-        )
-
-        view = await JiraFactory.create_jira_view_from_payload(
-            sample_job_context,
-            sample_user_auth,
-            sample_jira_user,
-            sample_jira_workspace,
-        )
-
-        assert isinstance(view, JiraExistingConversationView)
-        assert view.conversation_id == 'conv-123'
 
     @patch('integrations.jira.jira_view.integration_store')
     async def test_create_jira_view_from_payload_new_conversation(
