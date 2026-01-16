@@ -2240,7 +2240,7 @@
     "uk": "Браузер"
   },
   "BROWSER$EMPTY_MESSAGE": {
-    "en": "If you tell OpenHands to start a web server, the app will appear here.",
+    "en": "Your web application will appear here once running. Ask OpenHands to start your dev server (e.g., 'run npm start' or 'start the Flask server on port 5000').",
     "ja": "OpenHandsにWebサーバーの起動を指示すると、ここにアプリが表示されます。",
     "zh-CN": "如果您告诉OpenHands启动Web服务器，应用将在此处显示。",
     "zh-TW": "如果您要求 OpenHands 啟動網頁伺服器，應用程式將會顯示在此處。",
@@ -8688,7 +8688,7 @@
     "uk": "Відключено. Будь ласка, оновіть сторінку"
   },
   "BROWSER$NO_PAGE_LOADED": {
-    "en": "No page loaded",
+    "en": "No page loaded. Ask OpenHands to browse a URL or navigate to a website.",
     "ja": "ブラウザは空です",
     "zh-CN": "页面未加载",
     "zh-TW": "未載入任何頁面",
