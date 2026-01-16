@@ -916,7 +916,7 @@ class TestGetOrgRepositoryUrl:
         # Assert
         assert result == expected_url
         mock_user_context.get_authenticated_git_url.assert_called_once_with(
-            'owner/.openhands'
+            'owner/.openhands', is_optional=True
         )
 
     @pytest.mark.asyncio

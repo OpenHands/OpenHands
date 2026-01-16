@@ -465,7 +465,9 @@ async def _get_org_repository_url(
         Authenticated Git URL if successful, None otherwise
     """
     try:
-        remote_url = await user_context.get_authenticated_git_url(org_openhands_repo)
+        remote_url = await user_context.get_authenticated_git_url(
+            org_openhands_repo, is_optional=True
+        )
         return remote_url
     except AuthenticationError as e:
         _logger.debug(
