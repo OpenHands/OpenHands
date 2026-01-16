@@ -79,6 +79,7 @@ class DockerSandboxService(SandboxService):
     health_check_path: str | None
     httpx_client: httpx.AsyncClient
     max_num_sandboxes: int
+    use_host_network: bool = False
     extra_hosts: dict[str, str] = field(default_factory=dict)
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
@@ -138,36 +139,61 @@ class DockerSandboxService(SandboxService):
             env = self._get_container_env_vars(container)
             session_api_key = env.get(SESSION_API_KEY_VARIABLE)
 
-            # Get the first exposed port mapping
+            # Check if container is using host network mode
+            network_mode = container.attrs.get('HostConfig', {}).get('NetworkMode', '')
+            is_host_network = network_mode == 'host'
+
             exposed_urls = []
-            port_bindings = container.attrs.get('NetworkSettings', {}).get('Ports', {})
-            if port_bindings:
-                for container_port, host_bindings in port_bindings.items():
-                    if host_bindings:
-                        host_port = host_bindings[0]['HostPort']
-                        exposed_port = next(
-                            (
-                                exposed_port
-                                for exposed_port in self.exposed_ports
-                                if container_port
-                                == f'{exposed_port.container_port}/tcp'
-                            ),
-                            None,
+
+            if is_host_network:
+                # In host network mode, container ports are directly accessible on host
+                for exposed_port in self.exposed_ports:
+                    port = exposed_port.container_port
+                    url = self.container_url_pattern.format(port=port)
+
+                    # VSCode URLs require the api_key and working dir
+                    if exposed_port.name == VSCODE:
+                        url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+
+                    exposed_urls.append(
+                        ExposedUrl(
+                            name=exposed_port.name,
+                            url=url,
+                            port=port,
                         )
-                        if exposed_port:
-                            url = self.container_url_pattern.format(port=host_port)
-
-                            # VSCode URLs require the api_key and working dir
-                            if exposed_port.name == VSCODE:
-                                url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
-
-                            exposed_urls.append(
-                                ExposedUrl(
-                                    name=exposed_port.name,
-                                    url=url,
-                                    port=host_port,
-                                )
+                    )
+            else:
+                # Bridge network mode - use dynamic port mappings
+                port_bindings = container.attrs.get('NetworkSettings', {}).get(
+                    'Ports', {}
+                )
+                if port_bindings:
+                    for container_port, host_bindings in port_bindings.items():
+                        if host_bindings:
+                            host_port = host_bindings[0]['HostPort']
+                            exposed_port = next(
+                                (
+                                    exposed_port
+                                    for exposed_port in self.exposed_ports
+                                    if container_port
+                                    == f'{exposed_port.container_port}/tcp'
+                                ),
+                                None,
                             )
+                            if exposed_port:
+                                url = self.container_url_pattern.format(port=host_port)
+
+                                # VSCode URLs require the api_key and working dir
+                                if exposed_port.name == VSCODE:
+                                    url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+
+                                exposed_urls.append(
+                                    ExposedUrl(
+                                        name=exposed_port.name,
+                                        url=url,
+                                        port=host_port,
+                                    )
+                                )
 
         return SandboxInfo(
             id=container.name,
@@ -326,13 +352,28 @@ class DockerSandboxService(SandboxService):
             f'http://host.docker.internal:{self.host_port}/api/v1/webhooks'
         )
 
-        # Prepare port mappings and add port environment variables
-        port_mappings = {}
-        for exposed_port in self.exposed_ports:
-            host_port = self._find_unused_port()
-            port_mappings[exposed_port.container_port] = host_port
-            # Add port as environment variable
-            env_vars[exposed_port.name] = str(host_port)
+        # Determine network mode and prepare port mappings
+        network_mode: str | None = 'host' if self.use_host_network else None
+        port_mappings: dict[int, int] | None = None
+
+        if self.use_host_network:
+            # In host network mode, container ports are directly accessible on host
+            # No port mapping needed, just set environment variables with container ports
+            _logger.info(
+                'Using host network mode. Container ports will be directly accessible on host. '
+                'If you are using MacOS, please make sure you have the latest version of Docker Desktop '
+                'and enabled host network feature: https://docs.docker.com/network/drivers/host/#docker-desktop'
+            )
+            for exposed_port in self.exposed_ports:
+                env_vars[exposed_port.name] = str(exposed_port.container_port)
+        else:
+            # Bridge network mode - find unused ports and create mappings
+            port_mappings = {}
+            for exposed_port in self.exposed_ports:
+                host_port = self._find_unused_port()
+                port_mappings[exposed_port.container_port] = host_port
+                # Add port as environment variable
+                env_vars[exposed_port.name] = str(host_port)
 
         # Prepare labels
         labels = {
@@ -357,6 +398,7 @@ class DockerSandboxService(SandboxService):
                 name=container_name,
                 environment=env_vars,
                 ports=port_mappings,
+                network_mode=network_mode,
                 volumes=volumes,
                 working_dir=sandbox_spec.working_dir,
                 labels=labels,
@@ -511,6 +553,18 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Format: {"hostname": "ip_or_gateway"}'
         ),
     )
+    use_host_network: bool = Field(
+        default=False,
+        description=(
+            'Whether to use host network mode for Docker containers. '
+            'When enabled, containers share the host network stack, making container ports '
+            'directly accessible on the host without port mapping. '
+            'This is useful for reverse proxy deployments where the proxy needs to access '
+            'container ports directly (e.g., /runtime/{port}/ -> localhost:{port}). '
+            'Note: On macOS, requires Docker Desktop 4.29.0 or later. '
+            'Configure via OH_SANDBOX_USE_HOST_NETWORK environment variable.'
+        ),
+    )
     startup_grace_seconds: int = Field(
         default=STARTUP_GRACE_SECONDS,
         description=(
@@ -542,6 +596,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 health_check_path=self.health_check_path,
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
+                use_host_network=self.use_host_network,
                 extra_hosts=self.extra_hosts,
                 startup_grace_seconds=self.startup_grace_seconds,
             )

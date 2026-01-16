@@ -1125,3 +1125,296 @@ class TestDockerSandboxServiceInjectorFromEnv:
             assert config.sandbox is not None
             assert config.sandbox.host_port == 4000
             assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'
+
+class TestDockerSandboxServiceHostNetwork:
+    """Test cases for DockerSandboxService with host network mode."""
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_with_host_network(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test starting sandbox with host network mode enabled."""
+        # Setup
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value'],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'host'},
+            'NetworkSettings': {'Ports': {}},
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service with use_host_network=True
+        service_with_host_network = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+                ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            use_host_network=True,
+            docker_client=mock_docker_client,
+        )
+
+        with patch.object(
+            service_with_host_network, 'pause_old_sandboxes', return_value=[]
+        ):
+            # Execute
+            result = await service_with_host_network.start_sandbox()
+
+        # Verify
+        assert result is not None
+        assert result.id == 'oh-test-test_container_id'
+
+        # Verify container was created with host network mode
+        mock_docker_client.containers.run.assert_called_once()
+        call_args = mock_docker_client.containers.run.call_args
+
+        # Should use host network mode
+        assert call_args[1]['network_mode'] == 'host'
+        # Should NOT have port mappings in host network mode
+        assert call_args[1]['ports'] is None
+        # Environment variables should have container ports (not dynamic host ports)
+        assert call_args[1]['environment'][AGENT_SERVER] == '8000'
+        assert call_args[1]['environment'][VSCODE] == '8001'
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_without_host_network(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test starting sandbox with host network mode disabled (default bridge mode)."""
+        # Setup
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value'],
+                'WorkingDir': '/workspace',
+            },
+            'NetworkSettings': {
+                'Ports': {
+                    '8000/tcp': [{'HostPort': '12345'}],
+                    '8001/tcp': [{'HostPort': '12346'}],
+                }
+            },
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service with use_host_network=False (default)
+        service_without_host_network = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+                ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            use_host_network=False,
+            docker_client=mock_docker_client,
+        )
+
+        with (
+            patch.object(
+                service_without_host_network, '_find_unused_port', side_effect=[12345, 12346]
+            ),
+            patch.object(
+                service_without_host_network, 'pause_old_sandboxes', return_value=[]
+            ),
+        ):
+            # Execute
+            result = await service_without_host_network.start_sandbox()
+
+        # Verify
+        assert result is not None
+
+        # Verify container was created without host network mode
+        mock_docker_client.containers.run.assert_called_once()
+        call_args = mock_docker_client.containers.run.call_args
+
+        # Should NOT use host network mode
+        assert call_args[1]['network_mode'] is None
+        # Should have port mappings
+        assert call_args[1]['ports'] == {8000: 12345, 8001: 12346}
+        # Environment variables should have dynamic host ports
+        assert call_args[1]['environment'][AGENT_SERVER] == '12345'
+        assert call_args[1]['environment'][VSCODE] == '12346'
+
+    async def test_container_to_sandbox_info_host_network(
+        self, mock_sandbox_spec_service, mock_httpx_client, mock_docker_client
+    ):
+        """Test conversion of host network container to SandboxInfo."""
+        # Setup a container with host network mode
+        container = MagicMock()
+        container.name = 'oh-test-abc123'
+        container.status = 'running'
+        container.image.tags = ['spec456']
+        container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=session_key_123', 'OTHER_VAR=other_value'],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'host'},
+            'NetworkSettings': {'Ports': {}},
+        }
+
+        service = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+                ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            use_host_network=True,
+            docker_client=mock_docker_client,
+        )
+
+        # Execute
+        result = await service._container_to_sandbox_info(container)
+
+        # Verify
+        assert result is not None
+        assert result.id == 'oh-test-abc123'
+        assert result.status == SandboxStatus.RUNNING
+        assert result.session_api_key == 'session_key_123'
+        assert len(result.exposed_urls) == 2
+
+        # Check exposed URLs use container ports directly
+        agent_url = next(url for url in result.exposed_urls if url.name == AGENT_SERVER)
+        assert agent_url.url == 'http://localhost:8000'
+        assert agent_url.port == 8000
+
+        vscode_url = next(url for url in result.exposed_urls if url.name == VSCODE)
+        assert vscode_url.url == 'http://localhost:8001/?tkn=session_key_123&folder=/workspace'
+        assert vscode_url.port == 8001
+
+    async def test_container_to_sandbox_info_bridge_network(
+        self, mock_sandbox_spec_service, mock_httpx_client, mock_docker_client
+    ):
+        """Test conversion of bridge network container to SandboxInfo."""
+        # Setup a container with bridge network mode (default)
+        container = MagicMock()
+        container.name = 'oh-test-abc123'
+        container.status = 'running'
+        container.image.tags = ['spec456']
+        container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=session_key_123', 'OTHER_VAR=other_value'],
+                'WorkingDir': '/workspace',
+            },
+            'HostConfig': {'NetworkMode': 'bridge'},
+            'NetworkSettings': {
+                'Ports': {
+                    '8000/tcp': [{'HostPort': '12345'}],
+                    '8001/tcp': [{'HostPort': '12346'}],
+                }
+            },
+        }
+
+        service = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+                ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            use_host_network=False,
+            docker_client=mock_docker_client,
+        )
+
+        # Execute
+        result = await service._container_to_sandbox_info(container)
+
+        # Verify
+        assert result is not None
+        assert result.id == 'oh-test-abc123'
+        assert result.status == SandboxStatus.RUNNING
+        assert result.session_api_key == 'session_key_123'
+        assert len(result.exposed_urls) == 2
+
+        # Check exposed URLs use dynamic host ports
+        agent_url = next(url for url in result.exposed_urls if url.name == AGENT_SERVER)
+        assert agent_url.url == 'http://localhost:12345'
+        # Port comes from Docker port bindings and may be int or str
+        assert str(agent_url.port) == '12345'
+
+        vscode_url = next(url for url in result.exposed_urls if url.name == VSCODE)
+        assert vscode_url.url == 'http://localhost:12346/?tkn=session_key_123&folder=/workspace'
+        assert str(vscode_url.port) == '12346'
+
+    def test_injector_use_host_network_default(self):
+        """Test DockerSandboxServiceInjector defaults use_host_network to False."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector()
+        assert injector.use_host_network is False
+
+    def test_injector_use_host_network_enabled(self):
+        """Test DockerSandboxServiceInjector with use_host_network enabled."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector(use_host_network=True)
+        assert injector.use_host_network is True
