@@ -5,7 +5,6 @@ from threading import Thread
 
 from fastapi import APIRouter, FastAPI
 from sqlalchemy import func, select
-
 from storage.database import a_session_maker, get_engine, session_maker
 from storage.user import User
 
