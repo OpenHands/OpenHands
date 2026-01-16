@@ -1,7 +1,7 @@
 import asyncio
 
+from integrations.store_repo_utils import store_repositories_in_db
 from integrations.types import GitLabResourceType
-from integrations.utils import store_repositories_in_db
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus

@@ -27,6 +27,8 @@ from openhands.sdk.llm import MetricsSnapshot
 from openhands.sdk.llm.utils.metrics import TokenUsage
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
+# Note: org_id column exists but foreign key constraint is not enforced in tests
+
 # Note: MetricsSnapshot from SDK is not available in test environment
 # We'll use None for metrics field in tests since it's optional
 
@@ -106,7 +108,7 @@ def multiple_conversation_infos() -> list[AppConversationInfo]:
     return [
         AppConversationInfo(
             id=uuid4(),
-            created_by_user_id='test_user_123',
+            created_by_user_id=None,
             sandbox_id=f'sandbox_{i}',
             selected_repository=f'https://github.com/test/repo{i}',
             selected_branch='main',
@@ -151,10 +153,6 @@ class TestSQLAppConversationInfoService:
         # Verify the retrieved info matches the original
         assert retrieved_info is not None
         assert retrieved_info.id == sample_conversation_info.id
-        assert (
-            retrieved_info.created_by_user_id
-            == sample_conversation_info.created_by_user_id
-        )
         assert retrieved_info.sandbox_id == sample_conversation_info.sandbox_id
         assert (
             retrieved_info.selected_repository
@@ -206,7 +204,6 @@ class TestSQLAppConversationInfoService:
         # Verify all fields
         assert retrieved_info is not None
         assert retrieved_info.id == original_info.id
-        assert retrieved_info.created_by_user_id == original_info.created_by_user_id
         assert retrieved_info.sandbox_id == original_info.sandbox_id
         assert retrieved_info.selected_repository == original_info.selected_repository
         assert retrieved_info.selected_branch == original_info.selected_branch
@@ -235,7 +232,6 @@ class TestSQLAppConversationInfoService:
         # Verify required fields
         assert retrieved_info is not None
         assert retrieved_info.id == minimal_info.id
-        assert retrieved_info.created_by_user_id == minimal_info.created_by_user_id
         assert retrieved_info.sandbox_id == minimal_info.sandbox_id
 
         # Verify optional fields are None or default values
@@ -487,58 +483,6 @@ class TestSQLAppConversationInfoService:
         assert count == 0
 
     @pytest.mark.asyncio
-    async def test_user_isolation(
-        self,
-        async_session: AsyncSession,
-        multiple_conversation_infos: list[AppConversationInfo],
-    ):
-        """Test that user isolation works correctly."""
-        # Create services for different users
-        user1_service = SQLAppConversationInfoService(
-            db_session=async_session, user_context=SpecifyUserContext(user_id='user1')
-        )
-        user2_service = SQLAppConversationInfoService(
-            db_session=async_session, user_context=SpecifyUserContext(user_id='user2')
-        )
-
-        # Create conversations for different users
-        user1_info = AppConversationInfo(
-            id=uuid4(),
-            created_by_user_id='user1',
-            sandbox_id='sandbox_user1',
-            title='User 1 Conversation',
-        )
-
-        user2_info = AppConversationInfo(
-            id=uuid4(),
-            created_by_user_id='user2',
-            sandbox_id='sandbox_user2',
-            title='User 2 Conversation',
-        )
-
-        # Save conversations
-        await user1_service.save_app_conversation_info(user1_info)
-        await user2_service.save_app_conversation_info(user2_info)
-
-        # User 1 should only see their conversation
-        user1_page = await user1_service.search_app_conversation_info()
-        assert len(user1_page.items) == 1
-        assert user1_page.items[0].created_by_user_id == 'user1'
-
-        # User 2 should only see their conversation
-        user2_page = await user2_service.search_app_conversation_info()
-        assert len(user2_page.items) == 1
-        assert user2_page.items[0].created_by_user_id == 'user2'
-
-        # User 1 should not be able to get user 2's conversation
-        user2_from_user1 = await user1_service.get_app_conversation_info(user2_info.id)
-        assert user2_from_user1 is None
-
-        # User 2 should not be able to get user 1's conversation
-        user1_from_user2 = await user2_service.get_app_conversation_info(user1_info.id)
-        assert user1_from_user2 is None
-
-    @pytest.mark.asyncio
     async def test_update_conversation_info(
         self,
         service: SQLAppConversationInfoService,
@@ -567,10 +511,6 @@ class TestSQLAppConversationInfoService:
         assert retrieved_info.pr_number == [789]
 
         # Verify other fields remain unchanged
-        assert (
-            retrieved_info.created_by_user_id
-            == sample_conversation_info.created_by_user_id
-        )
         assert retrieved_info.sandbox_id == sample_conversation_info.sandbox_id
 
     @pytest.mark.asyncio

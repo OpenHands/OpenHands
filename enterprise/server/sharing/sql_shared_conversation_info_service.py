@@ -241,7 +241,7 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
 
         return SharedConversation(
             id=UUID(stored.conversation_id),
-            created_by_user_id=stored.user_id if stored.user_id else None,
+            created_by_user_id=None,  # user_id is no longer stored in conversation metadata
             sandbox_id=stored.sandbox_id,
             selected_repository=stored.selected_repository,
             selected_branch=stored.selected_branch,
