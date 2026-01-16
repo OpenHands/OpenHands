@@ -21,7 +21,6 @@ from server.logger import logger
 from storage.user_settings import UserSettings
 
 from openhands.server.settings import Settings
-from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.http_session import httpx_verify_option
 
 # Timeout in seconds for BYOR key verification requests to LiteLLM
@@ -676,7 +675,7 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
-        user = await call_sync_from_async(UserStore.get_user_by_id, keycloak_user_id)
+        user = await UserStore.get_user_by_id_async(keycloak_user_id)
         if not user:
             return {}
 

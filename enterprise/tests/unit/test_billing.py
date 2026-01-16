@@ -81,7 +81,8 @@ async def test_get_credits_lite_llm_error():
     with (
         patch('integrations.stripe_service.STRIPE_API_KEY', 'mock_key'),
         patch(
-            'storage.user_store.UserStore.get_user_by_id',
+            'storage.user_store.UserStore.get_user_by_id_async',
+            new_callable=AsyncMock,
             return_value=MagicMock(current_org_id='mock_org_id'),
         ),
         patch(
@@ -112,7 +113,8 @@ async def test_get_credits_success():
         patch('integrations.stripe_service.STRIPE_API_KEY', 'mock_key'),
         patch('httpx.AsyncClient', return_value=mock_client),
         patch(
-            'storage.user_store.UserStore.get_user_by_id',
+            'storage.user_store.UserStore.get_user_by_id_async',
+            new_callable=AsyncMock,
             return_value=MagicMock(current_org_id='mock_org_id'),
         ),
         patch(
@@ -301,7 +303,8 @@ async def test_success_callback_success():
         patch('server.routes.billing.session_maker') as mock_session_maker,
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
-            'storage.user_store.UserStore.get_user_by_id',
+            'storage.user_store.UserStore.get_user_by_id_async',
+            new_callable=AsyncMock,
             return_value=MagicMock(current_org_id='mock_org_id'),
         ),
         patch(
@@ -358,7 +361,8 @@ async def test_success_callback_lite_llm_error():
         patch('server.routes.billing.session_maker') as mock_session_maker,
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
-            'storage.user_store.UserStore.get_user_by_id',
+            'storage.user_store.UserStore.get_user_by_id_async',
+            new_callable=AsyncMock,
             return_value=MagicMock(current_org_id='mock_org_id'),
         ),
         patch(
