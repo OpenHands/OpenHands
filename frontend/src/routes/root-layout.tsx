@@ -174,7 +174,6 @@ export default function MainApp() {
   const shouldRedirectToLogin =
     config.isLoading ||
     isAuthLoading ||
-    isFetchingAuth ||
     (!isAuthed &&
       !isAuthError &&
       !isOnTosPage &&

@@ -16,7 +16,7 @@ import { cn } from "#/utils/utils";
 import { useModalStore } from "#/stores/modal-store";
 
 export function Sidebar() {
-  const location = useLocation();
+  const { pathname } = useLocation();
   const user = useGitUser();
   const { data: config } = useConfig();
   const {
@@ -34,7 +34,7 @@ export function Sidebar() {
 
   React.useEffect(() => {
     // Skip settings-related logic on the settings page
-    if (location.pathname === "/settings") {
+    if (pathname === "/settings") {
       closeModalByType("settings");
     } else if (
       !isFetchingSettings &&
@@ -46,15 +46,20 @@ export function Sidebar() {
       displayErrorToast(
         "Something went wrong while fetching settings. Please reload the page.",
       );
-    } else if (config?.APP_MODE === "oss" && settingsError?.status === 404) {
+    } else if (
+      config?.APP_MODE === "oss" &&
+      settingsError?.status === 404 &&
+      !config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS
+    ) {
       openModal("settings", { settings });
     }
   }, [
-    settingsError?.status,
-    settingsError,
+    pathname,
     isFetchingSettings,
-    location.pathname,
+    settingsIsError,
+    settingsError,
     config?.APP_MODE,
+    config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS,
     openModal,
     settings,
     closeModalByType,
@@ -64,7 +69,7 @@ export function Sidebar() {
     <aside
       className={cn(
         "h-[54px] p-3 md:p-0 md:h-[40px] md:h-auto flex flex-row md:flex-col gap-1 bg-base md:w-[75px] md:min-w-[75px] sm:pt-0 sm:px-2 md:pt-[14px] md:px-0",
-        location.pathname === "/" && "md:pt-6.5 md:pb-3",
+        pathname === "/" && "md:pt-6.5 md:pb-3",
       )}
     >
       <nav className="flex flex-row md:flex-col items-center justify-between w-full h-auto md:w-auto md:h-full">

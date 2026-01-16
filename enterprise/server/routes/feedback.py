@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.future import select
 from storage.database import session_maker
 from storage.feedback import ConversationFeedback
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
 from openhands.events.event_store import EventStore
 from openhands.server.shared import file_store
@@ -33,10 +33,10 @@ async def get_event_ids(conversation_id: str, user_id: str) -> List[int]:
     def _verify_conversation():
         with session_maker() as session:
             metadata = (
-                session.query(StoredConversationMetadata)
+                session.query(StoredConversationMetadataSaas)
                 .filter(
-                    StoredConversationMetadata.conversation_id == conversation_id,
-                    StoredConversationMetadata.user_id == user_id,
+                    StoredConversationMetadataSaas.conversation_id == conversation_id,
+                    StoredConversationMetadataSaas.user_id == user_id,
                 )
                 .first()
             )

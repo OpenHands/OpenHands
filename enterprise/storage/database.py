@@ -1,11 +1,15 @@
 import asyncio
 import os
+import sys
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy.util import await_only
+
+# Check if we're running in a test environment
+IS_TESTING = 'pytest' in sys.modules
 
 DB_HOST = os.environ.get('DB_HOST', 'localhost')  # for non-GCP environments
 DB_PORT = os.environ.get('DB_PORT', '5432')  # for non-GCP environments

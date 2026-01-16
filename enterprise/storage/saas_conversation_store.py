@@ -4,10 +4,13 @@ import dataclasses
 import logging
 from dataclasses import dataclass
 from datetime import UTC
+from uuid import UUID
 
 from sqlalchemy.orm import sessionmaker
 from storage.database import session_maker
 from storage.stored_conversation_metadata import StoredConversationMetadata
+from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
+from storage.user_store import UserStore
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.integrations.provider import ProviderType
@@ -29,20 +32,37 @@ logger = logging.getLogger(__name__)
 class SaasConversationStore(ConversationStore):
     user_id: str
     session_maker: sessionmaker
+    org_id: UUID | None = None  # will be fetched automatically
+
+    def __init__(self, user_id: str, session_maker: sessionmaker):
+        self.user_id = user_id
+        self.session_maker = session_maker
+        user = UserStore.get_user_by_id(user_id)
+        self.org_id = user.current_org_id if user else None
 
     def _select_by_id(self, session, conversation_id: str):
-        return (
+        # Join StoredConversationMetadata with ConversationMetadataSaas to filter by user/org
+        query = (
             session.query(StoredConversationMetadata)
-            .filter(StoredConversationMetadata.user_id == self.user_id)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .filter(StoredConversationMetadataSaas.user_id == UUID(self.user_id))
             .filter(StoredConversationMetadata.conversation_id == conversation_id)
             .filter(StoredConversationMetadata.conversation_version == 'V0')
         )
+
+        if self.org_id is not None:
+            query = query.filter(StoredConversationMetadataSaas.org_id == self.org_id)
+
+        return query
 
     def _to_external_model(self, conversation_metadata: StoredConversationMetadata):
         kwargs = {
             c.name: getattr(conversation_metadata, c.name)
             for c in StoredConversationMetadata.__table__.columns
-            if c.name != 'github_user_id'  # Skip github_user_id field
         }
         # TODO: I'm not sure why the timezone is not set on the dates coming back out of the db
         kwargs['created_at'] = kwargs['created_at'].replace(tzinfo=UTC)
@@ -52,6 +72,8 @@ class SaasConversationStore(ConversationStore):
         if kwargs['git_provider'] and isinstance(kwargs['git_provider'], str):
             # Convert string to ProviderType enum
             kwargs['git_provider'] = ProviderType(kwargs['git_provider'])
+
+        kwargs['user_id'] = self.user_id
 
         # Remove V1 attributes
         kwargs.pop('max_budget_per_task', None)
@@ -67,7 +89,10 @@ class SaasConversationStore(ConversationStore):
 
     async def save_metadata(self, metadata: ConversationMetadata):
         kwargs = dataclasses.asdict(metadata)
-        kwargs['user_id'] = self.user_id
+
+        # Remove user_id and org_id from kwargs since they're no longer in StoredConversationMetadata
+        kwargs.pop('user_id', None)
+        kwargs.pop('org_id', None)
 
         # Convert ProviderType enum to string for storage
         if kwargs.get('git_provider') is not None:
@@ -81,7 +106,41 @@ class SaasConversationStore(ConversationStore):
 
         def _save_metadata():
             with self.session_maker() as session:
+                # Save the main conversation metadata
                 session.merge(stored_metadata)
+
+                # Create or update the SaaS metadata record
+                saas_metadata = (
+                    session.query(StoredConversationMetadataSaas)
+                    .filter(
+                        StoredConversationMetadataSaas.conversation_id
+                        == stored_metadata.conversation_id
+                    )
+                    .first()
+                )
+
+                if not saas_metadata:
+                    saas_metadata = StoredConversationMetadataSaas(
+                        conversation_id=stored_metadata.conversation_id,
+                        user_id=UUID(self.user_id),
+                        org_id=self.org_id,
+                    )
+                    session.add(saas_metadata)
+                else:
+                    # Validate
+                    expected_user_id = UUID(self.user_id)
+                    expected_org_id = self.org_id
+
+                    if saas_metadata.user_id != expected_user_id:
+                        raise ValueError(
+                            f'Existing user_id ({saas_metadata.user_id}) does not match expected value ({expected_user_id}).'
+                        )
+
+                    if expected_org_id and saas_metadata.org_id != expected_org_id:
+                        raise ValueError(
+                            f'Existing org_id ({saas_metadata.org_id}) does not match expected value ({expected_org_id}).'
+                        )
+
                 session.commit()
 
         await call_sync_from_async(_save_metadata)
@@ -101,8 +160,29 @@ class SaasConversationStore(ConversationStore):
     async def delete_metadata(self, conversation_id: str) -> None:
         def _delete_metadata():
             with self.session_maker() as session:
-                self._select_by_id(session, conversation_id).delete()
-                session.commit()
+                saas_record = (
+                    session.query(StoredConversationMetadataSaas)
+                    .filter(
+                        StoredConversationMetadataSaas.conversation_id
+                        == conversation_id,
+                        StoredConversationMetadataSaas.user_id == UUID(self.user_id),
+                        StoredConversationMetadataSaas.org_id == self.org_id,
+                    )
+                    .first()
+                )
+
+                if saas_record:
+                    # Delete both records, but only if the SaaS one exists
+                    session.query(StoredConversationMetadata).filter(
+                        StoredConversationMetadata.conversation_id == conversation_id,
+                    ).delete()
+
+                    session.delete(saas_record)
+
+                    session.commit()
+                else:
+                    # No SaaS record found → skip deleting main metadata
+                    session.rollback()
 
         await call_sync_from_async(_delete_metadata)
 
@@ -125,7 +205,15 @@ class SaasConversationStore(ConversationStore):
             with self.session_maker() as session:
                 conversations = (
                     session.query(StoredConversationMetadata)
-                    .filter(StoredConversationMetadata.user_id == self.user_id)
+                    .join(
+                        StoredConversationMetadataSaas,
+                        StoredConversationMetadata.conversation_id
+                        == StoredConversationMetadataSaas.conversation_id,
+                    )
+                    .filter(
+                        StoredConversationMetadataSaas.user_id == UUID(self.user_id)
+                    )
+                    .filter(StoredConversationMetadataSaas.org_id == self.org_id)
                     .filter(StoredConversationMetadata.conversation_version == 'V0')
                     .order_by(StoredConversationMetadata.created_at.desc())
                     .offset(offset)

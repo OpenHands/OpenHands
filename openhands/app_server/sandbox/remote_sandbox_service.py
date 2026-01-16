@@ -272,6 +272,12 @@ class RemoteSandboxService(SandboxService):
             # we are probably in local development and the only url in use is localhost
             environment[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
 
+        # Add worker port environment variables so the agent knows which ports to use
+        # for web applications. These match the ports exposed via the WORKER_1 and
+        # WORKER_2 URLs.
+        environment[WORKER_1] = str(WORKER_1_PORT)
+        environment[WORKER_2] = str(WORKER_2_PORT)
+
         return environment
 
     async def search_sandboxes(

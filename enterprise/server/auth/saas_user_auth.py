@@ -103,7 +103,6 @@ class SaasUserAuth(UserAuth):
             return settings
         settings_store = await self.get_user_settings_store()
         settings = await settings_store.load()
-        # If load() returned None, should settings be created?
         if settings:
             settings.email = self.email
             settings.email_verified = self.email_verified

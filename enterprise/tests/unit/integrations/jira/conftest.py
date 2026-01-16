@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from integrations.jira.jira_manager import JiraManager
 from integrations.jira.jira_view import (
-    JiraExistingConversationView,
     JiraNewConversationView,
 )
 from integrations.models import JobContext
@@ -185,21 +184,6 @@ def new_conversation_view(
 ):
     """JiraNewConversationView instance for testing"""
     return JiraNewConversationView(
-        job_context=sample_job_context,
-        saas_user_auth=sample_user_auth,
-        jira_user=sample_jira_user,
-        jira_workspace=sample_jira_workspace,
-        selected_repo='test/repo1',
-        conversation_id='conv-123',
-    )
-
-
-@pytest.fixture
-def existing_conversation_view(
-    sample_job_context, sample_user_auth, sample_jira_user, sample_jira_workspace
-):
-    """JiraExistingConversationView instance for testing"""
-    return JiraExistingConversationView(
         job_context=sample_job_context,
         saas_user_auth=sample_user_auth,
         jira_user=sample_jira_user,

@@ -12,7 +12,6 @@ from fastapi import Request
 from integrations.jira.jira_manager import JiraManager
 from integrations.jira.jira_types import JiraViewInterface
 from integrations.jira.jira_view import (
-    JiraExistingConversationView,
     JiraNewConversationView,
 )
 from integrations.models import Message, SourceType
@@ -541,15 +540,6 @@ class TestIsJobRequested:
     """Test job request validation."""
 
     @pytest.mark.asyncio
-    async def test_is_job_requested_existing_conversation(self, jira_manager):
-        """Test job request validation for existing conversation."""
-        mock_view = MagicMock(spec=JiraExistingConversationView)
-        message = Message(source=SourceType.JIRA, message={})
-
-        result = await jira_manager.is_job_requested(message, mock_view)
-        assert result is True
-
-    @pytest.mark.asyncio
     async def test_is_job_requested_new_conversation_with_repo_match(
         self, jira_manager, sample_job_context, sample_user_auth
     ):
@@ -658,33 +648,6 @@ class TestStartJob:
                 mock_view.create_or_update_conversation.assert_called_once()
                 mock_register.assert_called_once()
                 jira_manager.send_message.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_start_job_success_existing_conversation(
-        self, jira_manager, sample_jira_workspace
-    ):
-        """Test successful job start for existing conversation."""
-        mock_view = MagicMock(spec=JiraExistingConversationView)
-        mock_view.jira_user = MagicMock()
-        mock_view.jira_user.keycloak_user_id = 'test_user'
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.create_or_update_conversation = AsyncMock(return_value='conv_123')
-        mock_view.get_response_msg = MagicMock(return_value='Job started successfully')
-
-        jira_manager.send_message = AsyncMock()
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
-
-        with patch(
-            'integrations.jira.jira_manager.register_callback_processor'
-        ) as mock_register:
-            await jira_manager.start_job(mock_view)
-
-            mock_view.create_or_update_conversation.assert_called_once()
-            # Should not register callback for existing conversation
-            mock_register.assert_not_called()
-            jira_manager.send_message.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_job_missing_settings_error(
