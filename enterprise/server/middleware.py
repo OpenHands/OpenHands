@@ -162,8 +162,15 @@ class SetAuthCookieMiddleware:
             '/api/email/resend',
             '/oauth/device/authorize',
             '/oauth/device/token',
+            '/api/v1/web-client/config',
         )
         if path in ignore_paths:
+            return False
+
+        # Allow public access to shared conversations and events
+        if path.startswith('/api/shared-conversations') or path.startswith(
+            '/api/shared-events'
+        ):
             return False
 
         is_mcp = path.startswith('/mcp')

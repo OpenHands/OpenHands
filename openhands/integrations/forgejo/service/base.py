@@ -57,7 +57,9 @@ class ForgejoMixinBase(BaseGitService, HTTPClient):
         self.base_url = self.BASE_URL  # Backwards compatibility for existing usage
         parsed = urlparse(self.BASE_URL)
         self.base_domain = parsed.netloc or self.DEFAULT_DOMAIN
-        self.web_base_url = f'https://{self.base_domain}'.rstrip('/')
+        # Preserve the protocol from BASE_URL (http or https)
+        protocol = parsed.scheme or 'https'
+        self.web_base_url = f'{protocol}://{self.base_domain}'.rstrip('/')
 
     @property
     def provider(self) -> str:

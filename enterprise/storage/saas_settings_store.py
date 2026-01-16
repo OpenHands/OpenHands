@@ -113,6 +113,8 @@ class SaasSettingsStore(SettingsStore):
             kwargs['llm_api_key_for_byor'] = org_member.llm_api_key_for_byor
         if org_member.llm_base_url:
             kwargs['llm_base_url'] = org_member.llm_base_url
+        if org.v1_enabled is None:
+            kwargs['v1_enabled'] = False
 
         settings = Settings(**kwargs)
         return settings
