@@ -1,15 +1,19 @@
-
-
 from datetime import datetime
-from openhands.app_server.web_client.web_client_config_injector import WebClientConfigInjector
-from openhands.app_server.web_client.web_client_models import WebClientConfig, WebClientFeatureFlags
-from openhands.integrations.service_types import ProviderType
-from openhands.server.types import AppMode
+
 from pydantic import Field
+
+from openhands.app_server.web_client.web_client_config_injector import (
+    WebClientConfigInjector,
+)
+from openhands.app_server.web_client.web_client_models import (
+    WebClientConfig,
+    WebClientFeatureFlags,
+)
+from openhands.integrations.service_types import ProviderType
 
 
 class DefaultWebClientConfigInjector(WebClientConfigInjector):
-    posthog_client_key: str | None = "phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA"
+    posthog_client_key: str | None = 'phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA'
     feature_flags: WebClientFeatureFlags = Field(default_factory=WebClientFeatureFlags)
     providers_configured: list[ProviderType] = Field(default_factory=list)
     maintenance_start_time: datetime | None = None
