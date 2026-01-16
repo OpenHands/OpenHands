@@ -7,7 +7,6 @@ import httpx
 from fastapi import Request
 from integrations.jira.jira_types import JiraViewInterface
 from integrations.jira.jira_view import (
-    JiraExistingConversationView,
     JiraFactory,
     JiraNewConversationView,
 )
@@ -308,9 +307,6 @@ class JiraManager(Manager):
         """
         Check if a job is requested and handle repository selection.
         """
-
-        if isinstance(jira_view, JiraExistingConversationView):
-            return True
 
         try:
             # Get user repositories
