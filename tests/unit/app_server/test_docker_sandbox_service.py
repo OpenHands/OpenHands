@@ -610,10 +610,10 @@ class TestDockerSandboxService:
             # Execute
             await service_without_extra_hosts.start_sandbox()
 
-        # Verify extra_hosts is None when empty dict is provided
+        # Verify extra_hosts is not passed when empty dict is provided
         mock_docker_client.containers.run.assert_called_once()
         call_args = mock_docker_client.containers.run.call_args
-        assert call_args[1]['extra_hosts'] is None
+        assert 'extra_hosts' not in call_args[1]
 
     async def test_resume_sandbox_from_paused(self, service):
         """Test resuming a paused sandbox."""
@@ -1202,7 +1202,7 @@ class TestDockerSandboxServiceHostNetwork:
         # Should use host network mode
         assert call_args[1]['network_mode'] == 'host'
         # Should NOT have port mappings in host network mode
-        assert call_args[1]['ports'] is None
+        assert 'ports' not in call_args[1]
         # Environment variables should have container ports (not dynamic host ports)
         assert call_args[1]['environment'][AGENT_SERVER] == '8000'
         assert call_args[1]['environment'][VSCODE] == '8001'
@@ -1286,8 +1286,8 @@ class TestDockerSandboxServiceHostNetwork:
         mock_docker_client.containers.run.assert_called_once()
         call_args = mock_docker_client.containers.run.call_args
 
-        # Should NOT use host network mode
-        assert call_args[1]['network_mode'] is None
+        # Should NOT use host network mode (network_mode not in kwargs)
+        assert 'network_mode' not in call_args[1]
         # Should have port mappings
         assert call_args[1]['ports'] == {8000: 12345, 8001: 12346}
         # Environment variables should have dynamic host ports

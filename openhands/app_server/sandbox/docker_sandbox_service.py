@@ -352,7 +352,6 @@ class DockerSandboxService(SandboxService):
         )
 
         # Determine network mode and prepare port mappings
-        network_mode: str | None = 'host' if self.use_host_network else None
         port_mappings: dict[int, int] | None = None
 
         if self.use_host_network:
@@ -389,26 +388,34 @@ class DockerSandboxService(SandboxService):
         }
 
         try:
+            # Build container run arguments
+            # Note: ports and network_mode='host' are mutually exclusive in Docker
+            run_kwargs: dict = {
+                'image': sandbox_spec.id,
+                'command': sandbox_spec.command,
+                'remove': False,
+                'name': container_name,
+                'environment': env_vars,
+                'volumes': volumes,
+                'working_dir': sandbox_spec.working_dir,
+                'labels': labels,
+                'detach': True,
+                'init': True,
+            }
+
+            # Add network_mode for host networking, or ports for bridge networking
+            # These are mutually exclusive - Docker throws error if both are specified
+            if self.use_host_network:
+                run_kwargs['network_mode'] = 'host'
+            else:
+                run_kwargs['ports'] = port_mappings
+
+            # Add extra_hosts if configured
+            if self.extra_hosts:
+                run_kwargs['extra_hosts'] = self.extra_hosts
+
             # Create and start the container
-            container = self.docker_client.containers.run(  # type: ignore[call-overload]
-                image=sandbox_spec.id,
-                command=sandbox_spec.command,  # Use default command from image
-                remove=False,
-                name=container_name,
-                environment=env_vars,
-                ports=port_mappings,
-                network_mode=network_mode,
-                volumes=volumes,
-                working_dir=sandbox_spec.working_dir,
-                labels=labels,
-                detach=True,
-                # Use Docker's tini init process to ensure proper signal handling and reaping of
-                # zombie child processes.
-                init=True,
-                # Allow agent-server containers to resolve host.docker.internal
-                # and other custom hostnames for LAN deployments
-                extra_hosts=self.extra_hosts if self.extra_hosts else None,
-            )
+            container = self.docker_client.containers.run(**run_kwargs)  # type: ignore[call-overload]
 
             sandbox_info = await self._container_to_sandbox_info(container)
             assert sandbox_info is not None
