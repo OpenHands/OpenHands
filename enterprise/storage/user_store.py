@@ -6,6 +6,7 @@ import asyncio
 import uuid
 from typing import Optional
 
+from server.auth.token_manager import TokenManager
 from server.constants import (
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
@@ -24,7 +25,6 @@ from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
-from server.auth.token_manager import TokenManager
 
 # The max possible time to wait for another process to finish creating a user before retrying
 _REDIS_CREATE_TIMEOUT_SECONDS = 30
