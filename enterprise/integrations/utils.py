@@ -6,15 +6,9 @@ import re
 from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader
-from server.config import get_config
 from server.constants import WEB_HOST
-from storage.database import session_maker
-from storage.repository_store import RepositoryStore
-from storage.stored_repository import StoredRepository
-from storage.user_repo_map import UserRepositoryMap
-from storage.user_repo_map_store import UserRepositoryMapStore
+from storage.org_store import OrgStore
 
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
 from openhands.events import Event, EventSource
@@ -125,26 +119,17 @@ async def get_user_v1_enabled_setting(user_id: str | None) -> bool:
     Returns:
         True if V1 conversations are enabled for this user, False otherwise
     """
-
-    # If no user ID is provided, we can't check user settings
     if not user_id:
         return False
 
-    from storage.saas_settings_store import SaasSettingsStore
-
-    config = get_config()
-    settings_store = SaasSettingsStore(
-        user_id=user_id, session_maker=session_maker, config=config
+    org = await call_sync_from_async(
+        OrgStore.get_current_org_from_keycloak_user_id, user_id
     )
 
-    settings = await call_sync_from_async(
-        settings_store.get_user_settings_by_keycloak_id, user_id
-    )
-
-    if not settings or settings.v1_enabled is None:
+    if not org or org.v1_enabled is None:
         return False
 
-    return settings.v1_enabled
+    return org.v1_enabled
 
 
 def has_exact_mention(text: str, mention: str) -> bool:
@@ -407,51 +392,6 @@ def append_conversation_footer(message: str, conversation_id: str) -> str:
     conversation_link = CONVERSATION_URL.format(conversation_id)
     footer = f'\n\n[View full conversation]({conversation_link})'
     return message + footer
-
-
-async def store_repositories_in_db(repos: list[Repository], user_id: str) -> None:
-    """
-    Store repositories in DB and create user-repository mappings
-
-    Args:
-        repos: List of Repository objects to store
-        user_id: User ID associated with these repositories
-    """
-
-    # Convert Repository objects to StoredRepository objects
-    # Convert Repository objects to UserRepositoryMap objects
-    stored_repos = []
-    user_repos = []
-    for repo in repos:
-        repo_id = f'{repo.git_provider.value}##{str(repo.id)}'
-        stored_repo = StoredRepository(
-            repo_name=repo.full_name,
-            repo_id=repo_id,
-            is_public=repo.is_public,
-            # Optional fields set to None by default
-            has_microagent=None,
-            has_setup_script=None,
-        )
-        stored_repos.append(stored_repo)
-        user_repo_map = UserRepositoryMap(user_id=user_id, repo_id=repo_id, admin=None)
-
-        user_repos.append(user_repo_map)
-
-    # Get config instance
-    config = OpenHandsConfig()
-
-    try:
-        # Store repositories in the repos table
-        repo_store = RepositoryStore.get_instance(config)
-        repo_store.store_projects(stored_repos)
-
-        # Store user-repository mappings in the user-repos table
-        user_repo_store = UserRepositoryMapStore.get_instance(config)
-        user_repo_store.store_user_repo_mappings(user_repos)
-
-        logger.info(f'Saved repos for user {user_id}')
-    except Exception:
-        logger.warning('Failed to save repos', exc_info=True)
 
 
 def infer_repo_from_message(user_msg: str) -> list[str]:

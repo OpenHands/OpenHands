@@ -6,7 +6,7 @@ from threading import Thread
 from fastapi import APIRouter, FastAPI
 from sqlalchemy import func, select
 from storage.database import a_session_maker, engine, session_maker
-from storage.user_settings import UserSettings
+from storage.user import User
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.utils.async_utils import wait_all
@@ -127,7 +127,7 @@ def _db_check(delay: int):
         delay: Number of seconds to hold the database connection
     """
     with session_maker() as session:
-        num_users = session.query(UserSettings).count()
+        num_users = session.query(User).count()
         time.sleep(delay)
         logger.info(
             'check',
@@ -155,7 +155,7 @@ async def _a_db_check(delay: int):
         delay: Number of seconds to hold the database connection
     """
     async with a_session_maker() as a_session:
-        stmt = select(func.count(UserSettings.id))
+        stmt = select(func.count(User.id))
         num_users = await a_session.execute(stmt)
         await asyncio.sleep(delay)
         logger.info(f'a_num_users:{num_users.scalar_one()}')

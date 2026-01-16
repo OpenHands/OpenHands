@@ -30,40 +30,39 @@ export function SecretListItem({
   onDelete,
 }: SecretListItemProps) {
   return (
-    <tr
-      data-testid="secret-item"
-      className="flex w-full items-center border-t border-tertiary"
-    >
-      <td className="p-3 w-1/4 text-sm text-content-2 truncate" title={title}>
+    <tr data-testid="secret-item" className="border-t border-tertiary">
+      <td className="p-3 text-sm text-content-2 truncate" title={title}>
         {title}
       </td>
 
       <td
-        className="p-3 w-1/2 truncate overflow-hidden whitespace-nowrap text-sm text-content-2 opacity-80 italic"
+        className="p-3 truncate overflow-hidden whitespace-nowrap text-sm text-content-2 opacity-80 italic"
         title={description || ""}
       >
         {description || ""}
       </td>
 
-      <td className="p-3 w-1/4 flex items-center justify-end gap-4">
-        <button
-          data-testid="edit-secret-button"
-          type="button"
-          onClick={onEdit}
-          aria-label={`Edit ${title}`}
-          className="cursor-pointer"
-        >
-          <FaPencil size={16} />
-        </button>
-        <button
-          data-testid="delete-secret-button"
-          type="button"
-          onClick={onDelete}
-          aria-label={`Delete ${title}`}
-          className="cursor-pointer"
-        >
-          <FaTrash size={16} />
-        </button>
+      <td className="p-3">
+        <div className="flex items-center justify-end gap-4">
+          <button
+            data-testid="edit-secret-button"
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${title}`}
+            className="cursor-pointer"
+          >
+            <FaPencil size={16} />
+          </button>
+          <button
+            data-testid="delete-secret-button"
+            type="button"
+            onClick={onDelete}
+            aria-label={`Delete ${title}`}
+            className="cursor-pointer"
+          >
+            <FaTrash size={16} />
+          </button>
+        </div>
       </td>
     </tr>
   );

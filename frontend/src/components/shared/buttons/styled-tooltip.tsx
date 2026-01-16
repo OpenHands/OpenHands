@@ -1,5 +1,6 @@
 import { Tooltip, TooltipProps } from "@heroui/react";
 import React, { ReactNode } from "react";
+import { cn } from "#/utils/utils";
 
 export interface StyledTooltipProps {
   children: ReactNode;
@@ -23,7 +24,7 @@ export function StyledTooltip({
       content={content}
       closeDelay={closeDelay}
       placement={placement}
-      className={tooltipClassName}
+      className={cn("bg-white text-black", tooltipClassName)}
       showArrow={showArrow}
     >
       <div className="inline-flex">{children}</div>

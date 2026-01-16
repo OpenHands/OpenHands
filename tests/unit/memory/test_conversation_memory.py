@@ -19,7 +19,6 @@ from openhands.events.event import (
     EventSource,
     FileEditSource,
     FileReadSource,
-    RecallType,
 )
 from openhands.events.observation import CmdOutputObservation
 from openhands.events.observation.agent import (
@@ -35,6 +34,7 @@ from openhands.events.observation.delegate import AgentDelegateObservation
 from openhands.events.observation.error import ErrorObservation
 from openhands.events.observation.files import FileEditObservation, FileReadObservation
 from openhands.events.observation.reject import UserRejectObservation
+from openhands.events.recall_type import RecallType
 from openhands.events.tool import ToolCallMetadata
 from openhands.memory.conversation_memory import ConversationMemory
 from openhands.utils.prompt import PromptManager, RepositoryInfo, RuntimeInfo

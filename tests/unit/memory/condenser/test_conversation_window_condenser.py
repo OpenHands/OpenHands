@@ -19,11 +19,11 @@ from openhands.events import EventSource
 from openhands.events.action import CmdRunAction, MessageAction, RecallAction
 from openhands.events.action.agent import CondensationAction
 from openhands.events.action.message import SystemMessageAction
-from openhands.events.event import RecallType
 from openhands.events.observation import (
     CmdOutputObservation,
     RecallObservation,
 )
+from openhands.events.recall_type import RecallType
 from openhands.memory.condenser.condenser import Condensation, View
 from openhands.memory.condenser.impl.conversation_window_condenser import (
     ConversationWindowCondenser,

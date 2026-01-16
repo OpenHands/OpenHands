@@ -79,7 +79,7 @@ from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
-from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
@@ -478,7 +478,15 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """Wait for sandbox to start and return info."""
         # Get or create the sandbox
         if not task.request.sandbox_id:
-            sandbox = await self.sandbox_service.start_sandbox()
+            # Convert conversation_id to hex string if present
+            sandbox_id_str = (
+                task.request.conversation_id.hex
+                if task.request.conversation_id is not None
+                else None
+            )
+            sandbox = await self.sandbox_service.start_sandbox(
+                sandbox_id=sandbox_id_str
+            )
             task.sandbox_id = sandbox.id
         else:
             sandbox_info = await self.sandbox_service.get_sandbox(
@@ -848,7 +856,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         system_message_suffix: str | None,
         mcp_config: dict,
         condenser_max_size: int | None,
-        secrets: dict | None = None,
+        secrets: dict[str, SecretValue] | None = None,
     ) -> Agent:
         """Create an agent with appropriate tools and context based on agent type.
 
@@ -958,7 +966,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         user: UserInfo,
         workspace: LocalWorkspace,
         initial_message: SendMessageRequest | None,
-        secrets: dict,
+        secrets: dict[str, SecretValue],
         sandbox: SandboxInfo,
         remote_workspace: AsyncRemoteWorkspace | None,
         selected_repository: str | None,

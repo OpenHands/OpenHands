@@ -8,6 +8,7 @@ from cryptography.fernet import Fernet
 from sqlalchemy.orm import sessionmaker
 from storage.database import session_maker
 from storage.stored_custom_secrets import StoredCustomSecrets
+from storage.user_store import UserStore
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
@@ -24,14 +25,17 @@ class SaasSecretsStore(SecretsStore):
     async def load(self) -> Secrets | None:
         if not self.user_id:
             return None
+        user = await UserStore.get_user_by_id_async(self.user_id)
+        org_id = user.current_org_id if user else None
 
         with self.session_maker() as session:
             # Fetch all secrets for the given user ID
-            settings = (
-                session.query(StoredCustomSecrets)
-                .filter(StoredCustomSecrets.keycloak_user_id == self.user_id)
-                .all()
+            query = session.query(StoredCustomSecrets).filter(
+                StoredCustomSecrets.keycloak_user_id == self.user_id
             )
+            if org_id is not None:
+                query = query.filter(StoredCustomSecrets.org_id == org_id)
+            settings = query.all()
 
             if not settings:
                 return Secrets()
@@ -48,6 +52,8 @@ class SaasSecretsStore(SecretsStore):
             return Secrets(custom_secrets=kwargs)  # type: ignore[arg-type]
 
     async def store(self, item: Secrets):
+        user = await UserStore.get_user_by_id_async(self.user_id)
+        org_id = user.current_org_id
         with self.session_maker() as session:
             # Incoming secrets are always the most updated ones
             # Delete all existing records and override with incoming ones
@@ -76,6 +82,7 @@ class SaasSecretsStore(SecretsStore):
             for secret_name, secret_value, description in secret_tuples:
                 new_secret = StoredCustomSecrets(
                     keycloak_user_id=self.user_id,
+                    org_id=org_id,
                     secret_name=secret_name,
                     secret_value=secret_value,
                     description=description,

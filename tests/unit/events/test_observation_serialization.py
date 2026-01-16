@@ -1,6 +1,5 @@
 from openhands.core.schema.observation import ObservationType
 from openhands.events.action.files import FileEditSource
-from openhands.events.event import RecallType
 from openhands.events.observation import (
     CmdOutputMetadata,
     CmdOutputObservation,
@@ -10,6 +9,7 @@ from openhands.events.observation import (
 )
 from openhands.events.observation.agent import MicroagentKnowledge
 from openhands.events.observation.commands import MAX_CMD_OUTPUT_SIZE
+from openhands.events.recall_type import RecallType
 from openhands.events.serialization import (
     event_from_dict,
     event_to_dict,
