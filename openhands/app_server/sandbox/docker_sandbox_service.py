@@ -171,25 +171,24 @@ class DockerSandboxService(SandboxService):
                     for container_port, host_bindings in port_bindings.items():
                         if host_bindings:
                             host_port = host_bindings[0]['HostPort']
-                            exposed_port = next(
+                            matched_port: ExposedPort | None = next(
                                 (
-                                    exposed_port
-                                    for exposed_port in self.exposed_ports
-                                    if container_port
-                                    == f'{exposed_port.container_port}/tcp'
+                                    ep
+                                    for ep in self.exposed_ports
+                                    if container_port == f'{ep.container_port}/tcp'
                                 ),
                                 None,
                             )
-                            if exposed_port:
+                            if matched_port:
                                 url = self.container_url_pattern.format(port=host_port)
 
                                 # VSCode URLs require the api_key and working dir
-                                if exposed_port.name == VSCODE:
+                                if matched_port.name == VSCODE:
                                     url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
 
                                 exposed_urls.append(
                                     ExposedUrl(
-                                        name=exposed_port.name,
+                                        name=matched_port.name,
                                         url=url,
                                         port=host_port,
                                     )
