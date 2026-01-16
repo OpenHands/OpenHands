@@ -80,7 +80,7 @@ dependencies = [
   "python-json-logger>=3.2.1",
   "python-multipart",
   "python-pptx",
-  "python-socketio==5.13.0",
+  "python-socketio==5.13",
   "pythonnet",
   "pyyaml>=6.0.2",
   "qtconsole>=5.6.1",
