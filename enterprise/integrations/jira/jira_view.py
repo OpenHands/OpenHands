@@ -102,7 +102,7 @@ class JiraFactory:
     """Factory for creating Jira views based on message content"""
 
     @staticmethod
-    def is_labeled_ticket(message: Message):
+    def is_labeled_ticket(message: Message) -> bool:
         payload = message.message.get('payload', {})
         event_type = payload.get('webhookEvent')
 
@@ -120,7 +120,7 @@ class JiraFactory:
         return OH_LABEL in labels
 
     @staticmethod
-    def is_ticket_comment(message: Message):
+    def is_ticket_comment(message: Message) -> bool:
         payload = message.message.get('payload', {})
         event_type = payload.get('webhookEvent')
 
