@@ -55,7 +55,9 @@ def set_response_cookie(
     secure: bool = True,
     accepted_tos: bool = False,
 ):
-    # Create a signed JWT token
+    import time
+    import jwt
+
     cookie_data = {
         'access_token': keycloak_access_token,
         'refresh_token': keycloak_refresh_token,
@@ -63,25 +65,32 @@ def set_response_cookie(
     }
     signed_token = sign_token(cookie_data, config.jwt_secret.get_secret_value())  # type: ignore
 
-    # Set secure cookie with signed token
+    cookie_max_age = None
+    try:
+        refresh_payload = jwt.decode(keycloak_refresh_token, options={'verify_signature': False})
+        refresh_exp = refresh_payload.get('exp')
+        if refresh_exp:
+            cookie_max_age = max(0, int(refresh_exp - time.time() - 300))
+    except (jwt.DecodeError, TypeError):
+        pass
+
     domain = get_cookie_domain(request)
+    cookie_kwargs = {
+        'key': 'keycloak_auth',
+        'value': signed_token,
+        'httponly': True,
+        'secure': secure,
+        'samesite': get_cookie_samesite(request),
+    }
+
+    if cookie_max_age is not None:
+        cookie_kwargs['max_age'] = cookie_max_age
+
     if domain:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            domain=domain,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(request),
-        )
+        cookie_kwargs['domain'] = domain
+        response.set_cookie(**cookie_kwargs)
     else:
-        response.set_cookie(
-            key='keycloak_auth',
-            value=signed_token,
-            httponly=True,
-            secure=secure,
-            samesite=get_cookie_samesite(request),
-        )
+        response.set_cookie(**cookie_kwargs)
 
 
 def get_cookie_domain(request: Request) -> str | None:

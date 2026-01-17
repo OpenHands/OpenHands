@@ -74,6 +74,47 @@ def test_set_response_cookie(mock_response, mock_request):
         assert token_data['accepted_tos'] is True
 
 
+def test_set_response_cookie_with_expiration(mock_response, mock_request):
+    """Test setting the auth cookie with expiration based on refresh token."""
+    import time
+
+    with patch('server.routes.auth.config') as mock_config:
+        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
+
+        mock_request.url.hostname = 'example.com'
+
+        current_time = int(time.time())
+        refresh_exp = current_time + 3600
+        refresh_payload = {
+            'exp': refresh_exp,
+            'iat': current_time,
+            'sub': 'test-user-id'
+        }
+        valid_refresh_token = jwt.encode(refresh_payload, 'dummy_key', algorithm='HS256')
+
+        set_response_cookie(
+            request=mock_request,
+            response=mock_response,
+            keycloak_access_token='test_access_token',
+            keycloak_refresh_token=valid_refresh_token,
+            secure=True,
+            accepted_tos=True,
+        )
+
+        mock_response.set_cookie.assert_called_once()
+        args, kwargs = mock_response.set_cookie.call_args
+
+        assert kwargs['key'] == 'keycloak_auth'
+        assert 'value' in kwargs
+        assert kwargs['httponly'] is True
+        assert kwargs['secure'] is True
+        assert kwargs['samesite'] == 'strict'
+        assert kwargs['domain'] == 'example.com'
+        assert 'max_age' in kwargs
+        expected_max_age = refresh_exp - current_time - 300
+        assert abs(kwargs['max_age'] - expected_max_age) <= 1
+
+
 @pytest.mark.asyncio
 async def test_keycloak_callback_missing_code(mock_request):
     """Test keycloak_callback with missing code."""
