@@ -12,7 +12,9 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 
 # Mock database before imports
-with patch('storage.database.engine'), patch('storage.database.a_engine'):
+with patch('storage.database.engine', create=True), patch(
+    'storage.database.a_engine', create=True
+):
     from server.email_validation import get_openhands_user_id
     from server.routes.org_models import (
         LiteLLMIntegrationError,

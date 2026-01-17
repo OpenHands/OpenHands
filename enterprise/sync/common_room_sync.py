@@ -21,7 +21,7 @@ from sqlalchemy import text
 # Add the parent directory to the path so we can import from storage
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server.auth.token_manager import get_keycloak_admin
-from storage.database import engine
+from storage.database import get_engine
 
 # Configure logging
 logging.basicConfig(
@@ -85,7 +85,7 @@ def get_recent_conversations(minutes: int = 60) -> List[Dict[str, Any]]:
                 created_at DESC
         """)
 
-        with engine.connect() as connection:
+        with get_engine().connect() as connection:
             result = connection.execute(query, {'minutes': minutes})
             conversations = [
                 {

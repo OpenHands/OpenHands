@@ -14,7 +14,6 @@ from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.secrets.secrets_store import SecretsStore
-from openhands.utils.async_utils import call_sync_from_async
 
 
 @dataclass
@@ -26,7 +25,7 @@ class SaasSecretsStore(SecretsStore):
     async def load(self) -> Secrets | None:
         if not self.user_id:
             return None
-        user = await call_sync_from_async(UserStore.get_user_by_id, self.user_id)
+        user = await UserStore.get_user_by_id_async(self.user_id)
         org_id = user.current_org_id if user else None
 
         with self.session_maker() as session:
@@ -53,7 +52,7 @@ class SaasSecretsStore(SecretsStore):
             return Secrets(custom_secrets=kwargs)  # type: ignore[arg-type]
 
     async def store(self, item: Secrets):
-        user = await call_sync_from_async(UserStore.get_user_by_id, self.user_id)
+        user = await UserStore.get_user_by_id_async(self.user_id)
         org_id = user.current_org_id
         with self.session_maker() as session:
             # Incoming secrets are always the most updated ones

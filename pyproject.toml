@@ -80,7 +80,7 @@ dependencies = [
   "python-json-logger>=3.2.1",
   "python-multipart",
   "python-pptx",
-  "python-socketio>=5.11.4",
+  "python-socketio==5.13",
   "pythonnet",
   "pyyaml>=6.0.2",
   "qtconsole>=5.6.1",
@@ -176,7 +176,7 @@ testgeneval = [
 
 [tool.poetry]
 name = "openhands-ai"
-version = "1.1.0"
+version = "1.2.1"
 description = "OpenHands: Code Less, Make More"
 authors = [ "OpenHands" ]
 license = "MIT"

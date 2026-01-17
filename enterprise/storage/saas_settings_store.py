@@ -114,7 +114,7 @@ class SaasSettingsStore(SettingsStore):
         if org_member.llm_base_url:
             kwargs['llm_base_url'] = org_member.llm_base_url
         if org.v1_enabled is None:
-            kwargs['v1_enabled'] = False
+            kwargs['v1_enabled'] = True
 
         settings = Settings(**kwargs)
         return settings
