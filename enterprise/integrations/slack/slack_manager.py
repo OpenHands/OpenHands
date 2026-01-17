@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 import jwt
@@ -54,9 +55,110 @@ class SlackManager(Manager):
             loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR + 'slack')
         )
 
+        self.repo_selection_timeouts: dict[str, asyncio.Task] = {}
+
+        self.job_started_flags: dict[str, bool] = {}
+
     def _confirm_incoming_source_type(self, message: Message):
         if message.source != SourceType.SLACK:
             raise ValueError(f'Unexpected message source {message.source}')
+
+    def _get_timeout_key(self, channel_id: str, message_ts: str, thread_ts: str | None) -> str:
+        """Generate a unique key for tracking timeout tasks."""
+        return f"{channel_id}:{message_ts}:{thread_ts or ''}"
+
+    def _is_job_already_started(self, channel_id: str, message_ts: str, thread_ts: str | None) -> bool:
+        """Check if a job has already been started for this conversation."""
+        key = self._get_timeout_key(channel_id, message_ts, thread_ts)
+        return self.job_started_flags.get(key, False)
+
+    def _mark_job_started(self, channel_id: str, message_ts: str, thread_ts: str | None):
+        """Mark that a job has been started for this conversation."""
+        key = self._get_timeout_key(channel_id, message_ts, thread_ts)
+        self.job_started_flags[key] = True
+
+    def _cleanup_job_started_flag(self, channel_id: str, message_ts: str, thread_ts: str | None):
+        """Clean up the job started flag."""
+        key = self._get_timeout_key(channel_id, message_ts, thread_ts)
+        self.job_started_flags.pop(key, None)
+
+    async def _start_repo_selection_timeout(
+        self, slack_view: SlackViewInterface, repos: list[Repository]
+    ):
+        """Start a timeout task that will automatically start the job if no repo is selected."""
+        timeout_key = self._get_timeout_key(
+            slack_view.channel_id, slack_view.message_ts, slack_view.thread_ts
+        )
+
+        async def timeout_handler():
+            """Handle the timeout by automatically starting the job without repo selection."""
+            try:
+                await asyncio.sleep(120)  # 2 minutes timeout
+
+
+                if self._is_job_already_started(slack_view.channel_id, slack_view.message_ts, slack_view.thread_ts):
+                    return
+
+                logger.info(
+                    'repo_selection_timeout_expired',
+                    extra={
+                        'slack_user_id': slack_view.slack_user_id,
+                        'channel_id': slack_view.channel_id,
+                        'message_ts': slack_view.message_ts,
+                        'thread_ts': slack_view.thread_ts,
+                    },
+                )
+
+                self._mark_job_started(slack_view.channel_id, slack_view.message_ts, slack_view.thread_ts)
+
+                timeout_message = {
+                    'text': ' Repository selection timed out. Starting job automatically...',
+                    'blocks': [
+                        {
+                            'type': 'section',
+                            'text': {
+                                'type': 'mrkdwn',
+                                'text': ' Repository selection timed out after 2 minutes. Starting job automatically without repository selection.',
+                            },
+                        }
+                    ],
+                }
+                await self.send_message(
+                    self.create_outgoing_message(timeout_message, ephemeral=True),
+                    slack_view,
+                )
+
+
+                slack_view.selected_repo = None
+                await self.start_job(slack_view)
+
+            except asyncio.CancelledError:
+
+                pass
+            except Exception as e:
+                logger.error(
+                    f'[Slack] Error in repo selection timeout handler: {e}',
+                    exc_info=True,
+                )
+            finally:
+
+                self.repo_selection_timeouts.pop(timeout_key, None)
+                self.job_started_flags.pop(timeout_key, None)
+
+        # Start the timeout task
+        timeout_task = asyncio.create_task(timeout_handler())
+        self.repo_selection_timeouts[timeout_key] = timeout_task
+
+    def _cancel_repo_selection_timeout(self, channel_id: str, message_ts: str, thread_ts: str | None):
+        """Cancel the timeout task for a specific repo selection."""
+        timeout_key = self._get_timeout_key(channel_id, message_ts, thread_ts)
+        if timeout_key in self.repo_selection_timeouts:
+            timeout_task = self.repo_selection_timeouts[timeout_key]
+            timeout_task.cancel()
+            del self.repo_selection_timeouts[timeout_key]
+
+            self.job_started_flags.pop(timeout_key, None)
+            logger.info(f'Cancelled repo selection timeout for {timeout_key}')
 
     async def authenticate_user(
         self, slack_user_id: str
@@ -175,6 +277,17 @@ class SlackManager(Manager):
     async def receive_message(self, message: Message):
         self._confirm_incoming_source_type(message)
 
+        # Cancel any pending repo selection timeout if user made a selection
+        payload = message.message
+        if 'selected_repo' in payload:
+            channel_id = payload.get('channel_id')
+            message_ts = payload.get('message_ts')
+            thread_ts = payload.get('thread_ts')
+            if channel_id and message_ts:
+                self._cancel_repo_selection_timeout(channel_id, message_ts, thread_ts)
+                # Mark job as started to prevent timeout from starting duplicate job
+                self._mark_job_started(channel_id, message_ts, thread_ts)
+
         slack_user, saas_user_auth = await self.authenticate_user(
             slack_user_id=message.message['slack_user_id']
         )
@@ -283,6 +396,9 @@ class SlackManager(Manager):
                 self.create_outgoing_message(repo_selection_msg, ephemeral=True),
                 slack_view,
             )
+
+            # Start timeout for automatic job start if user doesn't select repo
+            asyncio.create_task(self._start_repo_selection_timeout(slack_view, repos))
 
             return False
 
