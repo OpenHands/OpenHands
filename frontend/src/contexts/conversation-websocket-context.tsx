@@ -10,7 +10,7 @@ import React, {
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
-import { useEventStore } from "#/stores/use-event-store";
+import { OHEvent, useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
@@ -46,6 +46,7 @@ import { useTracking } from "#/hooks/use-tracking";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
 import { I18nKey } from "#/i18n/declaration";
+import { useConversationHistory } from "#/hooks/query/use-conversation-history";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type V1_WebSocketConnectionState =
@@ -305,6 +306,20 @@ export function ConversationWebSocketProvider({
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
+
+  const { data: preloadedEvents } = useConversationHistory(conversationId);
+
+  useEffect(() => {
+    if (!preloadedEvents || preloadedEvents.length === 0) return;
+
+    useEventStore.getState().clearEvents();
+
+    for (const event of preloadedEvents) {
+      addEvent(event as OHEvent);
+    }
+
+    setIsLoadingHistoryMain(false);
+  }, [preloadedEvents, addEvent]);
 
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
