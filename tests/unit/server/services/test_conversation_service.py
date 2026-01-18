@@ -12,6 +12,7 @@ from pydantic import SecretStr
 
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.server.services.conversation_service import (
+    initialize_conversation,
     setup_init_conversation_settings,
 )
 from openhands.server.types import AppMode
