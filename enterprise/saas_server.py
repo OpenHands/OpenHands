@@ -26,6 +26,7 @@ from server.logger import logger  # noqa: E402
 from server.middleware import SetAuthCookieMiddleware  # noqa: E402
 from server.rate_limit import setup_rate_limit_handler  # noqa: E402
 from server.routes.api_keys import api_router as api_keys_router  # noqa: E402
+from server.routes.status import router as status_router
 from server.routes.auth import api_router, oauth_router  # noqa: E402
 from server.routes.billing import billing_router  # noqa: E402
 from server.routes.email import api_router as email_router  # noqa: E402
@@ -89,6 +90,7 @@ base_app.include_router(
 )  # Add routes for credit management and Stripe payment integration
 base_app.include_router(shared_conversation_router)
 base_app.include_router(shared_event_router)
+base_app.include_router(status_router)
 
 # Add GitHub integration router only if GITHUB_APP_CLIENT_ID is set
 if GITHUB_APP_CLIENT_ID:

@@ -91,6 +91,7 @@ class SaaSServerConfig(ServerConfig):
     enable_linear = ENABLE_LINEAR
 
     app_slug: None | str = None
+    incident_io_widget_url: str = os.environ.get('INCIDENT_IO_WIDGET_URL', '')
 
     def __init__(self) -> None:
         self._get_app_slug()

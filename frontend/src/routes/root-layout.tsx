@@ -27,9 +27,16 @@ import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { AlertBanner } from "#/components/features/alerts/alert-banner";
-import { cn } from "#/utils/utils";
+import { MaintenanceBanner } from "#/components/features/maintenance/maintenance-banner";
+import { useIncidentStatus } from "#/hooks/query/use-incident-status";
+import type {
+  Incident,
+  Maintenance,
+} from "#/api/option-service/incident.types";
+import { cn, isMobileDevice } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
+import { IncidentBanner } from "#/components/features/incident/incident-banner";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -75,6 +82,9 @@ export default function MainApp() {
   const { t } = useTranslation();
 
   const config = useConfig();
+  const incidentStatus = useIncidentStatus({
+    enabled: config?.data?.APP_MODE === "saas",
+  });
   const {
     data: isAuthed,
     isFetching: isFetchingAuth,
@@ -236,6 +246,25 @@ export default function MainApp() {
               errorMessage={config.data.error_message}
               updatedAt={config.data.updated_at}
             />
+          )}
+        {config.data?.MAINTENANCE && (
+          <MaintenanceBanner startTime={config.data.MAINTENANCE.startTime} />
+        )}
+        {config.data?.APP_MODE === "saas" &&
+          incidentStatus.data?.ongoing_incidents?.map((incident: Incident) => (
+            <IncidentBanner key={incident.id} incident={incident} />
+          ))}
+        {config.data?.APP_MODE === "saas" &&
+          incidentStatus.data?.in_progress_maintenances?.map(
+            (maintenance: Maintenance) => (
+              <IncidentBanner key={maintenance.id} incident={maintenance} />
+            ),
+          )}
+        {config.data?.APP_MODE === "saas" &&
+          incidentStatus.data?.scheduled_maintenances?.map(
+            (maintenance: Maintenance) => (
+              <IncidentBanner key={maintenance.id} incident={maintenance} />
+            ),
           )}
         <div
           id="root-outlet"

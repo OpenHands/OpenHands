@@ -2,6 +2,7 @@ import { http, delay, HttpResponse } from "msw";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Provider, Settings } from "#/types/settings";
+import { IncidentStatusResponse } from "#/api/option-service/incident.types";
 
 export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
   llm_model: DEFAULT_SETTINGS.llm_model,
@@ -151,5 +152,33 @@ export const SETTINGS_HANDLERS = [
     }
 
     return HttpResponse.json(null, { status: 400 });
+  }),
+
+  http.get("/v1/status", () => {
+    const mockStatus: IncidentStatusResponse = {
+      ongoing_incidents: [
+        {
+          id: "test-incident-1",
+          name: "API Degradation",
+          status: "investigating",
+          url: "https://statuspage.incident.io/openhands",
+          last_update_at: new Date().toISOString(),
+          last_update_message:
+            "We're investigating reports of slow API response times.",
+          current_worst_impact: "degraded_performance",
+          affected_components: [
+            {
+              id: "comp-1",
+              name: "API",
+              current_status: "degraded_performance",
+            },
+          ],
+        },
+      ],
+      in_progress_maintenances: [],
+      scheduled_maintenances: [],
+    };
+
+    return HttpResponse.json(mockStatus);
   }),
 ];
