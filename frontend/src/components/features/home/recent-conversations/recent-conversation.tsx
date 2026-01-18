@@ -8,6 +8,7 @@ import { formatTimeDelta } from "#/utils/format-time-delta";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationStatusIndicator } from "./conversation-status-indicator";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
+import { ConversationModelBadge } from "../../conversation-panel/conversation-card/conversation-model-badge";
 
 interface RecentConversationProps {
   conversation: Conversation;
@@ -26,6 +27,7 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
     >
       <div className="flex items-center gap-2 pl-1">
         <ConversationStatusIndicator conversationStatus={conversation.status} />
+        <ConversationModelBadge llmModel={conversation.llm_model} />
         <span className="text-xs text-white leading-6 font-normal">
           {conversation.title}
         </span>

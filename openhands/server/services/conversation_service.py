@@ -46,6 +46,7 @@ async def initialize_conversation(
     selected_branch: str | None,
     conversation_trigger: ConversationTrigger = ConversationTrigger.GUI,
     git_provider: ProviderType | None = None,
+    llm_model: str | None = None,
 ) -> ConversationMetadata:
     if conversation_id is None:
         conversation_id = uuid.uuid4().hex
@@ -69,6 +70,7 @@ async def initialize_conversation(
             selected_repository=selected_repository,
             selected_branch=selected_branch,
             git_provider=git_provider,
+            llm_model=llm_model,
         )
 
         await conversation_store.save_metadata(conversation_metadata)
@@ -184,6 +186,11 @@ async def create_new_conversation(
     conversation_id: str | None = None,
     mcp_config: MCPConfig | None = None,
 ) -> AgentLoopInfo:
+    # Get user settings to capture the LLM model
+    settings_store = await SettingsStoreImpl.get_instance(config, user_id)
+    settings = await settings_store.load()
+    llm_model = settings.llm_model if settings else None
+
     conversation_metadata = await initialize_conversation(
         user_id,
         conversation_id,
@@ -191,6 +198,7 @@ async def create_new_conversation(
         selected_branch,
         conversation_trigger,
         git_provider,
+        llm_model,
     )
 
     return await start_conversation(

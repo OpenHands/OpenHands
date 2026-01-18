@@ -3,6 +3,7 @@ import { ConversationCardTitle } from "./conversation-card-title";
 import { ConversationStatusIndicator } from "../../home/recent-conversations/conversation-status-indicator";
 import { ConversationStatusBadges } from "./conversation-status-badges";
 import { ConversationVersionBadge } from "./conversation-version-badge";
+import { ConversationModelBadge } from "./conversation-model-badge";
 
 interface ConversationCardHeaderProps {
   title: string;
@@ -10,6 +11,7 @@ interface ConversationCardHeaderProps {
   onTitleSave: (title: string) => void;
   conversationStatus?: ConversationStatus;
   conversationVersion?: "V0" | "V1";
+  llmModel?: string | null;
 }
 
 export function ConversationCardHeader({
@@ -18,6 +20,7 @@ export function ConversationCardHeader({
   onTitleSave,
   conversationStatus,
   conversationVersion,
+  llmModel,
 }: ConversationCardHeaderProps) {
   const isConversationArchived = conversationStatus === "ARCHIVED";
 
@@ -36,6 +39,8 @@ export function ConversationCardHeader({
         version={conversationVersion}
         isConversationArchived={isConversationArchived}
       />
+      {/* Model Badge */}
+      <ConversationModelBadge llmModel={llmModel} />
       <ConversationCardTitle
         title={title}
         titleMode={titleMode}

@@ -11,6 +11,7 @@ import { AgentState } from "#/types/agent-state";
 import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
 import { ServerStatusContextMenu } from "../controls/server-status-context-menu";
 import { ConversationName } from "./conversation-name";
+import { ConversationModelBadge } from "../conversation-panel/conversation-card/conversation-model-badge";
 
 export function ConversationNameWithStatus() {
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -53,7 +54,7 @@ export function ConversationNameWithStatus() {
   };
 
   return (
-    <div className="flex items-center">
+    <div className="flex items-center gap-2">
       <div className="group relative">
         <DebugStackframeDot
           className="ml-[3.5px] w-6 h-6 cursor-pointer"
@@ -73,6 +74,7 @@ export function ConversationNameWithStatus() {
           isPausing={false}
         />
       </div>
+      <ConversationModelBadge llmModel={conversation?.llm_model} />
       <ConversationName />
     </div>
   );

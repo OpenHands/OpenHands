@@ -724,6 +724,7 @@ async def _get_conversation_info(
             url=agent_loop_info.url if agent_loop_info else None,
             session_api_key=getattr(agent_loop_info, 'session_api_key', None),
             pr_number=conversation.pr_number,
+            llm_model=conversation.llm_model,
         )
     except Exception as e:
         logger.error(
@@ -1540,4 +1541,5 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
             sub_id.hex for sub_id in app_conversation.sub_conversation_ids
         ],
         public=app_conversation.public,
+        llm_model=app_conversation.llm_model,
     )
