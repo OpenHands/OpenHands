@@ -63,10 +63,10 @@ async def generate_byor_key(user_id: str) -> str | None:
     """Generate a new BYOR key for a user."""
 
     try:
-        user = await call_sync_from_async(UserStore.get_user_by_id, user_id)
-        current_org_id = str(user.current_org_id)
+        user = await UserStore.get_user_by_id_async(user_id)
         if not user:
             return None
+        current_org_id = str(user.current_org_id)
         key = await LiteLlmManager.generate_key(
             user_id,
             current_org_id,

@@ -20,7 +20,6 @@ from storage.subscription_access import SubscriptionAccess
 from storage.user_store import UserStore
 
 from openhands.server.user_auth import get_user_id
-from openhands.utils.async_utils import call_sync_from_async
 
 stripe.api_key = STRIPE_API_KEY
 billing_router = APIRouter(prefix='/api/billing')
@@ -104,7 +103,7 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    user = await call_sync_from_async(UserStore.get_user_by_id, user_id)
+    user = await UserStore.get_user_by_id_async(user_id)
     user_team_info = await LiteLlmManager.get_user_team_info(
         user_id, str(user.current_org_id)
     )
@@ -257,9 +256,7 @@ async def success_callback(session_id: str, request: Request):
             )
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-        user = await call_sync_from_async(
-            UserStore.get_user_by_id, billing_session.user_id
-        )
+        user = await UserStore.get_user_by_id_async(billing_session.user_id)
         user_team_info = await LiteLlmManager.get_user_team_info(
             billing_session.user_id, str(user.current_org_id)
         )

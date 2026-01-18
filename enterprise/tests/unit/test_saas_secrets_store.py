@@ -1,6 +1,6 @@
 from types import MappingProxyType
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
@@ -35,7 +35,10 @@ def secrets_store(session_maker, mock_config):
 
 class TestSaasSecretsStore:
     @pytest.mark.asyncio
-    @patch('storage.saas_secrets_store.UserStore.get_user_by_id')
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id_async',
+        new_callable=AsyncMock,
+    )
     async def test_store_and_load(self, mock_get_user, secrets_store, mock_user):
         # Setup mock
         mock_get_user.return_value = mock_user
@@ -72,7 +75,10 @@ class TestSaasSecretsStore:
         )
 
     @pytest.mark.asyncio
-    @patch('storage.saas_secrets_store.UserStore.get_user_by_id')
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id_async',
+        new_callable=AsyncMock,
+    )
     async def test_encryption_decryption(self, mock_get_user, secrets_store, mock_user):
         # Setup mock
         mock_get_user.return_value = mock_user
@@ -169,7 +175,10 @@ class TestSaasSecretsStore:
         assert await secrets_store.load() is None
 
     @pytest.mark.asyncio
-    @patch('storage.saas_secrets_store.UserStore.get_user_by_id')
+    @patch(
+        'storage.saas_secrets_store.UserStore.get_user_by_id_async',
+        new_callable=AsyncMock,
+    )
     async def test_update_existing_secrets(
         self, mock_get_user, secrets_store, mock_user
     ):
