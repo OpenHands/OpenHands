@@ -160,3 +160,33 @@ async def test_setup_without_tokens_non_saas_uses_user_secrets(mock_settings):
                     == 'ghp_local_token_from_config'
                 )
                 assert github_token.user_id == 'local_user_123'
+
+
+@pytest.mark.asyncio
+async def test_initialize_conversation_captures_llm_model():
+    """Test that initialize_conversation saves llm_model to metadata."""
+    test_llm_model = 'openai/gpt-4'
+
+    with patch(
+        'openhands.server.services.conversation_service.ConversationStoreImpl.get_instance'
+    ) as mock_store_cls:
+        mock_store = AsyncMock()
+        mock_store.exists = AsyncMock(return_value=False)
+        mock_store.save_metadata = AsyncMock()
+        mock_store_cls.return_value = mock_store
+
+        result = await initialize_conversation(
+            user_id='test_user',
+            conversation_id='test_conv_123',
+            selected_repository='test/repo',
+            selected_branch='main',
+            llm_model=test_llm_model,
+        )
+
+        # Verify llm_model is captured in metadata
+        assert result.llm_model == test_llm_model
+
+        # Verify save_metadata was called with the correct llm_model
+        mock_store.save_metadata.assert_called_once()
+        saved_metadata = mock_store.save_metadata.call_args[0][0]
+        assert saved_metadata.llm_model == test_llm_model
