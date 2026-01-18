@@ -193,6 +193,33 @@ Each integration follows a consistent pattern with service classes, storage mode
 - If tests fail with import errors, verify `PYTHONPATH=".:$PYTHONPATH"` is set
 - **If GitHub CI fails but local linting passes**: Always use `--show-diff-on-failure` flag to match CI behavior exactly
 
+## Remote Browser Access Configuration
+
+When running OpenHands via Docker on a remote server (e.g., Ubuntu Server VM) and accessing it from an external machine, the following environment variables may need to be configured:
+
+**Key Environment Variables:**
+- `SANDBOX_CONTAINER_URL_PATTERN`: URL pattern for exposed sandbox ports. Use `{port}` as placeholder. For remote access, set to your server IP (e.g., `http://192.168.1.100:{port}`).
+- `WEB_HOST`: The hostname where OpenHands is accessible. If set, the system will automatically configure CORS for remote access.
+
+**CORS Support:**
+The Docker sandbox service automatically configures CORS (via `OH_ALLOW_CORS_ORIGINS_0` environment variable) when `WEB_HOST` is set. This allows agent-server containers to accept requests from remote browsers.
+
+**Example Docker run command for remote access:**
+```bash
+docker run -it --rm --pull=always \
+    -e SANDBOX_CONTAINER_URL_PATTERN="http://192.168.0.228:{port}" \
+    -e WEB_HOST="192.168.0.228:3000" \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v ~/.openhands:/.openhands \
+    -p 3000:3000 \
+    docker.openhands.dev/openhands/openhands:main
+```
+
+**Implementation Details:**
+- CORS configuration is in `openhands/app_server/sandbox/docker_sandbox_service.py`
+- The `DockerSandboxService` passes `OH_ALLOW_CORS_ORIGINS_0` to agent-server containers
+- This matches the behavior of `remote_sandbox_service.py` for consistency
+
 ## Template for Github Pull Request
 
 If you are starting a pull request (PR), please follow the template in `.github/pull_request_template.md`.
