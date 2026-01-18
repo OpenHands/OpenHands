@@ -31,6 +31,38 @@
     "de": "Die folgenden Modelle melden derzeit Fehler:",
     "uk": "Наступні моделі наразі повідомляють про помилки:"
   },
+  "INCIDENT$VIEW_DETAILS": {
+    "en": "View Details",
+    "ja": "詳細を見る",
+    "zh-CN": "查看详情",
+    "zh-TW": "查看詳情",
+    "ko-KR": "세부 정보 보기",
+    "no": "Se detaljer",
+    "it": "Visualizza dettagli",
+    "pt": "Ver detalhes",
+    "es": "Ver detalles",
+    "ar": "عرض التفاصيل",
+    "fr": "Voir les détails",
+    "tr": "Detayları görüntüle",
+    "de": "Details anzeigen",
+    "uk": "Переглянути деталі"
+  },
+  "INCIDENT$DISMISS": {
+    "en": "Dismiss",
+    "ja": "非表示",
+    "zh-CN": "忽略",
+    "zh-TW": "忽略",
+    "ko-KR": "닫기",
+    "no": "Lukk",
+    "it": "Chiudi",
+    "pt": "Ignorar",
+    "es": "Descartar",
+    "ar": "تجاهل",
+    "fr": "Ignorer",
+    "tr": "Yoksay",
+    "de": "Schließen",
+    "uk": "Закрити"
+  },
   "AZURE_DEVOPS$CONNECT_ACCOUNT": {
     "en": "Connect Azure DevOps Account",
     "ja": "Azure DevOps アカウントを接続",

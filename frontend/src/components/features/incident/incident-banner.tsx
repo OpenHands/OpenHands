@@ -61,7 +61,7 @@ export function IncidentBanner({ incident }: IncidentBannerProps) {
           rel="noopener noreferrer"
           className="text-xs underline hover:opacity-80"
         >
-          {t("incident.viewDetails")}
+          {t("INCIDENT$VIEW_DETAILS")}
         </a>
       </div>
 
@@ -69,7 +69,7 @@ export function IncidentBanner({ incident }: IncidentBannerProps) {
         type="button"
         onClick={handleDismiss}
         className="bg-white/20 hover:bg-white/30 rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0"
-        aria-label={t("incident.dismiss")}
+        aria-label={t("INCIDENT$DISMISS")}
       >
         <FaXmark className="text-xs" />
       </button>

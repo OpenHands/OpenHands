@@ -33,10 +33,10 @@ import type {
   Incident,
   Maintenance,
 } from "#/api/option-service/incident.types";
+import { IncidentBanner } from "#/components/features/incident/incident-banner";
 import { cn, isMobileDevice } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
-import { IncidentBanner } from "#/components/features/incident/incident-banner";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -250,22 +250,25 @@ export default function MainApp() {
         {config.data?.MAINTENANCE && (
           <MaintenanceBanner startTime={config.data.MAINTENANCE.startTime} />
         )}
-        {config.data?.APP_MODE === "saas" &&
-          incidentStatus.data?.ongoing_incidents?.map((incident: Incident) => (
-            <IncidentBanner key={incident.id} incident={incident} />
-          ))}
-        {config.data?.APP_MODE === "saas" &&
-          incidentStatus.data?.in_progress_maintenances?.map(
-            (maintenance: Maintenance) => (
-              <IncidentBanner key={maintenance.id} incident={maintenance} />
-            ),
-          )}
-        {config.data?.APP_MODE === "saas" &&
-          incidentStatus.data?.scheduled_maintenances?.map(
-            (maintenance: Maintenance) => (
-              <IncidentBanner key={maintenance.id} incident={maintenance} />
-            ),
-          )}
+        {config.data?.APP_MODE === "saas" && (
+          <>
+            {incidentStatus.data?.ongoing_incidents?.map(
+              (incident: Incident) => (
+                <IncidentBanner key={incident.id} incident={incident} />
+              ),
+            )}
+            {incidentStatus.data?.in_progress_maintenances?.map(
+              (maintenance: Maintenance) => (
+                <IncidentBanner key={maintenance.id} incident={maintenance} />
+              ),
+            )}
+            {incidentStatus.data?.scheduled_maintenances?.map(
+              (maintenance: Maintenance) => (
+                <IncidentBanner key={maintenance.id} incident={maintenance} />
+              ),
+            )}
+          </>
+        )}
         <div
           id="root-outlet"
           className="flex-1 relative overflow-auto custom-scrollbar"

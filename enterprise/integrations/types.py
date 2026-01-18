@@ -29,10 +29,42 @@ class UserData(BaseModel):
     keycloak_user_id: str
 
 
+class IncidentComponent(BaseModel):
+    id: str
+    name: str
+    groupname: str | None = None
+    current_status: str
+
+
+class Incident(BaseModel):
+    id: str
+    name: str
+    status: str
+    url: str
+    last_update_at: str
+    last_update_message: str
+    current_worst_impact: str
+    affected_components: list[IncidentComponent]
+
+
+class Maintenance(BaseModel):
+    id: str
+    name: str
+    status: str
+    last_update_at: str
+    last_update_message: str
+    url: str
+    affected_components: list[IncidentComponent]
+    starts_at: str | None = None
+    ends_at: str | None = None
+    started_at: str | None = None
+    scheduled_end_at: str
+
+
 class WidgetResponse(BaseModel):
-    ongoing_incidents: list[dict[str, Any]]
-    in_progress_maintenances: list[dict[str, Any]]
-    scheduled_maintenances: list[dict[str, Any]]
+    ongoing_incidents: list[Incident]
+    in_progress_maintenances: list[Maintenance]
+    scheduled_maintenances: list[Maintenance]
 
 
 @dataclass

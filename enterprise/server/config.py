@@ -92,6 +92,8 @@ class SaaSServerConfig(ServerConfig):
 
     app_slug: None | str = None
     incident_io_widget_url: str = os.environ.get('INCIDENT_IO_WIDGET_URL', '')
+    incident_io_cache_ttl_seconds: int = int(os.environ.get('INCIDENT_IO_CACHE_TTL_SECONDS', '60'))
+    incident_io_request_timeout_seconds: float = float(os.environ.get('INCIDENT_IO_REQUEST_TIMEOUT_SECONDS', '5.0'))
 
     def __init__(self) -> None:
         self._get_app_slug()
