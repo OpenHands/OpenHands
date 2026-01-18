@@ -558,6 +558,131 @@ class TestLiteLlmManager:
                 await LiteLlmManager._delete_key(mock_http_client, 'test-key-id')
 
     @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_delete_key_not_found_with_alias_triggers_alias_deletion(
+        self, mock_http_client
+    ):
+        """Test _delete_key falls back to alias deletion when key_id returns 404."""
+        # Arrange
+        not_found_response = MagicMock()
+        not_found_response.is_success = False
+        not_found_response.status_code = 404
+        not_found_response.text = 'Key not found'
+
+        alias_success_response = MagicMock()
+        alias_success_response.is_success = True
+        alias_success_response.status_code = 200
+
+        mock_http_client.post.side_effect = [not_found_response, alias_success_response]
+
+        # Act
+        await LiteLlmManager._delete_key(
+            mock_http_client, 'test-key-id', key_alias='BYOR Key - user 123, org 456'
+        )
+
+        # Assert
+        assert mock_http_client.post.call_count == 2
+        first_call = mock_http_client.post.call_args_list[0]
+        assert first_call[1]['json']['keys'] == ['test-key-id']
+        second_call = mock_http_client.post.call_args_list[1]
+        assert second_call[1]['json']['key_aliases'] == ['BYOR Key - user 123, org 456']
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_delete_key_not_found_without_alias_no_fallback(
+        self, mock_http_client
+    ):
+        """Test _delete_key without alias does not attempt alias deletion on 404."""
+        # Arrange
+        not_found_response = MagicMock()
+        not_found_response.is_success = False
+        not_found_response.status_code = 404
+        not_found_response.text = 'Key not found'
+        mock_http_client.post.return_value = not_found_response
+
+        # Act
+        await LiteLlmManager._delete_key(mock_http_client, 'test-key-id')
+
+        # Assert
+        assert mock_http_client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_delete_key_by_alias_success(self, mock_http_client, mock_response):
+        """Test successful _delete_key_by_alias operation."""
+        # Arrange
+        mock_http_client.post.return_value = mock_response
+
+        # Act
+        await LiteLlmManager._delete_key_by_alias(
+            mock_http_client, 'BYOR Key - user 123, org 456'
+        )
+
+        # Assert
+        mock_http_client.post.assert_called_once()
+        call_args = mock_http_client.post.call_args
+        assert 'http://test.com/key/delete' in call_args[0]
+        assert call_args[1]['json']['key_aliases'] == ['BYOR Key - user 123, org 456']
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_delete_key_by_alias_not_found(self, mock_http_client):
+        """Test _delete_key_by_alias when alias is not found (404)."""
+        # Arrange
+        not_found_response = MagicMock()
+        not_found_response.is_success = False
+        not_found_response.status_code = 404
+        not_found_response.text = 'Key alias not found'
+        mock_http_client.post.return_value = not_found_response
+
+        # Act & Assert - should not raise exception for 404
+        await LiteLlmManager._delete_key_by_alias(
+            mock_http_client, 'BYOR Key - user 123, org 456'
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_delete_key_by_alias_server_error_logs_warning(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _delete_key_by_alias logs warning for non-404 errors."""
+        # Arrange
+        error_response = MagicMock()
+        error_response.is_success = False
+        error_response.status_code = 500
+        error_response.text = 'Internal server error'
+        mock_http_client.post.return_value = error_response
+
+        # Act
+        await LiteLlmManager._delete_key_by_alias(
+            mock_http_client, 'BYOR Key - user 123, org 456'
+        )
+
+        # Assert
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args
+        assert call_args[0][0] == 'error_deleting_key_by_alias'
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', None)
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None)
+    async def test_delete_key_by_alias_missing_config(self, mock_http_client):
+        """Test _delete_key_by_alias returns early when config is missing."""
+        # Act
+        await LiteLlmManager._delete_key_by_alias(
+            mock_http_client, 'BYOR Key - user 123, org 456'
+        )
+
+        # Assert
+        mock_http_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_with_http_client_decorator(self):
         """Test the with_http_client decorator functionality."""
 
