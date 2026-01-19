@@ -700,9 +700,44 @@ class LiteLlmManager:
         }
 
     @staticmethod
+    async def _delete_key_by_alias(
+        client: httpx.AsyncClient,
+        key_alias: str,
+    ):
+        """Delete a key from LiteLLM by its alias.
+
+        This is a best-effort operation that logs but does not raise on failure.
+        """
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            logger.warning('LiteLLM API configuration not found')
+            return
+        response = await client.post(
+            f'{LITE_LLM_API_URL}/key/delete',
+            json={
+                'key_aliases': [key_alias],
+            },
+        )
+        if response.is_success:
+            logger.info(
+                'LiteLlmManager:_delete_key_by_alias:key_deleted',
+                extra={'key_alias': key_alias},
+            )
+        elif response.status_code != 404:
+            # Log non-404 errors but don't fail
+            logger.warning(
+                'error_deleting_key_by_alias',
+                extra={
+                    'key_alias': key_alias,
+                    'status_code': response.status_code,
+                    'text': response.text,
+                },
+            )
+
+    @staticmethod
     async def _delete_key(
         client: httpx.AsyncClient,
         key_id: str,
+        key_alias: str | None = None,
     ):
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
@@ -713,10 +748,13 @@ class LiteLlmManager:
                 'keys': [key_id],
             },
         )
-        # Failed to key...
+        # Failed to delete key...
         if not response.is_success:
             if response.status_code == 404:
-                # key doesn't exist, just return
+                # Key doesn't exist by key_id. If we have a key_alias,
+                # try deleting by alias to clean up any orphaned alias.
+                if key_alias:
+                    await LiteLlmManager._delete_key_by_alias(client, key_alias)
                 return
             logger.error(
                 'error_deleting_key',
