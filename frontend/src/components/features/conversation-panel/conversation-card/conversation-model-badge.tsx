@@ -1,30 +1,23 @@
-import { Tooltip } from "@heroui/react";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { mapProvider } from "#/utils/map-provider";
-import { cn } from "#/utils/utils";
 
 interface ConversationModelBadgeProps {
-  llmModel?: string | null;
+  llmModel: string;
 }
 
 export function ConversationModelBadge({
   llmModel,
 }: ConversationModelBadgeProps) {
-  if (!llmModel) return null;
-
   const { provider, model } = extractModelAndProvider(llmModel);
   const displayProvider = provider ? mapProvider(provider) : "";
   const displayText = provider ? `${displayProvider}/${model}` : model;
 
   return (
-    <Tooltip content={llmModel} placement="top">
-      <span
-        className={cn(
-          "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 cursor-help bg-neutral-600/30 text-neutral-300",
-        )}
-      >
+    <StyledTooltip content={llmModel} placement="top">
+      <span className="inline-flex cursor-pointer items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 bg-neutral-600/30 text-neutral-300 truncate max-w-[75px]">
         {displayText}
       </span>
-    </Tooltip>
+    </StyledTooltip>
   );
 }

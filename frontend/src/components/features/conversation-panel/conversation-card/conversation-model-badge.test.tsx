@@ -3,16 +3,6 @@ import { describe, it, expect } from "vitest";
 import { ConversationModelBadge } from "./conversation-model-badge";
 
 describe("ConversationModelBadge", () => {
-  it("renders nothing when llmModel is null", () => {
-    const { container } = render(<ConversationModelBadge llmModel={null} />);
-    expect(container.firstChild).toBeNull();
-  });
-
-  it("renders nothing when llmModel is undefined", () => {
-    const { container } = render(<ConversationModelBadge />);
-    expect(container.firstChild).toBeNull();
-  });
-
   it("renders badge with provider and model", () => {
     render(<ConversationModelBadge llmModel="openai/gpt-4" />);
     expect(screen.getByText("OpenAI/gpt-4")).toBeInTheDocument();

@@ -40,7 +40,7 @@ export function ConversationCardHeader({
         isConversationArchived={isConversationArchived}
       />
       {/* Model Badge */}
-      <ConversationModelBadge llmModel={llmModel} />
+      {llmModel && <ConversationModelBadge llmModel={llmModel} />}
       <ConversationCardTitle
         title={title}
         titleMode={titleMode}
