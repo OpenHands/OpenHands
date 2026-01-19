@@ -1,12 +1,22 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  beforeAll,
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
 import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
+import { ModalRoot } from "#/components/shared/modals/modal-orchestrator";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { Conversation } from "#/api/open-hands.types";
+import { useModalStore } from "#/stores/modal-store";
 
 // Mock the unified stop conversation hook
 const mockStopConversationMutate = vi.fn();
@@ -27,7 +37,12 @@ describe("ConversationPanel", () => {
   const onCloseMock = vi.fn();
   const RouterStub = createRoutesStub([
     {
-      Component: () => <ConversationPanel onClose={onCloseMock} />,
+      Component: () => (
+        <>
+          <ConversationPanel onClose={onCloseMock} />
+          <ModalRoot />
+        </>
+      ),
       path: "/",
     },
     {
@@ -94,11 +109,29 @@ describe("ConversationPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockStopConversationMutate.mockClear();
+
+    // Setup modal portal div
+    if (!document.getElementById("modal-portal-exit")) {
+      const portalRoot = document.createElement("div");
+      portalRoot.setAttribute("id", "modal-portal-exit");
+      document.body.appendChild(portalRoot);
+    }
+
+    // Reset modal store
+    useModalStore.setState({ modalStack: [] });
+
     // Setup default mock for getUserConversations
     vi.spyOn(ConversationService, "getUserConversations").mockResolvedValue({
       results: [...mockConversations],
       next_page_id: null,
     });
+  });
+
+  afterEach(() => {
+    const portalRoot = document.getElementById("modal-portal-exit");
+    if (portalRoot) {
+      document.body.removeChild(portalRoot);
+    }
   });
 
   it("should render the conversations", async () => {
@@ -296,6 +329,7 @@ describe("ConversationPanel", () => {
             Toggle
           </button>
           {isOpen && <ConversationPanel onClose={onCloseMock} />}
+          <ModalRoot />
         </>
       );
     }

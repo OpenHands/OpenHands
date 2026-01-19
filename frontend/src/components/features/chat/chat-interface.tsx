@@ -8,7 +8,6 @@ import { createChatMessage } from "#/services/chat-service";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { isOpenHandsAction, isActionOrObservation } from "#/types/core/guards";
-import { FeedbackModal } from "../feedback/feedback-modal";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { TypingIndicator } from "./typing-indicator";
 import { useWsClient } from "#/context/ws-client-provider";
@@ -52,6 +51,7 @@ import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
+import { useModalStore } from "#/stores/modal-store";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -88,11 +88,8 @@ export function ChatInterface() {
   const { data: config } = useConfig();
 
   const { curAgentState } = useAgentState();
+  const openModal = useModalStore((state) => state.openModal);
 
-  const [feedbackPolarity, setFeedbackPolarity] = React.useState<
-    "positive" | "negative"
-  >("positive");
-  const [feedbackModalIsOpen, setFeedbackModalIsOpen] = React.useState(false);
   const { selectedRepository, replayJson } = useInitialQueryStore();
   const params = useParams();
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();
@@ -223,11 +220,10 @@ export function ChatInterface() {
     setMessageToSend("");
   };
 
-  const onClickShareFeedbackActionButton = async (
+  const onClickShareFeedbackActionButton = (
     polarity: "positive" | "negative",
   ) => {
-    setFeedbackModalIsOpen(true);
-    setFeedbackPolarity(polarity);
+    openModal("feedback", { polarity });
   };
 
   // Create a ScrollProvider with the scroll hook values
@@ -351,14 +347,6 @@ export function ChatInterface() {
 
           <InteractiveChatBox onSubmit={handleSendMessage} />
         </div>
-
-        {config?.APP_MODE !== "saas" && !isV1Conversation && (
-          <FeedbackModal
-            isOpen={feedbackModalIsOpen}
-            onClose={() => setFeedbackModalIsOpen(false)}
-            polarity={feedbackPolarity}
-          />
-        )}
       </div>
     </ScrollProvider>
   );

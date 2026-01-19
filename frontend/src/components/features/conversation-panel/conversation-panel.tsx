@@ -7,10 +7,7 @@ import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useInfiniteScroll } from "#/hooks/use-infinite-scroll";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversationSandbox } from "#/hooks/mutation/use-unified-stop-conversation";
-import { ConfirmDeleteModal } from "./confirm-delete-modal";
-import { ConfirmStopModal } from "./confirm-stop-modal";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
-import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
@@ -18,6 +15,7 @@ import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
+import { useModalStore } from "#/stores/modal-store";
 
 interface ConversationPanelProps {
   onClose: () => void;
@@ -28,22 +26,8 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const { conversationId: currentConversationId } = useParams();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
   const navigate = useNavigate();
+  const openModal = useModalStore((state) => state.openModal);
 
-  const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
-    React.useState(false);
-  const [confirmStopModalVisible, setConfirmStopModalVisible] =
-    React.useState(false);
-  const [
-    confirmExitConversationModalVisible,
-    setConfirmExitConversationModalVisible,
-  ] = React.useState(false);
-  const [selectedConversationId, setSelectedConversationId] = React.useState<
-    string | null
-  >(null);
-  const [selectedConversationTitle, setSelectedConversationTitle] =
-    React.useState<string | null>(null);
-  const [selectedConversationVersion, setSelectedConversationVersion] =
-    React.useState<"V0" | "V1" | undefined>(undefined);
   const [openContextMenuId, setOpenContextMenuId] = React.useState<
     string | null
   >(null);
@@ -77,18 +61,35 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
   });
 
   const handleDeleteProject = (conversationId: string, title: string) => {
-    setConfirmDeleteModalVisible(true);
-    setSelectedConversationId(conversationId);
-    setSelectedConversationTitle(title);
+    openModal("confirm-delete", {
+      conversationTitle: title,
+      onConfirm: () => {
+        deleteConversation(
+          { conversationId },
+          {
+            onSuccess: () => {
+              if (conversationId === currentConversationId) {
+                navigate("/");
+              }
+            },
+          },
+        );
+      },
+    });
   };
 
   const handleStopConversation = (
     conversationId: string,
     version?: "V0" | "V1",
   ) => {
-    setConfirmStopModalVisible(true);
-    setSelectedConversationId(conversationId);
-    setSelectedConversationVersion(version);
+    openModal("confirm-stop", {
+      onConfirm: () => {
+        pauseConversationSandbox({
+          conversationId,
+          version,
+        });
+      },
+    });
   };
 
   const handleConversationTitleChange = async (
@@ -103,30 +104,6 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         },
       },
     );
-  };
-
-  const handleConfirmDelete = () => {
-    if (selectedConversationId) {
-      deleteConversation(
-        { conversationId: selectedConversationId },
-        {
-          onSuccess: () => {
-            if (selectedConversationId === currentConversationId) {
-              navigate("/");
-            }
-          },
-        },
-      );
-    }
-  };
-
-  const handleConfirmStop = () => {
-    if (selectedConversationId) {
-      pauseConversationSandbox({
-        conversationId: selectedConversationId,
-        version: selectedConversationVersion,
-      });
-    }
   };
 
   return (
@@ -214,41 +191,6 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         <div className="flex justify-center py-4">
           <LoadingSpinner size="small" />
         </div>
-      )}
-
-      {confirmDeleteModalVisible && (
-        <ConfirmDeleteModal
-          onConfirm={() => {
-            handleConfirmDelete();
-            setConfirmDeleteModalVisible(false);
-            setSelectedConversationTitle(null);
-          }}
-          onCancel={() => {
-            setConfirmDeleteModalVisible(false);
-            setSelectedConversationTitle(null);
-          }}
-          conversationTitle={selectedConversationTitle ?? undefined}
-        />
-      )}
-
-      {confirmStopModalVisible && (
-        <ConfirmStopModal
-          onConfirm={() => {
-            handleConfirmStop();
-            setConfirmStopModalVisible(false);
-          }}
-          onCancel={() => setConfirmStopModalVisible(false)}
-        />
-      )}
-
-      {confirmExitConversationModalVisible && (
-        <ExitConversationModal
-          onConfirm={() => {
-            onClose();
-          }}
-          onClose={() => setConfirmExitConversationModalVisible(false)}
-          onCancel={() => setConfirmExitConversationModalVisible(false)}
-        />
       )}
     </div>
   );
