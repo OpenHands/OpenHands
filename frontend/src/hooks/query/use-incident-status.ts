@@ -9,7 +9,7 @@ export const useIncidentStatus = (options?: UseIncidentStatusOptions) =>
   useQuery<IncidentStatusResponse>({
     queryKey: ["incident-status"],
     queryFn: async () => {
-      const response = await fetch("/v1/status");
+      const response = await fetch("/api/v1/status");
       if (!response.ok) {
         throw new Error("Failed to fetch incident status");
       }

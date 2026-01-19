@@ -31,7 +31,7 @@
     "de": "Die folgenden Modelle melden derzeit Fehler:",
     "uk": "Наступні моделі наразі повідомляють про помилки:"
   },
-  "INCIDENT$VIEW_DETAILS": {
+  "COMMONT$VIEW_DETAILS": {
     "en": "View Details",
     "ja": "詳細を見る",
     "zh-CN": "查看详情",
@@ -47,7 +47,7 @@
     "de": "Details anzeigen",
     "uk": "Переглянути деталі"
   },
-  "INCIDENT$DISMISS": {
+  "COMMONT$DISMISS": {
     "en": "Dismiss",
     "ja": "非表示",
     "zh-CN": "忽略",

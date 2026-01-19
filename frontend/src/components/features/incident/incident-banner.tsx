@@ -6,6 +6,8 @@ import type {
   Incident,
   Maintenance,
 } from "#/api/option-service/incident.types";
+import { cn } from "#/utils/utils";
+import { Typography } from "#/ui/typography";
 
 interface IncidentBannerProps {
   incident: Incident | Maintenance;
@@ -48,28 +50,30 @@ export function IncidentBanner({ incident }: IncidentBannerProps) {
 
   return (
     <div
-      className={`${bannerColor} text-white rounded m-1 p-4 flex items-center gap-4`}
+      className={cn(
+        bannerColor,
+        "text-white rounded m-1 p-4 flex items-center gap-4",
+      )}
     >
       <FaTriangleExclamation className="text-xl flex-shrink-0" />
 
       <div className="flex-1">
-        <p className="font-semibold">{incident.name}</p>
-        <p className="text-sm opacity-90">{incident.last_update_message}</p>
-        <a
-          href={incident.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs underline hover:opacity-80"
-        >
-          {t("INCIDENT$VIEW_DETAILS")}
-        </a>
+        <Typography.Text>{incident.name}</Typography.Text>
+        <Typography.Text className="text-sm opacity-90">
+          {incident.last_update_message}
+        </Typography.Text>
+        <Typography.Text className="text-xs underline hover:opacity-80">
+          <a href={incident.url} target="_blank" rel="noopener noreferrer">
+            {t("COMMONT$VIEW_DETAILS")}
+          </a>
+        </Typography.Text>
       </div>
 
       <button
         type="button"
         onClick={handleDismiss}
-        className="bg-white/20 hover:bg-white/30 rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0"
-        aria-label={t("INCIDENT$DISMISS")}
+        className="bg-white/20 hover:bg-white/30 cursor-pointer rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0"
+        aria-label={t("COMMONT$DISMISS")}
       >
         <FaXmark className="text-xs" />
       </button>
