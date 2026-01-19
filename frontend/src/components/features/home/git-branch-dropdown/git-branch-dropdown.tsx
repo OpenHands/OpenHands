@@ -130,6 +130,10 @@ export function GitBranchDropdown({
     },
     onInputValueChange: handleInputValueChange,
     inputValue,
+    stateReducer: (state, actionAndChanges) =>
+      actionAndChanges.type === useCombobox.stateChangeTypes.InputClick
+        ? { ...actionAndChanges.changes, isOpen: state.isOpen }
+        : actionAndChanges.changes,
   });
 
   // Reset branch selection when repository changes
