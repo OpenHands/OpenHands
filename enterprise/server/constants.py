@@ -19,8 +19,8 @@ IS_LOCAL_ENV = bool(HOST == 'localhost')
 DEFAULT_BILLING_MARGIN = float(os.environ.get('DEFAULT_BILLING_MARGIN', '1.0'))
 
 # Map of user settings versions to their corresponding default LLM models
-# This ensures that CURRENT_USER_SETTINGS_VERSION and LITELLM_DEFAULT_MODEL stay in sync
-USER_SETTINGS_VERSION_TO_MODEL = {
+# This ensures that PERSONAL_WORKSPACE_VERSION_TO_MODEL and LITELLM_DEFAULT_MODEL stay in sync
+PERSONAL_WORKSPACE_VERSION_TO_MODEL = {
     1: 'claude-3-5-sonnet-20241022',
     2: 'claude-3-7-sonnet-20250219',
     3: 'claude-sonnet-4-20250514',
@@ -31,7 +31,8 @@ USER_SETTINGS_VERSION_TO_MODEL = {
 LITELLM_DEFAULT_MODEL = os.getenv('LITELLM_DEFAULT_MODEL')
 
 # Current user settings version - this should be the latest key in USER_SETTINGS_VERSION_TO_MODEL
-CURRENT_USER_SETTINGS_VERSION = max(USER_SETTINGS_VERSION_TO_MODEL.keys())
+ORG_SETTINGS_VERSION = max(PERSONAL_WORKSPACE_VERSION_TO_MODEL.keys())
+PERSONAL_WORKSPACE_VERSION = max(PERSONAL_WORKSPACE_VERSION_TO_MODEL.keys())
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -55,7 +56,6 @@ SUBSCRIPTION_PRICE_DATA = {
 
 DEFAULT_INITIAL_BUDGET = float(os.environ.get('DEFAULT_INITIAL_BUDGET', '10'))
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', None)
-STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', None)
 REQUIRE_PAYMENT = os.environ.get('REQUIRE_PAYMENT', '0') in ('1', 'true')
 
 SLACK_CLIENT_ID = os.environ.get('SLACK_CLIENT_ID', None)
@@ -91,5 +91,5 @@ def get_default_litellm_model():
     """Construct proxy for litellm model based on user settings if not set explicitly."""
     if LITELLM_DEFAULT_MODEL:
         return LITELLM_DEFAULT_MODEL
-    model = USER_SETTINGS_VERSION_TO_MODEL[CURRENT_USER_SETTINGS_VERSION]
+    model = PERSONAL_WORKSPACE_VERSION_TO_MODEL[PERSONAL_WORKSPACE_VERSION]
     return build_litellm_proxy_model_path(model)

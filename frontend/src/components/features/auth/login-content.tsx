@@ -12,7 +12,6 @@ import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-not
 import { useRecaptcha } from "#/hooks/use-recaptcha";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { ENABLE_RECAPTCHA } from "#/utils/feature-flags";
 
 export interface LoginContentProps {
   githubAuthUrl: string | null;
@@ -39,7 +38,7 @@ export function LoginContent({
 
   // reCAPTCHA - only need token generation, verification happens at backend callback
   const { isReady: recaptchaReady, executeRecaptcha } = useRecaptcha({
-    siteKey: ENABLE_RECAPTCHA() ? config?.RECAPTCHA_SITE_KEY : undefined,
+    siteKey: config?.RECAPTCHA_SITE_KEY,
   });
 
   const gitlabAuthUrl = useAuthUrl({

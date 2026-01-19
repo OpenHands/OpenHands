@@ -28,7 +28,7 @@ from openhands.integrations.service_types import (
 from openhands.utils.import_utils import get_impl
 
 
-class AzureDevOpsServiceImpl(
+class AzureDevOpsService(
     AzureDevOpsResolverMixin,
     AzureDevOpsReposMixin,
     AzureDevOpsBranchesMixin,
@@ -242,8 +242,34 @@ class AzureDevOpsServiceImpl(
 # Dynamic class loading to support custom implementations (e.g., SaaS)
 azure_devops_service_cls = os.environ.get(
     'OPENHANDS_AZURE_DEVOPS_SERVICE_CLS',
-    'openhands.integrations.azure_devops.azure_devops_service.AzureDevOpsServiceImpl',
+    'openhands.integrations.azure_devops.azure_devops_service.AzureDevOpsService',
 )
-AzureDevOpsServiceImpl = get_impl(  # type: ignore[misc]
-    AzureDevOpsServiceImpl, azure_devops_service_cls
-)
+
+# Lazy loading to avoid circular imports
+_azure_devops_service_impl = None
+
+
+def get_azure_devops_service_impl():
+    """Get the Azure DevOps service implementation with lazy loading."""
+    global _azure_devops_service_impl
+    if _azure_devops_service_impl is None:
+        _azure_devops_service_impl = get_impl(  # type: ignore[misc]
+            AzureDevOpsService, azure_devops_service_cls
+        )
+    return _azure_devops_service_impl
+
+
+# For backward compatibility, provide the implementation as a property
+class _AzureDevOpsServiceImplProxy:
+    """Proxy class to provide lazy loading for AzureDevOpsServiceImpl."""
+
+    def __getattr__(self, name):
+        impl = get_azure_devops_service_impl()
+        return getattr(impl, name)
+
+    def __call__(self, *args, **kwargs):
+        impl = get_azure_devops_service_impl()
+        return impl(*args, **kwargs)
+
+
+AzureDevOpsServiceImpl: type[AzureDevOpsService] = _AzureDevOpsServiceImplProxy()  # type: ignore[assignment]

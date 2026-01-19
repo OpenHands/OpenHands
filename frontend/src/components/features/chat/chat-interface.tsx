@@ -66,7 +66,7 @@ export function ChatInterface() {
   const posthog = usePostHog();
   const { setMessageToSend } = useConversationStore();
   const { data: conversation } = useActiveConversation();
-  const { errorMessage } = useErrorMessageStore();
+  const { errorMessage, removeErrorMessage } = useErrorMessageStore();
   const { isLoadingMessages } = useWsClient();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   const conversationWebSocket = useConversationWebSocket();
@@ -342,7 +342,12 @@ export function ChatInterface() {
             {!hitBottom && <ScrollToBottomButton onClick={scrollDomToBottom} />}
           </div>
 
-          {errorMessage && <ErrorMessageBanner message={errorMessage} />}
+          {errorMessage && (
+            <ErrorMessageBanner
+              message={errorMessage}
+              onDismiss={removeErrorMessage}
+            />
+          )}
 
           <InteractiveChatBox onSubmit={handleSendMessage} />
         </div>

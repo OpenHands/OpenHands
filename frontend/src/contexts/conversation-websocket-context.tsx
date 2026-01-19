@@ -329,12 +329,16 @@ export function ConversationWebSocketProvider({
         if (isV1Event(event)) {
           addEvent(event);
 
-          // Handle ConversationErrorEvent specifically
+          // Handle ConversationErrorEvent specifically - show error banner
+          // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isConversationErrorEvent(event)) {
             setErrorMessage(event.detail);
+          } else {
+            // Clear error message on any non-ConversationErrorEvent
+            removeErrorMessage();
           }
 
-          // Handle AgentErrorEvent specifically
+          // Track credit limit reached if AgentErrorEvent has budget-related error
           if (isAgentErrorEvent(event)) {
             // Use friendly i18n message for budget/credit errors instead of raw error
             if (isBudgetOrCreditError(event.error)) {
@@ -418,6 +422,7 @@ export function ConversationWebSocketProvider({
       isLoadingHistoryMain,
       expectedEventCountMain,
       setErrorMessage,
+      removeErrorMessage,
       removeOptimisticUserMessage,
       queryClient,
       conversationId,
@@ -425,6 +430,7 @@ export function ConversationWebSocketProvider({
       appendInput,
       appendOutput,
       updateMetricsFromStats,
+      trackCreditLimitReached,
     ],
   );
 
