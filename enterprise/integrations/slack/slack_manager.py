@@ -64,37 +64,30 @@ class SlackManager(Manager):
             raise ValueError(f'Unexpected message source {message.source}')
 
     def _get_timeout_key(self, channel_id: str, message_ts: str, thread_ts: str | None) -> str:
-        """Generate a unique key for tracking timeout tasks."""
         return f"{channel_id}:{message_ts}:{thread_ts or ''}"
 
     def _is_job_already_started(self, channel_id: str, message_ts: str, thread_ts: str | None) -> bool:
-        """Check if a job has already been started for this conversation."""
         key = self._get_timeout_key(channel_id, message_ts, thread_ts)
         return self.job_started_flags.get(key, False)
 
     def _mark_job_started(self, channel_id: str, message_ts: str, thread_ts: str | None):
-        """Mark that a job has been started for this conversation."""
         key = self._get_timeout_key(channel_id, message_ts, thread_ts)
         self.job_started_flags[key] = True
 
     def _cleanup_job_started_flag(self, channel_id: str, message_ts: str, thread_ts: str | None):
-        """Clean up the job started flag."""
         key = self._get_timeout_key(channel_id, message_ts, thread_ts)
         self.job_started_flags.pop(key, None)
 
     async def _start_repo_selection_timeout(
         self, slack_view: SlackViewInterface, repos: list[Repository]
     ):
-        """Start a timeout task that will automatically start the job if no repo is selected."""
         timeout_key = self._get_timeout_key(
             slack_view.channel_id, slack_view.message_ts, slack_view.thread_ts
         )
 
         async def timeout_handler():
-            """Handle the timeout by automatically starting the job without repo selection."""
             try:
                 await asyncio.sleep(120)  # 2 minutes timeout
-
 
                 if self._is_job_already_started(slack_view.channel_id, slack_view.message_ts, slack_view.thread_ts):
                     return
@@ -112,13 +105,13 @@ class SlackManager(Manager):
                 self._mark_job_started(slack_view.channel_id, slack_view.message_ts, slack_view.thread_ts)
 
                 timeout_message = {
-                    'text': ' Repository selection timed out. Starting job automatically...',
+                    'text': 'Repository selection timed out. Starting job automatically.',
                     'blocks': [
                         {
                             'type': 'section',
                             'text': {
                                 'type': 'mrkdwn',
-                                'text': ' Repository selection timed out after 2 minutes. Starting job automatically without repository selection.',
+                                'text': 'Repository selection timed out after 2 minutes. Starting job automatically without repository selection.',
                             },
                         }
                     ],
@@ -128,12 +121,10 @@ class SlackManager(Manager):
                     slack_view,
                 )
 
-
                 slack_view.selected_repo = None
                 await self.start_job(slack_view)
 
             except asyncio.CancelledError:
-
                 pass
             except Exception as e:
                 logger.error(
@@ -141,16 +132,13 @@ class SlackManager(Manager):
                     exc_info=True,
                 )
             finally:
-
                 self.repo_selection_timeouts.pop(timeout_key, None)
                 self.job_started_flags.pop(timeout_key, None)
 
-        # Start the timeout task
         timeout_task = asyncio.create_task(timeout_handler())
         self.repo_selection_timeouts[timeout_key] = timeout_task
 
     def _cancel_repo_selection_timeout(self, channel_id: str, message_ts: str, thread_ts: str | None):
-        """Cancel the timeout task for a specific repo selection."""
         timeout_key = self._get_timeout_key(channel_id, message_ts, thread_ts)
         if timeout_key in self.repo_selection_timeouts:
             timeout_task = self.repo_selection_timeouts[timeout_key]
