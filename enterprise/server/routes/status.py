@@ -26,8 +26,9 @@ async def fetch_incident_status():
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
-                widget_url, timeout=server_config.incident_io_request_timeout_seconds
-            )  # type: ignore[attr-defined]
+                widget_url,
+                timeout=server_config.incident_io_request_timeout_seconds,  # type: ignore[attr-defined]
+            )
             response.raise_for_status()
             return response.json()
         except httpx.TimeoutException:
