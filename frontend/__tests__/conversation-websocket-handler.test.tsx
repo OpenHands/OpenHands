@@ -20,6 +20,7 @@ import {
   createMockMessageEvent,
   createMockUserMessageEvent,
   createMockConversationErrorEvent,
+  createMockAgentErrorEvent,
   createMockBrowserObservationEvent,
   createMockBrowserNavigateActionEvent,
   createMockExecuteBashActionEvent,
