@@ -346,8 +346,16 @@ class LiteLlmManager:
 
             # User failed to create in litellm - this is an unforseen error state...
             if not response.is_success:
-                if response.status_code == 400 and 'already exists' in response.text:
-                    # user already exists, just return
+                if (
+                    response.status_code in (400, 409)
+                    and 'already exists' in response.text
+                ):
+                    logger.warning(
+                        'litellm_user_already_exists',
+                        extra={
+                            'user_id': keycloak_user_id,
+                        },
+                    )
                     return
                 logger.error(
                     'error_creating_litellm_user',
@@ -478,6 +486,18 @@ class LiteLlmManager:
         )
         # Failed to add user to team - this is an unforseen error state...
         if not response.is_success:
+            if (
+                response.status_code == 400
+                and 'already in team' in response.text.lower()
+            ):
+                logger.warning(
+                    'user_already_in_team',
+                    extra={
+                        'user_id': keycloak_user_id,
+                        'team_id': team_id,
+                    },
+                )
+                return
             logger.error(
                 'error_adding_litellm_user_to_team',
                 extra={
