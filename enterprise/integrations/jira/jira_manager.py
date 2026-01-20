@@ -135,8 +135,8 @@ class JiraManager(Manager):
 
         return False, None, None
 
-    def parse_webhook(self, payload: Dict) -> JobContext | None:
-        event_type = payload.get('webhookEvent')
+    def parse_webhook(self, message: Message) -> JobContext | None:
+        payload = message.message.get('payload', {})
         issue_data = payload.get('issue', {})
         issue_id = issue_data.get('id')
         issue_key = issue_data.get('key')
@@ -152,12 +152,15 @@ class JiraManager(Manager):
             base_api_url = f'{parsed.scheme}://{parsed.netloc}'
 
         comment = ''
-        if event_type == 'comment_created':
+        if JiraFactory.is_ticket_comment(message):
             comment_data = payload.get('comment', {})
             comment = comment_data.get('body', '')
             user_data: dict = comment_data.get('author', {})
-        else:
+        elif JiraFactory.is_labeled_ticket(message):
             user_data = payload.get('user', {})
+
+        else:
+            raise ValueError('Unrecognized jira event')
 
         user_email = user_data.get('emailAddress')
         display_name = user_data.get('displayName')
@@ -207,7 +210,7 @@ class JiraManager(Manager):
         if not is_job_requested:
             return
 
-        job_context = self.parse_webhook(payload)
+        job_context = self.parse_webhook(message)
 
         if not job_context:
             logger.info(
