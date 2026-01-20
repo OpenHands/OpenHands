@@ -140,7 +140,17 @@ class JiraManager(Manager):
         issue_data = payload.get('issue', {})
         issue_id = issue_data.get('id')
         issue_key = issue_data.get('key')
-        base_api_url = issue_data.get('self', '').split('/rest/')[0]
+        self_url = issue_data.get('self', '')
+        if not self_url:
+            logger.warning('[Jira] Missing self URL in issue data')
+            base_api_url = ''
+        elif '/rest/' in self_url:
+            base_api_url = self_url.split('/rest/')[0]
+        else:
+            # Fallback: extract base URL using urlparse
+            parsed = urlparse(self_url)
+            base_api_url = f'{parsed.scheme}://{parsed.netloc}'
+
         comment = ''
         if event_type == 'comment_created':
             comment_data = payload.get('comment', {})
@@ -200,7 +210,10 @@ class JiraManager(Manager):
         job_context = self.parse_webhook(payload)
 
         if not job_context:
-            logger.info('[Jira] Webhook does not match trigger conditions')
+            logger.info(
+                '[Jira] Failed to parse webhook payload - missing required fields or invalid structure',
+                extra={'event_type': payload.get('webhookEvent')},
+            )
             return
 
         # Get workspace by user email domain
