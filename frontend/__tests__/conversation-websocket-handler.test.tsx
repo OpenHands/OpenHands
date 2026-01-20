@@ -20,6 +20,7 @@ import {
   createMockMessageEvent,
   createMockUserMessageEvent,
   createMockConversationErrorEvent,
+  createMockAgentErrorEvent,
   createMockBrowserObservationEvent,
   createMockBrowserNavigateActionEvent,
   createMockExecuteBashActionEvent,
@@ -311,6 +312,36 @@ describe("Conversation WebSocket Handler", () => {
       await waitFor(() => {
         expect(screen.getByTestId("error-message")).toHaveTextContent(
           "Your session has expired. Please log in again.",
+        );
+      });
+    });
+
+    it("should show friendly i18n message for budget/credit errors", async () => {
+      // Create a mock AgentErrorEvent with budget-related error message
+      const mockBudgetErrorEvent = createMockAgentErrorEvent({
+        error:
+          "litellm.BadRequestError: Litellm_proxyException - ExceededBudget: User=xxx over budget.",
+      });
+
+      // Set up MSW to send the budget error event when connection is established
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.send(JSON.stringify(mockBudgetErrorEvent));
+        }),
+      );
+
+      // Render components that use both WebSocket and error message store
+      renderWithWebSocketContext(<ErrorMessageStoreComponent />);
+
+      // Initially should show "none"
+      expect(screen.getByTestId("error-message")).toHaveTextContent("none");
+
+      // Wait for connection and error event processing
+      // Should show the i18n key instead of raw error message
+      await waitFor(() => {
+        expect(screen.getByTestId("error-message")).toHaveTextContent(
+          "STATUS$ERROR_LLM_OUT_OF_CREDITS",
         );
       });
     });
