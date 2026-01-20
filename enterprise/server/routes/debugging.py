@@ -5,7 +5,7 @@ from threading import Thread
 
 from fastapi import APIRouter, FastAPI
 from sqlalchemy import func, select
-from storage.database import a_session_maker, engine, session_maker
+from storage.database import a_session_maker, get_engine, session_maker
 from storage.user import User
 
 from openhands.core.logger import openhands_logger as logger
@@ -47,6 +47,7 @@ def add_debugging_routes(api: FastAPI):
         - checked_out: Number of connections currently in use
         - overflow: Number of overflow connections created beyond pool_size
         """
+        engine = get_engine()
         return {
             'checked_in': engine.pool.checkedin(),
             'checked_out': engine.pool.checkedout(),
@@ -129,6 +130,7 @@ def _db_check(delay: int):
     with session_maker() as session:
         num_users = session.query(User).count()
         time.sleep(delay)
+        engine = get_engine()
         logger.info(
             'check',
             extra={

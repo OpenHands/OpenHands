@@ -19,6 +19,7 @@ from keycloak.exceptions import (
 from server.auth.constants import (
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_APP_CLIENT_SECRET,
+    DUPLICATE_EMAIL_CHECK,
     GITHUB_APP_CLIENT_ID,
     GITHUB_APP_CLIENT_SECRET,
     GITLAB_APP_CLIENT_ID,
@@ -644,6 +645,10 @@ class TokenManager:
             True if a duplicate is found (excluding current user), False otherwise
         """
         if not email:
+            return False
+
+        # We have the option to skip the duplicate email check in test environments
+        if not DUPLICATE_EMAIL_CHECK:
             return False
 
         base_email = extract_base_email(email)

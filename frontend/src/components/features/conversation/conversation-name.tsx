@@ -6,7 +6,6 @@ import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation"
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
-import { ENABLE_PUBLIC_CONVERSATION_SHARING } from "#/utils/feature-flags";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
@@ -187,19 +186,9 @@ export function ConversationName() {
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
-                onTogglePublic={
-                  ENABLE_PUBLIC_CONVERSATION_SHARING()
-                    ? handleTogglePublic
-                    : undefined
-                }
-                shareUrl={
-                  ENABLE_PUBLIC_CONVERSATION_SHARING() ? shareUrl : undefined
-                }
-                onCopyShareLink={
-                  ENABLE_PUBLIC_CONVERSATION_SHARING()
-                    ? handleCopyShareLink
-                    : undefined
-                }
+                onTogglePublic={handleTogglePublic}
+                shareUrl={shareUrl}
+                onCopyShareLink={handleCopyShareLink}
                 onDownloadConversation={
                   shouldShowDownloadConversation
                     ? handleDownloadConversation

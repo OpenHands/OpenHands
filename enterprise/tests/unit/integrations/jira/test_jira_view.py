@@ -10,6 +10,7 @@ from integrations.jira.jira_view import (
     JiraFactory,
     JiraNewConversationView,
 )
+from integrations.models import Message, SourceType
 
 
 class TestJiraNewConversationView:
@@ -190,3 +191,359 @@ class TestJiraViewEdgeCases:
         assert new_conversation_view.job_context.issue_key == 'TEST-123'
         assert new_conversation_view.selected_repo == 'test/repo1'
         assert new_conversation_view.conversation_id == 'conv-123'
+
+
+class TestJiraFactoryIsLabeledTicket:
+    """Parameterized tests for JiraFactory.is_labeled_ticket method."""
+
+    @pytest.mark.parametrize(
+        'payload,expected',
+        [
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {
+                        'items': [{'field': 'labels', 'toString': 'openhands'}]
+                    },
+                },
+                True,
+                id='issue_updated_with_openhands_label',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {
+                        'items': [
+                            {'field': 'labels', 'toString': 'bug'},
+                            {'field': 'labels', 'toString': 'openhands'},
+                        ]
+                    },
+                },
+                True,
+                id='issue_updated_with_multiple_labels_including_openhands',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {
+                        'items': [{'field': 'labels', 'toString': 'bug,urgent'}]
+                    },
+                },
+                False,
+                id='issue_updated_without_openhands_label',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {'items': []},
+                },
+                False,
+                id='issue_updated_with_empty_changelog_items',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {},
+                },
+                False,
+                id='issue_updated_with_empty_changelog',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                },
+                False,
+                id='issue_updated_without_changelog',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'changelog': {
+                        'items': [{'field': 'labels', 'toString': 'openhands'}]
+                    },
+                },
+                False,
+                id='comment_created_event_with_label',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'issue_deleted',
+                    'changelog': {
+                        'items': [{'field': 'labels', 'toString': 'openhands'}]
+                    },
+                },
+                False,
+                id='unsupported_event_type',
+            ),
+            pytest.param(
+                {},
+                False,
+                id='empty_payload',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {
+                        'items': [{'field': 'status', 'toString': 'In Progress'}]
+                    },
+                },
+                False,
+                id='issue_updated_with_non_label_field',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {
+                        'items': [{'field': 'labels', 'fromString': 'openhands'}]
+                    },
+                },
+                False,
+                id='issue_updated_with_fromString_instead_of_toString',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {
+                        'items': [
+                            {'field': 'labels', 'toString': 'not-openhands'},
+                            {'field': 'priority', 'toString': 'High'},
+                        ]
+                    },
+                },
+                False,
+                id='issue_updated_with_mixed_fields_no_openhands',
+            ),
+        ],
+    )
+    def test_is_labeled_ticket(self, payload, expected):
+        """Test is_labeled_ticket with various payloads."""
+        with patch('integrations.jira.jira_view.OH_LABEL', 'openhands'):
+            message = Message(source=SourceType.JIRA, message={'payload': payload})
+            result = JiraFactory.is_labeled_ticket(message)
+            assert result == expected
+
+    @pytest.mark.parametrize(
+        'payload,expected',
+        [
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {
+                        'items': [{'field': 'labels', 'toString': 'openhands-exp'}]
+                    },
+                },
+                True,
+                id='issue_updated_with_staging_label',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'changelog': {
+                        'items': [{'field': 'labels', 'toString': 'openhands'}]
+                    },
+                },
+                False,
+                id='issue_updated_with_prod_label_in_staging_env',
+            ),
+        ],
+    )
+    def test_is_labeled_ticket_staging_labels(self, payload, expected):
+        """Test is_labeled_ticket with staging environment labels."""
+        with patch('integrations.jira.jira_view.OH_LABEL', 'openhands-exp'):
+            message = Message(source=SourceType.JIRA, message={'payload': payload})
+            result = JiraFactory.is_labeled_ticket(message)
+            assert result == expected
+
+
+class TestJiraFactoryIsTicketComment:
+    """Parameterized tests for JiraFactory.is_ticket_comment method."""
+
+    @pytest.mark.parametrize(
+        'payload,expected',
+        [
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Please fix this @openhands'},
+                },
+                True,
+                id='comment_with_openhands_mention',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': '@openhands please help'},
+                },
+                True,
+                id='comment_starting_with_openhands_mention',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Hello @openhands!'},
+                },
+                True,
+                id='comment_with_openhands_mention_and_punctuation',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': '(@openhands)'},
+                },
+                True,
+                id='comment_with_openhands_in_parentheses',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Hey @OpenHands can you help?'},
+                },
+                True,
+                id='comment_with_case_insensitive_mention',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Hey @OPENHANDS!'},
+                },
+                True,
+                id='comment_with_uppercase_mention',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Regular comment without mention'},
+                },
+                False,
+                id='comment_without_mention',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Hello @openhands-agent!'},
+                },
+                False,
+                id='comment_with_openhands_as_prefix',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'user@openhands.com'},
+                },
+                False,
+                id='comment_with_openhands_in_email',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': ''},
+                },
+                False,
+                id='comment_with_empty_body',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {},
+                },
+                False,
+                id='comment_without_body',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                },
+                False,
+                id='comment_created_without_comment_data',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'jira:issue_updated',
+                    'comment': {'body': 'Please fix this @openhands'},
+                },
+                False,
+                id='issue_updated_event_with_mention',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'issue_deleted',
+                    'comment': {'body': '@openhands'},
+                },
+                False,
+                id='unsupported_event_type_with_mention',
+            ),
+            pytest.param(
+                {},
+                False,
+                id='empty_payload',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Multiple @openhands @openhands mentions'},
+                },
+                True,
+                id='comment_with_multiple_mentions',
+            ),
+        ],
+    )
+    def test_is_ticket_comment(self, payload, expected):
+        """Test is_ticket_comment with various payloads."""
+        with patch('integrations.jira.jira_view.INLINE_OH_LABEL', '@openhands'), patch(
+            'integrations.jira.jira_view.has_exact_mention'
+        ) as mock_has_exact_mention:
+            from integrations.utils import has_exact_mention
+
+            mock_has_exact_mention.side_effect = (
+                lambda text, mention: has_exact_mention(text, mention)
+            )
+
+            message = Message(source=SourceType.JIRA, message={'payload': payload})
+            result = JiraFactory.is_ticket_comment(message)
+            assert result == expected
+
+    @pytest.mark.parametrize(
+        'payload,expected',
+        [
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Please fix this @openhands-exp'},
+                },
+                True,
+                id='comment_with_staging_mention',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': '@openhands-exp please help'},
+                },
+                True,
+                id='comment_starting_with_staging_mention',
+            ),
+            pytest.param(
+                {
+                    'webhookEvent': 'comment_created',
+                    'comment': {'body': 'Please fix this @openhands'},
+                },
+                False,
+                id='comment_with_prod_mention_in_staging_env',
+            ),
+        ],
+    )
+    def test_is_ticket_comment_staging_labels(self, payload, expected):
+        """Test is_ticket_comment with staging environment labels."""
+        with patch(
+            'integrations.jira.jira_view.INLINE_OH_LABEL', '@openhands-exp'
+        ), patch(
+            'integrations.jira.jira_view.has_exact_mention'
+        ) as mock_has_exact_mention:
+            from integrations.utils import has_exact_mention
+
+            mock_has_exact_mention.side_effect = (
+                lambda text, mention: has_exact_mention(text, mention)
+            )
+
+            message = Message(source=SourceType.JIRA, message={'payload': payload})
+            result = JiraFactory.is_ticket_comment(message)
+            assert result == expected

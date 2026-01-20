@@ -99,10 +99,19 @@ async def generate_byor_key(user_id: str) -> str | None:
 
 
 async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
-    """Delete the BYOR key from LiteLLM using the key directly."""
+    """Delete the BYOR key from LiteLLM using the key directly.
 
+    Also attempts to delete by key alias if the key is not found,
+    to clean up orphaned aliases that could block key regeneration.
+    """
     try:
-        await LiteLlmManager.delete_key(byor_key)
+        # Get user to construct the key alias
+        user = await UserStore.get_user_by_id_async(user_id)
+        key_alias = None
+        if user and user.current_org_id:
+            key_alias = f'BYOR Key - user {user_id}, org {user.current_org_id}'
+
+        await LiteLlmManager.delete_key(byor_key, key_alias=key_alias)
         logger.info(
             'Successfully deleted BYOR key from LiteLLM',
             extra={'user_id': user_id},
