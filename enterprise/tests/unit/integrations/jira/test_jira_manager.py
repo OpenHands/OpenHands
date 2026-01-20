@@ -251,7 +251,11 @@ class TestParseWebhook:
         self, jira_manager, sample_comment_webhook_payload
     ):
         """Test parsing comment creation webhook."""
-        job_context = jira_manager.parse_webhook(sample_comment_webhook_payload)
+        message = Message(
+            source=SourceType.JIRA,
+            message={'payload': sample_comment_webhook_payload},
+        )
+        job_context = jira_manager.parse_webhook(message)
 
         assert job_context is not None
         assert job_context.issue_id == '12345'
@@ -263,7 +267,7 @@ class TestParseWebhook:
         assert job_context.base_api_url == 'https://test.atlassian.net'
 
     def test_parse_webhook_comment_without_mention(self, jira_manager):
-        """Test parsing comment without @openhands mention."""
+        """Test parsing comment without @openhands mention raises error."""
         payload = {
             'webhookEvent': 'comment_created',
             'comment': {
@@ -271,6 +275,7 @@ class TestParseWebhook:
                 'author': {
                     'emailAddress': 'user@company.com',
                     'displayName': 'Test User',
+                    'accountId': 'user456',
                     'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
                 },
             },
@@ -281,14 +286,19 @@ class TestParseWebhook:
             },
         }
 
-        job_context = jira_manager.parse_webhook(payload)
-        assert job_context is None
+        message = Message(source=SourceType.JIRA, message={'payload': payload})
+        with pytest.raises(ValueError, match='Unrecognized jira event'):
+            jira_manager.parse_webhook(message)
 
     def test_parse_webhook_issue_update_with_openhands_label(
         self, jira_manager, sample_issue_update_webhook_payload
     ):
         """Test parsing issue update with openhands label."""
-        job_context = jira_manager.parse_webhook(sample_issue_update_webhook_payload)
+        message = Message(
+            source=SourceType.JIRA,
+            message={'payload': sample_issue_update_webhook_payload},
+        )
+        job_context = jira_manager.parse_webhook(message)
 
         assert job_context is not None
         assert job_context.issue_id == '12345'
@@ -298,7 +308,7 @@ class TestParseWebhook:
         assert job_context.display_name == 'Test User'
 
     def test_parse_webhook_issue_update_without_openhands_label(self, jira_manager):
-        """Test parsing issue update without openhands label."""
+        """Test parsing issue update without openhands label raises error."""
         payload = {
             'webhookEvent': 'jira:issue_updated',
             'changelog': {'items': [{'field': 'labels', 'toString': 'bug,urgent'}]},
@@ -310,12 +320,14 @@ class TestParseWebhook:
             'user': {
                 'emailAddress': 'user@company.com',
                 'displayName': 'Test User',
+                'accountId': 'user456',
                 'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
             },
         }
 
-        job_context = jira_manager.parse_webhook(payload)
-        assert job_context is None
+        message = Message(source=SourceType.JIRA, message={'payload': payload})
+        with pytest.raises(ValueError, match='Unrecognized jira event'):
+            jira_manager.parse_webhook(message)
 
     def test_parse_webhook_unsupported_event(self, jira_manager):
         """Test parsing webhook with unsupported event."""
@@ -324,8 +336,9 @@ class TestParseWebhook:
             'issue': {'id': '12345', 'key': 'PROJ-123'},
         }
 
-        job_context = jira_manager.parse_webhook(payload)
-        assert job_context is None
+        message = Message(source=SourceType.JIRA, message={'payload': payload})
+        with pytest.raises(ValueError, match='Unrecognized jira event'):
+            jira_manager.parse_webhook(message)
 
     def test_parse_webhook_missing_required_fields(self, jira_manager):
         """Test parsing webhook with missing required fields."""
@@ -346,7 +359,8 @@ class TestParseWebhook:
             },
         }
 
-        job_context = jira_manager.parse_webhook(payload)
+        message = Message(source=SourceType.JIRA, message={'payload': payload})
+        job_context = jira_manager.parse_webhook(message)
         assert job_context is None
 
 
