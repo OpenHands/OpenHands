@@ -214,8 +214,9 @@ export function GitRepoDropdown({
     },
     inputValue,
     stateReducer: (state, actionAndChanges) =>
-      actionAndChanges.type === useCombobox.stateChangeTypes.InputClick
-        ? { ...actionAndChanges.changes, isOpen: state.isOpen }
+      actionAndChanges.type === useCombobox.stateChangeTypes.InputClick &&
+      state.isOpen
+        ? { ...actionAndChanges.changes, isOpen: true }
         : actionAndChanges.changes,
   });
 
