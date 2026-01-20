@@ -7,7 +7,7 @@ import uuid
 from urllib.parse import urlparse
 
 import requests
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from integrations.jira.jira_manager import JiraManager
 from integrations.models import Message, SourceType
@@ -126,9 +126,24 @@ redis_client = create_redis_client()
 
 
 async def verify_jira_signature(body: bytes, signature: str, payload: dict):
+    """
+    Verify Jira webhook signature.
+
+    Args:
+        body: Raw request body bytes
+        signature: Signature from x-hub-signature header (format: "sha256=<hash>")
+        payload: Parsed JSON payload from webhook
+
+    Raises:
+        HTTPException: 403 if signature verification fails or workspace is invalid
+
+    Returns:
+        None (raises exception on failure)
+    """
+
     if not signature:
         raise HTTPException(
-            status_code=403, detail='x-hub-signature-256 header is missing!'
+            status_code=403, detail='x-hub-signature header is missing!'
         )
 
     workspace_name = jira_manager.get_workspace_name_from_payload(payload)
@@ -261,6 +276,7 @@ async def _validate_workspace_update_permissions(user_id: str, target_workspace:
 async def jira_events(
     request: Request,
     background_tasks: BackgroundTasks,
+    x_hub_signature: str = Header(None),
 ):
     """Handle Jira webhook events."""
     # Check if Jira webhooks are enabled
@@ -272,8 +288,11 @@ async def jira_events(
         )
 
     try:
-        signature_header = request.headers.get('x-hub-signature')
-        signature = signature_header.split('=')[1] if signature_header else None
+        parts = x_hub_signature.split('=', 1)
+        if not (len(parts) == 2 and parts[1]):
+            raise HTTPException(status_code=403, detail='Malformed x-hub-signature!')
+
+        signature = parts[1]
         body = await request.body()
         payload = await request.json()
 
