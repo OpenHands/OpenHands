@@ -748,6 +748,20 @@ class StandaloneConversationManager(ConversationManager):
 
 def _get_status_from_session(session: Session) -> ConversationStatus:
     agent_session = session.agent_session
+
+    # Check agent state if controller exists
+    if agent_session.controller:
+        agent_state = agent_session.controller.state.agent_state
+        if agent_state in (
+            AgentState.FINISHED,
+            AgentState.STOPPED,
+            AgentState.REJECTED,
+        ):
+            return ConversationStatus.STOPPED
+        if agent_state == AgentState.ERROR:
+            return ConversationStatus.ERROR
+
+    # Fallback to runtime check
     if agent_session.runtime and agent_session.runtime.runtime_initialized:
         return ConversationStatus.RUNNING
     return ConversationStatus.STARTING

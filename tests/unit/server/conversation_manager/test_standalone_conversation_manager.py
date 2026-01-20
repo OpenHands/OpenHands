@@ -6,11 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from openhands.core.config.openhands_config import OpenHandsConfig
+from openhands.core.schema.agent import AgentState
 from openhands.server.conversation_manager.standalone_conversation_manager import (
     StandaloneConversationManager,
+    _get_status_from_session,
 )
 from openhands.server.monitoring import MonitoringListener
 from openhands.server.session.conversation_init_data import ConversationInitData
+from openhands.storage.data_models.conversation_status import ConversationStatus
 from openhands.storage.memory import InMemoryFileStore
 
 
@@ -195,3 +198,139 @@ async def test_cleanup_session_connections():
         assert sio.disconnect.await_count == 2
         sio.disconnect.assert_any_call('conn1')
         sio.disconnect.assert_any_call('conn2')
+
+
+# Tests for _get_status_from_session
+def _create_mock_session(
+    agent_state=None, runtime_initialized=False, has_controller=True
+):
+    """Helper to create a mock session with configurable state."""
+    session = MagicMock()
+    session.agent_session = MagicMock()
+
+    if has_controller:
+        session.agent_session.controller = MagicMock()
+        session.agent_session.controller.state.agent_state = agent_state
+    else:
+        session.agent_session.controller = None
+
+    if runtime_initialized:
+        session.agent_session.runtime = MagicMock()
+        session.agent_session.runtime.runtime_initialized = True
+    else:
+        session.agent_session.runtime = None
+
+    return session
+
+
+def test_get_status_from_session_returns_stopped_when_agent_finished():
+    session = _create_mock_session(
+        agent_state=AgentState.FINISHED, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.STOPPED
+
+
+def test_get_status_from_session_returns_stopped_when_agent_stopped():
+    session = _create_mock_session(
+        agent_state=AgentState.STOPPED, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.STOPPED
+
+
+def test_get_status_from_session_returns_stopped_when_agent_rejected():
+    session = _create_mock_session(
+        agent_state=AgentState.REJECTED, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.STOPPED
+
+
+def test_get_status_from_session_returns_error_when_agent_error():
+    session = _create_mock_session(
+        agent_state=AgentState.ERROR, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.ERROR
+
+
+def test_get_status_from_session_returns_running_when_agent_running():
+    session = _create_mock_session(
+        agent_state=AgentState.RUNNING, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.RUNNING
+
+
+def test_get_status_from_session_returns_running_when_no_controller_but_runtime_initialized():
+    session = _create_mock_session(has_controller=False, runtime_initialized=True)
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.RUNNING
+
+
+def test_get_status_from_session_returns_starting_when_no_runtime():
+    session = _create_mock_session(has_controller=False, runtime_initialized=False)
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.STARTING
+
+
+# Edge case tests
+def test_get_status_from_session_returns_running_when_agent_awaiting_user_input():
+    session = _create_mock_session(
+        agent_state=AgentState.AWAITING_USER_INPUT, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.RUNNING
+
+
+def test_get_status_from_session_returns_running_when_agent_paused():
+    session = _create_mock_session(
+        agent_state=AgentState.PAUSED, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.RUNNING
+
+
+def test_get_status_from_session_returns_running_when_agent_loading():
+    session = _create_mock_session(
+        agent_state=AgentState.LOADING, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.RUNNING
+
+
+def test_get_status_from_session_returns_running_when_agent_awaiting_user_confirmation():
+    session = _create_mock_session(
+        agent_state=AgentState.AWAITING_USER_CONFIRMATION, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.RUNNING
+
+
+def test_get_status_from_session_returns_running_when_agent_rate_limited():
+    session = _create_mock_session(
+        agent_state=AgentState.RATE_LIMITED, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.RUNNING
+
+
+def test_get_status_from_session_returns_starting_when_runtime_exists_but_not_initialized():
+    """Edge case: runtime exists but runtime_initialized is False."""
+    session = MagicMock()
+    session.agent_session = MagicMock()
+    session.agent_session.controller = None
+    session.agent_session.runtime = MagicMock()
+    session.agent_session.runtime.runtime_initialized = False
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.STARTING
+
+
+def test_get_status_from_session_with_controller_but_no_terminal_state():
+    """Edge case: controller exists with a non-terminal state, runtime is initialized."""
+    session = _create_mock_session(
+        agent_state=AgentState.USER_CONFIRMED, runtime_initialized=True
+    )
+    status = _get_status_from_session(session)
+    assert status == ConversationStatus.RUNNING
