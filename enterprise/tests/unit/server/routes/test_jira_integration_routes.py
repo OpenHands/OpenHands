@@ -68,14 +68,15 @@ def mock_user_auth():
 @patch('server.routes.integration.jira.redis_client', new_callable=MagicMock)
 async def test_jira_events_invalid_signature(mock_redis, mock_verify, mock_request):
     with patch('server.routes.integration.jira.JIRA_WEBHOOKS_ENABLED', True):
-        mock_request.headers = {'x-hub-signature': 'sha256=invalid'}
         mock_request.body = AsyncMock(return_value=b'{}')
         mock_request.json = AsyncMock(return_value={})
         mock_verify.side_effect = HTTPException(
             status_code=403, detail="Request signatures didn't match!"
         )
         with pytest.raises(HTTPException) as exc_info:
-            await jira_events(mock_request, MagicMock())
+            await jira_events(
+                mock_request, MagicMock(), x_hub_signature='sha256=invalid'
+            )
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Request signatures didn't match!"
 
@@ -85,12 +86,13 @@ async def test_jira_events_invalid_signature(mock_redis, mock_verify, mock_reque
 @patch('server.routes.integration.jira.redis_client')
 async def test_jira_events_duplicate_request(mock_redis, mock_verify, mock_request):
     with patch('server.routes.integration.jira.JIRA_WEBHOOKS_ENABLED', True):
-        mock_request.headers = {'x-hub-signature': 'sha256=sig123'}
         mock_request.body = AsyncMock(return_value=b'{}')
         mock_request.json = AsyncMock(return_value={})
         mock_verify.return_value = None
         mock_redis.exists.return_value = True
-        response = await jira_events(mock_request, MagicMock())
+        response = await jira_events(
+            mock_request, MagicMock(), x_hub_signature='sha256=sig123'
+        )
         assert response.status_code == 200
         body = json.loads(response.body)
         assert body['success'] is True
@@ -365,14 +367,15 @@ async def test_jira_events_processing_success(
     mock_redis, mock_verify, mock_manager, mock_request
 ):
     with patch('server.routes.integration.jira.JIRA_WEBHOOKS_ENABLED', True):
-        mock_request.headers = {'x-hub-signature': 'sha256=sig123'}
         mock_request.body = AsyncMock(return_value=b'{"test": "payload"}')
         mock_request.json = AsyncMock(return_value={'test': 'payload'})
         mock_verify.return_value = None
         mock_redis.exists.return_value = False
 
         background_tasks = MagicMock()
-        response = await jira_events(mock_request, background_tasks)
+        response = await jira_events(
+            mock_request, background_tasks, x_hub_signature='sha256=sig123'
+        )
 
         assert response.status_code == 200
         body = json.loads(response.body)
@@ -386,11 +389,12 @@ async def test_jira_events_processing_success(
 @patch('server.routes.integration.jira.redis_client', new_callable=MagicMock)
 async def test_jira_events_general_exception(mock_redis, mock_verify, mock_request):
     with patch('server.routes.integration.jira.JIRA_WEBHOOKS_ENABLED', True):
-        mock_request.headers = {'x-hub-signature': 'sha256=sig123'}
         mock_request.body = AsyncMock(side_effect=Exception('Unexpected error'))
         mock_request.json = AsyncMock(return_value={})
 
-        response = await jira_events(mock_request, MagicMock())
+        response = await jira_events(
+            mock_request, MagicMock(), x_hub_signature='sha256=sig123'
+        )
 
         assert response.status_code == 500
         body = json.loads(response.body)
@@ -435,8 +439,8 @@ class TestVerifyJiraSignature:
     @pytest.mark.parametrize(
         'signature,expected_detail',
         [
-            (None, 'x-hub-signature-256 header is missing!'),
-            ('', 'x-hub-signature-256 header is missing!'),
+            (None, 'x-hub-signature header is missing!'),
+            ('', 'x-hub-signature header is missing!'),
         ],
         ids=['signature_none', 'signature_empty'],
     )
