@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from server.auth.constants import JIRA_CLIENT_ID, JIRA_CLIENT_SECRET
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
+from storage.jira_workspace import JiraWorkspace
 from storage.redis import create_redis_client
 
 from openhands.core.logger import openhands_logger as logger
