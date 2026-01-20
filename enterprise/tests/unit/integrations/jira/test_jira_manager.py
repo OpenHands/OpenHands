@@ -251,7 +251,11 @@ class TestParseWebhook:
         self, jira_manager, sample_comment_webhook_payload
     ):
         """Test parsing comment creation webhook."""
-        job_context = jira_manager.parse_webhook(sample_comment_webhook_payload)
+        message = Message(
+            source=SourceType.JIRA,
+            message={'payload': sample_comment_webhook_payload},
+        )
+        job_context = jira_manager.parse_webhook(message)
 
         assert job_context is not None
         assert job_context.issue_id == '12345'
@@ -263,7 +267,7 @@ class TestParseWebhook:
         assert job_context.base_api_url == 'https://test.atlassian.net'
 
     def test_parse_webhook_comment_without_mention(self, jira_manager):
-        """Test parsing comment without @openhands mention."""
+        """Test parsing comment without @openhands mention raises error."""
         payload = {
             'webhookEvent': 'comment_created',
             'comment': {
@@ -271,6 +275,7 @@ class TestParseWebhook:
                 'author': {
                     'emailAddress': 'user@company.com',
                     'displayName': 'Test User',
+                    'accountId': 'user456',
                     'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
                 },
             },
@@ -281,14 +286,19 @@ class TestParseWebhook:
             },
         }
 
-        job_context = jira_manager.parse_webhook(payload)
-        assert job_context is None
+        message = Message(source=SourceType.JIRA, message={'payload': payload})
+        with pytest.raises(ValueError, match='Unrecognized jira event'):
+            jira_manager.parse_webhook(message)
 
     def test_parse_webhook_issue_update_with_openhands_label(
         self, jira_manager, sample_issue_update_webhook_payload
     ):
         """Test parsing issue update with openhands label."""
-        job_context = jira_manager.parse_webhook(sample_issue_update_webhook_payload)
+        message = Message(
+            source=SourceType.JIRA,
+            message={'payload': sample_issue_update_webhook_payload},
+        )
+        job_context = jira_manager.parse_webhook(message)
 
         assert job_context is not None
         assert job_context.issue_id == '12345'
@@ -298,7 +308,7 @@ class TestParseWebhook:
         assert job_context.display_name == 'Test User'
 
     def test_parse_webhook_issue_update_without_openhands_label(self, jira_manager):
-        """Test parsing issue update without openhands label."""
+        """Test parsing issue update without openhands label raises error."""
         payload = {
             'webhookEvent': 'jira:issue_updated',
             'changelog': {'items': [{'field': 'labels', 'toString': 'bug,urgent'}]},
@@ -310,12 +320,14 @@ class TestParseWebhook:
             'user': {
                 'emailAddress': 'user@company.com',
                 'displayName': 'Test User',
+                'accountId': 'user456',
                 'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
             },
         }
 
-        job_context = jira_manager.parse_webhook(payload)
-        assert job_context is None
+        message = Message(source=SourceType.JIRA, message={'payload': payload})
+        with pytest.raises(ValueError, match='Unrecognized jira event'):
+            jira_manager.parse_webhook(message)
 
     def test_parse_webhook_unsupported_event(self, jira_manager):
         """Test parsing webhook with unsupported event."""
@@ -324,8 +336,9 @@ class TestParseWebhook:
             'issue': {'id': '12345', 'key': 'PROJ-123'},
         }
 
-        job_context = jira_manager.parse_webhook(payload)
-        assert job_context is None
+        message = Message(source=SourceType.JIRA, message={'payload': payload})
+        with pytest.raises(ValueError, match='Unrecognized jira event'):
+            jira_manager.parse_webhook(message)
 
     def test_parse_webhook_missing_required_fields(self, jira_manager):
         """Test parsing webhook with missing required fields."""
@@ -346,7 +359,8 @@ class TestParseWebhook:
             },
         }
 
-        job_context = jira_manager.parse_webhook(payload)
+        message = Message(source=SourceType.JIRA, message={'payload': payload})
+        job_context = jira_manager.parse_webhook(message)
         assert job_context is None
 
 
@@ -373,12 +387,15 @@ class TestReceiveMessage:
         jira_manager.get_issue_details = AsyncMock(
             return_value=('Test Title', 'Test Description')
         )
-        jira_manager.is_job_requested = AsyncMock(return_value=True)
+        jira_manager.is_repository_specified = AsyncMock(return_value=True)
         jira_manager.start_job = AsyncMock()
 
         with patch(
             'integrations.jira.jira_manager.JiraFactory.create_jira_view_from_payload'
-        ) as mock_factory:
+        ) as mock_factory, patch(
+            'integrations.jira.jira_manager.JiraFactory.is_ticket_comment',
+            return_value=True,
+        ):
             mock_view = MagicMock(spec=JiraViewInterface)
             mock_factory.return_value = mock_view
 
@@ -536,14 +553,14 @@ class TestReceiveMessage:
             jira_manager._send_error_comment.assert_called_once()
 
 
-class TestIsJobRequested:
-    """Test job request validation."""
+class TestIsRepositorySpecified:
+    """Test repository specification validation."""
 
     @pytest.mark.asyncio
-    async def test_is_job_requested_new_conversation_with_repo_match(
+    async def test_is_repository_specified_new_conversation_with_repo_match(
         self, jira_manager, sample_job_context, sample_user_auth
     ):
-        """Test job request validation for new conversation with repository match."""
+        """Test repository validation for new conversation with repository match."""
         mock_view = MagicMock(spec=JiraNewConversationView)
         mock_view.saas_user_auth = sample_user_auth
         mock_view.job_context = sample_job_context
@@ -565,16 +582,16 @@ class TestIsJobRequested:
             mock_filter.return_value = (True, mock_repos)
 
             message = Message(source=SourceType.JIRA, message={})
-            result = await jira_manager.is_job_requested(message, mock_view)
+            result = await jira_manager.is_repository_specified(message, mock_view)
 
             assert result is True
             assert mock_view.selected_repo == 'company/repo'
 
     @pytest.mark.asyncio
-    async def test_is_job_requested_new_conversation_no_repo_match(
+    async def test_is_repository_specified_new_conversation_no_repo_match(
         self, jira_manager, sample_job_context, sample_user_auth
     ):
-        """Test job request validation for new conversation without repository match."""
+        """Test repository validation for new conversation without repository match."""
         mock_view = MagicMock(spec=JiraNewConversationView)
         mock_view.saas_user_auth = sample_user_auth
         mock_view.job_context = sample_job_context
@@ -597,14 +614,16 @@ class TestIsJobRequested:
             mock_filter.return_value = (False, [])
 
             message = Message(source=SourceType.JIRA, message={})
-            result = await jira_manager.is_job_requested(message, mock_view)
+            result = await jira_manager.is_repository_specified(message, mock_view)
 
             assert result is False
             jira_manager._send_repo_selection_comment.assert_called_once_with(mock_view)
 
     @pytest.mark.asyncio
-    async def test_is_job_requested_exception(self, jira_manager, sample_user_auth):
-        """Test job request validation when an exception occurs."""
+    async def test_is_repository_specified_exception(
+        self, jira_manager, sample_user_auth
+    ):
+        """Test repository validation when an exception occurs."""
         mock_view = MagicMock(spec=JiraNewConversationView)
         mock_view.saas_user_auth = sample_user_auth
         jira_manager._get_repositories = AsyncMock(
@@ -612,7 +631,7 @@ class TestIsJobRequested:
         )
 
         message = Message(source=SourceType.JIRA, message={})
-        result = await jira_manager.is_job_requested(message, mock_view)
+        result = await jira_manager.is_repository_specified(message, mock_view)
 
         assert result is False
 

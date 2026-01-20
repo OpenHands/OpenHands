@@ -433,6 +433,14 @@ class LiteLlmManager:
         )
 
         if not response.is_success:
+            if response.status_code == 401:
+                logger.warning(
+                    'invalid_litellm_key_during_update',
+                    extra={
+                        'user_id': keycloak_user_id,
+                    },
+                )
+                return
             logger.error(
                 'error_updating_litellm_key',
                 extra={

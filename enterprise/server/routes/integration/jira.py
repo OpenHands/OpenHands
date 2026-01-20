@@ -9,11 +9,11 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from integrations.jira.jira_manager import JiraManager
 from integrations.models import Message, SourceType
+from integrations.utils import HOST_URL
 from pydantic import BaseModel, Field, field_validator
 from server.auth.constants import JIRA_CLIENT_ID, JIRA_CLIENT_SECRET
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
-from server.constants import WEB_HOST
 from storage.redis import create_redis_client
 
 from openhands.core.logger import openhands_logger as logger
@@ -24,7 +24,7 @@ JIRA_WEBHOOKS_ENABLED = os.environ.get('JIRA_WEBHOOKS_ENABLED', '0') in (
     '1',
     'true',
 )
-JIRA_REDIRECT_URI = f'https://{WEB_HOST}/integration/jira/callback'
+JIRA_REDIRECT_URI = f'{HOST_URL}/integration/jira/callback'
 JIRA_SCOPES = 'read:me read:jira-user read:jira-work'
 JIRA_AUTH_URL = 'https://auth.atlassian.com/authorize'
 JIRA_TOKEN_URL = 'https://auth.atlassian.com/oauth/token'

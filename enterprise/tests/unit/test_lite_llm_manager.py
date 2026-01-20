@@ -609,6 +609,73 @@ class TestLiteLlmManager:
             )
 
     @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_update_key_success(self, mock_http_client, mock_response):
+        """Test successful _update_key operation."""
+        # Arrange
+        mock_http_client.post.return_value = mock_response
+
+        # Act
+        await LiteLlmManager._update_key(
+            mock_http_client, 'test-user-id', 'test-api-key', team_id='test-team-id'
+        )
+
+        # Assert
+        mock_http_client.post.assert_called_once()
+        call_args = mock_http_client.post.call_args
+        assert 'http://test.com/key/update' in call_args[0]
+        assert call_args[1]['json']['key'] == 'test-api-key'
+        assert call_args[1]['json']['team_id'] == 'test-team-id'
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_update_key_invalid_key_returns_gracefully(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _update_key handles 401 Unauthorized for invalid keys gracefully."""
+        # Arrange
+        error_response = MagicMock()
+        error_response.is_success = False
+        error_response.status_code = 401
+        error_response.text = 'Unauthorized'
+        mock_http_client.post.return_value = error_response
+
+        # Act
+        await LiteLlmManager._update_key(
+            mock_http_client, 'test-user-id', 'invalid-api-key', team_id='test-team-id'
+        )
+
+        # Assert
+        mock_logger.warning.assert_called_once_with(
+            'invalid_litellm_key_during_update',
+            extra={'user_id': 'test-user-id'},
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_update_key_other_error_raises_exception(self, mock_http_client):
+        """Test _update_key raises exception for non-401 errors."""
+        # Arrange
+        error_response = MagicMock()
+        error_response.is_success = False
+        error_response.status_code = 500
+        error_response.text = 'Internal server error'
+        error_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            'Server error', request=MagicMock(), response=error_response
+        )
+        mock_http_client.post.return_value = error_response
+
+        # Act & Assert
+        with pytest.raises(httpx.HTTPStatusError):
+            await LiteLlmManager._update_key(
+                mock_http_client, 'test-user-id', 'test-api-key', team_id='test-team-id'
+            )
+
+    @pytest.mark.asyncio
     async def test_generate_key_success(self, mock_http_client, mock_response):
         """Test successful _generate_key operation."""
         mock_http_client.post.return_value = mock_response
