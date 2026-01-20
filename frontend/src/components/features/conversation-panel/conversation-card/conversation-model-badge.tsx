@@ -1,6 +1,7 @@
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { mapProvider } from "#/utils/map-provider";
+import { Typography } from "#/ui/typography";
 
 interface ConversationModelBadgeProps {
   llmModel: string;
@@ -15,9 +16,9 @@ export function ConversationModelBadge({
 
   return (
     <StyledTooltip content={llmModel} placement="top">
-      <span className="inline-flex cursor-pointer items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 bg-neutral-600/30 text-neutral-300 truncate max-w-[75px]">
+      <Typography.Text className="inline-flex cursor-pointer items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 bg-neutral-600/30 text-neutral-300 truncate max-w-[75px]">
         {displayText}
-      </span>
+      </Typography.Text>
     </StyledTooltip>
   );
 }
