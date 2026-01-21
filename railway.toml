@@ -1,0 +1,17 @@
+# Railway Configuration for OpenHands
+# Documentation: https://docs.railway.app/reference/config-as-code
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "./containers/app/Dockerfile"
+
+[deploy]
+startCommand = "uvicorn openhands.server.listen:app --host 0.0.0.0 --port $PORT"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+# Railway provides $PORT environment variable automatically
+# healthcheckPath = "/health"
+# healthcheckTimeout = 100
+
+# Example: uncomment to use a specific region
+# region = "us-west1"

@@ -1,0 +1,80 @@
+# Railway Ignore File
+# Files and directories to exclude from Railway deployments
+
+# Development
+.git/
+.github/
+.vscode/
+.idea/
+*.md
+!RAILWAY.md
+!README.md
+
+# Testing
+tests/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+coverage/
+.coverage
+pytest_cache/
+.pytest_cache/
+
+# Documentation
+docs/
+*.md
+!RAILWAY.md
+!README.md
+
+# Local development
+workspace/
+.openhands/
+*.log
+.env.local
+.env.*.local
+node_modules/
+
+# Build artifacts (will be rebuilt on Railway)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Development tools
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+
+# Local configuration
+config.toml
+!config.template.toml
+
+# Trajectories and cache
+trajectories/
+cache/
+/tmp/
