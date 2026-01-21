@@ -1,9 +1,10 @@
 import { OpenHandsEvent } from "#/types/v1/core";
-import { isObservationEvent } from "#/types/v1/type-guards";
+import { isObservationEvent, isActionEvent } from "#/types/v1/type-guards";
 
 /**
  * Handles adding an event to the UI events array
  * Replaces actions with observations when they arrive (so UI shows observation instead of action)
+ * Exception: ThinkAction is NOT replaced because the thought content is in the action, not in the observation
  */
 export const handleEventForUI = (
   event: OpenHandsEvent,
@@ -17,7 +18,15 @@ export const handleEventForUI = (
       (uiEvent) => uiEvent.id === event.action_id,
     );
     if (actionIndex !== -1) {
-      // Replace the action with the observation
+      const correspondingAction = newUiEvents[actionIndex];
+      // Don't replace ThinkAction with ThinkObservation
+      // The thought content is in the action, not the observation
+      if (
+        isActionEvent(correspondingAction) &&
+        correspondingAction.action.kind === "ThinkAction"
+      ) {
+        return newUiEvents;
+      }
       newUiEvents[actionIndex] = event;
     } else {
       // Action not found in uiEvents, just add the observation

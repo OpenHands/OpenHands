@@ -138,4 +138,63 @@ describe("handleEventForUI", () => {
       anotherActionEvent,
     ]);
   });
+
+  it("should NOT replace ThinkAction with observation", () => {
+    const mockThinkAction: ActionEvent = {
+      id: "test-think-action-1",
+      timestamp: Date.now().toString(),
+      source: "agent",
+      thought: [{ type: "text", text: "I am thinking..." }],
+      thinking_blocks: [],
+      action: {
+        kind: "ThinkAction",
+        thought: "I am thinking...",
+      },
+      tool_name: "think",
+      tool_call_id: "call_think_1",
+      tool_call: {
+        id: "call_think_1",
+        type: "function",
+        function: {
+          name: "think",
+          arguments: "",
+        },
+      },
+      llm_response_id: "response_think",
+      security_risk: SecurityRisk.UNKNOWN,
+    };
+
+    const mockThinkObservation: ObservationEvent = {
+      id: "test-think-observation-1",
+      timestamp: Date.now().toString(),
+      source: "environment",
+      tool_name: "",
+      tool_call_id: "",
+      observation: {
+        kind: "ExecuteBashObservation",
+        content: [],
+        command: "",
+        exit_code: 0,
+        error: false,
+        timeout: false,
+        metadata: {
+          exit_code: 0,
+          pid: 12345,
+          username: "user",
+          hostname: "localhost",
+          working_dir: "/home/user",
+          py_interpreter_path: null,
+          prefix: "",
+          suffix: "",
+        },
+      },
+      action_id: "test-think-action-1",
+    };
+
+    const initialUiEvents = [mockMessageEvent, mockThinkAction];
+    const result = handleEventForUI(mockThinkObservation, initialUiEvents);
+
+    expect(result).toEqual([mockMessageEvent, mockThinkAction]);
+    expect(result).not.toBe(initialUiEvents);
+  });
 });
