@@ -75,7 +75,6 @@ class TestLiveStatusAppConversationService:
             openhands_provider_base_url='https://provider.example.com',
             access_token_hard_timeout=None,
             app_mode='test',
-            keycloak_auth_cookie=None,
         )
 
         # Mock user info
@@ -150,10 +149,9 @@ class TestLiveStatusAppConversationService:
 
     @pytest.mark.asyncio
     async def test_setup_secrets_for_git_providers_with_saas_mode(self):
-        """Test _setup_secrets_for_git_providers with SaaS mode (includes keycloak cookie)."""
+        """Test _setup_secrets_for_git_providers with SaaS mode uses LookupSecret with X-Access-Token."""
         # Arrange
         self.service.app_mode = 'saas'
-        self.service.keycloak_auth_cookie = 'test_cookie'
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
@@ -173,8 +171,10 @@ class TestLiveStatusAppConversationService:
         assert 'GITLAB_TOKEN' in result
         lookup_secret = result['GITLAB_TOKEN']
         assert isinstance(lookup_secret, LookupSecret)
-        assert 'Cookie' in lookup_secret.headers
-        assert lookup_secret.headers['Cookie'] == 'keycloak_auth=test_cookie'
+        assert 'X-Access-Token' in lookup_secret.headers
+        assert lookup_secret.headers['X-Access-Token'] == 'test_access_token'
+        # Verify no cookie is included (authentication is via X-Access-Token only)
+        assert 'Cookie' not in lookup_secret.headers
         # Verify description is included
         assert lookup_secret.description == 'GITLAB authentication token'
 
