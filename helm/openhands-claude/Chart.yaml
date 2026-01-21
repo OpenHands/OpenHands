@@ -1,0 +1,27 @@
+apiVersion: v2
+name: openhands-claude
+description: OpenHands AI coding assistant with Claude Code CLI transport for subscription-based authentication
+
+type: application
+
+version: 0.1.0
+
+appVersion: "1.0.0"
+
+keywords:
+  - openhands
+  - ai
+  - coding-assistant
+  - claude
+  - anthropic
+
+home: https://github.com/OpenHands/OpenHands
+
+sources:
+  - https://github.com/OpenHands/OpenHands
+
+maintainers:
+  - name: OpenHands Team
+    url: https://github.com/OpenHands
+
+dependencies: []

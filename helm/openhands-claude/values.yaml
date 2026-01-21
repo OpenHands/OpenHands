@@ -1,0 +1,146 @@
+# Default values for openhands-claude
+# This is a YAML-formatted file.
+
+# Number of replicas
+replicaCount: 1
+
+image:
+  repository: openhands-claude-cli
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Claude Code CLI configuration
+claude:
+  # Enable Claude CLI transport (required for this chart)
+  enabled: true
+  # Model to use
+  model: "claude-sonnet-4-20250514"
+  # CLI timeout in seconds
+  timeout: 300
+  # OAuth token - can be set directly or via existingSecret
+  oauthToken: ""
+  # Use an existing secret for the OAuth token
+  existingSecret: ""
+  existingSecretKey: "CLAUDE_CODE_OAUTH_TOKEN"
+
+# OpenHands configuration
+openhands:
+  # Sandbox user ID
+  sandboxUserId: 0
+  # Workspace base path
+  workspaceBase: /opt/workspace_base
+  # File store configuration
+  fileStore: local
+  fileStorePath: /.openhands
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: openhands.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: openhands-tls
+  #    hosts:
+  #      - openhands.local
+
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube.
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+# Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Persistence for workspace
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  existingClaim: ""
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Environment variables to add to the container
+extraEnv: []
+#  - name: MY_VAR
+#    value: "my-value"
+
+# Additional volume mounts
+extraVolumeMounts: []
+
+# Additional volumes
+extraVolumes: []

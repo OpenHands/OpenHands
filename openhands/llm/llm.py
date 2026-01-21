@@ -46,6 +46,10 @@ from openhands.llm.fn_call_converter import (
     convert_non_fncall_messages_to_fncall_messages,
 )
 from openhands.llm.retry_mixin import RetryMixin
+from openhands.llm.transports.claude_code_cli import (
+    ClaudeCodeCLIConfig,
+    ClaudeCodeCLITransport,
+)
 
 __all__ = ['LLM']
 
@@ -213,6 +217,24 @@ class LLM(RetryMixin, DebugMixin):
         if self.config.completion_kwargs is not None:
             kwargs.update(self.config.completion_kwargs)
 
+        # Initialize Claude CLI transport if configured
+        self._use_claude_cli = self.config.use_claude_cli
+        self._claude_cli_transport: ClaudeCodeCLITransport | None = None
+
+        if self._use_claude_cli:
+            cli_config = ClaudeCodeCLIConfig(
+                cli_path=self.config.claude_cli_path,
+                oauth_token=self.config.claude_oauth_token.get_secret_value()
+                if self.config.claude_oauth_token
+                else None,
+                timeout=self.config.claude_cli_timeout,
+                model=self.config.model,
+            )
+            self._claude_cli_transport = ClaudeCodeCLITransport(cli_config)
+            logger.info(
+                f'Using Claude Code CLI transport for model {self.config.model}'
+            )
+
         self._completion = partial(
             litellm_completion,
             model=self.config.model,
@@ -335,19 +357,29 @@ class LLM(RetryMixin, DebugMixin):
             start_time = time.time()
             # we don't support streaming here, thus we get a ModelResponse
 
-            # Suppress httpx deprecation warnings during LiteLLM calls
-            # This prevents the "Use 'content=<...>' to upload raw bytes/text content" warning
-            # that appears when LiteLLM makes HTTP requests to LLM providers
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    'ignore', category=DeprecationWarning, module='httpx.*'
+            # Route to Claude CLI transport if configured
+            if self._use_claude_cli and self._claude_cli_transport is not None:
+                # Get tools from kwargs if present
+                tools = kwargs.get('tools', None)
+                resp: ModelResponse = self._claude_cli_transport.call(
+                    messages=messages,
+                    tools=tools,
+                    stream=False,
                 )
-                warnings.filterwarnings(
-                    'ignore',
-                    message=r'.*content=.*upload.*',
-                    category=DeprecationWarning,
-                )
-                resp: ModelResponse = self._completion_unwrapped(*args, **kwargs)
+            else:
+                # Suppress httpx deprecation warnings during LiteLLM calls
+                # This prevents the "Use 'content=<...>' to upload raw bytes/text content" warning
+                # that appears when LiteLLM makes HTTP requests to LLM providers
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        'ignore', category=DeprecationWarning, module='httpx.*'
+                    )
+                    warnings.filterwarnings(
+                        'ignore',
+                        message=r'.*content=.*upload.*',
+                        category=DeprecationWarning,
+                    )
+                    resp: ModelResponse = self._completion_unwrapped(*args, **kwargs)
 
             # Calculate and record latency
             latency = time.time() - start_time

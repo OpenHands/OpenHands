@@ -109,6 +109,24 @@ class LLMConfig(BaseModel):
         description='Custom kwargs to pass to litellm.completion',
     )
 
+    # Claude Code CLI transport configuration
+    use_claude_cli: bool = Field(
+        default=False,
+        description='Use Claude Code CLI for API calls instead of direct API (subscription auth)',
+    )
+    claude_cli_path: str = Field(
+        default='claude',
+        description='Path to the Claude Code CLI executable',
+    )
+    claude_oauth_token: SecretStr | None = Field(
+        default=None,
+        description='OAuth token for Claude Code CLI authentication (from setup-token)',
+    )
+    claude_cli_timeout: int = Field(
+        default=300,
+        description='Timeout in seconds for Claude Code CLI calls',
+    )
+
     model_config = ConfigDict(extra='forbid')
 
     @classmethod
