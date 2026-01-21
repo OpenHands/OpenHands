@@ -15,6 +15,7 @@ import { useRecaptcha } from "#/hooks/use-recaptcha";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import LoginWithEmail from "./otp-login/login-with-email";
+import GoogleSignInButton from "./google-sign-in";
 
 export interface LoginContentProps {
   githubAuthUrl: string | null;
@@ -205,7 +206,7 @@ export function LoginContent({
           </>
         )}
 
-        {/* render GMAIl here */}
+        <GoogleSignInButton onCredentialResponse={() => {}} clientId="" />
 
         <span className="text-[#A3A3A3] font-normal text-sm leading-5">
           {t("OR")}
