@@ -29,6 +29,7 @@ class ConversationInitData(Settings):
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
+        frozen=True,
     )
 
     @field_validator('git_provider_tokens', 'custom_secrets')
