@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ConversationTab } from "#/stores/conversation-store";
+import EventLogger from "./event-logger";
 
 export const LOCAL_STORAGE_KEYS = {
   CONVERSATION_STATE: "conversation-state",
@@ -65,7 +66,9 @@ export function setConversationState(
     const newState = { ...currentState, ...updates };
     localStorage.setItem(key, JSON.stringify(newState));
   } catch (err) {
-    console.warn("Failed to set conversation localStorage", err);
+    EventLogger.error(
+      `Failed to set conversation localStorage: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -74,10 +77,8 @@ export function clearConversationLocalStorage(conversationId: string) {
     const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
     localStorage.removeItem(key);
   } catch (err) {
-    console.warn(
-      "Failed to clear conversation localStorage",
-      conversationId,
-      err,
+    EventLogger.error(
+      `Failed to clear conversation localStorage (${conversationId}): ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
