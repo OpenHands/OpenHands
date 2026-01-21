@@ -29,10 +29,14 @@ from litellm import completion as litellm_completion
 from litellm import completion_cost as litellm_completion_cost
 from litellm.exceptions import (
     APIConnectionError,
-    BadGatewayError,
     RateLimitError,
     ServiceUnavailableError,
 )
+# BadGatewayError may not exist in older litellm versions
+try:
+    from litellm.exceptions import BadGatewayError
+except ImportError:
+    BadGatewayError = APIConnectionError  # Fallback to similar error type
 from litellm.types.utils import CostPerToken, ModelResponse, Usage
 from litellm.utils import create_pretrained_tokenizer
 
