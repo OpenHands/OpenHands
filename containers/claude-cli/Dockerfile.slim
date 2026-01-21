@@ -1,0 +1,30 @@
+# Slim Dockerfile - Extends official OpenHands image with Claude CLI
+# Build: docker build -t openhands-claude-cli -f containers/claude-cli/Dockerfile.slim .
+
+FROM ghcr.io/all-hands-ai/openhands:main
+
+USER root
+
+# Install Node.js for Claude Code CLI
+RUN apt-get update -y \
+    && apt-get install -y curl gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# Verify installation
+RUN claude --version
+
+# Copy the modified LLM files with CLI transport support
+COPY --chown=openhands:openhands openhands/llm/transports/ /app/openhands/llm/transports/
+COPY --chown=openhands:openhands openhands/llm/llm.py /app/openhands/llm/llm.py
+COPY --chown=openhands:openhands openhands/core/config/llm_config.py /app/openhands/core/config/llm_config.py
+
+# Environment
+ENV CLAUDE_CODE_OAUTH_TOKEN=""
+ENV USE_CLAUDE_CLI=true
+
+WORKDIR /app

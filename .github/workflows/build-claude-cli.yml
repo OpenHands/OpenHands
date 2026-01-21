@@ -42,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: containers/claude-cli/Dockerfile
+          file: containers/claude-cli/Dockerfile.slim
           push: true
           tags: |
             docker.turing-trading.org/flashbots/openhands-claude-cli:latest
