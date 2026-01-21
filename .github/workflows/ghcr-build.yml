@@ -37,16 +37,15 @@ jobs:
         shell: bash
         id: define-base-images
         run: |
-          # Use the pre-built runtime-base image to speed up builds (~15 min -> ~3 min)
-          # The runtime-base image is built weekly via build-runtime-base.yml workflow
-          # Fallback images (nikolaik, ubuntu) are kept for backwards compatibility
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             json=$(jq -n -c '[
-                { image: "ghcr.io/openhands/runtime-base:latest", tag: "ubuntu" }
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
+                { image: "ubuntu:24.04", tag: "ubuntu" }
               ]')
           else
             json=$(jq -n -c '[
-                { image: "ghcr.io/openhands/runtime-base:latest", tag: "ubuntu" }
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
+                { image: "ubuntu:24.04", tag: "ubuntu" }
               ]')
           fi
           echo "base_image=$json" >> "$GITHUB_OUTPUT"
@@ -125,7 +124,7 @@ jobs:
       - name: Install Python dependencies using Poetry
         run: make install-python-dependencies POETRY_GROUP=main INSTALL_PLAYWRIGHT=0
       - name: Create source distribution and Dockerfile
-        run: poetry run python3 -m openhands.runtime.utils.runtime_build --base_image ${{ matrix.base_image.image }} --build_folder containers/runtime
+        run: poetry run python3 -m openhands.runtime.utils.runtime_build --base_image ${{ matrix.base_image.image }} --build_folder containers/runtime --force_rebuild
       - name: Lowercase Repository Owner
         run: |
           echo REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV

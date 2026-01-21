@@ -55,21 +55,13 @@ def _generate_dockerfile(
     # Allow overriding conda/mamba channel alias (e.g., to avoid anaconda.org)
     channel_alias = os.getenv('OH_CONDA_CHANNEL_ALIAS', '').strip() or None
 
-    # Check if we're building from the pre-built runtime-base image
-    # This image already has all heavy dependencies installed (system packages,
-    # Docker, Node.js, micromamba, Playwright, VS Code Server)
-    build_from_runtime_base = 'runtime-base' in base_image
-
     dockerfile_content = template.render(
         base_image=base_image,
-        build_from_scratch=build_from == BuildFromImageType.SCRATCH
-        and not build_from_runtime_base,
-        build_from_versioned=build_from == BuildFromImageType.VERSIONED
-        or build_from_runtime_base,
+        build_from_scratch=build_from == BuildFromImageType.SCRATCH,
+        build_from_versioned=build_from == BuildFromImageType.VERSIONED,
         extra_deps=extra_deps if extra_deps is not None else '',
         enable_browser=enable_browser,
         channel_alias=channel_alias,
-        build_from_runtime_base=build_from_runtime_base,
     )
     return dockerfile_content
 
