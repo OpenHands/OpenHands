@@ -46,6 +46,22 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+vi.mock("#/components/features/auth/otp-login/login-with-email", () => ({
+  default: () => <div data-testid="login-with-email-modal">Login With Email</div>,
+}));
+
+vi.mock("#/components/features/auth/google-sign-in", () => ({
+  default: ({ onCredentialResponse, clientId }: { onCredentialResponse: () => void; clientId: string }) => (
+    <button
+      type="button"
+      data-testid="google-sign-in-button"
+      onClick={onCredentialResponse}
+    >
+      Google Sign In
+    </button>
+  ),
+}));
+
 describe("LoginContent", () => {
   beforeEach(() => {
     vi.stubGlobal("location", { href: "" });
@@ -200,5 +216,65 @@ describe("LoginContent", () => {
     );
 
     expect(screen.getByTestId("terms-and-privacy-notice")).toBeInTheDocument();
+  });
+
+  it("should render Google Sign In button", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("google-sign-in-button")).toBeInTheDocument();
+  });
+
+  it("should render Use Email button", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Use Email" })).toBeInTheDocument();
+  });
+
+  it("should show LoginWithEmail modal when Use Email button is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    const emailButton = screen.getByRole("button", { name: "Use Email" });
+    await user.click(emailButton);
+
+    expect(screen.getByTestId("login-with-email-modal")).toBeInTheDocument();
+  });
+
+  it("should render OR separator between providers and email login", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("OR")).toBeInTheDocument();
   });
 });
