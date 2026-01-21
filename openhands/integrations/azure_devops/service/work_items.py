@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+import mistune
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.azure_devops.service.base import AzureDevOpsMixinBase
 from openhands.integrations.service_types import Comment, RequestMethod
@@ -44,10 +45,13 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         org_enc = self._encode_url_component(org)
         project_enc = self._encode_url_component(project)
 
+        # Azure DevOps work item comments require HTML
+        comment_html = mistune.html(comment_text)
+
         url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/wit/workItems/{work_item_id}/comments?api-version=7.1-preview.4'
 
         payload = {
-            'text': comment_text,
+            'text': comment_html,
         }
 
         response, _ = await self._make_request(
@@ -55,6 +59,34 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         )
 
         logger.info(f'Added comment to work item {work_item_id} in project {project}')
+        return response
+
+    async def get_work_item(self, repository: str, work_item_id: int) -> dict:
+        """Get full work item details including all fields.
+
+        API Reference: https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-item
+
+        Args:
+            repository: Repository name in format "organization/project/repo" (project extracted)
+            work_item_id: The work item ID
+
+        Returns:
+            API response with complete work item information including all fields
+
+        Raises:
+            HTTPException: If the API request fails
+        """
+        org, project, _ = self._parse_repository(repository)
+
+        # URL-encode components to handle spaces and special characters
+        org_enc = self._encode_url_component(org)
+        project_enc = self._encode_url_component(project)
+
+        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/wit/workItems/{work_item_id}?api-version=7.1'
+
+        response, _ = await self._make_request(url)
+
+        logger.info(f'Fetched work item {work_item_id} from project {project}')
         return response
 
     async def get_work_item_comments(
@@ -121,9 +153,3 @@ class AzureDevOpsWorkItemsMixin(AzureDevOpsMixinBase):
         # Sort by creation date and limit
         all_comments.sort(key=lambda c: c.created_at)
         return all_comments[:max_comments]
-
-    async def add_work_item_reaction(
-        self, repository: str, work_item_id: int, reaction_type: str = ':thumbsup:'
-    ) -> dict:
-        comment_text = f'{reaction_type} OpenHands is processing this work item...'
-        return await self.add_work_item_comment(repository, work_item_id, comment_text)

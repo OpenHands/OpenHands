@@ -17,6 +17,10 @@ GITLAB_APP_CLIENT_ID = os.getenv('GITLAB_APP_CLIENT_ID', '').strip()
 GITLAB_APP_CLIENT_SECRET = os.getenv('GITLAB_APP_CLIENT_SECRET', '').strip()
 BITBUCKET_APP_CLIENT_ID = os.getenv('BITBUCKET_APP_CLIENT_ID', '').strip()
 BITBUCKET_APP_CLIENT_SECRET = os.getenv('BITBUCKET_APP_CLIENT_SECRET', '').strip()
+AZURE_DEVOPS_CLIENT_ID = os.getenv('AZURE_DEVOPS_CLIENT_ID', '').strip()
+AZURE_DEVOPS_CLIENT_SECRET = os.getenv('AZURE_DEVOPS_CLIENT_SECRET', '').strip()
+AZURE_DEVOPS_TENANT_ID = os.getenv('AZURE_DEVOPS_TENANT_ID', 'common').strip()
+AZURE_DEVOPS_ORGANIZATION = os.getenv('AZURE_DEVOPS_ORGANIZATION', '').strip()
 ENABLE_ENTERPRISE_SSO = os.getenv('ENABLE_ENTERPRISE_SSO', '').strip()
 ENABLE_JIRA = os.environ.get('ENABLE_JIRA', 'false') == 'true'
 ENABLE_JIRA_DC = os.environ.get('ENABLE_JIRA_DC', 'false') == 'true'

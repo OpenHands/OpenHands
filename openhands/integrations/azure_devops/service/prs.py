@@ -14,14 +14,14 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """Truncate comment to max length."""
         if len(comment) <= max_length:
             return comment
-        return comment[:max_length] + '...'
+        return comment[:max_length] + "..."
 
     async def add_pr_thread(
         self,
         repository: str,
         pr_number: int,
         comment_text: str,
-        status: str = 'active',
+        status: str = "active",
     ) -> dict:
         """Create a new thread (comment) in an Azure DevOps pull request.
 
@@ -33,7 +33,7 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         Args:
             repository: Repository name in format "organization/project/repo"
             pr_number: The pull request number
-            comment_text: The comment text to post
+            comment_text: The comment text to post (supports Markdown)
             status: Thread status ('active', 'fixed', 'wontFix', 'closed', 'byDesign', 'pending')
 
         Returns:
@@ -49,26 +49,27 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1'
+        url = f"{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1"
 
+        # PR comments support Markdown natively - no HTML conversion needed
         # Create thread payload with a comment
         # Reference: https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/create
         payload = {
-            'comments': [
+            "comments": [
                 {
-                    'parentCommentId': 0,
-                    'content': comment_text,
-                    'commentType': 1,  # 1 = text comment
+                    "parentCommentId": 0,
+                    "content": comment_text,
+                    "commentType": 1,  # 1 = text comment
                 }
             ],
-            'status': status,
+            "status": status,
         }
 
         response, _ = await self._make_request(
             url=url, params=payload, method=RequestMethod.POST
         )
 
-        logger.info(f'Created PR thread in {repository}#{pr_number}')
+        logger.info(f"Created PR thread in {repository}#{pr_number}")
         return response
 
     async def add_pr_comment_to_thread(
@@ -101,12 +102,12 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads/{thread_id}/comments?api-version=7.1'
+        url = f"{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads/{thread_id}/comments?api-version=7.1"
 
         payload = {
-            'content': comment_text,
-            'parentCommentId': 1,  # Reply to the thread's root comment
-            'commentType': 1,  # 1 = text comment
+            "content": comment_text,
+            "parentCommentId": 1,  # Reply to the thread's root comment
+            "commentType": 1,  # 1 = text comment
         }
 
         response, _ = await self._make_request(
@@ -114,7 +115,7 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         )
 
         logger.info(
-            f'Added comment to thread {thread_id} in PR {repository}#{pr_number}'
+            f"Added comment to thread {thread_id} in PR {repository}#{pr_number}"
         )
         return response
 
@@ -140,11 +141,11 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1'
+        url = f"{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}/threads?api-version=7.1"
 
         response, _ = await self._make_request(url)
 
-        return response.get('value', [])
+        return response.get("value", [])
 
     async def get_pr_comments(
         self, repository: str, pr_number: int, max_comments: int = 100
@@ -166,36 +167,36 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         all_comments: list[Comment] = []
 
         for thread in threads:
-            comments_data = thread.get('comments', [])
+            comments_data = thread.get("comments", [])
 
             for comment_data in comments_data:
                 # Extract author information
-                author_info = comment_data.get('author', {})
-                author = author_info.get('displayName', 'unknown')
+                author_info = comment_data.get("author", {})
+                author = author_info.get("displayName", "unknown")
 
                 # Parse dates
                 created_at = (
                     datetime.fromisoformat(
-                        comment_data.get('publishedDate', '').replace('Z', '+00:00')
+                        comment_data.get("publishedDate", "").replace("Z", "+00:00")
                     )
-                    if comment_data.get('publishedDate')
+                    if comment_data.get("publishedDate")
                     else datetime.fromtimestamp(0)
                 )
 
                 updated_at = (
                     datetime.fromisoformat(
-                        comment_data.get('lastUpdatedDate', '').replace('Z', '+00:00')
+                        comment_data.get("lastUpdatedDate", "").replace("Z", "+00:00")
                     )
-                    if comment_data.get('lastUpdatedDate')
+                    if comment_data.get("lastUpdatedDate")
                     else created_at
                 )
 
                 # Check if it's a system comment
-                is_system = comment_data.get('commentType', 1) != 1  # 1 = text comment
+                is_system = comment_data.get("commentType", 1) != 1  # 1 = text comment
 
                 comment = Comment(
-                    id=str(comment_data.get('id', 0)),
-                    body=self._truncate_comment(comment_data.get('content', '')),
+                    id=str(comment_data.get("id", 0)),
+                    body=self._truncate_comment(comment_data.get("content", "")),
                     author=author,
                     created_at=created_at,
                     updated_at=updated_at,
@@ -216,6 +217,7 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         title: str,
         body: str | None = None,
         draft: bool = False,
+        work_item_ids: list[int] | None = None,
     ) -> str:
         """Creates a pull request in Azure DevOps.
 
@@ -226,15 +228,16 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
             title: The title of the pull request
             body: The description of the pull request
             draft: Whether to create a draft pull request
+            work_item_ids: List of work item IDs to link to the PR
 
         Returns:
             The URL of the created pull request
         """
         # Parse repository string: organization/project/repo
-        parts = repo_name.split('/')
+        parts = repo_name.split("/")
         if len(parts) < 3:
             raise ValueError(
-                f'Invalid repository format: {repo_name}. Expected format: organization/project/repo'
+                f"Invalid repository format: {repo_name}. Expected format: organization/project/repo"
             )
 
         org = parts[0]
@@ -246,27 +249,37 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'https://dev.azure.com/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests?api-version=7.1'
+        url = f"https://dev.azure.com/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests?api-version=7.1"
 
         # Set default body if none provided
         if not body:
-            body = f'Merging changes from {source_branch} into {target_branch}'
+            body = f"Merging changes from {source_branch} into {target_branch}"
 
-        payload = {
-            'sourceRefName': f'refs/heads/{source_branch}',
-            'targetRefName': f'refs/heads/{target_branch}',
-            'title': title,
-            'description': body,
-            'isDraft': draft,
+        payload: dict = {
+            "sourceRefName": f"refs/heads/{source_branch}",
+            "targetRefName": f"refs/heads/{target_branch}",
+            "title": title,
+            "description": body,
+            "isDraft": draft,
         }
+
+        # Add work item references if provided
+        if work_item_ids:
+            payload["workItemRefs"] = [
+                {
+                    "id": str(work_item_id),
+                    "url": f"https://dev.azure.com/{org}/_apis/wit/workItems/{work_item_id}",
+                }
+                for work_item_id in work_item_ids
+            ]
 
         response, _ = await self._make_request(
             url=url, params=payload, method=RequestMethod.POST
         )
 
         # Return the web URL of the created PR
-        pr_id = response.get('pullRequestId')
-        return f'https://dev.azure.com/{org_enc}/{project_enc}/_git/{repo_enc}/pullrequest/{pr_id}'
+        pr_id = response.get("pullRequestId")
+        return f"https://dev.azure.com/{org_enc}/{project_enc}/_git/{repo_enc}/pullrequest/{pr_id}"
 
     async def get_pr_details(self, repository: str, pr_number: int) -> dict:
         """Get detailed information about a specific pull request.
@@ -285,7 +298,7 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         project_enc = self._encode_url_component(project)
         repo_enc = self._encode_url_component(repo)
 
-        url = f'{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}?api-version=7.1'
+        url = f"{self.base_url}/{org_enc}/{project_enc}/_apis/git/repositories/{repo_enc}/pullrequests/{pr_number}?api-version=7.1"
 
         response, _ = await self._make_request(url)
         return response
@@ -302,20 +315,20 @@ class AzureDevOpsPRsMixin(AzureDevOpsMixinBase):
         """
         try:
             pr_details = await self.get_pr_details(repository, pr_number)
-            status = pr_details.get('status', '').lower()
+            status = pr_details.get("status", "").lower()
             # Azure DevOps PR statuses: active, abandoned, completed
-            return status == 'active'
+            return status == "active"
         except Exception as e:
             logger.warning(
-                f'Failed to check PR status for {repository}#{pr_number}: {e}'
+                f"Failed to check PR status for {repository}#{pr_number}: {e}"
             )
             return False
 
     async def add_pr_reaction(
-        self, repository: str, pr_number: int, reaction_type: str = ':thumbsup:'
+        self, repository: str, pr_number: int, reaction_type: str = ":thumbsup:"
     ) -> dict:
         org, project, repo = self._parse_repository(repository)
-        comment_text = f'{reaction_type} OpenHands is processing this PR...'
+        comment_text = f"{reaction_type} OpenHands is processing this PR..."
         return await self.add_pr_thread(
-            repository, pr_number, comment_text, status='closed'
+            repository, pr_number, comment_text, status="closed"
         )

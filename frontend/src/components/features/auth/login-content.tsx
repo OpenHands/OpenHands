@@ -4,6 +4,7 @@ import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react
 import GitHubLogo from "#/assets/branding/github-logo.svg?react";
 import GitLabLogo from "#/assets/branding/gitlab-logo.svg?react";
 import BitbucketLogo from "#/assets/branding/bitbucket-logo.svg?react";
+import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
 import { useAuthUrl } from "#/hooks/use-auth-url";
 import { GetConfigResponse } from "#/api/option-service/option.types";
 import { Provider } from "#/types/settings";
@@ -50,6 +51,12 @@ export function LoginContent({
   const bitbucketAuthUrl = useAuthUrl({
     appMode: appMode || null,
     identityProvider: "bitbucket",
+    authUrl,
+  });
+
+  const azureDevOpsAuthUrl = useAuthUrl({
+    appMode: appMode || null,
+    identityProvider: "azure_devops",
     authUrl,
   });
 
@@ -104,6 +111,12 @@ export function LoginContent({
     }
   };
 
+  const handleAzureDevOpsAuth = () => {
+    if (azureDevOpsAuthUrl) {
+      handleAuthRedirect(azureDevOpsAuthUrl, "azure_devops");
+    }
+  };
+
   const showGithub =
     providersConfigured &&
     providersConfigured.length > 0 &&
@@ -116,6 +129,10 @@ export function LoginContent({
     providersConfigured &&
     providersConfigured.length > 0 &&
     providersConfigured.includes("bitbucket");
+  const showAzureDevOps =
+    providersConfigured &&
+    providersConfigured.length > 0 &&
+    providersConfigured.includes("azure_devops");
 
   const noProvidersConfigured =
     !providersConfigured || providersConfigured.length === 0;
@@ -194,6 +211,19 @@ export function LoginContent({
                 <BitbucketLogo width={14} height={14} className="shrink-0" />
                 <span className={buttonLabelClasses}>
                   {t(I18nKey.BITBUCKET$CONNECT_TO_BITBUCKET)}
+                </span>
+              </button>
+            )}
+
+            {showAzureDevOps && (
+              <button
+                type="button"
+                onClick={handleAzureDevOpsAuth}
+                className={`${buttonBaseClasses} bg-[#0078D4] text-white`}
+              >
+                <AzureDevOpsLogo width={14} height={14} className="shrink-0" />
+                <span className={buttonLabelClasses}>
+                  {t(I18nKey.AZURE_DEVOPS$CONNECT_ACCOUNT)}
                 </span>
               </button>
             )}

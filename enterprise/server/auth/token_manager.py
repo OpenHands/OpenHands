@@ -18,6 +18,9 @@ from keycloak.exceptions import (
 )
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
+    AZURE_DEVOPS_CLIENT_ID,
+    AZURE_DEVOPS_CLIENT_SECRET,
+    AZURE_DEVOPS_TENANT_ID,
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_APP_CLIENT_SECRET,
     DUPLICATE_EMAIL_CHECK,
@@ -348,6 +351,8 @@ class TokenManager:
             return await self._refresh_gitlab_token(refresh_token)
         elif idp == ProviderType.BITBUCKET:
             return await self._refresh_bitbucket_token(refresh_token)
+        elif idp == ProviderType.AZURE_DEVOPS:
+            return await self._refresh_azure_devops_token(refresh_token)
         else:
             raise ValueError(f'Unsupported IDP: {idp}')
 
@@ -422,6 +427,89 @@ class TokenManager:
 
             data = response.json()
             return await self._parse_refresh_response(data)
+
+    async def _refresh_azure_devops_token(
+        self, refresh_token: str
+    ) -> dict[str, str | int]:
+        if not refresh_token:
+            raise ValueError('Azure DevOps refresh token is empty')
+
+        url = f'https://login.microsoftonline.com/{AZURE_DEVOPS_TENANT_ID}/oauth2/v2.0/token'
+        logger.info(f'Refreshing Azure DevOps token with URL: {url}')
+
+        data = {
+            'grant_type': 'refresh_token',
+            'client_id': AZURE_DEVOPS_CLIENT_ID,
+            'client_secret': AZURE_DEVOPS_CLIENT_SECRET,
+            'refresh_token': refresh_token,
+            'scope': 'openid email profile offline_access 499b84ac-1321-427f-aa17-267ca6975798/.default',
+        }
+
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            response = await client.post(url, data=data, headers=headers)
+            response.raise_for_status()
+            logger.info('Successfully refreshed Azure DevOps token')
+
+            data = response.json()
+            return await self._parse_refresh_response(data)
+
+    async def get_azure_devops_service_principal_token(self) -> str:
+        """
+        Get an access token for Azure DevOps using service principal (client credentials flow).
+
+        This method authenticates the application itself (not a user) using client credentials.
+        Used for webhook processing where the app acts autonomously.
+
+        Returns:
+            Access token string for Azure DevOps API
+
+        Raises:
+            ValueError: If required credentials are not configured
+            httpx.HTTPStatusError: If token request fails
+
+        References:
+            - https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/service-principal-managed-identity
+        """
+        if (
+            not AZURE_DEVOPS_CLIENT_ID
+            or not AZURE_DEVOPS_CLIENT_SECRET
+            or not AZURE_DEVOPS_TENANT_ID
+        ):
+            raise ValueError(
+                'Azure DevOps service principal credentials not configured. '
+                'Set AZURE_DEVOPS_CLIENT_ID, AZURE_DEVOPS_CLIENT_SECRET, and AZURE_DEVOPS_TENANT_ID.'
+            )
+
+        url = f'https://login.microsoftonline.com/{AZURE_DEVOPS_TENANT_ID}/oauth2/v2.0/token'
+        logger.info('Requesting Azure DevOps service principal token')
+
+        data = {
+            'grant_type': 'client_credentials',
+            'client_id': AZURE_DEVOPS_CLIENT_ID,
+            'client_secret': AZURE_DEVOPS_CLIENT_SECRET,
+            'scope': 'https://app.vssps.visualstudio.com/.default',
+        }
+
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+
+        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+            response = await client.post(url, data=data, headers=headers)
+            response.raise_for_status()
+            logger.info('Successfully obtained Azure DevOps service principal token')
+
+            response_data = response.json()
+            access_token = response_data.get('access_token')
+
+            if not access_token:
+                raise ValueError('No access_token in service principal response')
+
+            return access_token
 
     async def _parse_refresh_response(self, data: dict) -> dict[str, str | int]:
         access_token = data.get('access_token')

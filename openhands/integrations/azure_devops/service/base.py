@@ -65,3 +65,4 @@ class AzureDevOpsMixinBase(BaseGitService, HTTPClient):
             URL-encoded string with spaces and special characters properly encoded
         """
         return quote(component, safe='')
+

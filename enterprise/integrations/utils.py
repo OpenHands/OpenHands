@@ -36,6 +36,7 @@ HOST = WEB_HOST
 HOST_URL = f'https://{HOST}' if 'localhost' not in HOST else f'http://{HOST}'
 GITHUB_WEBHOOK_URL = f'{HOST_URL}/integration/github/events'
 GITLAB_WEBHOOK_URL = f'{HOST_URL}/integration/gitlab/events'
+AZURE_DEVOPS_WEBHOOK_URL = f'{HOST_URL}/integration/azure-devops/events'
 conversation_prefix = 'conversations/{}'
 CONVERSATION_URL = f'{HOST_URL}/{conversation_prefix}'
 
@@ -77,6 +78,11 @@ ENABLE_V1_GITHUB_RESOLVER = (
 
 ENABLE_V1_SLACK_RESOLVER = (
     os.getenv('ENABLE_V1_SLACK_RESOLVER', 'false').lower() == 'true'
+)
+
+# Toggle for V1 Azure DevOps resolver feature
+ENABLE_V1_AZURE_DEVOPS_RESOLVER = (
+    os.getenv('ENABLE_V1_AZURE_DEVOPS_RESOLVER', 'false').lower() == 'true'
 )
 
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (

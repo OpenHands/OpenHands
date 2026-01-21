@@ -129,8 +129,13 @@ class AzureDevOpsIssueHandler(IssueHandlerInterface):
         return f'{self.get_base_url()}/_git/{self.repository}/branches?baseVersion=GB{self.default_branch}&targetVersion=GB{branch_name}&_a=files'
 
     def get_branch_name(self, base_branch_name: str) -> str:
-        """Generate a branch name for a new pull request."""
-        return f'openhands/issue-{base_branch_name}'
+        """Generate a branch name for a new pull request.
+
+        Uses openhands/fix-workitem-{id} format to match template instructions.
+        """
+        # Extract work item ID from base_branch_name (format: openhands-fix-issue-{id})
+        work_item_id = base_branch_name.replace('openhands-fix-issue-', '')
+        return f'openhands/fix-workitem-{work_item_id}'
 
     def get_default_branch_name(self) -> str:
         """Get the default branch name for the repository."""

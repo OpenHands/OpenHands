@@ -34,6 +34,12 @@ export const useAutoLogin = () => {
     authUrl: config?.AUTH_URL,
   });
 
+  const azureDevOpsAuthUrl = useAuthUrl({
+    appMode: config?.APP_MODE || null,
+    identityProvider: "azure_devops",
+    authUrl: config?.AUTH_URL,
+  });
+
   const enterpriseSsoUrl = useAuthUrl({
     appMode: config?.APP_MODE || null,
     identityProvider: "enterprise_sso",
@@ -69,6 +75,8 @@ export const useAutoLogin = () => {
       authUrl = gitlabAuthUrl;
     } else if (loginMethod === LoginMethod.BITBUCKET) {
       authUrl = bitbucketAuthUrl;
+    } else if (loginMethod === LoginMethod.AZURE_DEVOPS) {
+      authUrl = azureDevOpsAuthUrl;
     } else if (loginMethod === LoginMethod.ENTERPRISE_SSO) {
       authUrl = enterpriseSsoUrl;
     }
@@ -91,6 +99,7 @@ export const useAutoLogin = () => {
     githubAuthUrl,
     gitlabAuthUrl,
     bitbucketAuthUrl,
+    azureDevOpsAuthUrl,
     enterpriseSsoUrl,
   ]);
 };

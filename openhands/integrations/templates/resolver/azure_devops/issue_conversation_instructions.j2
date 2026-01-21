@@ -1,4 +1,11 @@
-{% if issue_number %}
+{% if selected_branch and not is_default_branch %}
+You are working on work item #{{ issue_number }}: "{{ issue_title }}" in an Azure DevOps repository.
+This work item has a linked development branch: {{ selected_branch }}.
+A comment on the work item has been addressed to you.
+{% elif selected_branch and is_default_branch %}
+You are requested to fix work item #{{ issue_number }}: "{{ issue_title }}" in an Azure DevOps repository.
+The work item is linked to the default branch ({{ selected_branch }}), so you will create a new feature branch.
+{% elif issue_number %}
 You are requested to fix work item #{{ issue_number }}: "{{ issue_title }}" in an Azure DevOps repository.
 A comment on the work item has been addressed to you.
 {% else %}
@@ -29,13 +36,46 @@ For reference, here are the previous comments on the work item:
 # Final Checklist
 Re-read the work item title, description, and comments and make sure that you have successfully implemented all requirements.
 
+{% if selected_branch and not is_default_branch %}
 Use the Azure DevOps token and Azure DevOps REST APIs to:
 
-1. Create a new branch using `openhands/` as a prefix (e.g `openhands/update-readme`)
-2. Commit your changes with a clear commit message
-3. Push the branch to Azure DevOps
-4. Use the `create_pr` tool to open a new pull request
-5. The PR description should:
-   - Mention that it "fixes" or "closes" the work item number
+1. Check out the branch {{ selected_branch }} (already exists for this work item)
+2. Make your changes to the code
+3. Commit your changes with a clear commit message
+4. Push the changes to Azure DevOps to update the existing PR
+5. DO NOT create a new PR - the branch already has an associated PR
+{% elif selected_branch and is_default_branch %}
+The linked branch ({{ selected_branch }}) is a default/protected branch. Do NOT commit directly to it.
+
+Use the Azure DevOps token and Azure DevOps REST APIs to:
+
+1. Create a new branch FROM {{ selected_branch }} using `users/openhands/` as a prefix (e.g `users/openhands/{{ issue_number }}`)
+2. Make your changes to the code
+3. Commit your changes with a clear commit message
+4. Push the branch to Azure DevOps
+5. Use the `create_azure_devops_pr` tool to open a new pull request targeting {{ selected_branch }}
+   - IMPORTANT: Pass `work_item_ids: [{{ issue_number }}]` to link the PR to the work item
+6. The PR description should:
    - Include a clear summary of the changes
    - Reference any related work items
+{% else %}
+{% if not repository_linked %}
+This work item does not have a linked repository. First, you need to identify which repository to work in:
+
+1. Use the Azure DevOps REST API to list all repositories in this project
+2. Analyze the work item description and title to determine which repository is most appropriate
+3. If there's only one repository in the project, use that one
+4. Once you've identified the target repository, proceed with the steps below
+
+{% endif %}
+Use the Azure DevOps token and Azure DevOps REST APIs to:
+
+1. Create a new branch using `users/openhands/` as a prefix (e.g `users/openhands/{{ issue_number }}`)
+2. Commit your changes with a clear commit message
+3. Push the branch to Azure DevOps
+4. Use the `create_azure_devops_pr` tool to open a new pull request
+   - IMPORTANT: Pass `work_item_ids: [{{ issue_number }}]` to link the PR to the work item
+5. The PR description should:
+   - Include a clear summary of the changes
+   - Reference any related work items
+{% endif %}
