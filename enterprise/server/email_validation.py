@@ -8,14 +8,18 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_auth, get_user_id
 
 
-async def get_openhands_user_id(
+async def get_admin_user_id(
     request: Request, user_id: str | None = Depends(get_user_id)
 ) -> str:
     """
     Dependency that validates user has @openhands.dev email domain.
 
     This dependency can be used in place of get_user_id for endpoints that
-    should only be accessible to users with @openhands.dev email addresses.
+    should only be accessible to admin users. Currently, this is implemented
+    by checking for @openhands.dev email domain.
+
+    TODO: In the future, this should be replaced with an explicit is_admin flag
+    in user/org settings instead of relying on email domain validation.
 
     Args:
         request: FastAPI request object
@@ -31,9 +35,9 @@ async def get_openhands_user_id(
     Example:
         @router.post('/endpoint')
         async def create_resource(
-            user_id: str = Depends(get_openhands_user_id),
+            user_id: str = Depends(get_admin_user_id),
         ):
-            # Only @openhands.dev users can access this endpoint
+            # Only admin users can access this endpoint
             pass
     """
     if not user_id:

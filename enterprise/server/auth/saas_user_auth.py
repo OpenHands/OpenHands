@@ -78,6 +78,8 @@ class SaasUserAuth(UserAuth):
         self.refresh_token = SecretStr(tokens['refresh_token'])
         self.refreshed = True
         if not self.email or not self.email_verified or not self.user_id:
+            # We don't need to verify the signature here because we just refreshed
+            # this token from the IDP via token_manager.refresh()
             access_token_payload = jwt.decode(
                 tokens['access_token'], options={'verify_signature': False}
             )

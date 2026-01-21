@@ -6,7 +6,9 @@ from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
 
 # Mock the database module before importing OrgStore
-with patch('storage.database.engine'), patch('storage.database.a_engine'):
+with patch('storage.database.engine', create=True), patch(
+    'storage.database.a_engine', create=True
+):
     from storage.org import Org
     from storage.org_member import OrgMember
     from storage.org_store import OrgStore

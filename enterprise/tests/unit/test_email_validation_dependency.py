@@ -1,5 +1,5 @@
 """
-Unit tests for email validation dependency (get_openhands_user_id).
+Unit tests for email validation dependency (get_admin_user_id).
 
 Tests the FastAPI dependency that validates @openhands.dev email domain.
 """
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
-from server.email_validation import get_openhands_user_id
+from server.email_validation import get_admin_user_id
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def mock_user_auth():
 async def test_get_openhands_user_id_success(mock_request, mock_user_auth):
     """
     GIVEN: Valid user ID and @openhands.dev email
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: User ID is returned successfully
     """
     # Arrange
@@ -38,7 +38,7 @@ async def test_get_openhands_user_id_success(mock_request, mock_user_auth):
 
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act
-        result = await get_openhands_user_id(mock_request, user_id)
+        result = await get_admin_user_id(mock_request, user_id)
 
         # Assert
         assert result == user_id
@@ -49,7 +49,7 @@ async def test_get_openhands_user_id_success(mock_request, mock_user_auth):
 async def test_get_openhands_user_id_no_user_id(mock_request):
     """
     GIVEN: No user ID provided (None)
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: 401 Unauthorized is raised
     """
     # Arrange
@@ -57,7 +57,7 @@ async def test_get_openhands_user_id_no_user_id(mock_request):
 
     # Act & Assert
     with pytest.raises(HTTPException) as exc_info:
-        await get_openhands_user_id(mock_request, user_id)
+        await get_admin_user_id(mock_request, user_id)
 
     assert exc_info.value.status_code == 401
     assert 'not authenticated' in exc_info.value.detail.lower()
@@ -67,7 +67,7 @@ async def test_get_openhands_user_id_no_user_id(mock_request):
 async def test_get_openhands_user_id_no_email(mock_request, mock_user_auth):
     """
     GIVEN: User ID provided but email is None
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: 401 Unauthorized is raised
     """
     # Arrange
@@ -77,7 +77,7 @@ async def test_get_openhands_user_id_no_email(mock_request, mock_user_auth):
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_openhands_user_id(mock_request, user_id)
+            await get_admin_user_id(mock_request, user_id)
 
         assert exc_info.value.status_code == 401
         assert 'email not available' in exc_info.value.detail.lower()
@@ -87,7 +87,7 @@ async def test_get_openhands_user_id_no_email(mock_request, mock_user_auth):
 async def test_get_openhands_user_id_invalid_domain(mock_request, mock_user_auth):
     """
     GIVEN: User ID and email with non-@openhands.dev domain
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: 403 Forbidden is raised
     """
     # Arrange
@@ -97,7 +97,7 @@ async def test_get_openhands_user_id_invalid_domain(mock_request, mock_user_auth
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_openhands_user_id(mock_request, user_id)
+            await get_admin_user_id(mock_request, user_id)
 
         assert exc_info.value.status_code == 403
         assert 'openhands.dev' in exc_info.value.detail.lower()
@@ -107,7 +107,7 @@ async def test_get_openhands_user_id_invalid_domain(mock_request, mock_user_auth
 async def test_get_openhands_user_id_empty_string_user_id(mock_request):
     """
     GIVEN: Empty string user ID
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: 401 Unauthorized is raised
     """
     # Arrange
@@ -115,7 +115,7 @@ async def test_get_openhands_user_id_empty_string_user_id(mock_request):
 
     # Act & Assert
     with pytest.raises(HTTPException) as exc_info:
-        await get_openhands_user_id(mock_request, user_id)
+        await get_admin_user_id(mock_request, user_id)
 
     assert exc_info.value.status_code == 401
     assert 'not authenticated' in exc_info.value.detail.lower()
@@ -125,7 +125,7 @@ async def test_get_openhands_user_id_empty_string_user_id(mock_request):
 async def test_get_openhands_user_id_case_sensitivity(mock_request, mock_user_auth):
     """
     GIVEN: Email with uppercase @OPENHANDS.DEV domain
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: 403 Forbidden is raised (case-sensitive check)
     """
     # Arrange
@@ -135,7 +135,7 @@ async def test_get_openhands_user_id_case_sensitivity(mock_request, mock_user_au
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_openhands_user_id(mock_request, user_id)
+            await get_admin_user_id(mock_request, user_id)
 
         assert exc_info.value.status_code == 403
 
@@ -146,7 +146,7 @@ async def test_get_openhands_user_id_subdomain_not_allowed(
 ):
     """
     GIVEN: Email with subdomain like @test.openhands.dev
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: 403 Forbidden is raised
     """
     # Arrange
@@ -156,7 +156,7 @@ async def test_get_openhands_user_id_subdomain_not_allowed(
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_openhands_user_id(mock_request, user_id)
+            await get_admin_user_id(mock_request, user_id)
 
         assert exc_info.value.status_code == 403
 
@@ -167,7 +167,7 @@ async def test_get_openhands_user_id_similar_domain_not_allowed(
 ):
     """
     GIVEN: Email with similar but different domain like @openhands.dev.fake.com
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: 403 Forbidden is raised
     """
     # Arrange
@@ -177,7 +177,7 @@ async def test_get_openhands_user_id_similar_domain_not_allowed(
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_openhands_user_id(mock_request, user_id)
+            await get_admin_user_id(mock_request, user_id)
 
         assert exc_info.value.status_code == 403
 
@@ -188,7 +188,7 @@ async def test_get_openhands_user_id_logs_warning_on_invalid_domain(
 ):
     """
     GIVEN: User with invalid email domain
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: Warning is logged with user_id and email_domain
     """
     # Arrange
@@ -202,7 +202,7 @@ async def test_get_openhands_user_id_logs_warning_on_invalid_domain(
     ):
         # Act & Assert
         with pytest.raises(HTTPException):
-            await get_openhands_user_id(mock_request, user_id)
+            await get_admin_user_id(mock_request, user_id)
 
         # Verify warning was logged
         mock_logger.warning.assert_called_once()
@@ -216,7 +216,7 @@ async def test_get_openhands_user_id_logs_warning_on_invalid_domain(
 async def test_get_openhands_user_id_with_plus_addressing(mock_request, mock_user_auth):
     """
     GIVEN: Email with plus addressing (test+tag@openhands.dev)
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: User ID is returned successfully
     """
     # Arrange
@@ -225,7 +225,7 @@ async def test_get_openhands_user_id_with_plus_addressing(mock_request, mock_use
 
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act
-        result = await get_openhands_user_id(mock_request, user_id)
+        result = await get_admin_user_id(mock_request, user_id)
 
         # Assert
         assert result == user_id
@@ -237,7 +237,7 @@ async def test_get_openhands_user_id_with_dots_in_local_part(
 ):
     """
     GIVEN: Email with dots in local part (first.last@openhands.dev)
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: User ID is returned successfully
     """
     # Arrange
@@ -246,7 +246,7 @@ async def test_get_openhands_user_id_with_dots_in_local_part(
 
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act
-        result = await get_openhands_user_id(mock_request, user_id)
+        result = await get_admin_user_id(mock_request, user_id)
 
         # Assert
         assert result == user_id
@@ -256,7 +256,7 @@ async def test_get_openhands_user_id_with_dots_in_local_part(
 async def test_get_openhands_user_id_empty_email(mock_request, mock_user_auth):
     """
     GIVEN: Empty string email
-    WHEN: get_openhands_user_id is called
+    WHEN: get_admin_user_id is called
     THEN: 401 Unauthorized is raised
     """
     # Arrange
@@ -266,7 +266,7 @@ async def test_get_openhands_user_id_empty_email(mock_request, mock_user_auth):
     with patch('server.email_validation.get_user_auth', return_value=mock_user_auth):
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_openhands_user_id(mock_request, user_id)
+            await get_admin_user_id(mock_request, user_id)
 
         assert exc_info.value.status_code == 401
         assert 'email not available' in exc_info.value.detail.lower()

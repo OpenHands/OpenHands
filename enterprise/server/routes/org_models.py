@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr, Field
 
 
 class OrgCreationError(Exception):
@@ -31,25 +31,9 @@ class OrgCreate(BaseModel):
     """Request model for creating a new organization."""
 
     # Required fields
-    name: str
+    name: str = Field(min_length=1, max_length=255, strip_whitespace=True)
     contact_name: str
-    contact_email: str
-
-    @field_validator('name')
-    def validate_name(cls, v):
-        """Validate organization name."""
-        if not v or not v.strip():
-            raise ValueError('Organization name cannot be empty')
-        if len(v) > 255:
-            raise ValueError('Organization name must be 255 characters or less')
-        return v.strip()
-
-    @field_validator('contact_email')
-    def validate_email(cls, v):
-        """Validate email format."""
-        if not v or '@' not in v:
-            raise ValueError('Invalid email address')
-        return v.strip()
+    contact_email: EmailStr = Field(strip_whitespace=True)
 
 
 class OrgResponse(BaseModel):
