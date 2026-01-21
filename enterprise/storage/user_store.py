@@ -435,7 +435,7 @@ class UserStore:
 
     @staticmethod
     async def create_default_settings(
-        org_id: str, user_id: str
+        org_id: str, user_id: str, create_user: bool = True
     ) -> Optional['Settings']:
         logger.info(
             'UserStore:create_default_settings:start',
@@ -451,7 +451,9 @@ class UserStore:
 
         from storage.lite_llm_manager import LiteLlmManager
 
-        settings = await LiteLlmManager.create_entries(org_id, user_id, settings)
+        settings = await LiteLlmManager.create_entries(
+            org_id, user_id, settings, create_user
+        )
         if not settings:
             logger.info(
                 'UserStore:create_default_settings:litellm_create_failed',

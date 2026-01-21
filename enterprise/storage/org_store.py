@@ -13,6 +13,7 @@ from server.constants import (
 from sqlalchemy.orm import joinedload
 from storage.database import session_maker
 from storage.org import Org
+from storage.org_member import OrgMember
 from storage.user import User
 from storage.user_settings import UserSettings
 
@@ -160,3 +161,28 @@ class OrgStore:
 
         kwargs['org_version'] = user_settings.user_version
         return kwargs
+
+    @staticmethod
+    def persist_org_with_owner(
+        org: Org,
+        org_member: OrgMember,
+    ) -> Org:
+        """
+        Persist organization and owner membership in a single transaction.
+
+        Args:
+            org: Organization entity to persist
+            org_member: Organization member entity to persist
+
+        Returns:
+            Org: The persisted organization object
+
+        Raises:
+            Exception: If database operations fail
+        """
+        with session_maker() as session:
+            session.add(org)
+            session.add(org_member)
+            session.commit()
+            session.refresh(org)
+            return org
