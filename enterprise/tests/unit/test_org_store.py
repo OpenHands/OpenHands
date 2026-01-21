@@ -3,11 +3,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
+from sqlalchemy.exc import IntegrityError
 
 # Mock the database module before importing OrgStore
-with patch('storage.database.engine'), patch('storage.database.a_engine'):
+with patch('storage.database.engine', create=True), patch(
+    'storage.database.a_engine', create=True
+):
     from storage.org import Org
+    from storage.org_member import OrgMember
     from storage.org_store import OrgStore
+    from storage.role import Role
+    from storage.user import User
 
 from openhands.storage.data_models.settings import Settings
 
@@ -195,3 +201,217 @@ def test_get_kwargs_from_settings():
     assert 'llm_api_key' not in kwargs
     assert 'llm_model' not in kwargs
     assert 'enable_sound_notifications' not in kwargs
+
+
+def test_persist_org_with_owner_success(session_maker, mock_litellm_api):
+    """
+    GIVEN: Valid org and org_member entities
+    WHEN: persist_org_with_owner is called
+    THEN: Both entities are persisted in a single transaction and org is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    # Create user and role first
+    with session_maker() as session:
+        user = User(id=user_id, current_org_id=org_id)
+        role = Role(id=1, name='owner', rank=1)
+        session.add(user)
+        session.add(role)
+        session.commit()
+
+    org = Org(
+        id=org_id,
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    org_member = OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        status='active',
+        llm_api_key='test-api-key-123',
+    )
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        result = OrgStore.persist_org_with_owner(org, org_member)
+
+    # Assert
+    assert result is not None
+    assert result.id == org_id
+    assert result.name == 'Test Organization'
+
+    # Verify both entities were persisted
+    with session_maker() as session:
+        persisted_org = session.get(Org, org_id)
+        assert persisted_org is not None
+        assert persisted_org.name == 'Test Organization'
+
+        persisted_member = (
+            session.query(OrgMember).filter_by(org_id=org_id, user_id=user_id).first()
+        )
+        assert persisted_member is not None
+        assert persisted_member.status == 'active'
+        assert persisted_member.role_id == 1
+
+
+def test_persist_org_with_owner_returns_refreshed_org(session_maker, mock_litellm_api):
+    """
+    GIVEN: Valid org and org_member entities
+    WHEN: persist_org_with_owner is called
+    THEN: The returned org is refreshed from database with all fields populated
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        user = User(id=user_id, current_org_id=org_id)
+        role = Role(id=1, name='owner', rank=1)
+        session.add(user)
+        session.add(role)
+        session.commit()
+
+    org = Org(
+        id=org_id,
+        name='Test Org',
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
+        agent='CodeActAgent',
+    )
+
+    org_member = OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        status='active',
+        llm_api_key='test-key',
+    )
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        result = OrgStore.persist_org_with_owner(org, org_member)
+
+    # Assert - verify the returned object has database-generated fields
+    assert result.id == org_id
+    assert result.name == 'Test Org'
+    assert result.agent == 'CodeActAgent'
+    # Verify org_version was set by create_org logic (if applicable)
+    assert hasattr(result, 'org_version')
+
+
+def test_persist_org_with_owner_transaction_atomicity(session_maker, mock_litellm_api):
+    """
+    GIVEN: Valid org but invalid org_member (missing required field)
+    WHEN: persist_org_with_owner is called
+    THEN: Transaction fails and neither entity is persisted
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        user = User(id=user_id, current_org_id=org_id)
+        role = Role(id=1, name='owner', rank=1)
+        session.add(user)
+        session.add(role)
+        session.commit()
+
+    org = Org(
+        id=org_id,
+        name='Test Org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    # Create invalid org_member (missing required llm_api_key field)
+    org_member = OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        status='active',
+        # llm_api_key is missing - should cause NOT NULL constraint violation
+    )
+
+    # Act & Assert
+    with patch('storage.org_store.session_maker', session_maker):
+        with pytest.raises(IntegrityError):  # NOT NULL constraint violation
+            OrgStore.persist_org_with_owner(org, org_member)
+
+    # Verify neither entity was persisted (transaction rolled back)
+    with session_maker() as session:
+        persisted_org = session.get(Org, org_id)
+        assert persisted_org is None
+
+        persisted_member = (
+            session.query(OrgMember).filter_by(org_id=org_id, user_id=user_id).first()
+        )
+        assert persisted_member is None
+
+
+def test_persist_org_with_owner_with_multiple_fields(session_maker, mock_litellm_api):
+    """
+    GIVEN: Org with multiple optional fields populated
+    WHEN: persist_org_with_owner is called
+    THEN: All fields are persisted correctly
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        user = User(id=user_id, current_org_id=org_id)
+        role = Role(id=1, name='owner', rank=1)
+        session.add(user)
+        session.add(role)
+        session.commit()
+
+    org = Org(
+        id=org_id,
+        name='Complex Org',
+        contact_name='Alice Smith',
+        contact_email='alice@example.com',
+        agent='CodeActAgent',
+        default_max_iterations=50,
+        confirmation_mode=True,
+        billing_margin=0.15,
+    )
+
+    org_member = OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        status='active',
+        llm_api_key='test-key',
+        max_iterations=100,
+        llm_model='gpt-4',
+    )
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        result = OrgStore.persist_org_with_owner(org, org_member)
+
+    # Assert
+    assert result.name == 'Complex Org'
+    assert result.agent == 'CodeActAgent'
+    assert result.default_max_iterations == 50
+    assert result.confirmation_mode is True
+    assert result.billing_margin == 0.15
+
+    # Verify persistence
+    with session_maker() as session:
+        persisted_org = session.get(Org, org_id)
+        assert persisted_org.agent == 'CodeActAgent'
+        assert persisted_org.default_max_iterations == 50
+        assert persisted_org.confirmation_mode is True
+        assert persisted_org.billing_margin == 0.15
+
+        persisted_member = (
+            session.query(OrgMember).filter_by(org_id=org_id, user_id=user_id).first()
+        )
+        assert persisted_member.max_iterations == 100
+        assert persisted_member.llm_model == 'gpt-4'

@@ -1,10 +1,7 @@
-import hashlib
-import hmac
-from typing import Dict, Optional, Tuple
+from typing import Tuple
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import Request
 from integrations.jira.jira_types import JiraViewInterface
 from integrations.jira.jira_view import (
     JiraFactory,
@@ -87,100 +84,53 @@ class JiraManager(Manager):
         )
         return repos
 
-    async def validate_request(
-        self, request: Request
-    ) -> Tuple[bool, Optional[str], Optional[Dict]]:
-        """Verify Jira webhook signature."""
-        signature_header = request.headers.get('x-hub-signature')
-        signature = signature_header.split('=')[1] if signature_header else None
-        body = await request.body()
-        payload = await request.json()
-        workspace_name = ''
-
+    def get_workspace_name_from_payload(self, payload: dict) -> str | None:
+        """Extract workspace name from Jira webhook payload."""
         if payload.get('webhookEvent') == 'comment_created':
             selfUrl = payload.get('comment', {}).get('author', {}).get('self')
         elif payload.get('webhookEvent') == 'jira:issue_updated':
             selfUrl = payload.get('user', {}).get('self')
         else:
-            workspace_name = ''
-
-        parsedUrl = urlparse(selfUrl)
-        if parsedUrl.hostname:
-            workspace_name = parsedUrl.hostname
-
-        if not workspace_name:
-            logger.warning('[Jira] No workspace name found in webhook payload')
-            return False, None, None
-
-        if not signature:
-            logger.warning('[Jira] No signature found in webhook headers')
-            return False, None, None
-
-        workspace = await self.integration_store.get_workspace_by_name(workspace_name)
-
-        if not workspace:
-            logger.warning('[Jira] Could not identify workspace for webhook')
-            return False, None, None
-
-        if workspace.status != 'active':
-            logger.warning(f'[Jira] Workspace {workspace.id} is not active')
-            return False, None, None
-
-        webhook_secret = self.token_manager.decrypt_text(workspace.webhook_secret)
-        digest = hmac.new(webhook_secret.encode(), body, hashlib.sha256).hexdigest()
-
-        if hmac.compare_digest(signature, digest):
-            logger.info('[Jira] Webhook signature verified successfully')
-            return True, signature, payload
-
-        return False, None, None
-
-    def parse_webhook(self, payload: Dict) -> JobContext | None:
-        event_type = payload.get('webhookEvent')
-
-        if event_type == 'comment_created':
-            comment_data = payload.get('comment', {})
-            comment = comment_data.get('body', '')
-
-            if '@openhands' not in comment:
-                return None
-
-            issue_data = payload.get('issue', {})
-            issue_id = issue_data.get('id')
-            issue_key = issue_data.get('key')
-            base_api_url = issue_data.get('self', '').split('/rest/')[0]
-
-            user_data = comment_data.get('author', {})
-            user_email = user_data.get('emailAddress')
-            display_name = user_data.get('displayName')
-            account_id = user_data.get('accountId')
-        elif event_type == 'jira:issue_updated':
-            changelog = payload.get('changelog', {})
-            items = changelog.get('items', [])
-            labels = [
-                item.get('toString', '')
-                for item in items
-                if item.get('field') == 'labels' and 'toString' in item
-            ]
-
-            if 'openhands' not in labels:
-                return None
-
-            issue_data = payload.get('issue', {})
-            issue_id = issue_data.get('id')
-            issue_key = issue_data.get('key')
-            base_api_url = issue_data.get('self', '').split('/rest/')[0]
-
-            user_data = payload.get('user', {})
-            user_email = user_data.get('emailAddress')
-            display_name = user_data.get('displayName')
-            account_id = user_data.get('accountId')
-            comment = ''
-        else:
             return None
 
-        workspace_name = ''
+        if not selfUrl:
+            return None
 
+        parsedUrl = urlparse(selfUrl)
+        return parsedUrl.hostname or None
+
+    def parse_webhook(self, message: Message) -> JobContext | None:
+        payload = message.message.get('payload', {})
+        issue_data = payload.get('issue', {})
+        issue_id = issue_data.get('id')
+        issue_key = issue_data.get('key')
+        self_url = issue_data.get('self', '')
+        if not self_url:
+            logger.warning('[Jira] Missing self URL in issue data')
+            base_api_url = ''
+        elif '/rest/' in self_url:
+            base_api_url = self_url.split('/rest/')[0]
+        else:
+            # Fallback: extract base URL using urlparse
+            parsed = urlparse(self_url)
+            base_api_url = f'{parsed.scheme}://{parsed.netloc}'
+
+        comment = ''
+        if JiraFactory.is_ticket_comment(message):
+            comment_data = payload.get('comment', {})
+            comment = comment_data.get('body', '')
+            user_data: dict = comment_data.get('author', {})
+        elif JiraFactory.is_labeled_ticket(message):
+            user_data = payload.get('user', {})
+
+        else:
+            raise ValueError('Unrecognized jira event')
+
+        user_email = user_data.get('emailAddress')
+        display_name = user_data.get('displayName')
+        account_id = user_data.get('accountId')
+
+        workspace_name = ''
         parsedUrl = urlparse(base_api_url)
         if parsedUrl.hostname:
             workspace_name = parsedUrl.hostname
@@ -209,14 +159,28 @@ class JiraManager(Manager):
             base_api_url=base_api_url,
         )
 
+    async def is_job_requested(self, message: Message) -> bool:
+        return JiraFactory.is_labeled_ticket(message) or JiraFactory.is_ticket_comment(
+            message
+        )
+
     async def receive_message(self, message: Message):
         """Process incoming Jira webhook message."""
 
         payload = message.message.get('payload', {})
-        job_context = self.parse_webhook(payload)
+        logger.info('[Jira]: received payload', extra={'payload': payload})
+
+        is_job_requested = await self.is_job_requested(message)
+        if not is_job_requested:
+            return
+
+        job_context = self.parse_webhook(message)
 
         if not job_context:
-            logger.info('[Jira] Webhook does not match trigger conditions')
+            logger.info(
+                '[Jira] Failed to parse webhook payload - missing required fields or invalid structure',
+                extra={'event_type': payload.get('webhookEvent')},
+            )
             return
 
         # Get workspace by user email domain
@@ -296,12 +260,12 @@ class JiraManager(Manager):
             )
             return
 
-        if not await self.is_job_requested(message, jira_view):
+        if not await self.is_repository_specified(message, jira_view):
             return
 
         await self.start_job(jira_view)
 
-    async def is_job_requested(
+    async def is_repository_specified(
         self, message: Message, jira_view: JiraViewInterface
     ) -> bool:
         """
@@ -330,7 +294,7 @@ class JiraManager(Manager):
                 return False
 
         except Exception as e:
-            logger.error(f'[Jira] Error in is_job_requested: {str(e)}')
+            logger.error(f'[Jira] Error determining repository: {str(e)}')
             return False
 
     async def start_job(self, jira_view: JiraViewInterface):

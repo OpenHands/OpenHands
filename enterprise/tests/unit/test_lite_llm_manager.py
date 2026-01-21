@@ -113,7 +113,7 @@ class TestLiteLlmManager:
             with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None):
                 with patch('storage.lite_llm_manager.LITE_LLM_API_URL', None):
                     result = await LiteLlmManager.create_entries(
-                        'test-org-id', 'test-user-id', mock_settings
+                        'test-org-id', 'test-user-id', mock_settings, create_user=True
                     )
                     assert result is None
 
@@ -126,7 +126,7 @@ class TestLiteLlmManager:
                     'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
                 ):
                     result = await LiteLlmManager.create_entries(
-                        'test-org-id', 'test-user-id', mock_settings
+                        'test-org-id', 'test-user-id', mock_settings, create_user=True
                     )
 
                     assert result is not None
@@ -158,7 +158,10 @@ class TestLiteLlmManager:
                             mock_client.post.return_value = mock_response
 
                             result = await LiteLlmManager.create_entries(
-                                'test-org-id', 'test-user-id', mock_settings
+                                'test-org-id',
+                                'test-user-id',
+                                mock_settings,
+                                create_user=False,
                             )
 
                             assert result is not None
@@ -171,7 +174,7 @@ class TestLiteLlmManager:
 
                             # Verify API calls were made
                             assert (
-                                mock_client.post.call_count == 4
+                                mock_client.post.call_count == 3
                             )  # create_team, create_user, add_user_to_team, generate_key
 
     @pytest.mark.asyncio
@@ -464,6 +467,216 @@ class TestLiteLlmManager:
                 # Second call should have None email
                 second_call_args = mock_http_client.post.call_args_list[1]
                 assert second_call_args[1]['json']['user_email'] is None
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_create_user_already_exists_with_409_status_code(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _create_user handles 409 Conflict when user already exists."""
+        # Arrange
+        first_response = MagicMock()
+        first_response.is_success = False
+        first_response.status_code = 400
+        first_response.text = 'duplicate email'
+
+        second_response = MagicMock()
+        second_response.is_success = False
+        second_response.status_code = 409
+        second_response.text = 'User with id test-user-id already exists'
+
+        mock_http_client.post.side_effect = [first_response, second_response]
+
+        # Act
+        await LiteLlmManager._create_user(
+            mock_http_client, 'test@example.com', 'test-user-id'
+        )
+
+        # Assert
+        mock_logger.warning.assert_any_call(
+            'litellm_user_already_exists',
+            extra={'user_id': 'test-user-id'},
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_create_user_already_exists_with_400_status_code(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _create_user handles 400 Bad Request when user already exists."""
+        # Arrange
+        first_response = MagicMock()
+        first_response.is_success = False
+        first_response.status_code = 400
+        first_response.text = 'duplicate email'
+
+        second_response = MagicMock()
+        second_response.is_success = False
+        second_response.status_code = 400
+        second_response.text = 'User already exists'
+
+        mock_http_client.post.side_effect = [first_response, second_response]
+
+        # Act
+        await LiteLlmManager._create_user(
+            mock_http_client, 'test@example.com', 'test-user-id'
+        )
+
+        # Assert
+        mock_logger.warning.assert_any_call(
+            'litellm_user_already_exists',
+            extra={'user_id': 'test-user-id'},
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_add_user_to_team_success(self, mock_http_client, mock_response):
+        """Test successful _add_user_to_team operation."""
+        # Arrange
+        mock_http_client.post.return_value = mock_response
+
+        # Act
+        await LiteLlmManager._add_user_to_team(
+            mock_http_client, 'test-user-id', 'test-team-id', 100.0
+        )
+
+        # Assert
+        mock_http_client.post.assert_called_once()
+        call_args = mock_http_client.post.call_args
+        assert 'http://test.com/team/member_add' in call_args[0]
+        assert call_args[1]['json']['team_id'] == 'test-team-id'
+        assert call_args[1]['json']['member'] == {
+            'user_id': 'test-user-id',
+            'role': 'user',
+        }
+        assert call_args[1]['json']['max_budget_in_team'] == 100.0
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_add_user_to_team_already_in_team(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _add_user_to_team handles 'already in team' error gracefully."""
+        # Arrange
+        error_response = MagicMock()
+        error_response.is_success = False
+        error_response.status_code = 400
+        error_response.text = (
+            '{"error":{"message":"User already in team. Member: '
+            'user_id=test-user-id","type":"team_member_already_in_team"}}'
+        )
+        mock_http_client.post.return_value = error_response
+
+        # Act
+        await LiteLlmManager._add_user_to_team(
+            mock_http_client, 'test-user-id', 'test-team-id', 100.0
+        )
+
+        # Assert
+        mock_logger.warning.assert_called_once_with(
+            'user_already_in_team',
+            extra={
+                'user_id': 'test-user-id',
+                'team_id': 'test-team-id',
+            },
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_add_user_to_team_other_error_raises_exception(
+        self, mock_http_client
+    ):
+        """Test _add_user_to_team raises exception for non-'already in team' errors."""
+        # Arrange
+        error_response = MagicMock()
+        error_response.is_success = False
+        error_response.status_code = 500
+        error_response.text = 'Internal server error'
+        error_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            'Server error', request=MagicMock(), response=error_response
+        )
+        mock_http_client.post.return_value = error_response
+
+        # Act & Assert
+        with pytest.raises(httpx.HTTPStatusError):
+            await LiteLlmManager._add_user_to_team(
+                mock_http_client, 'test-user-id', 'test-team-id', 100.0
+            )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_update_key_success(self, mock_http_client, mock_response):
+        """Test successful _update_key operation."""
+        # Arrange
+        mock_http_client.post.return_value = mock_response
+
+        # Act
+        await LiteLlmManager._update_key(
+            mock_http_client, 'test-user-id', 'test-api-key', team_id='test-team-id'
+        )
+
+        # Assert
+        mock_http_client.post.assert_called_once()
+        call_args = mock_http_client.post.call_args
+        assert 'http://test.com/key/update' in call_args[0]
+        assert call_args[1]['json']['key'] == 'test-api-key'
+        assert call_args[1]['json']['team_id'] == 'test-team-id'
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.logger')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_update_key_invalid_key_returns_gracefully(
+        self, mock_logger, mock_http_client
+    ):
+        """Test _update_key handles 401 Unauthorized for invalid keys gracefully."""
+        # Arrange
+        error_response = MagicMock()
+        error_response.is_success = False
+        error_response.status_code = 401
+        error_response.text = 'Unauthorized'
+        mock_http_client.post.return_value = error_response
+
+        # Act
+        await LiteLlmManager._update_key(
+            mock_http_client, 'test-user-id', 'invalid-api-key', team_id='test-team-id'
+        )
+
+        # Assert
+        mock_logger.warning.assert_called_once_with(
+            'invalid_litellm_key_during_update',
+            extra={'user_id': 'test-user-id'},
+        )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_update_key_other_error_raises_exception(self, mock_http_client):
+        """Test _update_key raises exception for non-401 errors."""
+        # Arrange
+        error_response = MagicMock()
+        error_response.is_success = False
+        error_response.status_code = 500
+        error_response.text = 'Internal server error'
+        error_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            'Server error', request=MagicMock(), response=error_response
+        )
+        mock_http_client.post.return_value = error_response
+
+        # Act & Assert
+        with pytest.raises(httpx.HTTPStatusError):
+            await LiteLlmManager._update_key(
+                mock_http_client, 'test-user-id', 'test-api-key', team_id='test-team-id'
+            )
 
     @pytest.mark.asyncio
     async def test_generate_key_success(self, mock_http_client, mock_response):
@@ -778,3 +991,138 @@ class TestLiteLlmManager:
                 # Verify no HTTP calls were made
                 mock_client.get.assert_not_called()
                 mock_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_team_success(self, mock_http_client, mock_response):
+        """
+        GIVEN: Valid team_id and configured LiteLLM API
+        WHEN: delete_team is called
+        THEN: Team is deleted successfully via POST /team/delete
+        """
+        # Arrange
+        team_id = 'test-team-123'
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_http_client.post.return_value = mock_response
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+            patch('storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'test-team'),
+        ):
+            # Act
+            await LiteLlmManager._delete_team(mock_http_client, team_id)
+
+            # Assert
+            mock_http_client.post.assert_called_once_with(
+                'http://test.url/team/delete',
+                json={'team_ids': [team_id]},
+            )
+
+    @pytest.mark.asyncio
+    async def test_delete_team_not_found_is_idempotent(
+        self, mock_http_client, mock_response
+    ):
+        """
+        GIVEN: Team does not exist (404 response)
+        WHEN: delete_team is called
+        THEN: Operation succeeds without raising exception (idempotent)
+        """
+        # Arrange
+        team_id = 'non-existent-team'
+        mock_response.is_success = False
+        mock_response.status_code = 404
+        mock_http_client.post.return_value = mock_response
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+            patch('storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'test-team'),
+        ):
+            # Act - should not raise
+            await LiteLlmManager._delete_team(mock_http_client, team_id)
+
+            # Assert
+            mock_http_client.post.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_team_api_error_raises_exception(
+        self, mock_http_client, mock_response
+    ):
+        """
+        GIVEN: LiteLLM API returns error (non-404)
+        WHEN: delete_team is called
+        THEN: HTTPStatusError is raised
+        """
+        # Arrange
+        team_id = 'test-team-123'
+        mock_response.is_success = False
+        mock_response.status_code = 500
+        mock_response.text = 'Internal Server Error'
+        mock_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                'Server error', request=MagicMock(), response=mock_response
+            )
+        )
+        mock_http_client.post.return_value = mock_response
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+            patch('storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'test-team'),
+        ):
+            # Act & Assert
+            with pytest.raises(httpx.HTTPStatusError):
+                await LiteLlmManager._delete_team(mock_http_client, team_id)
+
+    @pytest.mark.asyncio
+    async def test_delete_team_no_config_returns_early(self, mock_http_client):
+        """
+        GIVEN: LiteLLM API is not configured
+        WHEN: delete_team is called
+        THEN: Function returns early without making API call
+        """
+        # Arrange
+        team_id = 'test-team-123'
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', None),
+        ):
+            # Act
+            await LiteLlmManager._delete_team(mock_http_client, team_id)
+
+            # Assert
+            mock_http_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_team_public_method(self):
+        """
+        GIVEN: Valid team_id
+        WHEN: Public delete_team method is called
+        THEN: HTTP client is created and team is deleted
+        """
+        # Arrange
+        team_id = 'test-team-123'
+        mock_response = AsyncMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+            patch('storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'test-team'),
+            patch('httpx.AsyncClient') as mock_client_class,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            # Act
+            await LiteLlmManager.delete_team(team_id)
+
+            # Assert
+            mock_client.post.assert_called_once_with(
+                'http://test.url/team/delete',
+                json={'team_ids': [team_id]},
+            )
