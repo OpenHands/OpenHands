@@ -13,19 +13,28 @@ function VerifyEmailOTP({
 }: VerifyEmailOTPPProps) {
   const { t } = useTranslation();
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
-  const [isOTPIncorrect, setIsOTPIncorrect] = useState(false);
+  const [invalidEmailError, setInvalidEmailError] = useState("");
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  const resetForm = () => {
+    // reset OTP inputs
+    setOtp(Array(6).fill(""));
+
+    // focus first input after reset
+    requestAnimationFrame(() => {
+      inputRefs.current[0]?.focus();
+    });
+  };
+
   const verifyOTP = (otpValue: string) => {
-    console.log("Verifying OTP:", otpValue);
-    // TODO: validate OTP -> compare input to emailed OTP value pulled from ?
-    if (isOTPIncorrect) {
-      // check if pin is correct (isVerified)
-      setIsOTPComplete(true);
+    // TODO: validate OTP -> compare input to generated OTP value
+    const isOTPValid = otpValue;
+    if (isOTPValid) {
+      setIsOTPComplete(true); // render login org selecter
     } else {
-      setIsOTPIncorrect(true);
-      // reset form
+      setInvalidEmailError("Invalid code, please try again");
+      resetForm();
     }
   };
 
@@ -61,12 +70,15 @@ function VerifyEmailOTP({
         )}
       </span>
 
-      <div className="flex flex-col gap-[31px] w-full items-center">
-        {/* OTP Inputs */}
-        <form
-          className="flex gap-[8px] w-[210px] mx-auto"
-          onSubmit={(e) => e.preventDefault()}
-        >
+      <form
+        className="flex flex-col gap-[31px] w-full items-center"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSubmit();
+        }}
+      >
+        {/* OTP inputs */}
+        <div className="flex gap-[8px] w-[210px] mx-auto">
           {otp.map((value, index) => (
             <input
               key={index}
@@ -80,23 +92,20 @@ function VerifyEmailOTP({
               className="flex-1 bg-[#454545] border border-[#727987] w-[30px] h-[40px] rounded-[5px] text-center"
             />
           ))}
-        </form>
+        </div>
 
-        {isOTPIncorrect && (
-          <div className="flex items-center bg-[#4A0709] border border-[#FF0006] w-full h-[40px] rounded-[4px] gap-[14px] pr-[14px] pl-[14px]">
+        {invalidEmailError && (
+          <div className="flex items-center bg-[#4A0709] border border-[#FF0006] w-full h-[40px] rounded-[4px] gap-[14px] px-[14px]">
             <WarningIcon />
-            {/* make error dynamic */}
-            <span>{t("That code was invalid, please try again.")}</span>
+            <span>{t(invalidEmailError)}</span>
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex gap-[6px] h-[40px] text-[14px] font-[510] w-full">
+        <div className="flex gap-[6px] h-[40px] text-[14px] w-full">
           <button
-            type="button"
-            onClick={handleSubmit}
+            type="submit"
             className="flex-1 bg-[#FFFFFF] rounded-[4px] text-[#000000]"
-            disabled={otp.some((d) => d === "")}
           >
             <span className={buttonLabelClasses}>{t("Next")}</span>
           </button>
@@ -109,7 +118,7 @@ function VerifyEmailOTP({
             <span className={buttonLabelClasses}>{t("Back")}</span>
           </button>
         </div>
-      </div>
+      </form>
     </>
   );
 }

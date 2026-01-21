@@ -6,20 +6,26 @@ interface ModalProps {
   show?: boolean;
   className?: string;
   footer?: ReactNode;
+  header?: ReactNode | null;
 }
+
+const defaultHeader = (
+  // Logo fixed at top
+  <OpenHandsLogoWhite className="fixed top-4" width={106} height={72} />
+);
 
 function FullScreenModal({
   children,
   show = true,
   className = "",
   footer,
+  header = defaultHeader,
 }: ModalProps) {
   if (!show) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-      {/* Logo fixed at top */}
-      <OpenHandsLogoWhite className="fixed top-4" width={106} height={72} />
+      {header}
 
       {/* Modal content */}
       <div
