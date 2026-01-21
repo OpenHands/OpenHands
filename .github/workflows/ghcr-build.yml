@@ -148,8 +148,8 @@ jobs:
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           platforms: ${{ env.DOCKER_PLATFORM }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime:buildcache-${{ matrix.base_image.image }}
-          cache-to: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime:buildcache-${{ matrix.base_image.image }},mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime:buildcache-${{ matrix.base_image.tag }}
+          cache-to: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime:buildcache-${{ matrix.base_image.tag }},mode=max
           build-args: ${{ env.DOCKER_BUILD_ARGS }}
           context: containers/runtime
           provenance: false
