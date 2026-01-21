@@ -114,6 +114,8 @@ jobs:
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          cleanup: false
       - name: Install poetry via pipx
         run: pipx install poetry
       - name: Set up Python
@@ -165,6 +167,12 @@ jobs:
         with:
           name: runtime-src-${{ matrix.base_image.tag }}
           path: containers/runtime
+      - name: Cleanup buildx
+        if: always()
+        continue-on-error: true
+        run: |
+          docker buildx stop ${{ steps.buildx.outputs.name }} || true
+          docker buildx rm ${{ steps.buildx.outputs.name }} || true
 
   ghcr_build_enterprise:
     name: Push Enterprise Image
