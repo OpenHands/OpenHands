@@ -16,6 +16,12 @@ on:
   # Weekly schedule (Sunday at 2am UTC)
   schedule:
     - cron: "0 2 * * 0"
+  # Push to main branch or tags
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
 
 concurrency:
   group: ${{ github.workflow }}
@@ -58,9 +64,16 @@ jobs:
         run: |
           echo REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
 
-      - name: Get current date
-        id: date
-        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ env.REPO_OWNER }}/runtime-base
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push runtime-base image
         uses: docker/build-push-action@v6
@@ -68,9 +81,8 @@ jobs:
           context: ./containers/runtime-base
           file: ./containers/runtime-base/Dockerfile
           push: true
-          tags: |
-            ghcr.io/${{ env.REPO_OWNER }}/runtime-base:latest
-            ghcr.io/${{ env.REPO_OWNER }}/runtime-base:${{ steps.date.outputs.date }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ matrix.platform }}
           cache-from: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime-base:buildcache-${{ matrix.runner_arch }}
           cache-to: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime-base:buildcache-${{ matrix.runner_arch }},mode=max
@@ -95,16 +107,20 @@ jobs:
         run: |
           echo REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
 
-      - name: Get current date
-        id: date
-        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ env.REPO_OWNER }}/runtime-base
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Create and push manifest
         run: |
-          docker manifest create ghcr.io/${{ env.REPO_OWNER }}/runtime-base:latest \
-            --amend ghcr.io/${{ env.REPO_OWNER }}/runtime-base:latest
-          docker manifest push ghcr.io/${{ env.REPO_OWNER }}/runtime-base:latest
-
-          docker manifest create ghcr.io/${{ env.REPO_OWNER }}/runtime-base:${{ steps.date.outputs.date }} \
-            --amend ghcr.io/${{ env.REPO_OWNER }}/runtime-base:${{ steps.date.outputs.date }}
-          docker manifest push ghcr.io/${{ env.REPO_OWNER }}/runtime-base:${{ steps.date.outputs.date }}
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '); do
+            docker manifest create $tag --amend $tag
+            docker manifest push $tag
+          done
