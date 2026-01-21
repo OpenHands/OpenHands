@@ -91,16 +91,4 @@ def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
     ]
     model_list = clarifai_models + model_list
 
-    # Add Z.AI Coding Plan provider models
-    # For users on Z.AI coding plan subscription, which uses a different API endpoint
-    # See: https://github.com/All-Hands-AI/OpenHands/issues/12268
-    zai_coding_models = [
-        'zai_coding/glm-4.5',
-        'zai_coding/glm-4.7',
-        'zai_coding/glm-4-plus',
-        'zai_coding/glm-4-long',
-        'zai_coding/glm-4-flash',
-    ]
-    model_list = zai_coding_models + model_list
-
     return sorted(set(model_list))
