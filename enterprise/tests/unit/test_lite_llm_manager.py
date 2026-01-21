@@ -113,7 +113,7 @@ class TestLiteLlmManager:
             with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None):
                 with patch('storage.lite_llm_manager.LITE_LLM_API_URL', None):
                     result = await LiteLlmManager.create_entries(
-                        'test-org-id', 'test-user-id', mock_settings
+                        'test-org-id', 'test-user-id', mock_settings, create_user=True
                     )
                     assert result is None
 
@@ -126,7 +126,7 @@ class TestLiteLlmManager:
                     'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
                 ):
                     result = await LiteLlmManager.create_entries(
-                        'test-org-id', 'test-user-id', mock_settings
+                        'test-org-id', 'test-user-id', mock_settings, create_user=True
                     )
 
                     assert result is not None
@@ -158,7 +158,10 @@ class TestLiteLlmManager:
                             mock_client.post.return_value = mock_response
 
                             result = await LiteLlmManager.create_entries(
-                                'test-org-id', 'test-user-id', mock_settings
+                                'test-org-id',
+                                'test-user-id',
+                                mock_settings,
+                                create_user=False,
                             )
 
                             assert result is not None
@@ -171,7 +174,7 @@ class TestLiteLlmManager:
 
                             # Verify API calls were made
                             assert (
-                                mock_client.post.call_count == 4
+                                mock_client.post.call_count == 3
                             )  # create_team, create_user, add_user_to_team, generate_key
 
     @pytest.mark.asyncio
@@ -988,3 +991,138 @@ class TestLiteLlmManager:
                 # Verify no HTTP calls were made
                 mock_client.get.assert_not_called()
                 mock_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_team_success(self, mock_http_client, mock_response):
+        """
+        GIVEN: Valid team_id and configured LiteLLM API
+        WHEN: delete_team is called
+        THEN: Team is deleted successfully via POST /team/delete
+        """
+        # Arrange
+        team_id = 'test-team-123'
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_http_client.post.return_value = mock_response
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+            patch('storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'test-team'),
+        ):
+            # Act
+            await LiteLlmManager._delete_team(mock_http_client, team_id)
+
+            # Assert
+            mock_http_client.post.assert_called_once_with(
+                'http://test.url/team/delete',
+                json={'team_ids': [team_id]},
+            )
+
+    @pytest.mark.asyncio
+    async def test_delete_team_not_found_is_idempotent(
+        self, mock_http_client, mock_response
+    ):
+        """
+        GIVEN: Team does not exist (404 response)
+        WHEN: delete_team is called
+        THEN: Operation succeeds without raising exception (idempotent)
+        """
+        # Arrange
+        team_id = 'non-existent-team'
+        mock_response.is_success = False
+        mock_response.status_code = 404
+        mock_http_client.post.return_value = mock_response
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+            patch('storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'test-team'),
+        ):
+            # Act - should not raise
+            await LiteLlmManager._delete_team(mock_http_client, team_id)
+
+            # Assert
+            mock_http_client.post.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_team_api_error_raises_exception(
+        self, mock_http_client, mock_response
+    ):
+        """
+        GIVEN: LiteLLM API returns error (non-404)
+        WHEN: delete_team is called
+        THEN: HTTPStatusError is raised
+        """
+        # Arrange
+        team_id = 'test-team-123'
+        mock_response.is_success = False
+        mock_response.status_code = 500
+        mock_response.text = 'Internal Server Error'
+        mock_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(
+                'Server error', request=MagicMock(), response=mock_response
+            )
+        )
+        mock_http_client.post.return_value = mock_response
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+            patch('storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'test-team'),
+        ):
+            # Act & Assert
+            with pytest.raises(httpx.HTTPStatusError):
+                await LiteLlmManager._delete_team(mock_http_client, team_id)
+
+    @pytest.mark.asyncio
+    async def test_delete_team_no_config_returns_early(self, mock_http_client):
+        """
+        GIVEN: LiteLLM API is not configured
+        WHEN: delete_team is called
+        THEN: Function returns early without making API call
+        """
+        # Arrange
+        team_id = 'test-team-123'
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', None),
+        ):
+            # Act
+            await LiteLlmManager._delete_team(mock_http_client, team_id)
+
+            # Assert
+            mock_http_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_team_public_method(self):
+        """
+        GIVEN: Valid team_id
+        WHEN: Public delete_team method is called
+        THEN: HTTP client is created and team is deleted
+        """
+        # Arrange
+        team_id = 'test-team-123'
+        mock_response = AsyncMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+            patch('storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'test-team'),
+            patch('httpx.AsyncClient') as mock_client_class,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            # Act
+            await LiteLlmManager.delete_team(team_id)
+
+            # Assert
+            mock_client.post.assert_called_once_with(
+                'http://test.url/team/delete',
+                json={'team_ids': [team_id]},
+            )

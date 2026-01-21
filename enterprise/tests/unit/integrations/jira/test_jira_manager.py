@@ -2,13 +2,9 @@
 Unit tests for JiraManager.
 """
 
-import hashlib
-import hmac
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import Request
 from integrations.jira.jira_manager import JiraManager
 from integrations.jira.jira_types import JiraViewInterface
 from integrations.jira.jira_view import (
@@ -124,124 +120,83 @@ class TestGetRepositories:
             mock_client.get_repositories.assert_called_once()
 
 
-class TestValidateRequest:
-    """Test webhook request validation."""
+class TestGetWorkspaceNameFromPayload:
+    """Test workspace name extraction from webhook payload."""
 
-    @pytest.mark.asyncio
-    async def test_validate_request_success(
+    def test_get_workspace_name_from_comment_created_payload(
         self,
         jira_manager,
-        mock_token_manager,
-        sample_jira_workspace,
         sample_comment_webhook_payload,
     ):
-        """Test successful webhook validation."""
-        # Setup mocks
-        mock_token_manager.decrypt_text.return_value = 'test_secret'
-        jira_manager.integration_store.get_workspace_by_name.return_value = (
-            sample_jira_workspace
+        """Test extracting workspace name from comment_created webhook."""
+        workspace_name = jira_manager.get_workspace_name_from_payload(
+            sample_comment_webhook_payload
         )
 
-        # Create mock request
-        body = json.dumps(sample_comment_webhook_payload).encode()
-        signature = hmac.new('test_secret'.encode(), body, hashlib.sha256).hexdigest()
+        assert workspace_name == 'test.atlassian.net'
 
-        mock_request = MagicMock(spec=Request)
-        mock_request.headers = {'x-hub-signature': f'sha256={signature}'}
-        mock_request.body = AsyncMock(return_value=body)
-        mock_request.json = AsyncMock(return_value=sample_comment_webhook_payload)
-
-        is_valid, returned_signature, payload = await jira_manager.validate_request(
-            mock_request
-        )
-
-        assert is_valid is True
-        assert returned_signature == signature
-        assert payload == sample_comment_webhook_payload
-
-    @pytest.mark.asyncio
-    async def test_validate_request_missing_signature(
-        self, jira_manager, sample_comment_webhook_payload
-    ):
-        """Test webhook validation with missing signature."""
-        mock_request = MagicMock(spec=Request)
-        mock_request.headers = {}
-        mock_request.body = AsyncMock(return_value=b'{}')
-        mock_request.json = AsyncMock(return_value=sample_comment_webhook_payload)
-
-        is_valid, signature, payload = await jira_manager.validate_request(mock_request)
-
-        assert is_valid is False
-        assert signature is None
-        assert payload is None
-
-    @pytest.mark.asyncio
-    async def test_validate_request_workspace_not_found(
-        self, jira_manager, sample_comment_webhook_payload
-    ):
-        """Test webhook validation when workspace is not found."""
-        jira_manager.integration_store.get_workspace_by_name.return_value = None
-
-        mock_request = MagicMock(spec=Request)
-        mock_request.headers = {'x-hub-signature': 'sha256=test_signature'}
-        mock_request.body = AsyncMock(return_value=b'{}')
-        mock_request.json = AsyncMock(return_value=sample_comment_webhook_payload)
-
-        is_valid, signature, payload = await jira_manager.validate_request(mock_request)
-
-        assert is_valid is False
-        assert signature is None
-        assert payload is None
-
-    @pytest.mark.asyncio
-    async def test_validate_request_workspace_inactive(
+    def test_get_workspace_name_from_issue_updated_payload(
         self,
         jira_manager,
-        mock_token_manager,
-        sample_jira_workspace,
-        sample_comment_webhook_payload,
+        sample_issue_update_webhook_payload,
     ):
-        """Test webhook validation when workspace is inactive."""
-        sample_jira_workspace.status = 'inactive'
-        jira_manager.integration_store.get_workspace_by_name.return_value = (
-            sample_jira_workspace
+        """Test extracting workspace name from jira:issue_updated webhook."""
+        workspace_name = jira_manager.get_workspace_name_from_payload(
+            sample_issue_update_webhook_payload
         )
 
-        mock_request = MagicMock(spec=Request)
-        mock_request.headers = {'x-hub-signature': 'sha256=test_signature'}
-        mock_request.body = AsyncMock(return_value=b'{}')
-        mock_request.json = AsyncMock(return_value=sample_comment_webhook_payload)
+        assert workspace_name == 'jira.company.com'
 
-        is_valid, signature, payload = await jira_manager.validate_request(mock_request)
-
-        assert is_valid is False
-        assert signature is None
-        assert payload is None
-
-    @pytest.mark.asyncio
-    async def test_validate_request_invalid_signature(
+    def test_get_workspace_name_from_unknown_event(
         self,
         jira_manager,
-        mock_token_manager,
-        sample_jira_workspace,
-        sample_comment_webhook_payload,
     ):
-        """Test webhook validation with invalid signature."""
-        mock_token_manager.decrypt_text.return_value = 'test_secret'
-        jira_manager.integration_store.get_workspace_by_name.return_value = (
-            sample_jira_workspace
-        )
+        """Test extracting workspace name from unknown webhook event."""
+        payload = {
+            'webhookEvent': 'unknown_event',
+            'some_data': {'self': 'https://example.atlassian.net/rest/api/2/something'},
+        }
 
-        mock_request = MagicMock(spec=Request)
-        mock_request.headers = {'x-hub-signature': 'sha256=invalid_signature'}
-        mock_request.body = AsyncMock(return_value=b'{}')
-        mock_request.json = AsyncMock(return_value=sample_comment_webhook_payload)
+        workspace_name = jira_manager.get_workspace_name_from_payload(payload)
 
-        is_valid, signature, payload = await jira_manager.validate_request(mock_request)
+        assert workspace_name is None
 
-        assert is_valid is False
-        assert signature is None
-        assert payload is None
+    def test_get_workspace_name_with_missing_author_self(
+        self,
+        jira_manager,
+    ):
+        """Test extracting workspace name when author self URL is missing."""
+        payload = {
+            'webhookEvent': 'comment_created',
+            'comment': {
+                'body': 'Test comment',
+                'author': {
+                    'emailAddress': 'user@test.com',
+                    'displayName': 'Test User',
+                },
+            },
+        }
+
+        workspace_name = jira_manager.get_workspace_name_from_payload(payload)
+
+        assert workspace_name is None
+
+    def test_get_workspace_name_with_missing_user_self(
+        self,
+        jira_manager,
+    ):
+        """Test extracting workspace name when user self URL is missing."""
+        payload = {
+            'webhookEvent': 'jira:issue_updated',
+            'user': {
+                'emailAddress': 'user@test.com',
+                'displayName': 'Test User',
+            },
+        }
+
+        workspace_name = jira_manager.get_workspace_name_from_payload(payload)
+
+        assert workspace_name is None
 
 
 class TestParseWebhook:
