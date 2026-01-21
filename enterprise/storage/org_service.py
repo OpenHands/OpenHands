@@ -439,6 +439,35 @@ class OrgService:
             return False
 
     @staticmethod
+    def is_org_member(user_id: str, org_id: UUID) -> bool:
+        """
+        Check if user is a member of the specified organization.
+
+        Args:
+            user_id: User ID to check
+            org_id: Organization ID to check membership in
+
+        Returns:
+            bool: True if user is a member, False otherwise
+        """
+        from uuid import UUID as parse_uuid
+
+        try:
+            user_uuid = parse_uuid(user_id)
+            org_member = OrgMemberStore.get_org_member(org_id, user_uuid)
+            return org_member is not None
+        except Exception as e:
+            logger.warning(
+                'Error checking user membership in organization',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'error': str(e),
+                },
+            )
+            return False
+
+    @staticmethod
     def _get_llm_settings_fields() -> set[str]:
         """
         Get the set of organization fields that are considered LLM settings
@@ -493,7 +522,7 @@ class OrgService:
 
         Raises:
             ValueError: If organization not found
-            PermissionError: If user lacks permission for LLM settings
+            PermissionError: If user is not a member, or lacks admin/owner role for LLM settings
             OrgDatabaseError: If database update fails
         """
         logger.info(
@@ -509,6 +538,19 @@ class OrgService:
         existing_org = OrgStore.get_org_by_id(org_id)
         if not existing_org:
             raise ValueError(f'Organization with ID {org_id} not found')
+
+        # Check if user is a member of this organization
+        if not OrgService.is_org_member(user_id, org_id):
+            logger.warning(
+                'Non-member attempted to update organization',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                },
+            )
+            raise PermissionError(
+                'User must be a member of the organization to update it'
+            )
 
         # Check if update contains any LLM settings
         llm_fields_being_updated = OrgService._has_llm_settings_updates(update_data)
