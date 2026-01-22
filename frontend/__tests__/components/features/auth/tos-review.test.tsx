@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import TOSReview from "#/components/features/auth/tos-review";
+import { I18nKey } from "#/i18n/declaration";
 
 describe("TOSReview", () => {
   const mockSetIsOrgSelected = vi.fn();
@@ -22,10 +23,10 @@ describe("TOSReview", () => {
   it("should render heading and instructions", () => {
     renderComponent();
 
-    expect(screen.getByText("Review Terms Of Service")).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTH$REVIEW_TOS)).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Please review and accept our Terms of Service before continuing.",
+        I18nKey.AUTH$REVIEW_TOS_MESSAGE,
       ),
     ).toBeInTheDocument();
   });
@@ -34,7 +35,7 @@ describe("TOSReview", () => {
     renderComponent();
 
     expect(
-      screen.getByText("I accept the Terms of Service"),
+      screen.getByText(I18nKey.AUTH$ACCEPT_TOS),
     ).toBeInTheDocument();
     expect(screen.getByRole("checkbox")).toBeInTheDocument();
   });
@@ -42,14 +43,14 @@ describe("TOSReview", () => {
   it("should render Next and Back buttons", () => {
     renderComponent();
 
-    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: I18nKey.AUTH$NEXT })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: I18nKey.AUTH$BACK })).toBeInTheDocument();
   });
 
   it("should have disabled Next button when TOS is not accepted", () => {
     renderComponent();
 
-    const nextButton = screen.getByRole("button", { name: "Next" });
+    const nextButton = screen.getByRole("button", { name: I18nKey.AUTH$NEXT });
     expect(nextButton).toBeDisabled();
   });
 
@@ -60,7 +61,7 @@ describe("TOSReview", () => {
     const checkbox = screen.getByRole("checkbox");
     await user.click(checkbox);
 
-    const nextButton = screen.getByRole("button", { name: "Next" });
+    const nextButton = screen.getByRole("button", { name: I18nKey.AUTH$NEXT });
     expect(nextButton).not.toBeDisabled();
   });
 
@@ -68,7 +69,7 @@ describe("TOSReview", () => {
     const user = userEvent.setup();
     renderComponent();
 
-    const backButton = screen.getByRole("button", { name: "Back" });
+    const backButton = screen.getByRole("button", { name: I18nKey.AUTH$BACK });
     await user.click(backButton);
 
     expect(mockSetIsOrgSelected).toHaveBeenCalledWith(false);
@@ -83,7 +84,7 @@ describe("TOSReview", () => {
     await user.click(checkbox);
 
     // Click Next
-    const nextButton = screen.getByRole("button", { name: "Next" });
+    const nextButton = screen.getByRole("button", { name: I18nKey.AUTH$NEXT });
     await user.click(nextButton);
 
     expect(mockSetIsTOSReviewComplete).toHaveBeenCalledWith(true);
@@ -93,7 +94,7 @@ describe("TOSReview", () => {
     const user = userEvent.setup();
     renderComponent();
 
-    const nextButton = screen.getByRole("button", { name: "Next" });
+    const nextButton = screen.getByRole("button", { name: I18nKey.AUTH$NEXT });
     // Button is disabled, but try to click anyway
     await user.click(nextButton);
 

@@ -209,7 +209,7 @@ export function LoginContent({
         <GoogleSignInButton onCredentialResponse={() => {}} clientId="" />
 
         <span className="text-[#A3A3A3] font-normal text-sm leading-5">
-          {t("OR")}
+          {t(I18nKey.AUTH$OR)}
         </span>
 
         <button
@@ -218,7 +218,9 @@ export function LoginContent({
           className={`${buttonBaseClasses} bg-[#454545] text-white`}
         >
           <EmailIcon width={14} height={14} className="shrink-0" />
-          <span className={buttonLabelClasses}>{t("Use Email")}</span>
+          <span className={buttonLabelClasses}>
+            {t(I18nKey.AUTH$USE_EMAIL)}
+          </span>
         </button>
       </div>
 

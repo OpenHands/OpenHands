@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { LoginContent } from "#/components/features/auth/login-content";
+import { I18nKey } from "#/i18n/declaration";
 
 vi.mock("#/hooks/use-auth-url", () => ({
   useAuthUrl: (config: {
@@ -243,7 +244,7 @@ describe("LoginContent", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("button", { name: "Use Email" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: I18nKey.AUTH$USE_EMAIL })).toBeInTheDocument();
   });
 
   it("should show LoginWithEmail modal when Use Email button is clicked", async () => {
@@ -258,7 +259,7 @@ describe("LoginContent", () => {
       </MemoryRouter>,
     );
 
-    const emailButton = screen.getByRole("button", { name: "Use Email" });
+    const emailButton = screen.getByRole("button", { name: I18nKey.AUTH$USE_EMAIL });
     await user.click(emailButton);
 
     expect(screen.getByTestId("login-with-email-modal")).toBeInTheDocument();
@@ -275,6 +276,6 @@ describe("LoginContent", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("OR")).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTH$OR)).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { Dispatch, SetStateAction, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 
 interface LoginOrgSelectorProps {
   setIsOrgSelected: Dispatch<SetStateAction<boolean>>;
@@ -31,11 +32,11 @@ function TOSReview({
   return (
     <div className="flex flex-col gap-[32px]">
       <span className="text-[39px] font-medium text-center">
-        {t("Review Terms Of Service")}
+        {t(I18nKey.AUTH$REVIEW_TOS)}
       </span>
 
       <span className="text-center text-[14px] font-[400]">
-        {t("Please review and accept our Terms of Service before continuing.")}
+        {t(I18nKey.AUTH$REVIEW_TOS_MESSAGE)}
       </span>
 
       <div className="flex flex-col gap-[8px] w-full">
@@ -49,7 +50,7 @@ function TOSReview({
             className="h-[16px] w-[16px] rounded-[4px] border-[#D4D4D4] bg-[#FFFFFF] accent-white"
           />
           <span className="text-[12px] font-[400] text-[#A3A3A3]">
-            {t("I accept the Terms of Service")}
+            {t(I18nKey.AUTH$ACCEPT_TOS)}
           </span>
         </label>
       </div>
@@ -61,7 +62,7 @@ function TOSReview({
           disabled={!hasAcceptedTOS}
           className="flex-1 bg-[#FFFFFF] rounded-[4px] text-[#000000] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <span className={buttonLabelClasses}>{t("Next")}</span>
+          <span className={buttonLabelClasses}>{t(I18nKey.AUTH$NEXT)}</span>
         </button>
 
         <button
@@ -69,7 +70,7 @@ function TOSReview({
           onClick={() => setIsOrgSelected(false)}
           className="flex-1 border border-[#FFFFFF] rounded-[4px]"
         >
-          <span className={buttonLabelClasses}>{t("Back")}</span>
+          <span className={buttonLabelClasses}>{t(I18nKey.AUTH$BACK)}</span>
         </button>
       </div>
     </div>

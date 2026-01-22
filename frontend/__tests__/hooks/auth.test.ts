@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EMAIL_REGEX, isValidEmail, validateEmail } from "#/utils/auth";
+import { I18nKey } from "#/i18n/declaration";
 
 describe("auth utilities", () => {
   describe("EMAIL_REGEX", () => {
@@ -67,25 +68,25 @@ describe("auth utilities", () => {
     it("should return error when email is empty", () => {
       const result = validateEmail("");
       expect(result.valid).toBe(false);
-      expect(result.error).toBe("Email is required");
+      expect(result.error).toBe(I18nKey.AUTH$EMAIL_REQUIRED);
     });
 
     it("should return error when email format is invalid", () => {
       const result = validateEmail("invalid-email");
       expect(result.valid).toBe(false);
-      expect(result.error).toBe("Invalid email format");
+      expect(result.error).toBe(I18nKey.AUTH$INVALID_EMAIL_FORMAT);
     });
 
     it("should return error for email without domain", () => {
       const result = validateEmail("user@");
       expect(result.valid).toBe(false);
-      expect(result.error).toBe("Invalid email format");
+      expect(result.error).toBe(I18nKey.AUTH$INVALID_EMAIL_FORMAT);
     });
 
     it("should return error for email without user part", () => {
       const result = validateEmail("@example.com");
       expect(result.valid).toBe(false);
-      expect(result.error).toBe("Invalid email format");
+      expect(result.error).toBe(I18nKey.AUTH$INVALID_EMAIL_FORMAT);
     });
   });
 });

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import GoogleSignInButton from "#/components/features/auth/google-sign-in";
+import { I18nKey } from "#/i18n/declaration";
 
 describe("GoogleSignInButton", () => {
     const mockOnCredentialResponse = vi.fn();
@@ -31,7 +32,7 @@ describe("GoogleSignInButton", () => {
 
         const button = screen.getByRole("button");
         expect(button).toBeInTheDocument();
-        expect(screen.getByText("Login with Google")).toBeInTheDocument();
+        expect(screen.getByText(I18nKey.AUTH$LOGIN_WITH_GOOGLE)).toBeInTheDocument();
     });
 
     it("should initialize Google SDK and trigger prompt when clicked with SDK loaded", async () => {

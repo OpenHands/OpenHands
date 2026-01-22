@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import EnterEmailOTP from "#/components/features/auth/otp-login/enter-email-otp";
+import { I18nKey } from "#/i18n/declaration";
 
 describe("EnterEmailOTP", () => {
   const mockSetIsLogginInWithEmail = vi.fn();
@@ -22,8 +23,8 @@ describe("EnterEmailOTP", () => {
   it("should render heading and email input", () => {
     renderComponent();
 
-    expect(screen.getByText("Sign-in with your email")).toBeInTheDocument();
-    expect(screen.getByText("Your email address")).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTH$SIGN_IN_WITH_EMAIL)).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTH$YOUR_EMAIL_ADDRESS)).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("name@email.com"),
     ).toBeInTheDocument();
@@ -32,15 +33,15 @@ describe("EnterEmailOTP", () => {
   it("should render verify and cancel buttons", () => {
     renderComponent();
 
-    expect(screen.getByRole("button", { name: "Verify" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: I18nKey.AUTH$VERIFY })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: I18nKey.AUTH$CANCEL })).toBeInTheDocument();
   });
 
   it("should call setIsLogginInWithEmail(false) when cancel button is clicked", async () => {
     const user = userEvent.setup();
     renderComponent();
 
-    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    const cancelButton = screen.getByRole("button", { name: I18nKey.AUTH$CANCEL });
     await user.click(cancelButton);
 
     expect(mockSetIsLogginInWithEmail).toHaveBeenCalledWith(false);
@@ -50,10 +51,10 @@ describe("EnterEmailOTP", () => {
     const user = userEvent.setup();
     renderComponent();
 
-    const verifyButton = screen.getByRole("button", { name: "Verify" });
+    const verifyButton = screen.getByRole("button", { name: I18nKey.AUTH$VERIFY });
     await user.click(verifyButton);
 
-    expect(screen.getByText("Email is required")).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTH$EMAIL_REQUIRED)).toBeInTheDocument();
     expect(mockSetIsReadyToVerifyEmail).not.toHaveBeenCalled();
   });
 
@@ -64,10 +65,10 @@ describe("EnterEmailOTP", () => {
     const emailInput = screen.getByPlaceholderText("name@email.com");
     await user.type(emailInput, "invalid-email");
 
-    const verifyButton = screen.getByRole("button", { name: "Verify" });
+    const verifyButton = screen.getByRole("button", { name: I18nKey.AUTH$VERIFY });
     await user.click(verifyButton);
 
-    expect(screen.getByText("Invalid email format")).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTH$INVALID_EMAIL_FORMAT)).toBeInTheDocument();
     expect(mockSetIsReadyToVerifyEmail).not.toHaveBeenCalled();
   });
 
@@ -78,7 +79,7 @@ describe("EnterEmailOTP", () => {
     const emailInput = screen.getByPlaceholderText("name@email.com");
     await user.type(emailInput, "user@example.com");
 
-    const verifyButton = screen.getByRole("button", { name: "Verify" });
+    const verifyButton = screen.getByRole("button", { name: I18nKey.AUTH$VERIFY });
     await user.click(verifyButton);
 
     expect(mockSetIsReadyToVerifyEmail).toHaveBeenCalledWith(true);
@@ -92,17 +93,17 @@ describe("EnterEmailOTP", () => {
     const emailInput = screen.getByPlaceholderText("name@email.com");
     await user.type(emailInput, "invalid");
 
-    const verifyButton = screen.getByRole("button", { name: "Verify" });
+    const verifyButton = screen.getByRole("button", { name: I18nKey.AUTH$VERIFY });
     await user.click(verifyButton);
 
-    expect(screen.getByText("Invalid email format")).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTH$INVALID_EMAIL_FORMAT)).toBeInTheDocument();
 
     // Clear and type valid email
     await user.clear(emailInput);
     await user.type(emailInput, "user@example.com");
     await user.click(verifyButton);
 
-    expect(screen.queryByText("Invalid email format")).not.toBeInTheDocument();
+    expect(screen.queryByText(I18nKey.AUTH$INVALID_EMAIL_FORMAT)).not.toBeInTheDocument();
     expect(mockSetIsReadyToVerifyEmail).toHaveBeenCalledWith(true);
   });
 

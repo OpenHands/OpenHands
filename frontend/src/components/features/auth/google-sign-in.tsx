@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import GoogleLogo from "#/assets/branding/google-logo.svg?react";
 
 interface GoogleCredentialResponse {
@@ -91,7 +92,7 @@ export default function GoogleSignInButton({
     >
       <GoogleLogo className="w-5 h-5" />
       <span className="text-sm font-medium text-gray-700">
-        {t("Login with Google")}
+        {t(I18nKey.AUTH$LOGIN_WITH_GOOGLE)}
       </span>
     </button>
   );

@@ -1,5 +1,6 @@
 import { Dispatch, SetStateAction, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import { validateEmail } from "#/utils/auth";
 import WarningIcon from "#/assets/warning.svg?react";
 
@@ -36,7 +37,7 @@ function EnterEmailOTP({
   return (
     <>
       <span className="text-[39px] font-medium text-center">
-        {t("Sign-in with your email")}
+        {t(I18nKey.AUTH$SIGN_IN_WITH_EMAIL)}
       </span>
 
       <form
@@ -48,7 +49,7 @@ function EnterEmailOTP({
       >
         <div className="flex flex-col gap-[6px] w-full">
           <label className="font-[400] text-[14px]">
-            {t("Your email address")}
+            {t(I18nKey.AUTH$YOUR_EMAIL_ADDRESS)}
             <input
               data-test-id="email-address-input"
               value={email}
@@ -71,7 +72,7 @@ function EnterEmailOTP({
             type="submit"
             className="flex-1 bg-[#FFFFFF] rounded-[4px] text-[#000000]"
           >
-            <span className={buttonLabelClasses}>{t("Verify")}</span>
+            <span className={buttonLabelClasses}>{t(I18nKey.AUTH$VERIFY)}</span>
           </button>
 
           <button
@@ -79,7 +80,7 @@ function EnterEmailOTP({
             onClick={() => setIsLogginInWithEmail(false)}
             className="flex-1 border border-[#FFFFFF] rounded-[4px]"
           >
-            <span className={buttonLabelClasses}>{t("Cancel")}</span>
+            <span className={buttonLabelClasses}>{t(I18nKey.AUTH$CANCEL)}</span>
           </button>
         </div>
       </form>

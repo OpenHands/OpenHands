@@ -1,5 +1,6 @@
 import { Dispatch, SetStateAction, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import WarningIcon from "#/assets/warning.svg?react";
 
 interface VerifyEmailOTPPProps {
@@ -33,7 +34,7 @@ function VerifyEmailOTP({
     if (isOTPValid) {
       setIsOTPComplete(true); // render login org selecter
     } else {
-      setInvalidEmailError("Invalid code, please try again");
+      setInvalidEmailError(I18nKey.AUTH$INVALID_CODE);
       resetForm();
     }
   };
@@ -61,13 +62,11 @@ function VerifyEmailOTP({
   return (
     <>
       <span className="text-[39px] font-medium text-center">
-        {t("Enter Code")}
+        {t(I18nKey.AUTH$ENTER_CODE)}
       </span>
 
       <span className="text-[14px] font-[400] text-[#A3A3A3] w-[355px] text-center">
-        {t(
-          "An OTP code has been sent to your email address. Enter that code here. Didn’t receive it? Resend Code (link)",
-        )}
+        {t(I18nKey.AUTH$OTP_SENT_MESSAGE)}
       </span>
 
       <form
@@ -107,7 +106,7 @@ function VerifyEmailOTP({
             type="submit"
             className="flex-1 bg-[#FFFFFF] rounded-[4px] text-[#000000]"
           >
-            <span className={buttonLabelClasses}>{t("Next")}</span>
+            <span className={buttonLabelClasses}>{t(I18nKey.AUTH$NEXT)}</span>
           </button>
 
           <button
@@ -115,7 +114,7 @@ function VerifyEmailOTP({
             onClick={() => setIsReadyToVerifyEmail(false)}
             className="flex-1 border border-[#FFFFFF] rounded-[4px]"
           >
-            <span className={buttonLabelClasses}>{t("Back")}</span>
+            <span className={buttonLabelClasses}>{t(I18nKey.AUTH$BACK)}</span>
           </button>
         </div>
       </form>

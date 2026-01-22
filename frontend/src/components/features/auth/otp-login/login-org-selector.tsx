@@ -1,6 +1,7 @@
 import { cn } from "@heroui/react";
 import { Dispatch, SetStateAction, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 
 interface LoginOrgSelectorProps {
   setIsOrgSelected: Dispatch<SetStateAction<boolean>>;
@@ -28,7 +29,9 @@ function LoginOrgSelector({ setIsOrgSelected }: LoginOrgSelectorProps) {
 
   return (
     <div className="flex flex-col w-[700px] text-left gap-[32px]">
-      <span className="text-[39px] font-medium">{t("Login as")}</span>
+      <span className="text-[39px] font-medium">
+        {t(I18nKey.AUTH$LOGIN_AS)}
+      </span>
 
       {/* Org list */}
       <div className="flex flex-col gap-[10px]">
@@ -60,7 +63,7 @@ function LoginOrgSelector({ setIsOrgSelected }: LoginOrgSelectorProps) {
             className="h-[16px] w-[16px] rounded-[4px] border-[#D4D4D4] bg-[#FFFFFF] accent-white"
           />
           <span className="text-[12px] font-[400] text-[#A3A3A3]">
-            {t("Always login to last used")}
+            {t(I18nKey.AUTH$ALWAYS_LOGIN_TO_LAST_USED)}
           </span>
         </label>
       </div>
@@ -76,7 +79,7 @@ function LoginOrgSelector({ setIsOrgSelected }: LoginOrgSelectorProps) {
           "disabled:opacity-50 disabled:cursor-not-allowed",
         )}
       >
-        {t("Login")}
+        {t(I18nKey.AUTH$LOGIN)}
       </button>
     </div>
   );

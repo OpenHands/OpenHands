@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import VerifyEmailOTP from "#/components/features/auth/otp-login/verify-email-otp";
+import { I18nKey } from "#/i18n/declaration";
 
 describe("VerifyEmailOTP", () => {
   const mockSetIsOTPComplete = vi.fn();
@@ -22,9 +23,9 @@ describe("VerifyEmailOTP", () => {
   it("should render heading and instructions", () => {
     renderComponent();
 
-    expect(screen.getByText("Enter Code")).toBeInTheDocument();
+    expect(screen.getByText(I18nKey.AUTH$ENTER_CODE)).toBeInTheDocument();
     expect(
-      screen.getByText(/An OTP code has been sent to your email address/),
+      screen.getByText(I18nKey.AUTH$OTP_SENT_MESSAGE),
     ).toBeInTheDocument();
   });
 
@@ -38,15 +39,15 @@ describe("VerifyEmailOTP", () => {
   it("should render Next and Back buttons", () => {
     renderComponent();
 
-    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: I18nKey.AUTH$NEXT })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: I18nKey.AUTH$BACK })).toBeInTheDocument();
   });
 
   it("should call setIsReadyToVerifyEmail(false) when Back button is clicked", async () => {
     const user = userEvent.setup();
     renderComponent();
 
-    const backButton = screen.getByRole("button", { name: "Back" });
+    const backButton = screen.getByRole("button", { name: I18nKey.AUTH$BACK });
     await user.click(backButton);
 
     expect(mockSetIsReadyToVerifyEmail).toHaveBeenCalledWith(false);
@@ -94,7 +95,7 @@ describe("VerifyEmailOTP", () => {
     await user.type(inputs[4], "5");
     await user.type(inputs[5], "6");
 
-    const nextButton = screen.getByRole("button", { name: "Next" });
+    const nextButton = screen.getByRole("button", { name: I18nKey.AUTH$NEXT });
     await user.click(nextButton);
 
     expect(mockSetIsOTPComplete).toHaveBeenCalledWith(true);

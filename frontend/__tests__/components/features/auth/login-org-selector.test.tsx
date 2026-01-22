@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import LoginOrgSelector from "#/components/features/auth/otp-login/login-org-selector";
+import { I18nKey } from "#/i18n/declaration";
 
 describe("LoginOrgSelector", () => {
     const mockSetIsOrgSelected = vi.fn();
@@ -16,7 +17,7 @@ describe("LoginOrgSelector", () => {
     it("should render heading", () => {
         renderComponent();
 
-        expect(screen.getByText("Login as")).toBeInTheDocument();
+        expect(screen.getByText(I18nKey.AUTH$LOGIN_AS)).toBeInTheDocument();
     });
 
     // it("should render organization options", () => {
@@ -30,15 +31,15 @@ describe("LoginOrgSelector", () => {
     it("should render remember checkbox and login button", () => {
         renderComponent();
 
-        expect(screen.getByText("Always login to last used")).toBeInTheDocument();
+        expect(screen.getByText(I18nKey.AUTH$ALWAYS_LOGIN_TO_LAST_USED)).toBeInTheDocument();
         expect(screen.getByRole("checkbox")).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Login" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: I18nKey.AUTH$LOGIN })).toBeInTheDocument();
     });
 
     it("should have disabled login button when no org is selected", () => {
         renderComponent();
 
-        const loginButton = screen.getByRole("button", { name: "Login" });
+        const loginButton = screen.getByRole("button", { name: I18nKey.AUTH$LOGIN });
         expect(loginButton).toBeDisabled();
     });
 
@@ -49,7 +50,7 @@ describe("LoginOrgSelector", () => {
         const org1Button = screen.getByRole("button", { name: "org1" });
         await user.click(org1Button);
 
-        const loginButton = screen.getByRole("button", { name: "Login" });
+        const loginButton = screen.getByRole("button", { name: I18nKey.AUTH$LOGIN });
         expect(loginButton).not.toBeDisabled();
     });
 
@@ -73,7 +74,7 @@ describe("LoginOrgSelector", () => {
         await user.click(org1Button);
 
         // Click login
-        const loginButton = screen.getByRole("button", { name: "Login" });
+        const loginButton = screen.getByRole("button", { name: I18nKey.AUTH$LOGIN });
         await user.click(loginButton);
 
         expect(mockSetIsOrgSelected).toHaveBeenCalledWith(true);
@@ -83,7 +84,7 @@ describe("LoginOrgSelector", () => {
         const user = userEvent.setup();
         renderComponent();
 
-        const loginButton = screen.getByRole("button", { name: "Login" });
+        const loginButton = screen.getByRole("button", { name: I18nKey.AUTH$LOGIN });
         // Button is disabled, but try to click anyway
         await user.click(loginButton);
 
