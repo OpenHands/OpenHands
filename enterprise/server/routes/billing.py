@@ -25,31 +25,15 @@ stripe.api_key = STRIPE_API_KEY
 billing_router = APIRouter(prefix='/api/billing')
 
 
-# TODO: Add a new app_mode named "ON_PREM" to support self-hosted customers instead of doing this
-# and members should comment out the "validate_saas_environment" function if they are developing and testing locally.
-def is_all_hands_saas_environment(request: Request) -> bool:
-    """Check if the current domain is an All Hands SaaS environment.
-
-    Args:
-        request: FastAPI Request object
-
-    Returns:
-        True if the current domain contains "all-hands.dev" or "openhands.dev" postfix
+async def validate_billing_enabled() -> None:
     """
-    hostname = request.url.hostname or ''
-    return hostname.endswith('all-hands.dev') or hostname.endswith('openhands.dev')
-
-
-def validate_saas_environment(request: Request) -> None:
-    """Validate that the request is coming from an All Hands SaaS environment.
-
-    Args:
-        request: FastAPI Request object
-
-    Raises:
-        HTTPException: If the request is not from an All Hands SaaS environment
+    Validate that the billing feature flag is enabled
     """
-    if not is_all_hands_saas_environment(request):
+    from openhands.app_server.config import get_global_config
+
+    config = get_global_config()
+    web_client_config = await config.web_client.get_web_client_config()
+    if not web_client_config.feature_flags.enable_billing:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='Checkout sessions are only available for All Hands SaaS environments',

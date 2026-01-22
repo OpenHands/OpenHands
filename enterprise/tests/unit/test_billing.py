@@ -163,7 +163,7 @@ async def test_create_checkout_session_stripe_error(
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
             AsyncMock(return_value={'email': 'testy@tester.com'}),
         ),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         await create_checkout_session(
             CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
@@ -204,7 +204,7 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
             AsyncMock(return_value={'email': 'testy@tester.com'}),
         ),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         mock_db_session = MagicMock()
         mock_session_maker.return_value.__enter__.return_value = mock_db_session
@@ -490,7 +490,7 @@ async def test_create_customer_setup_session_success():
             AsyncMock(return_value=mock_customer_info),
         ),
         patch('stripe.checkout.Session.create_async', mock_create),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         result = await create_customer_setup_session(mock_request, 'mock_user')
 
