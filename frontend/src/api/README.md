@@ -13,8 +13,7 @@ Each service lives in its own directory:
 ```
 src/api/
 ├── billing-service/
-│   ├── billing-service.api.ts    # Service methods
-│   └── billing.types.ts          # Types and interfaces
+│   └── billing-service.api.ts    # Service methods
 ├── organization-service/
 │   ├── organization-service.api.ts
 │   └── organization.types.ts
