@@ -21,8 +21,10 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
 
   return (
     <Link
-      onClick={e => {
-        if(conversation.status === "DELETE") e.preventDefault();
+      onClick={(e) => {
+        if (conversation.status === "DELETE") {
+          e.preventDefault();
+        }
       }}
       to={`/conversations/${conversation.conversation_id}`}
       className="flex flex-col gap-1 p-[14px] cursor-pointer w-full rounded-lg hover:bg-[#5C5D62] transition-all duration-300 text-left"

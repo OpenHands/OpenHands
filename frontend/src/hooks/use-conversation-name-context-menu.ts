@@ -79,7 +79,6 @@ export function useConversationNameContextMenu({
     if (conversationId) {
       deleteConversation({ conversationId });
       navigate("/");
-
     }
     setConfirmDeleteModalVisible(false);
   };
