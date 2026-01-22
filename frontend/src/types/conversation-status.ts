@@ -3,4 +3,5 @@ export type ConversationStatus =
   | "RUNNING"
   | "STOPPED"
   | "ARCHIVED"
-  | "ERROR";
+  | "ERROR"
+  | "DELETE";

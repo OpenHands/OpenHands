@@ -567,6 +567,8 @@ export const getConversationStatusLabel = (
       return "COMMON$ERROR";
     case "ARCHIVED":
       return "COMMON$ARCHIVED"; // Use STOPPED for archived conversations
+    case "DELETE":
+      return "COMMON$DELETING";
     default:
       return "COMMON$UNKNOWN";
   }
@@ -694,6 +696,8 @@ export const isTaskPolling = (taskStatus: string | null | undefined): boolean =>
  * @param options.isStartingStatus Whether the agent is in a starting state (LOADING or INIT)
  * @param options.isStopStatus Whether the conversation status is STOPPED
  * @param options.curAgentState The current agent state
+ * @param options.isDeleting Whether the conversation is DELETE (being deleted)
+
  * @returns The hex color code for the status
  *
  * @example
@@ -713,6 +717,7 @@ export const getStatusColor = (options: {
   isStartingStatus: boolean;
   isStopStatus: boolean;
   curAgentState: AgentState;
+  isDeleting?: boolean;
 }): string => {
   const {
     isPausing,
@@ -721,6 +726,7 @@ export const getStatusColor = (options: {
     isStartingStatus,
     isStopStatus,
     curAgentState,
+    isDeleting = false,
   } = options;
 
   // Show pausing status
@@ -745,6 +751,9 @@ export const getStatusColor = (options: {
   if (curAgentState === AgentState.ERROR) {
     return "#FF684E";
   }
+  if (isDeleting) {
+    return "#FF0000";
+  }
   return "#BCFF8C";
 };
 
@@ -758,6 +767,7 @@ interface GetStatusTextArgs {
   curAgentState: AgentState;
   errorMessage?: string | null;
   t: (t: string) => string;
+  isDeleting?: boolean;
 }
 
 /**
@@ -794,6 +804,7 @@ export function getStatusText({
   isStopStatus,
   curAgentState,
   errorMessage,
+  isDeleting = false,
   t,
 }: GetStatusTextArgs): string {
   // Show pausing status
@@ -831,6 +842,10 @@ export function getStatusText({
 
   if (curAgentState === AgentState.ERROR) {
     return errorMessage || t(I18nKey.COMMON$ERROR);
+  }
+
+  if (isDeleting) {
+    return t(I18nKey.COMMON$STARTING);
   }
 
   return t(I18nKey.COMMON$RUNNING);

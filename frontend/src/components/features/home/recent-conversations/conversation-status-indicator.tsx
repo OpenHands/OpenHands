@@ -24,6 +24,8 @@ export function ConversationStatusIndicator({
         return "bg-[#FFD43B]"; // Busy/starting - yellow
       case "ERROR":
         return "bg-[#FF684E]"; // Error - red
+      case "DELETE":
+        return "bg-[#FF684E]"; // Busy/Deleting - red
       default:
         return "bg-[#3C3C49]"; // Default to grey for unknown states
     }

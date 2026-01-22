@@ -1,5 +1,5 @@
 import React from "react";
-import { NavLink, useParams, useNavigate } from "react-router";
+import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
@@ -25,9 +25,7 @@ interface ConversationPanelProps {
 
 export function ConversationPanel({ onClose }: ConversationPanelProps) {
   const { t } = useTranslation();
-  const { conversationId: currentConversationId } = useParams();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
-  const navigate = useNavigate();
 
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
@@ -107,16 +105,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
 
   const handleConfirmDelete = () => {
     if (selectedConversationId) {
-      deleteConversation(
-        { conversationId: selectedConversationId },
-        {
-          onSuccess: () => {
-            if (selectedConversationId === currentConversationId) {
-              navigate("/");
-            }
-          },
-        },
-      );
+      deleteConversation({ conversationId: selectedConversationId });
     }
   };
 
@@ -175,7 +164,13 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         <NavLink
           key={project.conversation_id}
           to={`/conversations/${project.conversation_id}`}
-          onClick={onClose}
+          onClick={(e) => {
+            if (project.status === "DELETE") {
+              e.preventDefault();
+              return;
+            }
+            onClose();
+          }}
         >
           <ConversationCard
             onDelete={() =>

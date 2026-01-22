@@ -115,7 +115,10 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
-  const hasContextMenu = !!(onDelete || onChangeTitle || showOptions);
+  const hasContextMenu =
+    conversationStatus === "DELETE"
+      ? false
+      : !!(onDelete || onChangeTitle || showOptions);
 
   return (
     <div

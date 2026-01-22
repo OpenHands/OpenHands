@@ -31,5 +31,14 @@ export function ConversationStatusBadges({
     );
   }
 
+  if (conversationStatus === "DELETE") {
+    return (
+      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-[#FF684E] text-white text-xs font-medium rounded-full">
+        <CircleErrorIcon className="text-white w-3 h-3" />
+        <span>{t(I18nKey.COMMON$DELETING)}</span>
+      </span>
+    );
+  }
+
   return null;
 }

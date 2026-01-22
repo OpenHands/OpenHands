@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import React from "react";
 import { usePostHog } from "posthog-js/react";
-import { useParams, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import useMetricsStore from "#/stores/metrics-store";
 import { ConversationStatus } from "#/types/conversation-status";
@@ -40,7 +40,6 @@ export function useConversationNameContextMenu({
 }: UseConversationNameContextMenuProps) {
   const posthog = usePostHog();
   const { t } = useTranslation();
-  const { conversationId: currentConversationId } = useParams();
   const navigate = useNavigate();
   const events = useEventStore((state) => state.events);
   const { mutate: deleteConversation } = useDeleteConversation();
@@ -78,16 +77,9 @@ export function useConversationNameContextMenu({
 
   const handleConfirmDelete = () => {
     if (conversationId) {
-      deleteConversation(
-        { conversationId },
-        {
-          onSuccess: () => {
-            if (conversationId === currentConversationId) {
-              navigate("/");
-            }
-          },
-        },
-      );
+      deleteConversation({ conversationId });
+      navigate("/");
+
     }
     setConfirmDeleteModalVisible(false);
   };
