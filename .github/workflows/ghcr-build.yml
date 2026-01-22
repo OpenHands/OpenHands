@@ -39,8 +39,7 @@ jobs:
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             json=$(jq -n -c '[
-                { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" },
-                { image: "ubuntu:24.04", tag: "ubuntu" }
+                { image: "nikolaik/python-nodejs:python3.12-nodejs22", tag: "nikolaik" }
               ]')
           else
             json=$(jq -n -c '[
@@ -149,6 +148,9 @@ jobs:
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           platforms: ${{ env.DOCKER_PLATFORM }}
+          # Caching directives to boost performance
+          cache-from: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime:buildcache-${{ matrix.base_image.tag }}
+          cache-to: type=registry,ref=ghcr.io/${{ env.REPO_OWNER }}/runtime:buildcache-${{ matrix.base_image.tag }},mode=max
           build-args: ${{ env.DOCKER_BUILD_ARGS }}
           context: containers/runtime
           provenance: false
