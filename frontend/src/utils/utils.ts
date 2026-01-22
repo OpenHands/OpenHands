@@ -845,7 +845,7 @@ export function getStatusText({
   }
 
   if (isDeleting) {
-    return t(I18nKey.COMMON$STARTING);
+    return t(I18nKey.COMMON$DELETING);
   }
 
   return t(I18nKey.COMMON$RUNNING);
