@@ -211,12 +211,7 @@ async def create_checkout_session(
 # Callback endpoint for successful Stripe payments - updates user credits and billing session status
 @billing_router.get('/success')
 async def success_callback(session_id: str, request: Request):
-    logger.info(
-        'success_callback:start',
-        extra={
-            'session_id': session_id
-        }
-    )
+    logger.info('success_callback:start', extra={'session_id': session_id})
 
     # We can't use the auth cookie because of SameSite=strict
     with session_maker() as session:
@@ -235,10 +230,7 @@ async def success_callback(session_id: str, request: Request):
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
         logger.info(
-            'success_callback:get_session_from_stripe',
-            extra={
-                'session_id': session_id
-            }
+            'success_callback:get_session_from_stripe', extra={'session_id': session_id}
         )
         stripe_session = stripe.checkout.Session.retrieve(session_id)
         if stripe_session.status != 'complete':
