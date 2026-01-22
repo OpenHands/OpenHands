@@ -114,7 +114,7 @@ rich-toolkit==0.14.1
 rpds-py==0.24.0
 safetensors==0.5.3
 scipy==1.15.2
-sentencepiece==0.2.0
+sentencepiece==0.2.1
 setuptools==75.8.0
 shellingham==1.5.4
 six==1.17.0
