@@ -6,13 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from integrations.jira.jira_manager import JiraManager
-from integrations.jira.jira_types import JiraViewInterface
-from integrations.jira.jira_view import (
-    JiraNewConversationView,
-)
+from integrations.jira.jira_payload import JiraEventType, JiraWebhookPayload
 from integrations.models import Message, SourceType
 
-from openhands.integrations.service_types import ProviderType, Repository
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -34,90 +30,7 @@ class TestJiraManagerInit:
             assert manager.token_manager == mock_token_manager
             assert manager.integration_store is not None
             assert manager.jinja_env is not None
-
-
-class TestAuthenticateUser:
-    """Test user authentication functionality."""
-
-    @pytest.mark.asyncio
-    async def test_authenticate_user_success(
-        self, jira_manager, mock_token_manager, sample_jira_user, sample_user_auth
-    ):
-        """Test successful user authentication."""
-        # Setup mocks
-        jira_manager.integration_store.get_active_user.return_value = sample_jira_user
-
-        with patch(
-            'integrations.jira.jira_manager.get_user_auth_from_keycloak_id',
-            return_value=sample_user_auth,
-        ):
-            jira_user, user_auth = await jira_manager.authenticate_user(
-                'jira_user_123', 1
-            )
-
-            assert jira_user == sample_jira_user
-            assert user_auth == sample_user_auth
-            jira_manager.integration_store.get_active_user.assert_called_once_with(
-                'jira_user_123', 1
-            )
-
-    @pytest.mark.asyncio
-    async def test_authenticate_user_no_keycloak_user(
-        self, jira_manager, mock_token_manager
-    ):
-        """Test authentication when no Keycloak user is found."""
-        jira_manager.integration_store.get_active_user.return_value = None
-
-        jira_user, user_auth = await jira_manager.authenticate_user('jira_user_123', 1)
-
-        assert jira_user is None
-        assert user_auth is None
-
-    @pytest.mark.asyncio
-    async def test_authenticate_user_no_jira_user(
-        self, jira_manager, mock_token_manager
-    ):
-        """Test authentication when no Jira user is found."""
-        jira_manager.integration_store.get_active_user.return_value = None
-
-        jira_user, user_auth = await jira_manager.authenticate_user('jira_user_123', 1)
-
-        assert jira_user is None
-        assert user_auth is None
-
-
-class TestGetRepositories:
-    """Test repository retrieval functionality."""
-
-    @pytest.mark.asyncio
-    async def test_get_repositories_success(self, jira_manager, sample_user_auth):
-        """Test successful repository retrieval."""
-        mock_repos = [
-            Repository(
-                id='1',
-                full_name='company/repo1',
-                stargazers_count=10,
-                git_provider=ProviderType.GITHUB,
-                is_public=True,
-            ),
-            Repository(
-                id='2',
-                full_name='company/repo2',
-                stargazers_count=5,
-                git_provider=ProviderType.GITHUB,
-                is_public=False,
-            ),
-        ]
-
-        with patch('integrations.jira.jira_manager.ProviderHandler') as mock_provider:
-            mock_client = MagicMock()
-            mock_client.get_repositories = AsyncMock(return_value=mock_repos)
-            mock_provider.return_value = mock_client
-
-            repos = await jira_manager._get_repositories(sample_user_auth)
-
-            assert repos == mock_repos
-            mock_client.get_repositories.assert_called_once()
+            assert manager.payload_parser is not None
 
 
 class TestGetWorkspaceNameFromPayload:
@@ -161,675 +74,189 @@ class TestGetWorkspaceNameFromPayload:
 
         assert workspace_name is None
 
-    def test_get_workspace_name_with_missing_author_self(
-        self,
-        jira_manager,
-    ):
-        """Test extracting workspace name when author self URL is missing."""
-        payload = {
-            'webhookEvent': 'comment_created',
-            'comment': {
-                'body': 'Test comment',
-                'author': {
-                    'emailAddress': 'user@test.com',
-                    'displayName': 'Test User',
-                },
-            },
-        }
 
-        workspace_name = jira_manager.get_workspace_name_from_payload(payload)
-
-        assert workspace_name is None
-
-    def test_get_workspace_name_with_missing_user_self(
-        self,
-        jira_manager,
-    ):
-        """Test extracting workspace name when user self URL is missing."""
-        payload = {
-            'webhookEvent': 'jira:issue_updated',
-            'user': {
-                'emailAddress': 'user@test.com',
-                'displayName': 'Test User',
-            },
-        }
-
-        workspace_name = jira_manager.get_workspace_name_from_payload(payload)
-
-        assert workspace_name is None
-
-
-class TestParseWebhook:
-    """Test webhook parsing functionality."""
-
-    def test_parse_webhook_comment_create(
-        self, jira_manager, sample_comment_webhook_payload
-    ):
-        """Test parsing comment creation webhook."""
-        message = Message(
-            source=SourceType.JIRA,
-            message={'payload': sample_comment_webhook_payload},
-        )
-        job_context = jira_manager.parse_webhook(message)
-
-        assert job_context is not None
-        assert job_context.issue_id == '12345'
-        assert job_context.issue_key == 'TEST-123'
-        assert job_context.user_msg == 'Please fix this @openhands'
-        assert job_context.user_email == 'user@test.com'
-        assert job_context.display_name == 'Test User'
-        assert job_context.workspace_name == 'test.atlassian.net'
-        assert job_context.base_api_url == 'https://test.atlassian.net'
-
-    def test_parse_webhook_comment_without_mention(self, jira_manager):
-        """Test parsing comment without @openhands mention raises error."""
-        payload = {
-            'webhookEvent': 'comment_created',
-            'comment': {
-                'body': 'Regular comment without mention',
-                'author': {
-                    'emailAddress': 'user@company.com',
-                    'displayName': 'Test User',
-                    'accountId': 'user456',
-                    'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
-                },
-            },
-            'issue': {
-                'id': '12345',
-                'key': 'PROJ-123',
-                'self': 'https://jira.company.com/rest/api/2/issue/12345',
-            },
-        }
-
-        message = Message(source=SourceType.JIRA, message={'payload': payload})
-        with pytest.raises(ValueError, match='Unrecognized jira event'):
-            jira_manager.parse_webhook(message)
-
-    def test_parse_webhook_issue_update_with_openhands_label(
-        self, jira_manager, sample_issue_update_webhook_payload
-    ):
-        """Test parsing issue update with openhands label."""
-        message = Message(
-            source=SourceType.JIRA,
-            message={'payload': sample_issue_update_webhook_payload},
-        )
-        job_context = jira_manager.parse_webhook(message)
-
-        assert job_context is not None
-        assert job_context.issue_id == '12345'
-        assert job_context.issue_key == 'PROJ-123'
-        assert job_context.user_msg == ''
-        assert job_context.user_email == 'user@company.com'
-        assert job_context.display_name == 'Test User'
-
-    def test_parse_webhook_issue_update_without_openhands_label(self, jira_manager):
-        """Test parsing issue update without openhands label raises error."""
-        payload = {
-            'webhookEvent': 'jira:issue_updated',
-            'changelog': {'items': [{'field': 'labels', 'toString': 'bug,urgent'}]},
-            'issue': {
-                'id': '12345',
-                'key': 'PROJ-123',
-                'self': 'https://jira.company.com/rest/api/2/issue/12345',
-            },
-            'user': {
-                'emailAddress': 'user@company.com',
-                'displayName': 'Test User',
-                'accountId': 'user456',
-                'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
-            },
-        }
-
-        message = Message(source=SourceType.JIRA, message={'payload': payload})
-        with pytest.raises(ValueError, match='Unrecognized jira event'):
-            jira_manager.parse_webhook(message)
-
-    def test_parse_webhook_unsupported_event(self, jira_manager):
-        """Test parsing webhook with unsupported event."""
-        payload = {
-            'webhookEvent': 'issue_deleted',
-            'issue': {'id': '12345', 'key': 'PROJ-123'},
-        }
-
-        message = Message(source=SourceType.JIRA, message={'payload': payload})
-        with pytest.raises(ValueError, match='Unrecognized jira event'):
-            jira_manager.parse_webhook(message)
-
-    def test_parse_webhook_missing_required_fields(self, jira_manager):
-        """Test parsing webhook with missing required fields."""
-        payload = {
-            'webhookEvent': 'comment_created',
-            'comment': {
-                'body': 'Please fix this @openhands',
-                'author': {
-                    'emailAddress': 'user@company.com',
-                    'displayName': 'Test User',
-                    'self': 'https://jira.company.com/rest/api/2/user?username=testuser',
-                },
-            },
-            'issue': {
-                'id': '12345',
-                # Missing key
-                'self': 'https://jira.company.com/rest/api/2/issue/12345',
-            },
-        }
-
-        message = Message(source=SourceType.JIRA, message={'payload': payload})
-        job_context = jira_manager.parse_webhook(message)
-        assert job_context is None
-
-
-class TestReceiveMessage:
-    """Test message receiving functionality."""
+class TestGetActiveWorkspace:
+    """Test workspace validation."""
 
     @pytest.mark.asyncio
-    async def test_receive_message_success(
-        self,
-        jira_manager,
-        sample_comment_webhook_payload,
-        sample_jira_workspace,
-        sample_jira_user,
-        sample_user_auth,
+    async def test_get_active_workspace_success(
+        self, jira_manager, sample_webhook_payload, sample_jira_workspace
     ):
-        """Test successful message processing."""
-        # Setup mocks
-        jira_manager.integration_store.get_workspace_by_name.return_value = (
-            sample_jira_workspace
-        )
-        jira_manager.authenticate_user = AsyncMock(
-            return_value=(sample_jira_user, sample_user_auth)
-        )
-        jira_manager.get_issue_details = AsyncMock(
-            return_value=('Test Title', 'Test Description')
-        )
-        jira_manager.is_repository_specified = AsyncMock(return_value=True)
-        jira_manager.start_job = AsyncMock()
-
-        with patch(
-            'integrations.jira.jira_manager.JiraFactory.create_jira_view_from_payload'
-        ) as mock_factory, patch(
-            'integrations.jira.jira_manager.JiraFactory.is_ticket_comment',
-            return_value=True,
-        ):
-            mock_view = MagicMock(spec=JiraViewInterface)
-            mock_factory.return_value = mock_view
-
-            message = Message(
-                source=SourceType.JIRA,
-                message={'payload': sample_comment_webhook_payload},
-            )
-
-            await jira_manager.receive_message(message)
-
-            jira_manager.start_job.assert_called_once_with(mock_view)
-
-    @pytest.mark.asyncio
-    async def test_receive_message_no_job_context(self, jira_manager):
-        """Test message processing when no job context is parsed."""
-        message = Message(
-            source=SourceType.JIRA, message={'payload': {'webhookEvent': 'unsupported'}}
-        )
-
-        with patch.object(jira_manager, 'parse_webhook', return_value=None):
-            await jira_manager.receive_message(message)
-            # Should return early without processing
-
-    @pytest.mark.asyncio
-    async def test_receive_message_workspace_not_found(
-        self, jira_manager, sample_comment_webhook_payload
-    ):
-        """Test message processing when workspace is not found."""
-        jira_manager.integration_store.get_workspace_by_name.return_value = None
-        jira_manager._send_error_comment = AsyncMock()
-
-        message = Message(
-            source=SourceType.JIRA, message={'payload': sample_comment_webhook_payload}
-        )
-
-        await jira_manager.receive_message(message)
-
-        jira_manager._send_error_comment.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_receive_message_service_account_user(
-        self, jira_manager, sample_comment_webhook_payload, sample_jira_workspace
-    ):
-        """Test message processing from service account user (should be ignored)."""
-        sample_jira_workspace.svc_acc_email = 'user@test.com'  # Same as webhook user
+        """Test successful workspace retrieval."""
         jira_manager.integration_store.get_workspace_by_name = AsyncMock(
             return_value=sample_jira_workspace
         )
 
-        message = Message(
-            source=SourceType.JIRA, message={'payload': sample_comment_webhook_payload}
-        )
+        workspace = await jira_manager._get_active_workspace(sample_webhook_payload)
 
-        await jira_manager.receive_message(message)
-        # Should return early without further processing
+        assert workspace == sample_jira_workspace
 
     @pytest.mark.asyncio
-    async def test_receive_message_workspace_inactive(
-        self, jira_manager, sample_comment_webhook_payload, sample_jira_workspace
+    async def test_get_active_workspace_not_found(
+        self, jira_manager, sample_webhook_payload
     ):
-        """Test message processing when workspace is inactive."""
+        """Test workspace not found."""
+        jira_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=None
+        )
+
+        workspace = await jira_manager._get_active_workspace(sample_webhook_payload)
+
+        assert workspace is None
+
+    @pytest.mark.asyncio
+    async def test_get_active_workspace_service_account_trigger(
+        self, jira_manager, sample_jira_workspace
+    ):
+        """Test ignoring service account triggers."""
+        # Create payload with service account email
+        payload = JiraWebhookPayload(
+            event_type=JiraEventType.COMMENT_MENTION,
+            raw_event='comment_created',
+            issue_id='12345',
+            issue_key='TEST-123',
+            user_email='service@example.com',  # Same as workspace svc_acc_email
+            display_name='Service Account',
+            account_id='svc123',
+            workspace_name='test.atlassian.net',
+            base_api_url='https://test.atlassian.net',
+            comment_body='@openhands test',
+        )
+        jira_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=sample_jira_workspace
+        )
+
+        workspace = await jira_manager._get_active_workspace(payload)
+
+        assert workspace is None
+
+    @pytest.mark.asyncio
+    async def test_get_active_workspace_inactive(
+        self, jira_manager, sample_webhook_payload, sample_jira_workspace
+    ):
+        """Test inactive workspace."""
         sample_jira_workspace.status = 'inactive'
-        jira_manager.integration_store.get_workspace_by_name.return_value = (
-            sample_jira_workspace
+        jira_manager.integration_store.get_workspace_by_name = AsyncMock(
+            return_value=sample_jira_workspace
         )
-        jira_manager._send_error_comment = AsyncMock()
+        jira_manager._send_error_from_payload = AsyncMock()
 
-        message = Message(
-            source=SourceType.JIRA, message={'payload': sample_comment_webhook_payload}
-        )
+        workspace = await jira_manager._get_active_workspace(sample_webhook_payload)
 
-        await jira_manager.receive_message(message)
+        assert workspace is None
+        jira_manager._send_error_from_payload.assert_called_once()
 
-        jira_manager._send_error_comment.assert_called_once()
+
+class TestAuthenticateUser:
+    """Test user authentication functionality."""
 
     @pytest.mark.asyncio
-    async def test_receive_message_authentication_failed(
-        self, jira_manager, sample_comment_webhook_payload, sample_jira_workspace
-    ):
-        """Test message processing when user authentication fails."""
-        jira_manager.integration_store.get_workspace_by_name.return_value = (
-            sample_jira_workspace
-        )
-        jira_manager.authenticate_user = AsyncMock(return_value=(None, None))
-        jira_manager._send_error_comment = AsyncMock()
-
-        message = Message(
-            source=SourceType.JIRA, message={'payload': sample_comment_webhook_payload}
-        )
-
-        await jira_manager.receive_message(message)
-
-        jira_manager._send_error_comment.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_receive_message_get_issue_details_failed(
+    async def test_authenticate_user_success(
         self,
         jira_manager,
-        sample_comment_webhook_payload,
+        sample_webhook_payload,
         sample_jira_workspace,
         sample_jira_user,
         sample_user_auth,
     ):
-        """Test message processing when getting issue details fails."""
-        jira_manager.integration_store.get_workspace_by_name.return_value = (
-            sample_jira_workspace
+        """Test successful user authentication."""
+        jira_manager.integration_store.get_active_user = AsyncMock(
+            return_value=sample_jira_user
         )
-        jira_manager.authenticate_user = AsyncMock(
-            return_value=(sample_jira_user, sample_user_auth)
-        )
-        jira_manager.get_issue_details = AsyncMock(side_effect=Exception('API Error'))
-        jira_manager._send_error_comment = AsyncMock()
-
-        message = Message(
-            source=SourceType.JIRA, message={'payload': sample_comment_webhook_payload}
-        )
-
-        await jira_manager.receive_message(message)
-
-        jira_manager._send_error_comment.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_receive_message_create_view_failed(
-        self,
-        jira_manager,
-        sample_comment_webhook_payload,
-        sample_jira_workspace,
-        sample_jira_user,
-        sample_user_auth,
-    ):
-        """Test message processing when creating Jira view fails."""
-        jira_manager.integration_store.get_workspace_by_name.return_value = (
-            sample_jira_workspace
-        )
-        jira_manager.authenticate_user = AsyncMock(
-            return_value=(sample_jira_user, sample_user_auth)
-        )
-        jira_manager.get_issue_details = AsyncMock(
-            return_value=('Test Title', 'Test Description')
-        )
-        jira_manager._send_error_comment = AsyncMock()
 
         with patch(
-            'integrations.jira.jira_manager.JiraFactory.create_jira_view_from_payload'
-        ) as mock_factory:
-            mock_factory.side_effect = Exception('View creation failed')
-
-            message = Message(
-                source=SourceType.JIRA,
-                message={'payload': sample_comment_webhook_payload},
+            'integrations.jira.jira_manager.get_user_auth_from_keycloak_id',
+            return_value=sample_user_auth,
+        ):
+            jira_user, user_auth = await jira_manager._authenticate_user(
+                sample_webhook_payload, sample_jira_workspace
             )
 
-            await jira_manager.receive_message(message)
-
-            jira_manager._send_error_comment.assert_called_once()
-
-
-class TestIsRepositorySpecified:
-    """Test repository specification validation."""
+            assert jira_user == sample_jira_user
+            assert user_auth == sample_user_auth
 
     @pytest.mark.asyncio
-    async def test_is_repository_specified_new_conversation_with_repo_match(
-        self, jira_manager, sample_job_context, sample_user_auth
+    async def test_authenticate_user_not_found(
+        self, jira_manager, sample_webhook_payload, sample_jira_workspace
     ):
-        """Test repository validation for new conversation with repository match."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.saas_user_auth = sample_user_auth
-        mock_view.job_context = sample_job_context
+        """Test authentication when user is not found."""
+        jira_manager.integration_store.get_active_user = AsyncMock(return_value=None)
+        jira_manager._send_error_from_payload = AsyncMock()
 
-        mock_repos = [
-            Repository(
-                id='1',
-                full_name='company/repo',
-                stargazers_count=10,
-                git_provider=ProviderType.GITHUB,
-                is_public=True,
-            )
-        ]
-        jira_manager._get_repositories = AsyncMock(return_value=mock_repos)
-
-        with patch(
-            'integrations.jira.jira_manager.filter_potential_repos_by_user_msg'
-        ) as mock_filter:
-            mock_filter.return_value = (True, mock_repos)
-
-            message = Message(source=SourceType.JIRA, message={})
-            result = await jira_manager.is_repository_specified(message, mock_view)
-
-            assert result is True
-            assert mock_view.selected_repo == 'company/repo'
-
-    @pytest.mark.asyncio
-    async def test_is_repository_specified_new_conversation_no_repo_match(
-        self, jira_manager, sample_job_context, sample_user_auth
-    ):
-        """Test repository validation for new conversation without repository match."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.saas_user_auth = sample_user_auth
-        mock_view.job_context = sample_job_context
-
-        mock_repos = [
-            Repository(
-                id='1',
-                full_name='company/repo',
-                stargazers_count=10,
-                git_provider=ProviderType.GITHUB,
-                is_public=True,
-            )
-        ]
-        jira_manager._get_repositories = AsyncMock(return_value=mock_repos)
-        jira_manager._send_repo_selection_comment = AsyncMock()
-
-        with patch(
-            'integrations.jira.jira_manager.filter_potential_repos_by_user_msg'
-        ) as mock_filter:
-            mock_filter.return_value = (False, [])
-
-            message = Message(source=SourceType.JIRA, message={})
-            result = await jira_manager.is_repository_specified(message, mock_view)
-
-            assert result is False
-            jira_manager._send_repo_selection_comment.assert_called_once_with(mock_view)
-
-    @pytest.mark.asyncio
-    async def test_is_repository_specified_exception(
-        self, jira_manager, sample_user_auth
-    ):
-        """Test repository validation when an exception occurs."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.saas_user_auth = sample_user_auth
-        jira_manager._get_repositories = AsyncMock(
-            side_effect=Exception('Repository error')
+        jira_user, user_auth = await jira_manager._authenticate_user(
+            sample_webhook_payload, sample_jira_workspace
         )
 
-        message = Message(source=SourceType.JIRA, message={})
-        result = await jira_manager.is_repository_specified(message, mock_view)
-
-        assert result is False
+        assert jira_user is None
+        assert user_auth is None
+        jira_manager._send_error_from_payload.assert_called_once()
 
 
 class TestStartJob:
     """Test job starting functionality."""
 
     @pytest.mark.asyncio
-    async def test_start_job_success_new_conversation(
-        self, jira_manager, sample_jira_workspace
-    ):
-        """Test successful job start for new conversation."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.jira_user = MagicMock()
-        mock_view.jira_user.keycloak_user_id = 'test_user'
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.create_or_update_conversation = AsyncMock(return_value='conv_123')
-        mock_view.get_response_msg = MagicMock(return_value='Job started successfully')
-
-        jira_manager.send_message = AsyncMock()
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+    async def test_start_job_success(self, jira_manager, new_conversation_view):
+        """Test successful job start."""
+        new_conversation_view.create_or_update_conversation = AsyncMock(
+            return_value='conv-123'
+        )
+        jira_manager._send_comment = AsyncMock()
 
         with patch(
             'integrations.jira.jira_manager.register_callback_processor'
         ) as mock_register:
-            with patch(
-                'server.conversation_callback_processor.jira_callback_processor.JiraCallbackProcessor'
-            ):
-                await jira_manager.start_job(mock_view)
+            await jira_manager.start_job(new_conversation_view)
 
-                mock_view.create_or_update_conversation.assert_called_once()
-                mock_register.assert_called_once()
-                jira_manager.send_message.assert_called_once()
+            new_conversation_view.create_or_update_conversation.assert_called_once()
+            mock_register.assert_called_once()
+            jira_manager._send_comment.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_start_job_missing_settings_error(
-        self, jira_manager, sample_jira_workspace
+        self, jira_manager, new_conversation_view
     ):
         """Test job start with missing settings error."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.jira_user = MagicMock()
-        mock_view.jira_user.keycloak_user_id = 'test_user'
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.create_or_update_conversation = AsyncMock(
+        new_conversation_view.create_or_update_conversation = AsyncMock(
             side_effect=MissingSettingsError('Missing settings')
         )
+        jira_manager._send_comment = AsyncMock()
 
-        jira_manager.send_message = AsyncMock()
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+        await jira_manager.start_job(new_conversation_view)
 
-        await jira_manager.start_job(mock_view)
-
-        # Should send error message about re-login
-        jira_manager.send_message.assert_called_once()
-        call_args = jira_manager.send_message.call_args[0]
-        assert 'Please re-login' in call_args[0].message
+        jira_manager._send_comment.assert_called_once()
+        call_args = jira_manager._send_comment.call_args[0]
+        assert 're-login' in call_args[1]
 
     @pytest.mark.asyncio
-    async def test_start_job_llm_authentication_error(
-        self, jira_manager, sample_jira_workspace
-    ):
+    async def test_start_job_llm_auth_error(self, jira_manager, new_conversation_view):
         """Test job start with LLM authentication error."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.jira_user = MagicMock()
-        mock_view.jira_user.keycloak_user_id = 'test_user'
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.create_or_update_conversation = AsyncMock(
+        new_conversation_view.create_or_update_conversation = AsyncMock(
             side_effect=LLMAuthenticationError('LLM auth failed')
         )
+        jira_manager._send_comment = AsyncMock()
 
-        jira_manager.send_message = AsyncMock()
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+        await jira_manager.start_job(new_conversation_view)
 
-        await jira_manager.start_job(mock_view)
-
-        # Should send error message about LLM API key
-        jira_manager.send_message.assert_called_once()
-        call_args = jira_manager.send_message.call_args[0]
-        assert 'valid LLM API key' in call_args[0].message
+        jira_manager._send_comment.assert_called_once()
+        call_args = jira_manager._send_comment.call_args[0]
+        assert 'LLM API key' in call_args[1]
 
     @pytest.mark.asyncio
     async def test_start_job_session_expired_error(
-        self, jira_manager, sample_jira_workspace
+        self, jira_manager, new_conversation_view
     ):
         """Test job start with session expired error."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.jira_user = MagicMock()
-        mock_view.jira_user.keycloak_user_id = 'test_user'
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.create_or_update_conversation = AsyncMock(
+        new_conversation_view.create_or_update_conversation = AsyncMock(
             side_effect=SessionExpiredError('Session expired')
         )
+        jira_manager._send_comment = AsyncMock()
 
-        jira_manager.send_message = AsyncMock()
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
+        await jira_manager.start_job(new_conversation_view)
 
-        await jira_manager.start_job(mock_view)
-
-        # Should send error message about session expired
-        jira_manager.send_message.assert_called_once()
-        call_args = jira_manager.send_message.call_args[0]
-        assert 'session has expired' in call_args[0].message
-        assert 'login again' in call_args[0].message
-
-    @pytest.mark.asyncio
-    async def test_start_job_unexpected_error(
-        self, jira_manager, sample_jira_workspace
-    ):
-        """Test job start with unexpected error."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.jira_user = MagicMock()
-        mock_view.jira_user.keycloak_user_id = 'test_user'
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.create_or_update_conversation = AsyncMock(
-            side_effect=Exception('Unexpected error')
-        )
-
-        jira_manager.send_message = AsyncMock()
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
-
-        await jira_manager.start_job(mock_view)
-
-        # Should send generic error message
-        jira_manager.send_message.assert_called_once()
-        call_args = jira_manager.send_message.call_args[0]
-        assert 'unexpected error' in call_args[0].message
-
-    @pytest.mark.asyncio
-    async def test_start_job_send_message_fails(
-        self, jira_manager, sample_jira_workspace
-    ):
-        """Test job start when sending message fails."""
-        mock_view = MagicMock(spec=JiraNewConversationView)
-        mock_view.jira_user = MagicMock()
-        mock_view.jira_user.keycloak_user_id = 'test_user'
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.create_or_update_conversation = AsyncMock(return_value='conv_123')
-        mock_view.get_response_msg = MagicMock(return_value='Job started successfully')
-
-        jira_manager.send_message = AsyncMock(side_effect=Exception('Send failed'))
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
-
-        with patch('integrations.jira.jira_manager.register_callback_processor'):
-            # Should not raise exception even if send_message fails
-            await jira_manager.start_job(mock_view)
-
-
-class TestGetIssueDetails:
-    """Test issue details retrieval."""
-
-    @pytest.mark.asyncio
-    async def test_get_issue_details_success(self, jira_manager, sample_job_context):
-        """Test successful issue details retrieval."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            'fields': {'summary': 'Test Issue', 'description': 'Test description'}
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
-            title, description = await jira_manager.get_issue_details(
-                sample_job_context, 'jira_cloud_id', 'service@test.com', 'api_key'
-            )
-
-            assert title == 'Test Issue'
-            assert description == 'Test description'
-
-    @pytest.mark.asyncio
-    async def test_get_issue_details_no_issue(self, jira_manager, sample_job_context):
-        """Test issue details retrieval when issue is not found."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = None
-        mock_response.raise_for_status = MagicMock()
-
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
-            with pytest.raises(ValueError, match='Issue with key TEST-123 not found'):
-                await jira_manager.get_issue_details(
-                    sample_job_context, 'jira_cloud_id', 'service@test.com', 'api_key'
-                )
-
-    @pytest.mark.asyncio
-    async def test_get_issue_details_no_title(self, jira_manager, sample_job_context):
-        """Test issue details retrieval when issue has no title."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            'fields': {'summary': '', 'description': 'Test description'}
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
-            with pytest.raises(
-                ValueError, match='Issue with key TEST-123 does not have a title'
-            ):
-                await jira_manager.get_issue_details(
-                    sample_job_context, 'jira_cloud_id', 'service@test.com', 'api_key'
-                )
-
-    @pytest.mark.asyncio
-    async def test_get_issue_details_no_description(
-        self, jira_manager, sample_job_context
-    ):
-        """Test issue details retrieval when issue has no description."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            'fields': {'summary': 'Test Issue', 'description': ''}
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
-            with pytest.raises(
-                ValueError, match='Issue with key TEST-123 does not have a description'
-            ):
-                await jira_manager.get_issue_details(
-                    sample_job_context, 'jira_cloud_id', 'service@test.com', 'api_key'
-                )
+        jira_manager._send_comment.assert_called_once()
+        call_args = jira_manager._send_comment.call_args[0]
+        assert 'expired' in call_args[1]
 
 
 class TestSendMessage:
@@ -851,7 +278,7 @@ class TestSendMessage:
             result = await jira_manager.send_message(
                 message,
                 'PROJ-123',
-                'https://jira.company.com',
+                'cloud-123',
                 'service@test.com',
                 'api_key',
             )
@@ -860,83 +287,53 @@ class TestSendMessage:
             mock_response.raise_for_status.assert_called_once()
 
 
-class TestSendErrorComment:
-    """Test error comment sending."""
+class TestSendErrorFromPayload:
+    """Test error comment sending from payload."""
 
     @pytest.mark.asyncio
-    async def test_send_error_comment_success(
-        self, jira_manager, sample_jira_workspace, sample_job_context
+    async def test_send_error_from_payload_success(
+        self, jira_manager, sample_webhook_payload, sample_jira_workspace
     ):
         """Test successful error comment sending."""
         jira_manager.send_message = AsyncMock()
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        await jira_manager._send_error_comment(
-            sample_job_context, 'Error message', sample_jira_workspace
+        await jira_manager._send_error_from_payload(
+            sample_webhook_payload, sample_jira_workspace, 'Error message'
         )
 
         jira_manager.send_message.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_send_error_comment_no_workspace(
-        self, jira_manager, sample_job_context
-    ):
-        """Test error comment sending when no workspace is provided."""
-        await jira_manager._send_error_comment(
-            sample_job_context, 'Error message', None
-        )
-        # Should not raise exception
-
-    @pytest.mark.asyncio
-    async def test_send_error_comment_send_fails(
-        self, jira_manager, sample_jira_workspace, sample_job_context
+    async def test_send_error_from_payload_send_fails(
+        self, jira_manager, sample_webhook_payload, sample_jira_workspace
     ):
         """Test error comment sending when send_message fails."""
         jira_manager.send_message = AsyncMock(side_effect=Exception('Send failed'))
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
         # Should not raise exception even if send_message fails
-        await jira_manager._send_error_comment(
-            sample_job_context, 'Error message', sample_jira_workspace
+        await jira_manager._send_error_from_payload(
+            sample_webhook_payload, sample_jira_workspace, 'Error message'
         )
 
 
-class TestSendRepoSelectionComment:
-    """Test repository selection comment sending."""
+class TestSendComment:
+    """Test comment sending from view."""
 
     @pytest.mark.asyncio
-    async def test_send_repo_selection_comment_success(
-        self, jira_manager, sample_jira_workspace
-    ):
-        """Test successful repository selection comment sending."""
-        mock_view = MagicMock(spec=JiraViewInterface)
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.job_context.base_api_url = 'https://jira.company.com'
-
+    async def test_send_comment_success(self, jira_manager, new_conversation_view):
+        """Test successful comment sending."""
         jira_manager.send_message = AsyncMock()
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        await jira_manager._send_repo_selection_comment(mock_view)
+        await jira_manager._send_comment(new_conversation_view, 'Test comment')
 
         jira_manager.send_message.assert_called_once()
-        call_args = jira_manager.send_message.call_args[0]
-        assert 'which repository to work with' in call_args[0].message
 
     @pytest.mark.asyncio
-    async def test_send_repo_selection_comment_send_fails(
-        self, jira_manager, sample_jira_workspace
+    async def test_send_comment_fails_silently(
+        self, jira_manager, new_conversation_view
     ):
-        """Test repository selection comment sending when send_message fails."""
-        mock_view = MagicMock(spec=JiraViewInterface)
-        mock_view.jira_workspace = sample_jira_workspace
-        mock_view.job_context = MagicMock()
-        mock_view.job_context.issue_key = 'PROJ-123'
-        mock_view.job_context.base_api_url = 'https://jira.company.com'
-
+        """Test comment sending fails silently."""
         jira_manager.send_message = AsyncMock(side_effect=Exception('Send failed'))
-        jira_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
 
-        # Should not raise exception even if send_message fails
-        await jira_manager._send_repo_selection_comment(mock_view)
+        # Should not raise exception
+        await jira_manager._send_comment(new_conversation_view, 'Test comment')

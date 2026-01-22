@@ -4,6 +4,7 @@ These tests verify that the immutable_validator correctly converts dict to Mappi
 for git_provider_tokens and custom_secrets fields, ensuring type safety.
 """
 
+import warnings
 from types import MappingProxyType
 
 import pytest
@@ -269,4 +270,32 @@ class TestConversationInitDataValidator:
         assert (
             init_data.custom_secrets['SECRET'].secret.get_secret_value()
             == 'secret_proxy'
+        )
+
+
+def test_conversation_init_data_no_pydantic_frozen_field_warning():
+    """Test that ConversationInitData model does not trigger Pydantic UnsupportedFieldAttributeWarning.
+
+    This test ensures that the 'frozen' parameter is not incorrectly used in Field()
+    definitions, which would cause warnings in Pydantic v2 for union types.
+    See: https://github.com/All-Hands-AI/infra/issues/860
+    """
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+
+        # Re-import to trigger any warnings during model definition
+        import importlib
+
+        import openhands.server.session.conversation_init_data
+
+        importlib.reload(openhands.server.session.conversation_init_data)
+
+        # Check for warnings containing 'frozen' which would indicate
+        # incorrect usage of frozen=True in Field()
+        frozen_warnings = [
+            warning for warning in w if 'frozen' in str(warning.message).lower()
+        ]
+
+        assert len(frozen_warnings) == 0, (
+            f'Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}'
         )

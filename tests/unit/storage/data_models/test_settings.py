@@ -1,3 +1,4 @@
+import warnings
 from unittest.mock import patch
 
 from pydantic import SecretStr
@@ -98,3 +99,31 @@ def test_convert_to_settings():
     settings = convert_to_settings(settings_with_token_data)
 
     assert settings.llm_api_key.get_secret_value() == 'test-key'
+
+
+def test_settings_no_pydantic_frozen_field_warning():
+    """Test that Settings model does not trigger Pydantic UnsupportedFieldAttributeWarning.
+
+    This test ensures that the 'frozen' parameter is not incorrectly used in Field()
+    definitions, which would cause warnings in Pydantic v2 for union types.
+    See: https://github.com/All-Hands-AI/infra/issues/860
+    """
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+
+        # Re-import to trigger any warnings during model definition
+        import importlib
+
+        import openhands.storage.data_models.settings
+
+        importlib.reload(openhands.storage.data_models.settings)
+
+        # Check for warnings containing 'frozen' which would indicate
+        # incorrect usage of frozen=True in Field()
+        frozen_warnings = [
+            warning for warning in w if 'frozen' in str(warning.message).lower()
+        ]
+
+        assert len(frozen_warnings) == 0, (
+            f'Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}'
+        )
