@@ -159,6 +159,11 @@ async def create_checkout_session(
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
 
+    # Never send any part of the credit card process over a non secure connection
+    base_url = request.base_url
+    if base_url.hostname != 'localhost':
+        base_url = base_url.replace(scheme='https')
+
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
@@ -181,8 +186,8 @@ async def create_checkout_session(
         saved_payment_method_options={
             'payment_method_save': 'enabled',
         },
-        success_url=f'{request.base_url}api/billing/success?session_id={{CHECKOUT_SESSION_ID}}',
-        cancel_url=f'{request.base_url}api/billing/cancel?session_id={{CHECKOUT_SESSION_ID}}',
+        success_url=f'{base_url}api/billing/success?session_id={{CHECKOUT_SESSION_ID}}',
+        cancel_url=f'{base_url}api/billing/cancel?session_id={{CHECKOUT_SESSION_ID}}',
     )
     logger.info(
         'created_stripe_checkout_session',
