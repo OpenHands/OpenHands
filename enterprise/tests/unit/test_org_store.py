@@ -415,3 +415,251 @@ def test_persist_org_with_owner_with_multiple_fields(session_maker, mock_litellm
         )
         assert persisted_member.max_iterations == 100
         assert persisted_member.llm_model == 'gpt-4'
+
+
+def test_get_user_orgs_paginated_first_page(session_maker, mock_litellm_api):
+    """
+    GIVEN: User is member of multiple organizations
+    WHEN: get_user_orgs_paginated is called without page_id
+    THEN: First page of organizations is returned in alphabetical order
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+    other_user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        # Create orgs for the user
+        org1 = Org(name='Alpha Org')
+        org2 = Org(name='Beta Org')
+        org3 = Org(name='Gamma Org')
+        # Create org for another user (should not be included)
+        org4 = Org(name='Other Org')
+        session.add_all([org1, org2, org3, org4])
+        session.flush()
+
+        # Create user and role
+        user = User(id=user_id, current_org_id=org1.id)
+        other_user = User(id=other_user_id, current_org_id=org4.id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([user, other_user, role])
+        session.flush()
+
+        # Create memberships
+        member1 = OrgMember(
+            org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        member2 = OrgMember(
+            org_id=org2.id, user_id=user_id, role_id=1, llm_api_key='key2'
+        )
+        member3 = OrgMember(
+            org_id=org3.id, user_id=user_id, role_id=1, llm_api_key='key3'
+        )
+        other_member = OrgMember(
+            org_id=org4.id, user_id=other_user_id, role_id=1, llm_api_key='key4'
+        )
+        session.add_all([member1, member2, member3, other_member])
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+            user_id=user_id, page_id=None, limit=2
+        )
+
+    # Assert
+    assert len(orgs) == 2
+    assert orgs[0].name == 'Alpha Org'
+    assert orgs[1].name == 'Beta Org'
+    assert next_page_id == '2'  # Has more results
+    # Verify other user's org is not included
+    org_names = [org.name for org in orgs]
+    assert 'Other Org' not in org_names
+
+
+def test_get_user_orgs_paginated_with_page_id(session_maker, mock_litellm_api):
+    """
+    GIVEN: User has multiple organizations and page_id is provided
+    WHEN: get_user_orgs_paginated is called with page_id
+    THEN: Organizations starting from offset are returned
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        org1 = Org(name='Alpha Org')
+        org2 = Org(name='Beta Org')
+        org3 = Org(name='Gamma Org')
+        session.add_all([org1, org2, org3])
+        session.flush()
+
+        user = User(id=user_id, current_org_id=org1.id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([user, role])
+        session.flush()
+
+        member1 = OrgMember(
+            org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        member2 = OrgMember(
+            org_id=org2.id, user_id=user_id, role_id=1, llm_api_key='key2'
+        )
+        member3 = OrgMember(
+            org_id=org3.id, user_id=user_id, role_id=1, llm_api_key='key3'
+        )
+        session.add_all([member1, member2, member3])
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+            user_id=user_id, page_id='1', limit=1
+        )
+
+    # Assert
+    assert len(orgs) == 1
+    assert orgs[0].name == 'Beta Org'  # Second org (offset 1)
+    assert next_page_id == '2'  # Has more results
+
+
+def test_get_user_orgs_paginated_no_more_results(session_maker, mock_litellm_api):
+    """
+    GIVEN: User has organizations but fewer than limit
+    WHEN: get_user_orgs_paginated is called
+    THEN: All organizations are returned and next_page_id is None
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        org1 = Org(name='Alpha Org')
+        org2 = Org(name='Beta Org')
+        session.add_all([org1, org2])
+        session.flush()
+
+        user = User(id=user_id, current_org_id=org1.id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([user, role])
+        session.flush()
+
+        member1 = OrgMember(
+            org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        member2 = OrgMember(
+            org_id=org2.id, user_id=user_id, role_id=1, llm_api_key='key2'
+        )
+        session.add_all([member1, member2])
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+            user_id=user_id, page_id=None, limit=10
+        )
+
+    # Assert
+    assert len(orgs) == 2
+    assert next_page_id is None
+
+
+def test_get_user_orgs_paginated_invalid_page_id(session_maker, mock_litellm_api):
+    """
+    GIVEN: Invalid page_id (non-numeric string)
+    WHEN: get_user_orgs_paginated is called
+    THEN: Results start from beginning (offset 0)
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        org1 = Org(name='Alpha Org')
+        session.add(org1)
+        session.flush()
+
+        user = User(id=user_id, current_org_id=org1.id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([user, role])
+        session.flush()
+
+        member1 = OrgMember(
+            org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        session.add(member1)
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+            user_id=user_id, page_id='invalid', limit=10
+        )
+
+    # Assert
+    assert len(orgs) == 1
+    assert orgs[0].name == 'Alpha Org'
+    assert next_page_id is None
+
+
+def test_get_user_orgs_paginated_empty_results(session_maker):
+    """
+    GIVEN: User has no organizations
+    WHEN: get_user_orgs_paginated is called
+    THEN: Empty list and None next_page_id are returned
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+            user_id=user_id, page_id=None, limit=10
+        )
+
+    # Assert
+    assert len(orgs) == 0
+    assert next_page_id is None
+
+
+def test_get_user_orgs_paginated_ordering(session_maker, mock_litellm_api):
+    """
+    GIVEN: User has organizations with different names
+    WHEN: get_user_orgs_paginated is called
+    THEN: Organizations are returned in alphabetical order by name
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        # Create orgs in non-alphabetical order
+        org3 = Org(name='Zebra Org')
+        org1 = Org(name='Apple Org')
+        org2 = Org(name='Banana Org')
+        session.add_all([org3, org1, org2])
+        session.flush()
+
+        user = User(id=user_id, current_org_id=org1.id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([user, role])
+        session.flush()
+
+        member1 = OrgMember(
+            org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        member2 = OrgMember(
+            org_id=org2.id, user_id=user_id, role_id=1, llm_api_key='key2'
+        )
+        member3 = OrgMember(
+            org_id=org3.id, user_id=user_id, role_id=1, llm_api_key='key3'
+        )
+        session.add_all([member1, member2, member3])
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, _ = OrgStore.get_user_orgs_paginated(
+            user_id=user_id, page_id=None, limit=10
+        )
+
+    # Assert
+    assert len(orgs) == 3
+    assert orgs[0].name == 'Apple Org'
+    assert orgs[1].name == 'Banana Org'
+    assert orgs[2].name == 'Zebra Org'

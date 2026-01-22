@@ -381,6 +381,279 @@ async def test_create_org_sensitive_fields_not_exposed(mock_app):
 
 
 @pytest.fixture
+def mock_app_list():
+    """Create a test FastAPI app with organization routes and mocked auth for list endpoint."""
+    app = FastAPI()
+    app.include_router(org_router)
+
+    # Override the auth dependency to return a test user
+    test_user_id = str(uuid.uuid4())
+
+    def mock_get_user_id():
+        return test_user_id
+
+    app.dependency_overrides[get_user_id] = mock_get_user_id
+
+    return app
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_success(mock_app_list):
+    """
+    GIVEN: User has organizations
+    WHEN: GET /api/organizations is called
+    THEN: Paginated list of organizations is returned with 200 status
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+        default_llm_model='claude-opus-4-5-20251101',
+    )
+
+    with patch(
+        'server.routes.orgs.OrgService.get_user_orgs_paginated',
+        return_value=([mock_org], None),
+    ):
+        client = TestClient(mock_app_list)
+
+        # Act
+        response = client.get('/api/organizations')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert 'items' in response_data
+        assert 'next_page_id' in response_data
+        assert len(response_data['items']) == 1
+        assert response_data['items'][0]['name'] == 'Test Organization'
+        assert response_data['items'][0]['id'] == str(org_id)
+        assert response_data['next_page_id'] is None
+        # Credits should be None in list view
+        assert response_data['items'][0]['credits'] is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_with_pagination(mock_app_list):
+    """
+    GIVEN: User has multiple organizations
+    WHEN: GET /api/organizations is called with pagination params
+    THEN: Paginated results are returned with next_page_id
+    """
+    # Arrange
+    org1 = Org(
+        id=uuid.uuid4(),
+        name='Alpha Org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+    org2 = Org(
+        id=uuid.uuid4(),
+        name='Beta Org',
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
+    )
+
+    with patch(
+        'server.routes.orgs.OrgService.get_user_orgs_paginated',
+        return_value=([org1, org2], '2'),
+    ):
+        client = TestClient(mock_app_list)
+
+        # Act
+        response = client.get('/api/organizations?page_id=0&limit=2')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert len(response_data['items']) == 2
+        assert response_data['next_page_id'] == '2'
+        assert response_data['items'][0]['name'] == 'Alpha Org'
+        assert response_data['items'][1]['name'] == 'Beta Org'
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_empty(mock_app_list):
+    """
+    GIVEN: User has no organizations
+    WHEN: GET /api/organizations is called
+    THEN: Empty list is returned with 200 status
+    """
+    # Arrange
+    with patch(
+        'server.routes.orgs.OrgService.get_user_orgs_paginated',
+        return_value=([], None),
+    ):
+        client = TestClient(mock_app_list)
+
+        # Act
+        response = client.get('/api/organizations')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['items'] == []
+        assert response_data['next_page_id'] is None
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_invalid_limit_negative(mock_app_list):
+    """
+    GIVEN: Invalid limit parameter (negative)
+    WHEN: GET /api/organizations is called
+    THEN: 422 validation error is returned
+    """
+    # Arrange
+    client = TestClient(mock_app_list)
+
+    # Act - FastAPI should validate and reject limit <= 0
+    response = client.get('/api/organizations?limit=-1')
+
+    # Assert - FastAPI should return 422 for validation error
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_invalid_limit_zero(mock_app_list):
+    """
+    GIVEN: Invalid limit parameter (zero or negative)
+    WHEN: GET /api/organizations is called
+    THEN: 422 validation error is returned
+    """
+    # Arrange
+    client = TestClient(mock_app_list)
+
+    # Act
+    response = client.get('/api/organizations?limit=0')
+
+    # Assert
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_service_error(mock_app_list):
+    """
+    GIVEN: Service layer raises an exception
+    WHEN: GET /api/organizations is called
+    THEN: 500 Internal Server Error is returned
+    """
+    # Arrange
+    with patch(
+        'server.routes.orgs.OrgService.get_user_orgs_paginated',
+        side_effect=Exception('Database error'),
+    ):
+        client = TestClient(mock_app_list)
+
+        # Act
+        response = client.get('/api/organizations')
+
+        # Assert
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert 'Failed to retrieve organizations' in response.json()['detail']
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_unauthorized():
+    """
+    GIVEN: User is not authenticated
+    WHEN: GET /api/organizations is called
+    THEN: 401 Unauthorized error is returned
+    """
+    # Arrange
+    app = FastAPI()
+    app.include_router(org_router)
+
+    # Override to simulate unauthenticated user
+    async def mock_unauthenticated():
+        raise HTTPException(status_code=401, detail='User not authenticated')
+
+    app.dependency_overrides[get_user_id] = mock_unauthenticated
+
+    client = TestClient(app)
+
+    # Act
+    response = client.get('/api/organizations')
+
+    # Assert
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_all_fields_present(mock_app_list):
+    """
+    GIVEN: Organization with all fields populated
+    WHEN: GET /api/organizations is called
+    THEN: All organization fields are included in response
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Complete Org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        conversation_expiration=3600,
+        agent='CodeActAgent',
+        default_max_iterations=50,
+        security_analyzer='enabled',
+        confirmation_mode=True,
+        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_base_url='https://api.example.com',
+        remote_runtime_resource_factor=2,
+        enable_default_condenser=True,
+        billing_margin=0.15,
+        enable_proactive_conversation_starters=True,
+        sandbox_base_container_image='test-image',
+        sandbox_runtime_container_image='test-runtime',
+        org_version=5,
+        mcp_config={'key': 'value'},
+        max_budget_per_task=1000.0,
+        enable_solvability_analysis=True,
+        v1_enabled=True,
+    )
+
+    with patch(
+        'server.routes.orgs.OrgService.get_user_orgs_paginated',
+        return_value=([mock_org], None),
+    ):
+        client = TestClient(mock_app_list)
+
+        # Act
+        response = client.get('/api/organizations')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        org_data = response_data['items'][0]
+        assert org_data['name'] == 'Complete Org'
+        assert org_data['contact_name'] == 'John Doe'
+        assert org_data['contact_email'] == 'john@example.com'
+        assert org_data['conversation_expiration'] == 3600
+        assert org_data['agent'] == 'CodeActAgent'
+        assert org_data['default_max_iterations'] == 50
+        assert org_data['security_analyzer'] == 'enabled'
+        assert org_data['confirmation_mode'] is True
+        assert org_data['default_llm_model'] == 'claude-opus-4-5-20251101'
+        assert org_data['default_llm_base_url'] == 'https://api.example.com'
+        assert org_data['remote_runtime_resource_factor'] == 2
+        assert org_data['enable_default_condenser'] is True
+        assert org_data['billing_margin'] == 0.15
+        assert org_data['enable_proactive_conversation_starters'] is True
+        assert org_data['sandbox_base_container_image'] == 'test-image'
+        assert org_data['sandbox_runtime_container_image'] == 'test-runtime'
+        assert org_data['org_version'] == 5
+        assert org_data['mcp_config'] == {'key': 'value'}
+        assert org_data['max_budget_per_task'] == 1000.0
+        assert org_data['enable_solvability_analysis'] is True
+        assert org_data['v1_enabled'] is True
+        assert org_data['credits'] is None
+
+
+@pytest.fixture
 def mock_app_with_get_user_id():
     """Create a test FastAPI app with organization routes and mocked get_user_id auth."""
     app = FastAPI()
