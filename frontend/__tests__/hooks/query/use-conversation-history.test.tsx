@@ -1,12 +1,6 @@
 // @vitest-environment happy-dom
 
 import { describe, it, expect, afterEach, vi } from "vitest";
-
-// Mock axios client before EventService import
-vi.mock("#/api/open-hands-axios", () => ({
-  openHands: { get: vi.fn() },
-}));
-
 import React from "react";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -14,18 +8,41 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useConversationHistory } from "#/hooks/query/use-conversation-history";
 import EventService from "#/api/event-service/event-service.api";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import type { Conversation } from "#/api/open-hands.types";
+import type { OpenHandsEvent } from "#/types/v1/core";
 
+function makeConversation(version: "V0" | "V1"): Conversation {
+  return {
+    conversation_id: "conv-test",
+    title: "Test Conversation",
+    selected_repository: null,
+    selected_branch: null,
+    git_provider: null,
+    last_updated_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    status: "RUNNING",
+    runtime_status: null,
+    url: null,
+    session_api_key: null,
+    conversation_version: version,
+  };
+}
 
-// Mock axios client BEFORE EventService import
+function makeEvent(): OpenHandsEvent {
+  return {
+    id: "evt-1",
+  } as OpenHandsEvent;
+}
+
+// --------------------
+// Mocks
+// --------------------
 vi.mock("#/api/open-hands-axios", () => ({
   openHands: {
     get: vi.fn(),
   },
 }));
 
-// --------------------
-// Mocks
-// --------------------
 vi.mock("#/api/event-service/event-service.api");
 vi.mock("#/hooks/query/use-user-conversation");
 
@@ -46,11 +63,18 @@ describe("useConversationHistory", () => {
   });
 
   it("calls V1 REST endpoint for V1 conversations", async () => {
-    (useUserConversation as any).mockReturnValue({
-      data: { conversation_version: "V1" },
-    });
+    const v1SearchEventsSpy = vi.spyOn(EventService, "searchEventsV1");
 
-    (EventService.searchEventsV1 as any).mockResolvedValue([{ id: "event-1" }]);
+    vi.mocked(useUserConversation).mockReturnValue({
+      data: makeConversation("V1"),
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    v1SearchEventsSpy.mockResolvedValue([makeEvent()]);
 
     const { result } = renderHook(() => useConversationHistory("conv-123"), {
       wrapper,
@@ -65,11 +89,18 @@ describe("useConversationHistory", () => {
   });
 
   it("calls V0 REST endpoint for V0 conversations", async () => {
-    (useUserConversation as any).mockReturnValue({
-      data: { conversation_version: "V0" },
-    });
+    const v0SearchEventsSpy = vi.spyOn(EventService, "searchEventsV0");
 
-    (EventService.searchEventsV0 as any).mockResolvedValue([{ id: 1 }]);
+    vi.mocked(useUserConversation).mockReturnValue({
+      data: makeConversation("V0"),
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    v0SearchEventsSpy.mockResolvedValue([makeEvent()]);
 
     const { result } = renderHook(() => useConversationHistory("conv-456"), {
       wrapper,

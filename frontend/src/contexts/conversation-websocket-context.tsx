@@ -310,9 +310,10 @@ export function ConversationWebSocketProvider({
   const { data: preloadedEvents } = useConversationHistory(conversationId);
 
   useEffect(() => {
-    if (!preloadedEvents || preloadedEvents.length === 0) return;
-
-    useEventStore.getState().clearEvents();
+    if (!preloadedEvents || preloadedEvents.length === 0) {
+      setIsLoadingHistoryMain(false);
+      return;
+    }
 
     for (const event of preloadedEvents) {
       addEvent(event as OHEvent);

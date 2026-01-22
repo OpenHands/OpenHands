@@ -6,6 +6,7 @@ import type {
   ConfirmationResponseResponse,
 } from "./event-service.types";
 import { openHands } from "../open-hands-axios";
+import { OpenHandsEvent } from "#/types/v1/core";
 
 class EventService {
   /**
@@ -66,7 +67,7 @@ class EventService {
   // V1 conversations — App Server REST endpoint
   static async searchEventsV1(conversationId: string, limit = 100) {
     const { data } = await openHands.get<{
-      items: unknown[];
+      items: OpenHandsEvent[];
     }>(`/api/v1/conversation/${conversationId}/events/search`, {
       params: { limit },
     });
@@ -77,7 +78,7 @@ class EventService {
   // V0 conversations — Legacy REST endpoint
   static async searchEventsV0(conversationId: string, limit = 100) {
     const { data } = await openHands.get<{
-      events: unknown[];
+      events: OpenHandsEvent[];
     }>(`/api/conversations/${conversationId}/events`, {
       params: { limit },
     });
