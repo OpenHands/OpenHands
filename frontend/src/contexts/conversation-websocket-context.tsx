@@ -316,7 +316,7 @@ export function ConversationWebSocketProvider({
     }
 
     for (const event of preloadedEvents) {
-      addEvent(event as OHEvent);
+      addEvent(event);
     }
 
     setIsLoadingHistoryMain(false);
