@@ -149,6 +149,18 @@ def test_infer_repo_from_message():
         ('https://github.com/My-User/My-Repo.git', ['My-User/My-Repo']),
         ('Check the my.user/my.repo repository', ['my.user/my.repo']),
         ('repos: user_1/repo-1 and user.2/repo_2', ['user_1/repo-1', 'user.2/repo_2']),
+        # Backtick-wrapped repo mentions (common in Slack/Discord messages)
+        (
+            '@openhands-exp just echo hello world in `OpenHands/OpenHands-CLI` repository',
+            ['OpenHands/OpenHands-CLI'],
+        ),
+        (
+            '@openhands-exp echo hello world with {{OpenHands/OpenHands-CLI}}',
+            ['OpenHands/OpenHands-CLI'],
+        ),
+        ('Deploy the `test/project` repo', ['test/project']),
+        # Colon-wrapped repo mentions
+        ('Check the :owner/repo: here', ['owner/repo']),
         # Large number of repositories
         ('Repos: a/b, c/d, e/f, g/h, i/j', ['a/b', 'c/d', 'e/f', 'g/h', 'i/j']),
         # Mixed with false positives that should be filtered

@@ -114,7 +114,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
-    keycloak_auth_cookie: str | None = None
     tavily_api_key: str | None = None
 
     async def search_app_conversations(
@@ -601,10 +600,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     expires_in=self.access_token_hard_timeout,
                 )
                 headers = {'X-Access-Token': access_token}
-
-                # Include keycloak_auth cookie in headers if app_mode is SaaS
-                if self.app_mode == 'saas' and self.keycloak_auth_cookie:
-                    headers['Cookie'] = f'keycloak_auth={self.keycloak_auth_cookie}'
 
                 secrets[secret_name] = LookupSecret(
                     url=self.web_url + '/api/v1/webhooks/secrets',
@@ -1400,17 +1395,14 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 if isinstance(sandbox_service, DockerSandboxService):
                     web_url = f'http://host.docker.internal:{sandbox_service.host_port}'
 
-            # Get app_mode and keycloak_auth cookie for SaaS mode
+            # Get app_mode for SaaS mode
             app_mode = None
-            keycloak_auth_cookie = None
             try:
                 from openhands.server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None
                 )
-                if request and server_config.app_mode == AppMode.SAAS:
-                    keycloak_auth_cookie = request.cookies.get('keycloak_auth')
             except (ImportError, AttributeError):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
@@ -1440,6 +1432,5 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
-                keycloak_auth_cookie=keycloak_auth_cookie,
                 tavily_api_key=tavily_api_key,
             )
