@@ -88,13 +88,18 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         )
 
     async def _create_async_gcp_db_connection(self):
-        gcp_connector = self._gcp_connector
-        if gcp_connector is None:
-            # Lazy import because lib does not import if user does not have posgres installed
-            from google.cloud.sql.connector import Connector
+        # Lazy import because lib does not import if user does not have postgres installed
+        from google.cloud.sql.connector import Connector
 
-            loop = asyncio.get_running_loop()
-            gcp_connector = Connector(loop=loop)
+        current_loop = asyncio.get_running_loop()
+        gcp_connector = self._gcp_connector
+
+        # Create new connector if none exists or if event loop changed
+        if (
+            gcp_connector is None
+            or getattr(gcp_connector, '_loop', None) != current_loop
+        ):
+            gcp_connector = Connector(loop=current_loop)
             self._gcp_connector = gcp_connector
 
         password = self.password

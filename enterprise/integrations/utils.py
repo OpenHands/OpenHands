@@ -6,15 +6,9 @@ import re
 from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader
-from server.config import get_config
 from server.constants import WEB_HOST
-from storage.database import session_maker
-from storage.repository_store import RepositoryStore
-from storage.stored_repository import StoredRepository
-from storage.user_repo_map import UserRepositoryMap
-from storage.user_repo_map_store import UserRepositoryMapStore
+from storage.org_store import OrgStore
 
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
 from openhands.events import Event, EventSource
@@ -125,26 +119,17 @@ async def get_user_v1_enabled_setting(user_id: str | None) -> bool:
     Returns:
         True if V1 conversations are enabled for this user, False otherwise
     """
-
-    # If no user ID is provided, we can't check user settings
     if not user_id:
         return False
 
-    from storage.saas_settings_store import SaasSettingsStore
-
-    config = get_config()
-    settings_store = SaasSettingsStore(
-        user_id=user_id, session_maker=session_maker, config=config
+    org = await call_sync_from_async(
+        OrgStore.get_current_org_from_keycloak_user_id, user_id
     )
 
-    settings = await call_sync_from_async(
-        settings_store.get_user_settings_by_keycloak_id, user_id
-    )
-
-    if not settings or settings.v1_enabled is None:
+    if not org or org.v1_enabled is None:
         return False
 
-    return settings.v1_enabled
+    return org.v1_enabled
 
 
 def has_exact_mention(text: str, mention: str) -> bool:
@@ -409,102 +394,46 @@ def append_conversation_footer(message: str, conversation_id: str) -> str:
     return message + footer
 
 
-async def store_repositories_in_db(repos: list[Repository], user_id: str) -> None:
-    """
-    Store repositories in DB and create user-repository mappings
-
-    Args:
-        repos: List of Repository objects to store
-        user_id: User ID associated with these repositories
-    """
-
-    # Convert Repository objects to StoredRepository objects
-    # Convert Repository objects to UserRepositoryMap objects
-    stored_repos = []
-    user_repos = []
-    for repo in repos:
-        repo_id = f'{repo.git_provider.value}##{str(repo.id)}'
-        stored_repo = StoredRepository(
-            repo_name=repo.full_name,
-            repo_id=repo_id,
-            is_public=repo.is_public,
-            # Optional fields set to None by default
-            has_microagent=None,
-            has_setup_script=None,
-        )
-        stored_repos.append(stored_repo)
-        user_repo_map = UserRepositoryMap(user_id=user_id, repo_id=repo_id, admin=None)
-
-        user_repos.append(user_repo_map)
-
-    # Get config instance
-    config = OpenHandsConfig()
-
-    try:
-        # Store repositories in the repos table
-        repo_store = RepositoryStore.get_instance(config)
-        repo_store.store_projects(stored_repos)
-
-        # Store user-repository mappings in the user-repos table
-        user_repo_store = UserRepositoryMapStore.get_instance(config)
-        user_repo_store.store_user_repo_mappings(user_repos)
-
-        logger.info(f'Saved repos for user {user_id}')
-    except Exception:
-        logger.warning('Failed to save repos', exc_info=True)
-
-
 def infer_repo_from_message(user_msg: str) -> list[str]:
     """
     Extract all repository names in the format 'owner/repo' from various Git provider URLs
     and direct mentions in text. Supports GitHub, GitLab, and BitBucket.
-    Args:
-        user_msg: Input message that may contain repository references
-    Returns:
-        List of repository names in 'owner/repo' format, empty list if none found
     """
-    # Normalize the message by removing extra whitespace and newlines
     normalized_msg = re.sub(r'\s+', ' ', user_msg.strip())
 
-    # Pattern to match Git URLs from GitHub, GitLab, and BitBucket
-    # Captures: protocol, domain, owner, repo (with optional .git extension)
-    git_url_pattern = r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:[/?#].*?)?(?=\s|$|[^\w.-])'
-
-    # Pattern to match direct owner/repo mentions (e.g., "OpenHands/OpenHands")
-    # Must be surrounded by word boundaries or specific characters to avoid false positives
-    direct_pattern = (
-        r'(?:^|\s|[\[\(\'"])([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?=\s|$|[\]\)\'",.])'
+    git_url_pattern = (
+        r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/'
+        r'([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?'
+        r'(?:[/?#].*?)?(?=\s|$|[^\w.-])'
     )
 
-    matches = []
+    # UPDATED: allow {{ owner/repo }} in addition to existing boundaries
+    direct_pattern = (
+        r'(?:^|\s|{{|[\[\(\'":`])'  # left boundary
+        r'([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)'
+        r'(?=\s|$|}}|[\]\)\'",.:`])'  # right boundary
+    )
 
-    # First, find all Git URLs (highest priority)
-    git_matches = re.findall(git_url_pattern, normalized_msg)
-    for owner, repo in git_matches:
-        # Remove .git extension if present
+    matches: list[str] = []
+
+    # Git URLs first (highest priority)
+    for owner, repo in re.findall(git_url_pattern, normalized_msg):
         repo = re.sub(r'\.git$', '', repo)
         matches.append(f'{owner}/{repo}')
 
-    # Second, find all direct owner/repo mentions
-    direct_matches = re.findall(direct_pattern, normalized_msg)
-    for owner, repo in direct_matches:
+    # Direct mentions
+    for owner, repo in re.findall(direct_pattern, normalized_msg):
         full_match = f'{owner}/{repo}'
 
-        # Skip if it looks like a version number, date, or file path
         if (
-            re.match(r'^\d+\.\d+/\d+\.\d+$', full_match)  # version numbers
-            or re.match(r'^\d{1,2}/\d{1,2}$', full_match)  # dates
-            or re.match(r'^[A-Z]/[A-Z]$', full_match)  # single letters
-            or repo.endswith('.txt')
-            or repo.endswith('.md')  # file extensions
-            or repo.endswith('.py')
-            or repo.endswith('.js')
-            or '.' in repo
-            and len(repo.split('.')) > 2
-        ):  # complex file paths
+            re.match(r'^\d+\.\d+/\d+\.\d+$', full_match)
+            or re.match(r'^\d{1,2}/\d{1,2}$', full_match)
+            or re.match(r'^[A-Z]/[A-Z]$', full_match)
+            or repo.endswith(('.txt', '.md', '.py', '.js'))
+            or ('.' in repo and len(repo.split('.')) > 2)
+        ):
             continue
 
-        # Avoid duplicates from Git URLs already found
         if full_match not in matches:
             matches.append(full_match)
 

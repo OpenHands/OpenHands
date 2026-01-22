@@ -9,6 +9,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import sessionmaker
 from storage.api_key import ApiKey
 from storage.database import session_maker
+from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 
@@ -39,10 +40,15 @@ class ApiKeyStore:
             The generated API key
         """
         api_key = self.generate_api_key()
-
+        user = UserStore.get_user_by_id(user_id)
+        org_id = user.current_org_id
         with self.session_maker() as session:
             key_record = ApiKey(
-                key=api_key, user_id=user_id, name=name, expires_at=expires_at
+                key=api_key,
+                user_id=user_id,
+                org_id=org_id,
+                name=name,
+                expires_at=expires_at,
             )
             session.add(key_record)
             session.commit()
@@ -108,8 +114,15 @@ class ApiKeyStore:
 
     def list_api_keys(self, user_id: str) -> list[dict]:
         """List all API keys for a user."""
+        user = UserStore.get_user_by_id(user_id)
+        org_id = user.current_org_id
         with self.session_maker() as session:
-            keys = session.query(ApiKey).filter(ApiKey.user_id == user_id).all()
+            keys = (
+                session.query(ApiKey)
+                .filter(ApiKey.user_id == user_id)
+                .filter(ApiKey.org_id == org_id)
+                .all()
+            )
 
             return [
                 {
@@ -124,9 +137,14 @@ class ApiKeyStore:
             ]
 
     def retrieve_mcp_api_key(self, user_id: str) -> str | None:
+        user = UserStore.get_user_by_id(user_id)
+        org_id = user.current_org_id
         with self.session_maker() as session:
             keys: list[ApiKey] = (
-                session.query(ApiKey).filter(ApiKey.user_id == user_id).all()
+                session.query(ApiKey)
+                .filter(ApiKey.user_id == user_id)
+                .filter(ApiKey.org_id == org_id)
+                .all()
             )
             for key in keys:
                 if key.name == 'MCP_API_KEY':

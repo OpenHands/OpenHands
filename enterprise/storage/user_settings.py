@@ -39,3 +39,6 @@ class UserSettings(Base):  # type: ignore
     git_user_name = Column(String, nullable=True)
     git_user_email = Column(String, nullable=True)
     v1_enabled = Column(Boolean, nullable=True)
+    already_migrated = Column(
+        Boolean, nullable=True, default=False
+    )  # False = not migrated, True = migrated

@@ -77,6 +77,15 @@ class SaasUserAuth(UserAuth):
         self.access_token = SecretStr(tokens['access_token'])
         self.refresh_token = SecretStr(tokens['refresh_token'])
         self.refreshed = True
+        if not self.email or not self.email_verified or not self.user_id:
+            # We don't need to verify the signature here because we just refreshed
+            # this token from the IDP via token_manager.refresh()
+            access_token_payload = jwt.decode(
+                tokens['access_token'], options={'verify_signature': False}
+            )
+            self.user_id = access_token_payload['sub']
+            self.email = access_token_payload['email']
+            self.email_verified = access_token_payload['email_verified']
 
     def _is_token_expired(self, token: SecretStr):
         logger.debug('saas_user_auth_is_token_expired')
@@ -103,7 +112,6 @@ class SaasUserAuth(UserAuth):
             return settings
         settings_store = await self.get_user_settings_store()
         settings = await settings_store.load()
-        # If load() returned None, should settings be created?
         if settings:
             settings.email = self.email
             settings.email_verified = self.email_verified
@@ -274,11 +282,13 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
         if not user_id:
             return None
         offline_token = await token_manager.load_offline_token(user_id)
-        return SaasUserAuth(
+        saas_user_auth = SaasUserAuth(
             user_id=user_id,
             refresh_token=SecretStr(offline_token),
             auth_type=AuthType.BEARER,
         )
+        await saas_user_auth.refresh()
+        return saas_user_auth
     except Exception as exc:
         raise BearerTokenError from exc
 

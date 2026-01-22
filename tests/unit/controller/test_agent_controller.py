@@ -26,13 +26,13 @@ from openhands.events.action import ChangeAgentStateAction, CmdRunAction, Messag
 from openhands.events.action.agent import CondensationAction, RecallAction
 from openhands.events.action.empty import NullAction
 from openhands.events.action.message import SystemMessageAction
-from openhands.events.event import RecallType
 from openhands.events.observation import (
     AgentStateChangedObservation,
     ErrorObservation,
 )
 from openhands.events.observation.agent import RecallObservation
 from openhands.events.observation.empty import NullObservation
+from openhands.events.recall_type import RecallType
 from openhands.events.serialization import event_to_dict
 from openhands.llm import LLM
 from openhands.llm.llm_registry import LLMRegistry, RegistryEvent

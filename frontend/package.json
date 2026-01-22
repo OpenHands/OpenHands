@@ -1,10 +1,10 @@
 {
   "name": "openhands-frontend",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.12.0"
   },
   "dependencies": {
     "@heroui/react": "2.8.7",
@@ -13,7 +13,7 @@
     "@react-router/node": "^7.12.0",
     "@react-router/serve": "^7.12.0",
     "@tailwindcss/vite": "^4.1.18",
-    "@tanstack/react-query": "^5.90.16",
+    "@tanstack/react-query": "^5.90.19",
     "@uidotdev/usehooks": "^2.4.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
@@ -22,18 +22,18 @@
     "clsx": "^2.1.1",
     "downshift": "^9.0.13",
     "eslint-config-airbnb-typescript": "^18.0.0",
-    "framer-motion": "^12.26.2",
-    "i18next": "^25.7.4",
+    "framer-motion": "^12.28.1",
+    "i18next": "^25.8.0",
     "i18next-browser-languagedetector": "^8.2.0",
     "i18next-http-backend": "^3.0.2",
-    "isbot": "^5.1.32",
+    "isbot": "^5.1.33",
     "lucide-react": "^0.562.0",
     "monaco-editor": "^0.55.1",
-    "posthog-js": "^1.319.0",
+    "posthog-js": "^1.333.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-hot-toast": "^2.6.0",
-    "react-i18next": "^16.5.2",
+    "react-i18next": "^16.5.3",
     "react-icons": "^5.5.0",
     "react-markdown": "^10.1.0",
     "react-router": "^7.12.0",
@@ -84,13 +84,13 @@
     "@playwright/test": "^1.57.0",
     "@react-router/dev": "^7.12.0",
     "@tailwindcss/typography": "^0.5.19",
-    "@tanstack/eslint-plugin-query": "^5.91.0",
+    "@tanstack/eslint-plugin-query": "^5.91.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.1",
+    "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^25.0.7",
-    "@types/react": "^19.2.8",
+    "@types/node": "^25.0.9",
+    "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
@@ -112,7 +112,7 @@
     "jsdom": "^27.4.0",
     "lint-staged": "^16.2.7",
     "msw": "^2.6.6",
-    "prettier": "^3.7.3",
+    "prettier": "^3.8.0",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.9.3",
     "vite-plugin-svgr": "^4.5.0",
@@ -121,7 +121,7 @@
   },
   "packageManager": "npm@10.5.0",
   "volta": {
-    "node": "22.0.0"
+    "node": "22.12.0"
   },
   "msw": {
     "workerDirectory": [

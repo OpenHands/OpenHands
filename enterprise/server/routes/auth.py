@@ -1,5 +1,6 @@
 import base64
 import json
+import uuid
 import warnings
 from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
@@ -22,12 +23,12 @@ from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
-from server.config import get_config, sign_token
+from server.config import sign_token
 from server.constants import IS_FEATURE_ENV
 from server.routes.event_webhook import _get_session_api_key, _get_user_id
 from storage.database import session_maker
-from storage.saas_settings_store import SaasSettingsStore
-from storage.user_settings import UserSettings
+from storage.user import User
+from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
@@ -87,7 +88,8 @@ def get_cookie_domain(request: Request) -> str | None:
     # for now just use the full hostname except for staging stacks.
     return (
         None
-        if (request.url.hostname or '').endswith('staging.all-hand.dev')
+        if not request.url.hostname
+        or request.url.hostname.endswith('staging.all-hands.dev')
         else request.url.hostname
     )
 
@@ -174,6 +176,20 @@ async def keycloak_callback(
 
     email = user_info.get('email')
     user_id = user_info['sub']
+    user = await UserStore.get_user_by_id_async(user_id)
+    if not user:
+        user = await UserStore.create_user(user_id, user_info)
+
+    if not user:
+        logger.error(f'Failed to authenticate user {user_info["preferred_username"]}')
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                'error': f'Failed to authenticate user {user_info["preferred_username"]}'
+            },
+        )
+
+    logger.info(f'Logging in user {str(user.id)} in org {user.current_org_id}')
 
     # reCAPTCHA verification with Account Defender
     if RECAPTCHA_SITE_KEY:
@@ -360,15 +376,7 @@ async def keycloak_callback(
             f'&state={state}'
         )
 
-    config = get_config()
-    settings_store = SaasSettingsStore(
-        user_id=user_id, session_maker=session_maker, config=config
-    )
-    user_settings = settings_store.get_user_settings_by_keycloak_id(user_id)
-    has_accepted_tos = (
-        user_settings is not None and user_settings.accepted_tos is not None
-    )
-
+    has_accepted_tos = user.accepted_tos is not None
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:
         encoded_redirect_url = quote(redirect_url, safe='')
@@ -486,28 +494,20 @@ async def accept_tos(request: Request):
     redirect_url = body.get('redirect_url', str(request.base_url))
 
     # Update user settings with TOS acceptance
+    accepted_tos: datetime = datetime.now(timezone.utc)
     with session_maker() as session:
-        user_settings = (
-            session.query(UserSettings)
-            .filter(UserSettings.keycloak_user_id == user_id)
-            .first()
-        )
-
-        if user_settings:
-            user_settings.accepted_tos = datetime.now(timezone.utc)
-            session.merge(user_settings)
-        else:
-            # Create user settings if they don't exist
-            user_settings = UserSettings(
-                keycloak_user_id=user_id,
-                accepted_tos=datetime.now(timezone.utc),
-                user_version=0,  # This will trigger a migration to the latest version on next load
+        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+        if not user:
+            session.rollback()
+            logger.error('User for {user_id} not found.')
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={'error': 'User does not exist'},
             )
-            session.add(user_settings)
-
+        user.accepted_tos = accepted_tos
         session.commit()
 
-    logger.info(f'User {user_id} accepted TOS')
+        logger.info(f'User {user_id} accepted TOS')
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={'redirect_url': redirect_url}
