@@ -138,7 +138,7 @@ async def has_payment_method(user_id: str = Depends(get_user_id)) -> bool:
 async def create_customer_setup_session(
     request: Request, user_id: str = Depends(get_user_id)
 ) -> CreateBillingSessionResponse:
-    validate_billing_enabled()
+    await validate_billing_enabled()
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
@@ -157,7 +157,7 @@ async def create_checkout_session(
     request: Request,
     user_id: str = Depends(get_user_id),
 ) -> CreateBillingSessionResponse:
-    validate_billing_enabled()
+    await validate_billing_enabled()
 
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
     checkout_session = await stripe.checkout.Session.create_async(
