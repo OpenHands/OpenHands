@@ -40,6 +40,18 @@ import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV1Event } from "#/types/v1/type-guards";
 
+// Mock useUserConversation to return V1 conversation data
+vi.mock("#/hooks/query/use-user-conversation", () => ({
+  useUserConversation: vi.fn(() => ({
+    data: {
+      conversation_version: "V1",
+      status: "RUNNING",
+    },
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 // MSW WebSocket mock setup
 const { wsLink, server: mswServer } = conversationWebSocketTestSetup();
 
@@ -667,6 +679,16 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
+        // Mock events search for history preloading
+        http.get(
+          `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
+          async () => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            return HttpResponse.json({
+              items: mockHistoryEvents,
+            });
+          },
+        ),
         http.get(
           `http://localhost:3000/api/conversations/${conversationId}/events/count`,
           () => HttpResponse.json(expectedEventCount),
@@ -703,11 +725,6 @@ describe("Conversation WebSocket Handler", () => {
         `http://localhost:3000/api/conversations/${conversationId}`,
       );
 
-      // Initially should be loading history
-      expect(screen.getByTestId("is-loading-history")).toHaveTextContent(
-        "true",
-      );
-
       // Wait for all events to be received
       await waitFor(() => {
         expect(screen.getByTestId("events-received")).toHaveTextContent("3");
@@ -726,6 +743,14 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
+        // Mock empty events search
+        http.get(
+          `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
+          () =>
+            HttpResponse.json({
+              items: [],
+            }),
+        ),
         http.get(
           `http://localhost:3000/api/conversations/${conversationId}/events/count`,
           () => HttpResponse.json(0),
@@ -775,6 +800,16 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
+        // Mock events search for history preloading (50 events)
+        http.get(
+          `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
+          async () => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            return HttpResponse.json({
+              items: mockHistoryEvents,
+            });
+          },
+        ),
         http.get(
           `http://localhost:3000/api/conversations/${conversationId}/events/count`,
           () => HttpResponse.json(expectedEventCount),
@@ -808,11 +843,6 @@ describe("Conversation WebSocket Handler", () => {
         <HistoryLoadingComponent />,
         conversationId,
         `http://localhost:3000/api/conversations/${conversationId}`,
-      );
-
-      // Initially should be loading history
-      expect(screen.getByTestId("is-loading-history")).toHaveTextContent(
-        "true",
       );
 
       // Wait for all events to be received

@@ -398,53 +398,42 @@ def infer_repo_from_message(user_msg: str) -> list[str]:
     """
     Extract all repository names in the format 'owner/repo' from various Git provider URLs
     and direct mentions in text. Supports GitHub, GitLab, and BitBucket.
-    Args:
-        user_msg: Input message that may contain repository references
-    Returns:
-        List of repository names in 'owner/repo' format, empty list if none found
     """
-    # Normalize the message by removing extra whitespace and newlines
     normalized_msg = re.sub(r'\s+', ' ', user_msg.strip())
 
-    # Pattern to match Git URLs from GitHub, GitLab, and BitBucket
-    # Captures: protocol, domain, owner, repo (with optional .git extension)
-    git_url_pattern = r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:[/?#].*?)?(?=\s|$|[^\w.-])'
-
-    # Pattern to match direct owner/repo mentions (e.g., "OpenHands/OpenHands")
-    # Must be surrounded by word boundaries or specific characters to avoid false positives
-    direct_pattern = (
-        r'(?:^|\s|[\[\(\'"])([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?=\s|$|[\]\)\'",.])'
+    git_url_pattern = (
+        r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/'
+        r'([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?'
+        r'(?:[/?#].*?)?(?=\s|$|[^\w.-])'
     )
 
-    matches = []
+    # UPDATED: allow {{ owner/repo }} in addition to existing boundaries
+    direct_pattern = (
+        r'(?:^|\s|{{|[\[\(\'":`])'  # left boundary
+        r'([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)'
+        r'(?=\s|$|}}|[\]\)\'",.:`])'  # right boundary
+    )
 
-    # First, find all Git URLs (highest priority)
-    git_matches = re.findall(git_url_pattern, normalized_msg)
-    for owner, repo in git_matches:
-        # Remove .git extension if present
+    matches: list[str] = []
+
+    # Git URLs first (highest priority)
+    for owner, repo in re.findall(git_url_pattern, normalized_msg):
         repo = re.sub(r'\.git$', '', repo)
         matches.append(f'{owner}/{repo}')
 
-    # Second, find all direct owner/repo mentions
-    direct_matches = re.findall(direct_pattern, normalized_msg)
-    for owner, repo in direct_matches:
+    # Direct mentions
+    for owner, repo in re.findall(direct_pattern, normalized_msg):
         full_match = f'{owner}/{repo}'
 
-        # Skip if it looks like a version number, date, or file path
         if (
-            re.match(r'^\d+\.\d+/\d+\.\d+$', full_match)  # version numbers
-            or re.match(r'^\d{1,2}/\d{1,2}$', full_match)  # dates
-            or re.match(r'^[A-Z]/[A-Z]$', full_match)  # single letters
-            or repo.endswith('.txt')
-            or repo.endswith('.md')  # file extensions
-            or repo.endswith('.py')
-            or repo.endswith('.js')
-            or '.' in repo
-            and len(repo.split('.')) > 2
-        ):  # complex file paths
+            re.match(r'^\d+\.\d+/\d+\.\d+$', full_match)
+            or re.match(r'^\d{1,2}/\d{1,2}$', full_match)
+            or re.match(r'^[A-Z]/[A-Z]$', full_match)
+            or repo.endswith(('.txt', '.md', '.py', '.js'))
+            or ('.' in repo and len(repo.split('.')) > 2)
+        ):
             continue
 
-        # Avoid duplicates from Git URLs already found
         if full_match not in matches:
             matches.append(full_match)
 

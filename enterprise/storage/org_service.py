@@ -9,8 +9,10 @@ from uuid import UUID as parse_uuid
 from server.constants import ORG_SETTINGS_VERSION, get_default_litellm_model
 from server.routes.org_models import (
     LiteLLMIntegrationError,
+    OrgAuthorizationError,
     OrgDatabaseError,
     OrgNameExistsError,
+    OrgNotFoundError,
 )
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
@@ -441,3 +443,183 @@ class OrgService:
                 extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
             )
             return None
+
+    @staticmethod
+    def get_user_orgs_paginated(
+        user_id: str, page_id: str | None = None, limit: int = 100
+    ):
+        """
+        Get paginated list of organizations for a user.
+
+        Args:
+            user_id: User ID (string that will be converted to UUID)
+            page_id: Optional page ID (offset as string) for pagination
+            limit: Maximum number of organizations to return
+
+        Returns:
+            Tuple of (list of Org objects, next_page_id or None)
+        """
+        logger.debug(
+            'Fetching paginated organizations for user',
+            extra={'user_id': user_id, 'page_id': page_id, 'limit': limit},
+        )
+
+        # Convert user_id string to UUID
+        user_uuid = parse_uuid(user_id)
+
+        # Fetch organizations from store
+        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+            user_id=user_uuid, page_id=page_id, limit=limit
+        )
+
+        logger.debug(
+            'Retrieved organizations for user',
+            extra={
+                'user_id': user_id,
+                'org_count': len(orgs),
+                'has_more': next_page_id is not None,
+            },
+        )
+
+        return orgs, next_page_id
+
+    @staticmethod
+    async def get_org_by_id(org_id: UUID, user_id: str) -> Org:
+        """
+        Get organization by ID with membership validation.
+
+        This method verifies that the user is a member of the organization
+        before returning the organization details.
+
+        Args:
+            org_id: Organization ID
+            user_id: User ID (string that will be converted to UUID)
+
+        Returns:
+            Org: The organization object
+
+        Raises:
+            OrgNotFoundError: If organization not found or user is not a member
+        """
+        logger.info(
+            'Retrieving organization',
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+        )
+
+        # Verify user is a member of the organization
+        org_member = OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
+        if not org_member:
+            logger.warning(
+                'User is not a member of organization or organization does not exist',
+                extra={'user_id': user_id, 'org_id': str(org_id)},
+            )
+            raise OrgNotFoundError(str(org_id))
+
+        # Retrieve organization
+        org = OrgStore.get_org_by_id(org_id)
+        if not org:
+            logger.error(
+                'Organization not found despite valid membership',
+                extra={'user_id': user_id, 'org_id': str(org_id)},
+            )
+            raise OrgNotFoundError(str(org_id))
+
+        logger.info(
+            'Successfully retrieved organization',
+            extra={
+                'org_id': str(org.id),
+                'org_name': org.name,
+                'user_id': user_id,
+            },
+        )
+
+        return org
+
+    @staticmethod
+    def verify_owner_authorization(user_id: str, org_id: UUID) -> None:
+        """
+        Verify that the user is the owner of the organization.
+
+        Args:
+            user_id: User ID to check
+            org_id: Organization ID
+
+        Raises:
+            OrgNotFoundError: If organization doesn't exist
+            OrgAuthorizationError: If user is not authorized to delete
+        """
+        # Check if organization exists
+        org = OrgStore.get_org_by_id(org_id)
+        if not org:
+            raise OrgNotFoundError(str(org_id))
+
+        # Check if user is a member of the organization
+        org_member = OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
+        if not org_member:
+            raise OrgAuthorizationError('User is not a member of this organization')
+
+        # Check if user has owner role
+        role = RoleStore.get_role_by_id(org_member.role_id)
+        if not role or role.name != 'owner':
+            raise OrgAuthorizationError(
+                'Only organization owners can delete organizations'
+            )
+
+        logger.debug(
+            'User authorization verified for organization deletion',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'role': role.name},
+        )
+
+    @staticmethod
+    async def delete_org_with_cleanup(user_id: str, org_id: UUID) -> Org:
+        """
+        Delete organization with complete cleanup of all associated data.
+
+        This method performs the complete organization deletion workflow:
+        1. Verifies user authorization (owner only)
+        2. Performs database cascade deletion and LiteLLM cleanup in single transaction
+
+        Args:
+            user_id: User ID requesting deletion (must be owner)
+            org_id: Organization ID to delete
+
+        Returns:
+            Org: The deleted organization details
+
+        Raises:
+            OrgNotFoundError: If organization doesn't exist
+            OrgAuthorizationError: If user is not authorized to delete
+            OrgDatabaseError: If database operations or LiteLLM cleanup fail
+        """
+        logger.info(
+            'Starting organization deletion',
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+        )
+
+        # Step 1: Verify user authorization
+        OrgService.verify_owner_authorization(user_id, org_id)
+
+        # Step 2: Perform database cascade deletion with LiteLLM cleanup in transaction
+        try:
+            deleted_org = await OrgStore.delete_org_cascade(org_id)
+            if not deleted_org:
+                # This shouldn't happen since we verified existence above
+                raise OrgDatabaseError('Organization not found during deletion')
+
+            logger.info(
+                'Organization deletion completed successfully',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'org_name': deleted_org.name,
+                },
+            )
+
+            return deleted_org
+
+        except Exception as e:
+            logger.error(
+                'Organization deletion failed',
+                extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            )
+            raise OrgDatabaseError(f'Failed to delete organization: {str(e)}')
