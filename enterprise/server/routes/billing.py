@@ -245,7 +245,14 @@ async def success_callback(session_id: str, request: Request):
             )
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
+        logger.info(
+            'success_callback:get_user_by_id_async',
+            extra={'user_id': billing_session.user_id},
+        )
         user = await UserStore.get_user_by_id_async(billing_session.user_id)
+        logger.info(
+            'success_callback:get_user_team_info', extra={'org_id': user.current_org_id}
+        )
         user_team_info = await LiteLlmManager.get_user_team_info(
             billing_session.user_id, str(user.current_org_id)
         )
@@ -255,7 +262,10 @@ async def success_callback(session_id: str, request: Request):
             'max_budget', 0
         )
         new_max_budget = max_budget + add_credits
-
+        logger.info(
+            'success_callback:update_team_and_users_budget',
+            extra={'org_id': user.current_org_id, 'new_max_budget': new_max_budget},
+        )
         await LiteLlmManager.update_team_and_users_budget(
             str(user.current_org_id), new_max_budget
         )
