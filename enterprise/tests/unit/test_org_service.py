@@ -566,6 +566,219 @@ async def test_get_org_credits_api_failure_returns_none(mock_litellm_api):
         assert credits is None
 
 
+@pytest.mark.asyncio
+async def test_get_org_by_id_success(session_maker, owner_role):
+    """
+    GIVEN: Valid org_id and user_id where user is a member
+    WHEN: get_org_by_id is called
+    THEN: Organization is returned successfully
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    org_name = 'Test Organization'
+
+    # Create mock objects
+    mock_org = Org(id=org_id, name=org_name)
+    mock_org_member = OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        llm_api_key='test-key',
+        status='active',
+    )
+
+    with (
+        patch('storage.org_service.OrgMemberStore.get_org_member') as mock_get_member,
+        patch('storage.org_service.OrgStore.get_org_by_id') as mock_get_org,
+    ):
+        mock_get_member.return_value = mock_org_member
+        mock_get_org.return_value = mock_org
+
+        # Act
+        result = await OrgService.get_org_by_id(org_id, str(user_id))
+
+        # Assert
+        assert result is not None
+        assert result.id == org_id
+        assert result.name == org_name
+        mock_get_member.assert_called_once()
+        mock_get_org.assert_called_once_with(org_id)
+
+
+@pytest.mark.asyncio
+async def test_get_org_by_id_user_not_member():
+    """
+    GIVEN: User is not a member of the organization
+    WHEN: get_org_by_id is called
+    THEN: OrgNotFoundError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    with patch(
+        'storage.org_service.OrgMemberStore.get_org_member',
+        return_value=None,
+    ):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError) as exc_info:
+            await OrgService.get_org_by_id(org_id, user_id)
+
+        assert str(org_id) in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_get_org_by_id_org_not_found():
+    """
+    GIVEN: User is a member but organization doesn't exist (edge case)
+    WHEN: get_org_by_id is called
+    THEN: OrgNotFoundError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    # Create mock org member (but org doesn't exist)
+    mock_org_member = OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        llm_api_key='test-key',
+        status='active',
+    )
+
+    with (
+        patch(
+            'storage.org_service.OrgMemberStore.get_org_member',
+            return_value=mock_org_member,
+        ),
+        patch('storage.org_service.OrgStore.get_org_by_id', return_value=None),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError) as exc_info:
+            await OrgService.get_org_by_id(org_id, str(user_id))
+
+        assert str(org_id) in str(exc_info.value)
+
+
+def test_get_user_orgs_paginated_success(session_maker, mock_litellm_api):
+    """
+    GIVEN: User has organizations in database
+    WHEN: get_user_orgs_paginated is called with valid user_id
+    THEN: Organizations are returned with pagination info
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+
+    with session_maker() as session:
+        org = Org(id=org_id, name='Test Org')
+        user = User(id=user_id, current_org_id=org_id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([org, user, role])
+        session.flush()
+
+        member = OrgMember(
+            org_id=org_id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        session.add(member)
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+            user_id=str(user_id), page_id=None, limit=10
+        )
+
+    # Assert
+    assert len(orgs) == 1
+    assert orgs[0].name == 'Test Org'
+    assert next_page_id is None
+
+
+def test_get_user_orgs_paginated_with_pagination(session_maker, mock_litellm_api):
+    """
+    GIVEN: User has multiple organizations
+    WHEN: get_user_orgs_paginated is called with page_id and limit
+    THEN: Paginated results are returned correctly
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        org1 = Org(name='Alpha Org')
+        org2 = Org(name='Beta Org')
+        org3 = Org(name='Gamma Org')
+        session.add_all([org1, org2, org3])
+        session.flush()
+
+        user = User(id=user_id, current_org_id=org1.id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([user, role])
+        session.flush()
+
+        member1 = OrgMember(
+            org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        member2 = OrgMember(
+            org_id=org2.id, user_id=user_id, role_id=1, llm_api_key='key2'
+        )
+        member3 = OrgMember(
+            org_id=org3.id, user_id=user_id, role_id=1, llm_api_key='key3'
+        )
+        session.add_all([member1, member2, member3])
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+            user_id=str(user_id), page_id='0', limit=2
+        )
+
+    # Assert
+    assert len(orgs) == 2
+    assert orgs[0].name == 'Alpha Org'
+    assert orgs[1].name == 'Beta Org'
+    assert next_page_id == '2'
+
+
+def test_get_user_orgs_paginated_empty_results(session_maker):
+    """
+    GIVEN: User has no organizations
+    WHEN: get_user_orgs_paginated is called
+    THEN: Empty list and None next_page_id are returned
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+            user_id=user_id, page_id=None, limit=10
+        )
+
+    # Assert
+    assert len(orgs) == 0
+    assert next_page_id is None
+
+
+def test_get_user_orgs_paginated_invalid_user_id_format():
+    """
+    GIVEN: Invalid user_id format (not a valid UUID string)
+    WHEN: get_user_orgs_paginated is called
+    THEN: ValueError is raised
+    """
+    # Arrange
+    invalid_user_id = 'not-a-uuid'
+
+    # Act & Assert
+    with pytest.raises(ValueError):
+        OrgService.get_user_orgs_paginated(
+            user_id=invalid_user_id, page_id=None, limit=10
+        )
+
+
 def test_verify_owner_authorization_success(session_maker, owner_role):
     """
     GIVEN: User is owner of the organization

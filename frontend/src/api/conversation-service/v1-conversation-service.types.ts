@@ -103,7 +103,7 @@ export interface V1AppConversation {
 
 export interface Skill {
   name: string;
-  type: "repo" | "knowledge";
+  type: "repo" | "knowledge" | "agentskills";
   content: string;
   triggers: string[];
 }

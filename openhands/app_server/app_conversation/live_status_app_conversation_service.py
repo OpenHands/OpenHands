@@ -237,7 +237,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 working_dir=sandbox_spec.working_dir,
             )
             async for updated_task in self.run_setup_scripts(
-                task, sandbox, remote_workspace
+                task, sandbox, remote_workspace, agent_server_url
             ):
                 yield updated_task
 
