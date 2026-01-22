@@ -65,38 +65,7 @@ async def list_user_orgs(
         )
 
         # Convert Org entities to OrgResponse objects
-        org_responses = [
-            OrgResponse(
-                id=str(org.id),
-                name=org.name,
-                contact_name=org.contact_name,
-                contact_email=org.contact_email,
-                conversation_expiration=org.conversation_expiration,
-                agent=org.agent,
-                default_max_iterations=org.default_max_iterations,
-                security_analyzer=org.security_analyzer,
-                confirmation_mode=org.confirmation_mode,
-                default_llm_model=org.default_llm_model,
-                default_llm_base_url=org.default_llm_base_url,
-                remote_runtime_resource_factor=org.remote_runtime_resource_factor,
-                enable_default_condenser=org.enable_default_condenser
-                if org.enable_default_condenser is not None
-                else True,
-                billing_margin=org.billing_margin,
-                enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
-                if org.enable_proactive_conversation_starters is not None
-                else True,
-                sandbox_base_container_image=org.sandbox_base_container_image,
-                sandbox_runtime_container_image=org.sandbox_runtime_container_image,
-                org_version=org.org_version if org.org_version is not None else 0,
-                mcp_config=org.mcp_config,
-                max_budget_per_task=org.max_budget_per_task,
-                enable_solvability_analysis=org.enable_solvability_analysis,
-                v1_enabled=org.v1_enabled,
-                credits=None,  # Credits not included in list to avoid N+1 queries
-            )
-            for org in orgs
-        ]
+        org_responses = [OrgResponse.from_org(org, credits=None) for org in orgs]
 
         logger.info(
             'Successfully retrieved organizations',
@@ -163,31 +132,7 @@ async def create_org(
         # Retrieve credits from LiteLLM
         credits = await OrgService.get_org_credits(user_id, org.id)
 
-        return OrgResponse(
-            id=str(org.id),
-            name=org.name,
-            contact_name=org.contact_name,
-            contact_email=org.contact_email,
-            conversation_expiration=org.conversation_expiration,
-            agent=org.agent,
-            default_max_iterations=org.default_max_iterations,
-            security_analyzer=org.security_analyzer,
-            confirmation_mode=org.confirmation_mode,
-            default_llm_model=org.default_llm_model,
-            default_llm_base_url=org.default_llm_base_url,
-            remote_runtime_resource_factor=org.remote_runtime_resource_factor,
-            enable_default_condenser=org.enable_default_condenser,
-            billing_margin=org.billing_margin,
-            enable_proactive_conversation_starters=org.enable_proactive_conversation_starters,
-            sandbox_base_container_image=org.sandbox_base_container_image,
-            sandbox_runtime_container_image=org.sandbox_runtime_container_image,
-            org_version=org.org_version,
-            mcp_config=org.mcp_config,
-            max_budget_per_task=org.max_budget_per_task,
-            enable_solvability_analysis=org.enable_solvability_analysis,
-            v1_enabled=org.v1_enabled,
-            credits=credits,
-        )
+        return OrgResponse.from_org(org, credits=credits)
     except OrgNameExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
