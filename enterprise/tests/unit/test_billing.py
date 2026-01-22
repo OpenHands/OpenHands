@@ -236,8 +236,8 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
             mode='payment',
             payment_method_types=['card'],
             saved_payment_method_options={'payment_method_save': 'enabled'},
-            success_url='http://test.com/api/billing/success?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url='http://test.com/api/billing/cancel?session_id={CHECKOUT_SESSION_ID}',
+            success_url='https://test.com/api/billing/success?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url='https://test.com/api/billing/cancel?session_id={CHECKOUT_SESSION_ID}',
         )
 
         # Verify database session creation
