@@ -7,6 +7,7 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import asyncio
+import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -137,3 +138,30 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return False
         # Put Other non rate limited checks here
         return True
+
+
+logger = logging.getLogger(__name__)
+
+
+class Trace1Middleware(BaseHTTPMiddleware):
+    """Middleware to disable caching for all routes by adding appropriate headers"""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        logger.info(f'TRACE_1:start:{request.url}')
+        response = await call_next(request)
+        logger.info(f'TRACE_1:end:{request.url}')
+        return response
+
+
+class Trace2Middleware(BaseHTTPMiddleware):
+    """Middleware to disable caching for all routes by adding appropriate headers"""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        logger.info(f'TRACE_2:start:{request.url}')
+        response = await call_next(request)
+        logger.info(f'TRACE_2:end:{request.url}')
+        return response
