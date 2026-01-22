@@ -54,9 +54,9 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.2",
-  "openhands-agent-server==1.8.2",
-  "openhands-sdk==1.8.2",
-  "openhands-tools==1.8.2",
+  "openhands-agent-server==1.9.1",
+  "openhands-sdk==1.9.1",
+  "openhands-tools==1.9.1",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "pathspec>=0.12.1",
@@ -80,7 +80,7 @@ dependencies = [
   "python-json-logger>=3.2.1",
   "python-multipart",
   "python-pptx",
-  "python-socketio>=5.11.4",
+  "python-socketio==5.13",
   "pythonnet",
   "pyyaml>=6.0.2",
   "qtconsole>=5.6.1",
@@ -176,7 +176,7 @@ testgeneval = [
 
 [tool.poetry]
 name = "openhands-ai"
-version = "1.1.0"
+version = "1.2.1"
 description = "OpenHands: Code Less, Make More"
 authors = [ "OpenHands" ]
 license = "MIT"
@@ -233,7 +233,7 @@ libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
 openhands-aci = "0.3.2"
-python-socketio = "^5.11.4"
+python-socketio = "5.13.0"
 sse-starlette = "^3.0.2"
 psutil = "*"
 python-json-logger = "^3.2.1"
@@ -283,9 +283,9 @@ pybase62 = "^1.0.0"
 #openhands-agent-server = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-agent-server", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
 #openhands-sdk = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-sdk", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
 #openhands-tools = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-tools", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
-openhands-sdk = "1.8.2"
-openhands-agent-server = "1.8.2"
-openhands-tools = "1.8.2"
+openhands-sdk = "1.9.1"
+openhands-agent-server = "1.9.1"
+openhands-tools = "1.9.1"
 python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"

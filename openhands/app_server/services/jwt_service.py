@@ -153,14 +153,14 @@ class JwtService:
 
         # Add standard JWT claims
         now = utc_now()
-        if expires_in is None:
-            expires_in = timedelta(hours=1)
-
         jwt_payload = {
             **payload,
             'iat': int(now.timestamp()),
-            'exp': int((now + expires_in).timestamp()),
         }
+
+        # Only add exp if expires_in is provided
+        if expires_in is not None:
+            jwt_payload['exp'] = int((now + expires_in).timestamp())
 
         # Get the raw key for JWE encryption and derive a 256-bit key
         secret_key = self._keys[key_id].key.get_secret_value()

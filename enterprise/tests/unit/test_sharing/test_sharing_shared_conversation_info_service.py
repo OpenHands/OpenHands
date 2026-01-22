@@ -144,7 +144,6 @@ class TestSharedConversationInfoService:
     """Test cases for SharedConversationInfoService."""
 
     @pytest.mark.asyncio
-    @pytest.mark.asyncio
     async def test_get_shared_conversation_info_returns_public_conversation(
         self,
         shared_conversation_info_service,
@@ -165,7 +164,8 @@ class TestSharedConversationInfoService:
         assert result is not None
         assert result.id == sample_conversation_info.id
         assert result.title == sample_conversation_info.title
-        assert result.created_by_user_id == sample_conversation_info.created_by_user_id
+        # Note: created_by_user_id is no longer stored in shared conversation metadata
+        assert result.created_by_user_id is None
 
     @pytest.mark.asyncio
     async def test_get_shared_conversation_info_returns_none_for_private_conversation(

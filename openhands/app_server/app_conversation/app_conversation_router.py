@@ -503,13 +503,6 @@ async def get_conversation_skills(
 
         agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
 
-        # Create remote workspace
-        remote_workspace = AsyncRemoteWorkspace(
-            host=agent_server_url,
-            api_key=sandbox.session_api_key,
-            working_dir=sandbox_spec.working_dir,
-        )
-
         # Load skills from all sources
         logger.info(f'Loading skills for conversation {conversation_id}')
 
@@ -518,9 +511,9 @@ async def get_conversation_skills(
         if isinstance(app_conversation_service, AppConversationServiceBase):
             all_skills = await app_conversation_service.load_and_merge_all_skills(
                 sandbox,
-                remote_workspace,
                 conversation.selected_repository,
                 sandbox_spec.working_dir,
+                agent_server_url,
             )
 
         logger.info(
@@ -531,9 +524,11 @@ async def get_conversation_skills(
         # Transform skills to response format
         skills_response = []
         for skill in all_skills:
-            # Determine type based on trigger
-            skill_type: Literal['repo', 'knowledge']
-            if skill.trigger is None:
+            # Determine type based on AgentSkills format and trigger
+            skill_type: Literal['repo', 'knowledge', 'agentskills']
+            if skill.is_agentskills_format:
+                skill_type = 'agentskills'
+            elif skill.trigger is None:
                 skill_type = 'repo'
             else:
                 skill_type = 'knowledge'

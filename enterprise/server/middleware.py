@@ -162,6 +162,8 @@ class SetAuthCookieMiddleware:
             '/api/email/resend',
             '/oauth/device/authorize',
             '/oauth/device/token',
+            '/api/v1/web-client/config',
+            '/api/v1/webhooks/secrets',
         )
         if path in ignore_paths:
             return False

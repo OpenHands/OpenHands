@@ -4308,7 +4308,7 @@ wheels = [
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.8.1"
+version = "1.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
@@ -4322,14 +4322,13 @@ dependencies = [
     { name = "websockets" },
     { name = "wsproto" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/df/58/cd67ceed06348f270893e3e9d971f912eb0996b182becee9b161c1820b7a/openhands_agent_server-1.8.1.tar.gz", hash = "sha256:08adfe26d867ff0cb0c1e87bb0ad6e058c9a97374964ba6a9860ea35d32764a0", size = 59146, upload-time = "2026-01-09T16:55:32.511Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/99/da/98778d86a66d10a24f84823c31d6339a489fc0eeab32564bac3c966f6f47/openhands_agent_server-1.8.2.tar.gz", hash = "sha256:43db2371ee84b100ac921396338dee74359fceeb5c9400c90530bcc5730144c3", size = 60141, upload-time = "2026-01-14T14:59:47.537Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ae/43/68a49222a484654f474d493b6fb5d9d05a6d3c9400c059dd756408dcb2f8/openhands_agent_server-1.8.1-py3-none-any.whl", hash = "sha256:c0dfe620184633a173094ffaa77b0d13124ea7bf84e7b534b1641e5fc5fd0256", size = 71241, upload-time = "2026-01-09T16:55:37.357Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/d6/1fe0f68b0f20383821e5bedfdb560999e96fa0d46515ad1a1e37ba6f54f0/openhands_agent_server-1.8.2-py3-none-any.whl", hash = "sha256:e9abb2e0fe970715537d0e0fc1aea3dd64bb9e8b531f70cb72b3d4e486aaa46a", size = 72331, upload-time = "2026-01-14T14:59:48.356Z" },
 ]
 
 [[package]]
 name = "openhands-ai"
-version = "1.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -4484,22 +4483,22 @@ testgeneval = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", specifier = ">=3.9.0,!=3.11.13" },
+    { name = "aiohttp", specifier = ">=3.9,!=3.11.13" },
     { name = "anthropic", extras = ["vertex"] },
-    { name = "anyio", specifier = "==4.9.0" },
-    { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "anyio", specifier = "==4.9" },
+    { name = "asyncpg", specifier = ">=0.30" },
     { name = "bashlex", specifier = ">=0.18" },
     { name = "boto3" },
     { name = "browsergym-core", specifier = "==0.13.3" },
     { name = "daytona", marker = "extra == 'third-party-runtimes'", specifier = "==0.24.2" },
     { name = "deprecated" },
-    { name = "deprecation", specifier = ">=2.1.0" },
+    { name = "deprecation", specifier = ">=2.1" },
     { name = "dirhash" },
     { name = "docker" },
-    { name = "e2b-code-interpreter", marker = "extra == 'third-party-runtimes'", specifier = ">=2.0.0" },
+    { name = "e2b-code-interpreter", marker = "extra == 'third-party-runtimes'", specifier = ">=2" },
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=2.12.4" },
-    { name = "google-api-python-client", specifier = ">=2.164.0" },
+    { name = "google-api-python-client", specifier = ">=2.164" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
     { name = "google-cloud-aiplatform" },
@@ -4511,55 +4510,55 @@ requires-dist = [
     { name = "joblib" },
     { name = "json-repair" },
     { name = "jupyter-kernel-gateway" },
-    { name = "kubernetes", specifier = ">=33.1.0" },
+    { name = "kubernetes", specifier = ">=33.1" },
     { name = "libtmux", specifier = ">=0.46.2" },
-    { name = "litellm", specifier = "!=1.64.4,!=1.67.*,>=1.74.3" },
+    { name = "litellm", specifier = ">=1.74.3" },
     { name = "lmnr", specifier = ">=0.7.20" },
-    { name = "memory-profiler", specifier = ">=0.61.0" },
-    { name = "modal", marker = "extra == 'third-party-runtimes'", specifier = ">=0.66.26,<1.2.0" },
+    { name = "memory-profiler", specifier = ">=0.61" },
+    { name = "modal", marker = "extra == 'third-party-runtimes'", specifier = ">=0.66.26,<1.2" },
     { name = "numpy" },
-    { name = "openai", specifier = "==2.8.0" },
+    { name = "openai", specifier = "==2.8" },
     { name = "openhands-aci", specifier = "==0.3.2" },
-    { name = "openhands-agent-server", specifier = "==1.8.1" },
-    { name = "openhands-sdk", specifier = "==1.8.1" },
-    { name = "openhands-tools", specifier = "==1.8.1" },
+    { name = "openhands-agent-server", specifier = "==1.8.2" },
+    { name = "openhands-sdk", specifier = "==1.8.2" },
+    { name = "openhands-tools", specifier = "==1.8.2" },
     { name = "opentelemetry-api", specifier = ">=1.33.1" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.33.1" },
     { name = "pathspec", specifier = ">=0.12.1" },
     { name = "pexpect" },
     { name = "pg8000", specifier = ">=1.31.5" },
-    { name = "pillow", specifier = ">=11.3.0" },
-    { name = "playwright", specifier = ">=1.55.0" },
+    { name = "pillow", specifier = ">=11.3" },
+    { name = "playwright", specifier = ">=1.55" },
     { name = "poetry", specifier = ">=2.1.2" },
     { name = "prompt-toolkit", specifier = ">=3.0.50" },
-    { name = "protobuf", specifier = ">=5.0.0,<6.0.0" },
+    { name = "protobuf", specifier = ">=5,<6" },
     { name = "psutil" },
-    { name = "pybase62", specifier = ">=1.0.0" },
-    { name = "pygithub", specifier = ">=2.5.0" },
-    { name = "pyjwt", specifier = ">=2.9.0" },
+    { name = "pybase62", specifier = ">=1" },
+    { name = "pygithub", specifier = ">=2.5" },
+    { name = "pyjwt", specifier = ">=2.9" },
     { name = "pylatexenc" },
-    { name = "pypdf", specifier = ">=6.0.0" },
+    { name = "pypdf", specifier = ">=6" },
     { name = "python-docx" },
     { name = "python-dotenv" },
-    { name = "python-frontmatter", specifier = ">=1.1.0" },
+    { name = "python-frontmatter", specifier = ">=1.1" },
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3" },
     { name = "python-json-logger", specifier = ">=3.2.1" },
     { name = "python-multipart" },
     { name = "python-pptx" },
-    { name = "python-socketio", specifier = ">=5.11.4" },
+    { name = "python-socketio", specifier = "==5.13.0" },
     { name = "pythonnet" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "qtconsole", specifier = ">=5.6.1" },
-    { name = "rapidfuzz", specifier = ">=3.9.0" },
-    { name = "redis", specifier = ">=5.2,<7.0" },
+    { name = "rapidfuzz", specifier = ">=3.9" },
+    { name = "redis", specifier = ">=5.2,<7" },
     { name = "requests", specifier = ">=2.32.5" },
-    { name = "runloop-api-client", marker = "extra == 'third-party-runtimes'", specifier = "==0.50.0" },
+    { name = "runloop-api-client", marker = "extra == 'third-party-runtimes'", specifier = "==0.50" },
     { name = "setuptools", specifier = ">=78.1.1" },
     { name = "shellingham", specifier = ">=1.5.4" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.40" },
     { name = "sse-starlette", specifier = ">=3.0.2" },
-    { name = "starlette", specifier = ">=0.48.0" },
-    { name = "tenacity", specifier = ">=8.5,<10.0" },
+    { name = "starlette", specifier = ">=0.48" },
+    { name = "tenacity", specifier = ">=8.5,<10" },
     { name = "termcolor" },
     { name = "toml" },
     { name = "tornado", specifier = ">=6.5" },
@@ -4633,11 +4632,12 @@ testgeneval = [
 
 [[package]]
 name = "openhands-sdk"
-version = "1.8.1"
+version = "1.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "deprecation" },
     { name = "fastmcp" },
+    { name = "filelock" },
     { name = "httpx" },
     { name = "litellm" },
     { name = "lmnr" },
@@ -4647,14 +4647,14 @@ dependencies = [
     { name = "tenacity" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ee/19/a50122137ae999740cf69fb383cad6528c1b06593eca1aaeb3f5f02853b8/openhands_sdk-1.8.1.tar.gz", hash = "sha256:9e2baa6c512ac4c2bc1c2c0bf8b1dbdb0267d794a8b86b7306a4656fc0cb8b0b", size = 223231, upload-time = "2026-01-09T16:55:31.218Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/19/293056354edd62eb0e708573558fbe50651ccc1979b17d181b934bd1a446/openhands_sdk-1.8.2.tar.gz", hash = "sha256:5bfb17c8b9515210d121249deb1f3d0dc407c3737edc55b5e73330b4571d61e3", size = 225947, upload-time = "2026-01-14T14:59:49.932Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/b9/e7486c67e811b00c8d94e2763db7c28b76c11d028ed68b689b650ec36642/openhands_sdk-1.8.1-py3-none-any.whl", hash = "sha256:133275f56321585c016b4718d56c8fc7bb834f4ef7cab1ef66b0c71c49d47d1d", size = 291245, upload-time = "2026-01-09T16:55:34.983Z" },
+    { url = "https://files.pythonhosted.org/packages/de/52/848c8f3f96b3ec279a1e0f4884158524e4deed72905f49b5b6f1a41692fc/openhands_sdk-1.8.2-py3-none-any.whl", hash = "sha256:b4fad9581865ce222a3e6722384e4df56113db01bd34c2d2d408dfd9695365c0", size = 294531, upload-time = "2026-01-14T14:59:53.583Z" },
 ]
 
 [[package]]
 name = "openhands-tools"
-version = "1.8.1"
+version = "1.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bashlex" },
@@ -4667,9 +4667,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "tom-swe" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/df/c5/12408b51fdc782cb03b261743afccf9e6aca7ae2bc45bf0db0bd67751987/openhands_tools-1.8.1.tar.gz", hash = "sha256:e59fcd9ca3baa6266e92020646c4c5f5266f57761f434770cf0cd458b1a33cb0", size = 91585, upload-time = "2026-01-09T16:55:36.334Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/05/3d/87f428bc661a7c9b305dd93cf4e3b6d1ceed4fe61a784469d4e8e91839bd/openhands_tools-1.8.2.tar.gz", hash = "sha256:eae416e3867f7cb595129a33a4b9237886c4b8a075d2bc7618da55963f2747d5", size = 91660, upload-time = "2026-01-14T14:59:45.63Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/16/5538199f65d4941ca0b124447a961999b49c3f7ea98f31ada4647549e973/openhands_tools-1.8.1-py3-none-any.whl", hash = "sha256:9404b17edb8960d4af3a4439e6f68e37c92c59d0705f13096e4a8ff9b6ffc472", size = 127477, upload-time = "2026-01-09T16:55:33.412Z" },
+    { url = "https://files.pythonhosted.org/packages/50/31/28271e9a9dd35d4ed735ef1e0b4d1104e7b43708365b2c0074d8b2dd3934/openhands_tools-1.8.2-py3-none-any.whl", hash = "sha256:283f0c1fdd316914559cd16ade792383715478a8f5a73f7166daffc34bf9e5af", size = 127564, upload-time = "2026-01-14T14:59:50.948Z" },
 ]
 
 [[package]]
@@ -8412,15 +8412,15 @@ wheels = [
 
 [[package]]
 name = "python-socketio"
-version = "5.16.0"
+version = "5.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bidict" },
     { name = "python-engineio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b8/55/5d8af5884283b58e4405580bcd84af1d898c457173c708736e065f10ca4a/python_socketio-5.16.0.tar.gz", hash = "sha256:f79403c7f1ba8b84460aa8fe4c671414c8145b21a501b46b676f3740286356fd", size = 127120, upload-time = "2025-12-24T23:51:48.826Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/1a/396d50ccf06ee539fa758ce5623b59a9cb27637fc4b2dc07ed08bf495e77/python_socketio-5.13.0.tar.gz", hash = "sha256:ac4e19a0302ae812e23b712ec8b6427ca0521f7c582d6abb096e36e24a263029", size = 121125, upload-time = "2025-04-12T15:46:59.933Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/d2/2ccc2b69a187b80fda3152745670cfba936704f296a9fa54c6c8ac694d12/python_socketio-5.16.0-py3-none-any.whl", hash = "sha256:d95802961e15c7bd54ecf884c6e7644f81be8460f0a02ee66b473df58088ee8a", size = 79607, upload-time = "2025-12-24T23:51:47.2Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/32/b4fb8585d1be0f68bde7e110dffbcf354915f77ad8c778563f0ad9655c02/python_socketio-5.13.0-py3-none-any.whl", hash = "sha256:51f68d6499f2df8524668c24bcec13ba1414117cfb3a90115c559b601ab10caf", size = 77800, upload-time = "2025-04-12T15:46:58.412Z" },
 ]
 
 [[package]]
