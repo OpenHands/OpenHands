@@ -21,7 +21,7 @@ DEVICE_CODE_EXPIRES_IN = 600  # 10 minutes
 DEVICE_TOKEN_POLL_INTERVAL = 5  # seconds
 
 API_KEY_NAME = 'Device Link Access Key'
-KEY_EXPIRATION_TIME = timedelta(days=1)  # Key expires in 24 hours
+KEY_EXPIRATION_TIME = timedelta(days=7)  # Key expires in a week
 
 # ---------------------------------------------------------------------------
 # Models

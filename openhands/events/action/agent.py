@@ -3,7 +3,7 @@ from typing import Any
 
 from openhands.core.schema import ActionType
 from openhands.events.action.action import Action
-from openhands.events.event import RecallType
+from openhands.events.recall_type import RecallType
 
 
 @dataclass

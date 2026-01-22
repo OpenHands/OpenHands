@@ -1,4 +1,4 @@
-# IMPORTANT: LEGACY V0 CODE
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
 # This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
 # OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
 #   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
@@ -159,7 +159,7 @@ class AgentSession:
                 await provider_handler.set_event_stream_secrets(self.event_stream)
 
             if custom_secrets:
-                custom_secrets_handler.set_event_stream_secrets(self.event_stream)
+                self.event_stream.set_secrets(custom_secrets_handler.get_env_vars())
 
             self.memory = await self._create_memory(
                 selected_repository=selected_repository,
