@@ -406,8 +406,6 @@ class OrgService:
         Returns:
             bool: True if user has admin or owner role, False otherwise
         """
-        from uuid import UUID as parse_uuid
-
         try:
             # Parse user_id as UUID for database query
             user_uuid = parse_uuid(user_id)
@@ -450,8 +448,6 @@ class OrgService:
         Returns:
             bool: True if user is a member, False otherwise
         """
-        from uuid import UUID as parse_uuid
-
         try:
             user_uuid = parse_uuid(user_id)
             org_member = OrgMemberStore.get_org_member(org_id, user_uuid)
