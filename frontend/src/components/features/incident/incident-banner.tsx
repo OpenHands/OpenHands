@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useLocalStorage } from "@uidotdev/usehooks";
 import { FaTriangleExclamation, FaXmark } from "react-icons/fa6";
 import { useTranslation } from "react-i18next";
@@ -13,6 +12,16 @@ interface IncidentBannerProps {
   incident: Incident | Maintenance;
 }
 
+const STATUS_COLOR_MAP: Record<string, string> = {
+  investigating: "bg-red-500",
+  identified: "bg-orange-500",
+  monitoring: "bg-yellow-500",
+  resolved: "bg-green-500",
+  maintenance_scheduled: "bg-blue-500",
+  maintenance_in_progress: "bg-blue-500",
+  maintenance_complete: "bg-green-500",
+};
+
 export function IncidentBanner({ incident }: IncidentBannerProps) {
   const { t } = useTranslation();
   const [dismissedIds, setDismissedIncidents] = useLocalStorage<Record<
@@ -20,24 +29,8 @@ export function IncidentBanner({ incident }: IncidentBannerProps) {
     boolean
   > | null>("dismissed_incidents", null);
 
-  const isDismissed = useMemo(
-    () => (dismissedIds ? dismissedIds[incident.id] || false : false),
-    [dismissedIds, incident.id],
-  );
-
-  const bannerColor = useMemo(() => {
-    const colorMap: Record<string, string> = {
-      investigating: "bg-red-500",
-      identified: "bg-orange-500",
-      monitoring: "bg-yellow-500",
-      resolved: "bg-green-500",
-      maintenance_scheduled: "bg-blue-500",
-      maintenance_in_progress: "bg-blue-500",
-      maintenance_complete: "bg-green-500",
-    };
-
-    return colorMap[incident.status] ?? "bg-gray-500";
-  }, [incident.status]);
+  const isDismissed = dismissedIds?.[incident.id] || false;
+  const bannerColor = STATUS_COLOR_MAP[incident.status] ?? "bg-gray-500";
 
   const handleDismiss = () => {
     const updated = { ...dismissedIds, [incident.id]: true };
