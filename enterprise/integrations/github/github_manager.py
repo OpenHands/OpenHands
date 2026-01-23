@@ -1,6 +1,7 @@
 from types import MappingProxyType
 
 from github import Auth, Github, GithubIntegration
+from enterprise.server.auth.auth_error import ExpiredError
 from integrations.github.data_collector import GitHubDataCollector
 from integrations.github.github_solvability import summarize_issue_solvability
 from integrations.github.github_view import (
@@ -347,7 +348,7 @@ class GithubManager(Manager):
 
                 msg_info = f'@{user_info.username} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
 
-            except SessionExpiredError as e:
+            except (ExpiredError, SessionExpiredError) as e:
                 logger.warning(
                     f'[GitHub] Session expired for user {user_info.username}: {str(e)}'
                 )
