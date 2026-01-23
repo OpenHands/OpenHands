@@ -52,8 +52,6 @@ from openhands.server.app import app as base_app  # noqa: E402
 from openhands.server.listen_socket import sio  # noqa: E402
 from openhands.server.middleware import (  # noqa: E402
     CacheControlMiddleware,
-    Trace1Middleware,
-    Trace2Middleware,
 )
 from openhands.server.static import SPAStaticFiles  # noqa: E402
 
@@ -111,8 +109,6 @@ base_app.include_router(
     event_webhook_router
 )  # Add routes for Events in nested runtimes
 
-base_app.add_middleware(Trace1Middleware)
-
 base_app.add_middleware(
     CORSMiddleware,
     allow_origins=PERMITTED_CORS_ORIGINS,
@@ -122,8 +118,6 @@ base_app.add_middleware(
 )
 base_app.add_middleware(CacheControlMiddleware)
 base_app.middleware('http')(SetAuthCookieMiddleware())
-
-base_app.add_middleware(Trace2Middleware)
 
 base_app.mount('/', SPAStaticFiles(directory=directory, html=True), name='dist')
 
