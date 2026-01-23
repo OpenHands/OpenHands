@@ -7,14 +7,19 @@ import LoginPage from "#/routes/login";
 import OptionService from "#/api/option-service/option-service.api";
 import AuthService from "#/api/auth-service/auth-service.api";
 
-const { useEmailVerificationMock } = vi.hoisted(() => ({
-  useEmailVerificationMock: vi.fn(() => ({
-    emailVerified: false,
-    hasDuplicatedEmail: false,
-    emailVerificationModalOpen: false,
-    setEmailVerificationModalOpen: vi.fn(),
-  })),
-}));
+const { useEmailVerificationMock, resendEmailVerificationMock } = vi.hoisted(
+  () => ({
+    useEmailVerificationMock: vi.fn(() => ({
+      emailVerified: false,
+      hasDuplicatedEmail: false,
+      emailVerificationModalOpen: false,
+      setEmailVerificationModalOpen: vi.fn(),
+      userId: null as string | null,
+      resendEmailVerification: vi.fn(),
+    })),
+    resendEmailVerificationMock: vi.fn(),
+  }),
+);
 
 vi.mock("#/hooks/use-github-auth-url", () => ({
   useGitHubAuthUrl: () => "https://github.com/login/oauth/authorize",
@@ -348,6 +353,8 @@ describe("LoginPage", () => {
         hasDuplicatedEmail: false,
         emailVerificationModalOpen: false,
         setEmailVerificationModalOpen: vi.fn(),
+        userId: null,
+        resendEmailVerification: resendEmailVerificationMock,
       });
 
       render(<RouterStub initialEntries={["/login"]} />, {
@@ -367,6 +374,8 @@ describe("LoginPage", () => {
         hasDuplicatedEmail: true,
         emailVerificationModalOpen: false,
         setEmailVerificationModalOpen: vi.fn(),
+        userId: null,
+        resendEmailVerification: resendEmailVerificationMock,
       });
 
       render(<RouterStub initialEntries={["/login"]} />, {
@@ -377,6 +386,41 @@ describe("LoginPage", () => {
         expect(
           screen.getByText("AUTH$DUPLICATE_EMAIL_ERROR"),
         ).toBeInTheDocument();
+      });
+    });
+
+    it("should pass userId to EmailVerificationModal when userId is provided", async () => {
+      const user = userEvent.setup();
+      const testUserId = "test-user-id-123";
+      const setEmailVerificationModalOpen = vi.fn();
+
+      useEmailVerificationMock.mockReturnValue({
+        emailVerified: false,
+        hasDuplicatedEmail: false,
+        emailVerificationModalOpen: true,
+        setEmailVerificationModalOpen,
+        userId: testUserId,
+        resendEmailVerification: resendEmailVerificationMock,
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("AUTH$PLEASE_CHECK_EMAIL_TO_VERIFY"),
+        ).toBeInTheDocument();
+      });
+
+      const resendButton = screen.getByRole("button", {
+        name: /SETTINGS\$RESEND_VERIFICATION/i,
+      });
+      await user.click(resendButton);
+
+      expect(resendEmailVerificationMock).toHaveBeenCalledWith({
+        userId: testUserId,
+        isAuthFlow: true,
       });
     });
   });
@@ -415,6 +459,15 @@ describe("LoginPage", () => {
 
   describe("Terms and Privacy", () => {
     it("should display Terms and Privacy notice", async () => {
+      useEmailVerificationMock.mockReturnValue({
+        emailVerified: false,
+        hasDuplicatedEmail: false,
+        emailVerificationModalOpen: false,
+        setEmailVerificationModalOpen: vi.fn(),
+        userId: null as string | null,
+        resendEmailVerification: resendEmailVerificationMock,
+      });
+
       render(<RouterStub initialEntries={["/login"]} />, {
         wrapper: createWrapper(),
       });
