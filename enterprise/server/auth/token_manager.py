@@ -426,7 +426,7 @@ class TokenManager:
         access_token = data.get('access_token')
         refresh_token = data.get('refresh_token')
         if not access_token or not refresh_token:
-            logger.warning("invalid_token_received", extra=data)
+            logger.warning('invalid_token_received', extra=data)
             raise ValueError(
                 'Failed to refresh token: missing access_token or refresh_token in response.'
             )
