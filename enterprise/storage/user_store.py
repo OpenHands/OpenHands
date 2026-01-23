@@ -373,12 +373,14 @@ class UserStore:
         avoids event loop conflicts that can occur with the sync version.
         """
         with session_maker() as session:
+            logger.info('TRACE:about_to_get_user_from_db')
             user = (
                 session.query(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
                 .first()
             )
+            logger.info(f'TRACE:got_user_from_db:{user}')
             if user:
                 return user
 
