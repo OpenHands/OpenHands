@@ -20,6 +20,7 @@ from storage.lite_llm_manager import LiteLlmManager
 from storage.subscription_access import SubscriptionAccess
 from storage.user_store import UserStore
 
+from openhands.app_server.config import get_global_config
 from openhands.server.user_auth import get_user_id
 
 stripe.api_key = STRIPE_API_KEY
@@ -30,8 +31,6 @@ async def validate_billing_enabled() -> None:
     """
     Validate that the billing feature flag is enabled
     """
-    from openhands.app_server.config import get_global_config
-
     config = get_global_config()
     web_client_config = await config.web_client.get_web_client_config()
     if not web_client_config.feature_flags.enable_billing:
