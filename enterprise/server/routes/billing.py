@@ -274,7 +274,7 @@ async def success_callback(session_id: str, request: Request):
         session.commit()
 
     return RedirectResponse(
-        f'{request.base_url}settings/billing?checkout=success', status_code=302
+        f'{_get_base_url(request)}settings/billing?checkout=success', status_code=302
     )
 
 
