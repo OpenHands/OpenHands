@@ -182,11 +182,12 @@ class SQLSharedConversationInfoService(SharedConversationInfoService):
         """Create a select query that returns public conversations with SAAS metadata.
 
         This joins with conversation_metadata_saas to retrieve the user_id needed
-        for constructing the correct event storage path.
+        for constructing the correct event storage path. Uses LEFT OUTER JOIN to
+        support conversations that may not have SAAS metadata (e.g., in tests).
         """
         query = (
             select(StoredConversationMetadata, StoredConversationMetadataSaas)
-            .join(
+            .outerjoin(
                 StoredConversationMetadataSaas,
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
