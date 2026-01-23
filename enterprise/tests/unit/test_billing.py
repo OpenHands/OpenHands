@@ -402,7 +402,7 @@ async def test_cancel_callback_session_not_found():
         assert response.status_code == 302
         assert (
             response.headers['location']
-            == 'http://test.com/settings/billing?checkout=cancel'
+            == 'https://test.com/settings/billing?checkout=cancel'
         )
 
         # Verify no database updates occurred
@@ -429,7 +429,7 @@ async def test_cancel_callback_success():
         assert response.status_code == 302
         assert (
             response.headers['location']
-            == 'http://test.com/settings/billing?checkout=cancel'
+            == 'https://test.com/settings/billing?checkout=cancel'
         )
 
         # Verify database updates
@@ -502,6 +502,6 @@ async def test_create_customer_setup_session_success():
             customer='mock-customer-id',
             mode='setup',
             payment_method_types=['card'],
-            success_url='http://test.com/?free_credits=success',
-            cancel_url='http://test.com/',
+            success_url='https://test.com/?free_credits=success',
+            cancel_url='https://test.com/',
         )
