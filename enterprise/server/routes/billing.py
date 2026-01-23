@@ -36,7 +36,10 @@ async def validate_billing_enabled() -> None:
     if not web_client_config.feature_flags.enable_billing:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail='Checkout sessions are only available for All Hands SaaS environments',
+            detail=(
+                'Billing is disabled in this environment. '
+                'Please set OH_WEB_CLIENT_FEATURE_FLAGS_ENABLE_BILLING to enable billing.'
+            ),
         )
 
 
