@@ -459,6 +459,15 @@ describe("LoginPage", () => {
 
   describe("Terms and Privacy", () => {
     it("should display Terms and Privacy notice", async () => {
+      useEmailVerificationMock.mockReturnValue({
+        emailVerified: false,
+        hasDuplicatedEmail: false,
+        emailVerificationModalOpen: false,
+        setEmailVerificationModalOpen: vi.fn(),
+        userId: null as string | null,
+        resendEmailVerification: resendEmailVerificationMock,
+      });
+
       render(<RouterStub initialEntries={["/login"]} />, {
         wrapper: createWrapper(),
       });
