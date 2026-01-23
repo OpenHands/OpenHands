@@ -16,7 +16,7 @@ from server.constants import (
 from server.logger import logger
 from sqlalchemy import text
 from sqlalchemy.orm import joinedload
-from storage.database import session_maker
+from storage.database import session_maker, a_session_maker
 from storage.encrypt_utils import decrypt_legacy_model
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -372,9 +372,9 @@ class UserStore:
         This is the preferred method when calling from an async context as it
         avoids event loop conflicts that can occur with the sync version.
         """
-        with session_maker() as session:
+        async with a_session_maker() as session:
             logger.info('TRACE:about_to_get_user_from_db')
-            user = (
+            user = await (
                 session.query(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
@@ -394,7 +394,7 @@ class UserStore:
                 await asyncio.sleep(_RETRY_LOAD_DELAY_SECONDS)
 
             # Check for user again as migration could have happened while trying to get the lock.
-            user = (
+            user = await (
                 session.query(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
@@ -403,7 +403,7 @@ class UserStore:
             if user:
                 return user
 
-            user_settings = (
+            user_settings = await (
                 session.query(UserSettings)
                 .filter(
                     UserSettings.keycloak_user_id == user_id,
