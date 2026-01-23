@@ -373,14 +373,12 @@ class UserStore:
         avoids event loop conflicts that can occur with the sync version.
         """
         async with a_session_maker() as session:
-            logger.info('TRACE:about_to_get_user_from_db')
             result = await session.execute(
                 select(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
             )
             user = result.scalars().first()
-            logger.info(f'TRACE:got_user_from_db:{user}')
             if user:
                 return user
 
