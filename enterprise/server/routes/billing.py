@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
+from starlette.datastructures import URL
 from server.constants import (
     STRIPE_API_KEY,
 )
@@ -140,12 +141,13 @@ async def create_customer_setup_session(
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    base_url = _get_base_url(request)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
         mode='setup',
         payment_method_types=['card'],
-        success_url=f'{request.base_url}?free_credits=success',
-        cancel_url=f'{request.base_url}',
+        success_url=f'{base_url}?free_credits=success',
+        cancel_url=f'{base_url}',
     )
     return CreateBillingSessionResponse(redirect_url=checkout_session.url)
 
@@ -158,12 +160,7 @@ async def create_checkout_session(
     user_id: str = Depends(get_user_id),
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
-
-    # Never send any part of the credit card process over a non secure connection
-    base_url = request.base_url
-    if base_url.hostname != 'localhost':
-        base_url = base_url.replace(scheme='https')
-
+    base_url = _get_base_url(request)
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
@@ -321,5 +318,13 @@ async def cancel_callback(session_id: str, request: Request):
             session.commit()
 
     return RedirectResponse(
-        f'{request.base_url}settings/billing?checkout=cancel', status_code=302
+        f'{_get_base_url(request)}settings/billing?checkout=cancel', status_code=302
     )
+
+
+def _get_base_url(request: Request) -> URL:
+    # Never send any part of the credit card process over a non secure connection
+    base_url = request.base_url
+    if base_url.hostname != 'localhost':
+        base_url = base_url.replace(scheme='https')
+    return base_url
