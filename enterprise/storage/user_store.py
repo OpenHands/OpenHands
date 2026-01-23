@@ -14,7 +14,7 @@ from server.constants import (
     get_default_litellm_model,
 )
 from server.logger import logger
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker, session_maker
 from storage.encrypt_utils import decrypt_legacy_model
@@ -374,12 +374,12 @@ class UserStore:
         """
         async with a_session_maker() as session:
             logger.info('TRACE:about_to_get_user_from_db')
-            user = await (
-                session.query(User)
+            result = await session.execute(
+                select(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
-                .first()
             )
+            user = result.scalars().first()
             logger.info(f'TRACE:got_user_from_db:{user}')
             if user:
                 return user
@@ -394,12 +394,12 @@ class UserStore:
                 await asyncio.sleep(_RETRY_LOAD_DELAY_SECONDS)
 
             # Check for user again as migration could have happened while trying to get the lock.
-            user = await (
-                session.query(User)
+            result = await session.execute(
+                select(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
-                .first()
             )
+            user = result.scalars().first()
             if user:
                 return user
 
