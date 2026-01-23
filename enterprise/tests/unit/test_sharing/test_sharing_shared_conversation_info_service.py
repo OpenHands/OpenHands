@@ -686,8 +686,6 @@ class TestSharedConversationInfoServiceWithSaasMetadata:
         conv_without = next(
             item for item in result.items if item.id == conv_without_saas_id
         )
-        conv_with = next(
-            item for item in result.items if item.id == conv_with_saas_id
-        )
+        conv_with = next(item for item in result.items if item.id == conv_with_saas_id)
         assert conv_without.created_by_user_id is None
         assert conv_with.created_by_user_id == str(test_user.id)
