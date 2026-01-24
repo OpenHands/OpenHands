@@ -435,7 +435,6 @@ class SaasNestedConversationManager(ConversationManager):
         if settings_json.get('git_provider'):
             settings_json['git_provider'] = settings_json['git_provider'].value
         settings_json.pop('secrets_store', None)
-        logger.info(f'TRACE:_setup_nested_settings:{settings_json}')
         response = await client.post(f'{api_url}/api/settings', json=settings_json)
         response.raise_for_status()
 

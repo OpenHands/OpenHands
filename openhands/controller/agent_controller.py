@@ -380,15 +380,6 @@ class AgentController:
         try:
             await self._step()
         except Exception as e:
-            logger.exception(
-                'TRACE:error_in_agent',
-                exc_info=True,
-                stack_info=True,
-                extra={
-                    'model': self.agent.llm.config.model,
-                    'base_url': self.agent.llm.config.base_url,
-                },
-            )
             self.log(
                 'error',
                 f'Error while running the agent (session ID: {self.id}): {e}',
