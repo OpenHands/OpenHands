@@ -1,4 +1,5 @@
 from typing import Annotated
+
 from pydantic import BaseModel, EmailStr, Field, StringConstraints
 from storage.org import Org
 
@@ -54,7 +55,9 @@ class OrgCreate(BaseModel):
     """Request model for creating a new organization."""
 
     # Required fields
-    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+    name: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
+    ]
     contact_name: str
     contact_email: EmailStr
 
