@@ -401,14 +401,13 @@ class UserStore:
             if user:
                 return user
 
-            user_settings = await (
-                session.query(UserSettings)
-                .filter(
+            result = await session.execute(
+                select(UserSettings).filter(
                     UserSettings.keycloak_user_id == user_id,
                     UserSettings.already_migrated.is_(False),
                 )
-                .first()
             )
+            user_settings = result.scalars().first()
             if user_settings:
                 token_manager = TokenManager()
                 user_info = await token_manager.get_user_info_from_user_id(user_id)
