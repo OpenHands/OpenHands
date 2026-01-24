@@ -1,10 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { Spinner } from "@heroui/react";
 import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { useRepositoryMicroagentContent } from "#/hooks/query/use-repository-microagent-content";
 import { I18nKey } from "#/i18n/declaration";
 import { extractRepositoryInfo } from "#/utils/utils";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
+import { Spinner } from "#/components/shared/spinner";
 
 export function MicroagentManagementViewMicroagentContent() {
   const { t } = useTranslation();

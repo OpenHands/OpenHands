@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "../settings/brand-button";
-import { Loader } from "#/components/shared/loader";
+import { Spinner } from "#/components/shared/spinner";
 import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 
 export function MicroagentManagementConversationStopped() {
@@ -22,7 +22,7 @@ export function MicroagentManagementConversationStopped() {
       <div className="text-[#ffffff99] text-[22px] font-bold pb-[22px] text-center max-w-[455px]">
         {t(I18nKey.MICROAGENT_MANAGEMENT$CONVERSATION_STOPPED)}
       </div>
-      <Loader size="small" className="pb-[22px]" />
+      <Spinner size="sm" className="text-[#ffffff99] pb-[22px]" />
       <a
         href={`/conversations/${conversationId}`}
         target="_blank"

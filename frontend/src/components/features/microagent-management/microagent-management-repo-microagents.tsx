@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
-import { Spinner } from "@heroui/react";
 import { MicroagentManagementMicroagentCard } from "./microagent-management-microagent-card";
 import { MicroagentManagementLearnThisRepo } from "./microagent-management-learn-this-repo";
 import { useRepositoryMicroagents } from "#/hooks/query/use-repository-microagents";
@@ -9,6 +8,7 @@ import { GitRepository } from "#/types/git";
 import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
+import { Spinner } from "#/components/shared/spinner";
 
 interface MicroagentManagementRepoMicroagentsProps {
   repository: GitRepository;

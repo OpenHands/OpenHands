@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Spinner } from "@heroui/react";
 import { MicroagentManagementSidebarHeader } from "./microagent-management-sidebar-header";
 import { MicroagentManagementSidebarTabs } from "./microagent-management-sidebar-tabs";
 import { useGitRepositories } from "#/hooks/query/use-git-repositories";
@@ -18,6 +17,7 @@ import {
 import { sanitizeQuery } from "#/utils/sanitize-query";
 import { I18nKey } from "#/i18n/declaration";
 import { useDebounce } from "#/hooks/use-debounce";
+import { Spinner } from "#/components/shared/spinner";
 
 interface MicroagentManagementSidebarProps {
   isSmallerScreen?: boolean;
