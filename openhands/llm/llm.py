@@ -861,7 +861,7 @@ def _get_openhands_llm_base_url():
 
     # Fallback to using web_host.
     web_host = os.getenv('WEB_HOST')
-    if web_host and '.staging.' in web_host:
+    if web_host and ('.staging.' in web_host or web_host.startswith('staging')):
         return 'https://llm-proxy.staging.all-hands.dev/'
 
     # Use the default
