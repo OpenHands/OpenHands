@@ -641,10 +641,7 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setMainConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        if (hasConnectedRefMain.current) {
-          setErrorMessage("Failed to connect to server");
-        }
+        // Error banners are handled in onClose; avoid overwriting cleared errors here.
       },
       onMessage: handleMainMessage,
     };
@@ -713,10 +710,7 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        if (hasConnectedRefPlanning.current) {
-          setErrorMessage("Failed to connect to server");
-        }
+        // Error banners are handled in onClose; avoid overwriting cleared errors here.
       },
       onMessage: handlePlanningMessage,
     };
