@@ -402,8 +402,7 @@ class UserStore:
                 return user
 
             result = await session.execute(
-                select(UserSettings)
-                .filter(
+                select(UserSettings).filter(
                     UserSettings.keycloak_user_id == user_id,
                     UserSettings.already_migrated.is_(False),
                 )
