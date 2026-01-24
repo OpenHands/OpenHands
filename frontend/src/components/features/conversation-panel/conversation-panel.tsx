@@ -9,7 +9,7 @@ import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation"
 import { useUnifiedPauseConversationSandbox } from "#/hooks/mutation/use-unified-stop-conversation";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
-import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { Spinner } from "#/components/shared/spinner";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";
@@ -212,7 +212,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
       {/* Loading indicator for fetching more conversations */}
       {isFetchingNextPage && (
         <div className="flex justify-center py-4">
-          <LoadingSpinner size="small" />
+          <Spinner size="md" />
         </div>
       )}
 
