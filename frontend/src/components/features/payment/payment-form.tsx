@@ -6,7 +6,7 @@ import { cn } from "#/utils/utils";
 import MoneyIcon from "#/icons/money.svg?react";
 import { SettingsInput } from "../settings/settings-input";
 import { BrandButton } from "../settings/brand-button";
-import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { Spinner } from "#/components/shared/spinner";
 import { amountIsValid } from "#/utils/amount-is-valid";
 import { I18nKey } from "#/i18n/declaration";
 import { PoweredByStripeTag } from "./powered-by-stripe-tag";
@@ -54,7 +54,7 @@ export function PaymentForm() {
         {!isLoading && (
           <span data-testid="user-balance">${Number(balance).toFixed(2)}</span>
         )}
-        {isLoading && <LoadingSpinner size="small" />}
+        {isLoading && <Spinner size="sm" />}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -79,7 +79,7 @@ export function PaymentForm() {
           >
             {t(I18nKey.PAYMENT$ADD_CREDIT)}
           </BrandButton>
-          {isPending && <LoadingSpinner size="small" />}
+          {isPending && <Spinner size="sm" />}
           <PoweredByStripeTag />
         </div>
       </div>

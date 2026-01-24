@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { Spinner } from "#/components/shared/spinner";
 import { ApiKey } from "#/api/api-keys";
 import {
   displayErrorToast,
@@ -49,7 +49,7 @@ export function DeleteApiKeyModal({
         isDisabled={deleteApiKeyMutation.isPending}
       >
         {deleteApiKeyMutation.isPending ? (
-          <LoadingSpinner size="small" />
+          <Spinner size="sm" />
         ) : (
           t(I18nKey.BUTTON$DELETE)
         )}
