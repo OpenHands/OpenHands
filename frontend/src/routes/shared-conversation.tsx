@@ -6,7 +6,7 @@ import { useSharedConversation } from "#/hooks/query/use-shared-conversation";
 import { useSharedConversationEvents } from "#/hooks/query/use-shared-conversation-events";
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
-import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { Spinner } from "#/components/shared/spinner";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 
 export default function SharedConversation() {
@@ -39,7 +39,7 @@ export default function SharedConversation() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-neutral-900">
-        <LoadingSpinner size="large" />
+        <Spinner size="xl" className="text-white" />
       </div>
     );
   }

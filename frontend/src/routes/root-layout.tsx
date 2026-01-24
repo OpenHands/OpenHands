@@ -28,7 +28,7 @@ import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { MaintenanceBanner } from "#/components/features/maintenance/maintenance-banner";
 import { cn, isMobileDevice } from "#/utils/utils";
-import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { Spinner } from "#/components/shared/spinner";
 import { useAppTitle } from "#/hooks/use-app-title";
 
 export function ErrorBoundary() {
@@ -200,7 +200,7 @@ export default function MainApp() {
   if (shouldRedirectToLogin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
-        <LoadingSpinner size="large" />
+        <Spinner size="xl" />
       </div>
     );
   }

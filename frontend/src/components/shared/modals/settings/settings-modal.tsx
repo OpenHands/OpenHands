@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useAIConfigOptions } from "#/hooks/query/use-ai-config-options";
 import { I18nKey } from "#/i18n/declaration";
-import { LoadingSpinner } from "../../loading-spinner";
+import { Spinner } from "#/components/shared/spinner";
 import { ModalBackdrop } from "../modal-backdrop";
 import { SettingsForm } from "./settings-form";
 import { Settings } from "#/types/settings";
@@ -42,7 +42,7 @@ export function SettingsModal({ onClose, settings }: SettingsModalProps) {
 
         {aiConfigOptions.isLoading && (
           <div className="flex justify-center">
-            <LoadingSpinner size="small" />
+            <Spinner size="md" />
           </div>
         )}
         {aiConfigOptions.data && (
