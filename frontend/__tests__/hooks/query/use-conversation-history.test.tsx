@@ -23,6 +23,7 @@ function makeConversation(version: "V0" | "V1"): Conversation {
     url: null,
     session_api_key: null,
     conversation_version: version,
+    llm_model: "claude-3-5-sonnet-20241022",
   };
 }
 
