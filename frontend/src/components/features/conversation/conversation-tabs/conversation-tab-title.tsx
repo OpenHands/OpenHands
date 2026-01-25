@@ -25,12 +25,12 @@ export function ConversationTabTitle({
           type="button"
           onClick={handleRefresh}
           disabled={isFetching}
-          className={[
+          className={cn(
             "flex w-[26px] py-1 items-center justify-center rounded-[7px] transition",
             isFetching
               ? "opacity-50 cursor-not-allowed"
               : "hover:bg-[#474A54] cursor-pointer",
-          ].join(" ")}
+          )}
         >
           <RefreshIcon
             width={12.75}
