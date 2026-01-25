@@ -138,3 +138,34 @@ class OrgPage(BaseModel):
 
     items: list[OrgResponse]
     next_page_id: str | None = None
+
+
+class OrgUpdate(BaseModel):
+    """Request model for updating an organization."""
+
+    # Basic organization information (any authenticated user can update)
+    contact_name: str | None = None
+    contact_email: EmailStr | None = Field(default=None, strip_whitespace=True)
+    conversation_expiration: int | None = None
+    default_max_iterations: int | None = Field(default=None, gt=0)
+    remote_runtime_resource_factor: int | None = Field(default=None, gt=0)
+    billing_margin: float | None = Field(default=None, ge=0, le=1)
+    enable_proactive_conversation_starters: bool | None = None
+    sandbox_base_container_image: str | None = None
+    sandbox_runtime_container_image: str | None = None
+    mcp_config: dict | None = None
+    sandbox_api_key: str | None = None
+    max_budget_per_task: float | None = Field(default=None, gt=0)
+    enable_solvability_analysis: bool | None = None
+    v1_enabled: bool | None = None
+
+    # LLM settings (require admin/owner role)
+    default_llm_model: str | None = None
+    default_llm_api_key_for_byor: str | None = None
+    default_llm_base_url: str | None = None
+    search_api_key: str | None = None
+    security_analyzer: str | None = None
+    agent: str | None = None
+    confirmation_mode: bool | None = None
+    enable_default_condenser: bool | None = None
+    condenser_max_size: int | None = Field(default=None, ge=20)

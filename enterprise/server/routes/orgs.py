@@ -12,6 +12,7 @@ from server.routes.org_models import (
     OrgNotFoundError,
     OrgPage,
     OrgResponse,
+    OrgUpdate,
 )
 from storage.org_service import OrgService
 
@@ -314,6 +315,85 @@ async def delete_org(
     except Exception as e:
         logger.exception(
             'Unexpected error during organization deletion',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.patch('/{org_id}', response_model=OrgResponse)
+async def update_org(
+    org_id: UUID,
+    update_data: OrgUpdate,
+    user_id: str = Depends(get_user_id),
+) -> OrgResponse:
+    """Update an existing organization.
+
+    This endpoint allows authenticated users to update organization settings.
+    LLM-related settings require admin or owner role in the organization.
+
+    Args:
+        org_id: Organization ID to update (UUID validated by FastAPI)
+        update_data: Organization update data
+        user_id: Authenticated user ID (injected by dependency)
+
+    Returns:
+        OrgResponse: The updated organization details
+
+    Raises:
+        HTTPException: 400 if org_id is invalid UUID format (handled by FastAPI)
+        HTTPException: 403 if user lacks permission for LLM settings
+        HTTPException: 404 if organization not found
+        HTTPException: 422 if validation errors occur (handled by FastAPI)
+        HTTPException: 500 if update fails
+    """
+    logger.info(
+        'Updating organization',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+        },
+    )
+
+    try:
+        # Use service layer to update organization with permission checks
+        updated_org = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Retrieve credits from LiteLLM (following same pattern as create endpoint)
+        credits = await OrgService.get_org_credits(user_id, updated_org.id)
+
+        return OrgResponse.from_org(updated_org, credits=credits)
+
+    except ValueError as e:
+        # Organization not found
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except PermissionError as e:
+        # User lacks permission for LLM settings
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except OrgDatabaseError as e:
+        logger.error(
+            'Database operation failed',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update organization',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error updating organization',
             extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(

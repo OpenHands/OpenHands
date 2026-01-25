@@ -13,6 +13,7 @@ from server.routes.org_models import (
     OrgDatabaseError,
     OrgNameExistsError,
     OrgNotFoundError,
+    OrgUpdate,
 )
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
@@ -394,6 +395,224 @@ class OrgService:
                 },
             )
             return e
+
+    @staticmethod
+    def has_admin_or_owner_role(user_id: str, org_id: UUID) -> bool:
+        """
+        Check if user has admin or owner role in the specified organization.
+
+        Args:
+            user_id: User ID to check
+            org_id: Organization ID to check membership in
+
+        Returns:
+            bool: True if user has admin or owner role, False otherwise
+        """
+        try:
+            # Parse user_id as UUID for database query
+            user_uuid = parse_uuid(user_id)
+
+            # Get the user's membership in this organization
+            # Note: The type annotation says int but the actual column is UUID
+            org_member = OrgMemberStore.get_org_member(org_id, user_uuid)
+            if not org_member:
+                return False
+
+            # Get the role details
+            role = RoleStore.get_role_by_id(org_member.role_id)
+            if not role:
+                return False
+
+            # Admin and owner roles have elevated permissions
+            # Based on test files, both admin and owner have rank 1
+            return role.name in ['admin', 'owner']
+
+        except Exception as e:
+            logger.warning(
+                'Error checking user role in organization',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'error': str(e),
+                },
+            )
+            return False
+
+    @staticmethod
+    def is_org_member(user_id: str, org_id: UUID) -> bool:
+        """
+        Check if user is a member of the specified organization.
+
+        Args:
+            user_id: User ID to check
+            org_id: Organization ID to check membership in
+
+        Returns:
+            bool: True if user is a member, False otherwise
+        """
+        try:
+            user_uuid = parse_uuid(user_id)
+            org_member = OrgMemberStore.get_org_member(org_id, user_uuid)
+            return org_member is not None
+        except Exception as e:
+            logger.warning(
+                'Error checking user membership in organization',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'error': str(e),
+                },
+            )
+            return False
+
+    @staticmethod
+    def _get_llm_settings_fields() -> set[str]:
+        """
+        Get the set of organization fields that are considered LLM settings
+        and require admin/owner role to update.
+
+        Returns:
+            set[str]: Set of field names that require elevated permissions
+        """
+        return {
+            'default_llm_model',
+            'default_llm_api_key_for_byor',
+            'default_llm_base_url',
+            'search_api_key',
+            'security_analyzer',
+            'agent',
+            'confirmation_mode',
+            'enable_default_condenser',
+            'condenser_max_size',
+        }
+
+    @staticmethod
+    def _has_llm_settings_updates(update_data: OrgUpdate) -> set[str]:
+        """
+        Check if the update contains any LLM settings fields.
+
+        Args:
+            update_data: The organization update data
+
+        Returns:
+            set[str]: Set of LLM fields being updated (empty if none)
+        """
+        llm_fields = OrgService._get_llm_settings_fields()
+        update_dict = update_data.model_dump(exclude_none=True)
+        return llm_fields.intersection(update_dict.keys())
+
+    @staticmethod
+    async def update_org_with_permissions(
+        org_id: UUID,
+        update_data: OrgUpdate,
+        user_id: str,
+    ) -> Org:
+        """
+        Update organization with permission checks for LLM settings.
+
+        Args:
+            org_id: Organization UUID to update
+            update_data: Organization update data from request
+            user_id: ID of the user requesting the update
+
+        Returns:
+            Org: The updated organization object
+
+        Raises:
+            ValueError: If organization not found
+            PermissionError: If user is not a member, or lacks admin/owner role for LLM settings
+            OrgDatabaseError: If database update fails
+        """
+        logger.info(
+            'Updating organization with permission checks',
+            extra={
+                'org_id': str(org_id),
+                'user_id': user_id,
+                'has_update_data': update_data is not None,
+            },
+        )
+
+        # Validate organization exists
+        existing_org = OrgStore.get_org_by_id(org_id)
+        if not existing_org:
+            raise ValueError(f'Organization with ID {org_id} not found')
+
+        # Check if user is a member of this organization
+        if not OrgService.is_org_member(user_id, org_id):
+            logger.warning(
+                'Non-member attempted to update organization',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                },
+            )
+            raise PermissionError(
+                'User must be a member of the organization to update it'
+            )
+
+        # Check if update contains any LLM settings
+        llm_fields_being_updated = OrgService._has_llm_settings_updates(update_data)
+        if llm_fields_being_updated:
+            # Verify user has admin or owner role
+            has_permission = OrgService.has_admin_or_owner_role(user_id, org_id)
+            if not has_permission:
+                logger.warning(
+                    'User attempted to update LLM settings without permission',
+                    extra={
+                        'user_id': user_id,
+                        'org_id': str(org_id),
+                        'attempted_fields': list(llm_fields_being_updated),
+                    },
+                )
+                raise PermissionError(
+                    'Admin or owner role required to update LLM settings'
+                )
+
+            logger.debug(
+                'User has permission to update LLM settings',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'llm_fields': list(llm_fields_being_updated),
+                },
+            )
+
+        # Convert to dict for OrgStore (excluding None values)
+        update_dict = update_data.model_dump(exclude_none=True)
+        if not update_dict:
+            logger.info(
+                'No fields to update',
+                extra={'org_id': str(org_id), 'user_id': user_id},
+            )
+            return existing_org
+
+        # Perform the update
+        try:
+            updated_org = OrgStore.update_org(org_id, update_dict)
+            if not updated_org:
+                raise OrgDatabaseError('Failed to update organization in database')
+
+            logger.info(
+                'Organization updated successfully',
+                extra={
+                    'org_id': str(org_id),
+                    'user_id': user_id,
+                    'updated_fields': list(update_dict.keys()),
+                },
+            )
+
+            return updated_org
+
+        except Exception as e:
+            logger.error(
+                'Failed to update organization',
+                extra={
+                    'org_id': str(org_id),
+                    'user_id': user_id,
+                    'error': str(e),
+                },
+            )
+            raise OrgDatabaseError(f'Failed to update organization: {str(e)}')
 
     @staticmethod
     async def get_org_credits(user_id: str, org_id: UUID) -> float | None:

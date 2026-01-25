@@ -7,6 +7,7 @@ Tests the POST /api/organizations endpoint with various scenarios.
 import uuid
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
@@ -1131,3 +1132,238 @@ async def test_delete_org_unauthorized():
 
     # Assert
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.fixture
+def mock_update_app():
+    """Create a test FastAPI app with organization routes and mocked auth for update endpoint."""
+    app = FastAPI()
+    app.include_router(org_router)
+
+    # Override the auth dependency to return a test user
+    async def mock_user_id():
+        return 'test-user-123'
+
+    app.dependency_overrides[get_user_id] = mock_user_id
+
+    return app
+
+
+# Note: Success cases for update endpoint are tested in test_org_service.py
+# Route handler tests focus on error handling and validation
+
+
+@pytest.mark.asyncio
+async def test_update_org_not_found(mock_update_app):
+    """
+    GIVEN: Organization ID does not exist
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 404 Not Found error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'contact_name': 'Jane Doe'}
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(side_effect=ValueError(f'Organization with ID {org_id} not found')),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            assert 'not found' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_permission_denied_non_member(mock_update_app):
+    """
+    GIVEN: User is not a member of the organization
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 403 Forbidden error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'contact_name': 'Jane Doe'}
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(
+            side_effect=PermissionError(
+                'User must be a member of the organization to update it'
+            )
+        ),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_403_FORBIDDEN
+            assert 'member' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_permission_denied_llm_settings(mock_update_app):
+    """
+    GIVEN: User lacks admin/owner role but tries to update LLM settings
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 403 Forbidden error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'default_llm_model': 'claude-opus-4-5-20251101'}
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(
+            side_effect=PermissionError(
+                'Admin or owner role required to update LLM settings'
+            )
+        ),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_403_FORBIDDEN
+            assert (
+                'admin' in response.json()['detail'].lower()
+                or 'owner' in response.json()['detail'].lower()
+            )
+
+
+@pytest.mark.asyncio
+async def test_update_org_database_error(mock_update_app):
+    """
+    GIVEN: Database operation fails during update
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 500 Internal Server Error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'contact_name': 'Jane Doe'}
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(side_effect=OrgDatabaseError('Database connection failed')),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'Failed to update organization' in response.json()['detail']
+
+
+@pytest.mark.asyncio
+async def test_update_org_unexpected_error(mock_update_app):
+    """
+    GIVEN: Unexpected error occurs during update
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 500 Internal Server Error is returned with generic message
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'contact_name': 'Jane Doe'}
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(side_effect=RuntimeError('Unexpected system error')),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'unexpected error' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_invalid_uuid_format(mock_update_app):
+    """
+    GIVEN: Invalid UUID format in org_id path parameter
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 422 validation error is returned (handled by FastAPI)
+    """
+    # Arrange
+    invalid_org_id = 'not-a-valid-uuid'
+    update_data = {'contact_name': 'Jane Doe'}
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+    ) as client:
+        # Act
+        response = await client.patch(
+            f'/api/organizations/{invalid_org_id}', json=update_data
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_invalid_field_values(mock_update_app):
+    """
+    GIVEN: Update request with invalid field values (e.g., negative max_iterations)
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 422 validation error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'default_max_iterations': -1}  # Invalid: must be > 0
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+    ) as client:
+        # Act
+        response = await client.patch(f'/api/organizations/{org_id}', json=update_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_invalid_email_format(mock_update_app):
+    """
+    GIVEN: Update request with invalid email format
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 422 validation error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'contact_email': 'invalid-email'}  # Missing @
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+    ) as client:
+        # Act
+        response = await client.patch(f'/api/organizations/{org_id}', json=update_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
