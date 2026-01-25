@@ -48,6 +48,7 @@ function LoginStub() {
     searchParams.get("email_verification_required") === "true";
   const emailVerified = searchParams.get("email_verified") === "true";
   const emailVerificationText = "AUTH$PLEASE_CHECK_EMAIL_TO_VERIFY";
+  const returnTo = searchParams.get("returnTo");
 
   return (
     <div data-testid="login-page">
@@ -58,6 +59,7 @@ function LoginStub() {
             {emailVerificationText}
           </div>
         )}
+        {returnTo && <div data-testid="return-to-param">{returnTo}</div>}
       </div>
     </div>
   );
@@ -96,6 +98,27 @@ const RouterStubWithLogin = createRoutesStub([
   },
   {
     Component: () => <div data-testid="login-page" />,
+    path: "/login",
+  },
+]);
+
+const RouterStubWithDeviceVerify = createRoutesStub([
+  {
+    Component: MainApp,
+    path: "/",
+    children: [
+      {
+        Component: () => <div data-testid="outlet-content" />,
+        path: "/",
+      },
+      {
+        Component: () => <div data-testid="device-verify-page" />,
+        path: "/oauth/device/verify",
+      },
+    ],
+  },
+  {
+    Component: LoginStub,
     path: "/login",
   },
 ]);
@@ -307,6 +330,24 @@ describe("MainApp", () => {
       await waitFor(
         () => {
           expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should preserve query parameters in returnTo when redirecting to login", async () => {
+      renderWithLoginStub(RouterStubWithDeviceVerify, [
+        "/oauth/device/verify?user_code=F9XN6BKU",
+      ]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+          const returnToElement = screen.getByTestId("return-to-param");
+          expect(returnToElement).toBeInTheDocument();
+          expect(returnToElement.textContent).toBe(
+            "/oauth/device/verify?user_code=F9XN6BKU",
+          );
         },
         { timeout: 2000 },
       );

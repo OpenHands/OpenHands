@@ -30,15 +30,27 @@ def mock_request():
     return request
 
 
+def create_mock_jwt_tokens(user_id='test_user_id', exp_offset=3600):
+    """Helper to create valid JWT tokens for mocking."""
+    payload = {
+        'sub': user_id,
+        'exp': int(time.time()) + exp_offset,
+        'email': 'test@example.com',
+        'email_verified': True,
+    }
+    access_token = jwt.encode(payload, 'secret', algorithm='HS256')
+    refresh_token = jwt.encode(
+        {'sub': user_id, 'exp': int(time.time()) + exp_offset},
+        'secret',
+        algorithm='HS256',
+    )
+    return {'access_token': access_token, 'refresh_token': refresh_token}
+
+
 @pytest.fixture
 def mock_token_manager():
     with patch('server.auth.saas_user_auth.token_manager') as mock_tm:
-        mock_tm.refresh = AsyncMock(
-            return_value={
-                'access_token': 'new_access_token',
-                'refresh_token': 'new_refresh_token',
-            }
-        )
+        mock_tm.refresh = AsyncMock(return_value=create_mock_jwt_tokens())
         mock_tm.get_user_info_from_user_id = AsyncMock(
             return_value={
                 'federatedIdentities': [
@@ -108,8 +120,11 @@ async def test_refresh(mock_token_manager):
     await user_auth.refresh()
 
     mock_token_manager.refresh.assert_called_once_with(refresh_token)
-    assert user_auth.access_token.get_secret_value() == 'new_access_token'
-    assert user_auth.refresh_token.get_secret_value() == 'new_refresh_token'
+    # Access token should be a valid JWT
+    access_token = user_auth.access_token.get_secret_value()
+    decoded = jwt.decode(access_token, options={'verify_signature': False})
+    assert decoded['sub'] == 'test_user_id'
+    assert decoded['email'] == 'test@example.com'
     assert user_auth.refreshed is True
 
 
@@ -159,7 +174,9 @@ async def test_get_access_token_with_expired_token(mock_token_manager):
 
     result = await user_auth.get_access_token()
 
-    assert result.get_secret_value() == 'new_access_token'
+    # Verify the returned token is a valid JWT with correct user_id
+    decoded = jwt.decode(result.get_secret_value(), options={'verify_signature': False})
+    assert decoded['sub'] == 'test_user_id'
     mock_token_manager.refresh.assert_called_once_with(refresh_token)
 
 
@@ -182,7 +199,9 @@ async def test_get_access_token_with_no_token(mock_token_manager):
 
     result = await user_auth.get_access_token()
 
-    assert result.get_secret_value() == 'new_access_token'
+    # Verify the returned token is a valid JWT with correct user_id
+    decoded = jwt.decode(result.get_secret_value(), options={'verify_signature': False})
+    assert decoded['sub'] == 'test_user_id'
     mock_token_manager.refresh.assert_called_once_with(refresh_token)
 
 
@@ -339,6 +358,13 @@ async def test_saas_user_auth_from_bearer_success():
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
 
+    # Create a valid offline token (refresh token)
+    offline_token = jwt.encode(
+        {'sub': 'test_user_id', 'exp': int(time.time()) + 3600},
+        'secret',
+        algorithm='HS256',
+    )
+
     with (
         patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls,
         patch('server.auth.saas_user_auth.token_manager') as mock_token_manager,
@@ -347,15 +373,18 @@ async def test_saas_user_auth_from_bearer_success():
         mock_api_key_store.validate_api_key.return_value = 'test_user_id'
         mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
 
-        mock_token_manager.load_offline_token = AsyncMock(return_value='offline_token')
+        mock_token_manager.load_offline_token = AsyncMock(return_value=offline_token)
+        mock_token_manager.refresh = AsyncMock(
+            return_value=create_mock_jwt_tokens('test_user_id')
+        )
 
         result = await saas_user_auth_from_bearer(mock_request)
 
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
-        assert result.refresh_token.get_secret_value() == 'offline_token'
         mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
         mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
+        mock_token_manager.refresh.assert_called_once_with(offline_token)
 
 
 @pytest.mark.asyncio

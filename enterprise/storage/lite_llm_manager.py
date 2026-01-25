@@ -38,6 +38,7 @@ class LiteLlmManager:
         org_id: str,
         keycloak_user_id: str,
         oss_settings: Settings,
+        create_user: bool,
     ) -> Settings | None:
         logger.info(
             'SettingsStore:update_settings_with_litellm_default:start',
@@ -64,9 +65,10 @@ class LiteLlmManager:
                     client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
                 )
 
-                await LiteLlmManager._create_user(
-                    client, keycloak_user_info.get('email'), keycloak_user_id
-                )
+                if create_user:
+                    await LiteLlmManager._create_user(
+                        client, keycloak_user_info.get('email'), keycloak_user_id
+                    )
 
                 await LiteLlmManager._add_user_to_team(
                     client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
@@ -76,7 +78,7 @@ class LiteLlmManager:
                     client,
                     keycloak_user_id,
                     org_id,
-                    f'OpenHands Cloud - user {keycloak_user_id}',
+                    f'OpenHands Cloud - user {keycloak_user_id} - org {org_id}',
                     None,
                 )
 
@@ -346,8 +348,16 @@ class LiteLlmManager:
 
             # User failed to create in litellm - this is an unforseen error state...
             if not response.is_success:
-                if response.status_code == 400 and 'already exists' in response.text:
-                    # user already exists, just return
+                if (
+                    response.status_code in (400, 409)
+                    and 'already exists' in response.text
+                ):
+                    logger.warning(
+                        'litellm_user_already_exists',
+                        extra={
+                            'user_id': keycloak_user_id,
+                        },
+                    )
                     return
                 logger.error(
                     'error_creating_litellm_user',
@@ -425,6 +435,14 @@ class LiteLlmManager:
         )
 
         if not response.is_success:
+            if response.status_code == 401:
+                logger.warning(
+                    'invalid_litellm_key_during_update',
+                    extra={
+                        'user_id': keycloak_user_id,
+                    },
+                )
+                return
             logger.error(
                 'error_updating_litellm_key',
                 extra={
@@ -459,6 +477,41 @@ class LiteLlmManager:
         response.raise_for_status()
 
     @staticmethod
+    async def _delete_team(
+        client: httpx.AsyncClient,
+        team_id: str,
+    ):
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            logger.warning('LiteLLM API configuration not found')
+            return
+        response = await client.post(
+            f'{LITE_LLM_API_URL}/team/delete',
+            json={'team_ids': [team_id]},
+        )
+
+        if not response.is_success:
+            if response.status_code == 404:
+                # Team doesn't exist, that's fine
+                logger.info(
+                    'Team already deleted or does not exist',
+                    extra={'team_id': team_id},
+                )
+                return
+            logger.error(
+                'error_deleting_litellm_team',
+                extra={
+                    'status_code': response.status_code,
+                    'text': response.text,
+                    'team_id': team_id,
+                },
+            )
+        response.raise_for_status()
+        logger.info(
+            'LiteLlmManager:_delete_team:team_deleted',
+            extra={'team_id': team_id},
+        )
+
+    @staticmethod
     async def _add_user_to_team(
         client: httpx.AsyncClient,
         keycloak_user_id: str,
@@ -478,6 +531,18 @@ class LiteLlmManager:
         )
         # Failed to add user to team - this is an unforseen error state...
         if not response.is_success:
+            if (
+                response.status_code == 400
+                and 'already in team' in response.text.lower()
+            ):
+                logger.warning(
+                    'user_already_in_team',
+                    extra={
+                        'user_id': keycloak_user_id,
+                        'team_id': team_id,
+                    },
+                )
+                return
             logger.error(
                 'error_adding_litellm_user_to_team',
                 extra={
@@ -789,6 +854,7 @@ class LiteLlmManager:
     get_user = staticmethod(with_http_client(_get_user))
     update_user = staticmethod(with_http_client(_update_user))
     delete_user = staticmethod(with_http_client(_delete_user))
+    delete_team = staticmethod(with_http_client(_delete_team))
     add_user_to_team = staticmethod(with_http_client(_add_user_to_team))
     get_user_team_info = staticmethod(with_http_client(_get_user_team_info))
     update_user_in_team = staticmethod(with_http_client(_update_user_in_team))
