@@ -14,6 +14,7 @@ const conversations: Conversation[] = [
     runtime_status: "STATUS$READY",
     url: null,
     session_api_key: null,
+    llm_model: "claude-3-5-sonnet-20241022",
   },
   {
     conversation_id: "2",
@@ -29,6 +30,7 @@ const conversations: Conversation[] = [
     runtime_status: null,
     url: null,
     session_api_key: null,
+    llm_model: "claude-3-5-sonnet-20241022",
   },
   {
     conversation_id: "3",
@@ -44,6 +46,7 @@ const conversations: Conversation[] = [
     runtime_status: null,
     url: null,
     session_api_key: null,
+    llm_model: "claude-3-5-sonnet-20241022",
   },
 ];
 
@@ -82,6 +85,7 @@ export const CONVERSATION_HANDLERS = [
       runtime_status: "STATUS$READY",
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
     };
     CONVERSATIONS.set(conversation.conversation_id, conversation);
     return HttpResponse.json(conversation, { status: 201 });

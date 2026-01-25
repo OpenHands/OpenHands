@@ -69,6 +69,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
       />,
     );
 
@@ -94,6 +95,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
       />,
     );
 
@@ -112,6 +114,7 @@ describe("ConversationCard", () => {
           git_provider: "github",
         }}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
       />,
     );
 
@@ -128,6 +131,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         contextMenuOpen={false}
         onContextMenuToggle={onContextMenuToggle}
       />,
@@ -155,6 +159,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         contextMenuOpen
         onContextMenuToggle={onContextMenuToggle}
       />,
@@ -177,6 +182,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         contextMenuOpen
         onContextMenuToggle={onContextMenuToggle}
       />,
@@ -204,6 +210,7 @@ describe("ConversationCard", () => {
           git_provider: "github",
         }}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
       />,
     );
 
@@ -227,6 +234,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         onChangeTitle={onChangeTitle}
         contextMenuOpen={menuOpen}
         onContextMenuToggle={onContextMenuToggle}
@@ -242,6 +250,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         onChangeTitle={onChangeTitle}
         contextMenuOpen={menuOpen}
         onContextMenuToggle={onContextMenuToggle}
@@ -279,6 +288,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         contextMenuOpen
         onContextMenuToggle={onContextMenuToggle}
       />,
@@ -304,6 +314,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
       />,
     );
 
@@ -323,6 +334,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         contextMenuOpen
         onContextMenuToggle={onContextMenuToggle}
       />,
@@ -346,6 +358,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         contextMenuOpen
         onContextMenuToggle={onContextMenuToggle}
       />,
@@ -368,6 +381,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         contextMenuOpen
         onContextMenuToggle={onContextMenuToggle}
       />,
@@ -384,6 +398,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
         contextMenuOpen
         onContextMenuToggle={onContextMenuToggle}
       />,
@@ -405,6 +420,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
       />,
     );
 
@@ -417,6 +433,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
       />,
     );
 
@@ -428,6 +445,7 @@ describe("ConversationCard", () => {
         title="Conversation 1"
         selectedRepository={null}
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="claude-3-5-sonnet-20241022"
       />,
     );
 
@@ -447,7 +465,7 @@ describe("ConversationCard", () => {
     (status, shouldShow) => {
       renderWithProviders(
         <ConversationCardActions
-          contextMenuOpen={true}
+          contextMenuOpen
           onContextMenuToggle={vi.fn()}
           onStop={vi.fn()}
           conversationStatus={status}

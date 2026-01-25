@@ -244,6 +244,7 @@ describe("MicroagentManagement", () => {
       trigger: "microagent_management",
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
     },
     {
       conversation_id: "conv-2",
@@ -258,6 +259,7 @@ describe("MicroagentManagement", () => {
       trigger: "microagent_management",
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
     },
   ];
 
@@ -1698,6 +1700,7 @@ describe("MicroagentManagement", () => {
       trigger: "microagent_management",
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
       pr_number: [123],
     };
 
@@ -1714,6 +1717,7 @@ describe("MicroagentManagement", () => {
       trigger: "microagent_management",
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
       pr_number: [],
     };
 
@@ -1730,6 +1734,7 @@ describe("MicroagentManagement", () => {
       trigger: "microagent_management",
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
       pr_number: null,
     };
 
@@ -2032,6 +2037,7 @@ describe("MicroagentManagement", () => {
         trigger: "microagent_management",
         url: "https://example.com",
         session_api_key: "test-api-key",
+        llm_model: "claude-3-5-sonnet-20241022",
         pr_number: [999],
       };
 

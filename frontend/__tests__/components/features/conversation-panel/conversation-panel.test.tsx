@@ -62,6 +62,7 @@ describe("ConversationPanel", () => {
       runtime_status: null,
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
     },
     {
       conversation_id: "2",
@@ -75,6 +76,7 @@ describe("ConversationPanel", () => {
       runtime_status: null,
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
     },
     {
       conversation_id: "3",
@@ -88,6 +90,7 @@ describe("ConversationPanel", () => {
       runtime_status: null,
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
     },
   ];
 
@@ -190,6 +193,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
       {
         conversation_id: "2",
@@ -203,6 +207,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
       {
         conversation_id: "3",
@@ -216,6 +221,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
     ];
 
@@ -342,6 +348,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
       {
         conversation_id: "2",
@@ -355,6 +362,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
       {
         conversation_id: "3",
@@ -368,6 +376,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
     ];
 
@@ -425,6 +434,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
       {
         conversation_id: "2",
@@ -438,6 +448,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
     ];
 
@@ -496,6 +507,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
       {
         conversation_id: "2",
@@ -509,6 +521,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
       {
         conversation_id: "3",
@@ -522,6 +535,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
     ];
 
@@ -931,6 +945,7 @@ describe("ConversationPanel", () => {
         runtime_status: null,
         url: null,
         session_api_key: null,
+        llm_model: "claude-3-5-sonnet-20241022",
       },
     ];
 

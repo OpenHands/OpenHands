@@ -93,6 +93,7 @@ describe("Messages", () => {
       git_provider: "github",
       session_api_key: null,
       url: null,
+      llm_model: "claude-3-5-sonnet-20241022",
     };
 
     getConversationSpy.mockResolvedValue(mockConversation);

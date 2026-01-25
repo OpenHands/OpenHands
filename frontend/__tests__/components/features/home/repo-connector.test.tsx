@@ -328,6 +328,7 @@ describe("RepoConnector", () => {
       runtime_status: null,
       url: null,
       session_api_key: null,
+      llm_model: "claude-3-5-sonnet-20241022",
     });
     const retrieveUserGitRepositoriesSpy = vi.spyOn(
       GitService,
@@ -404,7 +405,7 @@ describe("RepoConnector", () => {
       ConversationService,
       "createConversation",
     );
-    createConversationSpy.mockImplementation(() => new Promise(() => { })); // Never resolves to keep loading state
+    createConversationSpy.mockImplementation(() => new Promise(() => {})); // Never resolves to keep loading state
     const retrieveUserGitRepositoriesSpy = vi.spyOn(
       GitService,
       "retrieveUserGitRepositories",
