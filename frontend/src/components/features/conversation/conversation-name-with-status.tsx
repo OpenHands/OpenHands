@@ -75,7 +75,7 @@ export function ConversationNameWithStatus() {
         />
       </div>
       {conversation?.llm_model && (
-        <ConversationModelBadge llmModel={conversation?.llm_model} />
+        <ConversationModelBadge llmModel={conversation.llm_model} />
       )}
       <ConversationName />
     </div>

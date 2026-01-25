@@ -11,7 +11,7 @@ interface ConversationCardHeaderProps {
   onTitleSave: (title: string) => void;
   conversationStatus?: ConversationStatus;
   conversationVersion?: "V0" | "V1";
-  llmModel?: string | null;
+  llmModel: string;
 }
 
 export function ConversationCardHeader({
@@ -40,7 +40,7 @@ export function ConversationCardHeader({
         isConversationArchived={isConversationArchived}
       />
       {/* Model Badge */}
-      {llmModel && <ConversationModelBadge llmModel={llmModel} />}
+      <ConversationModelBadge llmModel={llmModel} />
       <ConversationCardTitle
         title={title}
         titleMode={titleMode}

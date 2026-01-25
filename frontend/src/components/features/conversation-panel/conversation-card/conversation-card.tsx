@@ -25,7 +25,7 @@ interface ConversationCardProps {
   conversationVersion?: "V0" | "V1";
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
-  llmModel?: string | null;
+  llmModel: string;
 }
 
 export function ConversationCard({
