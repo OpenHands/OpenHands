@@ -46,6 +46,7 @@ import { useTracking } from "#/hooks/use-tracking";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
 import { I18nKey } from "#/i18n/declaration";
+import { useConversationHistory } from "#/hooks/query/use-conversation-history";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type V1_WebSocketConnectionState =
@@ -306,6 +307,21 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
+  const { data: preloadedEvents } = useConversationHistory(conversationId);
+
+  useEffect(() => {
+    if (!preloadedEvents || preloadedEvents.length === 0) {
+      setIsLoadingHistoryMain(false);
+      return;
+    }
+
+    for (const event of preloadedEvents) {
+      addEvent(event);
+    }
+
+    setIsLoadingHistoryMain(false);
+  }, [preloadedEvents, addEvent]);
+
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
@@ -340,10 +356,14 @@ export function ConversationWebSocketProvider({
 
           // Track credit limit reached if AgentErrorEvent has budget-related error
           if (isAgentErrorEvent(event)) {
+            // Use friendly i18n message for budget/credit errors instead of raw error
             if (isBudgetOrCreditError(event.error)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
               trackCreditLimitReached({
                 conversationId: conversationId || "unknown",
               });
+            } else {
+              setErrorMessage(event.error);
             }
           }
 
@@ -459,7 +479,12 @@ export function ConversationWebSocketProvider({
 
           // Handle AgentErrorEvent specifically
           if (isAgentErrorEvent(event)) {
-            setErrorMessage(event.error);
+            // Use friendly i18n message for budget/credit errors instead of raw error
+            if (isBudgetOrCreditError(event.error)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            } else {
+              setErrorMessage(event.error);
+            }
           }
 
           // Clear optimistic user message when a user message is confirmed

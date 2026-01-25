@@ -20,6 +20,7 @@ import {
   createMockMessageEvent,
   createMockUserMessageEvent,
   createMockConversationErrorEvent,
+  createMockAgentErrorEvent,
   createMockBrowserObservationEvent,
   createMockBrowserNavigateActionEvent,
   createMockExecuteBashActionEvent,
@@ -38,6 +39,18 @@ import {
 import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV1Event } from "#/types/v1/type-guards";
+
+// Mock useUserConversation to return V1 conversation data
+vi.mock("#/hooks/query/use-user-conversation", () => ({
+  useUserConversation: vi.fn(() => ({
+    data: {
+      conversation_version: "V1",
+      status: "RUNNING",
+    },
+    isLoading: false,
+    error: null,
+  })),
+}));
 
 // MSW WebSocket mock setup
 const { wsLink, server: mswServer } = conversationWebSocketTestSetup();
@@ -311,6 +324,36 @@ describe("Conversation WebSocket Handler", () => {
       await waitFor(() => {
         expect(screen.getByTestId("error-message")).toHaveTextContent(
           "Your session has expired. Please log in again.",
+        );
+      });
+    });
+
+    it("should show friendly i18n message for budget/credit errors", async () => {
+      // Create a mock AgentErrorEvent with budget-related error message
+      const mockBudgetErrorEvent = createMockAgentErrorEvent({
+        error:
+          "litellm.BadRequestError: Litellm_proxyException - ExceededBudget: User=xxx over budget.",
+      });
+
+      // Set up MSW to send the budget error event when connection is established
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.send(JSON.stringify(mockBudgetErrorEvent));
+        }),
+      );
+
+      // Render components that use both WebSocket and error message store
+      renderWithWebSocketContext(<ErrorMessageStoreComponent />);
+
+      // Initially should show "none"
+      expect(screen.getByTestId("error-message")).toHaveTextContent("none");
+
+      // Wait for connection and error event processing
+      // Should show the i18n key instead of raw error message
+      await waitFor(() => {
+        expect(screen.getByTestId("error-message")).toHaveTextContent(
+          "STATUS$ERROR_LLM_OUT_OF_CREDITS",
         );
       });
     });
@@ -636,6 +679,16 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
+        // Mock events search for history preloading
+        http.get(
+          `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
+          async () => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            return HttpResponse.json({
+              items: mockHistoryEvents,
+            });
+          },
+        ),
         http.get(
           `http://localhost:3000/api/conversations/${conversationId}/events/count`,
           () => HttpResponse.json(expectedEventCount),
@@ -672,11 +725,6 @@ describe("Conversation WebSocket Handler", () => {
         `http://localhost:3000/api/conversations/${conversationId}`,
       );
 
-      // Initially should be loading history
-      expect(screen.getByTestId("is-loading-history")).toHaveTextContent(
-        "true",
-      );
-
       // Wait for all events to be received
       await waitFor(() => {
         expect(screen.getByTestId("events-received")).toHaveTextContent("3");
@@ -695,6 +743,14 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
+        // Mock empty events search
+        http.get(
+          `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
+          () =>
+            HttpResponse.json({
+              items: [],
+            }),
+        ),
         http.get(
           `http://localhost:3000/api/conversations/${conversationId}/events/count`,
           () => HttpResponse.json(0),
@@ -744,6 +800,16 @@ describe("Conversation WebSocket Handler", () => {
 
       // Set up MSW to mock both the HTTP API and WebSocket connection
       mswServer.use(
+        // Mock events search for history preloading (50 events)
+        http.get(
+          `http://localhost:3000/api/v1/conversation/${conversationId}/events/search`,
+          async () => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            return HttpResponse.json({
+              items: mockHistoryEvents,
+            });
+          },
+        ),
         http.get(
           `http://localhost:3000/api/conversations/${conversationId}/events/count`,
           () => HttpResponse.json(expectedEventCount),
@@ -777,11 +843,6 @@ describe("Conversation WebSocket Handler", () => {
         <HistoryLoadingComponent />,
         conversationId,
         `http://localhost:3000/api/conversations/${conversationId}`,
-      );
-
-      // Initially should be loading history
-      expect(screen.getByTestId("is-loading-history")).toHaveTextContent(
-        "true",
       );
 
       // Wait for all events to be received

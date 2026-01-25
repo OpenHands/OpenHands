@@ -615,6 +615,127 @@ class TestDockerSandboxService:
         call_args = mock_docker_client.containers.run.call_args
         assert call_args[1]['extra_hosts'] is None
 
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_with_cors_origins(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test that CORS origins are set when web_url is configured."""
+        # Setup
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value']
+            },
+            'NetworkSettings': {'Ports': {}},
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service with web_url configured for CORS
+        service_with_cors = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://192.168.1.100:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            web_url='http://192.168.1.100:3000',
+            docker_client=mock_docker_client,
+        )
+
+        with (
+            patch.object(service_with_cors, '_find_unused_port', return_value=12345),
+            patch.object(service_with_cors, 'pause_old_sandboxes', return_value=[]),
+        ):
+            # Execute
+            await service_with_cors.start_sandbox()
+
+        # Verify CORS origins environment variable was set
+        mock_docker_client.containers.run.assert_called_once()
+        call_args = mock_docker_client.containers.run.call_args
+        env_vars = call_args[1]['environment']
+        assert 'OH_ALLOW_CORS_ORIGINS_0' in env_vars
+        assert env_vars['OH_ALLOW_CORS_ORIGINS_0'] == 'http://192.168.1.100:3000'
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_without_cors_origins(
+        self,
+        mock_urandom,
+        mock_encodebytes,
+        mock_sandbox_spec_service,
+        mock_httpx_client,
+        mock_docker_client,
+    ):
+        """Test that CORS origins are not set when web_url is None."""
+        # Setup
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_container_id', 'test_session_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_container_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {
+                'Env': ['OH_SESSION_API_KEYS_0=test_session_key', 'TEST_VAR=test_value']
+            },
+            'NetworkSettings': {'Ports': {}},
+        }
+        mock_docker_client.containers.run.return_value = mock_container
+
+        # Create service without web_url (local development mode)
+        service_without_cors = DockerSandboxService(
+            sandbox_spec_service=mock_sandbox_spec_service,
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent server', container_port=8000
+                ),
+            ],
+            health_check_path='/health',
+            httpx_client=mock_httpx_client,
+            max_num_sandboxes=3,
+            web_url=None,  # No web_url configured
+            docker_client=mock_docker_client,
+        )
+
+        with (
+            patch.object(service_without_cors, '_find_unused_port', return_value=12345),
+            patch.object(service_without_cors, 'pause_old_sandboxes', return_value=[]),
+        ):
+            # Execute
+            await service_without_cors.start_sandbox()
+
+        # Verify CORS origins environment variable was NOT set
+        mock_docker_client.containers.run.assert_called_once()
+        call_args = mock_docker_client.containers.run.call_args
+        env_vars = call_args[1]['environment']
+        assert 'OH_ALLOW_CORS_ORIGINS_0' not in env_vars
+
     async def test_resume_sandbox_from_paused(self, service):
         """Test resuming a paused sandbox."""
         # Setup

@@ -75,7 +75,6 @@ class TestLiveStatusAppConversationService:
             openhands_provider_base_url='https://provider.example.com',
             access_token_hard_timeout=None,
             app_mode='test',
-            keycloak_auth_cookie=None,
         )
 
         # Mock user info
@@ -150,10 +149,9 @@ class TestLiveStatusAppConversationService:
 
     @pytest.mark.asyncio
     async def test_setup_secrets_for_git_providers_with_saas_mode(self):
-        """Test _setup_secrets_for_git_providers with SaaS mode (includes keycloak cookie)."""
+        """Test _setup_secrets_for_git_providers with SaaS mode uses LookupSecret with X-Access-Token."""
         # Arrange
         self.service.app_mode = 'saas'
-        self.service.keycloak_auth_cookie = 'test_cookie'
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
@@ -173,8 +171,10 @@ class TestLiveStatusAppConversationService:
         assert 'GITLAB_TOKEN' in result
         lookup_secret = result['GITLAB_TOKEN']
         assert isinstance(lookup_secret, LookupSecret)
-        assert 'Cookie' in lookup_secret.headers
-        assert lookup_secret.headers['Cookie'] == 'keycloak_auth=test_cookie'
+        assert 'X-Access-Token' in lookup_secret.headers
+        assert lookup_secret.headers['X-Access-Token'] == 'test_access_token'
+        # Verify no cookie is included (authentication is via X-Access-Token only)
+        assert 'Cookie' not in lookup_secret.headers
         # Verify description is included
         assert lookup_secret.description == 'GITLAB authentication token'
 
@@ -1166,6 +1166,50 @@ class TestLiveStatusAppConversationService:
         self.mock_event_service.search_events.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_export_conversation_calls_search_events_with_correct_parameter_name(
+        self,
+    ):
+        """Test that export_conversation calls search_events with 'conversation_id' parameter, not 'conversation_id__eq'.
+
+        This test verifies the fix for a bug where page_iterator was called with
+        conversation_id__eq instead of conversation_id, causing a TypeError since
+        the search_events method expects conversation_id as its parameter name.
+        """
+        # Arrange
+        conversation_id = uuid4()
+
+        # Mock conversation info
+        mock_conversation_info = Mock(spec=AppConversationInfo)
+        mock_conversation_info.id = conversation_id
+        mock_conversation_info.model_dump_json = Mock(return_value='{}')
+
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=mock_conversation_info
+        )
+
+        # Mock empty event page to simplify test
+        mock_event_page = Mock()
+        mock_event_page.items = []
+        mock_event_page.next_page_id = None
+
+        self.mock_event_service.search_events = AsyncMock(return_value=mock_event_page)
+
+        # Act
+        await self.service.export_conversation(conversation_id)
+
+        # Assert - Verify search_events was called with 'conversation_id', not 'conversation_id__eq'
+        self.mock_event_service.search_events.assert_called()
+        call_kwargs = self.mock_event_service.search_events.call_args[1]
+
+        assert 'conversation_id' in call_kwargs, (
+            "search_events should be called with 'conversation_id' parameter"
+        )
+        assert 'conversation_id__eq' not in call_kwargs, (
+            "search_events should NOT be called with 'conversation_id__eq' parameter"
+        )
+        assert call_kwargs['conversation_id'] == conversation_id
+
+    @pytest.mark.asyncio
     async def test_export_conversation_large_pagination(self):
         """Test download with multiple pages of events."""
         # Arrange
@@ -1288,7 +1332,7 @@ class TestLiveStatusAppConversationService:
             task.sandbox_id = self.mock_sandbox.id
             yield task
 
-        async def mock_run_setup_scripts(task, sandbox, workspace):
+        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
             yield task
 
         self.service._wait_for_sandbox_start = mock_wait_for_sandbox

@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from server.routes.api_keys import (
+    delete_byor_key_from_litellm,
     get_llm_api_key_for_byor,
 )
 from storage.lite_llm_manager import LiteLlmManager
@@ -328,3 +329,99 @@ class TestGetLlmApiKeyForByor:
 
         assert exc_info.value.status_code == 500
         assert 'Failed to retrieve BYOR LLM API key' in exc_info.value.detail
+
+
+class TestDeleteByorKeyFromLitellm:
+    """Test the delete_byor_key_from_litellm function with alias cleanup."""
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    async def test_delete_constructs_alias_from_user(
+        self, mock_get_user, mock_delete_key
+    ):
+        """Test that delete_byor_key_from_litellm constructs key alias from user."""
+        # Arrange
+        user_id = 'user-123'
+        org_id = 'org-456'
+        byor_key = 'sk-byor-key-to-delete'
+        expected_alias = f'BYOR Key - user {user_id}, org {org_id}'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+        mock_get_user.return_value = mock_user
+        mock_delete_key.return_value = None
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, byor_key)
+
+        # Assert
+        assert result is True
+        mock_get_user.assert_called_once_with(user_id)
+        mock_delete_key.assert_called_once_with(byor_key, key_alias=expected_alias)
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    async def test_delete_without_user_passes_no_alias(
+        self, mock_get_user, mock_delete_key
+    ):
+        """Test that when user is not found, no alias is passed."""
+        # Arrange
+        user_id = 'user-123'
+        byor_key = 'sk-byor-key-to-delete'
+
+        mock_get_user.return_value = None
+        mock_delete_key.return_value = None
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, byor_key)
+
+        # Assert
+        assert result is True
+        mock_delete_key.assert_called_once_with(byor_key, key_alias=None)
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    async def test_delete_without_org_id_passes_no_alias(
+        self, mock_get_user, mock_delete_key
+    ):
+        """Test that when user has no current_org_id, no alias is passed."""
+        # Arrange
+        user_id = 'user-123'
+        byor_key = 'sk-byor-key-to-delete'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = None
+        mock_get_user.return_value = mock_user
+        mock_delete_key.return_value = None
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, byor_key)
+
+        # Assert
+        assert result is True
+        mock_delete_key.assert_called_once_with(byor_key, key_alias=None)
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    async def test_delete_returns_false_on_exception(
+        self, mock_get_user, mock_delete_key
+    ):
+        """Test that exceptions during deletion return False."""
+        # Arrange
+        user_id = 'user-123'
+        byor_key = 'sk-byor-key-to-delete'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = 'org-456'
+        mock_get_user.return_value = mock_user
+        mock_delete_key.side_effect = Exception('LiteLLM API error')
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, byor_key)
+
+        # Assert
+        assert result is False
