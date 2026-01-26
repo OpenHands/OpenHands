@@ -11,7 +11,12 @@ from openhands.core.exceptions import (
     MicroagentValidationError,
 )
 from openhands.core.logger import openhands_logger as logger
-from openhands.microagent.types import InputMetadata, MicroagentMetadata, MicroagentType
+from openhands.microagent.types import (
+    DependencyRepo,
+    InputMetadata,
+    MicroagentMetadata,
+    MicroagentType,
+)
 
 
 class BaseMicroagent(BaseModel):
@@ -28,6 +33,11 @@ class BaseMicroagent(BaseModel):
         'agents.md': 'agents',
         'agent.md': 'agents',
     }
+
+    @property
+    def dependency_repos(self) -> list[DependencyRepo]:
+        """Get the dependency repos for this microagent."""
+        return self.metadata.dependency_repos
 
     @classmethod
     def _handle_third_party(
@@ -339,3 +349,32 @@ def load_microagents_from_dir(
         f'{[*repo_agents.keys(), *knowledge_agents.keys()]}'
     )
     return repo_agents, knowledge_agents
+
+
+def collect_dependency_repos(
+    microagents: list[BaseMicroagent],
+) -> list[DependencyRepo]:
+    """Collect all unique dependency repos from a list of microagents.
+
+    Args:
+        microagents: List of microagents to collect dependency repos from.
+
+    Returns:
+        List of unique DependencyRepo objects (deduplicated by repo identifier).
+    """
+    seen_repos: set[str] = set()
+    dependency_repos: list[DependencyRepo] = []
+
+    for agent in microagents:
+        for dep_repo in agent.dependency_repos:
+            if dep_repo.repo not in seen_repos:
+                seen_repos.add(dep_repo.repo)
+                dependency_repos.append(dep_repo)
+
+    if dependency_repos:
+        logger.debug(
+            f'Collected {len(dependency_repos)} dependency repos from microagents: '
+            f'{[dep.repo for dep in dependency_repos]}'
+        )
+
+    return dependency_repos

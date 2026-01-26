@@ -77,6 +77,17 @@ class RecallObservation(Observation):
     custom_secrets_descriptions: dict[str, str] = field(default_factory=dict)
     conversation_instructions: str = ''
     working_dir: str = ''
+    dependency_repos: dict[str, str] = field(default_factory=dict)
+    """
+    A dictionary mapping dependency repo names to their cloned directory paths.
+    These repos are specified in microagent frontmatter and cloned at startup.
+
+    Example:
+    {
+        "frontend": "OpenHands",
+        "backend": "software-agent-sdk"
+    }
+    """
 
     # knowledge
     microagent_knowledge: list[MicroagentKnowledge] = field(default_factory=list)

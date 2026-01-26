@@ -589,6 +589,7 @@ class ConversationMemory:
                 )
                 has_repo_instructions = bool(repo_instructions.strip())
                 has_conversation_instructions = conversation_instructions is not None
+                has_dependency_repos = bool(obs.dependency_repos)
 
                 # Filter and process microagent knowledge
                 filtered_agents = []
@@ -611,6 +612,7 @@ class ConversationMemory:
                     or has_runtime_info
                     or has_repo_instructions
                     or has_conversation_instructions
+                    or has_dependency_repos
                 ):
                     formatted_workspace_text = (
                         self.prompt_manager.build_workspace_context(
@@ -618,6 +620,7 @@ class ConversationMemory:
                             runtime_info=runtime_info,
                             conversation_instructions=conversation_instructions,
                             repo_instructions=repo_instructions,
+                            dependency_repos=obs.dependency_repos,
                         )
                     )
                     message_content.append(TextContent(text=formatted_workspace_text))

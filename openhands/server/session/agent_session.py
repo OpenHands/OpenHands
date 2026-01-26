@@ -476,11 +476,16 @@ class AgentSession:
             memory.set_conversation_instructions(conversation_instructions)
 
             # loads microagents from repo/.openhands/microagents
-            microagents: list[BaseMicroagent] = await call_sync_from_async(
+            # also clones any dependency repos specified in microagent frontmatter
+            microagents, cloned_dependency_repos = await call_sync_from_async(
                 self.runtime.get_microagents_from_selected_repo,
                 selected_repository or None,
             )
             memory.load_user_workspace_microagents(microagents)
+
+            # Store info about cloned dependency repos for the agent
+            if cloned_dependency_repos:
+                memory.set_dependency_repos_info(cloned_dependency_repos)
 
             if selected_repository and repo_directory:
                 memory.set_repository_info(

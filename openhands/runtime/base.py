@@ -58,6 +58,8 @@ from openhands.integrations.service_types import AuthenticationError
 from openhands.llm.llm_registry import LLMRegistry
 from openhands.microagent import (
     BaseMicroagent,
+    DependencyRepo,
+    collect_dependency_repos,
     load_microagents_from_dir,
 )
 from openhands.runtime.plugins import (
@@ -501,6 +503,70 @@ class Runtime(FileEditRuntimeMixin):
 
         return dir_name
 
+    async def clone_dependency_repos(
+        self,
+        dependency_repos: list[DependencyRepo],
+    ) -> dict[str, str]:
+        """Clone dependency repositories specified in microagent frontmatter.
+
+        Args:
+            dependency_repos: List of DependencyRepo objects to clone.
+
+        Returns:
+            Dictionary mapping repo names to their cloned directory paths.
+        """
+        cloned_repos: dict[str, str] = {}
+
+        if not dependency_repos:
+            return cloned_repos
+
+        self.log('info', f'Cloning {len(dependency_repos)} dependency repos...')
+
+        for dep_repo in dependency_repos:
+            try:
+                remote_repo_url = await self.provider_handler.get_authenticated_git_url(
+                    dep_repo.repo
+                )
+
+                if not remote_repo_url:
+                    self.log(
+                        'warning',
+                        f'Could not get authenticated URL for dependency repo: {dep_repo.repo}',
+                    )
+                    continue
+
+                dir_name = dep_repo.repo.split('/')[-1]
+                repo_path = self.workspace_root / dir_name
+                quoted_repo_path = shlex.quote(str(repo_path))
+                quoted_remote_repo_url = shlex.quote(remote_repo_url)
+
+                # Clone the dependency repository
+                clone_command = f'git clone {quoted_remote_repo_url} {quoted_repo_path}'
+                clone_action = CmdRunAction(command=clone_command)
+                obs = await call_sync_from_async(self.run_action, clone_action)
+
+                if isinstance(obs, CmdOutputObservation) and obs.exit_code == 0:
+                    cloned_repos[dep_repo.name] = dir_name
+                    self.log(
+                        'info',
+                        f'Cloned dependency repo "{dep_repo.name}": {dep_repo.repo} -> {dir_name}',
+                    )
+                else:
+                    error_content = (
+                        obs.content if isinstance(obs, CmdOutputObservation) else 'unknown error'
+                    )
+                    self.log(
+                        'warning',
+                        f'Failed to clone dependency repo {dep_repo.repo}: {error_content}',
+                    )
+            except Exception as e:
+                self.log(
+                    'warning',
+                    f'Error cloning dependency repo {dep_repo.repo}: {str(e)}',
+                )
+
+        return cloned_repos
+
     def maybe_run_setup_script(self):
         """Run .openhands/setup.sh if it exists in the workspace or repository."""
         setup_script = '.openhands/setup.sh'
@@ -901,7 +967,7 @@ fi
 
     def get_microagents_from_selected_repo(
         self, selected_repository: str | None
-    ) -> list[BaseMicroagent]:
+    ) -> tuple[list[BaseMicroagent], dict[str, str]]:
         """Load microagents from the selected repository.
         If selected_repository is None, load microagents from the current workspace.
         This is the main entry point for loading microagents.
@@ -913,6 +979,10 @@ fi
         For GitLab repositories, it will use openhands-config instead of .openhands
         since GitLab doesn't support repository names starting with non-alphanumeric
         characters.
+
+        Returns:
+            Tuple of (loaded_microagents, cloned_dependency_repos) where
+            cloned_dependency_repos is a dict mapping repo names to directory paths.
         """
         loaded_microagents: list[BaseMicroagent] = []
         microagents_dir = self.workspace_root / '.openhands' / 'microagents'
@@ -964,7 +1034,21 @@ fi
         )
         loaded_microagents.extend(repo_microagents)
 
-        return loaded_microagents
+        # Collect and clone dependency repos from all loaded microagents
+        dependency_repos = collect_dependency_repos(loaded_microagents)
+        cloned_repos: dict[str, str] = {}
+        if dependency_repos:
+            try:
+                cloned_repos = asyncio.get_event_loop().run_until_complete(
+                    self.clone_dependency_repos(dependency_repos)
+                )
+            except Exception as e:
+                self.log(
+                    'warning',
+                    f'Error cloning dependency repos: {str(e)}',
+                )
+
+        return loaded_microagents, cloned_repos
 
     def run_action(self, action: Action) -> Observation:
         """Run an action and return the resulting observation.

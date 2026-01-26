@@ -316,12 +316,13 @@ def test_get_microagents_from_selected_repo_gitlab_uses_openhands(temp_workspace
     with patch.object(runtime, '_is_gitlab_repository', return_value=True):
         # Mock org-level microagents (empty)
         with patch.object(runtime, 'get_microagents_from_org_or_user', return_value=[]):
-            result = runtime.get_microagents_from_selected_repo('gitlab.com/owner/repo')
+            result, cloned_repos = runtime.get_microagents_from_selected_repo('gitlab.com/owner/repo')
 
             # Should find microagents from .openhands directory
             # The exact assertion depends on the mock implementation
             # At minimum, it should not raise an exception
             assert isinstance(result, list)
+            assert isinstance(cloned_repos, dict)
 
 
 def test_get_microagents_from_selected_repo_github_only_openhands(temp_workspace):
@@ -340,7 +341,8 @@ def test_get_microagents_from_selected_repo_github_only_openhands(temp_workspace
     with patch.object(runtime, '_is_gitlab_repository', return_value=False):
         # Mock org-level microagents (empty)
         with patch.object(runtime, 'get_microagents_from_org_or_user', return_value=[]):
-            result = runtime.get_microagents_from_selected_repo('github.com/owner/repo')
+            result, cloned_repos = runtime.get_microagents_from_selected_repo('github.com/owner/repo')
 
             # Should only check .openhands directory, not openhands-config
             assert isinstance(result, list)
+            assert isinstance(cloned_repos, dict)

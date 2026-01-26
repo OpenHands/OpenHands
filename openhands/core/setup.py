@@ -219,10 +219,15 @@ def create_memory(
         memory.set_runtime_info(runtime, {}, working_dir)
 
         # loads microagents from repo/.openhands/microagents
-        microagents: list[BaseMicroagent] = runtime.get_microagents_from_selected_repo(
+        # also clones any dependency repos specified in microagent frontmatter
+        microagents, cloned_dependency_repos = runtime.get_microagents_from_selected_repo(
             selected_repository
         )
         memory.load_user_workspace_microagents(microagents)
+
+        # Store info about cloned dependency repos for the agent
+        if cloned_dependency_repos:
+            memory.set_dependency_repos_info(cloned_dependency_repos)
 
         if selected_repository and repo_directory:
             memory.set_repository_info(selected_repository, repo_directory)

@@ -9,6 +9,15 @@ IMPORTANT: You should work within the current branch "{{ repository_info.branch_
 {% endif %}
 </REPOSITORY_INFO>
 {% endif %}
+{% if dependency_repos %}
+<DEPENDENCY_REPOSITORIES>
+The following dependency repositories have been cloned to the workspace:
+{% for name, directory in dependency_repos.items() -%}
+* {{ name }}: cloned to {{ directory }}
+{% endfor %}
+These repositories are available for reference or use as needed.
+</DEPENDENCY_REPOSITORIES>
+{% endif %}
 {% if repository_instructions -%}
 <REPOSITORY_INSTRUCTIONS>
 {{ repository_instructions }}

@@ -545,3 +545,108 @@ def test_load_both_cursorrules_and_agents_md(temp_dir_with_both_cursorrules_and_
     agents_agent = repo_agents['agents']
     assert isinstance(agents_agent, RepoMicroagent)
     assert 'Install deps: `poetry install`' in agents_agent.content
+
+
+def test_dependency_repos_parsing():
+    """Test parsing of dependency_repos from frontmatter."""
+    from openhands.microagent import DependencyRepo, collect_dependency_repos
+
+    # Create a microagent with dependency_repos
+    agent_content = """---
+name: test-agent
+version: 1.0.0
+dependency_repos:
+  - name: frontend
+    repo: OpenHands/OpenHands
+  - name: backend
+    repo: OpenHands/software-agent-sdk
+---
+
+# Test Agent
+
+This agent has dependency repos.
+"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / 'test.md').write_text(agent_content)
+
+        agent = BaseMicroagent.load(root / 'test.md', root)
+
+        # Check that dependency_repos are parsed correctly
+        assert len(agent.dependency_repos) == 2
+        assert agent.dependency_repos[0].name == 'frontend'
+        assert agent.dependency_repos[0].repo == 'OpenHands/OpenHands'
+        assert agent.dependency_repos[1].name == 'backend'
+        assert agent.dependency_repos[1].repo == 'OpenHands/software-agent-sdk'
+
+
+def test_collect_dependency_repos():
+    """Test collecting dependency repos from multiple microagents."""
+    from openhands.microagent import DependencyRepo, collect_dependency_repos
+
+    # Create microagents with dependency_repos
+    agent1_content = """---
+name: agent1
+version: 1.0.0
+dependency_repos:
+  - name: frontend
+    repo: OpenHands/OpenHands
+---
+
+# Agent 1
+"""
+    agent2_content = """---
+name: agent2
+version: 1.0.0
+dependency_repos:
+  - name: backend
+    repo: OpenHands/software-agent-sdk
+  - name: frontend
+    repo: OpenHands/OpenHands
+---
+
+# Agent 2
+"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / 'agent1.md').write_text(agent1_content)
+        (root / 'agent2.md').write_text(agent2_content)
+
+        agent1 = BaseMicroagent.load(root / 'agent1.md', root)
+        agent2 = BaseMicroagent.load(root / 'agent2.md', root)
+
+        # Collect dependency repos (should deduplicate)
+        dependency_repos = collect_dependency_repos([agent1, agent2])
+
+        # Should have 2 unique repos (frontend appears twice but should be deduplicated)
+        assert len(dependency_repos) == 2
+        repo_names = {dep.repo for dep in dependency_repos}
+        assert 'OpenHands/OpenHands' in repo_names
+        assert 'OpenHands/software-agent-sdk' in repo_names
+
+
+def test_microagent_without_dependency_repos():
+    """Test that microagents without dependency_repos work correctly."""
+    from openhands.microagent import collect_dependency_repos
+
+    agent_content = """---
+name: simple-agent
+version: 1.0.0
+---
+
+# Simple Agent
+
+No dependency repos here.
+"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / 'simple.md').write_text(agent_content)
+
+        agent = BaseMicroagent.load(root / 'simple.md', root)
+
+        # Check that dependency_repos is empty
+        assert len(agent.dependency_repos) == 0
+
+        # Collect should return empty list
+        dependency_repos = collect_dependency_repos([agent])
+        assert len(dependency_repos) == 0

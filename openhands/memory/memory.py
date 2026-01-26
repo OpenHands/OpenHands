@@ -76,6 +76,7 @@ class Memory:
         self.repository_info: RepositoryInfo | None = None
         self.runtime_info: RuntimeInfo | None = None
         self.conversation_instructions: ConversationInstructions | None = None
+        self.dependency_repos_info: dict[str, str] = {}  # name -> directory mapping
 
         # Load global microagents (Knowledge + Repo)
         # from typically OpenHands/skills (i.e., the PUBLIC microagents)
@@ -170,6 +171,7 @@ class Memory:
             or repo_instructions
             or microagent_knowledge
             or self.conversation_instructions
+            or self.dependency_repos_info
         ):
             obs = RecallObservation(
                 recall_type=RecallType.WORKSPACE_CONTEXT,
@@ -218,6 +220,7 @@ class Memory:
                     else ''
                 ),
                 working_dir=self.runtime_info.working_dir if self.runtime_info else '',
+                dependency_repos=self.dependency_repos_info,
             )
             return obs
         return None
@@ -345,6 +348,14 @@ class Memory:
             )
         else:
             self.repository_info = None
+
+    def set_dependency_repos_info(self, dependency_repos: dict[str, str]) -> None:
+        """Store dependency repos info so we can reference it in an observation.
+
+        Args:
+            dependency_repos: Dictionary mapping repo names to their cloned directory paths.
+        """
+        self.dependency_repos_info = dependency_repos
 
     def set_runtime_info(
         self,

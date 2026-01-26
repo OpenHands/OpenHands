@@ -23,6 +23,13 @@ class InputMetadata(BaseModel):
     description: str
 
 
+class DependencyRepo(BaseModel):
+    """Metadata for a dependency repository."""
+
+    name: str  # A friendly name/alias for the repo (e.g., "frontend", "backend")
+    repo: str  # The repository identifier (e.g., "OpenHands/OpenHands")
+
+
 class MicroagentMetadata(BaseModel):
     """Metadata for all microagents."""
 
@@ -32,6 +39,7 @@ class MicroagentMetadata(BaseModel):
     agent: str = Field(default='CodeActAgent')
     triggers: list[str] = []  # optional, only exists for knowledge microagents
     inputs: list[InputMetadata] = []  # optional, only exists for task microagents
+    dependency_repos: list[DependencyRepo] = []  # optional, repos to clone at startup
     mcp_tools: MCPConfig | None = (
         None  # optional, for microagents that provide additional MCP tools
     )
