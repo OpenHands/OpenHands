@@ -5,7 +5,7 @@ import { EmptyChangesMessage } from "#/components/features/diff-viewer/empty-cha
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 import { I18nKey } from "#/i18n/declaration";
-import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
+import { AgentState, RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
 import { RandomTip } from "#/components/features/tips/random-tip";
 import { useAgentState } from "#/hooks/use-agent-state";
 
@@ -36,12 +36,17 @@ function GitChanges() {
 
   const { curAgentState } = useAgentState();
   const runtimeIsActive = !RUNTIME_INACTIVE_STATES.includes(curAgentState);
+  const agentIsStopped = curAgentState === AgentState.STOPPED;
 
   const isNotGitRepoError =
     error && GIT_REPO_ERROR_PATTERN.test(retrieveAxiosErrorMessage(error));
 
   React.useEffect(() => {
-    if (!runtimeIsActive) {
+    // When agent is stopped, preserve the current view (cached diffs or empty state)
+    // without showing "waiting for runtime" message
+    if (agentIsStopped) {
+      setStatusMessage(null);
+    } else if (!runtimeIsActive) {
       setStatusMessage([I18nKey.DIFF_VIEWER$WAITING_FOR_RUNTIME]);
     } else if (error) {
       const errorMessage = retrieveAxiosErrorMessage(error);
@@ -59,6 +64,7 @@ function GitChanges() {
       setStatusMessage(null);
     }
   }, [
+    agentIsStopped,
     runtimeIsActive,
     isNotGitRepoError,
     loadingGitChanges,
@@ -66,9 +72,14 @@ function GitChanges() {
     setStatusMessage,
   ]);
 
+  // Determine if we should show diffs: either successful query with changes,
+  // or agent is stopped with cached changes (preserve view when stopped)
+  const hasChangesToShow = gitChanges && gitChanges.length > 0;
+  const shouldShowDiffs = hasChangesToShow && (isSuccess || agentIsStopped);
+
   return (
     <main className="h-full overflow-y-scroll p-4 md:pr-1.5 gap-3 flex flex-col items-center custom-scrollbar-always">
-      {!isSuccess || !gitChanges.length ? (
+      {!shouldShowDiffs ? (
         <div className="relative flex h-full w-full items-center">
           <div className="absolute inset-x-0 top-1/2 -translate-y-1/2">
             {statusMessage && (
@@ -78,13 +89,13 @@ function GitChanges() {
                 ))}
               </StatusMessage>
             )}
-            {!statusMessage && isSuccess && gitChanges.length === 0 && (
-              <EmptyChangesMessage />
-            )}
+            {!statusMessage &&
+              (isSuccess || agentIsStopped) &&
+              !hasChangesToShow && <EmptyChangesMessage />}
           </div>
 
           <div className="absolute inset-x-0 bottom-0">
-            {!isError && gitChanges?.length === 0 && (
+            {!isError && !hasChangesToShow && (
               <div className="max-w-2xl mb-4 text-m bg-tertiary rounded-xl p-4 text-left mx-auto">
                 <RandomTip />
               </div>
