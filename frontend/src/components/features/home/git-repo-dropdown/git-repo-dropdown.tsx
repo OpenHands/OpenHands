@@ -213,6 +213,8 @@ export function GitRepoDropdown({
       handleSelectionChange(newSelectedItem);
     },
     inputValue,
+    // Override Downshift's default input-click behavior to avoid closing/reopening
+    // the menu, which would reset scroll position and break search continuity.
     stateReducer: (state, actionAndChanges) =>
       actionAndChanges.type === useCombobox.stateChangeTypes.InputClick &&
       state.isOpen
