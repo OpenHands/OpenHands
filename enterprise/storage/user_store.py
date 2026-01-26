@@ -14,9 +14,9 @@ from server.constants import (
     get_default_litellm_model,
 )
 from server.logger import logger
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import joinedload
-from storage.database import session_maker
+from storage.database import a_session_maker, session_maker
 from storage.encrypt_utils import decrypt_legacy_model
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -372,13 +372,13 @@ class UserStore:
         This is the preferred method when calling from an async context as it
         avoids event loop conflicts that can occur with the sync version.
         """
-        with session_maker() as session:
-            user = (
-                session.query(User)
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
-                .first()
             )
+            user = result.scalars().first()
             if user:
                 return user
 
@@ -392,23 +392,22 @@ class UserStore:
                 await asyncio.sleep(_RETRY_LOAD_DELAY_SECONDS)
 
             # Check for user again as migration could have happened while trying to get the lock.
-            user = (
-                session.query(User)
+            result = await session.execute(
+                select(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
-                .first()
             )
+            user = result.scalars().first()
             if user:
                 return user
 
-            user_settings = (
-                session.query(UserSettings)
-                .filter(
+            result = await session.execute(
+                select(UserSettings).filter(
                     UserSettings.keycloak_user_id == user_id,
                     UserSettings.already_migrated.is_(False),
                 )
-                .first()
             )
+            user_settings = result.scalars().first()
             if user_settings:
                 token_manager = TokenManager()
                 user_info = await token_manager.get_user_info_from_user_id(user_id)

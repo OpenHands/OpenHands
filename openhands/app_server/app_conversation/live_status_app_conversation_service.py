@@ -237,7 +237,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 working_dir=sandbox_spec.working_dir,
             )
             async for updated_task in self.run_setup_scripts(
-                task, sandbox, remote_workspace
+                task, sandbox, remote_workspace, agent_server_url
             ):
                 yield updated_task
 
@@ -1295,7 +1295,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # Get all events for this conversation
             i = 0
             async for event in page_iterator(
-                self.event_service.search_events, conversation_id__eq=conversation_id
+                self.event_service.search_events, conversation_id=conversation_id
             ):
                 event_filename = f'event_{i:06d}_{event.id}.json'
                 event_path = os.path.join(temp_dir, event_filename)

@@ -16,6 +16,7 @@ from keycloak.exceptions import (
     KeycloakError,
     KeycloakPostError,
 )
+from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_APP_CLIENT_SECRET,
@@ -426,6 +427,8 @@ class TokenManager:
         access_token = data.get('access_token')
         refresh_token = data.get('refresh_token')
         if not access_token or not refresh_token:
+            if data.get('error') == 'bad_refresh_token':
+                raise ExpiredError()
             raise ValueError(
                 'Failed to refresh token: missing access_token or refresh_token in response.'
             )

@@ -17,11 +17,6 @@ class Manager(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def is_job_requested(self, message: Message) -> bool:
-        "Confirm that a job is being requested"
-        raise NotImplementedError
-
-    @abstractmethod
     def start_job(self):
         "Kick off a job with openhands agent"
         raise NotImplementedError

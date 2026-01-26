@@ -20,6 +20,7 @@ export default function LoginPage() {
     recaptchaBlocked,
     emailVerificationModalOpen,
     setEmailVerificationModalOpen,
+    userId,
   } = useEmailVerification();
 
   const gitHubAuthUrl = useGitHubAuthUrl({
@@ -77,6 +78,7 @@ export default function LoginPage() {
           onClose={() => {
             setEmailVerificationModalOpen(false);
           }}
+          userId={userId}
         />
       )}
     </>

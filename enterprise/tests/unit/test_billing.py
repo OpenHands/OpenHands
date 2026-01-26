@@ -163,7 +163,7 @@ async def test_create_checkout_session_stripe_error(
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
             AsyncMock(return_value={'email': 'testy@tester.com'}),
         ),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         await create_checkout_session(
             CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
@@ -204,7 +204,7 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
             AsyncMock(return_value={'email': 'testy@tester.com'}),
         ),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         mock_db_session = MagicMock()
         mock_session_maker.return_value.__enter__.return_value = mock_db_session
@@ -236,8 +236,8 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
             mode='payment',
             payment_method_types=['card'],
             saved_payment_method_options={'payment_method_save': 'enabled'},
-            success_url='http://test.com/api/billing/success?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url='http://test.com/api/billing/cancel?session_id={CHECKOUT_SESSION_ID}',
+            success_url='https://test.com/api/billing/success?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url='https://test.com/api/billing/cancel?session_id={CHECKOUT_SESSION_ID}',
         )
 
         # Verify database session creation
@@ -331,7 +331,7 @@ async def test_success_callback_success():
         assert response.status_code == 302
         assert (
             response.headers['location']
-            == 'http://test.com/settings/billing?checkout=success'
+            == 'https://test.com/settings/billing?checkout=success'
         )
 
         # Verify LiteLLM API calls
@@ -402,7 +402,7 @@ async def test_cancel_callback_session_not_found():
         assert response.status_code == 302
         assert (
             response.headers['location']
-            == 'http://test.com/settings/billing?checkout=cancel'
+            == 'https://test.com/settings/billing?checkout=cancel'
         )
 
         # Verify no database updates occurred
@@ -429,7 +429,7 @@ async def test_cancel_callback_success():
         assert response.status_code == 302
         assert (
             response.headers['location']
-            == 'http://test.com/settings/billing?checkout=cancel'
+            == 'https://test.com/settings/billing?checkout=cancel'
         )
 
         # Verify database updates
@@ -490,7 +490,7 @@ async def test_create_customer_setup_session_success():
             AsyncMock(return_value=mock_customer_info),
         ),
         patch('stripe.checkout.Session.create_async', mock_create),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         result = await create_customer_setup_session(mock_request, 'mock_user')
 
@@ -502,6 +502,6 @@ async def test_create_customer_setup_session_success():
             customer='mock-customer-id',
             mode='setup',
             payment_method_types=['card'],
-            success_url='http://test.com/?free_credits=success',
-            cancel_url='http://test.com/',
+            success_url='https://test.com/?free_credits=success',
+            cancel_url='https://test.com/',
         )

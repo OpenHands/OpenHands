@@ -16,8 +16,10 @@ with patch('storage.database.engine', create=True), patch(
 ):
     from server.routes.org_models import (
         LiteLLMIntegrationError,
+        OrgAuthorizationError,
         OrgDatabaseError,
         OrgNameExistsError,
+        OrgNotFoundError,
     )
     from storage.org import Org
     from storage.org_member import OrgMember
@@ -76,7 +78,11 @@ def test_validate_name_uniqueness_with_unique_name(session_maker):
     unique_name = 'unique-org-name'
 
     # Act & Assert - should not raise
-    with patch('storage.org_store.session_maker', session_maker):
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
         OrgService.validate_name_uniqueness(unique_name)
 
 
@@ -562,3 +568,1092 @@ async def test_get_org_credits_api_failure_returns_none(mock_litellm_api):
 
         # Assert
         assert credits is None
+
+
+@pytest.mark.asyncio
+async def test_get_org_by_id_success(session_maker, owner_role):
+    """
+    GIVEN: Valid org_id and user_id where user is a member
+    WHEN: get_org_by_id is called
+    THEN: Organization is returned successfully
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    org_name = 'Test Organization'
+
+    # Create mock objects
+    mock_org = Org(id=org_id, name=org_name)
+    mock_org_member = OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        llm_api_key='test-key',
+        status='active',
+    )
+
+    with (
+        patch('storage.org_service.OrgMemberStore.get_org_member') as mock_get_member,
+        patch('storage.org_service.OrgStore.get_org_by_id') as mock_get_org,
+    ):
+        mock_get_member.return_value = mock_org_member
+        mock_get_org.return_value = mock_org
+
+        # Act
+        result = await OrgService.get_org_by_id(org_id, str(user_id))
+
+        # Assert
+        assert result is not None
+        assert result.id == org_id
+        assert result.name == org_name
+        mock_get_member.assert_called_once()
+        mock_get_org.assert_called_once_with(org_id)
+
+
+@pytest.mark.asyncio
+async def test_get_org_by_id_user_not_member():
+    """
+    GIVEN: User is not a member of the organization
+    WHEN: get_org_by_id is called
+    THEN: OrgNotFoundError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    with patch(
+        'storage.org_service.OrgMemberStore.get_org_member',
+        return_value=None,
+    ):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError) as exc_info:
+            await OrgService.get_org_by_id(org_id, user_id)
+
+        assert str(org_id) in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_get_org_by_id_org_not_found():
+    """
+    GIVEN: User is a member but organization doesn't exist (edge case)
+    WHEN: get_org_by_id is called
+    THEN: OrgNotFoundError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    # Create mock org member (but org doesn't exist)
+    mock_org_member = OrgMember(
+        org_id=org_id,
+        user_id=user_id,
+        role_id=1,
+        llm_api_key='test-key',
+        status='active',
+    )
+
+    with (
+        patch(
+            'storage.org_service.OrgMemberStore.get_org_member',
+            return_value=mock_org_member,
+        ),
+        patch('storage.org_service.OrgStore.get_org_by_id', return_value=None),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError) as exc_info:
+            await OrgService.get_org_by_id(org_id, str(user_id))
+
+        assert str(org_id) in str(exc_info.value)
+
+
+def test_get_user_orgs_paginated_success(session_maker, mock_litellm_api):
+    """
+    GIVEN: User has organizations in database
+    WHEN: get_user_orgs_paginated is called with valid user_id
+    THEN: Organizations are returned with pagination info
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+
+    with session_maker() as session:
+        org = Org(id=org_id, name='Test Org')
+        user = User(id=user_id, current_org_id=org_id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([org, user, role])
+        session.flush()
+
+        member = OrgMember(
+            org_id=org_id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        session.add(member)
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+            user_id=str(user_id), page_id=None, limit=10
+        )
+
+    # Assert
+    assert len(orgs) == 1
+    assert orgs[0].name == 'Test Org'
+    assert next_page_id is None
+
+
+def test_get_user_orgs_paginated_with_pagination(session_maker, mock_litellm_api):
+    """
+    GIVEN: User has multiple organizations
+    WHEN: get_user_orgs_paginated is called with page_id and limit
+    THEN: Paginated results are returned correctly
+    """
+    # Arrange
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        org1 = Org(name='Alpha Org')
+        org2 = Org(name='Beta Org')
+        org3 = Org(name='Gamma Org')
+        session.add_all([org1, org2, org3])
+        session.flush()
+
+        user = User(id=user_id, current_org_id=org1.id)
+        role = Role(id=1, name='member', rank=2)
+        session.add_all([user, role])
+        session.flush()
+
+        member1 = OrgMember(
+            org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
+        )
+        member2 = OrgMember(
+            org_id=org2.id, user_id=user_id, role_id=1, llm_api_key='key2'
+        )
+        member3 = OrgMember(
+            org_id=org3.id, user_id=user_id, role_id=1, llm_api_key='key3'
+        )
+        session.add_all([member1, member2, member3])
+        session.commit()
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+            user_id=str(user_id), page_id='0', limit=2
+        )
+
+    # Assert
+    assert len(orgs) == 2
+    assert orgs[0].name == 'Alpha Org'
+    assert orgs[1].name == 'Beta Org'
+    assert next_page_id == '2'
+
+
+def test_get_user_orgs_paginated_empty_results(session_maker):
+    """
+    GIVEN: User has no organizations
+    WHEN: get_user_orgs_paginated is called
+    THEN: Empty list and None next_page_id are returned
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+
+    # Act
+    with patch('storage.org_store.session_maker', session_maker):
+        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+            user_id=user_id, page_id=None, limit=10
+        )
+
+    # Assert
+    assert len(orgs) == 0
+    assert next_page_id is None
+
+
+def test_get_user_orgs_paginated_invalid_user_id_format():
+    """
+    GIVEN: Invalid user_id format (not a valid UUID string)
+    WHEN: get_user_orgs_paginated is called
+    THEN: ValueError is raised
+    """
+    # Arrange
+    invalid_user_id = 'not-a-uuid'
+
+    # Act & Assert
+    with pytest.raises(ValueError):
+        OrgService.get_user_orgs_paginated(
+            user_id=invalid_user_id, page_id=None, limit=10
+        )
+
+
+def test_verify_owner_authorization_success(session_maker, owner_role):
+    """
+    GIVEN: User is owner of the organization
+    WHEN: verify_owner_authorization is called
+    THEN: No exception is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    mock_org = Org(
+        id=org_id,
+        name='Test Org',
+        contact_name='John',
+        contact_email='john@example.com',
+    )
+    mock_org_member = OrgMember(
+        org_id=org_id,
+        user_id=uuid.UUID(user_id),
+        role_id=1,
+        status='active',
+        llm_api_key='key',
+    )
+
+    # Create a mock role to avoid detached instance issues
+    mock_owner_role = MagicMock()
+    mock_owner_role.name = 'owner'
+    mock_owner_role.id = 1
+
+    with (
+        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch(
+            'storage.org_service.OrgMemberStore.get_org_member',
+            return_value=mock_org_member,
+        ),
+        patch(
+            'storage.org_service.RoleStore.get_role_by_id', return_value=mock_owner_role
+        ),
+    ):
+        # Act & Assert - should not raise
+        OrgService.verify_owner_authorization(user_id, org_id)
+
+
+def test_verify_owner_authorization_org_not_found():
+    """
+    GIVEN: Organization does not exist
+    WHEN: verify_owner_authorization is called
+    THEN: OrgNotFoundError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    with patch('storage.org_service.OrgStore.get_org_by_id', return_value=None):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError) as exc_info:
+            OrgService.verify_owner_authorization(user_id, org_id)
+
+        assert str(org_id) in str(exc_info.value)
+
+
+def test_verify_owner_authorization_user_not_member(session_maker, owner_role):
+    """
+    GIVEN: User is not a member of the organization
+    WHEN: verify_owner_authorization is called
+    THEN: OrgAuthorizationError is raised with member message
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    mock_org = Org(
+        id=org_id,
+        name='Test Org',
+        contact_name='John',
+        contact_email='john@example.com',
+    )
+
+    with (
+        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch('storage.org_service.OrgMemberStore.get_org_member', return_value=None),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgAuthorizationError) as exc_info:
+            OrgService.verify_owner_authorization(user_id, org_id)
+
+        assert 'not a member' in str(exc_info.value)
+
+
+def test_verify_owner_authorization_user_not_owner(session_maker):
+    """
+    GIVEN: User is member but not owner (admin role)
+    WHEN: verify_owner_authorization is called
+    THEN: OrgAuthorizationError is raised with owner message
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    mock_org = Org(
+        id=org_id,
+        name='Test Org',
+        contact_name='John',
+        contact_email='john@example.com',
+    )
+    mock_org_member = OrgMember(
+        org_id=org_id,
+        user_id=uuid.UUID(user_id),
+        role_id=2,
+        status='active',
+        llm_api_key='key',
+    )
+    admin_role = Role(id=2, name='admin', rank=20)
+
+    with (
+        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch(
+            'storage.org_service.OrgMemberStore.get_org_member',
+            return_value=mock_org_member,
+        ),
+        patch('storage.org_service.RoleStore.get_role_by_id', return_value=admin_role),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgAuthorizationError) as exc_info:
+            OrgService.verify_owner_authorization(user_id, org_id)
+
+        assert 'Only organization owners' in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_delete_org_with_cleanup_success(session_maker, owner_role):
+    """
+    GIVEN: User is organization owner and deletion succeeds
+    WHEN: delete_org_with_cleanup is called
+    THEN: Organization is deleted and returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    mock_deleted_org = Org(
+        id=org_id,
+        name='Deleted Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    with (
+        patch('storage.org_service.OrgService.verify_owner_authorization'),
+        patch(
+            'storage.org_service.OrgStore.delete_org_cascade',
+            AsyncMock(return_value=mock_deleted_org),
+        ),
+    ):
+        # Act
+        result = await OrgService.delete_org_with_cleanup(user_id, org_id)
+
+    # Assert
+    assert result is not None
+    assert result.id == org_id
+    assert result.name == 'Deleted Organization'
+
+
+@pytest.mark.asyncio
+async def test_delete_org_with_cleanup_authorization_failure():
+    """
+    GIVEN: User is not authorized to delete organization
+    WHEN: delete_org_with_cleanup is called
+    THEN: OrgAuthorizationError is raised and no deletion occurs
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    with patch(
+        'storage.org_service.OrgService.verify_owner_authorization',
+        side_effect=OrgAuthorizationError('Not authorized'),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgAuthorizationError):
+            await OrgService.delete_org_with_cleanup(user_id, org_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_org_with_cleanup_org_not_found():
+    """
+    GIVEN: Organization does not exist
+    WHEN: delete_org_with_cleanup is called
+    THEN: OrgNotFoundError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    with patch(
+        'storage.org_service.OrgService.verify_owner_authorization',
+        side_effect=OrgNotFoundError(str(org_id)),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError):
+            await OrgService.delete_org_with_cleanup(user_id, org_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_org_with_cleanup_database_failure(session_maker, owner_role):
+    """
+    GIVEN: Authorization succeeds but database deletion fails
+    WHEN: delete_org_with_cleanup is called
+    THEN: OrgDatabaseError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    with (
+        patch('storage.org_service.OrgService.verify_owner_authorization'),
+        patch(
+            'storage.org_service.OrgStore.delete_org_cascade',
+            AsyncMock(side_effect=Exception('Database connection failed')),
+        ),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgDatabaseError) as exc_info:
+            await OrgService.delete_org_with_cleanup(user_id, org_id)
+
+        assert 'Database connection failed' in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_delete_org_with_cleanup_unexpected_none_result(
+    session_maker, owner_role
+):
+    """
+    GIVEN: Authorization succeeds but delete_org_cascade returns None
+    WHEN: delete_org_with_cleanup is called
+    THEN: OrgDatabaseError is raised with not found message
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    with (
+        patch('storage.org_service.OrgService.verify_owner_authorization'),
+        patch(
+            'storage.org_service.OrgStore.delete_org_cascade',
+            AsyncMock(return_value=None),
+        ),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgDatabaseError) as exc_info:
+            await OrgService.delete_org_with_cleanup(user_id, org_id)
+
+        assert 'not found during deletion' in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_success_non_llm_fields(session_maker):
+    """
+    GIVEN: Valid organization update with non-LLM fields and user is a member
+    WHEN: update_org_with_permissions is called
+    THEN: Organization is updated successfully
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization and user in database
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        role = Role(id=2, name='member', rank=2)
+        session.add(role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=2,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
+        conversation_expiration=30,
+    )
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act
+        result = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.contact_name == 'Jane Doe'
+        assert result.contact_email == 'jane@example.com'
+        assert result.conversation_expiration == 30
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_success_llm_fields_admin(session_maker):
+    """
+    GIVEN: Valid organization update with LLM fields and user has admin role
+    WHEN: update_org_with_permissions is called
+    THEN: Organization is updated successfully
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization, user, and admin role in database
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        admin_role = Role(id=1, name='admin', rank=1)
+        session.add(admin_role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=1,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(
+        default_llm_model='claude-opus-4-5-20251101',
+        default_llm_base_url='https://api.anthropic.com',
+    )
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act
+        result = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.default_llm_base_url == 'https://api.anthropic.com'
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_success_llm_fields_owner(session_maker):
+    """
+    GIVEN: Valid organization update with LLM fields and user has owner role
+    WHEN: update_org_with_permissions is called
+    THEN: Organization is updated successfully
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization, user, and owner role in database
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        owner_role = Role(id=1, name='owner', rank=1)
+        session.add(owner_role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=1,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(
+        default_llm_model='claude-opus-4-5-20251101',
+        security_analyzer='enabled',
+    )
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act
+        result = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.security_analyzer == 'enabled'
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_success_mixed_fields_admin(session_maker):
+    """
+    GIVEN: Valid organization update with both LLM and non-LLM fields and user has admin role
+    WHEN: update_org_with_permissions is called
+    THEN: Organization is updated successfully
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization, user, and admin role in database
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        admin_role = Role(id=1, name='admin', rank=1)
+        session.add(admin_role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=1,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(
+        contact_name='Jane Doe',
+        default_llm_model='claude-opus-4-5-20251101',
+        conversation_expiration=30,
+    )
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act
+        result = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.contact_name == 'Jane Doe'
+        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.conversation_expiration == 30
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_empty_update(session_maker):
+    """
+    GIVEN: Update request with no fields (all None)
+    WHEN: update_org_with_permissions is called
+    THEN: Original organization is returned unchanged
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization and user in database
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        role = Role(id=2, name='member', rank=2)
+        session.add(role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=2,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate()  # All fields None
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act
+        result = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.name == 'Test Organization'
+        assert result.contact_name == 'John Doe'
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_org_not_found(session_maker):
+    """
+    GIVEN: Organization ID does not exist
+    WHEN: update_org_with_permissions is called
+    THEN: ValueError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(contact_name='Jane Doe')
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            await OrgService.update_org_with_permissions(
+                org_id=org_id,
+                update_data=update_data,
+                user_id=user_id,
+            )
+
+        assert 'not found' in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_non_member(session_maker):
+    """
+    GIVEN: User is not a member of the organization
+    WHEN: update_org_with_permissions is called
+    THEN: PermissionError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    other_user_id = str(uuid.uuid4())
+
+    # Create organization but user is not a member
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(other_user_id), current_org_id=org_id)
+        session.add(user)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(contact_name='Jane Doe')
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act & Assert
+        with pytest.raises(PermissionError) as exc_info:
+            await OrgService.update_org_with_permissions(
+                org_id=org_id,
+                update_data=update_data,
+                user_id=user_id,
+            )
+
+        assert 'member' in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_llm_fields_insufficient_permission(
+    session_maker,
+):
+    """
+    GIVEN: User is a member but lacks admin/owner role and tries to update LLM settings
+    WHEN: update_org_with_permissions is called
+    THEN: PermissionError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization and user with member role (not admin/owner)
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        member_role = Role(id=2, name='member', rank=2)
+        session.add(member_role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=2,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(default_llm_model='claude-opus-4-5-20251101')
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act & Assert
+        with pytest.raises(PermissionError) as exc_info:
+            await OrgService.update_org_with_permissions(
+                org_id=org_id,
+                update_data=update_data,
+                user_id=user_id,
+            )
+
+        assert (
+            'admin' in str(exc_info.value).lower()
+            or 'owner' in str(exc_info.value).lower()
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_database_error(session_maker):
+    """
+    GIVEN: Database update operation fails
+    WHEN: update_org_with_permissions is called
+    THEN: OrgDatabaseError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization and user in database
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        role = Role(id=2, name='member', rank=2)
+        session.add(role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=2,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(contact_name='Jane Doe')
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+        patch(
+            'storage.org_service.OrgStore.update_org',
+            return_value=None,  # Simulate database failure
+        ),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgDatabaseError) as exc_info:
+            await OrgService.update_org_with_permissions(
+                org_id=org_id,
+                update_data=update_data,
+                user_id=user_id,
+            )
+
+        assert 'Failed to update organization' in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_only_llm_fields(session_maker):
+    """
+    GIVEN: Update request contains only LLM fields and user has admin role
+    WHEN: update_org_with_permissions is called
+    THEN: Organization is updated successfully
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization, user, and admin role in database
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        admin_role = Role(id=1, name='admin', rank=1)
+        session.add(admin_role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=1,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(
+        default_llm_model='claude-opus-4-5-20251101',
+        security_analyzer='enabled',
+        agent='agent-mode',
+    )
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act
+        result = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.default_llm_model == 'claude-opus-4-5-20251101'
+        assert result.security_analyzer == 'enabled'
+        assert result.agent == 'agent-mode'
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_only_non_llm_fields(session_maker):
+    """
+    GIVEN: Update request contains only non-LLM fields and user is a member
+    WHEN: update_org_with_permissions is called
+    THEN: Organization is updated successfully
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    # Create organization and user in database
+    with session_maker() as session:
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+            org_version=5,
+        )
+        session.add(org)
+        user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+        session.add(user)
+        role = Role(id=2, name='member', rank=2)
+        session.add(role)
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=uuid.UUID(user_id),
+            role_id=2,
+            status='active',
+            _llm_api_key='test-key',
+        )
+        session.add(org_member)
+        session.commit()
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(
+        contact_name='Jane Doe',
+        conversation_expiration=60,
+        enable_proactive_conversation_starters=False,
+    )
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+    ):
+        # Act
+        result = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.contact_name == 'Jane Doe'
+        assert result.conversation_expiration == 60
+        assert result.enable_proactive_conversation_starters is False
