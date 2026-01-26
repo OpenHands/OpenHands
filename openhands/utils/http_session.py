@@ -1,3 +1,4 @@
+import os
 import ssl
 from dataclasses import dataclass, field
 from threading import Lock
@@ -7,8 +8,26 @@ import httpx
 
 from openhands.core.logger import openhands_logger as logger
 
+
+def _get_verify_certificates_from_env() -> bool:
+    """Determine SSL certificate verification setting from environment variables.
+
+    Checks for SSL_VERIFY (explicit enable) or INSECURE_SKIP_VERIFY (explicit disable).
+    Returns True (verify certificates) by default for security.
+    """
+    ssl_verify = os.environ.get('SSL_VERIFY', '').lower()
+    if ssl_verify in ('false', '0', 'no'):
+        return False
+
+    insecure_skip = os.environ.get('INSECURE_SKIP_VERIFY', '').lower()
+    if insecure_skip in ('true', '1', 'yes'):
+        return False
+
+    return True
+
+
 _client_lock = Lock()
-_verify_certificates: bool = True
+_verify_certificates: bool = _get_verify_certificates_from_env()
 _client: httpx.Client | None = None
 
 

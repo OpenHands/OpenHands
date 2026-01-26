@@ -43,6 +43,8 @@ websocat ws://127.0.0.1:3000/ws
 LLM_API_KEY=sk-... # Your Anthropic API Key
 LLM_MODEL=claude-3-5-sonnet-20241022 # Default model for the agent to use
 SANDBOX_VOLUMES=/path/to/your/workspace:/workspace:rw # Mount paths in format host_path:container_path:mode
+SSL_VERIFY=false # Disable SSL certificate verification for self-hosted services (default: true)
+INSECURE_SKIP_VERIFY=true # Alternative way to disable SSL verification (default: false)
 ```
 
 ## API Schema
