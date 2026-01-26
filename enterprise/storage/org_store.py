@@ -10,8 +10,10 @@ from server.constants import (
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
 )
+from sqlalchemy import text
 from sqlalchemy.orm import joinedload
 from storage.database import session_maker
+from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.user import User
@@ -243,3 +245,119 @@ class OrgStore:
             session.commit()
             session.refresh(org)
             return org
+
+    @staticmethod
+    async def delete_org_cascade(org_id: UUID) -> Org | None:
+        """
+        Delete organization and all associated data in cascade, including external LiteLLM cleanup.
+
+        Args:
+            org_id: UUID of the organization to delete
+
+        Returns:
+            Org: The deleted organization object, or None if not found
+
+        Raises:
+            Exception: If database operations or LiteLLM cleanup fail
+        """
+        with session_maker() as session:
+            # First get the organization to return it
+            org = session.query(Org).filter(Org.id == org_id).first()
+            if not org:
+                return None
+
+            try:
+                # 1. Delete conversation data for organization conversations
+                session.execute(
+                    text("""
+                    DELETE FROM conversation_metadata
+                    WHERE conversation_id IN (
+                        SELECT conversation_id FROM conversation_metadata_saas WHERE org_id = :org_id
+                    )
+                    """),
+                    {'org_id': str(org_id)},
+                )
+
+                session.execute(
+                    text("""
+                    DELETE FROM app_conversation_start_task
+                    WHERE app_conversation_id::text IN (
+                        SELECT conversation_id FROM conversation_metadata_saas WHERE org_id = :org_id
+                    )
+                    """),
+                    {'org_id': str(org_id)},
+                )
+
+                # 2. Delete organization-owned data tables (direct org_id foreign keys)
+                session.execute(
+                    text('DELETE FROM billing_sessions WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
+                )
+                session.execute(
+                    text(
+                        'DELETE FROM conversation_metadata_saas WHERE org_id = :org_id'
+                    ),
+                    {'org_id': str(org_id)},
+                )
+                session.execute(
+                    text('DELETE FROM custom_secrets WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
+                )
+                session.execute(
+                    text('DELETE FROM api_keys WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
+                )
+                session.execute(
+                    text('DELETE FROM slack_conversation WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
+                )
+                session.execute(
+                    text('DELETE FROM slack_users WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
+                )
+                session.execute(
+                    text('DELETE FROM stripe_customers WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
+                )
+
+                # 3. Delete organization memberships
+                session.execute(
+                    text('DELETE FROM org_member WHERE org_id = :org_id'),
+                    {'org_id': str(org_id)},
+                )
+
+                # 4. Handle users with this as current_org_id
+                session.execute(
+                    text(
+                        'UPDATE "user" SET current_org_id = NULL WHERE current_org_id = :org_id'
+                    ),
+                    {'org_id': str(org_id)},
+                )
+
+                # 5. Finally delete the organization
+                session.delete(org)
+
+                # 6. Clean up LiteLLM team before committing transaction
+                logger.info(
+                    'Deleting LiteLLM team within database transaction',
+                    extra={'org_id': str(org_id)},
+                )
+                await LiteLlmManager.delete_team(str(org_id))
+
+                # 7. Commit all changes only if everything succeeded
+                session.commit()
+
+                logger.info(
+                    'Successfully deleted organization and all associated data including LiteLLM team',
+                    extra={'org_id': str(org_id), 'org_name': org.name},
+                )
+
+                return org
+
+            except Exception as e:
+                session.rollback()
+                logger.error(
+                    'Failed to delete organization - transaction rolled back',
+                    extra={'org_id': str(org_id), 'error': str(e)},
+                )
+                raise

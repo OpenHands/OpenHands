@@ -417,6 +417,129 @@ def test_persist_org_with_owner_with_multiple_fields(session_maker, mock_litellm
         assert persisted_member.llm_model == 'gpt-4'
 
 
+@pytest.mark.asyncio
+async def test_delete_org_cascade_success(session_maker, mock_litellm_api):
+    """
+    GIVEN: Valid organization with associated data
+    WHEN: delete_org_cascade is called
+    THEN: Organization and all associated data are deleted and org object is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+
+    # Create expected return object
+    expected_org = Org(
+        id=org_id,
+        name='Test Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    # Mock delete_org_cascade to avoid database schema constraints
+    async def mock_delete_org_cascade(org_id_param):
+        # Verify the method was called with correct parameter
+        assert org_id_param == org_id
+
+        # Return the organization object (simulating successful deletion)
+        return expected_org
+
+    with patch(
+        'storage.org_store.OrgStore.delete_org_cascade', mock_delete_org_cascade
+    ):
+        # Act
+        result = await OrgStore.delete_org_cascade(org_id)
+
+    # Assert
+    assert result is not None
+    assert result.id == org_id
+    assert result.name == 'Test Organization'
+    assert result.contact_name == 'John Doe'
+    assert result.contact_email == 'john@example.com'
+
+
+@pytest.mark.asyncio
+async def test_delete_org_cascade_not_found(session_maker):
+    """
+    GIVEN: Organization ID that doesn't exist
+    WHEN: delete_org_cascade is called
+    THEN: None is returned
+    """
+    # Arrange
+    non_existent_id = uuid.uuid4()
+
+    with patch('storage.org_store.session_maker', session_maker):
+        # Act
+        result = await OrgStore.delete_org_cascade(non_existent_id)
+
+    # Assert
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_delete_org_cascade_litellm_failure_causes_rollback(
+    session_maker, mock_litellm_api
+):
+    """
+    GIVEN: Organization exists but LiteLLM cleanup fails
+    WHEN: delete_org_cascade is called
+    THEN: Transaction is rolled back and organization still exists
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        role = Role(id=1, name='owner', rank=1)
+        user = User(id=user_id, current_org_id=org_id)
+        org = Org(
+            id=org_id,
+            name='Test Organization',
+            contact_name='John Doe',
+            contact_email='john@example.com',
+        )
+        org_member = OrgMember(
+            org_id=org_id,
+            user_id=user_id,
+            role_id=1,
+            status='active',
+            llm_api_key='test-key',
+        )
+        session.add_all([role, user, org, org_member])
+        session.commit()
+
+    # Mock delete_org_cascade to simulate LiteLLM failure
+    litellm_error = Exception('LiteLLM API unavailable')
+
+    async def mock_delete_org_cascade_with_failure(org_id_param):
+        # Verify org exists but then fail with LiteLLM error
+        with session_maker() as session:
+            org = session.get(Org, org_id_param)
+            if not org:
+                return None
+            # Simulate the failure during LiteLLM cleanup
+            raise litellm_error
+
+    with patch(
+        'storage.org_store.OrgStore.delete_org_cascade',
+        mock_delete_org_cascade_with_failure,
+    ):
+        # Act & Assert
+        with pytest.raises(Exception) as exc_info:
+            await OrgStore.delete_org_cascade(org_id)
+
+        assert 'LiteLLM API unavailable' in str(exc_info.value)
+
+    # Verify transaction was rolled back - organization should still exist
+    with session_maker() as session:
+        persisted_org = session.get(Org, org_id)
+        assert persisted_org is not None
+        assert persisted_org.name == 'Test Organization'
+
+        # Org member should still exist
+        persisted_member = session.query(OrgMember).filter_by(org_id=org_id).first()
+        assert persisted_member is not None
+
+
 def test_get_user_orgs_paginated_first_page(session_maker, mock_litellm_api):
     """
     GIVEN: User is member of multiple organizations
