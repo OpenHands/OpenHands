@@ -372,13 +372,13 @@ class UserStore:
         This is the preferred method when calling from an async context as it
         avoids event loop conflicts that can occur with the sync version.
         """
-        async with a_session_maker() as session:
-            result = await session.execute(
-                select(User)
+        with session_maker() as session:
+            user = (
+                session.query(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
+                .first()
             )
-            user = result.scalars().first()
             if user:
                 return user
 
@@ -392,22 +392,23 @@ class UserStore:
                 await asyncio.sleep(_RETRY_LOAD_DELAY_SECONDS)
 
             # Check for user again as migration could have happened while trying to get the lock.
-            result = await session.execute(
-                select(User)
+            user = (
+                session.query(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(user_id))
+                .first()
             )
-            user = result.scalars().first()
             if user:
                 return user
 
-            result = await session.execute(
-                select(UserSettings).filter(
+            user_settings = (
+                session.query(UserSettings)
+                .filter(
                     UserSettings.keycloak_user_id == user_id,
                     UserSettings.already_migrated.is_(False),
                 )
+                .first()
             )
-            user_settings = result.scalars().first()
             if user_settings:
                 token_manager = TokenManager()
                 user_info = await token_manager.get_user_info_from_user_id(user_id)
