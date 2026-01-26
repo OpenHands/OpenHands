@@ -8,7 +8,7 @@ import { GitRepository } from "#/types/git";
 // Mock the repository data hook
 const mockUseRepositoryData = vi.fn();
 vi.mock(
-  "../../../../src/components/features/home/git-repo-dropdown/use-repository-data",
+  "#/components/features/home/git-repo-dropdown/use-repository-data",
   () => ({
     useRepositoryData: (...args: unknown[]) => mockUseRepositoryData(...args),
   }),
@@ -16,12 +16,9 @@ vi.mock(
 
 // Mock the URL search hook
 const mockUseUrlSearch = vi.fn();
-vi.mock(
-  "../../../../src/components/features/home/git-repo-dropdown/use-url-search",
-  () => ({
-    useUrlSearch: (...args: unknown[]) => mockUseUrlSearch(...args),
-  }),
-);
+vi.mock("#/components/features/home/git-repo-dropdown/use-url-search", () => ({
+  useUrlSearch: (...args: unknown[]) => mockUseUrlSearch(...args),
+}));
 
 // Mock useConfig
 vi.mock("#/hooks/query/use-config", () => ({
