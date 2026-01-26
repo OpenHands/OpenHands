@@ -14,9 +14,9 @@ from server.constants import (
     get_default_litellm_model,
 )
 from server.logger import logger
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.orm import joinedload
-from storage.database import a_session_maker, session_maker
+from storage.database import session_maker
 from storage.encrypt_utils import decrypt_legacy_model
 from storage.org import Org
 from storage.org_member import OrgMember
