@@ -12,6 +12,7 @@ from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
+    EventCallbackStatus,
 )
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResult,
@@ -69,6 +70,9 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 extra={'summary': summary},
             )
             await self._post_summary_to_github(summary)
+
+            # Mark callback as completed to prevent re-invocation
+            callback.status = EventCallbackStatus.COMPLETED
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
