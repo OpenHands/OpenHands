@@ -5,29 +5,66 @@ labels: ['bug']
 body:
   - type: markdown
     attributes:
-      value: Thank you for taking the time to fill out this bug report. Please provide as much information as possible
-       to help us understand and address the issue effectively.
+      value: |
+        ## Thank you for reporting a bug! 🐛
+        
+        **Please fill out all required fields.** Issues missing critical information (version, installation method, reproduction steps, etc.) will be delayed or closed until complete details are provided.
+        
+        The team prioritizes bugs based on severity, impact, and available bandwidth. Clear, detailed reports help us resolve issues faster.
 
   - type: checkboxes
     attributes:
-      label: Is there an existing issue for the same bug? (If one exists, thumbs up or comment on the issue instead).
-      description: Please check if an issue already exists for the bug you encountered.
+      label: Is there an existing issue for the same bug?
+      description: Please search existing issues before creating a new one. If found, add a 👍 reaction or comment instead.
       options:
-      - label: I have checked the existing issues.
+      - label: I have searched existing issues and this is not a duplicate.
         required: true
 
   - type: textarea
     id: bug-description
     attributes:
-      label: Describe the bug and reproduction steps
-      description: Provide a description of the issue along with any reproduction steps.
+      label: Bug Description
+      description: Clearly describe what went wrong. Be specific and concise.
+      placeholder: Example - "When I run a Python task, OpenHands crashes after 30 seconds with a connection timeout error."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Example - "OpenHands should execute the Python script and return results."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Example - "Connection timed out after 30 seconds, task failed with error code 500."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Provide clear, step-by-step instructions to reproduce the bug.
+      placeholder: |
+        1. Install OpenHands using Docker
+        2. Configure with Claude 3.5 Sonnet
+        3. Run command: `openhands run "write a python script"`
+        4. Wait 30 seconds
+        5. Error appears
     validations:
       required: true
 
   - type: dropdown
     id: installation
     attributes:
-      label: OpenHands Installation
+      label: OpenHands Installation Method
       description: How are you running OpenHands?
       options:
         - Docker command in README
@@ -37,20 +74,26 @@ body:
         - app.all-hands.dev
         - Other
       default: 0
+    validations:
+      required: true
 
   - type: input
     id: openhands-version
     attributes:
       label: OpenHands Version
-      description: What version of OpenHands are you using?
-      placeholder: ex. 0.9.8, main, etc.
+      description: What version are you using? Find this in settings or by running `openhands --version`
+      placeholder: ex. 0.9.8, main, commit hash, etc.
+    validations:
+      required: true
 
   - type: input
     id: model-name
     attributes:
       label: Model Name
-      description: What model are you using?
-      placeholder: ex. gpt-4o, claude-3-5-sonnet, openrouter/deepseek-r1, etc.
+      description: Which LLM model are you using?
+      placeholder: ex. gpt-4o, claude-3-5-sonnet-20241022, openrouter/deepseek-r1, etc.
+    validations:
+      required: true
 
   - type: dropdown
     id: os
@@ -60,12 +103,50 @@ body:
         - MacOS
         - Linux
         - WSL on Windows
+        - Windows (Docker Desktop)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser (if using web UI)
+      description: If applicable, which browser and version?
+      placeholder: ex. Chrome 131, Firefox 133, Safari 17.2
+
+  - type: input
+    id: runtime-info
+    attributes:
+      label: Runtime Environment
+      description: Python version, Node version, or other relevant runtime details
+      placeholder: ex. Python 3.11.8, Node 20.11.0
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and Error Messages
+      description: |
+        **Paste relevant logs, error messages, or stack traces.** Use code blocks (```) for formatting.
+        
+        LLM logs are in `logs/llm/default/`. Include timestamps if errors occurred at a specific time.
+      placeholder: |
+        ```
+        Paste error logs here
+        ```
 
   - type: textarea
     id: additional-context
     attributes:
-      label: Logs, Errors, Screenshots, and Additional Context
-      description: Please provide any additional information you think might help. If you want to share the chat history
-        you can click the thumbs-down (👎) button above the input field and you will get a shareable link
-        (you can also click thumbs up when things are going well of course!). LLM logs will be stored in the
-        `logs/llm/default` folder. Please add any additional context about the problem here.
+      label: Screenshots and Additional Context
+      description: |
+        Add screenshots, videos, or other context that helps explain the issue.
+        
+        💡 **Tip:** Click the 👎 button in the chat UI to generate a shareable link to your conversation history.
+      placeholder: Drag and drop screenshots here, or paste links.
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        **Note:** Issues with incomplete information may be closed or deprioritized. The maintainer team has limited bandwidth and prioritizes well-documented bugs that are easier to reproduce and fix. Thank you for your understanding! 🙏
