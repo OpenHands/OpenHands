@@ -42,15 +42,6 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
     return isSaas ? redirect("/settings/user") : redirect("/settings/mcp");
   }
 
-  // If billing is hidden and user tries to access the billing page
-  if (config?.FEATURE_FLAGS?.HIDE_BILLING && pathname === "/settings/billing") {
-    // Redirect to the first available settings page
-    if (isSaas) {
-      return redirect("/settings/user");
-    }
-    return redirect("/settings/mcp");
-  }
-
   // Get org data for org-based route protection
   const orgId = queryClient.getQueryData<string | null>([
     "selected_organization",
@@ -67,19 +58,19 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const isPersonalOrg = selectedOrg?.is_personal === true;
   const isTeamOrg = selectedOrg && !selectedOrg.is_personal;
 
+  // Combined billing visibility check: hide if HIDE_BILLING flag OR team org
+  const shouldHideBilling = config?.FEATURE_FLAGS?.HIDE_BILLING || isTeamOrg;
+
+  if (shouldHideBilling && pathname === "/settings/billing") {
+    return isSaas ? redirect("/settings/user") : redirect("/settings/mcp");
+  }
+
   // Personal org: redirect away from org management routes
   if (isPersonalOrg) {
     if (
       pathname === "/settings/org" ||
       pathname === "/settings/organization-members"
     ) {
-      return redirect("/settings");
-    }
-  }
-
-  // Team org: redirect away from billing route
-  if (isTeamOrg) {
-    if (pathname === "/settings/billing") {
       return redirect("/settings");
     }
   }

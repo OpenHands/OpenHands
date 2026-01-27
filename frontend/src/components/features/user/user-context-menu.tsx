@@ -11,8 +11,7 @@ import {
 import { useLogout } from "#/hooks/mutation/use-logout";
 import { OrganizationUserRole } from "#/types/org";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
-import { useOrganizations } from "#/hooks/query/use-organizations";
-import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { cn } from "#/utils/utils";
 import { InviteOrganizationMemberModal } from "../org/invite-organization-member-modal";
 import { OrgSelector } from "../org/org-selector";
@@ -39,14 +38,8 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const navigate = useNavigate();
   const { mutate: logout } = useLogout();
   const { data: config } = useConfig();
-  const { data: organizations } = useOrganizations();
-  const { organizationId } = useSelectedOrganizationId();
+  const { isPersonalOrg, isTeamOrg } = useOrgTypeAndAccess();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
-
-  const selectedOrg = organizations?.find((org) => org.id === organizationId);
-  const isPersonalOrg = selectedOrg?.is_personal === true;
-  // Team org = any org that is not explicitly marked as personal (includes undefined)
-  const isTeamOrg = selectedOrg && !selectedOrg.is_personal;
 
   const isOss = config?.APP_MODE === "oss";
   // Filter nav items based on route visibility rules

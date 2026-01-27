@@ -5,10 +5,9 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useMe } from "#/hooks/query/use-me";
-import { useOrganizations } from "#/hooks/query/use-organizations";
 import { useConfig } from "#/hooks/query/use-config";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { OrgSelector } from "../org/org-selector";
 import { SettingsNavItem } from "#/constants/settings-nav";
 
@@ -23,17 +22,12 @@ export function SettingsNavigation({
   onCloseMobileMenu,
   navigationItems,
 }: SettingsNavigationProps) {
-  const { organizationId } = useSelectedOrganizationId();
   const { data: me } = useMe();
-  const { data: organizations } = useOrganizations();
   const { data: config } = useConfig();
+  const { organizationId, isPersonalOrg, isTeamOrg } = useOrgTypeAndAccess();
 
   const { t } = useTranslation();
 
-  const selectedOrg = organizations?.find((org) => org.id === organizationId);
-  const isPersonalOrg = selectedOrg?.is_personal === true;
-  // Team org = any org that is not explicitly marked as personal (includes undefined)
-  const isTeamOrg = selectedOrg && !selectedOrg.is_personal;
   const isUser = me?.role === "member";
 
   return (
