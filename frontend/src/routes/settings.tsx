@@ -10,6 +10,7 @@ import { Organization } from "#/types/org";
 import { SettingsLayout } from "#/components/features/settings";
 import { Typography } from "#/ui/typography";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
+import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organization-store";
 
 const SAAS_ONLY_PATHS = [
   "/settings/user",
@@ -43,9 +44,8 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   }
 
   // Get org data for org-based route protection
-  const orgId = queryClient.getQueryData<string | null>([
-    "selected_organization",
-  ]);
+  // Use Zustand store (not query client) - this is the canonical source of the selected org ID
+  const orgId = getSelectedOrganizationIdFromStore();
   let organizations = queryClient.getQueryData<Organization[]>([
     "organizations",
   ]);

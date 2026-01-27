@@ -11,6 +11,7 @@ import { resetOrgMockData } from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 import BillingService from "#/api/billing-service/billing-service.api";
 import { OrganizationMember } from "#/types/org";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 function ManageOrgWithPortalRoot() {
   return (
@@ -107,6 +108,9 @@ describe("Manage Org Route", () => {
   };
 
   beforeEach(() => {
+    // Reset Zustand store to ensure clean state before each test
+    useSelectedOrganizationStore.setState({ organizationId: null });
+
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     // @ts-expect-error - only return APP_MODE for these tests
     getConfigSpy.mockResolvedValue({
@@ -121,6 +125,8 @@ describe("Manage Org Route", () => {
     vi.clearAllMocks();
     // Reset organization mock data to ensure clean state between tests
     resetOrgMockData();
+    // Reset Zustand store to ensure clean state between tests
+    useSelectedOrganizationStore.setState({ organizationId: null });
     vi.clearAllMocks();
   });
 
