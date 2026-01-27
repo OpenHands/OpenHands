@@ -486,7 +486,9 @@ class UserStore:
 
             # Reset billing_sessions
             session.execute(
-                text('UPDATE billing_sessions SET org_id = NULL WHERE org_id = :org_id'),
+                text(
+                    'UPDATE billing_sessions SET org_id = NULL WHERE org_id = :org_id'
+                ),
                 {'org_id': user_uuid},
             )
 

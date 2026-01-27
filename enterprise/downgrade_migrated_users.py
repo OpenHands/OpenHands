@@ -165,7 +165,7 @@ async def main():
             else:
                 fail_count += 1
 
-        print(f'\n--- Summary ---')
+        print('\n--- Summary ---')
         print(f'Successful: {success_count}')
         print(f'Failed: {fail_count}')
 
