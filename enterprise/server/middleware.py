@@ -144,7 +144,7 @@ class SetAuthCookieMiddleware:
         # "if accepted_tos is not None" as there should not be any users with
         # accepted_tos equal to "None"
         if accepted_tos is False and request.url.path != '/api/accept_tos':
-            logger.error('User has not accepted the terms of service')
+            logger.warning('User has not accepted the terms of service')
             raise TosNotAcceptedError
 
     def _should_attach(self, request: Request) -> bool:

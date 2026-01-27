@@ -7731,13 +7731,15 @@ llama = ["llama-index (>=0.12.29,<0.13.0)", "llama-index-core (>=0.12.29,<0.13.0
 
 [[package]]
 name = "openhands-agent-server"
-version = "1.9.1"
+version = "1.10.0"
 description = "OpenHands Agent Server - REST/WebSocket interface for OpenHands AI Agent"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "openhands_agent_server-1.10.0-py3-none-any.whl", hash = "sha256:2e21076fff5e7cf9d03a3b011e2c90a6a3a46d2da3f18db9f7553ac413229c22"},
+    {file = "openhands_agent_server-1.10.0.tar.gz", hash = "sha256:2062da2496a98a6c23201d086f124e02329d6c6d9d1b47be55921c084a29f55a"},
+]
 
 [package.dependencies]
 aiosqlite = ">=0.19"
@@ -7751,22 +7753,17 @@ uvicorn = ">=0.31.1"
 websockets = ">=12"
 wsproto = ">=1.2.0"
 
-[package.source]
-type = "git"
-url = "https://github.com/OpenHands/software-agent-sdk.git"
-reference = "0fc053a4f6d760081a678038bb6bea91969931ac"
-resolved_reference = "0fc053a4f6d760081a678038bb6bea91969931ac"
-subdirectory = "openhands-agent-server"
-
 [[package]]
 name = "openhands-sdk"
-version = "1.9.1"
+version = "1.10.0"
 description = "OpenHands SDK - Core functionality for building AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "openhands_sdk-1.10.0-py3-none-any.whl", hash = "sha256:5c8875f2a07d7fabe3449914639572bef9003821207cb06aa237a239e964eed5"},
+    {file = "openhands_sdk-1.10.0.tar.gz", hash = "sha256:93371b1af4532266ad2d225b9d7d3d711c745df31888efe643970673f62bdef9"},
+]
 
 [package.dependencies]
 deprecation = ">=2.1.0"
@@ -7784,22 +7781,17 @@ websockets = ">=12"
 [package.extras]
 boto3 = ["boto3 (>=1.35.0)"]
 
-[package.source]
-type = "git"
-url = "https://github.com/OpenHands/software-agent-sdk.git"
-reference = "0fc053a4f6d760081a678038bb6bea91969931ac"
-resolved_reference = "0fc053a4f6d760081a678038bb6bea91969931ac"
-subdirectory = "openhands-sdk"
-
 [[package]]
 name = "openhands-tools"
-version = "1.9.1"
+version = "1.10.0"
 description = "OpenHands Tools - Runtime tools for AI agents"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "openhands_tools-1.10.0-py3-none-any.whl", hash = "sha256:1d5d2d1e34cc4ceb02c0ff1f008b06883ad48a8e7236ab8dd61ece64fbf8e2ed"},
+    {file = "openhands_tools-1.10.0.tar.gz", hash = "sha256:7ed38cb13545ec2c4a35c26ece725d5b35788d30597db8b1904619c043ec1194"},
+]
 
 [package.dependencies]
 bashlex = ">=0.18"
@@ -7811,13 +7803,6 @@ libtmux = ">=0.53.0"
 openhands-sdk = "*"
 pydantic = ">=2.11.7"
 tom-swe = ">=1.0.3"
-
-[package.source]
-type = "git"
-url = "https://github.com/OpenHands/software-agent-sdk.git"
-reference = "0fc053a4f6d760081a678038bb6bea91969931ac"
-resolved_reference = "0fc053a4f6d760081a678038bb6bea91969931ac"
-subdirectory = "openhands-tools"
 
 [[package]]
 name = "openpyxl"
@@ -17382,4 +17367,4 @@ third-party-runtimes = ["daytona", "e2b-code-interpreter", "modal", "runloop-api
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "92ce628bc34f0b47c47e11ab9a8b3857ea7a987d34397f72ac76442bef58d2db"
+content-hash = "f67478db2385eb258369313ac831b26582d744294c0996a35e786c3d7ced5db1"

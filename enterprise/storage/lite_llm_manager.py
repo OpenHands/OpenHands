@@ -96,7 +96,7 @@ class LiteLlmManager:
         user_settings: UserSettings,
     ) -> UserSettings | None:
         logger.info(
-            'SettingsStore:umigrate_lite_llm_entries:start',
+            'LiteLlmManager:migrate_lite_llm_entries:start',
             extra={'org_id': org_id, 'user_id': keycloak_user_id},
         )
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
@@ -141,19 +141,35 @@ class LiteLlmManager:
                     return None
                 credits = max(max_budget - spend, 0.0)
 
+                logger.debug(
+                    'LiteLlmManager:migrate_lite_llm_entries:create_team',
+                    extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                )
                 await LiteLlmManager._create_team(
                     client, keycloak_user_id, org_id, credits
                 )
 
+                logger.debug(
+                    'LiteLlmManager:migrate_lite_llm_entries:update_user',
+                    extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                )
                 await LiteLlmManager._update_user(
                     client, keycloak_user_id, max_budget=UNLIMITED_BUDGET_SETTING
                 )
 
+                logger.debug(
+                    'LiteLlmManager:migrate_lite_llm_entries:add_user_to_team',
+                    extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                )
                 await LiteLlmManager._add_user_to_team(
                     client, keycloak_user_id, org_id, credits
                 )
 
                 if user_settings.llm_api_key:
+                    logger.debug(
+                        'LiteLlmManager:migrate_lite_llm_entries:update_key',
+                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                    )
                     await LiteLlmManager._update_key(
                         client,
                         keycloak_user_id,
@@ -162,6 +178,10 @@ class LiteLlmManager:
                     )
 
                 if user_settings.llm_api_key_for_byor:
+                    logger.debug(
+                        'LiteLlmManager:migrate_lite_llm_entries:update_byor_key',
+                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                    )
                     await LiteLlmManager._update_key(
                         client,
                         keycloak_user_id,
@@ -169,6 +189,10 @@ class LiteLlmManager:
                         team_id=org_id,
                     )
 
+        logger.info(
+            'LiteLlmManager:migrate_lite_llm_entries:complete',
+            extra={'org_id': org_id, 'user_id': keycloak_user_id},
+        )
         return user_settings
 
     @staticmethod
