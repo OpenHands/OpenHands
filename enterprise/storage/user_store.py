@@ -406,9 +406,7 @@ class UserStore:
                 )
                 # Get org_members for this org - should only be one for personal orgs
                 org_members = (
-                    session.query(OrgMember)
-                    .filter(OrgMember.org_id == org.id)
-                    .all()
+                    session.query(OrgMember).filter(OrgMember.org_id == org.id).all()
                 )
 
                 if len(org_members) != 1:
