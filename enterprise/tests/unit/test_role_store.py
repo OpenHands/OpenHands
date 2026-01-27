@@ -123,7 +123,9 @@ async def test_get_role_by_name_async_with_session(async_session_maker):
 
     # Test retrieval with explicit session
     async with async_session_maker() as session:
-        retrieved_role = await RoleStore.get_role_by_name_async('admin', session=session)
+        retrieved_role = await RoleStore.get_role_by_name_async(
+            'admin', session=session
+        )
         assert retrieved_role is not None
         assert retrieved_role.id == role_id
         assert retrieved_role.name == 'admin'
