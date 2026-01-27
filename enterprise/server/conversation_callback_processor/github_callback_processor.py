@@ -141,3 +141,9 @@ class GithubCallbackProcessor(ConversationCallbackProcessor):
             logger.exception(
                 f'[GitHub] Error processing conversation callback: {str(e)}'
             )
+            # Mark callback as error to prevent infinite re-invocation
+            callback.status = CallbackStatus.ERROR
+            callback.updated_at = datetime.now()
+            with session_maker() as session:
+                session.merge(callback)
+                session.commit()
