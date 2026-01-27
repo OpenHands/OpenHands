@@ -48,7 +48,8 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
             accountContextMenuIsVisible && "opacity-100 pointer-events-auto",
             // Invisible hover bridge: extends hover zone to create a "safe corridor"
             // for diagonal mouse movement to the menu (only active when menu is visible)
-            "group-hover:before:content-[''] group-hover:before:block group-hover:before:absolute group-hover:before:inset-[-320px] group-hover:before:z-9998",
+            // IMPORTANT: before:pointer-events-none allows clicks to pass through to menu items
+            "group-hover:before:content-[''] group-hover:before:block group-hover:before:absolute group-hover:before:inset-[-320px] group-hover:before:z-9998 before:pointer-events-none",
           )}
         >
           <UserContextMenu

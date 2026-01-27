@@ -311,4 +311,21 @@ describe("UserActions", () => {
     // Menu should be visible on hover (CSS classes change via group-hover)
     expect(contextMenu).toBeVisible();
   });
+
+  it("should have pointer-events-none on hover bridge pseudo-element to allow menu item clicks", async () => {
+    renderUserActions();
+
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
+
+    const contextMenu = screen.getByTestId("user-context-menu");
+    const hoverBridgeContainer = contextMenu.parentElement;
+
+    // The hover bridge uses a ::before pseudo-element for diagonal mouse movement
+    // This pseudo-element MUST have pointer-events-none to allow clicks through to menu items
+    // The class should include "before:pointer-events-none" to prevent the hover bridge from blocking clicks
+    expect(hoverBridgeContainer?.className).toContain(
+      "before:pointer-events-none",
+    );
+  });
 });
