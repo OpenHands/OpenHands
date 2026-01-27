@@ -159,7 +159,7 @@ class UserStore:
 
             from storage.lite_llm_manager import LiteLlmManager
 
-            logger.info(
+            logger.debug(
                 'user_store:migrate_user:calling_litellm_migrate_entries',
                 extra={'user_id': user_id},
             )
@@ -169,7 +169,7 @@ class UserStore:
                 decrypted_user_settings,
             )
 
-            logger.info(
+            logger.debug(
                 'user_store:migrate_user:done_litellm_migrate_entries',
                 extra={'user_id': user_id},
             )
@@ -180,12 +180,12 @@ class UserStore:
             # avoids circular reference. This migrate method is temprorary until all users are migrated.
             from integrations.stripe_service import migrate_customer
 
-            logger.info(
+            logger.debug(
                 'user_store:migrate_user:calling_stripe_migrate_customer',
                 extra={'user_id': user_id},
             )
             await migrate_customer(session, user_id, org)
-            logger.info(
+            logger.debug(
                 'user_store:migrate_user:done_stripe_migrate_customer',
                 extra={'user_id': user_id},
             )
@@ -217,12 +217,12 @@ class UserStore:
             )
             session.add(user)
 
-            logger.info(
+            logger.debug(
                 'user_store:migrate_user:calling_get_role_by_name',
                 extra={'user_id': user_id},
             )
             role = await RoleStore.get_role_by_name_async('owner')
-            logger.info(
+            logger.debug(
                 'user_store:migrate_user:done_get_role_by_name',
                 extra={'user_id': user_id},
             )
@@ -253,7 +253,7 @@ class UserStore:
             user_settings.already_migrated = True
             session.merge(user_settings)
             session.flush()
-            logger.info(
+            logger.debug(
                 'user_store:migrate_user:session_flush_complete',
                 extra={'user_id': user_id},
             )
@@ -324,7 +324,7 @@ class UserStore:
             session.commit()
             session.refresh(user)
             user.org_members  # load org_members
-            logger.info(
+            logger.debug(
                 'user_store:migrate_user:session_committed',
                 extra={'user_id': user_id},
             )

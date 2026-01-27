@@ -141,7 +141,7 @@ class LiteLlmManager:
                     return None
                 credits = max(max_budget - spend, 0.0)
 
-                logger.info(
+                logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:create_team',
                     extra={'org_id': org_id, 'user_id': keycloak_user_id},
                 )
@@ -149,7 +149,7 @@ class LiteLlmManager:
                     client, keycloak_user_id, org_id, credits
                 )
 
-                logger.info(
+                logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:update_user',
                     extra={'org_id': org_id, 'user_id': keycloak_user_id},
                 )
@@ -157,7 +157,7 @@ class LiteLlmManager:
                     client, keycloak_user_id, max_budget=UNLIMITED_BUDGET_SETTING
                 )
 
-                logger.info(
+                logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:add_user_to_team',
                     extra={'org_id': org_id, 'user_id': keycloak_user_id},
                 )
@@ -166,7 +166,7 @@ class LiteLlmManager:
                 )
 
                 if user_settings.llm_api_key:
-                    logger.info(
+                    logger.debug(
                         'LiteLlmManager:migrate_lite_llm_entries:update_key',
                         extra={'org_id': org_id, 'user_id': keycloak_user_id},
                     )
@@ -178,7 +178,7 @@ class LiteLlmManager:
                     )
 
                 if user_settings.llm_api_key_for_byor:
-                    logger.info(
+                    logger.debug(
                         'LiteLlmManager:migrate_lite_llm_entries:update_byor_key',
                         extra={'org_id': org_id, 'user_id': keycloak_user_id},
                     )
@@ -190,7 +190,7 @@ class LiteLlmManager:
                     )
 
         logger.info(
-            'LiteLlmManager:migrate_lite_llm_entries:end',
+            'LiteLlmManager:migrate_lite_llm_entries:complete',
             extra={'org_id': org_id, 'user_id': keycloak_user_id},
         )
         return user_settings
