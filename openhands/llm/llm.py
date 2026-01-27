@@ -1,4 +1,4 @@
-# IMPORTANT: LEGACY V0 CODE
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
 # This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
 # OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
 #   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
@@ -136,7 +136,7 @@ class LLM(RetryMixin, DebugMixin):
         if self.config.model.startswith('openhands/'):
             model_name = self.config.model.removeprefix('openhands/')
             self.config.model = f'litellm_proxy/{model_name}'
-            self.config.base_url = 'https://llm-proxy.app.all-hands.dev/'
+            self.config.base_url = _get_openhands_llm_base_url()
             logger.debug(
                 f'Rewrote openhands/{model_name} to {self.config.model} with base URL {self.config.base_url}'
             )
@@ -851,3 +851,18 @@ class LLM(RetryMixin, DebugMixin):
 
         # let pydantic handle the serialization
         return [message.model_dump() for message in messages]
+
+
+def _get_openhands_llm_base_url():
+    # Get the API url if specified
+    lite_llm_api_url = os.getenv('LITE_LLM_API_URL')
+    if lite_llm_api_url:
+        return lite_llm_api_url
+
+    # Fallback to using web_host.
+    web_host = os.getenv('WEB_HOST')
+    if web_host and ('.staging.' in web_host or web_host.startswith('staging')):
+        return 'https://llm-proxy.staging.all-hands.dev/'
+
+    # Use the default
+    return 'https://llm-proxy.app.all-hands.dev/'

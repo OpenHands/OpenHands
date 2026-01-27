@@ -605,10 +605,7 @@ describe("ConversationNameContextMenu", () => {
 });
 
 describe("ConversationNameContextMenu - Share Link Functionality", () => {
-  const { mockWriteText, featureFlagMock } = vi.hoisted(() => ({
-    mockWriteText: vi.fn().mockResolvedValue(undefined),
-    featureFlagMock: vi.fn(() => true),
-  }));
+  const mockWriteText = vi.fn().mockResolvedValue(undefined);
 
   const mockOnCopyShareLink = vi.fn();
   const mockOnTogglePublic = vi.fn();
@@ -620,10 +617,6 @@ describe("ConversationNameContextMenu - Share Link Functionality", () => {
     onCopyShareLink: mockOnCopyShareLink,
     shareUrl: "https://example.com/shared/conversations/test-id",
   };
-
-  vi.mock("#/utils/feature-flags", () => ({
-    ENABLE_PUBLIC_CONVERSATION_SHARING: () => featureFlagMock(),
-  }));
 
   vi.mock("#/hooks/mutation/use-update-conversation-public-flag", () => ({
     useUpdateConversationPublicFlag: () => ({
@@ -646,7 +639,6 @@ describe("ConversationNameContextMenu - Share Link Functionality", () => {
   beforeEach(() => {
     mockWriteText.mockClear();
     mockDisplaySuccessToast.mockClear();
-    featureFlagMock.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -875,25 +867,9 @@ describe("ConversationNameContextMenu - Share Link Functionality", () => {
       );
     });
 
-    it("should not show share buttons when feature flag is disabled", () => {
-      // Arrange
-      featureFlagMock.mockReturnValue(false);
-
-      renderConversationNameWithRouter();
-
-      // Act - try to find share buttons (should not exist even if conversation is public)
-      const copyButton = screen.queryByTestId("copy-share-link-button");
-      const openButton = screen.queryByTestId("open-share-link-button");
-
-      // Assert
-      expect(copyButton).not.toBeInTheDocument();
-      expect(openButton).not.toBeInTheDocument();
-    });
-
-    it("should show both copy and open buttons when conversation is public and feature flag is enabled", async () => {
+    it("should show both copy and open buttons when conversation is public", async () => {
       // Arrange
       const user = userEvent.setup();
-      featureFlagMock.mockReturnValue(true);
 
       renderConversationNameWithRouter();
 

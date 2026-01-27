@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 from typing import AsyncGenerator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from server.sharing.shared_conversation_models import (
@@ -13,6 +13,9 @@ from server.sharing.sql_shared_conversation_info_service import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+from storage.org import Org
+from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
+from storage.user import User
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
@@ -144,7 +147,6 @@ class TestSharedConversationInfoService:
     """Test cases for SharedConversationInfoService."""
 
     @pytest.mark.asyncio
-    @pytest.mark.asyncio
     async def test_get_shared_conversation_info_returns_public_conversation(
         self,
         shared_conversation_info_service,
@@ -165,7 +167,8 @@ class TestSharedConversationInfoService:
         assert result is not None
         assert result.id == sample_conversation_info.id
         assert result.title == sample_conversation_info.title
-        assert result.created_by_user_id == sample_conversation_info.created_by_user_id
+        # Note: created_by_user_id is no longer stored in shared conversation metadata
+        assert result.created_by_user_id is None
 
     @pytest.mark.asyncio
     async def test_get_shared_conversation_info_returns_none_for_private_conversation(
@@ -428,3 +431,261 @@ class TestSharedConversationInfoService:
         page1_ids = {item.id for item in result.items}
         page2_ids = {item.id for item in result2.items}
         assert page1_ids.isdisjoint(page2_ids)
+
+
+class TestSharedConversationInfoServiceWithSaasMetadata:
+    """Test cases for SharedConversationInfoService with SAAS metadata.
+
+    These tests verify that created_by_user_id is correctly retrieved from
+    the conversation_metadata_saas table when it exists.
+    """
+
+    @pytest.fixture
+    async def async_engine_with_saas(self):
+        """Create an async SQLite engine with all SAAS tables."""
+        engine = create_async_engine(
+            'sqlite+aiosqlite:///:memory:',
+            poolclass=StaticPool,
+            connect_args={'check_same_thread': False},
+            echo=False,
+        )
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        yield engine
+        await engine.dispose()
+
+    @pytest.fixture
+    async def async_session_with_saas(
+        self, async_engine_with_saas
+    ) -> AsyncGenerator[AsyncSession, None]:
+        """Create an async session for testing with SAAS tables."""
+        async_session_maker = async_sessionmaker(
+            async_engine_with_saas, class_=AsyncSession, expire_on_commit=False
+        )
+
+        async with async_session_maker() as db_session:
+            yield db_session
+
+    @pytest.fixture
+    async def test_org(self, async_session_with_saas) -> Org:
+        """Create a test organization."""
+        org = Org(id=uuid4(), name=f'test_org_{uuid4().hex[:8]}')
+        async_session_with_saas.add(org)
+        await async_session_with_saas.commit()
+        return org
+
+    @pytest.fixture
+    async def test_user(self, async_session_with_saas, test_org) -> User:
+        """Create a test user belonging to the test organization."""
+        user = User(id=uuid4(), current_org_id=test_org.id)
+        async_session_with_saas.add(user)
+        await async_session_with_saas.commit()
+        return user
+
+    @pytest.fixture
+    async def shared_service_with_saas(self, async_session_with_saas):
+        """Create a SharedConversationInfoService for testing."""
+        return SQLSharedConversationInfoService(db_session=async_session_with_saas)
+
+    @pytest.fixture
+    async def app_service_with_saas(self, async_session_with_saas):
+        """Create an AppConversationInfoService for creating test data."""
+        return SQLAppConversationInfoService(
+            db_session=async_session_with_saas,
+            user_context=SpecifyUserContext(user_id=None),
+        )
+
+    async def _create_saas_metadata(
+        self,
+        db_session: AsyncSession,
+        conversation_id: UUID,
+        user_id: UUID,
+        org_id: UUID,
+    ) -> StoredConversationMetadataSaas:
+        """Helper to create SAAS metadata for a conversation."""
+        saas_metadata = StoredConversationMetadataSaas(
+            conversation_id=str(conversation_id),
+            user_id=user_id,
+            org_id=org_id,
+        )
+        db_session.add(saas_metadata)
+        await db_session.commit()
+        return saas_metadata
+
+    @pytest.mark.asyncio
+    async def test_get_shared_conversation_returns_user_id_from_saas_metadata(
+        self,
+        shared_service_with_saas,
+        app_service_with_saas,
+        async_session_with_saas,
+        test_user,
+        test_org,
+    ):
+        """Test that get_shared_conversation_info returns created_by_user_id from SAAS metadata."""
+        # Arrange
+        conversation_id = uuid4()
+        conversation = AppConversationInfo(
+            id=conversation_id,
+            created_by_user_id=None,
+            sandbox_id='test_sandbox',
+            title='Public Conversation With User',
+            public=True,
+            metrics=MetricsSnapshot(
+                accumulated_cost=0.0,
+                max_budget_per_task=10.0,
+                accumulated_token_usage=TokenUsage(),
+            ),
+        )
+        await app_service_with_saas.save_app_conversation_info(conversation)
+        await self._create_saas_metadata(
+            async_session_with_saas, conversation_id, test_user.id, test_org.id
+        )
+
+        # Act
+        result = await shared_service_with_saas.get_shared_conversation_info(
+            conversation_id
+        )
+
+        # Assert
+        assert result is not None
+        assert result.created_by_user_id == str(test_user.id)
+
+    @pytest.mark.asyncio
+    async def test_search_shared_conversations_returns_user_id_from_saas_metadata(
+        self,
+        shared_service_with_saas,
+        app_service_with_saas,
+        async_session_with_saas,
+        test_user,
+        test_org,
+    ):
+        """Test that search_shared_conversation_info returns created_by_user_id from SAAS metadata."""
+        # Arrange
+        conversation_id = uuid4()
+        conversation = AppConversationInfo(
+            id=conversation_id,
+            created_by_user_id=None,
+            sandbox_id='test_sandbox_search',
+            title='Searchable Public Conversation',
+            public=True,
+            metrics=MetricsSnapshot(
+                accumulated_cost=0.0,
+                max_budget_per_task=10.0,
+                accumulated_token_usage=TokenUsage(),
+            ),
+        )
+        await app_service_with_saas.save_app_conversation_info(conversation)
+        await self._create_saas_metadata(
+            async_session_with_saas, conversation_id, test_user.id, test_org.id
+        )
+
+        # Act
+        result = await shared_service_with_saas.search_shared_conversation_info()
+
+        # Assert
+        assert len(result.items) == 1
+        assert result.items[0].created_by_user_id == str(test_user.id)
+
+    @pytest.mark.asyncio
+    async def test_batch_get_shared_conversations_returns_user_id_from_saas_metadata(
+        self,
+        shared_service_with_saas,
+        app_service_with_saas,
+        async_session_with_saas,
+        test_user,
+        test_org,
+    ):
+        """Test that batch_get_shared_conversation_info returns created_by_user_id from SAAS metadata."""
+        # Arrange
+        conversation_id = uuid4()
+        conversation = AppConversationInfo(
+            id=conversation_id,
+            created_by_user_id=None,
+            sandbox_id='test_sandbox_batch',
+            title='Batch Get Conversation',
+            public=True,
+            metrics=MetricsSnapshot(
+                accumulated_cost=0.0,
+                max_budget_per_task=10.0,
+                accumulated_token_usage=TokenUsage(),
+            ),
+        )
+        await app_service_with_saas.save_app_conversation_info(conversation)
+        await self._create_saas_metadata(
+            async_session_with_saas, conversation_id, test_user.id, test_org.id
+        )
+
+        # Act
+        result = await shared_service_with_saas.batch_get_shared_conversation_info(
+            [conversation_id]
+        )
+
+        # Assert
+        assert len(result) == 1
+        assert result[0] is not None
+        assert result[0].created_by_user_id == str(test_user.id)
+
+    @pytest.mark.asyncio
+    async def test_mixed_conversations_with_and_without_saas_metadata(
+        self,
+        shared_service_with_saas,
+        app_service_with_saas,
+        async_session_with_saas,
+        test_user,
+        test_org,
+    ):
+        """Test handling of conversations where some have SAAS metadata and some don't."""
+        # Arrange
+        conv_with_saas_id = uuid4()
+        conv_without_saas_id = uuid4()
+
+        conv_with_saas = AppConversationInfo(
+            id=conv_with_saas_id,
+            created_by_user_id=None,
+            sandbox_id='sandbox_with_saas',
+            title='With SAAS Metadata',
+            created_at=datetime(2023, 1, 2, tzinfo=UTC),
+            updated_at=datetime(2023, 1, 2, tzinfo=UTC),
+            public=True,
+            metrics=MetricsSnapshot(
+                accumulated_cost=0.0,
+                max_budget_per_task=10.0,
+                accumulated_token_usage=TokenUsage(),
+            ),
+        )
+        conv_without_saas = AppConversationInfo(
+            id=conv_without_saas_id,
+            created_by_user_id=None,
+            sandbox_id='sandbox_without_saas',
+            title='Without SAAS Metadata',
+            created_at=datetime(2023, 1, 1, tzinfo=UTC),
+            updated_at=datetime(2023, 1, 1, tzinfo=UTC),
+            public=True,
+            metrics=MetricsSnapshot(
+                accumulated_cost=0.0,
+                max_budget_per_task=10.0,
+                accumulated_token_usage=TokenUsage(),
+            ),
+        )
+
+        await app_service_with_saas.save_app_conversation_info(conv_with_saas)
+        await app_service_with_saas.save_app_conversation_info(conv_without_saas)
+        await self._create_saas_metadata(
+            async_session_with_saas, conv_with_saas_id, test_user.id, test_org.id
+        )
+
+        # Act
+        result = await shared_service_with_saas.search_shared_conversation_info(
+            sort_order=SharedConversationSortOrder.CREATED_AT
+        )
+
+        # Assert
+        assert len(result.items) == 2
+        conv_without = next(
+            item for item in result.items if item.id == conv_without_saas_id
+        )
+        conv_with = next(item for item in result.items if item.id == conv_with_saas_id)
+        assert conv_without.created_by_user_id is None
+        assert conv_with.created_by_user_id == str(test_user.id)

@@ -79,7 +79,7 @@ from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
-from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
@@ -114,7 +114,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
-    keycloak_auth_cookie: str | None = None
     tavily_api_key: str | None = None
 
     async def search_app_conversations(
@@ -238,7 +237,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 working_dir=sandbox_spec.working_dir,
             )
             async for updated_task in self.run_setup_scripts(
-                task, sandbox, remote_workspace
+                task, sandbox, remote_workspace, agent_server_url
             ):
                 yield updated_task
 
@@ -602,10 +601,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
                 headers = {'X-Access-Token': access_token}
 
-                # Include keycloak_auth cookie in headers if app_mode is SaaS
-                if self.app_mode == 'saas' and self.keycloak_auth_cookie:
-                    headers['Cookie'] = f'keycloak_auth={self.keycloak_auth_cookie}'
-
                 secrets[secret_name] = LookupSecret(
                     url=self.web_url + '/api/v1/webhooks/secrets',
                     headers=headers,
@@ -856,7 +851,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         system_message_suffix: str | None,
         mcp_config: dict,
         condenser_max_size: int | None,
-        secrets: dict | None = None,
+        secrets: dict[str, SecretValue] | None = None,
     ) -> Agent:
         """Create an agent with appropriate tools and context based on agent type.
 
@@ -966,7 +961,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         user: UserInfo,
         workspace: LocalWorkspace,
         initial_message: SendMessageRequest | None,
-        secrets: dict,
+        secrets: dict[str, SecretValue],
         sandbox: SandboxInfo,
         remote_workspace: AsyncRemoteWorkspace | None,
         selected_repository: str | None,
@@ -1300,7 +1295,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # Get all events for this conversation
             i = 0
             async for event in page_iterator(
-                self.event_service.search_events, conversation_id__eq=conversation_id
+                self.event_service.search_events, conversation_id=conversation_id
             ):
                 event_filename = f'event_{i:06d}_{event.id}.json'
                 event_path = os.path.join(temp_dir, event_filename)
@@ -1400,17 +1395,14 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 if isinstance(sandbox_service, DockerSandboxService):
                     web_url = f'http://host.docker.internal:{sandbox_service.host_port}'
 
-            # Get app_mode and keycloak_auth cookie for SaaS mode
+            # Get app_mode for SaaS mode
             app_mode = None
-            keycloak_auth_cookie = None
             try:
                 from openhands.server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None
                 )
-                if request and server_config.app_mode == AppMode.SAAS:
-                    keycloak_auth_cookie = request.cookies.get('keycloak_auth')
             except (ImportError, AttributeError):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
@@ -1440,6 +1432,5 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
-                keycloak_auth_cookie=keycloak_auth_cookie,
                 tavily_api_key=tavily_api_key,
             )

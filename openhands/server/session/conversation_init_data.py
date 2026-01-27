@@ -1,4 +1,4 @@
-# IMPORTANT: LEGACY V0 CODE
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
 # This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
 # OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
 #   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
@@ -19,8 +19,8 @@ from openhands.storage.data_models.settings import Settings
 class ConversationInitData(Settings):
     """Session initialization data for the web environment - a deep copy of the global config is made and then overridden with this data."""
 
-    git_provider_tokens: PROVIDER_TOKEN_TYPE | None = Field(default=None, frozen=True)
-    custom_secrets: CUSTOM_SECRETS_TYPE | None = Field(default=None, frozen=True)
+    git_provider_tokens: PROVIDER_TOKEN_TYPE | None = Field(default=None)
+    custom_secrets: CUSTOM_SECRETS_TYPE | None = Field(default=None)
     selected_repository: str | None = Field(default=None)
     replay_json: str | None = Field(default=None)
     selected_branch: str | None = Field(default=None)
@@ -29,6 +29,7 @@ class ConversationInitData(Settings):
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
+        frozen=True,
     )
 
     @field_validator('git_provider_tokens', 'custom_secrets')

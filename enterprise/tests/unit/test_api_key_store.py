@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from storage.api_key_store import ApiKeyStore
@@ -20,6 +20,14 @@ def mock_session_maker(mock_session):
 
 
 @pytest.fixture
+def mock_user():
+    """Mock user with org_id."""
+    user = MagicMock()
+    user.current_org_id = 'test-org-123'
+    return user
+
+
+@pytest.fixture
 def api_key_store(mock_session_maker):
     return ApiKeyStore(mock_session_maker)
 
@@ -33,11 +41,13 @@ def test_generate_api_key(api_key_store):
     assert len(key) == len('sk-oh-') + 32
 
 
-def test_create_api_key(api_key_store, mock_session):
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+def test_create_api_key(mock_get_user, api_key_store, mock_session, mock_user):
     """Test creating an API key."""
     # Setup
     user_id = 'test-user-123'
     name = 'Test Key'
+    mock_get_user.return_value = mock_user
     api_key_store.generate_api_key = MagicMock(return_value='test-api-key')
 
     # Execute
@@ -45,9 +55,14 @@ def test_create_api_key(api_key_store, mock_session):
 
     # Verify
     assert result == 'test-api-key'
+    mock_get_user.assert_called_once_with(user_id)
     mock_session.add.assert_called_once()
     mock_session.commit.assert_called_once()
     api_key_store.generate_api_key.assert_called_once()
+
+    # Verify the ApiKey was created with the correct org_id
+    added_api_key = mock_session.add.call_args[0][0]
+    assert added_api_key.org_id == mock_user.current_org_id
 
 
 def test_validate_api_key_valid(api_key_store, mock_session):
@@ -204,10 +219,12 @@ def test_delete_api_key_by_id(api_key_store, mock_session):
     mock_session.commit.assert_called_once()
 
 
-def test_list_api_keys(api_key_store, mock_session):
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+def test_list_api_keys(mock_get_user, api_key_store, mock_session, mock_user):
     """Test listing API keys for a user."""
     # Setup
     user_id = 'test-user-123'
+    mock_get_user.return_value = mock_user
     now = datetime.now(UTC)
     mock_key1 = MagicMock()
     mock_key1.id = 1
@@ -223,15 +240,17 @@ def test_list_api_keys(api_key_store, mock_session):
     mock_key2.last_used_at = None
     mock_key2.expires_at = None
 
-    mock_session.query.return_value.filter.return_value.all.return_value = [
-        mock_key1,
-        mock_key2,
-    ]
+    # Mock the chained query calls for filtering by user_id and org_id
+    mock_query = mock_session.query.return_value
+    mock_filter_user = mock_query.filter.return_value
+    mock_filter_org = mock_filter_user.filter.return_value
+    mock_filter_org.all.return_value = [mock_key1, mock_key2]
 
     # Execute
     result = api_key_store.list_api_keys(user_id)
 
     # Verify
+    mock_get_user.assert_called_once_with(user_id)
     assert len(result) == 2
     assert result[0]['id'] == 1
     assert result[0]['name'] == 'Key 1'
@@ -244,3 +263,59 @@ def test_list_api_keys(api_key_store, mock_session):
     assert result[1]['created_at'] == now
     assert result[1]['last_used_at'] is None
     assert result[1]['expires_at'] is None
+
+
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+def test_retrieve_mcp_api_key(mock_get_user, api_key_store, mock_session, mock_user):
+    """Test retrieving MCP API key for a user."""
+    # Setup
+    user_id = 'test-user-123'
+    mock_get_user.return_value = mock_user
+
+    mock_mcp_key = MagicMock()
+    mock_mcp_key.name = 'MCP_API_KEY'
+    mock_mcp_key.key = 'mcp-test-key'
+
+    mock_other_key = MagicMock()
+    mock_other_key.name = 'Other Key'
+    mock_other_key.key = 'other-test-key'
+
+    # Mock the chained query calls for filtering by user_id and org_id
+    mock_query = mock_session.query.return_value
+    mock_filter_user = mock_query.filter.return_value
+    mock_filter_org = mock_filter_user.filter.return_value
+    mock_filter_org.all.return_value = [mock_other_key, mock_mcp_key]
+
+    # Execute
+    result = api_key_store.retrieve_mcp_api_key(user_id)
+
+    # Verify
+    mock_get_user.assert_called_once_with(user_id)
+    assert result == 'mcp-test-key'
+
+
+@patch('storage.api_key_store.UserStore.get_user_by_id')
+def test_retrieve_mcp_api_key_not_found(
+    mock_get_user, api_key_store, mock_session, mock_user
+):
+    """Test retrieving MCP API key when none exists."""
+    # Setup
+    user_id = 'test-user-123'
+    mock_get_user.return_value = mock_user
+
+    mock_other_key = MagicMock()
+    mock_other_key.name = 'Other Key'
+    mock_other_key.key = 'other-test-key'
+
+    # Mock the chained query calls for filtering by user_id and org_id
+    mock_query = mock_session.query.return_value
+    mock_filter_user = mock_query.filter.return_value
+    mock_filter_org = mock_filter_user.filter.return_value
+    mock_filter_org.all.return_value = [mock_other_key]
+
+    # Execute
+    result = api_key_store.retrieve_mcp_api_key(user_id)
+
+    # Verify
+    mock_get_user.assert_called_once_with(user_id)
+    assert result is None
