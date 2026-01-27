@@ -337,11 +337,12 @@ class UserStore:
         This reverses the migrate_user operation:
         1. Get the user's current settings from org/org_member
         2. Call LiteLlmManager.downgrade_entries to revert LiteLLM state
-        3. Delete conversation_metadata_saas entries
-        4. Reset org_id columns in related tables (stripe_customers, slack_users, etc.)
-        5. Delete the org_member and org entries
-        6. Delete the user entry
-        7. Set already_migrated=False on user_settings
+        3. Copy user_id from conversation_metadata_saas to conversation_metadata
+        4. Delete conversation_metadata_saas entries
+        5. Reset org_id columns in related tables (stripe_customers, slack_users, etc.)
+        6. Delete the org_member and org entries
+        7. Delete the user entry
+        8. Set already_migrated=False on user_settings
 
         Args:
             user_id: The Keycloak user ID to downgrade
@@ -426,13 +427,29 @@ class UserStore:
 
             user_uuid = uuid.UUID(user_id)
 
-            # Step 3: Delete conversation_metadata_saas entries
+            # Step 3: Copy user_id from conversation_metadata_saas to conversation_metadata
+            # This ensures any conversations created after migration have their user_id
+            # preserved in the original table before we delete the saas entries
+            session.execute(
+                text("""
+                    UPDATE conversation_metadata
+                    SET user_id = :user_id
+                    WHERE conversation_id IN (
+                        SELECT conversation_id
+                        FROM conversation_metadata_saas
+                        WHERE user_id = :user_uuid
+                    )
+                """),
+                {'user_id': user_id, 'user_uuid': user_uuid},
+            )
+
+            # Step 4: Delete conversation_metadata_saas entries
             session.execute(
                 text('DELETE FROM conversation_metadata_saas WHERE user_id = :user_id'),
                 {'user_id': user_uuid},
             )
 
-            # Step 4: Reset org_id columns in related tables
+            # Step 5: Reset org_id columns in related tables
             # Reset stripe_customers
             session.execute(
                 text(
@@ -473,13 +490,13 @@ class UserStore:
                 {'org_id': user_uuid},
             )
 
-            # Step 5: Delete org_member entries for this org
+            # Step 6: Delete org_member entries for this org
             session.execute(
                 text('DELETE FROM org_member WHERE org_id = :org_id'),
                 {'org_id': user_uuid},
             )
 
-            # Step 6: Delete the user entry
+            # Step 7: Delete the user entry
             session.execute(
                 text('DELETE FROM "user" WHERE id = :user_id'),
                 {'user_id': user_uuid},
@@ -491,7 +508,7 @@ class UserStore:
                 {'org_id': user_uuid},
             )
 
-            # Step 7: Set already_migrated=False on user_settings
+            # Step 8: Set already_migrated=False on user_settings
             user_settings.already_migrated = False
             session.merge(user_settings)
 
