@@ -16,8 +16,7 @@ import { cn } from "#/utils/utils";
 import { InviteOrganizationMemberModal } from "../org/invite-organization-member-modal";
 import { OrgSelector } from "../org/org-selector";
 import { I18nKey } from "#/i18n/declaration";
-import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
-import { useConfig } from "#/hooks/query/use-config";
+import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import DocumentIcon from "#/icons/document.svg?react";
 import { Divider } from "#/ui/divider";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
@@ -37,23 +36,15 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { mutate: logout } = useLogout();
-  const { data: config } = useConfig();
-  const { isPersonalOrg, isTeamOrg } = useOrgTypeAndAccess();
+  const { isPersonalOrg } = useOrgTypeAndAccess();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
+  const settingsNavItems = useSettingsNavItems();
 
-  const isOss = config?.APP_MODE === "oss";
-  // Filter nav items based on route visibility rules
-  const navItems = (isOss ? OSS_NAV_ITEMS : SAAS_NAV_ITEMS).filter((item) => {
-    const routeVisibility: Record<string, boolean> = {
-      // Org routes are handled separately in this menu (not shown in nav items)
-      "/settings/org-members": false,
-      "/settings/org": false,
-      "/settings/billing": !isTeamOrg,
-      // Hide LLM settings when the feature flag is enabled
-      "/settings": !config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS,
-    };
-    return routeVisibility[item.to] ?? true;
-  });
+  // Filter out org routes since they're handled separately via buttons in this menu
+  const navItems = settingsNavItems.filter(
+    (item) =>
+      item.to !== "/settings/org" && item.to !== "/settings/org-members",
+  );
 
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
     React.useState(false);

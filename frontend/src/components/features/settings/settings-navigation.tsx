@@ -5,9 +5,6 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-import { useMe } from "#/hooks/query/use-me";
-import { useConfig } from "#/hooks/query/use-config";
-import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { OrgSelector } from "../org/org-selector";
 import { SettingsNavItem } from "#/constants/settings-nav";
 
@@ -22,13 +19,7 @@ export function SettingsNavigation({
   onCloseMobileMenu,
   navigationItems,
 }: SettingsNavigationProps) {
-  const { data: me } = useMe();
-  const { data: config } = useConfig();
-  const { organizationId, isPersonalOrg, isTeamOrg } = useOrgTypeAndAccess();
-
   const { t } = useTranslation();
-
-  const isUser = me?.role === "member";
 
   return (
     <>
@@ -72,39 +63,27 @@ export function SettingsNavigation({
         </div>
 
         <div className="flex flex-col gap-2">
-          {navigationItems
-            .filter((navItem) => {
-              const canViewOrgRoutes =
-                !isUser && !!organizationId && !isPersonalOrg;
-              const routeVisibility: Record<string, boolean> = {
-                "/settings/org-members": canViewOrgRoutes,
-                "/settings/org": canViewOrgRoutes,
-                "/settings/billing": !isTeamOrg,
-                "/settings": !config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS,
-              };
-              return routeVisibility[navItem.to] ?? true;
-            })
-            .map(({ to, icon, text }) => (
-              <NavLink
-                end
-                key={to}
-                to={to}
-                onClick={onCloseMobileMenu}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 p-1 sm:px-3.5 sm:py-2 rounded-md transition-colors",
-                    isActive ? "bg-tertiary" : "hover:bg-tertiary",
-                  )
-                }
-              >
-                {icon}
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
-                    {t(text as I18nKey)}
-                  </Typography.Text>
-                </div>
-              </NavLink>
-            ))}
+          {navigationItems.map(({ to, icon, text }) => (
+            <NavLink
+              end
+              key={to}
+              to={to}
+              onClick={onCloseMobileMenu}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 p-1 sm:px-3.5 sm:py-2 rounded-md transition-colors",
+                  isActive ? "bg-tertiary" : "hover:bg-tertiary",
+                )
+              }
+            >
+              {icon}
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
+                  {t(text as I18nKey)}
+                </Typography.Text>
+              </div>
+            </NavLink>
+          ))}
         </div>
       </nav>
     </>
