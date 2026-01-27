@@ -27,21 +27,45 @@ import sys
 sys.path.insert(0, '/workspace/project/OpenHands/enterprise')
 
 from server.logger import logger
-from sqlalchemy import select
+from sqlalchemy import select, text
 from storage.database import session_maker
 from storage.user_settings import UserSettings
 from storage.user_store import UserStore
 
 
 def get_migrated_users() -> list[str]:
-    """Get list of keycloak_user_ids for users who have been migrated."""
+    """Get list of keycloak_user_ids for users who have been migrated.
+
+    This includes:
+    1. Users with already_migrated=True in user_settings (migrated users)
+    2. Users in the 'user' table who don't have a user_settings entry (new sign-ups)
+    """
     with session_maker() as session:
-        result = session.execute(
+        # Get users from user_settings with already_migrated=True
+        migrated_result = session.execute(
             select(UserSettings.keycloak_user_id).where(
                 UserSettings.already_migrated.is_(True)
             )
         )
-        return [row[0] for row in result.fetchall() if row[0]]
+        migrated_users = {row[0] for row in migrated_result.fetchall() if row[0]}
+
+        # Get users from the 'user' table (new sign-ups won't have user_settings)
+        # These are users who signed up after the migration was deployed
+        new_signup_result = session.execute(
+            text("""
+                SELECT CAST(u.id AS VARCHAR)
+                FROM "user" u
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM user_settings us
+                    WHERE us.keycloak_user_id = CAST(u.id AS VARCHAR)
+                )
+            """)
+        )
+        new_signups = {row[0] for row in new_signup_result.fetchall() if row[0]}
+
+        # Combine both sets
+        all_users = migrated_users | new_signups
+        return list(all_users)
 
 
 async def downgrade_user(user_id: str) -> bool:

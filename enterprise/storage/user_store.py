@@ -335,7 +335,8 @@ class UserStore:
         """Downgrade a migrated user back to the pre-migration state.
 
         This reverses the migrate_user operation:
-        1. Get the user's current settings from org/org_member
+        1. Get the user's settings from user_settings table (migrated users) or
+           create new user_settings from org_members table (new sign-ups)
         2. Call LiteLlmManager.downgrade_entries to revert LiteLLM state
         3. Copy user_id from conversation_metadata_saas to conversation_metadata
         4. Delete conversation_metadata_saas entries
@@ -344,11 +345,17 @@ class UserStore:
         7. Delete the user entry
         8. Set already_migrated=False on user_settings
 
+        For new sign-ups (users who registered after migration was deployed),
+        there won't be an existing user_settings entry. In this case, we fall back
+        to the org_members table to get the user's API keys and settings, and create
+        a new user_settings entry for them.
+
         Args:
             user_id: The Keycloak user ID to downgrade
 
         Returns:
-            The user_settings if downgrade was successful, None otherwise
+            The user_settings if downgrade was successful, None otherwise.
+            Returns None if the org has multiple members (not a personal org).
         """
         logger.info(
             'user_store:downgrade_user:start',
@@ -379,7 +386,7 @@ class UserStore:
                 )
                 return None
 
-            # Get the user_settings
+            # Get the user_settings (for migrated users)
             user_settings = (
                 session.query(UserSettings)
                 .filter(
@@ -388,12 +395,57 @@ class UserStore:
                 )
                 .first()
             )
+
+            # For new sign-ups after migration, user_settings won't exist
+            # Fall back to getting data from org_members
+            is_new_signup = False
             if not user_settings:
-                logger.warning(
-                    'user_store:downgrade_user:user_settings_not_found',
+                logger.info(
+                    'user_store:downgrade_user:user_settings_not_found_checking_org_members',
                     extra={'user_id': user_id},
                 )
-                return None
+                # Get org_members for this org - should only be one for personal orgs
+                org_members = (
+                    session.query(OrgMember)
+                    .filter(OrgMember.org_id == org.id)
+                    .all()
+                )
+
+                if len(org_members) != 1:
+                    logger.error(
+                        'user_store:downgrade_user:unexpected_org_members_count',
+                        extra={
+                            'user_id': user_id,
+                            'org_id': str(org.id),
+                            'org_members_count': len(org_members),
+                        },
+                    )
+                    return None
+
+                org_member = org_members[0]
+                is_new_signup = True
+
+                # Create a new user_settings entry from org_member data
+                # This is needed for new sign-ups who don't have user_settings
+                user_settings = UserSettings(
+                    keycloak_user_id=user_id,
+                    llm_api_key=org_member.llm_api_key.get_secret_value()
+                    if org_member.llm_api_key
+                    else None,
+                    llm_api_key_for_byor=org_member.llm_api_key_for_byor.get_secret_value()
+                    if org_member.llm_api_key_for_byor
+                    else None,
+                    llm_model=org_member.llm_model,
+                    llm_base_url=org_member.llm_base_url,
+                    max_iterations=org_member.max_iterations,
+                    already_migrated=False,  # Will be set correctly below
+                )
+                session.add(user_settings)
+                session.flush()
+                logger.info(
+                    'user_store:downgrade_user:created_user_settings_from_org_member',
+                    extra={'user_id': user_id},
+                )
 
             # Call LiteLLM downgrade
             from storage.lite_llm_manager import LiteLlmManager
@@ -403,17 +455,22 @@ class UserStore:
                 extra={'user_id': user_id},
             )
 
-            # Decrypt user_settings keys for passing to LiteLLM
-            kwargs = decrypt_legacy_model(
-                [
-                    'llm_api_key',
-                    'llm_api_key_for_byor',
-                    'search_api_key',
-                    'sandbox_api_key',
-                ],
-                user_settings,
-            )
-            decrypted_user_settings = UserSettings(**kwargs)
+            # Get the API keys for LiteLLM downgrade
+            if is_new_signup:
+                # For new signups, we already have decrypted values in user_settings
+                decrypted_user_settings = user_settings
+            else:
+                # For migrated users, decrypt the legacy model
+                kwargs = decrypt_legacy_model(
+                    [
+                        'llm_api_key',
+                        'llm_api_key_for_byor',
+                        'search_api_key',
+                        'sandbox_api_key',
+                    ],
+                    user_settings,
+                )
+                decrypted_user_settings = UserSettings(**kwargs)
 
             await LiteLlmManager.downgrade_entries(
                 str(org.id),
