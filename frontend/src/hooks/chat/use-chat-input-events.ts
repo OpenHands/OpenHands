@@ -80,8 +80,9 @@ export const useChatInputEvents = (
         return;
       }
 
-      // Original submit logic - only for desktop without shift key
-      if (!isMobileDevice() && !e.shiftKey && !disabled) {
+      // Submit with Ctrl+Enter (Windows/Linux) or Cmd+Enter (Mac)
+      // Plain Enter creates a new line, Shift+Enter also creates a new line
+      if (!isMobileDevice() && (e.ctrlKey || e.metaKey) && !disabled) {
         e.preventDefault();
         handleSubmit();
       }
