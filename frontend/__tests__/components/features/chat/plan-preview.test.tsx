@@ -156,4 +156,72 @@ describe("PlanPreview", () => {
     expect(container.textContent).toContain("Heading 1");
     expect(container.textContent).toContain("Heading 2");
   });
+
+  it("should use planHeadings components for h1 headings", () => {
+    // Arrange
+    const planContent = "# Main Title";
+
+    // Act
+    const { container } = renderWithProviders(
+      <PlanPreview planContent={planContent} />,
+    );
+
+    // Assert
+    const h1 = container.querySelector("h1");
+    expect(h1).toBeInTheDocument();
+    expect(h1).toHaveTextContent("Main Title");
+  });
+
+  it("should use planHeadings components for h2 headings", () => {
+    // Arrange
+    const planContent = "## Section Title";
+
+    // Act
+    const { container } = renderWithProviders(
+      <PlanPreview planContent={planContent} />,
+    );
+
+    // Assert
+    const h2 = container.querySelector("h2");
+    expect(h2).toBeInTheDocument();
+    expect(h2).toHaveTextContent("Section Title");
+  });
+
+  it("should use planHeadings components for h3 headings", () => {
+    // Arrange
+    const planContent = "### Subsection Title";
+
+    // Act
+    const { container } = renderWithProviders(
+      <PlanPreview planContent={planContent} />,
+    );
+
+    // Assert
+    const h3 = container.querySelector("h3");
+    expect(h3).toBeInTheDocument();
+    expect(h3).toHaveTextContent("Subsection Title");
+  });
+
+  it("should use planHeadings components for all heading levels", () => {
+    // Arrange
+    const planContent = `# H1 Title
+## H2 Title
+### H3 Title
+#### H4 Title
+##### H5 Title
+###### H6 Title`;
+
+    // Act
+    const { container } = renderWithProviders(
+      <PlanPreview planContent={planContent} />,
+    );
+
+    // Assert
+    expect(container.querySelector("h1")).toBeInTheDocument();
+    expect(container.querySelector("h2")).toBeInTheDocument();
+    expect(container.querySelector("h3")).toBeInTheDocument();
+    expect(container.querySelector("h4")).toBeInTheDocument();
+    expect(container.querySelector("h5")).toBeInTheDocument();
+    expect(container.querySelector("h6")).toBeInTheDocument();
+  });
 });
