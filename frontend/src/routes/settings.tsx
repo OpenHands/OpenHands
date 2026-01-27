@@ -67,10 +67,7 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
 
   // Personal org: redirect away from org management routes
   if (isPersonalOrg) {
-    if (
-      pathname === "/settings/org" ||
-      pathname === "/settings/organization-members"
-    ) {
+    if (pathname === "/settings/org" || pathname === "/settings/org-members") {
       return redirect("/settings");
     }
   }

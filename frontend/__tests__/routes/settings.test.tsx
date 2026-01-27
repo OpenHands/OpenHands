@@ -86,10 +86,8 @@ describe("Settings Screen", () => {
           path: "/settings/api-keys",
         },
         {
-          Component: () => (
-            <div data-testid="organization-members-settings-screen" />
-          ),
-          path: "/settings/organization-members",
+          Component: () => <div data-testid="org-members-settings-screen" />,
+          path: "/settings/org-members",
         },
         {
           Component: () => <div data-testid="organization-settings-screen" />,
@@ -311,36 +309,24 @@ describe("Settings Screen", () => {
       });
     });
 
-    it("should not allow direct URL access to /settings/organization-members when personal org is selected", async () => {
-      // Set up orgs in query client so clientLoader can access them
+    it("should not allow direct URL access to /settings/org-members when personal org is selected", async () => {
+      // Set up config and organizations in query client so clientLoader can access them
+      mockQueryClient.setQueryData(["config"], { APP_MODE: "saas" });
       mockQueryClient.setQueryData(["organizations"], [MOCK_PERSONAL_ORG]);
-      // Use Zustand store instead of query client for selected org ID
+      // Use Zustand store for selected org ID
       useSelectedOrganizationStore.setState({ organizationId: "1" });
 
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_PERSONAL_ORG,
-      ]);
-      vi.spyOn(organizationService, "getMe").mockResolvedValue({
-        org_id: "1",
-        user_id: "99",
-        email: "me@test.com",
-        role: "admin",
-        llm_api_key: "**********",
-        max_iterations: 20,
-        llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
-        llm_base_url: "https://api.openai.com",
-        status: "active",
-      });
+      // Act: Call clientLoader directly with the REAL route path (as defined in routes.ts)
+      const request = new Request("http://localhost/settings/org-members");
+      // @ts-expect-error - test only needs request and params, not full loader args
+      const result = await clientLoader({ request, params: {} });
 
-      renderSettingsScreen("/settings/organization-members");
-
-      // Should redirect away from organization-members settings for personal org
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId("organization-members-settings-screen"),
-        ).not.toBeInTheDocument();
-      });
+      // Assert: Should redirect away from org-members settings for personal org
+      expect(result).not.toBeNull();
+      expect(result).toBeInstanceOf(Response);
+      const response = result as Response;
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe("/settings");
     });
 
     it("should not allow direct URL access to /settings/billing when team org is selected", async () => {
