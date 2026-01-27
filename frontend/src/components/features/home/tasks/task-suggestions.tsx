@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { Link } from "react-router";
 import { TaskGroup } from "./task-group";
 import { useSuggestedTasks } from "#/hooks/query/use-suggested-tasks";
 import { TaskSuggestionsSkeleton } from "./task-suggestions-skeleton";
@@ -9,6 +9,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { GitRepository } from "#/types/git";
 import { useConfig } from "#/hooks/query/use-config";
 import { useUserProviders } from "#/hooks/use-user-providers";
+import { Typography } from "#/ui/typography";
 
 interface TaskSuggestionsProps {
   filterFor?: GitRepository | null;
@@ -18,7 +19,6 @@ export function TaskSuggestions({ filterFor }: TaskSuggestionsProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const navigate = useNavigate();
   const { data: config } = useConfig();
   const { data: tasks, isLoading } = useSuggestedTasks();
   const { providers } = useUserProviders();
@@ -76,27 +76,28 @@ export function TaskSuggestions({ filterFor }: TaskSuggestionsProps) {
         {!hasSuggestedTasks &&
           !isLoading &&
           (hasNoProviders ? (
-            <div className="px-[14px] flex flex-col gap-3">
-              <span className="text-xs leading-4 text-white font-medium">
+            <div className="px-[14px] flex flex-col gap-3 pb-6 sm:pb-8">
+              <Typography.Text className="text-xs leading-4 text-white font-medium">
                 {t(I18nKey.TASKS$NO_GIT_PROVIDERS_TITLE)}
-              </span>
+              </Typography.Text>
 
-              <span className="text-xs leading-4 text-[#C9C9C9] font-normal">
+              <Typography.Text className="text-xs leading-4 text-[#C9C9C9] font-normal">
                 {t(I18nKey.TASKS$NO_GIT_PROVIDERS_DESCRIPTION)}
-              </span>
+              </Typography.Text>
 
-              <button
-                type="button"
-                onClick={() => navigate("/settings/integrations")}
-                className="text-xs leading-4 text-[#FAFAFA] font-normal cursor-pointer hover:underline w-fit"
+              <Link
+                to="/settings/integrations"
+                className="w-fit hover:underline"
               >
-                {t(I18nKey.TASKS$NO_GIT_PROVIDERS_CTA)}
-              </button>
+                <Typography.Text className="text-xs leading-4 text-[#FAFAFA] font-normal">
+                  {t(I18nKey.TASKS$NO_GIT_PROVIDERS_CTA)}
+                </Typography.Text>
+              </Link>
             </div>
           ) : (
-            <span className="text-xs leading-4 text-white font-medium px-[14px]">
+            <Typography.Text className="text-xs leading-4 text-white font-medium px-[14px]">
               {t(I18nKey.TASKS$NO_TASKS_AVAILABLE)}
-            </span>
+            </Typography.Text>
           ))}
 
         {!isLoading &&
