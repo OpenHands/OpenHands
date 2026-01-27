@@ -331,6 +331,179 @@ class UserStore:
             return user
 
     @staticmethod
+    async def downgrade_user(user_id: str) -> UserSettings | None:
+        """Downgrade a migrated user back to the pre-migration state.
+
+        This reverses the migrate_user operation:
+        1. Get the user's current settings from org/org_member
+        2. Call LiteLlmManager.downgrade_entries to revert LiteLLM state
+        3. Delete conversation_metadata_saas entries
+        4. Reset org_id columns in related tables (stripe_customers, slack_users, etc.)
+        5. Delete the org_member and org entries
+        6. Delete the user entry
+        7. Set already_migrated=False on user_settings
+
+        Args:
+            user_id: The Keycloak user ID to downgrade
+
+        Returns:
+            The user_settings if downgrade was successful, None otherwise
+        """
+        logger.info(
+            'user_store:downgrade_user:start',
+            extra={'user_id': user_id},
+        )
+
+        with session_maker() as session:
+            # Get the user and their org_member
+            user = (
+                session.query(User)
+                .options(joinedload(User.org_members))
+                .filter(User.id == uuid.UUID(user_id))
+                .first()
+            )
+            if not user:
+                logger.warning(
+                    'user_store:downgrade_user:user_not_found',
+                    extra={'user_id': user_id},
+                )
+                return None
+
+            # Get the user's personal org (org_id == user_id)
+            org = session.query(Org).filter(Org.id == uuid.UUID(user_id)).first()
+            if not org:
+                logger.warning(
+                    'user_store:downgrade_user:org_not_found',
+                    extra={'user_id': user_id},
+                )
+                return None
+
+            # Get the user_settings
+            user_settings = (
+                session.query(UserSettings)
+                .filter(
+                    UserSettings.keycloak_user_id == user_id,
+                    UserSettings.already_migrated.is_(True),
+                )
+                .first()
+            )
+            if not user_settings:
+                logger.warning(
+                    'user_store:downgrade_user:user_settings_not_found',
+                    extra={'user_id': user_id},
+                )
+                return None
+
+            # Call LiteLLM downgrade
+            from storage.lite_llm_manager import LiteLlmManager
+
+            logger.debug(
+                'user_store:downgrade_user:calling_litellm_downgrade_entries',
+                extra={'user_id': user_id},
+            )
+
+            # Decrypt user_settings keys for passing to LiteLLM
+            kwargs = decrypt_legacy_model(
+                [
+                    'llm_api_key',
+                    'llm_api_key_for_byor',
+                    'search_api_key',
+                    'sandbox_api_key',
+                ],
+                user_settings,
+            )
+            decrypted_user_settings = UserSettings(**kwargs)
+
+            await LiteLlmManager.downgrade_entries(
+                str(org.id),
+                user_id,
+                decrypted_user_settings,
+            )
+            logger.debug(
+                'user_store:downgrade_user:done_litellm_downgrade_entries',
+                extra={'user_id': user_id},
+            )
+
+            user_uuid = uuid.UUID(user_id)
+
+            # Step 3: Delete conversation_metadata_saas entries
+            session.execute(
+                text('DELETE FROM conversation_metadata_saas WHERE user_id = :user_id'),
+                {'user_id': user_uuid},
+            )
+
+            # Step 4: Reset org_id columns in related tables
+            # Reset stripe_customers
+            session.execute(
+                text(
+                    'UPDATE stripe_customers SET org_id = NULL WHERE org_id = :org_id'
+                ),
+                {'org_id': user_uuid},
+            )
+
+            # Reset slack_users
+            session.execute(
+                text('UPDATE slack_users SET org_id = NULL WHERE org_id = :org_id'),
+                {'org_id': user_uuid},
+            )
+
+            # Reset slack_conversation
+            session.execute(
+                text(
+                    'UPDATE slack_conversation SET org_id = NULL WHERE org_id = :org_id'
+                ),
+                {'org_id': user_uuid},
+            )
+
+            # Reset api_keys
+            session.execute(
+                text('UPDATE api_keys SET org_id = NULL WHERE org_id = :org_id'),
+                {'org_id': user_uuid},
+            )
+
+            # Reset custom_secrets
+            session.execute(
+                text('UPDATE custom_secrets SET org_id = NULL WHERE org_id = :org_id'),
+                {'org_id': user_uuid},
+            )
+
+            # Reset billing_sessions
+            session.execute(
+                text('UPDATE billing_sessions SET org_id = NULL WHERE org_id = :org_id'),
+                {'org_id': user_uuid},
+            )
+
+            # Step 5: Delete org_member entries for this org
+            session.execute(
+                text('DELETE FROM org_member WHERE org_id = :org_id'),
+                {'org_id': user_uuid},
+            )
+
+            # Step 6: Delete the user entry
+            session.execute(
+                text('DELETE FROM "user" WHERE id = :user_id'),
+                {'user_id': user_uuid},
+            )
+
+            # Delete the org entry
+            session.execute(
+                text('DELETE FROM org WHERE id = :org_id'),
+                {'org_id': user_uuid},
+            )
+
+            # Step 7: Set already_migrated=False on user_settings
+            user_settings.already_migrated = False
+            session.merge(user_settings)
+
+            session.commit()
+
+            logger.info(
+                'user_store:downgrade_user:complete',
+                extra={'user_id': user_id},
+            )
+            return user_settings
+
+    @staticmethod
     def get_user_by_id(user_id: str) -> Optional[User]:
         """Get user by Keycloak user ID (sync version).
 
