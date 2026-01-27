@@ -67,15 +67,24 @@ body:
       label: OpenHands Installation Method
       description: How are you running OpenHands?
       options:
-        - Docker command in README
-        - GitHub resolver
+        - CLI (uv tool install)
+        - CLI (executable binary)
+        - CLI (Docker)
+        - Local GUI (Docker web interface)
+        - OpenHands Cloud (app.all-hands.dev)
+        - SDK (Python library)
         - Development workflow
-        - CLI
-        - app.all-hands.dev
         - Other
       default: 0
     validations:
       required: true
+
+  - type: input
+    id: installation-other
+    attributes:
+      label: If you selected "Other", please specify
+      description: Describe your installation method
+      placeholder: ex. Custom Kubernetes deployment, pip install from source, etc.
 
   - type: input
     id: openhands-version
@@ -85,6 +94,15 @@ body:
       placeholder: ex. 0.9.8, main, commit hash, etc.
     validations:
       required: true
+
+  - type: checkboxes
+    id: version-confirmation
+    attributes:
+      label: Version Confirmation
+      description: Bugs on older versions may already be fixed. Please upgrade before submitting.
+      options:
+        - label: "I have confirmed this bug exists on the LATEST version of OpenHands"
+          required: true
 
   - type: input
     id: model-name
@@ -112,7 +130,10 @@ body:
     id: browser
     attributes:
       label: Browser (if using web UI)
-      description: If applicable, which browser and version?
+      description: |
+        If applicable, which browser and version?
+        
+        **Note:** If experiencing a browser-specific issue, please test in another browser and in incognito/private mode before submitting.
       placeholder: ex. Chrome 131, Firefox 133, Safari 17.2
 
   - type: input
@@ -142,8 +163,10 @@ body:
       description: |
         Add screenshots, videos, or other context that helps explain the issue.
         
-        💡 **Tip:** Click the 👎 button in the chat UI to generate a shareable link to your conversation history.
-      placeholder: Drag and drop screenshots here, or paste links.
+        💡 **Share conversation history:** In the OpenHands chat UI, click the 👎 or 👍 button (above the message input) to generate a shareable link to your conversation.
+        
+        **Note:** If you previously could not confirm you were on the latest version of OpenHands, use the space below to elaborate why you were unable to upgrade and confirm the bug exists on the latest version.
+      placeholder: Drag and drop screenshots here, paste links, or add additional context.
 
   - type: markdown
     attributes:
