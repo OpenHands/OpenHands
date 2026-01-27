@@ -8,12 +8,17 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from pydantic import SecretStr
-
 from openhands.agent_server.models import (
     SendMessageRequest,
     StartConversationRequest,
 )
+from openhands.sdk import Agent, Event
+from openhands.sdk.llm import LLM
+from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.workspace import LocalWorkspace
+from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from pydantic import SecretStr
+
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
     AppConversationInfo,
@@ -31,11 +36,6 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderToken, ProviderType
-from openhands.sdk import Agent, Event
-from openhands.sdk.llm import LLM
-from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.workspace import LocalWorkspace
-from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 
 
@@ -1821,6 +1821,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_no_params(self):
         """Test _construct_initial_message_with_plugin_params with plugins but no parameters."""
         from openhands.agent_server.models import SendMessageRequest, TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -1844,6 +1845,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_creates_new_message(self):
         """Test _construct_initial_message_with_plugin_params creates message when no initial message."""
         from openhands.agent_server.models import TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -1870,6 +1872,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_appends_to_message(self):
         """Test _construct_initial_message_with_plugin_params appends to existing message."""
         from openhands.agent_server.models import SendMessageRequest, TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -1902,6 +1905,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_preserves_role(self):
         """Test _construct_initial_message_with_plugin_params preserves message role."""
         from openhands.agent_server.models import SendMessageRequest, TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -1922,6 +1926,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_plugin_params_empty_content(self):
         """Test _construct_initial_message_with_plugin_params handles empty content list."""
         from openhands.agent_server.models import SendMessageRequest, TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -1941,6 +1946,7 @@ class TestPluginHandling:
     def test_construct_initial_message_with_multiple_plugins(self):
         """Test _construct_initial_message_with_plugin_params handles multiple plugins."""
         from openhands.agent_server.models import TextContent
+
         from openhands.app_server.app_conversation.app_conversation_models import (
             PluginSpec,
         )
@@ -2398,6 +2404,95 @@ class TestPluginSpecModel:
         assert plugin.ref == 'v2.0.0'
         assert plugin.repo_path == 'plugins/weather'
         assert plugin.parameters == {'timeout': 30}
+
+    def test_plugin_spec_display_name_github_format(self):
+        """Test display_name extracts repo name from github:owner/repo format."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            PluginSpec,
+        )
+
+        plugin = PluginSpec(source='github:owner/my-plugin')
+        assert plugin.display_name == 'my-plugin'
+
+    def test_plugin_spec_display_name_git_url(self):
+        """Test display_name extracts repo name from git URL."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            PluginSpec,
+        )
+
+        plugin = PluginSpec(source='https://github.com/owner/repo.git')
+        assert plugin.display_name == 'repo.git'
+
+    def test_plugin_spec_display_name_local_path(self):
+        """Test display_name extracts directory name from local path."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            PluginSpec,
+        )
+
+        plugin = PluginSpec(source='/local/path/to/plugin')
+        assert plugin.display_name == 'plugin'
+
+    def test_plugin_spec_display_name_no_slash(self):
+        """Test display_name returns source as-is when no slash present."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            PluginSpec,
+        )
+
+        plugin = PluginSpec(source='local-plugin')
+        assert plugin.display_name == 'local-plugin'
+
+    def test_plugin_spec_format_params_as_text(self):
+        """Test format_params_as_text formats parameters as text."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            PluginSpec,
+        )
+
+        plugin = PluginSpec(
+            source='github:owner/repo',
+            parameters={'key1': 'value1', 'key2': 123},
+        )
+
+        result = plugin.format_params_as_text()
+        assert result == '- key1: value1\n- key2: 123'
+
+    def test_plugin_spec_format_params_as_text_with_indent(self):
+        """Test format_params_as_text with custom indent."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            PluginSpec,
+        )
+
+        plugin = PluginSpec(
+            source='github:owner/repo',
+            parameters={'debug': True},
+        )
+
+        result = plugin.format_params_as_text(indent='  ')
+        assert result == '  - debug: True'
+
+    def test_plugin_spec_format_params_as_text_no_params(self):
+        """Test format_params_as_text returns None when no parameters."""
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            PluginSpec,
+        )
+
+        plugin = PluginSpec(source='github:owner/repo')
+        assert plugin.format_params_as_text() is None
+
+    def test_plugin_spec_inherits_repo_path_validation(self):
+        """Test PluginSpec inherits validation from SDK's PluginSource."""
+        import pytest
+
+        from openhands.app_server.app_conversation.app_conversation_models import (
+            PluginSpec,
+        )
+
+        # Should reject absolute paths
+        with pytest.raises(ValueError, match='must be relative'):
+            PluginSpec(source='github:owner/repo', repo_path='/absolute/path')
+
+        # Should reject parent traversal
+        with pytest.raises(ValueError, match="cannot contain '..'"):
+            PluginSpec(source='github:owner/repo', repo_path='../parent/path')
 
 
 class TestAppConversationStartRequestWithPlugins:

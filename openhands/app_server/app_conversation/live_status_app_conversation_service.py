@@ -80,6 +80,7 @@ from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
+from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
@@ -979,41 +980,27 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not plugins:
             return initial_message
 
-        # Collect all parameters from all plugins
-        all_params: list[tuple[str, str, Any]] = []  # (plugin_name, key, value)
-        for plugin in plugins:
-            if plugin.parameters:
-                plugin_name = (
-                    plugin.source.split('/')[-1]
-                    if '/' in plugin.source
-                    else plugin.source
-                )
-                for key, value in plugin.parameters.items():
-                    all_params.append((plugin_name, key, value))
-
-        if not all_params:
+        # Collect formatted parameters from plugins that have them
+        plugins_with_params = [p for p in plugins if p.parameters]
+        if not plugins_with_params:
             return initial_message
 
-        # Format parameters as a readable list, grouped by plugin if multiple
-        if len(plugins) == 1:
-            params_text = '\n'.join(f'- {key}: {value}' for _, key, value in all_params)
+        # Format parameters, grouped by plugin if multiple
+        if len(plugins_with_params) == 1:
+            params_text = plugins_with_params[0].format_params_as_text()
             plugin_params_message = (
                 f'\n\nPlugin Configuration Parameters:\n{params_text}'
             )
         else:
             # Group by plugin name for clarity
-            params_by_plugin: dict[str, list[str]] = {}
-            for plugin_name, key, value in all_params:
-                if plugin_name not in params_by_plugin:
-                    params_by_plugin[plugin_name] = []
-                params_by_plugin[plugin_name].append(f'  - {key}: {value}')
+            formatted_plugins = []
+            for plugin in plugins_with_params:
+                params_text = plugin.format_params_as_text(indent='  ')
+                if params_text:
+                    formatted_plugins.append(f'{plugin.display_name}:\n{params_text}')
 
-            params_text = '\n'.join(
-                f'{name}:\n' + '\n'.join(params)
-                for name, params in params_by_plugin.items()
-            )
             plugin_params_message = (
-                f'\n\nPlugin Configuration Parameters:\n{params_text}'
+                '\n\nPlugin Configuration Parameters:\n' + '\n'.join(formatted_plugins)
             )
 
         if initial_message is None:
@@ -1075,8 +1062,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Returns:
             Complete StartConversationRequest ready for use
         """
-        from openhands.sdk.plugin import PluginSource
-
         # Generate conversation ID if not provided
         conversation_id = conversation_id or uuid4()
 

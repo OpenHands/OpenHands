@@ -14,6 +14,7 @@ from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.integrations.service_types import ProviderType
 from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
+from openhands.sdk.plugin import PluginSource
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 
@@ -24,32 +25,43 @@ class AgentType(Enum):
     PLAN = 'plan'
 
 
-class PluginSpec(BaseModel):
+class PluginSpec(PluginSource):
     """Specification for loading a plugin into a conversation.
 
-    This model mirrors the SDK's PluginSource with an additional 'parameters' field
-    for user-provided plugin configuration values.
+    Extends SDK's PluginSource with user-provided plugin configuration parameters.
+    Inherits source, ref, and repo_path fields along with their validation.
     """
 
-    source: str = Field(
-        description="Plugin source: 'github:owner/repo', any git URL, or local path"
-    )
-    ref: str | None = Field(
-        default=None,
-        description='Optional branch, tag, or commit (only for git sources)',
-    )
-    repo_path: str | None = Field(
-        default=None,
-        description=(
-            'Subdirectory path within the git repository '
-            "(e.g., 'plugins/my-plugin' for monorepos). "
-            'Only relevant for git sources, not local paths.'
-        ),
-    )
     parameters: dict[str, Any] | None = Field(
         default=None,
         description='User-provided values for plugin input parameters',
     )
+
+    @property
+    def display_name(self) -> str:
+        """Extract a friendly display name from the plugin source.
+
+        Examples:
+            - 'github:owner/repo' -> 'repo'
+            - 'https://github.com/owner/repo.git' -> 'repo.git'
+            - '/local/path' -> 'path'
+        """
+        return self.source.split('/')[-1] if '/' in self.source else self.source
+
+    def format_params_as_text(self, indent: str = '') -> str | None:
+        """Format parameters as a readable text block for display.
+
+        Args:
+            indent: Optional prefix to add before each parameter line.
+
+        Returns:
+            Formatted parameters string, or None if no parameters.
+        """
+        if not self.parameters:
+            return None
+        return '\n'.join(
+            f'{indent}- {key}: {value}' for key, value in self.parameters.items()
+        )
 
 
 class AppConversationInfo(BaseModel):
