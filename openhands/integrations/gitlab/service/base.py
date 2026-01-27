@@ -29,7 +29,7 @@ class GitLabMixinBase(BaseGitService, HTTPClient):
                 self.token = latest_token
 
         return {
-            'Authorization': f'Bearer {self.token.get_secret_value()}',
+            'PRIVATE-TOKEN': self.token.get_secret_value(),
         }
 
     async def get_latest_token(self) -> SecretStr | None:  # type: ignore[override]
