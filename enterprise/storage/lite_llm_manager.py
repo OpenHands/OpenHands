@@ -629,6 +629,7 @@ class LiteLlmManager:
                     'invalid_litellm_key_during_update',
                     extra={
                         'user_id': keycloak_user_id,
+                        'text': response.text,
                     },
                 )
                 return
