@@ -8,7 +8,6 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 from pydantic import SecretStr
-from enterprise.storage.encrypt_utils import decrypt_legacy_value
 from server.auth.token_manager import TokenManager
 from server.constants import (
     DEFAULT_INITIAL_BUDGET,
@@ -21,6 +20,7 @@ from server.constants import (
 from server.logger import logger
 from storage.user_settings import UserSettings
 
+from enterprise.storage.encrypt_utils import decrypt_legacy_value
 from openhands.server.settings import Settings
 from openhands.utils.http_session import httpx_verify_option
 
