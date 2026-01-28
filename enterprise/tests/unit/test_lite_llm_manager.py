@@ -1126,3 +1126,174 @@ class TestLiteLlmManager:
                 'http://test.url/team/delete',
                 json={'team_ids': [team_id]},
             )
+
+    @pytest.mark.asyncio
+    async def test_remove_user_from_team_successful(self):
+        """
+        GIVEN: Valid user_id and team_id
+        WHEN: _remove_user_from_team is called
+        THEN: HTTP POST is made to remove user from team
+        """
+        mock_response = AsyncMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+        ):
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+
+            await LiteLlmManager._remove_user_from_team(
+                mock_client, 'test-user-id', 'test-team-id'
+            )
+
+            mock_client.post.assert_called_once_with(
+                'http://test.url/team/member_delete',
+                json={
+                    'team_id': 'test-team-id',
+                    'user_id': 'test-user-id',
+                },
+            )
+
+    @pytest.mark.asyncio
+    async def test_remove_user_from_team_not_found(self):
+        """
+        GIVEN: User not in team
+        WHEN: _remove_user_from_team is called
+        THEN: 404 response is handled gracefully without raising
+        """
+        mock_response = AsyncMock()
+        mock_response.is_success = False
+        mock_response.status_code = 404
+        mock_response.text = 'User not found in team'
+        mock_response.raise_for_status = MagicMock()
+
+        with (
+            patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.url'),
+        ):
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+
+            # Should not raise an exception
+            await LiteLlmManager._remove_user_from_team(
+                mock_client, 'test-user-id', 'test-team-id'
+            )
+
+    @pytest.mark.asyncio
+    async def test_downgrade_entries_missing_config(self, mock_user_settings):
+        """Test downgrade_entries when LiteLLM config is missing."""
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', None):
+                result = await LiteLlmManager.downgrade_entries(
+                    'test-org-id',
+                    'test-user-id',
+                    mock_user_settings,
+                )
+                assert result is None
+
+    @pytest.mark.asyncio
+    async def test_downgrade_entries_team_not_found(self, mock_user_settings):
+        """Test downgrade_entries when team is not found."""
+        with patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
+                with patch(
+                    'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
+                ):
+                    with patch.object(
+                        LiteLlmManager, '_get_team', new_callable=AsyncMock
+                    ) as mock_get_team:
+                        mock_get_team.return_value = None
+
+                        result = await LiteLlmManager.downgrade_entries(
+                            'test-org-id',
+                            'test-user-id',
+                            mock_user_settings,
+                        )
+
+                        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_downgrade_entries_successful(self, mock_user_settings):
+        """Test successful downgrade_entries operation."""
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+
+        mock_team_info_response = MagicMock()
+        mock_team_info_response.is_success = True
+        mock_team_info_response.status_code = 200
+        mock_team_info_response.json.return_value = {
+            'team_info': {
+                'max_budget': 100.0,
+                'spend': 20.0,
+            },
+            'team_memberships': [
+                {
+                    'user_id': 'test-user-id',
+                    'team_id': 'test-org-id',
+                    'max_budget_in_team': 100.0,
+                    'spend': 20.0,
+                }
+            ],
+        }
+        mock_team_info_response.raise_for_status = MagicMock()
+
+        with patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
+                with patch(
+                    'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
+                ):
+                    with patch(
+                        'storage.lite_llm_manager.LITE_LLM_TEAM_ID', 'default-team'
+                    ):
+                        with patch('httpx.AsyncClient') as mock_client_class:
+                            mock_client = AsyncMock()
+                            mock_client_class.return_value.__aenter__.return_value = (
+                                mock_client
+                            )
+                            mock_client.get.return_value = mock_team_info_response
+                            mock_client.post.return_value = mock_response
+
+                            result = await LiteLlmManager.downgrade_entries(
+                                'test-org-id',
+                                'test-user-id',
+                                mock_user_settings,
+                            )
+
+                            # downgrade_entries returns the user_settings
+                            assert result is not None
+                            assert result.agent == 'TestAgent'
+
+                            # Verify downgrade steps were called:
+                            # 1. get_team (GET)
+                            # 2. get_user_team_info (GET via _get_team)
+                            # 3. update_user (POST)
+                            # 4. add_user_to_team (POST)
+                            # 5. update_key (POST)
+                            # 6. remove_user_from_team (POST)
+                            # 7. delete_team (POST)
+                            assert mock_client.get.call_count >= 1
+                            assert mock_client.post.call_count >= 4
+
+    @pytest.mark.asyncio
+    async def test_downgrade_entries_local_deployment(self, mock_user_settings):
+        """Test downgrade_entries in local deployment mode (skips LiteLLM calls)."""
+        with patch.dict(os.environ, {'LOCAL_DEPLOYMENT': 'true'}):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
+                with patch(
+                    'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
+                ):
+                    result = await LiteLlmManager.downgrade_entries(
+                        'test-org-id',
+                        'test-user-id',
+                        mock_user_settings,
+                    )
+
+                    # In local deployment, should return user_settings without
+                    # making any LiteLLM calls
+                    assert result is not None
+                    assert result.agent == 'TestAgent'

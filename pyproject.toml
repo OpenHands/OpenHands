@@ -54,9 +54,9 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.2",
-  "openhands-agent-server==1.9.1",
-  "openhands-sdk==1.9.1",
-  "openhands-tools==1.9.1",
+  "openhands-agent-server==1.10",
+  "openhands-sdk==1.10",
+  "openhands-tools==1.10",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "pathspec>=0.12.1",
@@ -280,12 +280,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-#openhands-agent-server = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-agent-server", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
-#openhands-sdk = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-sdk", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
-#openhands-tools = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-tools", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
-openhands-sdk = "1.9.1"
-openhands-agent-server = "1.9.1"
-openhands-tools = "1.9.1"
+openhands-sdk = "1.10"
+openhands-agent-server = "1.10"
+openhands-tools = "1.10"
 python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"

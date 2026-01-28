@@ -1,28 +1,37 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight } from "lucide-react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
+import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
+
+const MAX_CONTENT_LENGTH = 300;
 
 interface PlanPreviewProps {
-  title?: string;
-  description?: string;
+  /** Raw plan content from PLAN.md file */
+  planContent?: string | null;
   onViewClick?: () => void;
   onBuildClick?: () => void;
 }
 
-// TODO: Remove the hardcoded values and use the plan content from the conversation store
 /* eslint-disable i18next/no-literal-string */
 export function PlanPreview({
-  title = "Improve Developer Onboarding and Examples",
-  description = "Based on the analysis of Browser-Use's current documentation and examples, this plan addresses gaps in developer onboarding by creating a progressive learning path, troubleshooting resources, and practical examples that address real-world scenarios (like the LM Studio/local LLM integration issues encountered...",
+  planContent,
   onViewClick,
   onBuildClick,
 }: PlanPreviewProps) {
   const { t } = useTranslation();
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
+
+  // Truncate plan content for preview
+  const truncatedContent = useMemo(() => {
+    if (!planContent) return "";
+    if (planContent.length <= MAX_CONTENT_LENGTH) return planContent;
+    return `${planContent.slice(0, MAX_CONTENT_LENGTH)}...`;
+  }, [planContent]);
 
   if (!shouldUsePlanningAgent) {
     return null;
@@ -41,6 +50,7 @@ export function PlanPreview({
           type="button"
           onClick={onViewClick}
           className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+          data-testid="plan-preview-view-button"
         >
           <Typography.Text className="font-medium text-[11px] text-white tracking-[0.11px] leading-4">
             {t(I18nKey.COMMON$VIEW)}
@@ -50,16 +60,27 @@ export function PlanPreview({
       </div>
 
       {/* Content */}
-      <div className="flex flex-col gap-[10px] p-4">
-        <h3 className="font-bold text-[19px] text-white leading-[29px]">
-          {title}
-        </h3>
-        <p className="text-[15px] text-white leading-[29px]">
-          {description}
-          <Typography.Text className="text-[#4a67bd] cursor-pointer hover:underline ml-1">
-            {t(I18nKey.COMMON$READ_MORE)}
-          </Typography.Text>
-        </p>
+      <div
+        data-testid="plan-preview-content"
+        className="flex flex-col gap-[10px] p-4 text-[15px] text-white leading-[29px]"
+      >
+        {truncatedContent && (
+          <>
+            <MarkdownRenderer includeStandard includeHeadings>
+              {truncatedContent}
+            </MarkdownRenderer>
+            {planContent && planContent.length > MAX_CONTENT_LENGTH && (
+              <button
+                type="button"
+                onClick={onViewClick}
+                className="text-[#4a67bd] cursor-pointer hover:underline text-left"
+                data-testid="plan-preview-read-more-button"
+              >
+                {t(I18nKey.COMMON$READ_MORE)}
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {/* Footer */}
@@ -68,6 +89,7 @@ export function PlanPreview({
           type="button"
           onClick={onBuildClick}
           className="bg-white flex items-center justify-center h-[26px] px-2 rounded-[4px] w-[93px] hover:opacity-90 transition-opacity cursor-pointer"
+          data-testid="plan-preview-build-button"
         >
           <Typography.Text className="font-medium text-[14px] text-black leading-5">
             {t(I18nKey.COMMON$BUILD)}{" "}
