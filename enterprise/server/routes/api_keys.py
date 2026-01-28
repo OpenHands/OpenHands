@@ -152,7 +152,7 @@ class LlmApiKeyResponse(BaseModel):
 async def create_api_key(key_data: ApiKeyCreate, user_id: str = Depends(get_user_id)):
     """Create a new API key for the authenticated user."""
     try:
-        api_key = api_key_store.create_api_key(
+        api_key = await api_key_store.create_api_key(
             user_id, key_data.name, key_data.expires_at
         )
         # Get the created key details

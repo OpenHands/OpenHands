@@ -34,7 +34,7 @@ class SaasConversationStore(ConversationStore):
     session_maker: sessionmaker
     org_id: UUID | None = None  # will be fetched automatically
 
-    def __init__(self, user_id: str, org_id: str, session_maker: sessionmaker):
+    def __init__(self, user_id: str, org_id: UUID, session_maker: sessionmaker):
         self.user_id = user_id
         self.org_id = org_id
         self.session_maker = session_maker
@@ -236,5 +236,4 @@ class SaasConversationStore(ConversationStore):
         # user_id should not be None in SaaS, should we raise?
         user = await UserStore.get_user_by_id_async(user_id)
         org_id = user.current_org_id if user else None
-        org_id_str = str(org_id) if org_id is not None else None
-        return SaasConversationStore(str(user_id), org_id_str, session_maker)
+        return SaasConversationStore(str(user_id), org_id, session_maker)
