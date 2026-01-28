@@ -10,53 +10,44 @@ from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
-from openhands.utils.async_utils import call_sync_from_async
 
 
 # Helper functions for BYOR API key management
 async def get_byor_key_from_db(user_id: str) -> str | None:
     """Get the BYOR key from the database for a user."""
-
-    def _get_byor_key():
-        user = UserStore.get_user_by_id(user_id)
-        if not user:
-            return None
-
-        current_org_id = user.current_org_id
-        current_org_member: OrgMember = None
-        for org_member in user.org_members:
-            if org_member.org_id == current_org_id:
-                current_org_member = org_member
-                break
-        if not current_org_member:
-            return None
-        if current_org_member.llm_api_key_for_byor:
-            return current_org_member.llm_api_key_for_byor.get_secret_value()
+    user = await UserStore.get_user_by_id_async(user_id)
+    if not user:
         return None
 
-    return await call_sync_from_async(_get_byor_key)
+    current_org_id = user.current_org_id
+    current_org_member: OrgMember = None
+    for org_member in user.org_members:
+        if org_member.org_id == current_org_id:
+            current_org_member = org_member
+            break
+    if not current_org_member:
+        return None
+    if current_org_member.llm_api_key_for_byor:
+        return current_org_member.llm_api_key_for_byor.get_secret_value()
+    return None
 
 
 async def store_byor_key_in_db(user_id: str, key: str) -> None:
     """Store the BYOR key in the database for a user."""
+    user = await UserStore.get_user_by_id_async(user_id)
+    if not user:
+        return None
 
-    def _update_user_settings():
-        user = UserStore.get_user_by_id(user_id)
-        if not user:
-            return None
-
-        current_org_id = user.current_org_id
-        current_org_member: OrgMember = None
-        for org_member in user.org_members:
-            if org_member.org_id == current_org_id:
-                current_org_member = org_member
-                break
-        if not current_org_member:
-            return None
-        current_org_member.llm_api_key_for_byor = key
-        OrgMemberStore.update_org_member(current_org_member)
-
-    await call_sync_from_async(_update_user_settings)
+    current_org_id = user.current_org_id
+    current_org_member: OrgMember = None
+    for org_member in user.org_members:
+        if org_member.org_id == current_org_id:
+            current_org_member = org_member
+            break
+    if not current_org_member:
+        return None
+    current_org_member.llm_api_key_for_byor = key
+    OrgMemberStore.update_org_member(current_org_member)
 
 
 async def generate_byor_key(user_id: str) -> str | None:
