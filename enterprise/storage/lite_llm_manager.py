@@ -145,32 +145,19 @@ class LiteLlmManager:
                 # These are keys that were created due to the missing check in
                 # _ensure_openhands_api_key that should have looked for existing keys
                 # before generating new ones.
+                # Note: We don't need to adjust max_budget for orphaned key spend because
+                # spend is tracked against the user and will already be applied to the team.
                 logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:cleanup_orphaned_keys',
                     extra={'org_id': org_id, 'user_id': keycloak_user_id},
                 )
-                orphaned_spend = await LiteLlmManager._cleanup_orphaned_keys(
+                await LiteLlmManager._cleanup_orphaned_keys(
                     client,
                     keycloak_user_id,
                     org_id,
                     user_settings.llm_api_key,
                     user_settings.llm_api_key_for_byor,
                 )
-
-                # Reduce max_budget by the spend from orphaned keys
-                # This ensures we don't credit users for spend that occurred on orphaned keys
-                if orphaned_spend > 0:
-                    logger.info(
-                        'LiteLlmManager:migrate_lite_llm_entries:adjusting_budget_for_orphaned_spend',
-                        extra={
-                            'org_id': org_id,
-                            'user_id': keycloak_user_id,
-                            'original_max_budget': max_budget,
-                            'orphaned_spend': orphaned_spend,
-                            'adjusted_max_budget': max_budget - orphaned_spend,
-                        },
-                    )
-                    max_budget = max(max_budget - orphaned_spend, 0.0)
 
                 credits = max(max_budget - spend, 0.0)
 
@@ -1102,8 +1089,8 @@ class LiteLlmManager:
         org_id: str,
         valid_api_key: str | None,
         valid_byor_key: str | None,
-    ) -> float:
-        """Find and delete orphaned keys for a user, returning the total spend.
+    ) -> None:
+        """Find and delete orphaned keys for a user.
 
         Orphaned keys are keys that:
         1. Belong to this user
@@ -1113,19 +1100,20 @@ class LiteLlmManager:
         This helps clean up keys that were generated but never properly tracked
         due to the missing check when generating OpenHands provider keys.
 
+        Note: We don't need to adjust budget for orphaned key spend because
+        spend is tracked against the user and will already be applied to the team
+        during migration.
+
         Args:
             client: The HTTP client
             keycloak_user_id: The user's Keycloak ID
             org_id: The organization ID (team_id in LiteLLM)
             valid_api_key: The user's current valid API key (will not be deleted)
             valid_byor_key: The user's current valid BYOR key (will not be deleted)
-
-        Returns:
-            The sum of 'spend' from all deleted orphaned keys
         """
         keys = await LiteLlmManager._get_all_keys_for_user(client, keycloak_user_id)
         if not keys:
-            return 0.0
+            return
 
         # Normalize valid keys for comparison (strip whitespace)
         valid_keys = set()
@@ -1134,7 +1122,6 @@ class LiteLlmManager:
         if valid_byor_key:
             valid_keys.add(valid_byor_key.strip())
 
-        orphaned_spend = 0.0
         orphaned_key_count = 0
 
         for key_info in keys:
@@ -1148,9 +1135,7 @@ class LiteLlmManager:
             if token.strip() in valid_keys:
                 continue
 
-            # This is an orphaned key - accumulate spend and delete
-            spend = key_info.get('spend', 0.0) or 0.0
-            orphaned_spend += spend
+            # This is an orphaned key - delete it
             orphaned_key_count += 1
 
             key_id = key_info.get('token')  # Use token as key identifier
@@ -1162,7 +1147,6 @@ class LiteLlmManager:
                     'user_id': keycloak_user_id,
                     'org_id': org_id,
                     'key_alias': key_alias,
-                    'spend': spend,
                 },
             )
 
@@ -1187,11 +1171,8 @@ class LiteLlmManager:
                     'user_id': keycloak_user_id,
                     'org_id': org_id,
                     'orphaned_keys_deleted': orphaned_key_count,
-                    'total_orphaned_spend': orphaned_spend,
                 },
             )
-
-        return orphaned_spend
 
     @staticmethod
     async def _delete_key_by_alias(
