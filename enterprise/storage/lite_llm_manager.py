@@ -18,9 +18,9 @@ from server.constants import (
     get_default_litellm_model,
 )
 from server.logger import logger
+from storage.encrypt_utils import decrypt_legacy_value
 from storage.user_settings import UserSettings
 
-from enterprise.storage.encrypt_utils import decrypt_legacy_value
 from openhands.server.settings import Settings
 from openhands.utils.http_session import httpx_verify_option
 
