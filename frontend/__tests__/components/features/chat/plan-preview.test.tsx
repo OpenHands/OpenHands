@@ -132,6 +132,75 @@ describe("PlanPreview", () => {
     expect(onBuildClick).toHaveBeenCalledTimes(1);
   });
 
+  it("should disable Build button when isBuildDisabled is true", () => {
+    // Arrange
+    renderWithProviders(
+      <PlanPreview
+        planContent="Plan content"
+        onBuildClick={vi.fn()}
+        isBuildDisabled={true}
+      />,
+    );
+
+    // Act
+    const buildButton = screen.getByTestId("plan-preview-build-button");
+
+    // Assert
+    expect(buildButton).toBeDisabled();
+  });
+
+  it("should not disable Build button when isBuildDisabled is false", () => {
+    // Arrange
+    renderWithProviders(
+      <PlanPreview
+        planContent="Plan content"
+        onBuildClick={vi.fn()}
+        isBuildDisabled={false}
+      />,
+    );
+
+    // Act
+    const buildButton = screen.getByTestId("plan-preview-build-button");
+
+    // Assert
+    expect(buildButton).not.toBeDisabled();
+  });
+
+  it("should not disable Build button when isBuildDisabled is undefined", () => {
+    // Arrange
+    renderWithProviders(
+      <PlanPreview planContent="Plan content" onBuildClick={vi.fn()} />,
+    );
+
+    // Act
+    const buildButton = screen.getByTestId("plan-preview-build-button");
+
+    // Assert
+    expect(buildButton).not.toBeDisabled();
+  });
+
+  it("should not call onBuildClick when Build button is disabled and clicked", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const onBuildClick = vi.fn();
+
+    renderWithProviders(
+      <PlanPreview
+        planContent="Plan content"
+        onBuildClick={onBuildClick}
+        isBuildDisabled={true}
+      />,
+    );
+
+    const buildButton = screen.getByTestId("plan-preview-build-button");
+
+    // Act
+    await user.click(buildButton);
+
+    // Assert
+    expect(onBuildClick).not.toHaveBeenCalled();
+  });
+
   it("should render header with PLAN_MD text", () => {
     const { container } = renderWithProviders(
       <PlanPreview planContent="Plan content" />,
