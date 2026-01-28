@@ -131,6 +131,25 @@ class UserStore:
         return bool(lock_acquired)
 
     @staticmethod
+    async def _release_user_creation_lock(user_id: str) -> bool:
+        """Release the distributed lock for user creation.
+
+        Returns True if the lock was released or if Redis is unavailable.
+        Returns False if the lock could not be released.
+        """
+        redis_client = UserStore._get_redis_client()
+        if redis_client is None:
+            logger.warning(
+                'user_store:_release_user_creation_lock:no_redis_client',
+                extra={'user_id': user_id},
+            )
+            return True  # Nothing to release if Redis is unavailable
+
+        user_key = f'{_REDIS_USER_CREATION_KEY_PREFIX}{user_id}'
+        deleted = await redis_client.delete(user_key)
+        return bool(deleted)
+
+    @staticmethod
     async def migrate_user(
         user_id: str,
         user_settings: UserSettings,
@@ -613,41 +632,46 @@ class UserStore:
                     asyncio.sleep, GENERAL_TIMEOUT, _RETRY_LOAD_DELAY_SECONDS
                 )
 
-            # Check for user again as migration could have happened while trying to get the lock.
-            user = (
-                session.query(User)
-                .options(joinedload(User.org_members))
-                .filter(User.id == uuid.UUID(user_id))
-                .first()
-            )
-            if user:
-                return user
+            try:
+                # Check for user again as migration could have happened while trying to get the lock.
+                user = (
+                    session.query(User)
+                    .options(joinedload(User.org_members))
+                    .filter(User.id == uuid.UUID(user_id))
+                    .first()
+                )
+                if user:
+                    return user
 
-            user_settings = (
-                session.query(UserSettings)
-                .filter(
-                    UserSettings.keycloak_user_id == user_id,
-                    UserSettings.already_migrated.is_(False),
+                user_settings = (
+                    session.query(UserSettings)
+                    .filter(
+                        UserSettings.keycloak_user_id == user_id,
+                        UserSettings.already_migrated.is_(False),
+                    )
+                    .first()
                 )
-                .first()
-            )
-            if user_settings:
-                token_manager = TokenManager()
-                user_info = call_async_from_sync(
-                    token_manager.get_user_info_from_user_id,
-                    GENERAL_TIMEOUT,
-                    user_id,
+                if user_settings:
+                    token_manager = TokenManager()
+                    user_info = call_async_from_sync(
+                        token_manager.get_user_info_from_user_id,
+                        GENERAL_TIMEOUT,
+                        user_id,
+                    )
+                    user = call_async_from_sync(
+                        UserStore.migrate_user,
+                        GENERAL_TIMEOUT,
+                        user_id,
+                        user_settings,
+                        user_info,
+                    )
+                    return user
+                else:
+                    return None
+            finally:
+                call_async_from_sync(
+                    UserStore._release_user_creation_lock, GENERAL_TIMEOUT, user_id
                 )
-                user = call_async_from_sync(
-                    UserStore.migrate_user,
-                    GENERAL_TIMEOUT,
-                    user_id,
-                    user_settings,
-                    user_info,
-                )
-                return user
-            else:
-                return None
 
     @staticmethod
     async def get_user_by_id_async(user_id: str) -> Optional[User]:
@@ -675,42 +699,45 @@ class UserStore:
                 )
                 await asyncio.sleep(_RETRY_LOAD_DELAY_SECONDS)
 
-            # Check for user again as migration could have happened while trying to get the lock.
-            result = await session.execute(
-                select(User)
-                .options(joinedload(User.org_members))
-                .filter(User.id == uuid.UUID(user_id))
-            )
-            user = result.scalars().first()
-            if user:
-                return user
-
-            logger.info(
-                'user_store:get_user_by_id_async:start_migration',
-                extra={'user_id': user_id},
-            )
-            result = await session.execute(
-                select(UserSettings).filter(
-                    UserSettings.keycloak_user_id == user_id,
-                    UserSettings.already_migrated.is_(False),
+            try:
+                # Check for user again as migration could have happened while trying to get the lock.
+                result = await session.execute(
+                    select(User)
+                    .options(joinedload(User.org_members))
+                    .filter(User.id == uuid.UUID(user_id))
                 )
-            )
-            user_settings = result.scalars().first()
-            if user_settings:
-                token_manager = TokenManager()
-                user_info = await token_manager.get_user_info_from_user_id(user_id)
+                user = result.scalars().first()
+                if user:
+                    return user
+
                 logger.info(
-                    'user_store:get_user_by_id_async:calling_migrate_user',
+                    'user_store:get_user_by_id_async:start_migration',
                     extra={'user_id': user_id},
                 )
-                user = await UserStore.migrate_user(
-                    user_id,
-                    user_settings,
-                    user_info,
+                result = await session.execute(
+                    select(UserSettings).filter(
+                        UserSettings.keycloak_user_id == user_id,
+                        UserSettings.already_migrated.is_(False),
+                    )
                 )
-                return user
-            else:
-                return None
+                user_settings = result.scalars().first()
+                if user_settings:
+                    token_manager = TokenManager()
+                    user_info = await token_manager.get_user_info_from_user_id(user_id)
+                    logger.info(
+                        'user_store:get_user_by_id_async:calling_migrate_user',
+                        extra={'user_id': user_id},
+                    )
+                    user = await UserStore.migrate_user(
+                        user_id,
+                        user_settings,
+                        user_info,
+                    )
+                    return user
+                else:
+                    return None
+            finally:
+                await UserStore._release_user_creation_lock(user_id)
 
     @staticmethod
     def list_users() -> list[User]:
