@@ -3,6 +3,9 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { PlanPreview } from "#/components/features/chat/plan-preview";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { createChatMessage } from "#/services/chat-service";
 
 // Mock the feature flag to always return true (not testing feature flag behavior)
 vi.mock("#/utils/feature-flags", () => ({
@@ -20,13 +23,45 @@ vi.mock("react-i18next", async (importOriginal) => {
   };
 });
 
+// Mock services (underlying dependencies of the hook)
+const mockSend = vi.fn();
+
+vi.mock("#/hooks/use-send-message", () => ({
+  useSendMessage: vi.fn(() => ({
+    send: mockSend,
+  })),
+}));
+
+vi.mock("#/services/chat-service", () => ({
+  createChatMessage: vi.fn((content, imageUrls, fileUrls, timestamp) => ({
+    action: "message",
+    args: { content, image_urls: imageUrls, file_urls: fileUrls, timestamp },
+  })),
+}));
+
 describe("PlanPreview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Reset store states
+    useConversationStore.setState({
+      conversationMode: "plan",
+    });
+    useOptimisticUserMessageStore.setState({
+      optimisticUserMessage: null,
+    });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+
+    // Clean up store states
+    useConversationStore.setState({
+      conversationMode: "code",
+    });
+    useOptimisticUserMessageStore.setState({
+      optimisticUserMessage: null,
+    });
   });
 
   it("should render nothing when planContent is null", () => {
@@ -116,20 +151,73 @@ describe("PlanPreview", () => {
     expect(onViewClick).toHaveBeenCalledTimes(1);
   });
 
-  it("should call onBuildClick when Build button is clicked", async () => {
-    const user = userEvent.setup();
-    const onBuildClick = vi.fn();
-
-    renderWithProviders(
-      <PlanPreview planContent="Plan content" onBuildClick={onBuildClick} />,
-    );
+  it("should render Build button", () => {
+    renderWithProviders(<PlanPreview planContent="Plan content" />);
 
     const buildButton = screen.getByTestId("plan-preview-build-button");
     expect(buildButton).toBeInTheDocument();
+  });
 
+  it("should switch to code mode when Build button is clicked", async () => {
+    // Arrange
+    useConversationStore.setState({ conversationMode: "plan" });
+    const user = userEvent.setup();
+    renderWithProviders(<PlanPreview planContent="Plan content" />);
+    const buildButton = screen.getByTestId("plan-preview-build-button");
+
+    // Act
     await user.click(buildButton);
 
-    expect(onBuildClick).toHaveBeenCalledTimes(1);
+    // Assert
+    expect(useConversationStore.getState().conversationMode).toBe("code");
+  });
+
+  it("should send build prompt message when Build button is clicked", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const expectedPrompt =
+      "Execute the plan based on the workspace/project/PLAN.md file.";
+    renderWithProviders(<PlanPreview planContent="Plan content" />);
+    const buildButton = screen.getByTestId("plan-preview-build-button");
+
+    // Act
+    await user.click(buildButton);
+
+    // Assert
+    expect(createChatMessage).toHaveBeenCalledTimes(1);
+    expect(createChatMessage).toHaveBeenCalledWith(
+      expectedPrompt,
+      [],
+      [],
+      expect.any(String),
+    );
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "message",
+        args: expect.objectContaining({
+          content: expectedPrompt,
+        }),
+      }),
+    );
+  });
+
+  it("should set optimistic user message when Build button is clicked", async () => {
+    // Arrange
+    useOptimisticUserMessageStore.setState({ optimisticUserMessage: null });
+    const user = userEvent.setup();
+    const expectedPrompt =
+      "Execute the plan based on the workspace/project/PLAN.md file.";
+    renderWithProviders(<PlanPreview planContent="Plan content" />);
+    const buildButton = screen.getByTestId("plan-preview-build-button");
+
+    // Act
+    await user.click(buildButton);
+
+    // Assert
+    expect(useOptimisticUserMessageStore.getState().optimisticUserMessage).toBe(
+      expectedPrompt,
+    );
   });
 
   it("should render header with PLAN_MD text", () => {

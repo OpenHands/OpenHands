@@ -110,7 +110,7 @@ export function ConversationWebSocketProvider({
     number | null
   >(null);
 
-  const { conversationMode, setPlanContent } = useConversationStore();
+  const { setPlanContent } = useConversationStore();
 
   // Hook for reading conversation file
   const { mutate: readConversationFile } = useReadConversationFile();
@@ -741,15 +741,14 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
-  const socket = useMemo(
-    () => (conversationMode === "plan" ? planningAgentSocket : mainSocket),
-    [conversationMode, planningAgentSocket, mainSocket],
-  );
-
   // V1 send message function via WebSocket
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest) => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
+      const currentMode = useConversationStore.getState().conversationMode;
+      const currentSocket =
+        currentMode === "plan" ? planningAgentSocket : mainSocket;
+
+      if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
         const error = "WebSocket is not connected";
         setErrorMessage(error);
         throw new Error(error);
@@ -757,7 +756,7 @@ export function ConversationWebSocketProvider({
 
       try {
         // Send message through WebSocket as JSON
-        socket.send(JSON.stringify(message));
+        currentSocket.send(JSON.stringify(message));
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to send message";
@@ -765,7 +764,7 @@ export function ConversationWebSocketProvider({
         throw error;
       }
     },
-    [socket, setErrorMessage],
+    [mainSocket, planningAgentSocket, setErrorMessage],
   );
 
   // Track main socket state changes
