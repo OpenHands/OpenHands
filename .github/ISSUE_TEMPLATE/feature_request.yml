@@ -12,9 +12,8 @@ body:
         - Community engagement (👍 reactions and constructive discussion)
         - Alignment with project roadmap and goals
         - Implementation complexity vs. value delivered
-        - Team bandwidth and available resources
         
-        **Please provide detailed information.** Vague or low-effort requests may be closed. Well-documented feature requests with strong community support are more likely to be implemented.
+        **Please provide detailed information.** Vague or low-effort requests may be closed. Well-documented feature requests with strong community support are more likely to be added to the roadmap.
 
   - type: checkboxes
     attributes:
@@ -109,8 +108,9 @@ body:
       label: Would you be willing to contribute this feature?
       description: Community contributions are welcome! Select if you'd be open to implementing this (with guidance from maintainers).
       options:
-        - label: "Yes, I'd be willing to submit a PR with guidance"
+        - label: "Yes, I'd be willing to submit a PR"
         - label: "Maybe, depending on complexity and time commitment"
+        - label: "No, I cannot contribute to this feature request."
 
   - type: textarea
     id: additional-context
@@ -118,16 +118,3 @@ body:
       label: Additional Context
       description: Add any other context, screenshots, mockups, or examples that help illustrate this feature request.
       placeholder: Drag and drop screenshots, mockups, or links here.
-
-  - type: markdown
-    attributes:
-      value: |
-        ---
-        **What happens next?**
-        - Maintainers will review and label your request appropriately
-        - **Community engagement matters:** If this feature resonates with others, encourage them to add 👍 reactions and share their use cases in comments
-        - Features with strong community support and clear value are more likely to be prioritized
-        - **Community contributions welcome:** Well-documented feature requests with clear scope and medium/low effort requirements are often picked up by community members
-        - If you're willing to contribute, maintainers may provide guidance on implementation
-        
-        **Please note:** Maintainers and community members have limited bandwidth and may not be able to implement every feature request. Low-engagement or out-of-scope requests may be closed. Thank you for understanding!
