@@ -272,7 +272,7 @@ async def device_verification_authenticated(
         try:
             # Create a unique API key for this device using user_code in the name
             device_key_name = f'{API_KEY_NAME} ({user_code})'
-            api_key_store.create_api_key(
+            await api_key_store.create_api_key(
                 user_id,
                 name=device_key_name,
                 expires_at=datetime.now(UTC) + KEY_EXPIRATION_TIME,

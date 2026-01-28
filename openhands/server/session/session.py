@@ -202,10 +202,11 @@ class WebSession:
             self.logger.debug(f'Merged custom MCP Config: {mcp_config}')
 
         # Add OpenHands' MCP server by default
-        openhands_mcp_server, openhands_mcp_stdio_servers = (
-            OpenHandsMCPConfigImpl.create_default_mcp_server_config(
-                self.config.mcp_host, self.config, self.user_id
-            )
+        (
+            openhands_mcp_server,
+            openhands_mcp_stdio_servers,
+        ) = await OpenHandsMCPConfigImpl.create_default_mcp_server_config(
+            self.config.mcp_host, self.config, self.user_id
         )
 
         if openhands_mcp_server:
