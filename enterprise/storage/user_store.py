@@ -19,6 +19,7 @@ from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker, session_maker
 from storage.encrypt_utils import (
     decrypt_legacy_model,
+    decrypt_legacy_value,
     encrypt_legacy_value,
 )
 from storage.org import Org
@@ -588,7 +589,7 @@ class UserStore:
             ]
             for key in encrypt_keys:
                 value = getattr(user_settings, key, None)
-                if value is not None:
+                if value is not None and not _is_legacy_value_encrypted(value):
                     setattr(user_settings, key, encrypt_legacy_value(value))
 
             session.merge(user_settings)
@@ -934,3 +935,12 @@ class UserStore:
                 return False  # Matches old default
 
         return True  # Custom model
+
+
+def _is_legacy_value_encrypted(value: str) -> bool:
+    """Check if a legacy value is encrypted by trying to decrypt it"""
+    try:
+        decrypt_legacy_value(value)
+        return True
+    except Exception:
+        return False
