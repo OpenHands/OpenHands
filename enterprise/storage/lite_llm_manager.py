@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 from pydantic import SecretStr
+from enterprise.storage.encrypt_utils import decrypt_legacy_value
 from server.auth.token_manager import TokenManager
 from server.constants import (
     DEFAULT_INITIAL_BUDGET,
@@ -604,6 +605,13 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return
+
+        try:
+            # Sometimes the key we get is encrypted - attempt to decrypt.
+            key = decrypt_legacy_value(key)
+        except Exception:
+            # The key was not encrypted
+            pass
 
         payload = {
             'key': key,
