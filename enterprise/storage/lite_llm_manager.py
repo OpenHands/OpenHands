@@ -140,6 +140,38 @@ class LiteLlmManager:
                 if not max_budget:
                     # if max_budget is None, then we've already migrated the User
                     return None
+
+                # Clean up orphaned keys before migration
+                # These are keys that were created due to the missing check in
+                # _ensure_openhands_api_key that should have looked for existing keys
+                # before generating new ones.
+                logger.debug(
+                    'LiteLlmManager:migrate_lite_llm_entries:cleanup_orphaned_keys',
+                    extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                )
+                orphaned_spend = await LiteLlmManager._cleanup_orphaned_keys(
+                    client,
+                    keycloak_user_id,
+                    org_id,
+                    user_settings.llm_api_key,
+                    user_settings.llm_api_key_for_byor,
+                )
+
+                # Reduce max_budget by the spend from orphaned keys
+                # This ensures we don't credit users for spend that occurred on orphaned keys
+                if orphaned_spend > 0:
+                    logger.info(
+                        'LiteLlmManager:migrate_lite_llm_entries:adjusting_budget_for_orphaned_spend',
+                        extra={
+                            'org_id': org_id,
+                            'user_id': keycloak_user_id,
+                            'original_max_budget': max_budget,
+                            'orphaned_spend': orphaned_spend,
+                            'adjusted_max_budget': max_budget - orphaned_spend,
+                        },
+                    )
+                    max_budget = max(max_budget - orphaned_spend, 0.0)
+
                 credits = max(max_budget - spend, 0.0)
 
                 logger.debug(
@@ -994,6 +1026,174 @@ class LiteLlmManager:
         }
 
     @staticmethod
+    async def _get_all_keys_for_user(
+        client: httpx.AsyncClient,
+        keycloak_user_id: str,
+    ) -> list[dict]:
+        """Get all keys for a user from LiteLLM.
+
+        Returns a list of key info dictionaries containing:
+        - token: the key value (hashed or partial)
+        - key_alias: the alias for the key
+        - key_name: the name of the key
+        - spend: the amount spent on this key
+        - max_budget: the max budget for this key
+        - team_id: the team the key belongs to
+        - metadata: any metadata associated with the key
+
+        Returns an empty list if no keys found or on error.
+        """
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            logger.warning('LiteLLM API configuration not found')
+            return []
+
+        try:
+            response = await client.get(
+                f'{LITE_LLM_API_URL}/user/info?user_id={keycloak_user_id}',
+            )
+            response.raise_for_status()
+            user_json = response.json()
+            # The user/info endpoint returns keys in the 'keys' field
+            return user_json.get('keys', [])
+        except Exception as e:
+            logger.warning(
+                'LiteLlmManager:_get_all_keys_for_user:error',
+                extra={
+                    'user_id': keycloak_user_id,
+                    'error': str(e),
+                },
+            )
+            return []
+
+    @staticmethod
+    async def _get_existing_openhands_key(
+        client: httpx.AsyncClient,
+        keycloak_user_id: str,
+        org_id: str,
+    ) -> str | None:
+        """Check if an existing OpenHands key exists for the user/org and return it.
+
+        Looks for keys with metadata type='openhands' and matching team_id.
+
+        Returns the key value if found, None otherwise.
+        """
+        keys = await LiteLlmManager._get_all_keys_for_user(client, keycloak_user_id)
+        for key_info in keys:
+            metadata = key_info.get('metadata') or {}
+            team_id = key_info.get('team_id')
+            if metadata.get('type') == 'openhands' and team_id == org_id:
+                # Found an existing OpenHands key for this org
+                token = key_info.get('token')
+                if token:
+                    logger.info(
+                        'LiteLlmManager:_get_existing_openhands_key:found',
+                        extra={
+                            'user_id': keycloak_user_id,
+                            'org_id': org_id,
+                        },
+                    )
+                    return token
+        return None
+
+    @staticmethod
+    async def _cleanup_orphaned_keys(
+        client: httpx.AsyncClient,
+        keycloak_user_id: str,
+        org_id: str,
+        valid_api_key: str | None,
+        valid_byor_key: str | None,
+    ) -> float:
+        """Find and delete orphaned keys for a user, returning the total spend.
+
+        Orphaned keys are keys that:
+        1. Belong to this user
+        2. Are not the valid_api_key or valid_byor_key
+        3. May or may not be associated with the org/team
+
+        This helps clean up keys that were generated but never properly tracked
+        due to the missing check when generating OpenHands provider keys.
+
+        Args:
+            client: The HTTP client
+            keycloak_user_id: The user's Keycloak ID
+            org_id: The organization ID (team_id in LiteLLM)
+            valid_api_key: The user's current valid API key (will not be deleted)
+            valid_byor_key: The user's current valid BYOR key (will not be deleted)
+
+        Returns:
+            The sum of 'spend' from all deleted orphaned keys
+        """
+        keys = await LiteLlmManager._get_all_keys_for_user(client, keycloak_user_id)
+        if not keys:
+            return 0.0
+
+        # Normalize valid keys for comparison (strip whitespace)
+        valid_keys = set()
+        if valid_api_key:
+            valid_keys.add(valid_api_key.strip())
+        if valid_byor_key:
+            valid_keys.add(valid_byor_key.strip())
+
+        orphaned_spend = 0.0
+        orphaned_key_count = 0
+
+        for key_info in keys:
+            token = key_info.get('token')
+            if not token:
+                continue
+
+            # Check if this key is one of the valid keys
+            # Note: LiteLLM may return hashed/partial tokens, so we need to be careful
+            # with the comparison. We compare the full token if available.
+            if token.strip() in valid_keys:
+                continue
+
+            # This is an orphaned key - accumulate spend and delete
+            spend = key_info.get('spend', 0.0) or 0.0
+            orphaned_spend += spend
+            orphaned_key_count += 1
+
+            key_id = key_info.get('token')  # Use token as key identifier
+            key_alias = key_info.get('key_alias')
+
+            logger.info(
+                'LiteLlmManager:_cleanup_orphaned_keys:deleting',
+                extra={
+                    'user_id': keycloak_user_id,
+                    'org_id': org_id,
+                    'key_alias': key_alias,
+                    'spend': spend,
+                },
+            )
+
+            try:
+                if key_id:
+                    await LiteLlmManager._delete_key(client, key_id, key_alias)
+            except Exception as e:
+                # Log but don't fail on individual key deletion errors
+                logger.warning(
+                    'LiteLlmManager:_cleanup_orphaned_keys:delete_error',
+                    extra={
+                        'user_id': keycloak_user_id,
+                        'key_alias': key_alias,
+                        'error': str(e),
+                    },
+                )
+
+        if orphaned_key_count > 0:
+            logger.info(
+                'LiteLlmManager:_cleanup_orphaned_keys:complete',
+                extra={
+                    'user_id': keycloak_user_id,
+                    'org_id': org_id,
+                    'orphaned_keys_deleted': orphaned_key_count,
+                    'total_orphaned_spend': orphaned_spend,
+                },
+            )
+
+        return orphaned_spend
+
+    @staticmethod
     async def _delete_key_by_alias(
         client: httpx.AsyncClient,
         key_alias: str,
@@ -1091,3 +1291,6 @@ class LiteLlmManager:
     generate_key = staticmethod(with_http_client(_generate_key))
     get_key_info = staticmethod(with_http_client(_get_key_info))
     delete_key = staticmethod(with_http_client(_delete_key))
+    get_all_keys_for_user = staticmethod(with_http_client(_get_all_keys_for_user))
+    get_existing_openhands_key = staticmethod(with_http_client(_get_existing_openhands_key))
+    cleanup_orphaned_keys = staticmethod(with_http_client(_cleanup_orphaned_keys))
