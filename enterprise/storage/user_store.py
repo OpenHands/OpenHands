@@ -420,7 +420,6 @@ class UserStore:
 
             # For new sign-ups after migration, user_settings won't exist
             # Fall back to getting data from org_members
-            is_new_signup = False
             if not user_settings:
                 logger.info(
                     'user_store:downgrade_user:user_settings_not_found_checking_org_members',
@@ -443,7 +442,6 @@ class UserStore:
                     return None
 
                 org_member = org_members[0]
-                is_new_signup = True
 
                 # Create a new user_settings entry from OrgMember, User, and Org data
                 # This is needed for new sign-ups who don't have user_settings
