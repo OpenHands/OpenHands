@@ -156,7 +156,7 @@ async def create_api_key(key_data: ApiKeyCreate, user_id: str = Depends(get_user
             user_id, key_data.name, key_data.expires_at
         )
         # Get the created key details
-        keys = api_key_store.list_api_keys(user_id)
+        keys = await api_key_store.list_api_keys(user_id)
         for key in keys:
             if key['name'] == key_data.name:
                 return {
@@ -184,7 +184,7 @@ async def create_api_key(key_data: ApiKeyCreate, user_id: str = Depends(get_user
 async def list_api_keys(user_id: str = Depends(get_user_id)):
     """List all API keys for the authenticated user."""
     try:
-        keys = api_key_store.list_api_keys(user_id)
+        keys = await api_key_store.list_api_keys(user_id)
         return [
             {
                 **key,
@@ -213,7 +213,7 @@ async def delete_api_key(key_id: int, user_id: str = Depends(get_user_id)):
     """Delete an API key."""
     try:
         # First, verify the key belongs to the user
-        keys = api_key_store.list_api_keys(user_id)
+        keys = await api_key_store.list_api_keys(user_id)
         key_to_delete = None
 
         for key in keys:
