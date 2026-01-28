@@ -1273,5 +1273,7 @@ class LiteLlmManager:
     get_key_info = staticmethod(with_http_client(_get_key_info))
     delete_key = staticmethod(with_http_client(_delete_key))
     get_all_keys_for_user = staticmethod(with_http_client(_get_all_keys_for_user))
-    get_existing_openhands_key = staticmethod(with_http_client(_get_existing_openhands_key))
+    get_existing_openhands_key = staticmethod(
+        with_http_client(_get_existing_openhands_key)
+    )
     cleanup_orphaned_keys = staticmethod(with_http_client(_cleanup_orphaned_keys))
