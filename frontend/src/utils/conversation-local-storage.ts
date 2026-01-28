@@ -12,12 +12,14 @@ export interface ConversationState {
   selectedTab: ConversationTab | null;
   rightPanelShown: boolean;
   unpinnedTabs: string[];
+  subConversationTaskId: string | null;
 }
 
 const DEFAULT_CONVERSATION_STATE: ConversationState = {
   selectedTab: "editor",
   rightPanelShown: true,
   unpinnedTabs: [],
+  subConversationTaskId: null,
 };
 
 /**
