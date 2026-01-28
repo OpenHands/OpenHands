@@ -12,6 +12,7 @@ from evaluation.utils.shared import (
     EvalMetadata,
     EvalOutput,
     assert_and_raise,
+    get_openhands_config_for_eval,
     codeact_user_response,
     get_default_sandbox_config_for_eval,
     get_metrics,
@@ -24,7 +25,7 @@ from evaluation.utils.shared import (
 )
 from openhands.core.config import (
     AgentConfig,
-    AppConfig,
+    OpenHandsConfig,
     get_evaluation_parser,
     get_llm_config_arg,
 )
@@ -53,7 +54,7 @@ def get_instance_docker_image(instance_id: str) -> str:
 def get_config(
     instance: pd.Series,
     metadata: EvalMetadata,
-) -> AppConfig:
+) -> OpenHandsConfig:
     base_container_image = get_instance_docker_image(instance['instance_id'])
     
     sandbox_config = get_default_sandbox_config_for_eval()
@@ -62,14 +63,11 @@ def get_config(
     sandbox_config.use_host_network = True
     sandbox_config.platform = 'linux/amd64'
 
-    config = AppConfig(
-        default_agent=metadata.agent_class,
-        run_as_openhands=False,
-        max_iterations=metadata.max_iterations,
-        runtime="docker",
-        sandbox=sandbox_config,
-        workspace_base=None,
-        workspace_mount_path=None,
+    config = get_openhands_config_for_eval(
+        metadata=metadata,
+        enable_browser=False,
+        runtime=os.environ.get('RUNTIME', 'docker'),
+        sandbox_config=sandbox_config,
     )
     
     cur_llm_config = update_llm_config_for_completions_logging(
@@ -367,36 +365,11 @@ def load_nl2repo_dataset(data_path: str) -> pd.DataFrame:
 
 if __name__ == '__main__':
     parser = get_evaluation_parser()
-    parser.add_argument('--model', type=str, default='gpt-4')
-    parser.add_argument('--api-key', type=str, default='sk-glm')
-    parser.add_argument('--base-url', type=str, default='')
-    parser.add_argument('--tokenizer-path', type=str, default=None)
-    parser.add_argument('--sglang-router-ip', type=str, default='172.0.0.1')
-    parser.add_argument('--sglang-router-port', type=str, default='8000')
-    parser.add_argument('--rollout-max-context-length', type=int, default=131072)
-    parser.add_argument('--model-type', type=str, default='qwen', help='Model type')
-    parser.add_argument('--temperature', type=float, default=1.0)
-    parser.add_argument('--top-p', type=float, default=1.0)
-    parser.add_argument('--max-output-tokens', type=int, default=8192)
     parser.add_argument('--dataset', type=str, required=True, help='Path to dataset')
     parser.add_argument('--split', type=str, default='train')
-    parser.add_argument('--selected-ids', type=str, default='',
-                       help='Comma-separated list of instance IDs to evaluate')
-    parser.add_argument('--disable-generate', action='store_true')
-    parser.add_argument('--disable-logging', action='store_true')
-    
     args, _ = parser.parse_known_args()
 
     nl2repo_tests = load_nl2repo_dataset(args.dataset)
-    
-    if args.selected_ids:
-        selected_ids = args.selected_ids.split(',')
-        nl2repo_tests = nl2repo_tests[
-            nl2repo_tests['instance_id'].isin(selected_ids)
-        ]
-        logger.info(
-            f'Filtered dataset to {len(nl2repo_tests)} tasks based on selected_ids.'
-        )
     
     logger.info(f'Loaded NL2Repo dataset with {len(nl2repo_tests)} tasks')
 
@@ -425,8 +398,12 @@ if __name__ == '__main__':
     )
 
     output_file = os.path.join(metadata.eval_output_dir, 'output.jsonl')
-
-    instances = prepare_dataset(nl2repo_tests, output_file)
+    instances = prepare_dataset(
+        nl2repo_tests, 
+        output_file,
+        args.eval_n_limit,
+    )
+    
     run_evaluation(
         instances,
         metadata,

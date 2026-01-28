@@ -20,14 +20,15 @@ from evaluation.utils.shared import (
     EvalMetadata,
     EvalOutput,
     get_default_sandbox_config_for_eval,
+    get_openhands_config_for_eval,
     prepare_dataset,
     reset_logger_for_multiprocessing,
     run_evaluation,
 )
 from openhands.core.config import (
-    AppConfig,
     LLMConfig,
-    get_parser,
+    OpenHandsConfig,
+    get_evaluation_parser,
 )
 from openhands.core.logger import openhands_logger as logger
 
@@ -130,16 +131,14 @@ def analyze_pytest_results(output: str, total_test_cases: int = 0) -> Dict[str, 
     return results
 
 
-def get_config(metadata: EvalMetadata, instance: pd.Series) -> AppConfig:
+def get_config(metadata: EvalMetadata, instance: pd.Series) -> OpenHandsConfig:
     base_container_image = get_instance_test_image(instance['instance_id'])
     sandbox_config = get_default_sandbox_config_for_eval()
     sandbox_config.base_container_image = base_container_image    
-    config = AppConfig(
-        run_as_openhands=False,
+    config = get_openhands_config_for_eval(
+        metadata=metadata,
         runtime="docker",
-        sandbox=sandbox_config,
-        workspace_base=None,
-        workspace_mount_path=None,
+        sandbox_config=sandbox_config,
     )
     return config
 
@@ -407,11 +406,11 @@ def process_instance(
 
 
 if __name__ == '__main__':
-    parser = get_parser()
+    parser = get_evaluation_parser()
     parser.add_argument(
         '--dataset',
         type=str,
-        default='/workspace/swe-data/dataset/nl2repo/nl2repo.jsonl',
+        default='/workspace/dataset/nl2repo/nl2repo.jsonl',
         help='Path to NL2Repo dataset file',
     )
     parser.add_argument(
