@@ -133,7 +133,6 @@ body:
       description: |
         If applicable, which browser and version?
         
-        **Note:** If experiencing a browser-specific issue, please test in another browser and in incognito/private mode before submitting.
       placeholder: ex. Chrome 131, Firefox 133, Safari 17.2
 
   - type: textarea
