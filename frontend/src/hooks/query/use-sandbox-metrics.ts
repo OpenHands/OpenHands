@@ -8,7 +8,7 @@ import type { V1MetricsSnapshot } from "#/api/conversation-service/v1-conversati
  * @param conversationId The conversation ID
  * @param conversationUrl The conversation URL from the active conversation
  * @param sessionApiKey The session API key from the active conversation
- * @param enabled Whether the query should be enabled (only for V1 conversations)
+ * @param enabled Whether the query should be enabled (typically when modal is open and conversation is V1)
  */
 export const useSandboxMetrics = (
   conversationId: string | null | undefined,

@@ -28,11 +28,12 @@ export function MetricsModal({ isOpen, onOpenChange }: MetricsModalProps) {
   const sessionApiKey = conversation?.session_api_key;
 
   // For V1 conversations, fetch metrics directly from the sandbox
+  // Only fetch when the modal is open to avoid unnecessary requests
   const { data: sandboxMetrics } = useSandboxMetrics(
     conversationId,
     conversationUrl,
     sessionApiKey,
-    isV1,
+    isV1 && isOpen, // Only enable when modal is open
   );
 
   // Compute the metrics based on conversation version
