@@ -127,3 +127,40 @@ export interface Skill {
 export interface GetSkillsResponse {
   skills: Skill[];
 }
+
+// Runtime conversation types (from agent server)
+export interface V1RuntimeConversationStats {
+  usage_to_metrics: Record<string, V1RuntimeMetrics>;
+}
+
+export interface V1RuntimeMetrics {
+  model_name: string;
+  accumulated_cost: number;
+  max_budget_per_task: number | null;
+  accumulated_token_usage: V1TokenUsage | null;
+  costs: V1Cost[];
+  response_latencies: V1ResponseLatency[];
+  token_usages: V1TokenUsage[];
+}
+
+export interface V1Cost {
+  model: string;
+  cost: number;
+  timestamp: number;
+}
+
+export interface V1ResponseLatency {
+  model: string;
+  latency: number;
+  response_id: string;
+}
+
+export interface V1RuntimeConversationInfo {
+  id: string;
+  title: string | null;
+  metrics: V1MetricsSnapshot | null;
+  created_at: string;
+  updated_at: string;
+  status: V1ConversationExecutionStatus;
+  stats: V1RuntimeConversationStats;
+}
