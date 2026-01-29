@@ -161,7 +161,7 @@ body:
     attributes:
       label: Screenshots and Additional Context
       description: |
-        Add screenshots, videos, or other context that helps explain the issue.
+        Add screenshots, videos, runtime environment, or other context that helps explain the issue.
         
         💡 **Share conversation history:** In the OpenHands chat UI, click the 👎 or 👍 button (above the message input) to generate a shareable link to your conversation.
         
