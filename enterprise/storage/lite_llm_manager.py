@@ -1199,8 +1199,6 @@ class LiteLlmManager:
 
         for key_info in keys:
             token = key_info.get('token')
-            if not token:
-                continue
 
             # Check if this key's ID matches one of the valid key IDs
             if token in valid_key_ids:
@@ -1215,20 +1213,22 @@ class LiteLlmManager:
                 extra={
                     'user_id': keycloak_user_id,
                     'org_id': org_id,
-                    'key_id': token,
                     'key_alias': key_alias,
                 },
             )
 
             try:
-                await LiteLlmManager._delete_key(client, token, key_alias)
+                # Use key_alias for deletion since LiteLLM may not return token
+                if key_alias:
+                    await LiteLlmManager._delete_key_by_alias(client, key_alias)
+                elif token:
+                    await LiteLlmManager._delete_key(client, token, key_alias)
             except Exception as e:
                 # Log but don't fail on individual key deletion errors
                 logger.warning(
                     'LiteLlmManager:_cleanup_orphaned_keys:delete_error',
                     extra={
                         'user_id': keycloak_user_id,
-                        'key_id': token,
                         'key_alias': key_alias,
                         'error': str(e),
                     },
