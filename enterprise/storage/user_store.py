@@ -442,9 +442,16 @@ class UserStore:
             # Fall back to getting data from org_members
             if user_settings:
                 if org_member.llm_api_key and org_member.llm_api_key.get_secret_value():
-                    user_settings.llm_api_key = encrypt_legacy_value(org_member.llm_api_key.get_secret_value())
-                if org_member.llm_api_key_for_byor and org_member.llm_api_key_for_byor.get_secret_value():
-                    user_settings.llm_api_key_for_byor = encrypt_legacy_value(org_member.llm_api_key_for_byor.get_secret_value())
+                    user_settings.llm_api_key = encrypt_legacy_value(
+                        org_member.llm_api_key.get_secret_value()
+                    )
+                if (
+                    org_member.llm_api_key_for_byor
+                    and org_member.llm_api_key_for_byor.get_secret_value()
+                ):
+                    user_settings.llm_api_key_for_byor = encrypt_legacy_value(
+                        org_member.llm_api_key_for_byor.get_secret_value()
+                    )
                 logger.info(
                     'user_store:downgrade_user:updated_user_settings_from_org_member',
                     extra={'user_id': user_id},

@@ -186,14 +186,18 @@ class LiteLlmManager:
 
                 if db_key:
                     # Verify the database key exists in LiteLLM
-                    key_valid = await LiteLlmManager.verify_key(db_key, keycloak_user_id)
+                    key_valid = await LiteLlmManager.verify_key(
+                        db_key, keycloak_user_id
+                    )
                     if not key_valid:
                         logger.warning(
                             'LiteLlmManager:migrate_lite_llm_entries:db_key_not_in_litellm',
                             extra={
                                 'org_id': org_id,
                                 'user_id': keycloak_user_id,
-                                'key_prefix': db_key[:10] + '...' if len(db_key) > 10 else db_key,
+                                'key_prefix': db_key[:10] + '...'
+                                if len(db_key) > 10
+                                else db_key,
                             },
                         )
                         # Generate a new key for the user
