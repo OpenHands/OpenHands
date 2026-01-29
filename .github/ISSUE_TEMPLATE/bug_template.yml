@@ -165,7 +165,6 @@ body:
         
         💡 **Share conversation history:** In the OpenHands chat UI, click the 👎 or 👍 button (above the message input) to generate a shareable link to your conversation.
         
-        **Note:** If you previously could not confirm you were on the latest version of OpenHands, use the space below to elaborate why you were unable to upgrade and confirm the bug exists on the latest version.
       placeholder: Drag and drop screenshots here, paste links, or add additional context.
 
   - type: markdown
