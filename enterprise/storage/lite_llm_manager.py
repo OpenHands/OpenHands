@@ -180,9 +180,9 @@ class LiteLlmManager:
                 # If not, generate a new key to prevent verification failures later
                 db_key = None
                 if (
-                    user_settings and
-                    user_settings.llm_api_key and
-                    user_settings.llm_base_url == LITE_LLM_API_URL
+                    user_settings
+                    and user_settings.llm_api_key
+                    and user_settings.llm_base_url == LITE_LLM_API_URL
                 ):
                     db_key = user_settings.llm_api_key
                     if hasattr(db_key, 'get_secret_value'):
