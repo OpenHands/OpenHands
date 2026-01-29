@@ -166,29 +166,15 @@ class LiteLlmManager:
                     client, keycloak_user_id, org_id, credits
                 )
 
-                if user_settings.llm_api_key:
-                    logger.debug(
-                        'LiteLlmManager:migrate_lite_llm_entries:update_key',
-                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
-                    )
-                    await LiteLlmManager._update_key(
-                        client,
-                        keycloak_user_id,
-                        user_settings.llm_api_key,
-                        team_id=org_id,
-                    )
-
-                if user_settings.llm_api_key_for_byor:
-                    logger.debug(
-                        'LiteLlmManager:migrate_lite_llm_entries:update_byor_key',
-                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
-                    )
-                    await LiteLlmManager._update_key(
-                        client,
-                        keycloak_user_id,
-                        user_settings.llm_api_key_for_byor,
-                        team_id=org_id,
-                    )
+                logger.debug(
+                    'LiteLlmManager:migrate_lite_llm_entries:update_user_keys',
+                    extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                )
+                await LiteLlmManager._update_user_keys(
+                    client,
+                    keycloak_user_id,
+                    team_id=org_id,
+                )
 
         logger.info(
             'LiteLlmManager:migrate_lite_llm_entries:complete',
@@ -306,30 +292,16 @@ class LiteLlmManager:
                         client, keycloak_user_id, LITE_LLM_TEAM_ID, restored_budget
                     )
 
-                # Step 4: Update keys to remove org team association (set team_id to default)
-                if user_settings.llm_api_key:
-                    logger.debug(
-                        'LiteLlmManager:downgrade_entries:update_key',
-                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
-                    )
-                    await LiteLlmManager._update_key(
-                        client,
-                        keycloak_user_id,
-                        user_settings.llm_api_key,
-                        team_id=LITE_LLM_TEAM_ID,
-                    )
-
-                if user_settings.llm_api_key_for_byor:
-                    logger.debug(
-                        'LiteLlmManager:downgrade_entries:update_byor_key',
-                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
-                    )
-                    await LiteLlmManager._update_key(
-                        client,
-                        keycloak_user_id,
-                        user_settings.llm_api_key_for_byor,
-                        team_id=LITE_LLM_TEAM_ID,
-                    )
+                # Step 4: Update all user keys to remove org team association (set team_id to default)
+                logger.debug(
+                    'LiteLlmManager:downgrade_entries:update_user_keys',
+                    extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                )
+                await LiteLlmManager._update_user_keys(
+                    client,
+                    keycloak_user_id,
+                    team_id=LITE_LLM_TEAM_ID,
+                )
 
                 # Step 5: Remove user from their org team
                 logger.debug(
@@ -642,6 +614,77 @@ class LiteLlmManager:
                 },
             )
         response.raise_for_status()
+
+    @staticmethod
+    async def _get_user_keys(
+        client: httpx.AsyncClient,
+        keycloak_user_id: str,
+    ) -> list[str]:
+        """Get all keys for a user from LiteLLM.
+
+        Args:
+            client: The HTTP client to use for the request
+            keycloak_user_id: The user's Keycloak ID
+
+        Returns:
+            A list of key strings belonging to the user
+        """
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            logger.warning('LiteLLM API configuration not found')
+            return []
+
+        response = await client.get(
+            f'{LITE_LLM_API_URL}/key/list',
+            params={'user_id': keycloak_user_id},
+        )
+
+        if not response.is_success:
+            logger.error(
+                'error_getting_user_keys',
+                extra={
+                    'status_code': response.status_code,
+                    'text': response.text,
+                    'user_id': keycloak_user_id,
+                },
+            )
+            return []
+
+        response_json = response.json()
+        keys = response_json.get('keys', [])
+        logger.debug(
+            'LiteLlmManager:_get_user_keys:keys_retrieved',
+            extra={
+                'user_id': keycloak_user_id,
+                'key_count': len(keys),
+            },
+        )
+        return keys
+
+    @staticmethod
+    async def _update_user_keys(
+        client: httpx.AsyncClient,
+        keycloak_user_id: str,
+        **kwargs,
+    ):
+        """Update all keys belonging to a user with the given parameters.
+
+        Args:
+            client: The HTTP client to use for the request
+            keycloak_user_id: The user's Keycloak ID
+            **kwargs: Parameters to update on each key (e.g., team_id)
+        """
+        keys = await LiteLlmManager._get_user_keys(client, keycloak_user_id)
+
+        logger.debug(
+            'LiteLlmManager:_update_user_keys:updating_keys',
+            extra={
+                'user_id': keycloak_user_id,
+                'key_count': len(keys),
+            },
+        )
+
+        for key in keys:
+            await LiteLlmManager._update_key(client, keycloak_user_id, key, **kwargs)
 
     @staticmethod
     async def _delete_user(
@@ -1091,3 +1134,5 @@ class LiteLlmManager:
     generate_key = staticmethod(with_http_client(_generate_key))
     get_key_info = staticmethod(with_http_client(_get_key_info))
     delete_key = staticmethod(with_http_client(_delete_key))
+    get_user_keys = staticmethod(with_http_client(_get_user_keys))
+    update_user_keys = staticmethod(with_http_client(_update_user_keys))
