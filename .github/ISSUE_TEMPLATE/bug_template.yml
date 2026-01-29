@@ -136,13 +136,6 @@ body:
         **Note:** If experiencing a browser-specific issue, please test in another browser and in incognito/private mode before submitting.
       placeholder: ex. Chrome 131, Firefox 133, Safari 17.2
 
-  - type: input
-    id: runtime-info
-    attributes:
-      label: Runtime Environment
-      description: Python version, Node version, or other relevant runtime details
-      placeholder: ex. Python 3.11.8, Node 20.11.0
-
   - type: textarea
     id: logs
     attributes:
