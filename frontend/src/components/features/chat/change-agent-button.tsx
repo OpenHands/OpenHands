@@ -1,5 +1,6 @@
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
@@ -36,11 +37,40 @@ export function ChangeAgentButton() {
 
   const { data: conversation } = useActiveConversation();
 
-  // Poll sub-conversation task and invalidate parent conversation when ready
-  useSubConversationTaskPolling(
+  const queryClient = useQueryClient();
+
+  // Track the last invalidated task ID to prevent duplicate invalidations
+  const lastInvalidatedTaskIdRef = useRef<string | null>(null);
+
+  // Poll sub-conversation task status
+  const { taskStatus, subConversationId } = useSubConversationTaskPolling(
     subConversationTaskId,
     conversation?.conversation_id || null,
   );
+
+  // Invalidate parent conversation cache when task is ready (only once per task)
+  useEffect(() => {
+    if (
+      taskStatus === "READY" &&
+      subConversationId &&
+      conversation?.conversation_id &&
+      subConversationTaskId &&
+      lastInvalidatedTaskIdRef.current !== subConversationTaskId
+    ) {
+      // Mark this task as invalidated to prevent duplicate calls
+      lastInvalidatedTaskIdRef.current = subConversationTaskId;
+      // Invalidate the parent conversation to refetch with updated sub_conversation_ids
+      queryClient.invalidateQueries({
+        queryKey: ["user", "conversation", conversation.conversation_id],
+      });
+    }
+  }, [
+    taskStatus,
+    subConversationId,
+    conversation?.conversation_id,
+    subConversationTaskId,
+    queryClient,
+  ]);
 
   // Get handlePlanClick and isCreatingConversation from custom hook
   const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
