@@ -354,7 +354,9 @@ class UserStore:
 
     @staticmethod
     async def downgrade_user(user_id: str) -> UserSettings | None:
-        """Downgrade a migrated user back to the pre-migration state.
+        """
+        This method can be removed once orgs is established - probably after Feb 15 2026
+        Downgrade a migrated user back to the pre-migration state.
 
         This reverses the migrate_user operation:
         1. Get the user's settings from user_settings table (migrated users) or
