@@ -18,6 +18,7 @@ from server.constants import (
     get_default_litellm_model,
 )
 from server.logger import logger
+from storage.encrypt_utils import decrypt_legacy_value
 from storage.user_settings import UserSettings
 
 from openhands.server.settings import Settings
@@ -605,6 +606,13 @@ class LiteLlmManager:
             logger.warning('LiteLLM API configuration not found')
             return
 
+        try:
+            # Sometimes the key we get is encrypted - attempt to decrypt.
+            key = decrypt_legacy_value(key)
+        except Exception:
+            # The key was not encrypted
+            pass
+
         payload = {
             'key': key,
         }
@@ -621,6 +629,7 @@ class LiteLlmManager:
                     'invalid_litellm_key_during_update',
                     extra={
                         'user_id': keycloak_user_id,
+                        'text': response.text,
                     },
                 )
                 return
