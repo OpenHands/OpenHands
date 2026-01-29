@@ -654,7 +654,7 @@ class TestLiteLlmManager:
         # Assert
         mock_logger.warning.assert_called_once_with(
             'invalid_litellm_key_during_update',
-            extra={'user_id': 'test-user-id'},
+            extra={'user_id': 'test-user-id', 'text': 'Unauthorized'},
         )
 
     @pytest.mark.asyncio
