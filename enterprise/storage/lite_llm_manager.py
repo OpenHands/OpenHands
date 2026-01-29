@@ -176,6 +176,43 @@ class LiteLlmManager:
                     team_id=org_id,
                 )
 
+                # Check if the database key exists in LiteLLM
+                # If not, generate a new key to prevent verification failures later
+                db_key = None
+                if user_settings and user_settings.llm_api_key:
+                    db_key = user_settings.llm_api_key
+                    if hasattr(db_key, 'get_secret_value'):
+                        db_key = db_key.get_secret_value()
+
+                if db_key:
+                    # Verify the database key exists in LiteLLM
+                    key_valid = await LiteLlmManager.verify_key(db_key, keycloak_user_id)
+                    if not key_valid:
+                        logger.warning(
+                            'LiteLlmManager:migrate_lite_llm_entries:db_key_not_in_litellm',
+                            extra={
+                                'org_id': org_id,
+                                'user_id': keycloak_user_id,
+                                'key_prefix': db_key[:10] + '...' if len(db_key) > 10 else db_key,
+                            },
+                        )
+                        # Generate a new key for the user
+                        new_key = await LiteLlmManager._generate_key(
+                            client,
+                            keycloak_user_id,
+                            org_id,
+                            f'OpenHands Cloud - user {keycloak_user_id} - org {org_id}',
+                            None,
+                        )
+                        if new_key:
+                            logger.info(
+                                'LiteLlmManager:migrate_lite_llm_entries:generated_new_key',
+                                extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                            )
+                            # Update user_settings with the new key so it gets stored in org_member
+                            user_settings.llm_api_key = SecretStr(new_key)
+                            user_settings.llm_api_key_for_byor = SecretStr(new_key)
+
         logger.info(
             'LiteLlmManager:migrate_lite_llm_entries:complete',
             extra={'org_id': org_id, 'user_id': keycloak_user_id},
