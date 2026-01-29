@@ -718,7 +718,7 @@ async def refresh_conversation(
         # explicit metrics
         try:
             app_conversation_info.metrics = (
-                updated_conversation_info.stats.usage_to_metrics['agent']
+                updated_conversation_info.stats.get_combined_metrics()
             )
         except Exception:
             _logger.exception('error_updating_conversation_metrics', stack_info=True)
