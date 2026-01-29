@@ -123,7 +123,6 @@ class SaasSettingsStore(SettingsStore):
         with self.session_maker() as session:
             if not item:
                 return None
-            kwargs = item.model_dump(context={'expose_secrets': True})
             user = (
                 session.query(User)
                 .options(joinedload(User.org_members))
@@ -161,6 +160,7 @@ class SaasSettingsStore(SettingsStore):
                 )
                 return None
 
+            kwargs = item.model_dump(context={'expose_secrets': True})
             for model in (user, org, org_member):
                 for key, value in kwargs.items():
                     if hasattr(model, key):
