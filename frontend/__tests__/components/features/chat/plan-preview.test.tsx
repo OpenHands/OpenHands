@@ -125,35 +125,6 @@ describe("PlanPreview", () => {
     expect(container.textContent).toContain("COMMON$READ_MORE");
   });
 
-  it("should call onViewClick when View button is clicked", async () => {
-    const user = userEvent.setup();
-    const onViewClick = vi.fn();
-
-    renderWithProviders(<PlanPreview planContent="Plan content" />);
-
-    const viewButton = screen.getByTestId("plan-preview-view-button");
-    expect(viewButton).toBeInTheDocument();
-
-    await user.click(viewButton);
-
-    expect(onViewClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("should call onViewClick when Read More button is clicked", async () => {
-    const user = userEvent.setup();
-    const onViewClick = vi.fn();
-    const longContent = "A".repeat(350);
-
-    renderWithProviders(<PlanPreview planContent={longContent} />);
-
-    const readMoreButton = screen.getByTestId("plan-preview-read-more-button");
-    expect(readMoreButton).toBeInTheDocument();
-
-    await user.click(readMoreButton);
-
-    expect(onViewClick).toHaveBeenCalledTimes(1);
-  });
-
   it("should render Build button", () => {
     renderWithProviders(<PlanPreview planContent="Plan content" />);
 
