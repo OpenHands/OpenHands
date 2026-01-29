@@ -7,18 +7,33 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
-import { planHeadings } from "#/components/features/markdown/plan-headings";
+import {
+  planComponents,
+  createPlanComponents,
+} from "#/components/features/markdown/plan-components";
 
 const MAX_CONTENT_LENGTH = 300;
+
+// Shine effect class for streaming text
+const SHINE_TEXT_CLASS = "shine-text";
+
+// Plan components with shine effect applied for streaming state
+const shineComponents = createPlanComponents(SHINE_TEXT_CLASS);
 
 interface PlanPreviewProps {
   /** Raw plan content from PLAN.md file */
   planContent?: string | null;
   onBuildClick?: () => void;
+  /** Whether the plan content is actively being streamed */
+  isStreaming?: boolean;
 }
 
 /* eslint-disable i18next/no-literal-string */
-export function PlanPreview({ planContent, onBuildClick }: PlanPreviewProps) {
+export function PlanPreview({
+  planContent,
+  onBuildClick,
+  isStreaming,
+}: PlanPreviewProps) {
   const { t } = useTranslation();
   const { selectTab } = useSelectConversationTab();
 
@@ -68,7 +83,10 @@ export function PlanPreview({ planContent, onBuildClick }: PlanPreviewProps) {
       >
         {truncatedContent && (
           <>
-            <MarkdownRenderer includeStandard components={planHeadings}>
+            <MarkdownRenderer
+              includeStandard
+              components={isStreaming ? shineComponents : planComponents}
+            >
               {truncatedContent}
             </MarkdownRenderer>
             {planContent && planContent.length > MAX_CONTENT_LENGTH && (
