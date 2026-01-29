@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { PlanPreview } from "#/components/features/chat/plan-preview";
+import { useConversationStore } from "#/stores/conversation-store";
 
 // Mock the feature flag to always return true (not testing feature flag behavior)
 vi.mock("#/utils/feature-flags", () => ({
@@ -20,13 +21,24 @@ vi.mock("react-i18next", async (importOriginal) => {
   };
 });
 
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useConversationId: () => ({ conversationId: "test-conversation-id" }),
+}));
+
 describe("PlanPreview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    useConversationStore.setState({
+      selectedTab: null,
+      isRightPanelShown: false,
+      hasRightPanelToggled: false,
+    });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("should render nothing when planContent is null", () => {
@@ -81,39 +93,6 @@ describe("PlanPreview", () => {
     expect(container.textContent).toContain("A".repeat(300));
     expect(container.textContent).toContain("...");
     expect(container.textContent).toContain("COMMON$READ_MORE");
-  });
-
-  it("should call onViewClick when View button is clicked", async () => {
-    const user = userEvent.setup();
-    const onViewClick = vi.fn();
-
-    renderWithProviders(
-      <PlanPreview planContent="Plan content" onViewClick={onViewClick} />,
-    );
-
-    const viewButton = screen.getByTestId("plan-preview-view-button");
-    expect(viewButton).toBeInTheDocument();
-
-    await user.click(viewButton);
-
-    expect(onViewClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("should call onViewClick when Read More button is clicked", async () => {
-    const user = userEvent.setup();
-    const onViewClick = vi.fn();
-    const longContent = "A".repeat(350);
-
-    renderWithProviders(
-      <PlanPreview planContent={longContent} onViewClick={onViewClick} />,
-    );
-
-    const readMoreButton = screen.getByTestId("plan-preview-read-more-button");
-    expect(readMoreButton).toBeInTheDocument();
-
-    await user.click(readMoreButton);
-
-    expect(onViewClick).toHaveBeenCalledTimes(1);
   });
 
   it("should call onBuildClick when Build button is clicked", async () => {
@@ -223,5 +202,69 @@ describe("PlanPreview", () => {
     expect(container.querySelector("h4")).toBeInTheDocument();
     expect(container.querySelector("h5")).toBeInTheDocument();
     expect(container.querySelector("h6")).toBeInTheDocument();
+  });
+
+  it("should call selectTab with 'planner' when View button is clicked", async () => {
+    const user = userEvent.setup();
+    const planContent = "Plan content";
+    const conversationId = "test-conversation-id";
+
+    // Arrange: Set up initial state
+    useConversationStore.setState({
+      selectedTab: null,
+      isRightPanelShown: false,
+      hasRightPanelToggled: false,
+    });
+
+    renderWithProviders(<PlanPreview planContent={planContent} />);
+
+    // Act: Click the View button
+    const viewButton = screen.getByTestId("plan-preview-view-button");
+    await user.click(viewButton);
+
+    // Assert: Verify selectTab was called with 'planner' and panel was opened
+    // The hook sets hasRightPanelToggled, which should trigger isRightPanelShown update
+    // In tests, we need to manually sync or check hasRightPanelToggled
+    expect(useConversationStore.getState().selectedTab).toBe("planner");
+    expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
+
+    // Verify localStorage was updated
+    const storedState = JSON.parse(
+      localStorage.getItem(`conversation-state-${conversationId}`)!,
+    );
+    expect(storedState.selectedTab).toBe("planner");
+    expect(storedState.rightPanelShown).toBe(true);
+  });
+
+  it("should call selectTab with 'planner' when Read more button is clicked", async () => {
+    const user = userEvent.setup();
+    const longContent = "A".repeat(350);
+    const conversationId = "test-conversation-id";
+
+    // Arrange: Set up initial state
+    useConversationStore.setState({
+      selectedTab: null,
+      isRightPanelShown: false,
+      hasRightPanelToggled: false,
+    });
+
+    renderWithProviders(<PlanPreview planContent={longContent} />);
+
+    // Act: Click the Read more button
+    const readMoreButton = screen.getByTestId("plan-preview-read-more-button");
+    await user.click(readMoreButton);
+
+    // Assert: Verify selectTab was called with 'planner' and panel was opened
+    // The hook sets hasRightPanelToggled, which should trigger isRightPanelShown update
+    // In tests, we need to manually sync or check hasRightPanelToggled
+    expect(useConversationStore.getState().selectedTab).toBe("planner");
+    expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
+
+    // Verify localStorage was updated
+    const storedState = JSON.parse(
+      localStorage.getItem(`conversation-state-${conversationId}`)!,
+    );
+    expect(storedState.selectedTab).toBe("planner");
+    expect(storedState.rightPanelShown).toBe(true);
   });
 });
