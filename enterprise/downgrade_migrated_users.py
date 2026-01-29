@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 """
+This script can be removed once orgs is established - probably after Feb 15 2026
+
 Downgrade script for migrated users.
 
 This script identifies users who have been migrated (already_migrated=True)
