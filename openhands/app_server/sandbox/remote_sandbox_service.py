@@ -717,9 +717,9 @@ async def refresh_conversation(
         # We should probably update the data structures and to store / display the more
         # explicit metrics
         try:
-            app_conversation_info.metrics = updated_conversation_info.stats.usage_to_metrics[
-                'agent'
-            ]
+            app_conversation_info.metrics = (
+                updated_conversation_info.stats.usage_to_metrics['agent']
+            )
         except Exception:
             _logger.exception('error_updating_conversation_metrics', stack_info=True)
 
