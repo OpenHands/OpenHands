@@ -8,11 +8,6 @@ body:
       value: |
         ## Thank you for suggesting a feature! 💡
         
-        **Feature requests are prioritized based on:**
-        - Community engagement (👍 reactions and constructive discussion)
-        - Alignment with project roadmap and goals
-        - Implementation complexity vs. value delivered
-        
         **Please provide detailed information.** Vague or low-effort requests may be closed. Well-documented feature requests with strong community support are more likely to be added to the roadmap.
 
   - type: checkboxes
