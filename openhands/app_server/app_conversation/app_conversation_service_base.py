@@ -51,7 +51,8 @@ PRE_COMMIT_LOCAL = '.git/hooks/pre-commit.local'
 class AppConversationServiceBase(AppConversationService, ABC):
     """App Conversation service which adds git specific functionality.
 
-    Sets up repositories and installs hooks"""
+    Sets up repositories and installs hooks
+    """
 
     init_git_in_empty_workspace: bool
     user_context: UserContext
@@ -484,7 +485,6 @@ class AppConversationServiceBase(AppConversationService, ABC):
             security_analyzer_str: String value from settings
             httpx_client: HTTP client for making API requests
         """
-
         if session_api_key is None:
             return
 

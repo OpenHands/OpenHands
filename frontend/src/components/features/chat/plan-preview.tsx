@@ -7,6 +7,7 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
+import { planHeadings } from "#/components/features/markdown/plan-headings";
 
 const MAX_CONTENT_LENGTH = 300;
 
@@ -67,7 +68,7 @@ export function PlanPreview({ planContent, onBuildClick }: PlanPreviewProps) {
       >
         {truncatedContent && (
           <>
-            <MarkdownRenderer includeStandard includeHeadings>
+            <MarkdownRenderer includeStandard components={planHeadings}>
               {truncatedContent}
             </MarkdownRenderer>
             {planContent && planContent.length > MAX_CONTENT_LENGTH && (

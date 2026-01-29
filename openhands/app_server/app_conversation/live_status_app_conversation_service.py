@@ -32,6 +32,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskStatus,
     AppConversationUpdateRequest,
+    PluginSpec,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
@@ -79,6 +80,7 @@ from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
+from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
@@ -254,6 +256,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     request.conversation_id,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
+                    plugins=request.plugins,
                 )
             )
 
@@ -954,6 +957,79 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             return agent.model_copy(update=updates)
         return agent
 
+    def _construct_initial_message_with_plugin_params(
+        self,
+        initial_message: SendMessageRequest | None,
+        plugins: list[PluginSpec] | None,
+    ) -> SendMessageRequest | None:
+        """Incorporate plugin parameters into the initial message if specified.
+
+        Plugin parameters are formatted and appended to the initial message so the
+        agent has context about the user-provided configuration values.
+
+        Args:
+            initial_message: The original initial message, if any
+            plugins: List of plugin specifications with optional parameters
+
+        Returns:
+            The initial message with plugin parameters incorporated, or the
+            original message if no plugin parameters are specified
+        """
+        from openhands.agent_server.models import TextContent
+
+        if not plugins:
+            return initial_message
+
+        # Collect formatted parameters from plugins that have them
+        plugins_with_params = [p for p in plugins if p.parameters]
+        if not plugins_with_params:
+            return initial_message
+
+        # Format parameters, grouped by plugin if multiple
+        if len(plugins_with_params) == 1:
+            params_text = plugins_with_params[0].format_params_as_text()
+            plugin_params_message = (
+                f'\n\nPlugin Configuration Parameters:\n{params_text}'
+            )
+        else:
+            # Group by plugin name for clarity
+            formatted_plugins = []
+            for plugin in plugins_with_params:
+                params_text = plugin.format_params_as_text(indent='  ')
+                if params_text:
+                    formatted_plugins.append(f'{plugin.display_name}:\n{params_text}')
+
+            plugin_params_message = (
+                '\n\nPlugin Configuration Parameters:\n' + '\n'.join(formatted_plugins)
+            )
+
+        if initial_message is None:
+            # Create a new message with just the plugin parameters
+            return SendMessageRequest(
+                content=[TextContent(text=plugin_params_message.strip())],
+                run=True,
+            )
+
+        # Append plugin parameters to existing message content
+        new_content = list(initial_message.content)
+        if new_content and isinstance(new_content[-1], TextContent):
+            # Append to the last text content
+            last_content = new_content[-1]
+            new_content[-1] = TextContent(
+                text=last_content.text + plugin_params_message,
+                cache_prompt=last_content.cache_prompt,
+                enable_truncation=last_content.enable_truncation,
+            )
+        else:
+            # Add as new text content
+            new_content.append(TextContent(text=plugin_params_message.strip()))
+
+        return SendMessageRequest(
+            role=initial_message.role,
+            content=new_content,
+            run=initial_message.run,
+        )
+
     async def _finalize_conversation_request(
         self,
         agent: Agent,
@@ -966,6 +1042,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         remote_workspace: AsyncRemoteWorkspace | None,
         selected_repository: str | None,
         working_dir: str,
+        plugins: list[PluginSpec] | None = None,
     ) -> StartConversationRequest:
         """Finalize the conversation request with experiment variants and skills.
 
@@ -980,6 +1057,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             remote_workspace: Optional remote workspace for skills loading
             selected_repository: Optional repository name
             working_dir: Working directory path
+            plugins: Optional list of plugin specifications to load
 
         Returns:
             Complete StartConversationRequest ready for use
@@ -1006,6 +1084,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 _logger.warning(f'Failed to load skills: {e}', exc_info=True)
                 # Continue without skills - don't fail conversation startup
 
+        # Incorporate plugin parameters into initial message if specified
+        final_initial_message = self._construct_initial_message_with_plugin_params(
+            initial_message, plugins
+        )
+
+        # Convert PluginSpec list to SDK PluginSource list for agent server
+        sdk_plugins: list[PluginSource] | None = None
+        if plugins:
+            sdk_plugins = [
+                PluginSource(
+                    source=p.source,
+                    ref=p.ref,
+                    repo_path=p.repo_path,
+                )
+                for p in plugins
+            ]
+
         # Create and return the final request
         return StartConversationRequest(
             conversation_id=conversation_id,
@@ -1014,8 +1109,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             confirmation_policy=self._select_confirmation_policy(
                 bool(user.confirmation_mode), user.security_analyzer
             ),
-            initial_message=initial_message,
+            initial_message=final_initial_message,
             secrets=secrets,
+            plugins=sdk_plugins,
         )
 
     async def _build_start_conversation_request_for_user(
@@ -1030,6 +1126,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
+        plugins: list[PluginSpec] | None = None,
     ) -> StartConversationRequest:
         """Build a complete conversation request for a user.
 
@@ -1038,6 +1135,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         2. Configuring LLM and MCP settings
         3. Creating an agent with appropriate context
         4. Finalizing the request with skills and experiment variants
+        5. Passing plugins to the agent server for remote plugin loading
         """
         user = await self.user_context.get_user_info()
         workspace = LocalWorkspace(working_dir=working_dir)
@@ -1070,6 +1168,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             remote_workspace,
             selected_repository,
             working_dir,
+            plugins=plugins,
         )
 
     async def update_agent_server_conversation_title(
@@ -1124,7 +1223,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self, conversation_id: UUID, request: AppConversationUpdateRequest
     ) -> AppConversation | None:
         """Update an app conversation and return it. Return None if the conversation
-        did not exist."""
+        did not exist.
+        """
         info = await self.app_conversation_info_service.get_app_conversation_info(
             conversation_id
         )
