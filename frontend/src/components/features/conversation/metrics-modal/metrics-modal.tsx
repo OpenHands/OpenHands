@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -8,6 +9,8 @@ import { UsageSection } from "./usage-section";
 import { ContextWindowSection } from "./context-window-section";
 import { EmptyState } from "./empty-state";
 import useMetricsStore from "#/stores/metrics-store";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useBatchAppConversations } from "#/hooks/query/use-batch-app-conversations";
 
 interface MetricsModalProps {
   isOpen: boolean;
@@ -16,7 +19,50 @@ interface MetricsModalProps {
 
 export function MetricsModal({ isOpen, onOpenChange }: MetricsModalProps) {
   const { t } = useTranslation();
-  const metrics = useMetricsStore();
+  const storeMetrics = useMetricsStore();
+  const { data: conversation } = useActiveConversation();
+
+  const isV1 = conversation?.conversation_version === "V1";
+  const conversationId = conversation?.conversation_id;
+
+  // For V1 conversations, fetch metrics from useBatchAppConversations
+  const { data: v1Conversations } = useBatchAppConversations(
+    isV1 && conversationId ? [conversationId] : [],
+  );
+
+  // Compute the metrics based on conversation version
+  const metrics = useMemo(() => {
+    if (isV1 && v1Conversations?.[0]) {
+      const v1Metrics = v1Conversations[0].metrics;
+      if (v1Metrics) {
+        return {
+          cost: v1Metrics.accumulated_cost,
+          max_budget_per_task: v1Metrics.max_budget_per_task,
+          usage: v1Metrics.accumulated_token_usage
+            ? {
+                prompt_tokens:
+                  v1Metrics.accumulated_token_usage.prompt_tokens ?? 0,
+                completion_tokens:
+                  v1Metrics.accumulated_token_usage.completion_tokens ?? 0,
+                cache_read_tokens:
+                  v1Metrics.accumulated_token_usage.cache_read_tokens ?? 0,
+                cache_write_tokens:
+                  v1Metrics.accumulated_token_usage.cache_write_tokens ?? 0,
+                context_window:
+                  v1Metrics.accumulated_token_usage.context_window ?? 0,
+                per_turn_token:
+                  v1Metrics.accumulated_token_usage.per_turn_token ?? 0,
+              }
+            : null,
+        };
+      }
+      return { cost: null, max_budget_per_task: null, usage: null };
+    }
+
+    // For non-V1 conversations, use the store metrics
+    return storeMetrics;
+  }, [isV1, v1Conversations, storeMetrics]);
+
   if (!isOpen) return null;
 
   return (

@@ -2,6 +2,22 @@ import { ConversationTrigger } from "../open-hands.types";
 import { Provider } from "#/types/settings";
 import { V1SandboxStatus } from "../sandbox-service/sandbox-service.types";
 
+// V1 Metrics Types
+export interface V1TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  context_window: number;
+  per_turn_token: number;
+}
+
+export interface V1MetricsSnapshot {
+  accumulated_cost: number | null;
+  max_budget_per_task: number | null;
+  accumulated_token_usage: V1TokenUsage | null;
+}
+
 // V1 API Types for requests
 // These types match the SDK's TextContent and ImageContent formats
 export interface V1TextContent {
@@ -91,7 +107,7 @@ export interface V1AppConversation {
   trigger: ConversationTrigger | null;
   pr_number: number[];
   llm_model: string | null;
-  metrics: unknown | null;
+  metrics: V1MetricsSnapshot | null;
   created_at: string;
   updated_at: string;
   sandbox_status: V1SandboxStatus;
