@@ -35,6 +35,9 @@ export function ConversationName() {
     handleShowAgentTools,
     handleShowSkills,
     handleExportConversation,
+    handleTogglePublic,
+    handleCopyShareLink,
+    shareUrl,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -88,6 +91,10 @@ export function ConversationName() {
   };
 
   const handleKeyUp = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input)
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
     if (event.key === "Enter") {
       event.currentTarget.blur();
     }
@@ -179,6 +186,9 @@ export function ConversationName() {
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
+                onTogglePublic={handleTogglePublic}
+                shareUrl={shareUrl}
+                onCopyShareLink={handleCopyShareLink}
                 onDownloadConversation={
                   shouldShowDownloadConversation
                     ? handleDownloadConversation
@@ -201,7 +211,7 @@ export function ConversationName() {
       <SystemMessageModal
         isOpen={systemModalVisible}
         onClose={() => setSystemModalVisible(false)}
-        systemMessage={systemMessage ? systemMessage.args : null}
+        systemMessage={systemMessage || null}
       />
 
       {/* Skills Modal */}
@@ -214,6 +224,7 @@ export function ConversationName() {
         <ConfirmDeleteModal
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmDeleteModalVisible(false)}
+          conversationTitle={conversation?.title}
         />
       )}
 

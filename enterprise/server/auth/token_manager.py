@@ -14,10 +14,13 @@ from keycloak.exceptions import (
     KeycloakAuthenticationError,
     KeycloakConnectionError,
     KeycloakError,
+    KeycloakPostError,
 )
+from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_APP_CLIENT_SECRET,
+    DUPLICATE_EMAIL_CHECK,
     GITHUB_APP_CLIENT_ID,
     GITHUB_APP_CLIENT_SECRET,
     GITLAB_APP_CLIENT_ID,
@@ -43,6 +46,7 @@ from storage.offline_token_store import OfflineTokenStore
 from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
 
 from openhands.integrations.service_types import ProviderType
+from openhands.server.types import SessionExpiredError
 from openhands.utils.http_session import httpx_verify_option
 
 
@@ -423,6 +427,8 @@ class TokenManager:
         access_token = data.get('access_token')
         refresh_token = data.get('refresh_token')
         if not access_token or not refresh_token:
+            if data.get('error') == 'bad_refresh_token':
+                raise ExpiredError()
             raise ValueError(
                 'Failed to refresh token: missing access_token or refresh_token in response.'
             )
@@ -464,6 +470,14 @@ class TokenManager:
             return await self.get_idp_token(tokens['access_token'], idp)
         except KeycloakConnectionError:
             logger.exception('KeycloakConnectionError when refreshing token')
+            raise
+        except KeycloakPostError as e:
+            error_message = str(e)
+            if 'invalid_grant' in error_message or 'session not found' in error_message:
+                logger.warning(f'User session expired or invalid: {error_message}')
+                raise SessionExpiredError(
+                    'Your session has expired. Please login again.'
+                ) from e
             raise
 
     @retry(
@@ -634,6 +648,10 @@ class TokenManager:
             True if a duplicate is found (excluding current user), False otherwise
         """
         if not email:
+            return False
+
+        # We have the option to skip the duplicate email check in test environments
+        if not DUPLICATE_EMAIL_CHECK:
             return False
 
         base_email = extract_base_email(email)

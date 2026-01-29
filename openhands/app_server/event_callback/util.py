@@ -18,15 +18,6 @@ if TYPE_CHECKING:
     )
 
 
-def get_conversation_url() -> str:
-    from openhands.app_server.config import get_global_config
-
-    web_url = get_global_config().web_url
-    conversation_prefix = 'conversations/{}'
-    conversation_url = f'{web_url}/{conversation_prefix}'
-    return conversation_url
-
-
 def ensure_conversation_found(
     app_conversation_info: AppConversationInfo | None, conversation_id: UUID
 ) -> AppConversationInfo:
@@ -68,14 +59,3 @@ def get_agent_server_url_from_sandbox(sandbox: SandboxInfo) -> str:
         ) from None
 
     return replace_localhost_hostname_for_docker(agent_server_url)
-
-
-def get_prompt_template(template_name: str) -> str:
-    from jinja2 import Environment, FileSystemLoader
-
-    jinja_env = Environment(
-        loader=FileSystemLoader('openhands/integrations/templates/resolver/')
-    )
-    summary_instruction_template = jinja_env.get_template(template_name)
-    summary_instruction = summary_instruction_template.render()
-    return summary_instruction

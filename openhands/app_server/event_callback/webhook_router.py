@@ -1,4 +1,4 @@
-"""Event Callback router for OpenHands Server."""
+"""Event Callback router for OpenHands App Server."""
 
 import asyncio
 import importlib
@@ -124,6 +124,8 @@ async def on_conversation_update(
         git_provider=existing.git_provider,
         trigger=existing.trigger,
         pr_number=existing.pr_number,
+        # Preserve parent/child relationship and other metadata
+        parent_conversation_id=existing.parent_conversation_id,
     )
     await app_conversation_info_service.save_app_conversation_info(
         app_conversation_info
@@ -188,7 +190,7 @@ async def get_secret(
         if user_id:
             user_auth = await get_user_auth_for_user(user_id)
         else:
-            # OSS mode - use default user auth
+            # OpenHands (OSS mode) - use default user auth
             user_auth = DefaultUserAuth()
 
         # Create UserContext directly

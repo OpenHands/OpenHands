@@ -48,7 +48,7 @@ async def test_get_conversation_link_non_saas_mode():
 
     # Test with non-SAAS mode
     with patch('openhands.server.routes.mcp.server_config') as mock_config:
-        mock_config.app_mode = AppMode.OSS
+        mock_config.app_mode = AppMode.OPENHANDS
 
         # Call the function
         result = await get_conversation_link(

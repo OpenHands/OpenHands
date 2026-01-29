@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ConversationStatus } from "#/types/conversation-status";
 import { cn, getConversationStatusLabel } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
-import { TooltipButton } from "#/components/shared/buttons/tooltip-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 
 interface ConversationStatusIndicatorProps {
   conversationStatus: ConversationStatus;
@@ -17,7 +17,7 @@ export function ConversationStatusIndicator({
   const conversationStatusBackgroundColor = useMemo(() => {
     switch (conversationStatus) {
       case "STOPPED":
-        return "bg-[#3C3C49]"; // Inactive/stopped - grey
+        return "bg-[#3C3C49]";
       case "RUNNING":
         return "bg-[#1FBD53]"; // Running/online - green
       case "STARTING":
@@ -34,13 +34,10 @@ export function ConversationStatusIndicator({
   );
 
   return (
-    <TooltipButton
-      tooltip={statusLabel}
-      ariaLabel={statusLabel}
+    <StyledTooltip
+      content={statusLabel}
       placement="right"
       showArrow
-      asSpan
-      className="p-0 border-0 bg-transparent hover:opacity-100"
       tooltipClassName="bg-[#1a1a1a] text-white text-xs shadow-lg"
     >
       <div
@@ -49,6 +46,6 @@ export function ConversationStatusIndicator({
           conversationStatusBackgroundColor,
         )}
       />
-    </TooltipButton>
+    </StyledTooltip>
   );
 }

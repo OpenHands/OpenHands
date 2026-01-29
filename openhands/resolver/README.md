@@ -40,7 +40,7 @@ Follow these steps to use this workflow in your own repository:
 
    Note: You can set these secrets at the organization level to use across multiple repositories.
 
-6. Set up any [custom configurations required](https://docs.all-hands.dev/usage/how-to/github-action#custom-configurations)
+6. Set up any [custom configurations required](https://docs.openhands.dev/usage/how-to/github-action#custom-configurations)
 
 7. Usage:
    There are two ways to trigger the OpenHands agent:
@@ -215,4 +215,4 @@ You can customize how the AI agent approaches issue resolution by adding a repos
 ## Troubleshooting
 
 If you have any issues, please open an issue on this GitHub, GitLab, or Bitbucket repo, we're happy to help!
-Alternatively, you can [email us](mailto:contact@all-hands.dev) or join the OpenHands Slack workspace (see [the README](/README.md) for an invite link).
+Alternatively, you can [email us](mailto:contact@openhands.dev) or join the OpenHands Slack workspace (see [the README](/README.md) for an invite link).

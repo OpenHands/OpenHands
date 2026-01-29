@@ -3,6 +3,7 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Union
+from uuid import UUID
 
 import base62
 import httpx
@@ -35,6 +36,8 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
+    ALLOW_CORS_ORIGINS_VARIABLE,
+    WEBHOOK_CALLBACK_VARIABLE,
     SandboxService,
     SandboxServiceInjector,
 )
@@ -47,8 +50,6 @@ from openhands.app_server.utils.sql_utils import Base, UtcDateTime
 from openhands.sdk.utils.paging import page_iterator
 
 _logger = logging.getLogger(__name__)
-WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
-ALLOW_CORS_ORIGINS_VARIABLE = 'OH_ALLOW_CORS_ORIGINS_0'
 polling_task: asyncio.Task | None = None
 POD_STATUS_MAPPING = {
     'ready': SandboxStatus.RUNNING,
@@ -271,6 +272,12 @@ class RemoteSandboxService(SandboxService):
             # we are probably in local development and the only url in use is localhost
             environment[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
 
+        # Add worker port environment variables so the agent knows which ports to use
+        # for web applications. These match the ports exposed via the WORKER_1 and
+        # WORKER_2 URLs.
+        environment[WORKER_1] = str(WORKER_1_PORT)
+        environment[WORKER_2] = str(WORKER_2_PORT)
+
         return environment
 
     async def search_sandboxes(
@@ -382,7 +389,9 @@ class RemoteSandboxService(SandboxService):
 
         return None
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
             # Enforce sandbox limits by cleaning up old sandboxes
@@ -401,8 +410,9 @@ class RemoteSandboxService(SandboxService):
                     raise ValueError('Sandbox Spec not found')
                 sandbox_spec = sandbox_spec_maybe
 
-            # Create a unique id
-            sandbox_id = base62.encodebytes(os.urandom(16))
+            # Create a unique id, use provided sandbox_id if available
+            if sandbox_id is None:
+                sandbox_id = base62.encodebytes(os.urandom(16))
 
             # get user id
             user_id = await self.user_context.get_user_id()
@@ -729,7 +739,9 @@ async def refresh_conversation(
             return EventPage.model_validate(response.json())
 
         async for event in page_iterator(fetch_events_page):
-            existing = await event_service.get_event(event.id)
+            existing = await event_service.get_event(
+                app_conversation_info.id, UUID(event.id)
+            )
             if existing is None:
                 await event_service.save_event(app_conversation_info.id, event)
                 await event_callback_service.execute_callbacks(
@@ -790,7 +802,7 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
         # This is primarily used for local development rather than production
         config = get_global_config()
         web_url = config.web_url
-        if web_url is None:
+        if web_url is None or 'localhost' in web_url:
             global polling_task
             if polling_task is None:
                 polling_task = asyncio.create_task(

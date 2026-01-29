@@ -19,6 +19,7 @@ import {
   renderConversationCreatedToast,
   renderConversationFinishedToast,
 } from "#/components/features/chat/microagent/microagent-status-toast";
+import { Provider } from "#/types/settings";
 
 interface ConversationSocket {
   socket: Socket;
@@ -31,7 +32,7 @@ interface ConversationSubscriptionsContextType {
   subscribeToConversation: (options: {
     conversationId: string;
     sessionApiKey: string | null;
-    providersSet: import("#/types/settings").Provider[];
+    providersSet: Provider[];
     baseUrl: string;
     socketPath?: string;
     onEvent?: (event: unknown, conversationId: string) => void;
@@ -135,7 +136,7 @@ export function ConversationSubscriptionsProvider({
     (options: {
       conversationId: string;
       sessionApiKey: string | null;
-      providersSet: import("#/types/settings").Provider[];
+      providersSet: Provider[];
       baseUrl: string;
       socketPath?: string;
       onEvent?: (event: unknown, conversationId: string) => void;

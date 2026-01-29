@@ -1,7 +1,14 @@
 """Tests for enterprise integrations utils module."""
 
+from unittest.mock import patch
+
 import pytest
-from integrations.utils import get_summary_for_agent_state
+from integrations.utils import (
+    HOST_URL,
+    append_conversation_footer,
+    get_session_expired_message,
+    get_summary_for_agent_state,
+)
 
 from openhands.core.schema.agent import AgentState
 from openhands.events.observation.agent import AgentStateChangedObservation
@@ -157,3 +164,200 @@ class TestGetSummaryForAgentState:
         assert 'try again later' in result.lower()
         # RATE_LIMITED doesn't include conversation link in response
         assert self.conversation_link not in result
+
+
+class TestGetSessionExpiredMessage:
+    """Test cases for get_session_expired_message function."""
+
+    def test_message_with_username_contains_at_prefix(self):
+        """Test that the message contains the username with @ prefix."""
+        result = get_session_expired_message('testuser')
+        assert '@testuser' in result
+
+    def test_message_with_username_contains_session_expired_text(self):
+        """Test that the message contains session expired text."""
+        result = get_session_expired_message('testuser')
+        assert 'session has expired' in result
+
+    def test_message_with_username_contains_login_instruction(self):
+        """Test that the message contains login instruction."""
+        result = get_session_expired_message('testuser')
+        assert 'login again' in result
+
+    def test_message_with_username_contains_host_url(self):
+        """Test that the message contains the OpenHands Cloud URL."""
+        result = get_session_expired_message('testuser')
+        assert HOST_URL in result
+        assert 'OpenHands Cloud' in result
+
+    def test_different_usernames(self):
+        """Test that different usernames produce different messages."""
+        result1 = get_session_expired_message('user1')
+        result2 = get_session_expired_message('user2')
+        assert '@user1' in result1
+        assert '@user2' in result2
+        assert '@user1' not in result2
+        assert '@user2' not in result1
+
+    def test_message_without_username_contains_session_expired_text(self):
+        """Test that the message without username contains session expired text."""
+        result = get_session_expired_message()
+        assert 'session has expired' in result
+
+    def test_message_without_username_contains_login_instruction(self):
+        """Test that the message without username contains login instruction."""
+        result = get_session_expired_message()
+        assert 'login again' in result
+
+    def test_message_without_username_contains_host_url(self):
+        """Test that the message without username contains the OpenHands Cloud URL."""
+        result = get_session_expired_message()
+        assert HOST_URL in result
+        assert 'OpenHands Cloud' in result
+
+    def test_message_without_username_does_not_contain_at_prefix(self):
+        """Test that the message without username does not contain @ prefix."""
+        result = get_session_expired_message()
+        assert not result.startswith('@')
+        assert 'Your session' in result
+
+    def test_message_with_none_username(self):
+        """Test that passing None explicitly works the same as no argument."""
+        result = get_session_expired_message(None)
+        assert not result.startswith('@')
+        assert 'Your session' in result
+
+
+class TestAppendConversationFooter:
+    """Test cases for append_conversation_footer function."""
+
+    @patch(
+        'integrations.utils.CONVERSATION_URL', 'https://example.com/conversations/{}'
+    )
+    def test_appends_footer_with_markdown_link(self):
+        """Test that footer is appended with correct markdown link format."""
+        # Arrange
+        message = 'This is a test message'
+        conversation_id = 'test-conv-123'
+
+        # Act
+        result = append_conversation_footer(message, conversation_id)
+
+        # Assert
+        assert result.startswith(message)
+        assert (
+            '[View full conversation](https://example.com/conversations/test-conv-123)'
+            in result
+        )
+        assert result.endswith(
+            '[View full conversation](https://example.com/conversations/test-conv-123)'
+        )
+
+    @patch(
+        'integrations.utils.CONVERSATION_URL', 'https://example.com/conversations/{}'
+    )
+    def test_footer_does_not_contain_html_tags(self):
+        """Test that footer does not contain HTML tags like <sub>."""
+        # Arrange
+        message = 'Test message'
+        conversation_id = 'test-conv-456'
+
+        # Act
+        result = append_conversation_footer(message, conversation_id)
+
+        # Assert
+        assert '<sub>' not in result
+        assert '</sub>' not in result
+
+    @patch(
+        'integrations.utils.CONVERSATION_URL', 'https://example.com/conversations/{}'
+    )
+    def test_footer_format_with_newlines(self):
+        """Test that footer is properly separated with newlines."""
+        # Arrange
+        message = 'Original message content'
+        conversation_id = 'test-conv-789'
+
+        # Act
+        result = append_conversation_footer(message, conversation_id)
+
+        # Assert
+        assert (
+            result
+            == 'Original message content\n\n[View full conversation](https://example.com/conversations/test-conv-789)'
+        )
+
+    @patch(
+        'integrations.utils.CONVERSATION_URL', 'https://example.com/conversations/{}'
+    )
+    def test_empty_message_still_appends_footer(self):
+        """Test that footer is appended even when message is empty."""
+        # Arrange
+        message = ''
+        conversation_id = 'empty-msg-conv'
+
+        # Act
+        result = append_conversation_footer(message, conversation_id)
+
+        # Assert
+        assert result.startswith('\n\n')
+        assert (
+            '[View full conversation](https://example.com/conversations/empty-msg-conv)'
+            in result
+        )
+
+    @patch(
+        'integrations.utils.CONVERSATION_URL', 'https://example.com/conversations/{}'
+    )
+    def test_conversation_id_with_special_characters(self):
+        """Test that footer handles conversation IDs with special characters."""
+        # Arrange
+        message = 'Test message'
+        conversation_id = 'conv-123_abc-456'
+
+        # Act
+        result = append_conversation_footer(message, conversation_id)
+
+        # Assert
+        expected_url = 'https://example.com/conversations/conv-123_abc-456'
+        assert expected_url in result
+        assert '[View full conversation]' in result
+
+    @patch(
+        'integrations.utils.CONVERSATION_URL', 'https://example.com/conversations/{}'
+    )
+    def test_multiline_message_preserves_content(self):
+        """Test that multiline messages are preserved correctly."""
+        # Arrange
+        message = 'Line 1\nLine 2\nLine 3'
+        conversation_id = 'multiline-conv'
+
+        # Act
+        result = append_conversation_footer(message, conversation_id)
+
+        # Assert
+        assert result.startswith('Line 1\nLine 2\nLine 3')
+        assert '\n\n[View full conversation]' in result
+        assert message in result
+
+    @patch(
+        'integrations.utils.CONVERSATION_URL', 'https://example.com/conversations/{}'
+    )
+    def test_footer_contains_only_markdown_syntax(self):
+        """Test that footer uses only markdown syntax, not HTML."""
+        # Arrange
+        message = 'Test message'
+        conversation_id = 'markdown-test'
+
+        # Act
+        result = append_conversation_footer(message, conversation_id)
+
+        # Assert
+        footer_part = result[len(message) :]
+        # Should only contain markdown link syntax: [text](url)
+        assert footer_part.startswith('\n\n[')
+        assert '](' in footer_part
+        assert footer_part.endswith(')')
+        # Should not contain any HTML tags (specifically <sub> tags that were removed)
+        assert '<sub>' not in footer_part
+        assert '</sub>' not in footer_part

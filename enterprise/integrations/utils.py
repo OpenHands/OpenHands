@@ -7,12 +7,8 @@ from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader
 from server.constants import WEB_HOST
-from storage.repository_store import RepositoryStore
-from storage.stored_repository import StoredRepository
-from storage.user_repo_map import UserRepositoryMap
-from storage.user_repo_map_store import UserRepositoryMapStore
+from storage.org_store import OrgStore
 
-from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
 from openhands.events import Event, EventSource
@@ -20,10 +16,12 @@ from openhands.events.action import (
     AgentFinishAction,
     MessageAction,
 )
+from openhands.events.event_filter import EventFilter
 from openhands.events.event_store_abc import EventStoreABC
 from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.integrations.service_types import Repository
 from openhands.storage.data_models.conversation_status import ConversationStatus
+from openhands.utils.async_utils import call_sync_from_async
 
 if TYPE_CHECKING:
     from openhands.server.conversation_manager.conversation_manager import (
@@ -35,7 +33,7 @@ if TYPE_CHECKING:
 HOST = WEB_HOST
 # ---- DO NOT REMOVE ----
 
-HOST_URL = f'https://{HOST}'
+HOST_URL = f'https://{HOST}' if 'localhost' not in HOST else f'http://{HOST}'
 GITHUB_WEBHOOK_URL = f'{HOST_URL}/integration/github/events'
 GITLAB_WEBHOOK_URL = f'{HOST_URL}/integration/gitlab/events'
 conversation_prefix = 'conversations/{}'
@@ -45,6 +43,27 @@ CONVERSATION_URL = f'{HOST_URL}/{conversation_prefix}'
 ENABLE_PROACTIVE_CONVERSATION_STARTERS = (
     os.getenv('ENABLE_PROACTIVE_CONVERSATION_STARTERS', 'false').lower() == 'true'
 )
+
+
+def get_session_expired_message(username: str | None = None) -> str:
+    """Get a user-friendly session expired message.
+
+    Used by integrations to notify users when their Keycloak offline session
+    has expired.
+
+    Args:
+        username: Optional username to mention in the message. If provided,
+                  the message will include @username prefix (used by Git providers
+                  like GitHub, GitLab, Slack). If None, returns a generic message
+                  (used by Jira, Jira DC, Linear).
+
+    Returns:
+        A formatted session expired message
+    """
+    if username:
+        return f'@{username} your session has expired. Please login again at [OpenHands Cloud]({HOST_URL}) and try again.'
+    return f'Your session has expired. Please login again at [OpenHands Cloud]({HOST_URL}) and try again.'
+
 
 # Toggle for solvability report feature
 ENABLE_SOLVABILITY_ANALYSIS = (
@@ -56,8 +75,14 @@ ENABLE_V1_GITHUB_RESOLVER = (
     os.getenv('ENABLE_V1_GITHUB_RESOLVER', 'false').lower() == 'true'
 )
 
+ENABLE_V1_SLACK_RESOLVER = (
+    os.getenv('ENABLE_V1_SLACK_RESOLVER', 'false').lower() == 'true'
+)
 
-OPENHANDS_RESOLVER_TEMPLATES_DIR = 'openhands/integrations/templates/resolver/'
+OPENHANDS_RESOLVER_TEMPLATES_DIR = (
+    os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
+    or 'openhands/integrations/templates/resolver/'
+)
 jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
 
 
@@ -83,6 +108,28 @@ def get_summary_instruction():
     summary_instruction_template = jinja_env.get_template('summary_prompt.j2')
     summary_instruction = summary_instruction_template.render()
     return summary_instruction
+
+
+async def get_user_v1_enabled_setting(user_id: str | None) -> bool:
+    """Get the user's V1 conversation API setting.
+
+    Args:
+        user_id: The keycloak user ID
+
+    Returns:
+        True if V1 conversations are enabled for this user, False otherwise
+    """
+    if not user_id:
+        return False
+
+    org = await call_sync_from_async(
+        OrgStore.get_current_org_from_keycloak_user_id, user_id
+    )
+
+    if not org or org.v1_enabled is None:
+        return False
+
+    return org.v1_enabled
 
 
 def has_exact_mention(text: str, mention: str) -> bool:
@@ -203,18 +250,35 @@ def get_summary_for_agent_state(
 def get_final_agent_observation(
     event_store: EventStoreABC,
 ) -> list[AgentStateChangedObservation]:
-    return event_store.get_matching_events(
-        source=EventSource.ENVIRONMENT,
-        event_types=(AgentStateChangedObservation,),
-        limit=1,
-        reverse=True,
+    events = list(
+        event_store.search_events(
+            filter=EventFilter(
+                source=EventSource.ENVIRONMENT,
+                include_types=(AgentStateChangedObservation,),
+            ),
+            limit=1,
+            reverse=True,
+        )
     )
+    result = [e for e in events if isinstance(e, AgentStateChangedObservation)]
+    assert len(result) == len(events)
+    return result
 
 
 def get_last_user_msg(event_store: EventStoreABC) -> list[MessageAction]:
-    return event_store.get_matching_events(
-        source=EventSource.USER, event_types=(MessageAction,), limit=1, reverse='true'
+    events = list(
+        event_store.search_events(
+            filter=EventFilter(
+                source=EventSource.USER,
+                include_types=(MessageAction,),
+            ),
+            limit=1,
+            reverse=True,
+        )
     )
+    result = [e for e in events if isinstance(e, MessageAction)]
+    assert len(result) == len(events)
+    return result
 
 
 def extract_summary_from_event_store(
@@ -226,18 +290,22 @@ def extract_summary_from_event_store(
     conversation_link = CONVERSATION_URL.format(conversation_id)
     summary_instruction = get_summary_instruction()
 
-    instruction_event: list[MessageAction] = event_store.get_matching_events(
-        query=json.dumps(summary_instruction),
-        source=EventSource.USER,
-        event_types=(MessageAction,),
-        limit=1,
-        reverse=True,
+    instruction_events = list(
+        event_store.search_events(
+            filter=EventFilter(
+                query=json.dumps(summary_instruction),
+                source=EventSource.USER,
+                include_types=(MessageAction,),
+            ),
+            limit=1,
+            reverse=True,
+        )
     )
 
     final_agent_observation = get_final_agent_observation(event_store)
 
     # Find summary instruction event ID
-    if len(instruction_event) == 0:
+    if not instruction_events:
         logger.warning(
             'no_instruction_event_found', extra={'conversation_id': conversation_id}
         )
@@ -245,19 +313,19 @@ def extract_summary_from_event_store(
             final_agent_observation, conversation_link
         )  # Agent did not receive summary instruction
 
-    event_id: int = instruction_event[0].id
-
-    agent_messages: list[MessageAction | AgentFinishAction] = (
-        event_store.get_matching_events(
-            start_id=event_id,
-            source=EventSource.AGENT,
-            event_types=(MessageAction, AgentFinishAction),
-            reverse=True,
+    summary_events = list(
+        event_store.search_events(
+            filter=EventFilter(
+                source=EventSource.AGENT,
+                include_types=(MessageAction, AgentFinishAction),
+            ),
             limit=1,
+            reverse=True,
+            start_id=instruction_events[0].id,
         )
     )
 
-    if len(agent_messages) == 0:
+    if not summary_events:
         logger.warning(
             'no_agent_messages_found', extra={'conversation_id': conversation_id}
         )
@@ -265,10 +333,11 @@ def extract_summary_from_event_store(
             final_agent_observation, conversation_link
         )  # Agent failed to generate summary
 
-    summary_event: MessageAction | AgentFinishAction = agent_messages[0]
+    summary_event = summary_events[0]
     if isinstance(summary_event, MessageAction):
         return summary_event.content
 
+    assert isinstance(summary_event, AgentFinishAction)
     return summary_event.final_thought
 
 
@@ -321,106 +390,50 @@ def append_conversation_footer(message: str, conversation_id: str) -> str:
         The message with the conversation footer appended
     """
     conversation_link = CONVERSATION_URL.format(conversation_id)
-    footer = f'\n\n<sub>[View full conversation]({conversation_link})</sub>'
+    footer = f'\n\n[View full conversation]({conversation_link})'
     return message + footer
-
-
-async def store_repositories_in_db(repos: list[Repository], user_id: str) -> None:
-    """
-    Store repositories in DB and create user-repository mappings
-
-    Args:
-        repos: List of Repository objects to store
-        user_id: User ID associated with these repositories
-    """
-
-    # Convert Repository objects to StoredRepository objects
-    # Convert Repository objects to UserRepositoryMap objects
-    stored_repos = []
-    user_repos = []
-    for repo in repos:
-        repo_id = f'{repo.git_provider.value}##{str(repo.id)}'
-        stored_repo = StoredRepository(
-            repo_name=repo.full_name,
-            repo_id=repo_id,
-            is_public=repo.is_public,
-            # Optional fields set to None by default
-            has_microagent=None,
-            has_setup_script=None,
-        )
-        stored_repos.append(stored_repo)
-        user_repo_map = UserRepositoryMap(user_id=user_id, repo_id=repo_id, admin=None)
-
-        user_repos.append(user_repo_map)
-
-    # Get config instance
-    config = OpenHandsConfig()
-
-    try:
-        # Store repositories in the repos table
-        repo_store = RepositoryStore.get_instance(config)
-        repo_store.store_projects(stored_repos)
-
-        # Store user-repository mappings in the user-repos table
-        user_repo_store = UserRepositoryMapStore.get_instance(config)
-        user_repo_store.store_user_repo_mappings(user_repos)
-
-        logger.info(f'Saved repos for user {user_id}')
-    except Exception:
-        logger.warning('Failed to save repos', exc_info=True)
 
 
 def infer_repo_from_message(user_msg: str) -> list[str]:
     """
     Extract all repository names in the format 'owner/repo' from various Git provider URLs
     and direct mentions in text. Supports GitHub, GitLab, and BitBucket.
-    Args:
-        user_msg: Input message that may contain repository references
-    Returns:
-        List of repository names in 'owner/repo' format, empty list if none found
     """
-    # Normalize the message by removing extra whitespace and newlines
     normalized_msg = re.sub(r'\s+', ' ', user_msg.strip())
 
-    # Pattern to match Git URLs from GitHub, GitLab, and BitBucket
-    # Captures: protocol, domain, owner, repo (with optional .git extension)
-    git_url_pattern = r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:[/?#].*?)?(?=\s|$|[^\w.-])'
-
-    # Pattern to match direct owner/repo mentions (e.g., "OpenHands/OpenHands")
-    # Must be surrounded by word boundaries or specific characters to avoid false positives
-    direct_pattern = (
-        r'(?:^|\s|[\[\(\'"])([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(?=\s|$|[\]\)\'",.])'
+    git_url_pattern = (
+        r'https?://(?:github\.com|gitlab\.com|bitbucket\.org)/'
+        r'([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?'
+        r'(?:[/?#].*?)?(?=\s|$|[^\w.-])'
     )
 
-    matches = []
+    # UPDATED: allow {{ owner/repo }} in addition to existing boundaries
+    direct_pattern = (
+        r'(?:^|\s|{{|[\[\(\'":`])'  # left boundary
+        r'([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)'
+        r'(?=\s|$|}}|[\]\)\'",.:`])'  # right boundary
+    )
 
-    # First, find all Git URLs (highest priority)
-    git_matches = re.findall(git_url_pattern, normalized_msg)
-    for owner, repo in git_matches:
-        # Remove .git extension if present
+    matches: list[str] = []
+
+    # Git URLs first (highest priority)
+    for owner, repo in re.findall(git_url_pattern, normalized_msg):
         repo = re.sub(r'\.git$', '', repo)
         matches.append(f'{owner}/{repo}')
 
-    # Second, find all direct owner/repo mentions
-    direct_matches = re.findall(direct_pattern, normalized_msg)
-    for owner, repo in direct_matches:
+    # Direct mentions
+    for owner, repo in re.findall(direct_pattern, normalized_msg):
         full_match = f'{owner}/{repo}'
 
-        # Skip if it looks like a version number, date, or file path
         if (
-            re.match(r'^\d+\.\d+/\d+\.\d+$', full_match)  # version numbers
-            or re.match(r'^\d{1,2}/\d{1,2}$', full_match)  # dates
-            or re.match(r'^[A-Z]/[A-Z]$', full_match)  # single letters
-            or repo.endswith('.txt')
-            or repo.endswith('.md')  # file extensions
-            or repo.endswith('.py')
-            or repo.endswith('.js')
-            or '.' in repo
-            and len(repo.split('.')) > 2
-        ):  # complex file paths
+            re.match(r'^\d+\.\d+/\d+\.\d+$', full_match)
+            or re.match(r'^\d{1,2}/\d{1,2}$', full_match)
+            or re.match(r'^[A-Z]/[A-Z]$', full_match)
+            or repo.endswith(('.txt', '.md', '.py', '.js'))
+            or ('.' in repo and len(repo.split('.')) > 2)
+        ):
             continue
 
-        # Avoid duplicates from Git URLs already found
         if full_match not in matches:
             matches.append(full_match)
 
