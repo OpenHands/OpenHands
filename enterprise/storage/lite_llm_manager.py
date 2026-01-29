@@ -1053,6 +1053,47 @@ class LiteLlmManager:
             return []
 
     @staticmethod
+    async def _get_key_id_from_key_value(
+        client: httpx.AsyncClient,
+        key_value: str,
+    ) -> str | None:
+        """Get the key ID (token) from LiteLLM given a key value.
+
+        Uses the /key/info endpoint to look up the key and retrieve its token/ID.
+
+        Args:
+            client: The HTTP client
+            key_value: The actual key value (e.g., sk-...)
+
+        Returns:
+            The key's token/ID if found, None otherwise.
+        """
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            logger.warning('LiteLLM API configuration not found')
+            return None
+
+        try:
+            response = await client.get(
+                f'{LITE_LLM_API_URL}/key/info?key={key_value}',
+            )
+            if not response.is_success:
+                logger.debug(
+                    'LiteLlmManager:_get_key_id_from_key_value:key_not_found',
+                    extra={'status_code': response.status_code},
+                )
+                return None
+
+            response_json = response.json()
+            key_info = response_json.get('info', {})
+            return key_info.get('token')
+        except Exception as e:
+            logger.warning(
+                'LiteLlmManager:_get_key_id_from_key_value:error',
+                extra={'error': str(e)},
+            )
+            return None
+
+    @staticmethod
     async def _get_existing_openhands_key(
         client: httpx.AsyncClient,
         keycloak_user_id: str,
@@ -1100,6 +1141,12 @@ class LiteLlmManager:
         This helps clean up keys that were generated but never properly tracked
         due to the missing check when generating OpenHands provider keys.
 
+        The algorithm:
+        1. Look up the key IDs for the existing llm_api_key and llm_api_key_for_byor
+           from LiteLLM (if they are defined)
+        2. Get all keys for the user
+        3. Delete any keys whose IDs don't match the valid key IDs
+
         Note: We don't need to adjust budget for orphaned key spend because
         spend is tracked against the user and will already be applied to the team
         during migration.
@@ -1111,17 +1158,43 @@ class LiteLlmManager:
             valid_api_key: The user's current valid API key (will not be deleted)
             valid_byor_key: The user's current valid BYOR key (will not be deleted)
         """
+        # Step 1: Get the key IDs for the existing valid keys from LiteLLM
+        valid_key_ids = set()
+
+        if valid_api_key:
+            api_key_id = await LiteLlmManager._get_key_id_from_key_value(
+                client, valid_api_key
+            )
+            if api_key_id:
+                valid_key_ids.add(api_key_id)
+                logger.debug(
+                    'LiteLlmManager:_cleanup_orphaned_keys:found_valid_api_key',
+                    extra={
+                        'user_id': keycloak_user_id,
+                        'key_id': api_key_id,
+                    },
+                )
+
+        if valid_byor_key:
+            byor_key_id = await LiteLlmManager._get_key_id_from_key_value(
+                client, valid_byor_key
+            )
+            if byor_key_id:
+                valid_key_ids.add(byor_key_id)
+                logger.debug(
+                    'LiteLlmManager:_cleanup_orphaned_keys:found_valid_byor_key',
+                    extra={
+                        'user_id': keycloak_user_id,
+                        'key_id': byor_key_id,
+                    },
+                )
+
+        # Step 2: Get all keys for the user
         keys = await LiteLlmManager._get_all_keys_for_user(client, keycloak_user_id)
         if not keys:
             return
 
-        # Normalize valid keys for comparison (strip whitespace)
-        valid_keys = set()
-        if valid_api_key:
-            valid_keys.add(valid_api_key.strip())
-        if valid_byor_key:
-            valid_keys.add(valid_byor_key.strip())
-
+        # Step 3: Delete any keys whose IDs don't match the valid key IDs
         orphaned_key_count = 0
 
         for key_info in keys:
@@ -1129,16 +1202,12 @@ class LiteLlmManager:
             if not token:
                 continue
 
-            # Check if this key is one of the valid keys
-            # Note: LiteLLM may return hashed/partial tokens, so we need to be careful
-            # with the comparison. We compare the full token if available.
-            if token.strip() in valid_keys:
+            # Check if this key's ID matches one of the valid key IDs
+            if token in valid_key_ids:
                 continue
 
             # This is an orphaned key - delete it
             orphaned_key_count += 1
-
-            key_id = key_info.get('token')  # Use token as key identifier
             key_alias = key_info.get('key_alias')
 
             logger.info(
@@ -1146,19 +1215,20 @@ class LiteLlmManager:
                 extra={
                     'user_id': keycloak_user_id,
                     'org_id': org_id,
+                    'key_id': token,
                     'key_alias': key_alias,
                 },
             )
 
             try:
-                if key_id:
-                    await LiteLlmManager._delete_key(client, key_id, key_alias)
+                await LiteLlmManager._delete_key(client, token, key_alias)
             except Exception as e:
                 # Log but don't fail on individual key deletion errors
                 logger.warning(
                     'LiteLlmManager:_cleanup_orphaned_keys:delete_error',
                     extra={
                         'user_id': keycloak_user_id,
+                        'key_id': token,
                         'key_alias': key_alias,
                         'error': str(e),
                     },
