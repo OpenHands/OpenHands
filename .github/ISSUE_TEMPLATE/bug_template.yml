@@ -36,7 +36,7 @@ body:
       description: What did you expect to happen?
       placeholder: Example - "OpenHands should execute the Python script and return results."
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: actual-behavior
@@ -45,7 +45,7 @@ body:
       description: What actually happened?
       placeholder: Example - "Connection timed out after 30 seconds, task failed with error code 500."
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: reproduction-steps
@@ -59,7 +59,7 @@ body:
         4. Wait 30 seconds
         5. Error appears
     validations:
-      required: true
+      required: false
 
   - type: dropdown
     id: installation
@@ -77,7 +77,7 @@ body:
         - Other
       default: 0
     validations:
-      required: true
+      required: false
 
   - type: input
     id: installation-other
@@ -93,7 +93,7 @@ body:
       description: What version are you using? Find this in settings or by running `openhands --version`
       placeholder: ex. 0.9.8, main, commit hash, etc.
     validations:
-      required: true
+      required: false
 
   - type: checkboxes
     id: version-confirmation
@@ -102,7 +102,7 @@ body:
       description: Bugs on older versions may already be fixed. Please upgrade before submitting.
       options:
         - label: "I have confirmed this bug exists on the LATEST version of OpenHands"
-          required: true
+          required: false
 
   - type: input
     id: model-name
@@ -111,7 +111,7 @@ body:
       description: Which LLM model are you using?
       placeholder: ex. gpt-4o, claude-3-5-sonnet-20241022, openrouter/deepseek-r1, etc.
     validations:
-      required: true
+      required: false
 
   - type: dropdown
     id: os
@@ -124,7 +124,7 @@ body:
         - Windows (Docker Desktop)
         - Other
     validations:
-      required: true
+      required: false
 
   - type: input
     id: browser
