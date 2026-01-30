@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 
 interface BranchLoadingStateProps {
   wrapperClassName?: string;

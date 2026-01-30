@@ -1,6 +1,6 @@
 import React from "react";
 import { cn } from "#/utils/utils";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 
 interface LoadingSpinnerProps {
   hasSelection: boolean;
@@ -18,7 +18,7 @@ export function LoadingSpinner({
         hasSelection ? "right-11" : "right-6",
       )}
     >
-      <Spinner size="sm" className="text-blue-500" data-testid={testId} />
+      <Spinner size="sm" className="text-blue-500" testId={testId} />
     </div>
   );
 }
