@@ -129,7 +129,9 @@ class LiteLlmManager:
                     },
                 )
 
-                max_budget = original_max_budget if original_max_budget is not None else 0.0
+                max_budget = (
+                    original_max_budget if original_max_budget is not None else 0.0
+                )
                 spend = original_spend if original_spend is not None else 0.0
                 # In upgrade to V4, we no longer use billing margin, but instead apply this directly
                 # in litellm. The default billing marign was 2 before this (hence the magic numbers below)
