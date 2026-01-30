@@ -17,6 +17,27 @@ import { clickOnEditButton } from "./utils";
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { ConversationStatus } from "#/types/conversation-status";
 
+// Mock useTracking hook since these tests focus on component behavior
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackDownloadViaVSCodeButtonClick: vi.fn(),
+    trackDownloadTrajectoryButtonClick: vi.fn(),
+    trackMcpConfigUpdated: vi.fn(),
+    trackSettingsSaved: vi.fn(),
+    trackInitialQuerySubmitted: vi.fn(),
+    trackUserMessageSent: vi.fn(),
+    trackLoginButtonClick: vi.fn(),
+    trackConversationCreated: vi.fn(),
+    trackPushButtonClick: vi.fn(),
+    trackPullButtonClick: vi.fn(),
+    trackCreatePrButtonClick: vi.fn(),
+    trackGitProviderConnected: vi.fn(),
+    trackUserSignupCompleted: vi.fn(),
+    trackCreditsPurchased: vi.fn(),
+    trackCreditLimitReached: vi.fn(),
+  }),
+}));
+
 // We'll use the actual i18next implementation but override the translation function
 
 // Mock the t function to return our custom translations

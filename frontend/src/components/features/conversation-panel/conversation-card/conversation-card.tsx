@@ -1,5 +1,4 @@
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -9,6 +8,7 @@ import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
+import { useTracking } from "#/hooks/use-tracking";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -45,7 +45,7 @@ export function ConversationCard({
   contextMenuOpen = false,
   onContextMenuToggle,
 }: ConversationCardProps) {
-  const posthog = usePostHog();
+  const { trackDownloadViaVSCodeButtonClick } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
@@ -82,7 +82,7 @@ export function ConversationCard({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    posthog.capture("download_via_vscode_button_clicked");
+    trackDownloadViaVSCodeButtonClick();
 
     // Fetch the VS Code URL from the API
     if (conversationId) {

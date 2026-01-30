@@ -99,6 +99,86 @@ export const useTracking = () => {
     });
   };
 
+  const trackDownloadViaVSCodeButtonClick = () => {
+    posthog.capture("download_via_vscode_button_clicked", {
+      ...commonProperties,
+    });
+  };
+
+  const trackDownloadTrajectoryButtonClick = () => {
+    posthog.capture("download_trajectory_button_clicked", {
+      ...commonProperties,
+    });
+  };
+
+  const trackMcpConfigUpdated = ({
+    hasMcpConfig,
+    sseServersCount,
+    stdioServersCount,
+  }: {
+    hasMcpConfig: boolean;
+    sseServersCount: number;
+    stdioServersCount: number;
+  }) => {
+    posthog.capture("mcp_config_updated", {
+      has_mcp_config: hasMcpConfig,
+      sse_servers_count: sseServersCount,
+      stdio_servers_count: stdioServersCount,
+      ...commonProperties,
+    });
+  };
+
+  const trackSettingsSaved = ({
+    llmModel,
+    llmApiKeySet,
+    searchApiKeySet,
+    remoteRuntimeResourceFactor,
+  }: {
+    llmModel: string | undefined;
+    llmApiKeySet: string;
+    searchApiKeySet: string;
+    remoteRuntimeResourceFactor: number | null | undefined;
+  }) => {
+    posthog.capture("settings_saved", {
+      LLM_MODEL: llmModel,
+      LLM_API_KEY_SET: llmApiKeySet,
+      SEARCH_API_KEY_SET: searchApiKeySet,
+      REMOTE_RUNTIME_RESOURCE_FACTOR: remoteRuntimeResourceFactor,
+      ...commonProperties,
+    });
+  };
+
+  const trackInitialQuerySubmitted = ({
+    entryPoint,
+    queryCharacterLength,
+    replayJsonSize,
+  }: {
+    entryPoint: string;
+    queryCharacterLength: number;
+    replayJsonSize: number | undefined;
+  }) => {
+    posthog.capture("initial_query_submitted", {
+      entry_point: entryPoint,
+      query_character_length: queryCharacterLength,
+      replay_json_size: replayJsonSize,
+      ...commonProperties,
+    });
+  };
+
+  const trackUserMessageSent = ({
+    sessionMessageCount,
+    currentMessageLength,
+  }: {
+    sessionMessageCount: number;
+    currentMessageLength: number;
+  }) => {
+    posthog.capture("user_message_sent", {
+      session_message_count: sessionMessageCount,
+      current_message_length: currentMessageLength,
+      ...commonProperties,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -109,5 +189,11 @@ export const useTracking = () => {
     trackUserSignupCompleted,
     trackCreditsPurchased,
     trackCreditLimitReached,
+    trackDownloadViaVSCodeButtonClick,
+    trackDownloadTrajectoryButtonClick,
+    trackMcpConfigUpdated,
+    trackSettingsSaved,
+    trackInitialQuerySubmitted,
+    trackUserMessageSent,
   };
 };

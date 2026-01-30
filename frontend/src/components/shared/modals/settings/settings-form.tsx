@@ -1,7 +1,6 @@
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { I18nKey } from "#/i18n/declaration";
 import { organizeModelsAndProviders } from "#/utils/organize-models-and-providers";
 import { DangerModal } from "../confirmation-modals/danger-modal";
@@ -13,6 +12,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { HelpLink } from "#/ui/help-link";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
+import { useTracking } from "#/hooks/use-tracking";
 import { SETTINGS_FORM } from "#/utils/constants";
 
 interface SettingsFormProps {
@@ -22,7 +22,7 @@ interface SettingsFormProps {
 }
 
 export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
-  const posthog = usePostHog();
+  const { trackSettingsSaved } = useTracking();
   const { mutate: saveUserSettings } = useSaveSettings();
 
   const location = useLocation();
@@ -40,11 +40,11 @@ export function SettingsForm({ settings, models, onClose }: SettingsFormProps) {
       onSuccess: () => {
         onClose();
 
-        posthog.capture("settings_saved", {
-          LLM_MODEL: newSettings.llm_model,
-          LLM_API_KEY_SET: newSettings.llm_api_key_set ? "SET" : "UNSET",
-          SEARCH_API_KEY_SET: newSettings.search_api_key ? "SET" : "UNSET",
-          REMOTE_RUNTIME_RESOURCE_FACTOR:
+        trackSettingsSaved({
+          llmModel: newSettings.llm_model,
+          llmApiKeySet: newSettings.llm_api_key_set ? "SET" : "UNSET",
+          searchApiKeySet: newSettings.search_api_key ? "SET" : "UNSET",
+          remoteRuntimeResourceFactor:
             newSettings.remote_runtime_resource_factor,
         });
       },

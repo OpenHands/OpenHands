@@ -1,5 +1,4 @@
 import React from "react";
-import { usePostHog } from "posthog-js/react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
@@ -48,6 +47,7 @@ import {
   isConversationStateUpdateEvent,
 } from "#/types/v1/type-guards";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useTracking } from "#/hooks/use-tracking";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
@@ -63,7 +63,7 @@ function getEntryPoint(
 }
 
 export function ChatInterface() {
-  const posthog = usePostHog();
+  const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
   const { setMessageToSend } = useConversationStore();
   const { data: conversation } = useActiveConversation();
   const { errorMessage, removeErrorMessage } = useErrorMessageStore();
@@ -178,18 +178,18 @@ export function ChatInterface() {
     const images = [...originalImages];
     const files = [...originalFiles];
     if (totalEvents === 0) {
-      posthog.capture("initial_query_submitted", {
-        entry_point: getEntryPoint(
+      trackInitialQuerySubmitted({
+        entryPoint: getEntryPoint(
           selectedRepository !== null,
           replayJson !== null,
         ),
-        query_character_length: content.length,
-        replay_json_size: replayJson?.length,
+        queryCharacterLength: content.length,
+        replayJsonSize: replayJson?.length,
       });
     } else {
-      posthog.capture("user_message_sent", {
-        session_message_count: totalEvents,
-        current_message_length: content.length,
+      trackUserMessageSent({
+        sessionMessageCount: totalEvents,
+        currentMessageLength: content.length,
       });
     }
 
