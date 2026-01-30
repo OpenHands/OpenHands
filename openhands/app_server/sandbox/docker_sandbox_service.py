@@ -558,7 +558,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
         ]
     )
     health_check_path: str | None = Field(
-        default='/health',
+        default='/alive',
         description=(
             'The url path in the sandbox agent server to check to '
             'determine whether the server is running'

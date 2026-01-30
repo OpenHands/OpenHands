@@ -78,7 +78,7 @@ def service(mock_sandbox_spec_service, mock_httpx_client, mock_docker_client):
             ),
             ExposedPort(name=VSCODE, description='VSCode server', container_port=8001),
         ],
-        health_check_path='/health',
+        health_check_path='/alive',
         httpx_client=mock_httpx_client,
         max_num_sandboxes=3,
         docker_client=mock_docker_client,
@@ -523,7 +523,7 @@ class TestDockerSandboxService:
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
             ],
-            health_check_path='/health',
+            health_check_path='/alive',
             httpx_client=mock_httpx_client,
             max_num_sandboxes=3,
             extra_hosts={
@@ -592,7 +592,7 @@ class TestDockerSandboxService:
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
             ],
-            health_check_path='/health',
+            health_check_path='/alive',
             httpx_client=mock_httpx_client,
             max_num_sandboxes=3,
             extra_hosts={},
@@ -655,7 +655,7 @@ class TestDockerSandboxService:
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
             ],
-            health_check_path='/health',
+            health_check_path='/alive',
             httpx_client=mock_httpx_client,
             max_num_sandboxes=3,
             web_url='http://192.168.1.100:3000',
@@ -716,7 +716,7 @@ class TestDockerSandboxService:
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
             ],
-            health_check_path='/health',
+            health_check_path='/alive',
             httpx_client=mock_httpx_client,
             max_num_sandboxes=3,
             web_url=None,  # No web_url configured
@@ -1013,7 +1013,7 @@ class TestDockerSandboxService:
 
         # Verify health check was called with Docker-internal URL
         service.httpx_client.get.assert_called_once_with(
-            'http://host.docker.internal:12345/health'
+            'http://host.docker.internal:12345/alive'
         )
 
     @patch(
@@ -1040,7 +1040,7 @@ class TestDockerSandboxService:
 
         # Verify health check was called with original localhost URL
         service.httpx_client.get.assert_called_once_with(
-            'http://localhost:12345/health'
+            'http://localhost:12345/alive'
         )
 
     async def test_container_to_checked_sandbox_info_health_check_failure(
@@ -1288,7 +1288,7 @@ class TestDockerSandboxServiceHostNetwork:
                     name=VSCODE, description='VSCode server', container_port=8001
                 ),
             ],
-            health_check_path='/health',
+            health_check_path='/alive',
             httpx_client=mock_httpx_client,
             max_num_sandboxes=3,
             docker_client=mock_docker_client,
@@ -1468,7 +1468,7 @@ class TestDockerSandboxServiceHostNetwork:
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
             ],
-            health_check_path='/health',
+            health_check_path='/alive',
             httpx_client=mock_httpx_client,
             max_num_sandboxes=3,  # > 1
             docker_client=mock_docker_client,
@@ -1529,7 +1529,7 @@ class TestDockerSandboxServiceHostNetwork:
                     name=AGENT_SERVER, description='Agent server', container_port=8000
                 ),
             ],
-            health_check_path='/health',
+            health_check_path='/alive',
             httpx_client=mock_httpx_client,
             max_num_sandboxes=1,  # = 1, no warning expected
             docker_client=mock_docker_client,
