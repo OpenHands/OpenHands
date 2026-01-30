@@ -354,7 +354,9 @@ class UserStore:
 
     @staticmethod
     async def downgrade_user(user_id: str) -> UserSettings | None:
-        """Downgrade a migrated user back to the pre-migration state.
+        """
+        This method can be removed once orgs is established - probably after Feb 15 2026
+        Downgrade a migrated user back to the pre-migration state.
 
         This reverses the migrate_user operation:
         1. Get the user's settings from user_settings table (migrated users) or
@@ -408,6 +410,24 @@ class UserStore:
                 )
                 return None
 
+            # Get org_members for this org - should only be one for personal orgs
+            org_members = (
+                session.query(OrgMember).filter(OrgMember.org_id == org.id).all()
+            )
+
+            if len(org_members) != 1:
+                logger.error(
+                    'user_store:downgrade_user:unexpected_org_members_count',
+                    extra={
+                        'user_id': user_id,
+                        'org_id': str(org.id),
+                        'org_members_count': len(org_members),
+                    },
+                )
+                return None
+
+            org_member = org_members[0]
+
             # Get the user_settings (for migrated users)
             user_settings = (
                 session.query(UserSettings)
@@ -420,42 +440,34 @@ class UserStore:
 
             # For new sign-ups after migration, user_settings won't exist
             # Fall back to getting data from org_members
-            is_new_signup = False
-            if not user_settings:
+            if user_settings:
+                if org_member.llm_api_key and org_member.llm_api_key.get_secret_value():
+                    user_settings.llm_api_key = encrypt_legacy_value(
+                        org_member.llm_api_key.get_secret_value()
+                    )
+                if (
+                    org_member.llm_api_key_for_byor
+                    and org_member.llm_api_key_for_byor.get_secret_value()
+                ):
+                    user_settings.llm_api_key_for_byor = encrypt_legacy_value(
+                        org_member.llm_api_key_for_byor.get_secret_value()
+                    )
                 logger.info(
-                    'user_store:downgrade_user:user_settings_not_found_checking_org_members',
+                    'user_store:downgrade_user:updated_user_settings_from_org_member',
                     extra={'user_id': user_id},
                 )
-                # Get org_members for this org - should only be one for personal orgs
-                org_members = (
-                    session.query(OrgMember).filter(OrgMember.org_id == org.id).all()
-                )
-
-                if len(org_members) != 1:
-                    logger.error(
-                        'user_store:downgrade_user:unexpected_org_members_count',
-                        extra={
-                            'user_id': user_id,
-                            'org_id': str(org.id),
-                            'org_members_count': len(org_members),
-                        },
-                    )
-                    return None
-
-                org_member = org_members[0]
-                is_new_signup = True
-
+            else:
                 # Create a new user_settings entry from OrgMember, User, and Org data
                 # This is needed for new sign-ups who don't have user_settings
                 user_settings = UserStore._create_user_settings_from_entities(
                     user_id, org_member, user, org
                 )
                 session.add(user_settings)
-                session.flush()
                 logger.info(
                     'user_store:downgrade_user:created_user_settings_from_org_member',
                     extra={'user_id': user_id},
                 )
+            session.flush()
 
             # Call LiteLLM downgrade
             from storage.lite_llm_manager import LiteLlmManager
@@ -465,27 +477,25 @@ class UserStore:
                 extra={'user_id': user_id},
             )
 
-            # Get the API keys for LiteLLM downgrade
-            if is_new_signup:
-                # For new signups, we already have decrypted values in user_settings
-                decrypted_user_settings = user_settings
-            else:
-                # For migrated users, decrypt the legacy model
-                kwargs = decrypt_legacy_model(
-                    [
-                        'llm_api_key',
-                        'llm_api_key_for_byor',
-                        'search_api_key',
-                        'sandbox_api_key',
-                    ],
-                    user_settings,
-                )
-                decrypted_user_settings = UserSettings(**kwargs)
+            encrypted_fields = [
+                'llm_api_key',
+                'llm_api_key_for_byor',
+                'search_api_key',
+                'sandbox_api_key',
+            ]
+            for field in encrypted_fields:
+                value = getattr(user_settings, field, None)
+                if value:
+                    try:
+                        value = decrypt_legacy_value(value)
+                        setattr(user_settings, field, value)
+                    except Exception:
+                        pass
 
             await LiteLlmManager.downgrade_entries(
                 str(org.id),
                 user_id,
-                decrypted_user_settings,
+                user_settings,
             )
             logger.debug(
                 'user_store:downgrade_user:done_litellm_downgrade_entries',

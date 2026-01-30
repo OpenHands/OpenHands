@@ -284,6 +284,16 @@ class TestLiteLlmManager:
         self, mock_user_settings, mock_user_response, mock_response
     ):
         """Test successful migrate_entries operation."""
+        # Mock response for key list
+        mock_key_list_response = MagicMock()
+        mock_key_list_response.is_success = True
+        mock_key_list_response.status_code = 200
+        mock_key_list_response.json.return_value = {
+            'keys': ['test-key-1', 'test-key-2'],
+            'total_count': 2,
+        }
+        mock_key_list_response.raise_for_status = MagicMock()
+
         with patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}):
             with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
                 with patch(
@@ -301,14 +311,22 @@ class TestLiteLlmManager:
                             mock_client_class.return_value.__aenter__.return_value = (
                                 mock_client
                             )
-                            mock_client.get.return_value = mock_user_response
+                            # First GET is for _get_user, second GET is for _get_user_keys
+                            mock_client.get.side_effect = [
+                                mock_user_response,
+                                mock_key_list_response,
+                            ]
                             mock_client.post.return_value = mock_response
 
-                            result = await LiteLlmManager.migrate_entries(
-                                'test-org-id',
-                                'test-user-id',
-                                mock_user_settings,
-                            )
+                            # Mock verify_key to return True (key exists in LiteLLM)
+                            with patch.object(
+                                LiteLlmManager, 'verify_key', return_value=True
+                            ):
+                                result = await LiteLlmManager.migrate_entries(
+                                    'test-org-id',
+                                    'test-user-id',
+                                    mock_user_settings,
+                                )
 
                             # migrate_entries returns the user_settings unchanged
                             assert result is not None
@@ -317,10 +335,97 @@ class TestLiteLlmManager:
                             assert result.llm_api_key.get_secret_value() == 'test-key'
                             assert result.llm_base_url == 'http://test.com'
 
-                            # Verify migration steps were called
+                            # Verify migration steps were called:
+                            # - 2 GET requests: _get_user, _get_user_keys
+                            # - POST requests: create_team, update_user, add_user_to_team,
+                            #   and update_key for each key (2 keys)
+                            assert mock_client.get.call_count == 2
                             assert (
-                                mock_client.post.call_count == 4
-                            )  # create_team, update_user, add_user_to_team, update_key
+                                mock_client.post.call_count == 5
+                            )  # create_team, update_user, add_user_to_team, 2x update_key
+
+    @pytest.mark.asyncio
+    async def test_migrate_entries_generates_key_when_db_key_not_in_litellm(
+        self, mock_user_settings, mock_user_response, mock_response
+    ):
+        """Test migrate_entries generates a new key when the DB key doesn't exist in LiteLLM."""
+        # Mock response for key list
+        mock_key_list_response = MagicMock()
+        mock_key_list_response.is_success = True
+        mock_key_list_response.status_code = 200
+        mock_key_list_response.json.return_value = {
+            'keys': ['test-key-1', 'test-key-2'],
+            'total_count': 2,
+        }
+        mock_key_list_response.raise_for_status = MagicMock()
+
+        # Mock response for key generation
+        mock_generate_response = MagicMock()
+        mock_generate_response.is_success = True
+        mock_generate_response.status_code = 200
+        mock_generate_response.json.return_value = {'key': 'new-generated-key'}
+        mock_generate_response.raise_for_status = MagicMock()
+
+        with patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
+                with patch(
+                    'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
+                ):
+                    with patch(
+                        'storage.lite_llm_manager.TokenManager'
+                    ) as mock_token_manager:
+                        mock_token_manager.return_value.get_user_info_from_user_id = (
+                            AsyncMock(return_value={'email': 'test@example.com'})
+                        )
+
+                        with patch('httpx.AsyncClient') as mock_client_class:
+                            mock_client = AsyncMock()
+                            mock_client_class.return_value.__aenter__.return_value = (
+                                mock_client
+                            )
+                            # First GET is for _get_user, second GET is for _get_user_keys
+                            mock_client.get.side_effect = [
+                                mock_user_response,
+                                mock_key_list_response,
+                            ]
+                            # POST responses: create_team, update_user, add_user_to_team,
+                            # 2x update_key, and 1x generate_key
+                            mock_client.post.side_effect = [
+                                mock_response,  # create_team
+                                mock_response,  # update_user
+                                mock_response,  # add_user_to_team
+                                mock_response,  # update_key 1
+                                mock_response,  # update_key 2
+                                mock_generate_response,  # generate_key
+                            ]
+
+                            # Mock verify_key to return False (key doesn't exist in LiteLLM)
+                            with patch.object(
+                                LiteLlmManager, 'verify_key', return_value=False
+                            ):
+                                result = await LiteLlmManager.migrate_entries(
+                                    'test-org-id',
+                                    'test-user-id',
+                                    mock_user_settings,
+                                )
+
+                            # migrate_entries should update user_settings with the new key
+                            assert result is not None
+                            assert (
+                                result.llm_api_key.get_secret_value()
+                                == 'new-generated-key'
+                            )
+                            assert (
+                                result.llm_api_key_for_byor.get_secret_value()
+                                == 'new-generated-key'
+                            )
+
+                            # Verify migration steps were called including key generation:
+                            # - 2 GET requests: _get_user, _get_user_keys
+                            # - 6 POST requests: create_team, update_user, add_user_to_team,
+                            #   2x update_key, 1x generate_key
+                            assert mock_client.get.call_count == 2
+                            assert mock_client.post.call_count == 6
 
     @pytest.mark.asyncio
     async def test_update_team_and_users_budget_missing_config(self):
@@ -654,7 +759,7 @@ class TestLiteLlmManager:
         # Assert
         mock_logger.warning.assert_called_once_with(
             'invalid_litellm_key_during_update',
-            extra={'user_id': 'test-user-id'},
+            extra={'user_id': 'test-user-id', 'text': 'Unauthorized'},
         )
 
     @pytest.mark.asyncio
@@ -677,6 +782,133 @@ class TestLiteLlmManager:
             await LiteLlmManager._update_key(
                 mock_http_client, 'test-user-id', 'test-api-key', team_id='test-team-id'
             )
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_get_user_keys_success(self, mock_http_client):
+        """Test successful _get_user_keys operation."""
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'keys': ['key-1', 'key-2', 'key-3'],
+            'total_count': 3,
+        }
+        mock_http_client.get.return_value = mock_response
+
+        # Act
+        keys = await LiteLlmManager._get_user_keys(mock_http_client, 'test-user-id')
+
+        # Assert
+        assert keys == ['key-1', 'key-2', 'key-3']
+        mock_http_client.get.assert_called_once()
+        call_args = mock_http_client.get.call_args
+        assert 'http://test.com/key/list' in call_args[0]
+        assert call_args[1]['params'] == {'user_id': 'test-user-id'}
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_get_user_keys_empty_list(self, mock_http_client):
+        """Test _get_user_keys returns empty list when user has no keys."""
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'keys': [],
+            'total_count': 0,
+        }
+        mock_http_client.get.return_value = mock_response
+
+        # Act
+        keys = await LiteLlmManager._get_user_keys(mock_http_client, 'test-user-id')
+
+        # Assert
+        assert keys == []
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_get_user_keys_error_returns_empty_list(self, mock_http_client):
+        """Test _get_user_keys returns empty list on error."""
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.is_success = False
+        mock_response.status_code = 500
+        mock_response.text = 'Internal server error'
+        mock_http_client.get.return_value = mock_response
+
+        # Act
+        keys = await LiteLlmManager._get_user_keys(mock_http_client, 'test-user-id')
+
+        # Assert
+        assert keys == []
+
+    @pytest.mark.asyncio
+    async def test_get_user_keys_missing_config(self, mock_http_client):
+        """Test _get_user_keys returns empty list when config is missing."""
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', None):
+                keys = await LiteLlmManager._get_user_keys(
+                    mock_http_client, 'test-user-id'
+                )
+                assert keys == []
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_update_user_keys_success(self, mock_http_client, mock_response):
+        """Test successful _update_user_keys operation."""
+        # Arrange
+        mock_key_list_response = MagicMock()
+        mock_key_list_response.is_success = True
+        mock_key_list_response.status_code = 200
+        mock_key_list_response.json.return_value = {
+            'keys': ['key-1', 'key-2'],
+            'total_count': 2,
+        }
+        mock_http_client.get.return_value = mock_key_list_response
+        mock_http_client.post.return_value = mock_response
+
+        # Act
+        await LiteLlmManager._update_user_keys(
+            mock_http_client, 'test-user-id', team_id='test-team-id'
+        )
+
+        # Assert
+        # Should call GET once for key list
+        assert mock_http_client.get.call_count == 1
+        # Should call POST twice (once for each key)
+        assert mock_http_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key')
+    async def test_update_user_keys_no_keys(self, mock_http_client, mock_response):
+        """Test _update_user_keys when user has no keys."""
+        # Arrange
+        mock_key_list_response = MagicMock()
+        mock_key_list_response.is_success = True
+        mock_key_list_response.status_code = 200
+        mock_key_list_response.json.return_value = {
+            'keys': [],
+            'total_count': 0,
+        }
+        mock_http_client.get.return_value = mock_key_list_response
+
+        # Act
+        await LiteLlmManager._update_user_keys(
+            mock_http_client, 'test-user-id', team_id='test-team-id'
+        )
+
+        # Assert
+        # Should call GET once for key list
+        assert mock_http_client.get.call_count == 1
+        # Should not call POST since there are no keys
+        assert mock_http_client.post.call_count == 0
 
     @pytest.mark.asyncio
     async def test_generate_key_success(self, mock_http_client, mock_response):
@@ -1242,6 +1474,15 @@ class TestLiteLlmManager:
         }
         mock_team_info_response.raise_for_status = MagicMock()
 
+        mock_key_list_response = MagicMock()
+        mock_key_list_response.is_success = True
+        mock_key_list_response.status_code = 200
+        mock_key_list_response.json.return_value = {
+            'keys': ['test-key-1', 'test-key-2'],
+            'total_count': 2,
+        }
+        mock_key_list_response.raise_for_status = MagicMock()
+
         with patch.dict(os.environ, {'LOCAL_DEPLOYMENT': ''}):
             with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-key'):
                 with patch(
@@ -1255,7 +1496,12 @@ class TestLiteLlmManager:
                             mock_client_class.return_value.__aenter__.return_value = (
                                 mock_client
                             )
-                            mock_client.get.return_value = mock_team_info_response
+                            # GET requests: get_team (x2 for team info), get_user_keys
+                            mock_client.get.side_effect = [
+                                mock_team_info_response,
+                                mock_team_info_response,
+                                mock_key_list_response,
+                            ]
                             mock_client.post.return_value = mock_response
 
                             result = await LiteLlmManager.downgrade_entries(
@@ -1269,15 +1515,19 @@ class TestLiteLlmManager:
                             assert result.agent == 'TestAgent'
 
                             # Verify downgrade steps were called:
+                            # GET requests:
                             # 1. get_team (GET)
                             # 2. get_user_team_info (GET via _get_team)
-                            # 3. update_user (POST)
-                            # 4. add_user_to_team (POST)
-                            # 5. update_key (POST)
-                            # 6. remove_user_from_team (POST)
-                            # 7. delete_team (POST)
-                            assert mock_client.get.call_count >= 1
-                            assert mock_client.post.call_count >= 4
+                            # 3. get_user_keys (GET)
+                            # POST requests:
+                            # 1. update_user (POST)
+                            # 2. add_user_to_team (POST)
+                            # 3. update_key for key 1 (POST)
+                            # 4. update_key for key 2 (POST)
+                            # 5. remove_user_from_team (POST)
+                            # 6. delete_team (POST)
+                            assert mock_client.get.call_count == 3
+                            assert mock_client.post.call_count == 6
 
     @pytest.mark.asyncio
     async def test_downgrade_entries_local_deployment(self, mock_user_settings):

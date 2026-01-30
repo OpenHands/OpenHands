@@ -123,7 +123,6 @@ class SaasSettingsStore(SettingsStore):
         with self.session_maker() as session:
             if not item:
                 return None
-            kwargs = item.model_dump(context={'expose_secrets': True})
             user = (
                 session.query(User)
                 .options(joinedload(User.org_members))
@@ -161,6 +160,7 @@ class SaasSettingsStore(SettingsStore):
                 )
                 return None
 
+            kwargs = item.model_dump(context={'expose_secrets': True})
             for model in (user, org, org_member):
                 for key, value in kwargs.items():
                     if hasattr(model, key):
@@ -230,10 +230,19 @@ class SaasSettingsStore(SettingsStore):
     async def _ensure_openhands_api_key(self, item: Settings, org_id: str) -> None:
         """Generate and set the OpenHands API key for the given settings.
 
-        First checks if an existing key with the OpenHands alias exists,
-        and reuses it if found. Otherwise, generates a new key.
+        First checks if an existing key exists for the user and reuses it
+        if found. Otherwise, generates a new key.
         """
-        # Generate new key if none exists
+        # Check if user already has keys in LiteLLM
+        existing_keys = await LiteLlmManager.get_user_keys(self.user_id)
+        if existing_keys:
+            logger.info(
+                'saas_settings_store:store:user_already_has_keys',
+                extra={'user_id': self.user_id, 'key_count': len(existing_keys)},
+            )
+            return
+
+        # Generate new key only if none exists
         generated_key = await LiteLlmManager.generate_key(
             self.user_id,
             org_id,
