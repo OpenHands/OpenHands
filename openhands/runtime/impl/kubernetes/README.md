@@ -40,7 +40,7 @@ Two configuration options are required to use the Kubernetes runtime:
 2. **Runtime Container Image**: Specify the container image to use for the runtime environment
    ```toml
    [sandbox]
-   runtime_container_image = "docker.openhands.dev/openhands/runtime:1.1-nikolaik"
+   runtime_container_image = "docker.openhands.dev/openhands/runtime:1.2-nikolaik"
    ```
 
 #### Additional Kubernetes Options

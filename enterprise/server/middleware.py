@@ -144,7 +144,7 @@ class SetAuthCookieMiddleware:
         # "if accepted_tos is not None" as there should not be any users with
         # accepted_tos equal to "None"
         if accepted_tos is False and request.url.path != '/api/accept_tos':
-            logger.error('User has not accepted the terms of service')
+            logger.warning('User has not accepted the terms of service')
             raise TosNotAcceptedError
 
     def _should_attach(self, request: Request) -> bool:
@@ -162,8 +162,16 @@ class SetAuthCookieMiddleware:
             '/api/email/resend',
             '/oauth/device/authorize',
             '/oauth/device/token',
+            '/api/v1/web-client/config',
+            '/api/v1/webhooks/secrets',
         )
         if path in ignore_paths:
+            return False
+
+        # Allow public access to shared conversations and events
+        if path.startswith('/api/shared-conversations') or path.startswith(
+            '/api/shared-events'
+        ):
             return False
 
         is_mcp = path.startswith('/mcp')

@@ -95,6 +95,7 @@ class AppConversationService(ABC):
         task: AppConversationStartTask,
         sandbox: SandboxInfo,
         workspace: AsyncRemoteWorkspace,
+        agent_server_url: str,
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Run the setup scripts for the project and yield status updates"""
         yield task
@@ -104,7 +105,8 @@ class AppConversationService(ABC):
         self, conversation_id: UUID, request: AppConversationUpdateRequest
     ) -> AppConversation | None:
         """Update an app conversation and return it. Return None if the conversation
-        did not exist."""
+        did not exist.
+        """
 
     @abstractmethod
     async def delete_app_conversation(self, conversation_id: UUID) -> bool:

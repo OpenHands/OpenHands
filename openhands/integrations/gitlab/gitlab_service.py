@@ -79,4 +79,30 @@ gitlab_service_cls = os.environ.get(
     'OPENHANDS_GITLAB_SERVICE_CLS',
     'openhands.integrations.gitlab.gitlab_service.GitLabService',
 )
-GitLabServiceImpl = get_impl(GitLabService, gitlab_service_cls)
+
+# Lazy loading to avoid circular imports
+_gitlab_service_impl = None
+
+
+def get_gitlab_service_impl():
+    """Get the GitLab service implementation with lazy loading."""
+    global _gitlab_service_impl
+    if _gitlab_service_impl is None:
+        _gitlab_service_impl = get_impl(GitLabService, gitlab_service_cls)
+    return _gitlab_service_impl
+
+
+# For backward compatibility, provide the implementation as a property
+class _GitLabServiceImplProxy:
+    """Proxy class to provide lazy loading for GitLabServiceImpl."""
+
+    def __getattr__(self, name):
+        impl = get_gitlab_service_impl()
+        return getattr(impl, name)
+
+    def __call__(self, *args, **kwargs):
+        impl = get_gitlab_service_impl()
+        return impl(*args, **kwargs)
+
+
+GitLabServiceImpl: type[GitLabService] = _GitLabServiceImplProxy()  # type: ignore[assignment]

@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { useLocalStorage } from "@uidotdev/usehooks";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useConversationId } from "#/hooks/use-conversation-id";
+import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
@@ -13,7 +14,6 @@ import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
-import { useConversationId } from "#/hooks/use-conversation-id";
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -27,11 +27,8 @@ export function ConversationTabsContextMenu({
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { t } = useTranslation();
   const { conversationId } = useConversationId();
-
-  const [unpinnedTabs, setUnpinnedTabs] = useLocalStorage<string[]>(
-    `conversation-unpinned-tabs-${conversationId}`,
-    [],
-  );
+  const { state, setUnpinnedTabs } =
+    useConversationLocalStorageState(conversationId);
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
@@ -54,11 +51,11 @@ export function ConversationTabsContextMenu({
   if (!isOpen) return null;
 
   const handleTabClick = (tab: string) => {
-    setUnpinnedTabs((prev) =>
-      prev.includes(tab)
-        ? prev.filter((tabItem) => tabItem !== tab)
-        : [...prev, tab],
-    );
+    if (state.unpinnedTabs.includes(tab)) {
+      setUnpinnedTabs(state.unpinnedTabs.filter((item) => item !== tab));
+    } else {
+      setUnpinnedTabs([...state.unpinnedTabs, tab]);
+    }
   };
 
   return (
@@ -69,7 +66,7 @@ export function ConversationTabsContextMenu({
       className="mt-2 w-fit z-[9999]"
     >
       {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
-        const pinned = !unpinnedTabs.includes(tab);
+        const pinned = !state.unpinnedTabs.includes(tab);
         return (
           <ContextMenuListItem
             key={tab}

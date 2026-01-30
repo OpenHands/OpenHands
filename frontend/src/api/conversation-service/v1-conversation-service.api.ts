@@ -12,6 +12,7 @@ import type {
   V1AppConversationStartTaskPage,
   V1AppConversation,
   GetSkillsResponse,
+  V1RuntimeConversationInfo,
 } from "./v1-conversation-service.types";
 
 class V1ConversationService {
@@ -358,6 +359,32 @@ class V1ConversationService {
     const { data } = await openHands.get<GetSkillsResponse>(
       `/api/v1/app-conversations/${conversationId}/skills`,
     );
+    return data;
+  }
+
+  /**
+   * Get conversation info directly from the runtime for a V1 conversation
+   * Uses the custom runtime URL from the conversation
+   *
+   * @param conversationId The conversation ID
+   * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
+   * @param sessionApiKey Session API key for authentication (required for V1)
+   * @returns Conversation info from the runtime
+   */
+  static async getRuntimeConversation(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<V1RuntimeConversationInfo> {
+    const url = this.buildRuntimeUrl(
+      conversationUrl,
+      `/api/conversations/${conversationId}`,
+    );
+    const headers = buildSessionHeaders(sessionApiKey);
+
+    const { data } = await axios.get<V1RuntimeConversationInfo>(url, {
+      headers,
+    });
     return data;
   }
 }

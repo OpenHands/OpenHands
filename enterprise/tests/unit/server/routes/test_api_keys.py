@@ -6,17 +6,18 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from server.routes.api_keys import (
+    delete_byor_key_from_litellm,
     get_llm_api_key_for_byor,
-    verify_byor_key_in_litellm,
 )
+from storage.lite_llm_manager import LiteLlmManager
 
 
 class TestVerifyByorKeyInLitellm:
     """Test the verify_byor_key_in_litellm function."""
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
-    @patch('server.routes.api_keys.httpx.AsyncClient')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'https://litellm.example.com')
+    @patch('storage.lite_llm_manager.httpx.AsyncClient')
     async def test_verify_valid_key_returns_true(self, mock_client_class):
         """Test that a valid key (200 response) returns True."""
         # Arrange
@@ -32,7 +33,7 @@ class TestVerifyByorKeyInLitellm:
         mock_client_class.return_value = mock_client
 
         # Act
-        result = await verify_byor_key_in_litellm(byor_key, user_id)
+        result = await LiteLlmManager.verify_key(byor_key, user_id)
 
         # Assert
         assert result is True
@@ -42,8 +43,8 @@ class TestVerifyByorKeyInLitellm:
         )
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
-    @patch('server.routes.api_keys.httpx.AsyncClient')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'https://litellm.example.com')
+    @patch('storage.lite_llm_manager.httpx.AsyncClient')
     async def test_verify_invalid_key_401_returns_false(self, mock_client_class):
         """Test that an invalid key (401 response) returns False."""
         # Arrange
@@ -58,14 +59,14 @@ class TestVerifyByorKeyInLitellm:
         mock_client_class.return_value = mock_client
 
         # Act
-        result = await verify_byor_key_in_litellm(byor_key, user_id)
+        result = await LiteLlmManager.verify_key(byor_key, user_id)
 
         # Assert
         assert result is False
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
-    @patch('server.routes.api_keys.httpx.AsyncClient')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'https://litellm.example.com')
+    @patch('storage.lite_llm_manager.httpx.AsyncClient')
     async def test_verify_invalid_key_403_returns_false(self, mock_client_class):
         """Test that an invalid key (403 response) returns False."""
         # Arrange
@@ -80,14 +81,14 @@ class TestVerifyByorKeyInLitellm:
         mock_client_class.return_value = mock_client
 
         # Act
-        result = await verify_byor_key_in_litellm(byor_key, user_id)
+        result = await LiteLlmManager.verify_key(byor_key, user_id)
 
         # Assert
         assert result is False
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
-    @patch('server.routes.api_keys.httpx.AsyncClient')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'https://litellm.example.com')
+    @patch('storage.lite_llm_manager.httpx.AsyncClient')
     async def test_verify_server_error_returns_false(self, mock_client_class):
         """Test that a server error (500) returns False to ensure key validity."""
         # Arrange
@@ -103,14 +104,14 @@ class TestVerifyByorKeyInLitellm:
         mock_client_class.return_value = mock_client
 
         # Act
-        result = await verify_byor_key_in_litellm(byor_key, user_id)
+        result = await LiteLlmManager.verify_key(byor_key, user_id)
 
         # Assert
         assert result is False
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
-    @patch('server.routes.api_keys.httpx.AsyncClient')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'https://litellm.example.com')
+    @patch('storage.lite_llm_manager.httpx.AsyncClient')
     async def test_verify_timeout_returns_false(self, mock_client_class):
         """Test that a timeout returns False to ensure key validity."""
         # Arrange
@@ -123,14 +124,14 @@ class TestVerifyByorKeyInLitellm:
         mock_client_class.return_value = mock_client
 
         # Act
-        result = await verify_byor_key_in_litellm(byor_key, user_id)
+        result = await LiteLlmManager.verify_key(byor_key, user_id)
 
         # Assert
         assert result is False
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
-    @patch('server.routes.api_keys.httpx.AsyncClient')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'https://litellm.example.com')
+    @patch('storage.lite_llm_manager.httpx.AsyncClient')
     async def test_verify_network_error_returns_false(self, mock_client_class):
         """Test that a network error returns False to ensure key validity."""
         # Arrange
@@ -143,13 +144,13 @@ class TestVerifyByorKeyInLitellm:
         mock_client_class.return_value = mock_client
 
         # Act
-        result = await verify_byor_key_in_litellm(byor_key, user_id)
+        result = await LiteLlmManager.verify_key(byor_key, user_id)
 
         # Assert
         assert result is False
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.LITE_LLM_API_URL', None)
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', None)
     async def test_verify_missing_api_url_returns_false(self):
         """Test that missing LITE_LLM_API_URL returns False."""
         # Arrange
@@ -157,13 +158,13 @@ class TestVerifyByorKeyInLitellm:
         user_id = 'user-123'
 
         # Act
-        result = await verify_byor_key_in_litellm(byor_key, user_id)
+        result = await LiteLlmManager.verify_key(byor_key, user_id)
 
         # Assert
         assert result is False
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.LITE_LLM_API_URL', 'https://litellm.example.com')
+    @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'https://litellm.example.com')
     async def test_verify_empty_key_returns_false(self):
         """Test that empty key returns False."""
         # Arrange
@@ -171,7 +172,7 @@ class TestVerifyByorKeyInLitellm:
         user_id = 'user-123'
 
         # Act
-        result = await verify_byor_key_in_litellm(byor_key, user_id)
+        result = await LiteLlmManager.verify_key(byor_key, user_id)
 
         # Assert
         assert result is False
@@ -205,7 +206,7 @@ class TestGetLlmApiKeyForByor:
         mock_store_key.assert_called_once_with(user_id, new_key)
 
     @pytest.mark.asyncio
-    @patch('server.routes.api_keys.verify_byor_key_in_litellm')
+    @patch('storage.lite_llm_manager.LiteLlmManager.verify_key')
     @patch('server.routes.api_keys.get_byor_key_from_db')
     async def test_valid_key_in_database_returns_key(
         self, mock_get_key, mock_verify_key
@@ -229,7 +230,7 @@ class TestGetLlmApiKeyForByor:
     @patch('server.routes.api_keys.store_byor_key_in_db')
     @patch('server.routes.api_keys.generate_byor_key')
     @patch('server.routes.api_keys.delete_byor_key_from_litellm')
-    @patch('server.routes.api_keys.verify_byor_key_in_litellm')
+    @patch('storage.lite_llm_manager.LiteLlmManager.verify_key')
     @patch('server.routes.api_keys.get_byor_key_from_db')
     async def test_invalid_key_in_database_regenerates(
         self,
@@ -265,7 +266,7 @@ class TestGetLlmApiKeyForByor:
     @patch('server.routes.api_keys.store_byor_key_in_db')
     @patch('server.routes.api_keys.generate_byor_key')
     @patch('server.routes.api_keys.delete_byor_key_from_litellm')
-    @patch('server.routes.api_keys.verify_byor_key_in_litellm')
+    @patch('storage.lite_llm_manager.LiteLlmManager.verify_key')
     @patch('server.routes.api_keys.get_byor_key_from_db')
     async def test_invalid_key_deletion_failure_still_regenerates(
         self,
@@ -328,3 +329,99 @@ class TestGetLlmApiKeyForByor:
 
         assert exc_info.value.status_code == 500
         assert 'Failed to retrieve BYOR LLM API key' in exc_info.value.detail
+
+
+class TestDeleteByorKeyFromLitellm:
+    """Test the delete_byor_key_from_litellm function with alias cleanup."""
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    async def test_delete_constructs_alias_from_user(
+        self, mock_get_user, mock_delete_key
+    ):
+        """Test that delete_byor_key_from_litellm constructs key alias from user."""
+        # Arrange
+        user_id = 'user-123'
+        org_id = 'org-456'
+        byor_key = 'sk-byor-key-to-delete'
+        expected_alias = f'BYOR Key - user {user_id}, org {org_id}'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = org_id
+        mock_get_user.return_value = mock_user
+        mock_delete_key.return_value = None
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, byor_key)
+
+        # Assert
+        assert result is True
+        mock_get_user.assert_called_once_with(user_id)
+        mock_delete_key.assert_called_once_with(byor_key, key_alias=expected_alias)
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    async def test_delete_without_user_passes_no_alias(
+        self, mock_get_user, mock_delete_key
+    ):
+        """Test that when user is not found, no alias is passed."""
+        # Arrange
+        user_id = 'user-123'
+        byor_key = 'sk-byor-key-to-delete'
+
+        mock_get_user.return_value = None
+        mock_delete_key.return_value = None
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, byor_key)
+
+        # Assert
+        assert result is True
+        mock_delete_key.assert_called_once_with(byor_key, key_alias=None)
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    async def test_delete_without_org_id_passes_no_alias(
+        self, mock_get_user, mock_delete_key
+    ):
+        """Test that when user has no current_org_id, no alias is passed."""
+        # Arrange
+        user_id = 'user-123'
+        byor_key = 'sk-byor-key-to-delete'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = None
+        mock_get_user.return_value = mock_user
+        mock_delete_key.return_value = None
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, byor_key)
+
+        # Assert
+        assert result is True
+        mock_delete_key.assert_called_once_with(byor_key, key_alias=None)
+
+    @pytest.mark.asyncio
+    @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
+    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    async def test_delete_returns_false_on_exception(
+        self, mock_get_user, mock_delete_key
+    ):
+        """Test that exceptions during deletion return False."""
+        # Arrange
+        user_id = 'user-123'
+        byor_key = 'sk-byor-key-to-delete'
+
+        mock_user = MagicMock()
+        mock_user.current_org_id = 'org-456'
+        mock_get_user.return_value = mock_user
+        mock_delete_key.side_effect = Exception('LiteLLM API error')
+
+        # Act
+        result = await delete_byor_key_from_litellm(user_id, byor_key)
+
+        # Assert
+        assert result is False

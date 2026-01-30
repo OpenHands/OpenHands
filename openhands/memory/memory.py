@@ -9,12 +9,13 @@ import openhands
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.action.agent import RecallAction
-from openhands.events.event import Event, EventSource, RecallType
+from openhands.events.event import Event, EventSource
 from openhands.events.observation.agent import (
     MicroagentKnowledge,
     RecallObservation,
 )
 from openhands.events.observation.empty import NullObservation
+from openhands.events.recall_type import RecallType
 from openhands.events.stream import EventStream, EventStreamSubscriber
 from openhands.microagent import (
     BaseMicroagent,
