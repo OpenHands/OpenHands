@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Annotated
-
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -33,9 +31,7 @@ class Settings(BaseModel):
     user_version: int | None = None
     remote_runtime_resource_factor: int | None = None
     # Planned to be removed from settings
-    secrets_store: Annotated[Secrets, Field(frozen=True)] = Field(
-        default_factory=Secrets
-    )
+    secrets_store: Secrets = Field(default_factory=Secrets)
     enable_default_condenser: bool = True
     enable_sound_notifications: bool = False
     enable_proactive_conversation_starters: bool = True
