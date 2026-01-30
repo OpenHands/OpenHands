@@ -70,3 +70,7 @@ export const CHAT_INPUT = {
 
 // UI tolerance constants
 export const EPS = 1.5; // px tolerance for "near min" height comparisons
+
+// Modal constants
+export const MODAL_BASE_Z_INDEX = 1000;
+export const MODAL_Z_INDEX_GAP = 10;

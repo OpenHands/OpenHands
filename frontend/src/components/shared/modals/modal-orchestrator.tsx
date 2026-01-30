@@ -1,55 +1,17 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useModalStore } from "#/stores/modal-store";
-import type { ModalInstance, ModalConfigMap } from "#/stores/modal-store";
-import { ConfirmDeleteModal } from "#/components/features/conversation-panel/confirm-delete-modal";
-import { ConfirmStopModal } from "#/components/features/conversation-panel/confirm-stop-modal";
-import { FeedbackModal } from "#/components/features/feedback/feedback-modal";
+import type { ModalInstance } from "#/stores/modal-store";
+import { MODAL_BASE_Z_INDEX, MODAL_Z_INDEX_GAP } from "#/utils/constants";
+import { MODAL_REGISTRY } from "#/components/shared/modals/modal-registry";
 
-/**
- * Renders the appropriate modal component based on modal type.
- * Add new modal cases here when migrating modals to the centralized system.
- */
 function renderModal(
   modal: ModalInstance,
   onClose: () => void,
 ): React.ReactNode {
-  switch (modal.type) {
-    case "confirm-delete": {
-      const props = modal.props as ModalConfigMap["confirm-delete"];
-      return (
-        <ConfirmDeleteModal
-          conversationTitle={props.conversationTitle}
-          onConfirm={() => {
-            props.onConfirm();
-            onClose();
-          }}
-          onCancel={onClose}
-        />
-      );
-    }
-
-    case "confirm-stop": {
-      const props = modal.props as ModalConfigMap["confirm-stop"];
-      return (
-        <ConfirmStopModal
-          onConfirm={() => {
-            props.onConfirm();
-            onClose();
-          }}
-          onCancel={onClose}
-        />
-      );
-    }
-
-    case "feedback": {
-      const props = modal.props as ModalConfigMap["feedback"];
-      return <FeedbackModal polarity={props.polarity} onClose={onClose} />;
-    }
-
-    default:
-      return null;
-  }
+  const renderer = MODAL_REGISTRY[modal.type];
+  if (!renderer) return null;
+  return renderer(modal.props as never, onClose);
 }
 
 /**
@@ -95,8 +57,7 @@ export function ModalRoot() {
     <>
       {modalStack.map((modal, index) => {
         const isTopModal = index === modalStack.length - 1;
-        // Higher base z-index (1000) to stay above toasts, command palette, etc.
-        const zIndex = 1000 + index * 10;
+        const zIndex = MODAL_BASE_Z_INDEX + index * MODAL_Z_INDEX_GAP;
         const allowBackdropClose = modal.props.closeOnBackdrop !== false;
 
         const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
