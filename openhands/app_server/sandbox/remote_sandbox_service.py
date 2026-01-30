@@ -711,8 +711,18 @@ async def refresh_conversation(
 
         updated_conversation_info = ConversationInfo.model_validate(response.json())
 
-        # TODO: As of writing, ConversationInfo from AgentServer does not have a title to update...
         app_conversation_info.updated_at = updated_conversation_info.updated_at
+
+        # TODO: This is a temp fix - the agent server is storing metrics in a new format
+        # We should probably update the data structures and to store / display the more
+        # explicit metrics
+        try:
+            app_conversation_info.metrics = (
+                updated_conversation_info.stats.get_combined_metrics()
+            )
+        except Exception:
+            _logger.exception('error_updating_conversation_metrics', stack_info=True)
+
         # TODO: Update other appropriate attributes...
 
         await app_conversation_info_service.save_app_conversation_info(

@@ -91,6 +91,10 @@ def mock_conversation_info() -> ConversationInfo:
     conversation_info.agent.llm = MagicMock()
     conversation_info.agent.llm.model = 'gpt-4'
 
+    # Mock stats.get_combined_metrics() structure
+    conversation_info.stats = MagicMock()
+    conversation_info.stats.get_combined_metrics.return_value = None
+
     return conversation_info
 
 

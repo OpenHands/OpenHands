@@ -11,6 +11,8 @@ import {
 import { MicroagentStatus } from "#/types/microagent-status";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useAgentState } from "#/hooks/use-agent-state";
+import { AgentState } from "#/types/agent-state";
 // TODO: Implement V1 feedback functionality when API supports V1 event IDs
 // import { useFeedbackExists } from "#/hooks/query/use-feedback-exists";
 import {
@@ -153,6 +155,12 @@ export function EventMessage({
 }: EventMessageProps) {
   const { data: config } = useConfig();
   const { planContent } = useConversationStore();
+  const { curAgentState } = useAgentState();
+
+  // Disable Build button while agent is running (streaming)
+  const isAgentRunning =
+    curAgentState === AgentState.RUNNING ||
+    curAgentState === AgentState.LOADING;
 
   // V1 events use string IDs, but useFeedbackExists expects number
   // For now, we'll skip feedback functionality for V1 events
@@ -214,7 +222,12 @@ export function EventMessage({
         planPreviewEventIds &&
         shouldShowPlanPreview(event.id, planPreviewEventIds)
       ) {
-        return <PlanPreview planContent={planContent} />;
+        return (
+          <PlanPreview
+            planContent={planContent}
+            isBuildDisabled={isAgentRunning}
+          />
+        );
       }
       // Not the designated preview event for this phase - render nothing
       // This prevents duplicate previews within the same phase
