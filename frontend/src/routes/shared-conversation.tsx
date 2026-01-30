@@ -6,7 +6,7 @@ import { useSharedConversation } from "#/hooks/query/use-shared-conversation";
 import { useSharedConversationEvents } from "#/hooks/query/use-shared-conversation-events";
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 
 export default function SharedConversation() {

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 import ProfileIcon from "#/icons/profile.svg?react";
 import { cn } from "#/utils/utils";
 import { Avatar } from "./avatar";
@@ -33,7 +33,7 @@ export function UserAvatar({ onClick, avatarUrl, isLoading }: UserAvatarProps) {
           className="text-[#9099AC]"
         />
       )}
-      {isLoading && <Spinner size="sm" data-testid="loading-spinner" />}
+      {isLoading && <Spinner size="sm" testId="loading-spinner" />}
     </button>
   );
 }
