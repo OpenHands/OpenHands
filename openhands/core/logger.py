@@ -11,22 +11,18 @@ import os
 import re
 import sys
 import traceback
-import warnings
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from types import TracebackType
 from typing import Any, Literal, Mapping, MutableMapping, TextIO
 
-# Suppress deprecation warnings from dependencies before they're imported
-# aifc was removed in Python 3.13 but speech_recognition still references it
-warnings.filterwarnings(
-    'ignore', category=DeprecationWarning, message=r'aifc was removed'
-)
+import litellm
+from pythonjsonlogger.json import JsonFormatter
+from termcolor import colored
 
-import litellm  # noqa: E402
-from pythonjsonlogger.json import JsonFormatter  # noqa: E402
-from termcolor import colored  # noqa: E402
+from openhands.app_server.a_quieter_log import quieten_log
 
+quieten_log()
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 DEBUG = os.getenv('DEBUG', 'False').lower() in ['true', '1', 'yes']
 DEBUG_LLM = os.getenv('DEBUG_LLM', 'False').lower() in ['true', '1', 'yes']

@@ -7,18 +7,10 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import os
-import warnings
 
-# Suppress deprecation warnings early, before any imports that might trigger them
-# This handles import-time warnings from dependencies like speech_recognition
-warnings.filterwarnings(
-    'ignore', category=DeprecationWarning, message=r'aifc was removed'
-)
-warnings.filterwarnings('ignore', category=SyntaxWarning, module=r'pydub\.utils')
+import uvicorn
 
-import uvicorn  # noqa: E402
-
-from openhands.core.logger import get_uvicorn_json_log_config  # noqa: E402
+from openhands.core.logger import get_uvicorn_json_log_config
 
 
 def main():
