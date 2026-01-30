@@ -55,7 +55,11 @@ export function handleActionMessage(message: ActionMessage) {
   }
 }
 
-export function handleStatusMessage(message: StatusMessage, posthog?: PostHog) {
+export function handleStatusMessage(
+  message: StatusMessage,
+  posthog?: PostHog,
+  userEmail?: string | null,
+) {
   // Info message with conversation_title indicates new title for conversation
   if (message.type === "info" && message.conversation_title) {
     const conversationId = message.message;
@@ -74,6 +78,7 @@ export function handleStatusMessage(message: StatusMessage, posthog?: PostHog) {
       source: "chat",
       metadata: { msgId: message.id },
       posthog,
+      userEmail,
     });
   }
 }
@@ -81,12 +86,17 @@ export function handleStatusMessage(message: StatusMessage, posthog?: PostHog) {
 export function handleAssistantMessage(
   message: Record<string, unknown>,
   posthog?: PostHog,
+  userEmail?: string | null,
 ) {
   if (message.action) {
     handleActionMessage(message as unknown as ActionMessage);
   } else if (message.observation) {
     handleObservationMessage(message as unknown as ObservationMessage);
   } else if (message.status_update) {
-    handleStatusMessage(message as unknown as StatusMessage, posthog);
+    handleStatusMessage(
+      message as unknown as StatusMessage,
+      posthog,
+      userEmail,
+    );
   }
 }

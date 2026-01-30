@@ -122,4 +122,24 @@ describe("handleStatusMessage", () => {
       posthog: mockPosthog,
     });
   });
+
+  it("should pass userEmail to trackError for error messages", () => {
+    const mockPosthog = { captureException: vi.fn() } as unknown as PostHog;
+    const statusMessage: StatusMessage = {
+      status_update: true,
+      type: "error",
+      id: "ERROR_ID",
+      message: "Some error message",
+    };
+
+    handleStatusMessage(statusMessage, mockPosthog, "user@example.com");
+
+    expect(trackError).toHaveBeenCalledWith({
+      message: "Some error message",
+      source: "chat",
+      metadata: { msgId: "ERROR_ID" },
+      posthog: mockPosthog,
+      userEmail: "user@example.com",
+    });
+  });
 });

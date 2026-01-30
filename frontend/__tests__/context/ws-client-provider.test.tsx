@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { PostHog } from "posthog-js";
 import {
   updateStatusWhenErrorMessagePresent,
   WsClientProvider,
   useWsClient,
 } from "#/context/ws-client-provider";
+import { showChatError } from "#/utils/error-handler";
 
 describe("Propagate error message", () => {
   it("should do nothing when no message was passed from server", () => {
@@ -16,10 +18,30 @@ describe("Propagate error message", () => {
     updateStatusWhenErrorMessagePresent({ message: null });
   });
 
+  it("should forward userEmail to showChatError", () => {
+    const mockPosthog = { captureException: vi.fn() } as unknown as PostHog;
+    updateStatusWhenErrorMessagePresent(
+      { message: "test error" },
+      mockPosthog,
+      "user@example.com",
+    );
+
+    expect(showChatError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userEmail: "user@example.com",
+      }),
+    );
+  });
+
   it.todo("should display error to user when present");
 
   it.todo("should display error including translation id when present");
 });
+
+vi.mock("#/utils/error-handler", () => ({
+  showChatError: vi.fn(),
+  trackError: vi.fn(),
+}));
 
 // Create a mock for socket.io-client
 const mockEmit = vi.fn();

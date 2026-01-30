@@ -8,6 +8,7 @@ interface ErrorDetails {
   metadata?: Record<string, unknown>;
   msgId?: string;
   posthog?: PostHog;
+  userEmail?: string | null;
 }
 
 export function trackError({
@@ -15,12 +16,14 @@ export function trackError({
   source,
   metadata = {},
   posthog,
+  userEmail,
 }: ErrorDetails) {
   if (!posthog) return;
 
   const error = new Error(message);
   posthog.captureException(error, {
     error_source: source || "unknown",
+    user_email: userEmail ?? null,
     ...metadata,
   });
 }
@@ -30,8 +33,9 @@ export function showErrorToast({
   source,
   metadata = {},
   posthog,
+  userEmail,
 }: ErrorDetails) {
-  trackError({ message, source, metadata, posthog });
+  trackError({ message, source, metadata, posthog, userEmail });
   displayErrorToast(message);
 }
 
@@ -41,8 +45,9 @@ export function showChatError({
   metadata = {},
   msgId,
   posthog,
+  userEmail,
 }: ErrorDetails) {
-  trackError({ message, source, metadata, posthog });
+  trackError({ message, source, metadata, posthog, userEmail });
   handleStatusMessage({
     type: "error",
     message,

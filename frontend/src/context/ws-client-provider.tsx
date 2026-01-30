@@ -28,6 +28,7 @@ import {
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useEventStore } from "#/stores/use-event-store";
+import { useSettings } from "#/hooks/query/use-settings";
 
 /**
  * @deprecated Use `V1_WebSocketConnectionState` from `conversation-websocket-context.tsx` instead.
@@ -104,6 +105,7 @@ interface ErrorArgData {
 export function updateStatusWhenErrorMessagePresent(
   data: ErrorArg | unknown,
   posthog?: ReturnType<typeof usePostHog>,
+  userEmail?: string | null,
 ) {
   const isObject = (val: unknown): val is object =>
     !!val && typeof val === "object";
@@ -128,6 +130,7 @@ export function updateStatusWhenErrorMessagePresent(
       metadata,
       msgId,
       posthog,
+      userEmail,
     });
   }
 }
@@ -137,6 +140,8 @@ export function WsClientProvider({
   children,
 }: React.PropsWithChildren<WsClientProviderProps>) {
   const posthog = usePostHog();
+  const { data: settings } = useSettings();
+  const userEmail = settings?.email || settings?.git_user_email || null;
   const { setErrorMessage, removeErrorMessage } = useErrorMessageStore();
   const { removeOptimisticUserMessage } = useOptimisticUserMessageStore();
   const { addEvent, clearEvents } = useEventStore();
@@ -186,7 +191,7 @@ export function WsClientProvider({
   }
 
   function handleMessage(event: Record<string, unknown>) {
-    handleAssistantMessage(event, posthog);
+    handleAssistantMessage(event, posthog, userEmail);
 
     if (isOpenHandsEvent(event)) {
       const isStatusUpdateError =
@@ -209,6 +214,7 @@ export function WsClientProvider({
           source: "chat",
           metadata: { msgId: event.id },
           posthog,
+          userEmail,
         });
         setErrorMessage(errorMessage);
 
@@ -225,6 +231,7 @@ export function WsClientProvider({
           source: "chat",
           metadata: { msgId: event.id },
           posthog,
+          userEmail,
         });
       } else {
         removeErrorMessage();
@@ -292,14 +299,14 @@ export function WsClientProvider({
     sio.io.opts.query = sio.io.opts.query || {};
     sio.io.opts.query.latest_event_id = lastEventRef.current?.id;
 
-    updateStatusWhenErrorMessagePresent(data, posthog);
+    updateStatusWhenErrorMessagePresent(data, posthog, userEmail);
     setErrorMessage(hasValidMessageProperty(data) ? data.message : "");
   }
 
   function handleError(data: unknown) {
     // set status
     setWebSocketStatus("DISCONNECTED");
-    updateStatusWhenErrorMessagePresent(data, posthog);
+    updateStatusWhenErrorMessagePresent(data, posthog, userEmail);
 
     setErrorMessage(
       hasValidMessageProperty(data)
