@@ -8,7 +8,7 @@ import { GitRepository } from "#/types/git";
 import { useMicroagentManagementStore } from "#/stores/microagent-management-store";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 
 interface MicroagentManagementRepoMicroagentsProps {
   repository: GitRepository;
@@ -82,7 +82,7 @@ export function MicroagentManagementRepoMicroagents({
   if (isLoading) {
     return (
       <div className="pb-4 flex justify-center">
-        <Spinner size="sm" data-testid="loading-spinner" />
+        <Spinner size="sm" testId="loading-spinner" />
       </div>
     );
   }

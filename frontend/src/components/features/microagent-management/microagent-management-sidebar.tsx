@@ -17,7 +17,7 @@ import {
 import { sanitizeQuery } from "#/utils/sanitize-query";
 import { I18nKey } from "#/i18n/declaration";
 import { useDebounce } from "#/hooks/use-debounce";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 
 interface MicroagentManagementSidebarProps {
   isSmallerScreen?: boolean;
