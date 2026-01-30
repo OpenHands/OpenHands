@@ -126,7 +126,6 @@ class LiteLlmManager:
                         'user_id': keycloak_user_id,
                         'original_max_budget': original_max_budget,
                         'original_spend': original_spend,
-                        'user_info_keys': list(user_info.keys()),
                     },
                 )
 
