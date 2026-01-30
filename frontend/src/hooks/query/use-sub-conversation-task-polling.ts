@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
+import { setConversationState } from "#/utils/conversation-local-storage";
+import { useConversationStore } from "#/stores/conversation-store";
 
 /**
  * Hook that polls V1 sub-conversation start tasks and invalidates parent conversation cache when ready.
@@ -22,6 +24,7 @@ export const useSubConversationTaskPolling = (
   parentConversationId: string | null,
 ) => {
   const queryClient = useQueryClient();
+  const { setSubConversationTaskId } = useConversationStore();
 
   // Poll the task if we have both taskId and parentConversationId
   const taskQuery = useQuery({
@@ -46,20 +49,34 @@ export const useSubConversationTaskPolling = (
     retry: false,
   });
 
-  // Invalidate parent conversation cache when task is ready
+  // Invalidate parent conversation cache when task is ready and clear localStorage
   useEffect(() => {
     const task = taskQuery.data;
-    if (
-      task?.status === "READY" &&
-      task.app_conversation_id &&
-      parentConversationId
-    ) {
+    if (!parentConversationId) return;
+
+    if (task?.status === "READY" && task.app_conversation_id) {
       // Invalidate the parent conversation to refetch with updated sub_conversation_ids
       queryClient.invalidateQueries({
         queryKey: ["user", "conversation", parentConversationId],
       });
+      // Clear the task ID from localStorage and store since task completed successfully
+      setConversationState(parentConversationId, {
+        subConversationTaskId: null,
+      });
+      setSubConversationTaskId(null);
+    } else if (task?.status === "ERROR") {
+      // Clear the task ID from localStorage and store on error so user can retry
+      setConversationState(parentConversationId, {
+        subConversationTaskId: null,
+      });
+      setSubConversationTaskId(null);
     }
-  }, [taskQuery.data, parentConversationId, queryClient]);
+  }, [
+    taskQuery.data,
+    parentConversationId,
+    queryClient,
+    setSubConversationTaskId,
+  ]);
 
   return {
     task: taskQuery.data,

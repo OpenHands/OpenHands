@@ -16,6 +16,7 @@ export interface ConversationState {
   rightPanelShown: boolean;
   unpinnedTabs: string[];
   conversationMode: ConversationMode;
+  subConversationTaskId: string | null;
 }
 
 const DEFAULT_CONVERSATION_STATE: ConversationState = {
@@ -23,6 +24,7 @@ const DEFAULT_CONVERSATION_STATE: ConversationState = {
   rightPanelShown: true,
   unpinnedTabs: [],
   conversationMode: "code",
+  subConversationTaskId: null,
 };
 
 /**
