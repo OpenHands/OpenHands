@@ -1,5 +1,10 @@
 # Evaluation
 
+> [!WARNING]
+> **This directory is deprecated.** Our new benchmarks are located at [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks).
+>
+> If you have already implemented a benchmark in this directory and would like to contribute it, we are happy to have the contribution. However, if you are starting anew, please use the new location.
+
 This folder contains code and resources to run experiments and evaluations.
 
 ## For Benchmark Users
@@ -44,7 +49,7 @@ temperature = 0.0
 
 ### Configuring Condensers for Evaluation
 
-For benchmarks that support condenser configuration (like SWE-Bench), you can define multiple condenser configurations in your `config.toml` file. A condenser is responsible for managing conversation history to maintain context while staying within token limits - you can learn more about how it works [here](https://www.all-hands.dev/blog/openhands-context-condensensation-for-more-efficient-ai-agents):
+For benchmarks that support condenser configuration (like SWE-Bench), you can define multiple condenser configurations in your `config.toml` file. A condenser is responsible for managing conversation history to maintain context while staying within token limits - you can learn more about how it works [here](https://www.openhands.dev/blog/openhands-context-condensensation-for-more-efficient-ai-agents):
 
 ```toml
 # LLM-based summarizing condenser for evaluation
@@ -138,7 +143,7 @@ You can start your own fork of [our huggingface evaluation outputs](https://hugg
 
 ## For Benchmark Developers
 
-To learn more about how to integrate your benchmark into OpenHands, check out [tutorial here](https://docs.all-hands.dev/usage/how-to/evaluation-harness). Briefly,
+To learn more about how to integrate your benchmark into OpenHands, check out [tutorial here](https://docs.openhands.dev/usage/how-to/evaluation-harness). Briefly,
 
 - Each subfolder contains a specific benchmark or experiment. For example, [`evaluation/benchmarks/swe_bench`](./benchmarks/swe_bench) should contain
 all the preprocessing/evaluation/analysis scripts.

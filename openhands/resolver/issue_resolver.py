@@ -54,6 +54,7 @@ class IssueResolver:
 
     def __init__(self, args: Namespace) -> None:
         """Initialize the IssueResolver with the given parameters.
+
         Params initialized:
             owner: Owner of the repo.
             repo: Repository name.
@@ -82,6 +83,7 @@ class IssueResolver:
             or os.getenv('GITLAB_TOKEN')
             or os.getenv('BITBUCKET_TOKEN')
             or os.getenv('AZURE_DEVOPS_TOKEN')
+            or os.getenv('FORGEJO_TOKEN')
         )
         username = args.username if args.username else os.getenv('GIT_USERNAME')
         if not username:

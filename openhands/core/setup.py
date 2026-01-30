@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import hashlib
 import os
 import uuid
@@ -108,6 +115,30 @@ def get_provider_tokens():
     if 'BITBUCKET_TOKEN' in os.environ:
         bitbucket_token = SecretStr(os.environ['BITBUCKET_TOKEN'])
         provider_tokens[ProviderType.BITBUCKET] = ProviderToken(token=bitbucket_token)
+
+    # Forgejo support (e.g., Codeberg or self-hosted Forgejo)
+    if 'FORGEJO_TOKEN' in os.environ:
+        forgejo_token = SecretStr(os.environ['FORGEJO_TOKEN'])
+        # If a base URL is provided, extract the domain to use as host override
+        forgejo_base_url = os.environ.get('FORGEJO_BASE_URL', '').strip()
+        host: str | None = None
+        if forgejo_base_url:
+            # Normalize by stripping protocol and any path (e.g., /api/v1)
+            url = forgejo_base_url
+            if url.startswith(('http://', 'https://')):
+                try:
+                    from urllib.parse import urlparse
+
+                    parsed = urlparse(url)
+                    host = parsed.netloc or None
+                except Exception:
+                    pass
+            if host is None:
+                host = url.replace('https://', '').replace('http://', '')
+            host = host.split('/')[0].strip('/') if host else None
+        provider_tokens[ProviderType.FORGEJO] = ProviderToken(
+            token=forgejo_token, host=host
+        )
 
     # Wrap provider tokens in Secrets if any tokens were found
     secret_store = (

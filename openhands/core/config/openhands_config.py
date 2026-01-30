@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import os
 from typing import Any, ClassVar
 
@@ -5,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from openhands.core import logger
 from openhands.core.config.agent_config import AgentConfig
-from openhands.core.config.cli_config import CLIConfig
 from openhands.core.config.config_utils import (
     DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX,
     OH_DEFAULT_AGENT,
@@ -119,7 +125,6 @@ class OpenHandsConfig(BaseModel):
     mcp_host: str = Field(default=f'localhost:{os.getenv("port", 3000)}')
     mcp: MCPConfig = Field(default_factory=MCPConfig)
     kubernetes: KubernetesConfig = Field(default_factory=KubernetesConfig)
-    cli: CLIConfig = Field(default_factory=CLIConfig)
     git_user_name: str = Field(
         default='openhands', description='Git user name for commits made by the agent'
     )

@@ -13,6 +13,7 @@ from server.auth.auth_error import (
     ExpiredError,
     NoCredentialsError,
 )
+from server.auth.domain_blocker import domain_blocker
 from server.auth.token_manager import TokenManager
 from server.config import get_config
 from server.logger import logger
@@ -76,6 +77,15 @@ class SaasUserAuth(UserAuth):
         self.access_token = SecretStr(tokens['access_token'])
         self.refresh_token = SecretStr(tokens['refresh_token'])
         self.refreshed = True
+        if not self.email or not self.email_verified or not self.user_id:
+            # We don't need to verify the signature here because we just refreshed
+            # this token from the IDP via token_manager.refresh()
+            access_token_payload = jwt.decode(
+                tokens['access_token'], options={'verify_signature': False}
+            )
+            self.user_id = access_token_payload['sub']
+            self.email = access_token_payload['email']
+            self.email_verified = access_token_payload['email_verified']
 
     def _is_token_expired(self, token: SecretStr):
         logger.debug('saas_user_auth_is_token_expired')
@@ -102,7 +112,6 @@ class SaasUserAuth(UserAuth):
             return settings
         settings_store = await self.get_user_settings_store()
         settings = await settings_store.load()
-        # If load() returned None, should settings be created?
         if settings:
             settings.email = self.email
             settings.email_verified = self.email_verified
@@ -153,8 +162,10 @@ class SaasUserAuth(UserAuth):
         try:
             # TODO: I think we can do this in a single request if we refactor
             with session_maker() as session:
-                tokens = session.query(AuthTokens).where(
-                    AuthTokens.keycloak_user_id == self.user_id
+                tokens = (
+                    session.query(AuthTokens)
+                    .where(AuthTokens.keycloak_user_id == self.user_id)
+                    .all()
                 )
 
             for token in tokens:
@@ -205,9 +216,9 @@ class SaasUserAuth(UserAuth):
 
     async def get_mcp_api_key(self) -> str:
         api_key_store = ApiKeyStore.get_instance()
-        mcp_api_key = api_key_store.retrieve_mcp_api_key(self.user_id)
+        mcp_api_key = await api_key_store.retrieve_mcp_api_key(self.user_id)
         if not mcp_api_key:
-            mcp_api_key = api_key_store.create_api_key(
+            mcp_api_key = await api_key_store.create_api_key(
                 self.user_id, 'MCP_API_KEY', None
             )
         return mcp_api_key
@@ -271,11 +282,13 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
         if not user_id:
             return None
         offline_token = await token_manager.load_offline_token(user_id)
-        return SaasUserAuth(
+        saas_user_auth = SaasUserAuth(
             user_id=user_id,
             refresh_token=SecretStr(offline_token),
             auth_type=AuthType.BEARER,
         )
+        await saas_user_auth.refresh()
+        return saas_user_auth
     except Exception as exc:
         raise BearerTokenError from exc
 
@@ -312,6 +325,16 @@ async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     user_id = access_token_payload['sub']
     email = access_token_payload['email']
     email_verified = access_token_payload['email_verified']
+
+    # Check if email domain is blocked
+    if email and domain_blocker.is_domain_blocked(email):
+        logger.warning(
+            f'Blocked authentication attempt for existing user with email: {email}'
+        )
+        raise AuthError(
+            'Access denied: Your email domain is not allowed to access this service'
+        )
+
     logger.debug('saas_user_auth_from_signed_token:return')
 
     return SaasUserAuth(

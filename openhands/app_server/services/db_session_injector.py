@@ -1,11 +1,12 @@
-"""Database configuration and session management for OpenHands Server."""
+"""Database configuration and session management for OpenHands App Server."""
 
 import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
+import asyncpg
 from fastapi import Request
 from pydantic import BaseModel, PrivateAttr, SecretStr, model_validator
 from sqlalchemy import Engine, create_engine
@@ -33,6 +34,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
     echo: bool = False
     pool_size: int = 25
     max_overflow: int = 10
+    pool_recycle: int = 1800
     gcp_db_instance: str | None = None
     gcp_project: str | None = None
     gcp_region: str | None = None
@@ -42,6 +44,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
     _async_engine: AsyncEngine | None = PrivateAttr(default=None)
     _session_maker: sessionmaker | None = PrivateAttr(default=None)
     _async_session_maker: async_sessionmaker | None = PrivateAttr(default=None)
+    _gcp_connector: Any = PrivateAttr(default=None)
 
     @model_validator(mode='after')
     def fill_empty_fields(self):
@@ -65,14 +68,18 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         return self
 
     def _create_gcp_db_connection(self):
-        # Lazy import because lib does not import if user does not have posgres installed
-        from google.cloud.sql.connector import Connector
+        gcp_connector = self._gcp_connector
+        if gcp_connector is None:
+            # Lazy import because lib does not import if user does not have posgres installed
+            from google.cloud.sql.connector import Connector
 
-        connector = Connector()
+            gcp_connector = Connector()
+            self._gcp_connector = gcp_connector
+
         instance_string = f'{self.gcp_project}:{self.gcp_region}:{self.gcp_db_instance}'
         password = self.password
         assert password is not None
-        return connector.connect(
+        return gcp_connector.connect(
             instance_string,
             'pg8000',
             user=self.user,
@@ -81,21 +88,30 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
         )
 
     async def _create_async_gcp_db_connection(self):
-        # Lazy import because lib does not import if user does not have posgres installed
+        # Lazy import because lib does not import if user does not have postgres installed
         from google.cloud.sql.connector import Connector
 
-        loop = asyncio.get_running_loop()
-        async with Connector(loop=loop) as connector:
-            password = self.password
-            assert password is not None
-            conn = await connector.connect_async(
-                f'{self.gcp_project}:{self.gcp_region}:{self.gcp_db_instance}',
-                'asyncpg',
-                user=self.user,
-                password=password.get_secret_value(),
-                db=self.name,
-            )
-            return conn
+        current_loop = asyncio.get_running_loop()
+        gcp_connector = self._gcp_connector
+
+        # Create new connector if none exists or if event loop changed
+        if (
+            gcp_connector is None
+            or getattr(gcp_connector, '_loop', None) != current_loop
+        ):
+            gcp_connector = Connector(loop=current_loop)
+            self._gcp_connector = gcp_connector
+
+        password = self.password
+        assert password is not None
+        conn = await gcp_connector.connect_async(
+            f'{self.gcp_project}:{self.gcp_region}:{self.gcp_db_instance}',
+            'asyncpg',
+            user=self.user,
+            password=password.get_secret_value(),
+            db=self.name,
+        )
+        return conn
 
     def _create_gcp_engine(self):
         engine = create_engine(
@@ -112,10 +128,8 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
             AsyncAdapt_asyncpg_connection,
         )
 
-        engine = self._create_gcp_engine()
-
         return AsyncAdapt_asyncpg_connection(
-            engine.dialect.dbapi,
+            asyncpg,
             await self._create_async_gcp_db_connection(),
             prepared_statement_cache_size=100,
         )
@@ -125,12 +139,9 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
             AsyncAdapt_asyncpg_connection,
         )
 
-        base_engine = self._create_gcp_engine()
-        dbapi = base_engine.dialect.dbapi
-
         def adapted_creator():
             return AsyncAdapt_asyncpg_connection(
-                dbapi,
+                asyncpg,
                 await_only(self._create_async_gcp_db_connection()),
                 prepared_statement_cache_size=100,
             )
@@ -141,6 +152,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
             pool_size=self.pool_size,
             max_overflow=self.max_overflow,
             pool_pre_ping=True,
+            pool_recycle=self.pool_recycle,
         )
 
     async def get_async_db_engine(self) -> AsyncEngine:
@@ -174,6 +186,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                     url,
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
+                    pool_recycle=self.pool_recycle,
                     pool_pre_ping=True,
                 )
             else:
@@ -214,6 +227,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                 url,
                 pool_size=self.pool_size,
                 max_overflow=self.max_overflow,
+                pool_recycle=self.pool_recycle,
                 pool_pre_ping=True,
             )
         self._engine = engine

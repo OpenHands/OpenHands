@@ -1,22 +1,49 @@
-import { screen, within } from "@testing-library/react";
+import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ConversationName } from "#/components/features/conversation/conversation-name";
 import { ConversationNameContextMenu } from "#/components/features/conversation/conversation-name-context-menu";
 import { BrowserRouter } from "react-router";
+import type { Conversation } from "#/api/open-hands.types";
 
-// Mock the hooks and utilities
-const mockMutate = vi.fn();
-
-vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({
+// Hoisted mocks for controllable return values
+const {
+  mockMutate,
+  mockDisplaySuccessToast,
+  useActiveConversationMock,
+  useConfigMock,
+} = vi.hoisted(() => ({
+  mockMutate: vi.fn(),
+  mockDisplaySuccessToast: vi.fn(),
+  useActiveConversationMock: vi.fn(() => ({
     data: {
       conversation_id: "test-conversation-id",
       title: "Test Conversation",
       status: "RUNNING",
     },
-  }),
+  })),
+  useConfigMock: vi.fn(() => ({
+    data: {
+      APP_MODE: "oss",
+    },
+  })),
+}));
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => useActiveConversationMock(),
+}));
+
+vi.mock("#/hooks/query/use-config", () => ({
+  useConfig: () => useConfigMock(),
 }));
 
 vi.mock("#/hooks/mutation/use-update-conversation", () => ({
@@ -26,7 +53,7 @@ vi.mock("#/hooks/mutation/use-update-conversation", () => ({
 }));
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
-  displaySuccessToast: vi.fn(),
+  displaySuccessToast: mockDisplaySuccessToast,
 }));
 
 // Mock react-i18next
@@ -42,11 +69,15 @@ vi.mock("react-i18next", async () => {
           BUTTON$EXPORT_CONVERSATION: "Export Conversation",
           BUTTON$DOWNLOAD_VIA_VSCODE: "Download via VS Code",
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
-          CONVERSATION$SHOW_MICROAGENTS: "Show Microagents",
+          CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Cost",
           COMMON$CLOSE_CONVERSATION_STOP_RUNTIME:
             "Close Conversation (Stop Runtime)",
           COMMON$DELETE_CONVERSATION: "Delete Conversation",
+          CONVERSATION$SHARE_PUBLICLY: "Share Publicly",
+          CONVERSATION$LINK_COPIED: "Link copied to clipboard",
+          BUTTON$COPY_TO_CLIPBOARD: "Copy to Clipboard",
+          BUTTON$OPEN_IN_NEW_TAB: "Open in New Tab",
         };
         return translations[key] || key;
       },
@@ -72,6 +103,9 @@ describe("ConversationName", () => {
       open: vi.fn(),
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
+      location: {
+        origin: "http://localhost:3000",
+      },
     });
   });
 
@@ -290,7 +324,7 @@ describe("ConversationNameContextMenu", () => {
       onStop: vi.fn(),
       onDisplayCost: vi.fn(),
       onShowAgentTools: vi.fn(),
-      onShowMicroagents: vi.fn(),
+      onShowSkills: vi.fn(),
       onExportConversation: vi.fn(),
       onDownloadViaVSCode: vi.fn(),
     };
@@ -304,7 +338,7 @@ describe("ConversationNameContextMenu", () => {
     expect(screen.getByTestId("stop-button")).toBeInTheDocument();
     expect(screen.getByTestId("display-cost-button")).toBeInTheDocument();
     expect(screen.getByTestId("show-agent-tools-button")).toBeInTheDocument();
-    expect(screen.getByTestId("show-microagents-button")).toBeInTheDocument();
+    expect(screen.getByTestId("show-skills-button")).toBeInTheDocument();
     expect(
       screen.getByTestId("export-conversation-button"),
     ).toBeInTheDocument();
@@ -321,9 +355,7 @@ describe("ConversationNameContextMenu", () => {
     expect(
       screen.queryByTestId("show-agent-tools-button"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("show-microagents-button"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("show-skills-button")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("export-conversation-button"),
     ).not.toBeInTheDocument();
@@ -410,19 +442,19 @@ describe("ConversationNameContextMenu", () => {
 
   it("should call show microagents handler when show microagents button is clicked", async () => {
     const user = userEvent.setup();
-    const onShowMicroagents = vi.fn();
+    const onShowSkills = vi.fn();
 
     renderWithProviders(
       <ConversationNameContextMenu
         {...defaultProps}
-        onShowMicroagents={onShowMicroagents}
+        onShowSkills={onShowSkills}
       />,
     );
 
-    const showMicroagentsButton = screen.getByTestId("show-microagents-button");
+    const showMicroagentsButton = screen.getByTestId("show-skills-button");
     await user.click(showMicroagentsButton);
 
-    expect(onShowMicroagents).toHaveBeenCalledTimes(1);
+    expect(onShowSkills).toHaveBeenCalledTimes(1);
   });
 
   it("should call export conversation handler when export conversation button is clicked", async () => {
@@ -519,7 +551,7 @@ describe("ConversationNameContextMenu", () => {
       onStop: vi.fn(),
       onDisplayCost: vi.fn(),
       onShowAgentTools: vi.fn(),
-      onShowMicroagents: vi.fn(),
+      onShowSkills: vi.fn(),
       onExportConversation: vi.fn(),
       onDownloadViaVSCode: vi.fn(),
     };
@@ -541,8 +573,8 @@ describe("ConversationNameContextMenu", () => {
     expect(screen.getByTestId("show-agent-tools-button")).toHaveTextContent(
       "Show Agent Tools",
     );
-    expect(screen.getByTestId("show-microagents-button")).toHaveTextContent(
-      "Show Microagents",
+    expect(screen.getByTestId("show-skills-button")).toHaveTextContent(
+      "Show Skills",
     );
     expect(screen.getByTestId("export-conversation-button")).toHaveTextContent(
       "Export Conversation",
@@ -569,5 +601,291 @@ describe("ConversationNameContextMenu", () => {
     // The onClose is typically called by the parent component when clicking outside
     // This test verifies the prop is properly passed
     expect(onClose).toBeDefined();
+  });
+});
+
+describe("ConversationNameContextMenu - Share Link Functionality", () => {
+  const mockWriteText = vi.fn().mockResolvedValue(undefined);
+
+  const mockOnCopyShareLink = vi.fn();
+  const mockOnTogglePublic = vi.fn();
+  const mockOnClose = vi.fn();
+
+  const defaultProps = {
+    onClose: mockOnClose,
+    onTogglePublic: mockOnTogglePublic,
+    onCopyShareLink: mockOnCopyShareLink,
+    shareUrl: "https://example.com/shared/conversations/test-id",
+  };
+
+  vi.mock("#/hooks/mutation/use-update-conversation-public-flag", () => ({
+    useUpdateConversationPublicFlag: () => ({
+      mutate: vi.fn(),
+    }),
+  }));
+
+  beforeAll(() => {
+    // Mock navigator.clipboard
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: mockWriteText,
+        readText: vi.fn(),
+      },
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  beforeEach(() => {
+    mockWriteText.mockClear();
+    mockDisplaySuccessToast.mockClear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should display copy and open buttons when conversation is public", () => {
+    // Arrange
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-id",
+        title: "Test Conversation",
+        status: "STOPPED",
+        conversation_version: "V1" as const,
+        public: true,
+      } as Conversation,
+    });
+
+    useConfigMock.mockReturnValue({
+      data: {
+        APP_MODE: "saas",
+      },
+    });
+
+    // Act
+    renderWithProviders(<ConversationNameContextMenu {...defaultProps} />);
+
+    // Assert
+    expect(screen.getByTestId("copy-share-link-button")).toBeInTheDocument();
+    expect(screen.getByTestId("open-share-link-button")).toBeInTheDocument();
+  });
+
+  it("should not display share buttons when conversation is not public", () => {
+    // Arrange
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-id",
+        title: "Test Conversation",
+        status: "STOPPED",
+        conversation_version: "V1" as const,
+        public: false,
+      } as Conversation,
+    });
+
+    useConfigMock.mockReturnValue({
+      data: {
+        APP_MODE: "saas",
+      },
+    });
+
+    // Act
+    renderWithProviders(<ConversationNameContextMenu {...defaultProps} />);
+
+    // Assert
+    expect(
+      screen.queryByTestId("copy-share-link-button"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("open-share-link-button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should call copy handler when copy button is clicked", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const shareUrl = "https://example.com/shared/conversations/test-id";
+
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-id",
+        title: "Test Conversation",
+        status: "STOPPED",
+        conversation_version: "V1" as const,
+        public: true,
+      } as Conversation,
+    });
+
+    useConfigMock.mockReturnValue({
+      data: {
+        APP_MODE: "saas",
+      },
+    });
+
+    renderWithProviders(
+      <ConversationNameContextMenu {...defaultProps} shareUrl={shareUrl} />,
+    );
+
+    const copyButton = screen.getByTestId("copy-share-link-button");
+
+    // Act
+    await user.click(copyButton);
+
+    // Assert
+    expect(mockOnCopyShareLink).toHaveBeenCalledTimes(1);
+  });
+
+  it("should have correct attributes for open share link button", () => {
+    // Arrange
+    const shareUrl = "https://example.com/shared/conversations/test-id";
+
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-id",
+        title: "Test Conversation",
+        status: "STOPPED",
+        conversation_version: "V1" as const,
+        public: true,
+      } as Conversation,
+    });
+
+    useConfigMock.mockReturnValue({
+      data: {
+        APP_MODE: "saas",
+      },
+    });
+
+    renderWithProviders(
+      <ConversationNameContextMenu {...defaultProps} shareUrl={shareUrl} />,
+    );
+
+    const openButton = screen.getByTestId("open-share-link-button");
+
+    // Assert
+    expect(openButton).toHaveAttribute("href", shareUrl);
+    expect(openButton).toHaveAttribute("target", "_blank");
+    expect(openButton).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("should display correct tooltips for share buttons", () => {
+    // Arrange
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-id",
+        title: "Test Conversation",
+        status: "STOPPED",
+        conversation_version: "V1" as const,
+        public: true,
+      } as Conversation,
+    });
+
+    useConfigMock.mockReturnValue({
+      data: {
+        APP_MODE: "saas",
+      },
+    });
+
+    renderWithProviders(<ConversationNameContextMenu {...defaultProps} />);
+
+    // Assert
+    const copyButton = screen.getByTestId("copy-share-link-button");
+    const openButton = screen.getByTestId("open-share-link-button");
+
+    expect(copyButton).toHaveAttribute("title", "Copy to Clipboard");
+    expect(openButton).toHaveAttribute("title", "Open in New Tab");
+  });
+
+  describe("Integration with ConversationName component", () => {
+    beforeEach(() => {
+      // Default mocks for public V1 conversation in SAAS mode
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          title: "Test Conversation",
+          status: "STOPPED",
+          conversation_version: "V1" as const,
+          public: true,
+        } as Conversation,
+      });
+
+      useConfigMock.mockReturnValue({
+        data: {
+          APP_MODE: "saas",
+        },
+      });
+    });
+
+    it("should copy share URL to clipboard and show success toast when copy button is clicked through ConversationName", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const expectedUrl =
+        "http://localhost:3000/shared/conversations/test-conversation-id";
+
+      // Ensure navigator.clipboard is properly mocked
+      if (!navigator.clipboard) {
+        Object.defineProperty(navigator, "clipboard", {
+          value: {
+            writeText: mockWriteText,
+            readText: vi.fn(),
+          },
+          writable: true,
+          configurable: true,
+        });
+      } else {
+        vi.spyOn(navigator.clipboard, "writeText").mockImplementation(
+          mockWriteText,
+        );
+      }
+
+      renderConversationNameWithRouter();
+
+      // Open context menu by clicking ellipsis
+      const ellipsisButton = screen.getByRole("button", { hidden: true });
+      await user.click(ellipsisButton);
+
+      // Wait for context menu to appear and find share publicly button
+      const sharePubliclyButton = await screen.findByTestId(
+        "share-publicly-button",
+      );
+      expect(sharePubliclyButton).toBeInTheDocument();
+
+      // Find copy button
+      const copyButton = screen.getByTestId("copy-share-link-button");
+
+      // Act
+      await user.click(copyButton);
+
+      // Assert - clipboard.writeText is async, so we need to wait
+      await waitFor(
+        () => {
+          expect(mockWriteText).toHaveBeenCalledWith(expectedUrl);
+          expect(mockDisplaySuccessToast).toHaveBeenCalledWith(
+            "Link copied to clipboard",
+          );
+        },
+        { timeout: 2000, container: document.body },
+      );
+    });
+
+    it("should show both copy and open buttons when conversation is public", async () => {
+      // Arrange
+      const user = userEvent.setup();
+
+      renderConversationNameWithRouter();
+
+      // Act - open context menu
+      const ellipsisButton = screen.getByRole("button", { hidden: true });
+      await user.click(ellipsisButton);
+
+      // Wait for context menu
+      const sharePubliclyButton = await screen.findByTestId(
+        "share-publicly-button",
+      );
+
+      // Assert
+      expect(sharePubliclyButton).toBeInTheDocument();
+      expect(screen.getByTestId("copy-share-link-button")).toBeInTheDocument();
+      expect(screen.getByTestId("open-share-link-button")).toBeInTheDocument();
+    });
   });
 });

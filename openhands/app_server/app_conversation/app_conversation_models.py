@@ -1,10 +1,11 @@
 from datetime import datetime
 from enum import Enum
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from openhands.agent_server.models import SendMessageRequest
+from openhands.agent_server.models import OpenHandsModel, SendMessageRequest
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackProcessor,
@@ -13,6 +14,7 @@ from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.integrations.service_types import ProviderType
 from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.llm import MetricsSnapshot
+from openhands.sdk.plugin import PluginSource
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 
@@ -21,6 +23,45 @@ class AgentType(Enum):
 
     DEFAULT = 'default'
     PLAN = 'plan'
+
+
+class PluginSpec(PluginSource):
+    """Specification for loading a plugin into a conversation.
+
+    Extends SDK's PluginSource with user-provided plugin configuration parameters.
+    Inherits source, ref, and repo_path fields along with their validation.
+    """
+
+    parameters: dict[str, Any] | None = Field(
+        default=None,
+        description='User-provided values for plugin input parameters',
+    )
+
+    @property
+    def display_name(self) -> str:
+        """Extract a friendly display name from the plugin source.
+
+        Examples:
+            - 'github:owner/repo' -> 'repo'
+            - 'https://github.com/owner/repo.git' -> 'repo.git'
+            - '/local/path' -> 'path'
+        """
+        return self.source.split('/')[-1] if '/' in self.source else self.source
+
+    def format_params_as_text(self, indent: str = '') -> str | None:
+        """Format parameters as a readable text block for display.
+
+        Args:
+            indent: Optional prefix to add before each parameter line.
+
+        Returns:
+            Formatted parameters string, or None if no parameters.
+        """
+        if not self.parameters:
+            return None
+        return '\n'.join(
+            f'{indent}- {key}: {value}' for key, value in self.parameters.items()
+        )
 
 
 class AppConversationInfo(BaseModel):
@@ -43,6 +84,8 @@ class AppConversationInfo(BaseModel):
 
     parent_conversation_id: OpenHandsUUID | None = None
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
+
+    public: bool | None = None
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -88,7 +131,7 @@ class AppConversationPage(BaseModel):
     next_page_id: str | None = None
 
 
-class AppConversationStartRequest(BaseModel):
+class AppConversationStartRequest(OpenHandsModel):
     """Start conversation request object.
 
     Although a user can go directly to the sandbox and start conversations, they
@@ -113,6 +156,21 @@ class AppConversationStartRequest(BaseModel):
     parent_conversation_id: OpenHandsUUID | None = None
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
 
+    public: bool | None = None
+
+    # Plugin parameters - for loading remote plugins into the conversation
+    plugins: list[PluginSpec] | None = Field(
+        default=None,
+        description=(
+            'List of plugins to load for this conversation. Plugins are loaded '
+            'and their skills/MCP config are merged into the agent.'
+        ),
+    )
+
+
+class AppConversationUpdateRequest(BaseModel):
+    public: bool
+
 
 class AppConversationStartTaskStatus(Enum):
     WORKING = 'WORKING'
@@ -133,12 +191,13 @@ class AppConversationStartTaskSortOrder(Enum):
     UPDATED_AT_DESC = 'UPDATED_AT_DESC'
 
 
-class AppConversationStartTask(BaseModel):
+class AppConversationStartTask(OpenHandsModel):
     """Object describing the start process for an app conversation.
 
     Because starting an app conversation can be slow (And can involve starting a sandbox),
     we kick off a background task for it. Once the conversation is started, the app_conversation_id
-    is populated."""
+    is populated.
+    """
 
     id: OpenHandsUUID = Field(default_factory=uuid4)
     created_by_user_id: str | None
@@ -158,6 +217,15 @@ class AppConversationStartTask(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
-class AppConversationStartTaskPage(BaseModel):
+class AppConversationStartTaskPage(OpenHandsModel):
     items: list[AppConversationStartTask]
     next_page_id: str | None = None
+
+
+class SkillResponse(BaseModel):
+    """Response model for skills endpoint."""
+
+    name: str
+    type: Literal['repo', 'knowledge', 'agentskills']
+    content: str
+    triggers: list[str] = []

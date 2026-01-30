@@ -1,10 +1,8 @@
 from openhands.core.config.agent_config import AgentConfig
 from openhands.core.config.arg_utils import (
-    get_cli_parser,
     get_evaluation_parser,
     get_headless_parser,
 )
-from openhands.core.config.cli_config import CLIConfig
 from openhands.core.config.config_utils import (
     OH_DEFAULT_AGENT,
     OH_MAX_ITERATIONS,
@@ -34,7 +32,6 @@ __all__ = [
     'OH_DEFAULT_AGENT',
     'OH_MAX_ITERATIONS',
     'AgentConfig',
-    'CLIConfig',
     'OpenHandsConfig',
     'MCPConfig',
     'LLMConfig',
@@ -49,7 +46,6 @@ __all__ = [
     'get_agent_config_arg',
     'get_llm_config_arg',
     'get_field_info',
-    'get_cli_parser',
     'get_headless_parser',
     'get_evaluation_parser',
     'parse_arguments',

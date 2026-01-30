@@ -22,6 +22,7 @@ from openhands.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketServiceImpl
+from openhands.integrations.forgejo.forgejo_service import ForgejoServiceImpl
 from openhands.integrations.github.github_service import GithubServiceImpl
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.integrations.service_types import (
@@ -105,6 +106,7 @@ class ProviderHandler:
         ProviderType.GITHUB: 'github.com',
         ProviderType.GITLAB: 'gitlab.com',
         ProviderType.BITBUCKET: 'bitbucket.org',
+        ProviderType.FORGEJO: 'codeberg.org',
         ProviderType.AZURE_DEVOPS: 'dev.azure.com',
     }
 
@@ -126,6 +128,7 @@ class ProviderHandler:
             ProviderType.GITHUB: GithubServiceImpl,
             ProviderType.GITLAB: GitLabServiceImpl,
             ProviderType.BITBUCKET: BitBucketServiceImpl,
+            ProviderType.FORGEJO: ForgejoServiceImpl,
             ProviderType.AZURE_DEVOPS: AzureDevOpsServiceImpl,
         }
 
@@ -672,6 +675,30 @@ class ProviderHandler:
             if provider != ProviderType.AZURE_DEVOPS:
                 domain = self.provider_tokens[provider].host or domain
 
+        # Detect protocol before normalizing domain
+        # Default to https, but preserve http if explicitly specified
+        protocol = 'https'
+        if domain and domain.strip().startswith('http://'):
+            # Check if insecure HTTP access is allowed
+            allow_insecure = os.environ.get(
+                'ALLOW_INSECURE_GIT_ACCESS', 'false'
+            ).lower() in ('true', '1', 'yes')
+            if not allow_insecure:
+                raise ValueError(
+                    'Attempting to connect to an insecure git repository over HTTP. '
+                    "If you'd like to allow this nonetheless, set "
+                    'ALLOW_INSECURE_GIT_ACCESS=true as an environment variable.'
+                )
+            protocol = 'http'
+
+        # Normalize domain to prevent double protocols or path segments
+        if domain:
+            domain = domain.strip()
+            domain = domain.replace('https://', '').replace('http://', '')
+            # Remove any trailing path like /api/v3 or /api/v4
+            if '/' in domain:
+                domain = domain.split('/')[0]
+
         # Try to use token if available, otherwise use public URL
         if self.provider_tokens and provider in self.provider_tokens:
             git_token = self.provider_tokens[provider].token
@@ -679,16 +706,18 @@ class ProviderHandler:
                 token_value = git_token.get_secret_value()
                 if provider == ProviderType.GITLAB:
                     remote_url = (
-                        f'https://oauth2:{token_value}@{domain}/{repo_name}.git'
+                        f'{protocol}://oauth2:{token_value}@{domain}/{repo_name}.git'
                     )
                 elif provider == ProviderType.BITBUCKET:
                     # For Bitbucket, handle username:app_password format
                     if ':' in token_value:
                         # App token format: username:app_password
-                        remote_url = f'https://{token_value}@{domain}/{repo_name}.git'
+                        remote_url = (
+                            f'{protocol}://{token_value}@{domain}/{repo_name}.git'
+                        )
                     else:
                         # Access token format: use x-token-auth
-                        remote_url = f'https://x-token-auth:{token_value}@{domain}/{repo_name}.git'
+                        remote_url = f'{protocol}://x-token-auth:{token_value}@{domain}/{repo_name}.git'
                 elif provider == ProviderType.AZURE_DEVOPS:
                     # Azure DevOps uses PAT with Basic auth
                     # Format: https://{anything}:{PAT}@dev.azure.com/{org}/{project}/_git/{repo}
@@ -747,12 +776,12 @@ class ProviderHandler:
                             f'https://user:***@{clean_domain}/{repo_name}.git'
                         )
                 else:
-                    # GitHub
-                    remote_url = f'https://{token_value}@{domain}/{repo_name}.git'
+                    # GitHub, Forgejo
+                    remote_url = f'{protocol}://{token_value}@{domain}/{repo_name}.git'
             else:
-                remote_url = f'https://{domain}/{repo_name}.git'
+                remote_url = f'{protocol}://{domain}/{repo_name}.git'
         else:
-            remote_url = f'https://{domain}/{repo_name}.git'
+            remote_url = f'{protocol}://{domain}/{repo_name}.git'
 
         return remote_url
 

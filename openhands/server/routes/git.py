@@ -1,5 +1,13 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from types import MappingProxyType
-from typing import cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
@@ -67,7 +75,7 @@ async def get_user_installations(
 @app.get('/repositories', response_model=list[Repository])
 async def get_user_repositories(
     sort: str = 'pushed',
-    selected_provider: ProviderType | None = None,
+    selected_provider: Annotated[ProviderType | None, Query()] = None,
     page: int | None = None,
     per_page: int | None = None,
     installation_id: str | None = None,
@@ -137,7 +145,7 @@ async def search_repositories(
     per_page: int = 5,
     sort: str = 'stars',
     order: str = 'desc',
-    selected_provider: ProviderType | None = None,
+    selected_provider: Annotated[ProviderType | None, Query()] = None,
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
@@ -171,7 +179,7 @@ async def search_branches(
     repository: str,
     query: str,
     per_page: int = 30,
-    selected_provider: ProviderType | None = None,
+    selected_provider: Annotated[ProviderType | None, Query()] = None,
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
@@ -243,6 +251,7 @@ async def get_repository_branches(
     repository: str,
     page: int = 1,
     per_page: int = 30,
+    selected_provider: Annotated[ProviderType | None, Query()] = None,
     provider_tokens: PROVIDER_TOKEN_TYPE | None = Depends(get_provider_tokens),
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
@@ -253,6 +262,7 @@ async def get_repository_branches(
         repository: The repository name in the format 'owner/repo'
         page: Page number for pagination (default: 1)
         per_page: Number of branches per page (default: 30)
+        selected_provider: Optional provider hint to avoid trying other providers
 
     Returns:
         A paginated response with branches for the repository
@@ -263,7 +273,10 @@ async def get_repository_branches(
         )
         try:
             branches_response: PaginatedBranchesResponse = await client.get_branches(
-                repository, page=page, per_page=per_page
+                repository,
+                specified_provider=selected_provider,
+                page=page,
+                per_page=per_page,
             )
             return branches_response
 

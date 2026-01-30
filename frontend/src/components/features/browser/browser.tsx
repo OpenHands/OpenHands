@@ -12,10 +12,9 @@ export function BrowserPanel() {
     reset();
   }, [conversationId, reset]);
 
-  const imgSrc =
-    screenshotSrc && screenshotSrc.startsWith("data:image/png;base64,")
-      ? screenshotSrc
-      : `data:image/png;base64,${screenshotSrc || ""}`;
+  const imgSrc = screenshotSrc?.startsWith("data:image/png;base64,")
+    ? screenshotSrc
+    : `data:image/png;base64,${screenshotSrc ?? ""}`;
 
   return (
     <div className="h-full w-full flex flex-col text-neutral-400">

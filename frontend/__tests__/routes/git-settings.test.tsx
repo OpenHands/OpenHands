@@ -13,6 +13,7 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { GetConfigResponse } from "#/api/option-service/option.types";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import { SecretsService } from "#/api/secrets-service";
+import { integrationService } from "#/api/integration-service/integration-service.api";
 
 const VALID_OSS_CONFIG: GetConfigResponse = {
   APP_MODE: "oss",
@@ -63,6 +64,15 @@ const renderGitSettingsScreen = () => {
           GITLAB$HOST_LABEL: "GitLab Host",
           BITBUCKET$TOKEN_LABEL: "Bitbucket Token",
           BITBUCKET$HOST_LABEL: "Bitbucket Host",
+          SETTINGS$GITLAB: "GitLab",
+          COMMON$STATUS: "Status",
+          STATUS$CONNECTED: "Connected",
+          SETTINGS$GITLAB_NOT_CONNECTED: "Not Connected",
+          SETTINGS$GITLAB_REINSTALL_WEBHOOK: "Reinstall Webhook",
+          SETTINGS$GITLAB_INSTALLING_WEBHOOK:
+            "Installing GitLab webhook, please wait a few minutes.",
+          SETTINGS$SAVING: "Saving...",
+          ERROR$GENERIC: "An error occurred",
         },
       },
     },
@@ -298,6 +308,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -320,6 +331,7 @@ describe("Form submission", () => {
       gitlab: { token: "test-token", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -342,6 +354,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "test-token", host: "" },
       azure_devops: { token: "", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -353,7 +366,9 @@ describe("Form submission", () => {
 
     renderGitSettingsScreen();
 
-    const azureDevOpsInput = await screen.findByTestId("azure-devops-token-input");
+    const azureDevOpsInput = await screen.findByTestId(
+      "azure-devops-token-input",
+    );
     const submit = await screen.findByTestId("submit-button");
 
     await userEvent.type(azureDevOpsInput, "test-token");
@@ -364,6 +379,7 @@ describe("Form submission", () => {
       gitlab: { token: "", host: "" },
       bitbucket: { token: "", host: "" },
       azure_devops: { token: "test-token", host: "" },
+      forgejo: { token: "", host: "" },
     });
   });
 
@@ -554,5 +570,103 @@ describe("Status toasts", () => {
 
     expect(saveProvidersSpy).toHaveBeenCalled();
     expect(displayErrorToastSpy).toHaveBeenCalled();
+  });
+});
+
+describe("GitLab Webhook Manager Integration", () => {
+  it("should not render GitLab webhook manager in OSS mode", async () => {
+    // Arrange
+    const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+    getConfigSpy.mockResolvedValue(VALID_OSS_CONFIG);
+
+    // Act
+    renderGitSettingsScreen();
+    await screen.findByTestId("git-settings-screen");
+
+    // Assert
+    await waitFor(() => {
+      expect(
+        screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("should not render GitLab webhook manager in SaaS mode without APP_SLUG", async () => {
+    // Arrange
+    const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+    getConfigSpy.mockResolvedValue(VALID_SAAS_CONFIG);
+
+    // Act
+    renderGitSettingsScreen();
+    await screen.findByTestId("git-settings-screen");
+
+    // Assert
+    await waitFor(() => {
+      expect(
+        screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("should not render GitLab webhook manager when token is not set", async () => {
+    // Arrange
+    const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+
+    getConfigSpy.mockResolvedValue({
+      ...VALID_SAAS_CONFIG,
+      APP_SLUG: "test-slug",
+    });
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      provider_tokens_set: {},
+    });
+
+    // Act
+    renderGitSettingsScreen();
+    await screen.findByTestId("git-settings-screen");
+
+    // Assert
+    await waitFor(() => {
+      expect(
+        screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("should render GitLab webhook manager when token is set", async () => {
+    // Arrange
+    const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+    const getResourcesSpy = vi.spyOn(
+      integrationService,
+      "getGitLabResources",
+    );
+
+    getConfigSpy.mockResolvedValue({
+      ...VALID_SAAS_CONFIG,
+      APP_SLUG: "test-slug",
+    });
+    getSettingsSpy.mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      provider_tokens_set: {
+        gitlab: null,
+      },
+    });
+    getResourcesSpy.mockResolvedValue({
+      resources: [],
+    });
+
+    // Act
+    renderGitSettingsScreen();
+    await screen.findByTestId("git-settings-screen");
+
+    // Assert
+    await waitFor(() => {
+      expect(
+        screen.getByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
+      ).toBeInTheDocument();
+      expect(getResourcesSpy).toHaveBeenCalled();
+    });
   });
 });

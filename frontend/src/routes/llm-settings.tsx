@@ -9,7 +9,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { hasAdvancedSettingsSet } from "#/utils/has-advanced-settings-set";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
-import { TooltipButton } from "#/components/shared/buttons/tooltip-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import QuestionCircleIcon from "#/icons/question-circle.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -667,8 +667,9 @@ function LlmSettingsScreen() {
                   )?.toString()}
                   onChange={(value) => handleCondenserMaxSizeIsDirty(value)}
                   isDisabled={!settings.enable_default_condenser}
+                  className="w-full max-w-[680px] capitalize"
                 />
-                <p className="text-xs text-tertiary-alt mt-1">
+                <p className="text-xs text-tertiary-alt mt-6">
                   {t(I18nKey.SETTINGS$CONDENSER_MAX_SIZE_TOOLTIP)}
                 </p>
               </div>
@@ -693,13 +694,13 @@ function LlmSettingsScreen() {
                 >
                   {t(I18nKey.SETTINGS$CONFIRMATION_MODE)}
                 </SettingsSwitch>
-                <TooltipButton
-                  tooltip={t(I18nKey.SETTINGS$CONFIRMATION_MODE_TOOLTIP)}
-                  ariaLabel={t(I18nKey.SETTINGS$CONFIRMATION_MODE)}
-                  className="text-[#9099AC] hover:text-white cursor-help"
+                <StyledTooltip
+                  content={t(I18nKey.SETTINGS$CONFIRMATION_MODE_TOOLTIP)}
                 >
-                  <QuestionCircleIcon width={16} height={16} />
-                </TooltipButton>
+                  <span className="text-[#9099AC] hover:text-white cursor-help">
+                    <QuestionCircleIcon width={16} height={16} />
+                  </span>
+                </StyledTooltip>
               </div>
 
               {confirmationModeEnabled && (

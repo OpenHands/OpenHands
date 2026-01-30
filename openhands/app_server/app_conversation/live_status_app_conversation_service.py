@@ -1,9 +1,12 @@
 import asyncio
+import json
 import logging
+import os
+import tempfile
+import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from time import time
 from typing import Any, AsyncGenerator, Sequence
 from uuid import UUID, uuid4
 
@@ -28,6 +31,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTask,
     AppConversationStartTaskStatus,
+    AppConversationUpdateRequest,
+    PluginSpec,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
@@ -44,6 +49,7 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 )
 from openhands.app_server.config import get_event_callback_service
 from openhands.app_server.errors import SandboxError
+from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
 from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
@@ -66,11 +72,17 @@ from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
+from openhands.app_server.utils.llm_metadata import (
+    get_llm_metadata,
+    should_set_litellm_extra_body,
+)
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
-from openhands.sdk.secret import LookupSecret, StaticSecret
+from openhands.sdk.plugin import PluginSource
+from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
+from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
 from openhands.tools.preset.default import (
@@ -93,6 +105,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     app_conversation_info_service: AppConversationInfoService
     app_conversation_start_task_service: AppConversationStartTaskService
     event_callback_service: EventCallbackService
+    event_service: EventService
     sandbox_service: SandboxService
     sandbox_spec_service: SandboxSpecService
     jwt_service: JwtService
@@ -103,7 +116,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
-    keycloak_auth_cookie: str | None = None
     tavily_api_key: str | None = None
 
     async def search_app_conversations(
@@ -227,7 +239,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 working_dir=sandbox_spec.working_dir,
             )
             async for updated_task in self.run_setup_scripts(
-                task, sandbox, remote_workspace
+                task, sandbox, remote_workspace, agent_server_url
             ):
                 yield updated_task
 
@@ -244,6 +256,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     request.conversation_id,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
+                    plugins=request.plugins,
                 )
             )
 
@@ -399,6 +412,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_info = _conversation_info_type_adapter.validate_python(data)
             conversation_info = [c for c in conversation_info if c]
             return conversation_info
+        except httpx.HTTPStatusError as exc:
+            # The runtime API stops idle sandboxes all the time and they return a 503.
+            # This is normal and should not be logged.
+            if not exc.response or exc.response.status_code != 503:
+                _logger.exception(
+                    f'Error getting conversation status from sandbox {sandbox.id}',
+                    exc_info=True,
+                    stack_info=True,
+                )
+            return []
         except Exception:
             # Not getting a status is not a fatal error - we just mark the conversation as stopped
             _logger.exception(
@@ -455,9 +478,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self, task: AppConversationStartTask
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Wait for sandbox to start and return info."""
-        # Get the sandbox
+        # Get or create the sandbox
         if not task.request.sandbox_id:
-            sandbox = await self.sandbox_service.start_sandbox()
+            # Convert conversation_id to hex string if present
+            sandbox_id_str = (
+                task.request.conversation_id.hex
+                if task.request.conversation_id is not None
+                else None
+            )
+            sandbox = await self.sandbox_service.start_sandbox(
+                sandbox_id=sandbox_id_str
+            )
             task.sandbox_id = sandbox.id
         else:
             sandbox_info = await self.sandbox_service.get_sandbox(
@@ -467,31 +498,34 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 raise SandboxError(f'Sandbox not found: {task.request.sandbox_id}')
             sandbox = sandbox_info
 
-        # Update the listener
+        # Update the listener with sandbox info
         task.status = AppConversationStartTaskStatus.WAITING_FOR_SANDBOX
         task.sandbox_id = sandbox.id
         yield task
 
+        # Resume if paused
         if sandbox.status == SandboxStatus.PAUSED:
             await self.sandbox_service.resume_sandbox(sandbox.id)
+
+        # Check for immediate error states
         if sandbox.status in (None, SandboxStatus.ERROR):
             raise SandboxError(f'Sandbox status: {sandbox.status}')
-        if sandbox.status == SandboxStatus.RUNNING:
-            return
-        if sandbox.status != SandboxStatus.STARTING:
+
+        # For non-STARTING/RUNNING states (except PAUSED which we just resumed), fail fast
+        if sandbox.status not in (
+            SandboxStatus.STARTING,
+            SandboxStatus.RUNNING,
+            SandboxStatus.PAUSED,
+        ):
             raise SandboxError(f'Sandbox not startable: {sandbox.id}')
 
-        start = time()
-        while time() - start <= self.sandbox_startup_timeout:
-            await asyncio.sleep(self.sandbox_startup_poll_frequency)
-            sandbox_info = await self.sandbox_service.get_sandbox(sandbox.id)
-            if sandbox_info is None:
-                raise SandboxError(f'Sandbox not found: {sandbox.id}')
-            if sandbox.status not in (SandboxStatus.STARTING, SandboxStatus.RUNNING):
-                raise SandboxError(f'Sandbox not startable: {sandbox.id}')
-            if sandbox_info.status == SandboxStatus.RUNNING:
-                return
-        raise SandboxError(f'Sandbox failed to start: {sandbox.id}')
+        # Use shared wait_for_sandbox_running utility to poll for ready state
+        await self.sandbox_service.wait_for_sandbox_running(
+            sandbox.id,
+            timeout=self.sandbox_startup_timeout,
+            poll_interval=self.sandbox_startup_poll_frequency,
+            httpx_client=self.httpx_client,
+        )
 
     def _get_agent_server_url(self, sandbox: SandboxInfo) -> str:
         """Get agent server url for running sandbox."""
@@ -557,6 +591,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 continue
 
             secret_name = f'{provider_type.name}_TOKEN'
+            description = f'{provider_type.name} authentication token'
 
             if self.web_url:
                 # Create an access token for web-based authentication
@@ -569,19 +604,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
                 headers = {'X-Access-Token': access_token}
 
-                # Include keycloak_auth cookie in headers if app_mode is SaaS
-                if self.app_mode == 'saas' and self.keycloak_auth_cookie:
-                    headers['Cookie'] = f'keycloak_auth={self.keycloak_auth_cookie}'
-
                 secrets[secret_name] = LookupSecret(
                     url=self.web_url + '/api/v1/webhooks/secrets',
                     headers=headers,
+                    description=description,
                 )
             else:
                 # Use static token for environments without web URL access
                 static_token = await self.user_context.get_latest_token(provider_type)
                 if static_token:
-                    secrets[secret_name] = StaticSecret(value=static_token)
+                    secrets[secret_name] = StaticSecret(
+                        value=static_token, description=description
+                    )
 
         return secrets
 
@@ -820,7 +854,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         system_message_suffix: str | None,
         mcp_config: dict,
         condenser_max_size: int | None,
-        secrets: dict | None = None,
+        secrets: dict[str, SecretValue] | None = None,
     ) -> Agent:
         """Create an agent with appropriate tools and context based on agent type.
 
@@ -866,6 +900,136 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return agent
 
+    def _update_agent_with_llm_metadata(
+        self,
+        agent: Agent,
+        conversation_id: UUID,
+        user_id: str | None,
+    ) -> Agent:
+        """Update agent's LLM and condenser LLM with litellm_extra_body metadata.
+
+        This adds tracing metadata (conversation_id, user_id, etc.) to the LLM
+        for analytics and debugging purposes. Only applies to openhands/ models.
+
+        Args:
+            agent: The agent to update
+            conversation_id: The conversation ID
+            user_id: The user ID (can be None)
+
+        Returns:
+            Updated agent with LLM metadata
+        """
+        updates: dict[str, Any] = {}
+
+        # Update main LLM if it's an openhands model
+        if should_set_litellm_extra_body(agent.llm.model):
+            llm_metadata = get_llm_metadata(
+                model_name=agent.llm.model,
+                llm_type=agent.llm.usage_id or 'agent',
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
+            updated_llm = agent.llm.model_copy(
+                update={'litellm_extra_body': {'metadata': llm_metadata}}
+            )
+            updates['llm'] = updated_llm
+
+        # Update condenser LLM if it exists and is an openhands model
+        if agent.condenser and hasattr(agent.condenser, 'llm'):
+            condenser_llm = agent.condenser.llm
+            if should_set_litellm_extra_body(condenser_llm.model):
+                condenser_metadata = get_llm_metadata(
+                    model_name=condenser_llm.model,
+                    llm_type=condenser_llm.usage_id or 'condenser',
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                )
+                updated_condenser_llm = condenser_llm.model_copy(
+                    update={'litellm_extra_body': {'metadata': condenser_metadata}}
+                )
+                updated_condenser = agent.condenser.model_copy(
+                    update={'llm': updated_condenser_llm}
+                )
+                updates['condenser'] = updated_condenser
+
+        # Return updated agent if there are changes
+        if updates:
+            return agent.model_copy(update=updates)
+        return agent
+
+    def _construct_initial_message_with_plugin_params(
+        self,
+        initial_message: SendMessageRequest | None,
+        plugins: list[PluginSpec] | None,
+    ) -> SendMessageRequest | None:
+        """Incorporate plugin parameters into the initial message if specified.
+
+        Plugin parameters are formatted and appended to the initial message so the
+        agent has context about the user-provided configuration values.
+
+        Args:
+            initial_message: The original initial message, if any
+            plugins: List of plugin specifications with optional parameters
+
+        Returns:
+            The initial message with plugin parameters incorporated, or the
+            original message if no plugin parameters are specified
+        """
+        from openhands.agent_server.models import TextContent
+
+        if not plugins:
+            return initial_message
+
+        # Collect formatted parameters from plugins that have them
+        plugins_with_params = [p for p in plugins if p.parameters]
+        if not plugins_with_params:
+            return initial_message
+
+        # Format parameters, grouped by plugin if multiple
+        if len(plugins_with_params) == 1:
+            params_text = plugins_with_params[0].format_params_as_text()
+            plugin_params_message = (
+                f'\n\nPlugin Configuration Parameters:\n{params_text}'
+            )
+        else:
+            # Group by plugin name for clarity
+            formatted_plugins = []
+            for plugin in plugins_with_params:
+                params_text = plugin.format_params_as_text(indent='  ')
+                if params_text:
+                    formatted_plugins.append(f'{plugin.display_name}:\n{params_text}')
+
+            plugin_params_message = (
+                '\n\nPlugin Configuration Parameters:\n' + '\n'.join(formatted_plugins)
+            )
+
+        if initial_message is None:
+            # Create a new message with just the plugin parameters
+            return SendMessageRequest(
+                content=[TextContent(text=plugin_params_message.strip())],
+                run=True,
+            )
+
+        # Append plugin parameters to existing message content
+        new_content = list(initial_message.content)
+        if new_content and isinstance(new_content[-1], TextContent):
+            # Append to the last text content
+            last_content = new_content[-1]
+            new_content[-1] = TextContent(
+                text=last_content.text + plugin_params_message,
+                cache_prompt=last_content.cache_prompt,
+                enable_truncation=last_content.enable_truncation,
+            )
+        else:
+            # Add as new text content
+            new_content.append(TextContent(text=plugin_params_message.strip()))
+
+        return SendMessageRequest(
+            role=initial_message.role,
+            content=new_content,
+            run=initial_message.run,
+        )
+
     async def _finalize_conversation_request(
         self,
         agent: Agent,
@@ -873,11 +1037,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         user: UserInfo,
         workspace: LocalWorkspace,
         initial_message: SendMessageRequest | None,
-        secrets: dict,
+        secrets: dict[str, SecretValue],
         sandbox: SandboxInfo,
         remote_workspace: AsyncRemoteWorkspace | None,
         selected_repository: str | None,
         working_dir: str,
+        plugins: list[PluginSpec] | None = None,
     ) -> StartConversationRequest:
         """Finalize the conversation request with experiment variants and skills.
 
@@ -892,6 +1057,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             remote_workspace: Optional remote workspace for skills loading
             selected_repository: Optional repository name
             working_dir: Working directory path
+            plugins: Optional list of plugin specifications to load
 
         Returns:
             Complete StartConversationRequest ready for use
@@ -904,6 +1070,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user.id, conversation_id, agent
         )
 
+        # Update agent's LLM with litellm_extra_body metadata for tracing
+        # This is done after experiment variants to ensure the final LLM config is used
+        agent = self._update_agent_with_llm_metadata(agent, conversation_id, user.id)
+
         # Load and merge skills if remote workspace is available
         if remote_workspace:
             try:
@@ -914,6 +1084,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 _logger.warning(f'Failed to load skills: {e}', exc_info=True)
                 # Continue without skills - don't fail conversation startup
 
+        # Incorporate plugin parameters into initial message if specified
+        final_initial_message = self._construct_initial_message_with_plugin_params(
+            initial_message, plugins
+        )
+
+        # Convert PluginSpec list to SDK PluginSource list for agent server
+        sdk_plugins: list[PluginSource] | None = None
+        if plugins:
+            sdk_plugins = [
+                PluginSource(
+                    source=p.source,
+                    ref=p.ref,
+                    repo_path=p.repo_path,
+                )
+                for p in plugins
+            ]
+
         # Create and return the final request
         return StartConversationRequest(
             conversation_id=conversation_id,
@@ -922,8 +1109,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             confirmation_policy=self._select_confirmation_policy(
                 bool(user.confirmation_mode), user.security_analyzer
             ),
-            initial_message=initial_message,
+            initial_message=final_initial_message,
             secrets=secrets,
+            plugins=sdk_plugins,
         )
 
     async def _build_start_conversation_request_for_user(
@@ -938,6 +1126,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
+        plugins: list[PluginSpec] | None = None,
     ) -> StartConversationRequest:
         """Build a complete conversation request for a user.
 
@@ -946,6 +1135,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         2. Configuring LLM and MCP settings
         3. Creating an agent with appropriate context
         4. Finalizing the request with skills and experiment variants
+        5. Passing plugins to the agent server for remote plugin loading
         """
         user = await self.user_context.get_user_info()
         workspace = LocalWorkspace(working_dir=working_dir)
@@ -978,6 +1168,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             remote_workspace,
             selected_repository,
             working_dir,
+            plugins=plugins,
         )
 
     async def update_agent_server_conversation_title(
@@ -1027,6 +1218,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         _logger.info(
             f'Successfully updated agent-server conversation {conversation_id} title to "{new_title}"'
         )
+
+    async def update_app_conversation(
+        self, conversation_id: UUID, request: AppConversationUpdateRequest
+    ) -> AppConversation | None:
+        """Update an app conversation and return it. Return None if the conversation
+        did not exist.
+        """
+        info = await self.app_conversation_info_service.get_app_conversation_info(
+            conversation_id
+        )
+        if info is None:
+            return None
+        for field_name in AppConversationUpdateRequest.model_fields:
+            value = getattr(request, field_name)
+            setattr(info, field_name, value)
+        info = await self.app_conversation_info_service.save_app_conversation_info(info)
+        conversations = await self._build_app_conversations([info])
+        return conversations[0]
 
     async def delete_app_conversation(self, conversation_id: UUID) -> bool:
         """Delete a V1 conversation and all its associated data.
@@ -1164,6 +1373,61 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         return deleted_info or deleted_tasks
 
+    async def export_conversation(self, conversation_id: UUID) -> bytes:
+        """Download a conversation trajectory as a zip file.
+
+        Args:
+            conversation_id: The UUID of the conversation to download.
+
+        Returns the zip file as bytes.
+        """
+        # Get the conversation info to verify it exists and user has access
+        conversation_info = (
+            await self.app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+        )
+        if not conversation_info:
+            raise ValueError(f'Conversation not found: {conversation_id}')
+
+        # Create a temporary directory to store files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Get all events for this conversation
+            i = 0
+            async for event in page_iterator(
+                self.event_service.search_events, conversation_id=conversation_id
+            ):
+                event_filename = f'event_{i:06d}_{event.id}.json'
+                event_path = os.path.join(temp_dir, event_filename)
+
+                with open(event_path, 'w') as f:
+                    # Use model_dump with mode='json' to handle UUID serialization
+                    event_data = event.model_dump(mode='json')
+                    json.dump(event_data, f, indent=2)
+                i += 1
+
+            # Create meta.json with conversation info
+            meta_path = os.path.join(temp_dir, 'meta.json')
+            with open(meta_path, 'w') as f:
+                f.write(conversation_info.model_dump_json(indent=2))
+
+            # Create zip file in memory
+            zip_buffer = tempfile.NamedTemporaryFile()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Add all files from temp directory to zip
+                for root, dirs, files in os.walk(temp_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, temp_dir)
+                        zipf.write(file_path, arcname)
+
+            # Read the zip file content
+            zip_buffer.seek(0)
+            zip_content = zip_buffer.read()
+            zip_buffer.close()
+
+            return zip_content
+
 
 class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
     sandbox_startup_timeout: int = Field(
@@ -1194,6 +1458,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
         from openhands.app_server.config import (
             get_app_conversation_info_service,
             get_app_conversation_start_task_service,
+            get_event_service,
             get_global_config,
             get_httpx_client,
             get_jwt_service,
@@ -1213,6 +1478,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 state, request
             ) as app_conversation_start_task_service,
             get_event_callback_service(state, request) as event_callback_service,
+            get_event_service(state, request) as event_service,
             get_jwt_service(state, request) as jwt_service,
             get_httpx_client(state, request) as httpx_client,
         ):
@@ -1229,17 +1495,14 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 if isinstance(sandbox_service, DockerSandboxService):
                     web_url = f'http://host.docker.internal:{sandbox_service.host_port}'
 
-            # Get app_mode and keycloak_auth cookie for SaaS mode
+            # Get app_mode for SaaS mode
             app_mode = None
-            keycloak_auth_cookie = None
             try:
                 from openhands.server.shared import server_config
 
                 app_mode = (
                     server_config.app_mode.value if server_config.app_mode else None
                 )
-                if request and server_config.app_mode == AppMode.SAAS:
-                    keycloak_auth_cookie = request.cookies.get('keycloak_auth')
             except (ImportError, AttributeError):
                 # If server_config is not available (e.g., in tests), continue without it
                 pass
@@ -1260,6 +1523,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 app_conversation_info_service=app_conversation_info_service,
                 app_conversation_start_task_service=app_conversation_start_task_service,
                 event_callback_service=event_callback_service,
+                event_service=event_service,
                 jwt_service=jwt_service,
                 sandbox_startup_timeout=self.sandbox_startup_timeout,
                 sandbox_startup_poll_frequency=self.sandbox_startup_poll_frequency,
@@ -1268,6 +1532,5 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
-                keycloak_auth_cookie=keycloak_auth_cookie,
                 tavily_api_key=tavily_api_key,
             )

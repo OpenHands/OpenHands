@@ -1,4 +1,4 @@
-"""Event router for OpenHands Server."""
+"""Event router for OpenHands App Server."""
 
 from datetime import datetime
 from typing import Annotated
@@ -12,7 +12,7 @@ from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
 
-router = APIRouter(prefix='/events', tags=['Events'])
+router = APIRouter(prefix='/conversation/{conversation_id}/events', tags=['Events'])
 event_service_dependency = depends_event_service()
 
 
@@ -21,10 +21,7 @@ event_service_dependency = depends_event_service()
 
 @router.get('/search')
 async def search_events(
-    conversation_id__eq: Annotated[
-        UUID | None,
-        Query(title='Optional filter by conversation ID'),
-    ] = None,
+    conversation_id: str,
     kind__eq: Annotated[
         EventKind | None,
         Query(title='Optional filter by event kind'),
@@ -55,7 +52,7 @@ async def search_events(
     assert limit > 0
     assert limit <= 100
     return await event_service.search_events(
-        conversation_id__eq=conversation_id__eq,
+        conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
@@ -67,10 +64,7 @@ async def search_events(
 
 @router.get('/count')
 async def count_events(
-    conversation_id__eq: Annotated[
-        UUID | None,
-        Query(title='Optional filter by conversation ID'),
-    ] = None,
+    conversation_id: str,
     kind__eq: Annotated[
         EventKind | None,
         Query(title='Optional filter by event kind'),
@@ -83,28 +77,25 @@ async def count_events(
         datetime | None,
         Query(title='Optional filter by timestamp less than'),
     ] = None,
-    sort_order: Annotated[
-        EventSortOrder,
-        Query(title='Sort order for results'),
-    ] = EventSortOrder.TIMESTAMP,
     event_service: EventService = event_service_dependency,
 ) -> int:
     """Count events matching the given filters."""
     return await event_service.count_events(
-        conversation_id__eq=conversation_id__eq,
+        conversation_id=UUID(conversation_id),
         kind__eq=kind__eq,
         timestamp__gte=timestamp__gte,
         timestamp__lt=timestamp__lt,
-        sort_order=sort_order,
     )
 
 
 @router.get('')
 async def batch_get_events(
+    conversation_id: str,
     id: Annotated[list[str], Query()],
     event_service: EventService = event_service_dependency,
 ) -> list[Event | None]:
     """Get a batch of events given their ids, returning null for any missing event."""
+    event_ids = [UUID(id_) for id_ in id]
     assert len(id) <= 100
-    events = await event_service.batch_get_events(id)
+    events = await event_service.batch_get_events(UUID(conversation_id), event_ids)
     return events

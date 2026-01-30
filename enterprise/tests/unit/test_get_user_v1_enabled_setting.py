@@ -1,68 +1,43 @@
-"""Unit tests for get_user_v1_enabled_setting function."""
+"""Unit tests for get_user_v1_enabled_setting and is_v1_enabled_for_github_resolver functions."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from integrations.github.github_view import get_user_v1_enabled_setting
+from integrations.github.github_view import (
+    get_user_v1_enabled_setting,
+    is_v1_enabled_for_github_resolver,
+)
 
 
 @pytest.fixture
-def mock_user_settings():
-    """Create a mock user settings object."""
-    settings = MagicMock()
-    settings.v1_enabled = True  # Default to True, can be overridden in tests
-    return settings
+def mock_org():
+    """Create a mock org object."""
+    org = MagicMock()
+    org.v1_enabled = True  # Default to True, can be overridden in tests
+    return org
 
 
 @pytest.fixture
-def mock_settings_store(mock_user_settings):
-    """Create a mock settings store."""
-    store = MagicMock()
-    store.get_user_settings_by_keycloak_id = AsyncMock(return_value=mock_user_settings)
-    return store
-
-
-@pytest.fixture
-def mock_config():
-    """Create a mock config object."""
-    return MagicMock()
-
-
-@pytest.fixture
-def mock_session_maker():
-    """Create a mock session maker."""
-    return MagicMock()
-
-
-@pytest.fixture
-def mock_dependencies(
-    mock_settings_store, mock_config, mock_session_maker, mock_user_settings
-):
+def mock_dependencies(mock_org):
     """Fixture that patches all the common dependencies."""
     with patch(
-        'integrations.github.github_view.SaasSettingsStore',
-        return_value=mock_settings_store,
-    ) as mock_store_class, patch(
-        'integrations.github.github_view.get_config', return_value=mock_config
-    ) as mock_get_config, patch(
-        'integrations.github.github_view.session_maker', mock_session_maker
-    ), patch(
-        'integrations.github.github_view.call_sync_from_async',
-        return_value=mock_user_settings,
-    ) as mock_call_sync:
+        'integrations.utils.call_sync_from_async',
+        return_value=mock_org,
+    ) as mock_call_sync, patch('integrations.utils.OrgStore') as mock_org_store:
         yield {
-            'store_class': mock_store_class,
-            'get_config': mock_get_config,
-            'session_maker': mock_session_maker,
             'call_sync': mock_call_sync,
-            'settings_store': mock_settings_store,
-            'user_settings': mock_user_settings,
+            'org_store': mock_org_store,
+            'org': mock_org,
         }
 
 
-class TestGetUserV1EnabledSetting:
-    """Test cases for get_user_v1_enabled_setting function."""
+class TestIsV1EnabledForGithubResolver:
+    """Test cases for is_v1_enabled_for_github_resolver function.
+
+    This function returns True only if BOTH the environment variable
+    ENABLE_V1_GITHUB_RESOLVER is true AND the user's org has v1_enabled=True.
+    """
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -78,12 +53,12 @@ class TestGetUserV1EnabledSetting:
         self, mock_dependencies, env_var_enabled, user_setting_enabled, expected_result
     ):
         """Test all combinations of environment variable and user setting values."""
-        mock_dependencies['user_settings'].v1_enabled = user_setting_enabled
+        mock_dependencies['org'].v1_enabled = user_setting_enabled
 
         with patch(
             'integrations.github.github_view.ENABLE_V1_GITHUB_RESOLVER', env_var_enabled
         ):
-            result = await get_user_v1_enabled_setting('test_user_id')
+            result = await is_v1_enabled_for_github_resolver('test_user_id')
             assert result is expected_result
 
     @pytest.mark.asyncio
@@ -98,35 +73,67 @@ class TestGetUserV1EnabledSetting:
         self, mock_dependencies, env_var_value, env_var_bool, expected_result
     ):
         """Test that the function properly reads the ENABLE_V1_GITHUB_RESOLVER environment variable."""
-        mock_dependencies['user_settings'].v1_enabled = True
+        mock_dependencies['org'].v1_enabled = True
 
         with patch.dict(
             os.environ, {'ENABLE_V1_GITHUB_RESOLVER': env_var_value}
         ), patch('integrations.utils.os.getenv', return_value=env_var_value), patch(
             'integrations.github.github_view.ENABLE_V1_GITHUB_RESOLVER', env_var_bool
         ):
-            result = await get_user_v1_enabled_setting('test_user_id')
+            result = await is_v1_enabled_for_github_resolver('test_user_id')
             assert result is expected_result
+
+
+class TestGetUserV1EnabledSetting:
+    """Test cases for get_user_v1_enabled_setting function.
+
+    This function only returns the user's org v1_enabled setting.
+    It does NOT check the ENABLE_V1_GITHUB_RESOLVER environment variable.
+    """
 
     @pytest.mark.asyncio
     async def test_function_calls_correct_methods(self, mock_dependencies):
         """Test that the function calls the correct methods with correct parameters."""
-        mock_dependencies['user_settings'].v1_enabled = True
+        mock_dependencies['org'].v1_enabled = True
 
-        with patch('integrations.github.github_view.ENABLE_V1_GITHUB_RESOLVER', True):
-            result = await get_user_v1_enabled_setting('test_user_123')
+        result = await get_user_v1_enabled_setting('test_user_123')
 
-            # Verify the result
-            assert result is True
+        # Verify the result
+        assert result is True
 
-            # Verify correct methods were called with correct parameters
-            mock_dependencies['get_config'].assert_called_once()
-            mock_dependencies['store_class'].assert_called_once_with(
-                user_id='test_user_123',
-                session_maker=mock_dependencies['session_maker'],
-                config=mock_dependencies['get_config'].return_value,
-            )
-            mock_dependencies['call_sync'].assert_called_once_with(
-                mock_dependencies['settings_store'].get_user_settings_by_keycloak_id,
-                'test_user_123',
-            )
+        # Verify correct methods were called with correct parameters
+        mock_dependencies['call_sync'].assert_called_once_with(
+            mock_dependencies['org_store'].get_current_org_from_keycloak_user_id,
+            'test_user_123',
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_user_setting_true(self, mock_dependencies):
+        """Test that the function returns True when org.v1_enabled is True."""
+        mock_dependencies['org'].v1_enabled = True
+        result = await get_user_v1_enabled_setting('test_user_123')
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_user_setting_false(self, mock_dependencies):
+        """Test that the function returns False when org.v1_enabled is False."""
+        mock_dependencies['org'].v1_enabled = False
+        result = await get_user_v1_enabled_setting('test_user_123')
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_no_org_returns_false(self, mock_dependencies):
+        """Test that the function returns False when no org is found."""
+        # Mock call_sync_from_async to return None (no org found)
+        mock_dependencies['call_sync'].return_value = None
+
+        result = await get_user_v1_enabled_setting('test_user_123')
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_org_v1_enabled_none_returns_false(self, mock_dependencies):
+        """Test that the function returns False when org.v1_enabled is None."""
+        mock_dependencies['org'].v1_enabled = None
+
+        result = await get_user_v1_enabled_setting('test_user_123')
+        assert result is False

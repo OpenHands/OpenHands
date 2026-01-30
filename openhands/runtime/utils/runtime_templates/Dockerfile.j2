@@ -223,12 +223,12 @@ RUN \
     # Set environment variables (requires root)
     /openhands/micromamba/bin/micromamba run -n openhands poetry run python -c "import sys; print('OH_INTERPRETER_PATH=' + sys.executable)" >> /etc/environment && \
     # Set permissions for shared read-only access
+    # Note: chown -R operations removed - files are now created with correct ownership
+    # by running micromamba/poetry as openhands user (see install_dependencies_user)
     chmod -R 755 /openhands/poetry && \
     chmod -R 755 /openhands/micromamba && \
-    chown -R openhands:openhands /openhands/poetry && \
     mkdir -p /openhands/workspace && chmod -R g+rws,o+rw /openhands/workspace && \
     chown -R openhands:openhands /openhands/workspace && \
-    chown -R openhands:openhands /openhands/micromamba && \
     # Ensure PATH includes system binaries early in startup
     echo 'export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"' >> /etc/environment && \
     echo 'export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"' >> /etc/bash.bashrc && \
@@ -275,6 +275,9 @@ RUN \
 RUN mkdir -p /openhands/micromamba/bin && \
     /bin/bash -c "PREFIX_LOCATION=/openhands/micromamba BIN_FOLDER=/openhands/micromamba/bin INIT_YES=no CONDA_FORGE_YES=yes $(curl -L https://micro.mamba.pm/install.sh)" && \
     /openhands/micromamba/bin/micromamba config remove channels defaults && \
+    {%- if channel_alias %}
+    /openhands/micromamba/bin/micromamba config set channel_alias '{{ channel_alias }}' && \
+    {%- endif %}
     /openhands/micromamba/bin/micromamba config list && \
     chown -R openhands:openhands /openhands/micromamba && \
     # Create read-only shared access to micromamba for all users
@@ -287,8 +290,11 @@ RUN mkdir -p /openhands/micromamba/bin && \
     echo 'export PATH="/openhands/micromamba/bin:$PATH"' >> /etc/environment
 
 # Create the openhands virtual environment and install poetry and python
+# Run as openhands user to avoid expensive chown -R operations later
+USER openhands
 RUN /openhands/micromamba/bin/micromamba create -n openhands -y && \
     /openhands/micromamba/bin/micromamba install -n openhands -c conda-forge poetry python=3.12 -y
+USER root
 
 # Create a clean openhands directory including only the pyproject.toml, poetry.lock and openhands/__init__.py
 RUN \

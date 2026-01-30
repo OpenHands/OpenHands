@@ -6,6 +6,7 @@ import {
 } from "@react-router/dev/routes";
 
 export default [
+  route("login", "routes/login.tsx"),
   layout("routes/root-layout.tsx", [
     index("routes/home.tsx"),
     route("accept-tos", "routes/accept-tos.tsx"),
@@ -21,5 +22,11 @@ export default [
     ]),
     route("conversations/:conversationId", "routes/conversation.tsx"),
     route("microagent-management", "routes/microagent-management.tsx"),
+    route("oauth/device/verify", "routes/device-verify.tsx"),
   ]),
+  // Shared routes that don't require authentication
+  route(
+    "shared/conversations/:conversationId",
+    "routes/shared-conversation.tsx",
+  ),
 ] satisfies RouteConfig;

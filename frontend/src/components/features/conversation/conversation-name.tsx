@@ -9,7 +9,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
-import { MicroagentsModal } from "../conversation-panel/microagents-modal";
+import { SkillsModal } from "../conversation-panel/skills-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { MetricsModal } from "./metrics-modal/metrics-modal";
@@ -30,18 +30,22 @@ export function ConversationName() {
     handleDelete,
     handleStop,
     handleDownloadViaVSCode,
+    handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
-    handleShowMicroagents,
+    handleShowSkills,
     handleExportConversation,
+    handleTogglePublic,
+    handleCopyShareLink,
+    shareUrl,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
     setMetricsModalVisible,
     systemModalVisible,
     setSystemModalVisible,
-    microagentsModalVisible,
-    setMicroagentsModalVisible,
+    skillsModalVisible,
+    setSkillsModalVisible,
     confirmDeleteModalVisible,
     setConfirmDeleteModalVisible,
     confirmStopModalVisible,
@@ -50,9 +54,10 @@ export function ConversationName() {
     shouldShowStop,
     shouldShowDownload,
     shouldShowExport,
+    shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
-    shouldShowMicroagents,
+    shouldShowSkills,
   } = useConversationNameContextMenu({
     conversationId,
     conversationStatus: conversation?.status,
@@ -86,6 +91,10 @@ export function ConversationName() {
   };
 
   const handleKeyUp = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input)
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
     if (event.key === "Enter") {
       event.currentTarget.blur();
     }
@@ -170,14 +179,20 @@ export function ConversationName() {
                 onShowAgentTools={
                   shouldShowAgentTools ? handleShowAgentTools : undefined
                 }
-                onShowMicroagents={
-                  shouldShowMicroagents ? handleShowMicroagents : undefined
-                }
+                onShowSkills={shouldShowSkills ? handleShowSkills : undefined}
                 onExportConversation={
                   shouldShowExport ? handleExportConversation : undefined
                 }
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
+                }
+                onTogglePublic={handleTogglePublic}
+                shareUrl={shareUrl}
+                onCopyShareLink={handleCopyShareLink}
+                onDownloadConversation={
+                  shouldShowDownloadConversation
+                    ? handleDownloadConversation
+                    : undefined
                 }
                 position="bottom"
               />
@@ -196,12 +211,12 @@ export function ConversationName() {
       <SystemMessageModal
         isOpen={systemModalVisible}
         onClose={() => setSystemModalVisible(false)}
-        systemMessage={systemMessage ? systemMessage.args : null}
+        systemMessage={systemMessage || null}
       />
 
-      {/* Microagents Modal */}
-      {microagentsModalVisible && (
-        <MicroagentsModal onClose={() => setMicroagentsModalVisible(false)} />
+      {/* Skills Modal */}
+      {skillsModalVisible && (
+        <SkillsModal onClose={() => setSkillsModalVisible(false)} />
       )}
 
       {/* Confirm Delete Modal */}
@@ -209,6 +224,7 @@ export function ConversationName() {
         <ConfirmDeleteModal
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmDeleteModalVisible(false)}
+          conversationTitle={conversation?.title}
         />
       )}
 

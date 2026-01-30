@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from github import Github, GithubIntegration
+from github import Auth, Github, GithubIntegration
 from github.Issue import Issue
 from integrations.github.github_types import (
     WorkflowRun,
@@ -17,6 +17,7 @@ from integrations.utils import (
     HOST,
     HOST_URL,
     get_oh_labels,
+    get_user_v1_enabled_setting,
     has_exact_mention,
 )
 from jinja2 import Environment
@@ -24,9 +25,9 @@ from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from server.config import get_config
 from storage.database import session_maker
+from storage.org_store import OrgStore
 from storage.proactive_conversation_store import ProactiveConversationStore
 from storage.saas_secrets_store import SaasSecretsStore
-from storage.saas_settings_store import SaasSettingsStore
 
 from openhands.agent_server.models import SendMessageRequest
 from openhands.app_server.app_conversation.app_conversation_models import (
@@ -55,6 +56,10 @@ from openhands.utils.async_utils import call_sync_from_async
 OH_LABEL, INLINE_OH_LABEL = get_oh_labels(HOST)
 
 
+async def is_v1_enabled_for_github_resolver(user_id: str) -> bool:
+    return await get_user_v1_enabled_setting(user_id) and ENABLE_V1_GITHUB_RESOLVER
+
+
 async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     """Get the user's proactive conversation setting.
 
@@ -73,51 +78,17 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     if not user_id:
         return False
 
-    config = get_config()
-    settings_store = SaasSettingsStore(
-        user_id=user_id, session_maker=session_maker, config=config
-    )
-
-    settings = await call_sync_from_async(
-        settings_store.get_user_settings_by_keycloak_id, user_id
-    )
-
-    if not settings or settings.enable_proactive_conversation_starters is None:
+    # Check global setting first - if disabled globally, return False
+    if not ENABLE_PROACTIVE_CONVERSATION_STARTERS:
         return False
 
-    return settings.enable_proactive_conversation_starters
+    def _get_setting():
+        org = OrgStore.get_current_org_from_keycloak_user_id(user_id)
+        if not org:
+            return False
+        return bool(org.enable_proactive_conversation_starters)
 
-
-async def get_user_v1_enabled_setting(user_id: str) -> bool:
-    """Get the user's V1 conversation API setting.
-
-    Args:
-        user_id: The keycloak user ID
-
-    Returns:
-        True if V1 conversations are enabled for this user, False otherwise
-
-    Note:
-        This function checks both the global environment variable kill switch AND
-        the user's individual setting. Both must be true for the function to return true.
-    """
-    # Check the global environment variable first
-    if not ENABLE_V1_GITHUB_RESOLVER:
-        return False
-
-    config = get_config()
-    settings_store = SaasSettingsStore(
-        user_id=user_id, session_maker=session_maker, config=config
-    )
-
-    settings = await call_sync_from_async(
-        settings_store.get_user_settings_by_keycloak_id, user_id
-    )
-
-    if not settings or settings.v1_enabled is None:
-        return False
-
-    return settings.v1_enabled
+    return await call_sync_from_async(_get_setting)
 
 
 # =================================================
@@ -140,7 +111,10 @@ class GithubIssue(ResolverViewInterface):
     title: str
     description: str
     previous_comments: list[Comment]
-    v1: bool
+    v1_enabled: bool
+
+    def _get_branch_name(self) -> str | None:
+        return getattr(self, 'branch_name', None)
 
     async def _load_resolver_context(self):
         github_service = GithubServiceImpl(
@@ -175,6 +149,7 @@ class GithubIssue(ResolverViewInterface):
             issue_body=self.description,
             previous_comments=self.previous_comments,
         )
+
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
@@ -188,26 +163,32 @@ class GithubIssue(ResolverViewInterface):
     async def initialize_new_conversation(self) -> ConversationMetadata:
         # FIXME: Handle if initialize_conversation returns None
 
-        v1_enabled = await get_user_v1_enabled_setting(self.user_info.keycloak_user_id)
-        logger.info(
-            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {v1_enabled}'
+        self.v1_enabled = await is_v1_enabled_for_github_resolver(
+            self.user_info.keycloak_user_id
         )
-        if v1_enabled:
+
+        logger.info(
+            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'
+        )
+        if self.v1_enabled:
             # Create dummy conversationm metadata
             # Don't save to conversation store
             # V1 conversations are stored in a separate table
+            self.conversation_id = uuid4().hex
             return ConversationMetadata(
-                conversation_id=uuid4().hex, selected_repository=self.full_repo_name
+                conversation_id=self.conversation_id,
+                selected_repository=self.full_repo_name,
             )
 
         conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
             user_id=self.user_info.keycloak_user_id,
             conversation_id=None,
             selected_repository=self.full_repo_name,
-            selected_branch=None,
+            selected_branch=self._get_branch_name(),
             conversation_trigger=ConversationTrigger.RESOLVER,
             git_provider=ProviderType.GITHUB,
         )
+
         self.conversation_id = conversation_metadata.conversation_id
         return conversation_metadata
 
@@ -218,25 +199,18 @@ class GithubIssue(ResolverViewInterface):
         conversation_metadata: ConversationMetadata,
         saas_user_auth: UserAuth,
     ):
-        v1_enabled = await get_user_v1_enabled_setting(self.user_info.keycloak_user_id)
         logger.info(
-            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {v1_enabled}'
+            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'
         )
-        if v1_enabled:
-            try:
-                # Use V1 app conversation service
-                await self._create_v1_conversation(
-                    jinja_env, saas_user_auth, conversation_metadata
-                )
-                return
-
-            except Exception as e:
-                logger.warning(f'Error checking V1 settings, falling back to V0: {e}')
-
-        # Use existing V0 conversation service
-        await self._create_v0_conversation(
-            jinja_env, git_provider_tokens, conversation_metadata
-        )
+        if self.v1_enabled:
+            # Use V1 app conversation service
+            await self._create_v1_conversation(
+                jinja_env, saas_user_auth, conversation_metadata
+            )
+        else:
+            await self._create_v0_conversation(
+                jinja_env, git_provider_tokens, conversation_metadata
+            )
 
     async def _create_v0_conversation(
         self,
@@ -294,6 +268,7 @@ class GithubIssue(ResolverViewInterface):
             system_message_suffix=conversation_instructions,
             initial_message=initial_message,
             selected_repository=self.full_repo_name,
+            selected_branch=self._get_branch_name(),
             git_provider=ProviderType.GITHUB,
             title=f'GitHub Issue #{self.issue_number}: {self.title}',
             trigger=ConversationTrigger.RESOLVER,
@@ -318,11 +293,9 @@ class GithubIssue(ResolverViewInterface):
                         f'Failed to start V1 conversation: {task.detail}'
                     )
 
-        self.v1 = True
-
     def _create_github_v1_callback_processor(self):
         """Create a V1 callback processor for GitHub integration."""
-        from openhands.app_server.event_callback.github_v1_callback_processor import (
+        from integrations.github.github_v1_callback_processor import (
             GithubV1CallbackProcessor,
         )
 
@@ -354,7 +327,6 @@ class GithubIssueComment(GithubIssue):
         conversation_instructions_template = jinja_env.get_template(
             'issue_conversation_instructions.j2'
         )
-
         conversation_instructions = conversation_instructions_template.render(
             issue_number=self.issue_number,
             issue_title=self.title,
@@ -390,31 +362,6 @@ class GithubPRComment(GithubIssueComment):
 
         return user_instructions, conversation_instructions
 
-    async def initialize_new_conversation(self) -> ConversationMetadata:
-        v1_enabled = await get_user_v1_enabled_setting(self.user_info.keycloak_user_id)
-        logger.info(
-            f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {v1_enabled}'
-        )
-        if v1_enabled:
-            # Create dummy conversationm metadata
-            # Don't save to conversation store
-            # V1 conversations are stored in a separate table
-            return ConversationMetadata(
-                conversation_id=uuid4().hex, selected_repository=self.full_repo_name
-            )
-
-        conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
-            user_id=self.user_info.keycloak_user_id,
-            conversation_id=None,
-            selected_repository=self.full_repo_name,
-            selected_branch=self.branch_name,
-            conversation_trigger=ConversationTrigger.RESOLVER,
-            git_provider=ProviderType.GITHUB,
-        )
-
-        self.conversation_id = conversation_metadata.conversation_id
-        return conversation_metadata
-
 
 @dataclass
 class GithubInlinePRComment(GithubPRComment):
@@ -449,7 +396,6 @@ class GithubInlinePRComment(GithubPRComment):
         conversation_instructions_template = jinja_env.get_template(
             'pr_update_conversation_instructions.j2'
         )
-
         conversation_instructions = conversation_instructions_template.render(
             pr_number=self.issue_number,
             pr_title=self.title,
@@ -464,7 +410,7 @@ class GithubInlinePRComment(GithubPRComment):
 
     def _create_github_v1_callback_processor(self):
         """Create a V1 callback processor for GitHub integration."""
-        from openhands.app_server.event_callback.github_v1_callback_processor import (
+        from integrations.github.github_v1_callback_processor import (
             GithubV1CallbackProcessor,
         )
 
@@ -729,13 +675,13 @@ class GithubFactory:
 
         def _interact_with_github() -> Issue | None:
             with GithubIntegration(
-                GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
+                auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
             ) as integration:
                 access_token = integration.get_access_token(
                     payload['installation']['id']
                 ).token
 
-            with Github(access_token) as gh:
+            with Github(auth=Auth.Token(access_token)) as gh:
                 repo = gh.get_repo(selected_repo)
                 login = (
                     payload['organization']['login']
@@ -830,7 +776,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1=False,
+                v1_enabled=False,
             )
 
         elif GithubFactory.is_issue_comment(message):
@@ -856,7 +802,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1=False,
+                v1_enabled=False,
             )
 
         elif GithubFactory.is_pr_comment(message):
@@ -867,12 +813,12 @@ class GithubFactory:
 
             access_token = ''
             with GithubIntegration(
-                GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
+                auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
             ) as integration:
                 access_token = integration.get_access_token(installation_id).token
 
             head_ref = None
-            with Github(access_token) as gh:
+            with Github(auth=Auth.Token(access_token)) as gh:
                 repo = gh.get_repo(selected_repo)
                 pull_request = repo.get_pull(issue_number)
                 head_ref = pull_request.head.ref
@@ -898,7 +844,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1=False,
+                v1_enabled=False,
             )
 
         elif GithubFactory.is_inline_pr_comment(message):
@@ -932,7 +878,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1=False,
+                v1_enabled=False,
             )
 
         else:

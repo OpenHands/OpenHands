@@ -68,7 +68,8 @@ class StoredAppConversationStartTask(Base):  # type: ignore
 class SQLAppConversationStartTaskService(AppConversationStartTaskService):
     """SQL implementation of AppConversationStartTaskService focused on db operations.
 
-    This allows storing and retrieving conversation start tasks from the database."""
+    This allows storing and retrieving conversation start tasks from the database.
+    """
 
     session: AsyncSession
     user_id: str | None = None
@@ -135,7 +136,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
         if has_more:
             rows = rows[:limit]
 
-        items = [AppConversationStartTask(**row2dict(row)) for row in rows]
+        items = [AppConversationStartTask.model_validate(row2dict(row)) for row in rows]
 
         # Calculate next page ID
         next_page_id = None
@@ -196,7 +197,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
         # Return tasks in the same order as requested, with None for missing ones
         return [
             (
-                AppConversationStartTask(**row2dict(tasks_by_id[task_id]))
+                AppConversationStartTask.model_validate(row2dict(tasks_by_id[task_id]))
                 if task_id in tasks_by_id
                 else None
             )
@@ -218,7 +219,7 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
         result = await self.session.execute(query)
         stored_task = result.scalar_one_or_none()
         if stored_task:
-            return AppConversationStartTask(**row2dict(stored_task))
+            return AppConversationStartTask.model_validate(row2dict(stored_task))
         return None
 
     async def save_app_conversation_start_task(

@@ -14,7 +14,7 @@ import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useV1ConversationStateStore } from "#/stores/v1-conversation-state-store";
-import { useCommandStore } from "#/state/command-store";
+import { useCommandStore } from "#/stores/command-store";
 import { useBrowserStore } from "#/stores/browser-store";
 import {
   isV1Event,
@@ -40,12 +40,13 @@ import type {
   V1SendMessageRequest,
 } from "#/api/conversation-service/v1-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
-import { useConversationStore } from "#/state/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { isBudgetOrCreditError } from "#/utils/error-handler";
 import { useTracking } from "#/hooks/use-tracking";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
 import { I18nKey } from "#/i18n/declaration";
+import { useConversationHistory } from "#/hooks/query/use-conversation-history";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type V1_WebSocketConnectionState =
@@ -109,7 +110,7 @@ export function ConversationWebSocketProvider({
     number | null
   >(null);
 
-  const { conversationMode, setPlanContent } = useConversationStore();
+  const { setPlanContent } = useConversationStore();
 
   // Hook for reading conversation file
   const { mutate: readConversationFile } = useReadConversationFile();
@@ -306,6 +307,21 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
+  const { data: preloadedEvents } = useConversationHistory(conversationId);
+
+  useEffect(() => {
+    if (!preloadedEvents || preloadedEvents.length === 0) {
+      setIsLoadingHistoryMain(false);
+      return;
+    }
+
+    for (const event of preloadedEvents) {
+      addEvent(event);
+    }
+
+    setIsLoadingHistoryMain(false);
+  }, [preloadedEvents, addEvent]);
+
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
@@ -329,20 +345,25 @@ export function ConversationWebSocketProvider({
         if (isV1Event(event)) {
           addEvent(event);
 
-          // Handle ConversationErrorEvent specifically
+          // Handle ConversationErrorEvent specifically - show error banner
+          // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isConversationErrorEvent(event)) {
             setErrorMessage(event.detail);
+          } else {
+            // Clear error message on any non-ConversationErrorEvent
+            removeErrorMessage();
           }
 
-          // Handle AgentErrorEvent specifically
+          // Track credit limit reached if AgentErrorEvent has budget-related error
           if (isAgentErrorEvent(event)) {
-            setErrorMessage(event.error);
-
-            // Track credit limit reached if the error is budget-related
+            // Use friendly i18n message for budget/credit errors instead of raw error
             if (isBudgetOrCreditError(event.error)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
               trackCreditLimitReached({
                 conversationId: conversationId || "unknown",
               });
+            } else {
+              setErrorMessage(event.error);
             }
           }
 
@@ -417,6 +438,7 @@ export function ConversationWebSocketProvider({
       isLoadingHistoryMain,
       expectedEventCountMain,
       setErrorMessage,
+      removeErrorMessage,
       removeOptimisticUserMessage,
       queryClient,
       conversationId,
@@ -424,6 +446,7 @@ export function ConversationWebSocketProvider({
       appendInput,
       appendOutput,
       updateMetricsFromStats,
+      trackCreditLimitReached,
     ],
   );
 
@@ -456,7 +479,12 @@ export function ConversationWebSocketProvider({
 
           // Handle AgentErrorEvent specifically
           if (isAgentErrorEvent(event)) {
-            setErrorMessage(event.error);
+            // Use friendly i18n message for budget/credit errors instead of raw error
+            if (isBudgetOrCreditError(event.error)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            } else {
+              setErrorMessage(event.error);
+            }
           }
 
           // Clear optimistic user message when a user message is confirmed
@@ -713,15 +741,14 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
-  const socket = useMemo(
-    () => (conversationMode === "plan" ? planningAgentSocket : mainSocket),
-    [conversationMode, planningAgentSocket, mainSocket],
-  );
-
   // V1 send message function via WebSocket
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest) => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
+      const currentMode = useConversationStore.getState().conversationMode;
+      const currentSocket =
+        currentMode === "plan" ? planningAgentSocket : mainSocket;
+
+      if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
         const error = "WebSocket is not connected";
         setErrorMessage(error);
         throw new Error(error);
@@ -729,7 +756,7 @@ export function ConversationWebSocketProvider({
 
       try {
         // Send message through WebSocket as JSON
-        socket.send(JSON.stringify(message));
+        currentSocket.send(JSON.stringify(message));
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to send message";
@@ -737,7 +764,7 @@ export function ConversationWebSocketProvider({
         throw error;
       }
     },
-    [socket, setErrorMessage],
+    [mainSocket, planningAgentSocket, setErrorMessage],
   );
 
   // Track main socket state changes

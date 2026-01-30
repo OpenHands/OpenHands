@@ -20,7 +20,7 @@ export function useBranchData(
     isLoading,
     isFetchingNextPage,
     isError,
-  } = useRepositoryBranchesPaginated(repository);
+  } = useRepositoryBranchesPaginated(repository, 30, provider);
 
   // Search branches when user types
   const { data: searchData, isLoading: isSearchLoading } = useSearchBranches(

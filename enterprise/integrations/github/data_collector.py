@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from github import Github, GithubIntegration
+from github import Auth, Github, GithubIntegration
 from integrations.github.github_view import (
     GithubIssue,
 )
@@ -84,7 +84,7 @@ class GitHubDataCollector:
         # self.full_saved_pr_path = 'github_data/prs/{}-{}/data.json'
         self.full_saved_pr_path = 'prs/github/{}-{}/data.json'
         self.github_integration = GithubIntegration(
-            GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
+            auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
         )
         self.conversation_id = None
 
@@ -143,7 +143,7 @@ class GitHubDataCollector:
         try:
             installation_token = self._get_installation_access_token(installation_id)
 
-            with Github(installation_token) as github_client:
+            with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(repo_name)
                 issue = repo.get_issue(issue_number)
                 comments = []
@@ -237,7 +237,7 @@ class GitHubDataCollector:
     def _get_pr_commits(self, installation_id: str, repo_name: str, pr_number: int):
         commits = []
         installation_token = self._get_installation_access_token(installation_id)
-        with Github(installation_token) as github_client:
+        with Github(auth=Auth.Token(installation_token)) as github_client:
             repo = github_client.get_repo(repo_name)
             pr = repo.get_pull(pr_number)
 

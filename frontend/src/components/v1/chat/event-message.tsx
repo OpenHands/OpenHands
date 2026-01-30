@@ -6,9 +6,13 @@ import {
   isObservationEvent,
   isAgentErrorEvent,
   isUserMessageEvent,
+  isPlanningFileEditorObservationEvent,
 } from "#/types/v1/type-guards";
 import { MicroagentStatus } from "#/types/microagent-status";
 import { useConfig } from "#/hooks/query/use-config";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useAgentState } from "#/hooks/use-agent-state";
+import { AgentState } from "#/types/agent-state";
 // TODO: Implement V1 feedback functionality when API supports V1 event IDs
 // import { useFeedbackExists } from "#/hooks/query/use-feedback-exists";
 import {
@@ -19,6 +23,8 @@ import {
   ThoughtEventMessage,
 } from "./event-message-components";
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
+import { PlanPreview } from "../../features/chat/plan-preview";
+import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 
 interface EventMessageProps {
   event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
@@ -33,6 +39,8 @@ interface EventMessageProps {
     tooltip?: string;
   }>;
   isInLast10Actions: boolean;
+  /** Set of event IDs that should render PlanPreview (one per user message phase) */
+  planPreviewEventIds?: Set<string>;
 }
 
 /**
@@ -143,8 +151,16 @@ export function EventMessage({
   microagentPRUrl,
   actions,
   isInLast10Actions,
+  planPreviewEventIds,
 }: EventMessageProps) {
   const { data: config } = useConfig();
+  const { planContent } = useConversationStore();
+  const { curAgentState } = useAgentState();
+
+  // Disable Build button while agent is running (streaming)
+  const isAgentRunning =
+    curAgentState === AgentState.RUNNING ||
+    curAgentState === AgentState.LOADING;
 
   // V1 events use string IDs, but useFeedbackExists expects number
   // For now, we'll skip feedback functionality for V1 events
@@ -198,6 +214,26 @@ export function EventMessage({
 
   // Observation events - find the corresponding action and render thought + observation
   if (isObservationEvent(event)) {
+    // Handle PlanningFileEditorObservation specially
+    if (isPlanningFileEditorObservationEvent(event)) {
+      // Only show PlanPreview if this event is marked as the one to display
+      // (last PlanningFileEditorObservation in its phase)
+      if (
+        planPreviewEventIds &&
+        shouldShowPlanPreview(event.id, planPreviewEventIds)
+      ) {
+        return (
+          <PlanPreview
+            planContent={planContent}
+            isBuildDisabled={isAgentRunning}
+          />
+        );
+      }
+      // Not the designated preview event for this phase - render nothing
+      // This prevents duplicate previews within the same phase
+      return null;
+    }
+
     // Find the action that this observation is responding to
     const correspondingAction = messages.find(
       (msg) => isActionEvent(msg) && msg.id === event.action_id,

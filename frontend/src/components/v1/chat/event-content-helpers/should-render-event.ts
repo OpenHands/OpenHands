@@ -18,8 +18,17 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     // For V1, action is an object with kind property
     const actionType = event.action.kind;
 
+    if (!actionType) {
+      return false;
+    }
+
     // Hide user commands from the chat interface
     if (actionType === "ExecuteBashAction" && event.source === "user") {
+      return false;
+    }
+
+    // Hide PlanningFileEditorAction - handled separately with PlanPreview component
+    if (actionType === "PlanningFileEditorAction") {
       return false;
     }
 

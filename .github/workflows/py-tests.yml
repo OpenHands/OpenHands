@@ -63,7 +63,7 @@ jobs:
         env:
           COVERAGE_FILE: ".coverage.runtime.${{ matrix.python_version }}"
       - name: Store coverage file
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-openhands
           path: |
@@ -95,7 +95,7 @@ jobs:
         env:
           COVERAGE_FILE: ".coverage.enterprise.${{ matrix.python_version }}"
       - name: Store coverage file
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-enterprise
           path: ".coverage.enterprise.${{ matrix.python_version }}"
@@ -113,7 +113,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         id: download
         with:
           pattern: coverage-*
