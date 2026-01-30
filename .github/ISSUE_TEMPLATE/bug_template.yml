@@ -7,9 +7,9 @@ body:
     attributes:
       value: |
         ## Thank you for reporting a bug! 🐛
-        
+
         **Please fill out all required fields.** Issues missing critical information (version, installation method, reproduction steps, etc.) will be delayed or closed until complete details are provided.
-        
+
         Clear, detailed reports help us resolve issues faster.
 
   - type: checkboxes
@@ -132,7 +132,7 @@ body:
       label: Browser (if using web UI)
       description: |
         If applicable, which browser and version?
-        
+
       placeholder: ex. Chrome 131, Firefox 133, Safari 17.2
 
   - type: textarea
@@ -141,7 +141,7 @@ body:
       label: Logs and Error Messages
       description: |
         **Paste relevant logs, error messages, or stack traces.** Use code blocks (```) for formatting.
-        
+
         LLM logs are in `logs/llm/default/`. Include timestamps if errors occurred at a specific time.
       placeholder: |
         ```
@@ -154,9 +154,9 @@ body:
       label: Screenshots and Additional Context
       description: |
         Add screenshots, videos, runtime environment, or other context that helps explain the issue.
-        
+
         💡 **Share conversation history:** In the OpenHands chat UI, click the 👎 or 👍 button (above the message input) to generate a shareable link to your conversation.
-        
+
       placeholder: Drag and drop screenshots here, paste links, or add additional context.
 
   - type: markdown
