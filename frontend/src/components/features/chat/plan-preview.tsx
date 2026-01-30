@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight } from "lucide-react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
@@ -51,34 +51,12 @@ export function PlanPreview({
 
   // Handle Build action with scroll to bottom
   const handleBuildClick = useCallback(
-    (event?: React.MouseEvent<HTMLButtonElement> | KeyboardEvent) => {
+    (event?: React.MouseEvent<HTMLButtonElement>) => {
       handleBuildPlanClick(event);
       scrollDomToBottom();
     },
     [handleBuildPlanClick, scrollDomToBottom],
   );
-
-  // Handle Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) keyboard shortcut
-  useEffect(() => {
-    if (isBuildDisabled) {
-      return undefined;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Check for Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        handleBuildClick(event);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isBuildDisabled, handleBuildClick]);
 
   // Truncate plan content for preview
   const truncatedContent = useMemo(() => {
