@@ -25,6 +25,12 @@ vi.mock("#/hooks/query/use-config", () => ({
 vi.mock("#/hooks/use-agent-state");
 
 // Mock PlanPreview component to verify it's rendered with correct props
+// Mock useConversationId (EventMessage -> useAgentState -> useActiveConversation -> useConversationId)
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useConversationId: () => ({ conversationId: "test-conversation-id" }),
+}));
+
+// Mock PlanPreview component to verify it's rendered
 vi.mock("#/components/features/chat/plan-preview", () => ({
   PlanPreview: ({
     planContent,

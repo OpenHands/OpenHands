@@ -157,6 +157,11 @@ export function EventMessage({
   const { planContent } = useConversationStore();
   const { curAgentState } = useAgentState();
 
+  // Disable Build button while agent is running (streaming)
+  const isAgentRunning =
+    curAgentState === AgentState.RUNNING ||
+    curAgentState === AgentState.LOADING;
+
   // V1 events use string IDs, but useFeedbackExists expects number
   // For now, we'll skip feedback functionality for V1 events
   const feedbackData = { exists: false };
@@ -221,7 +226,11 @@ export function EventMessage({
         const isStreaming =
           isLastMessage && curAgentState === AgentState.RUNNING;
         return (
-          <PlanPreview planContent={planContent} isStreaming={isStreaming} />
+          <PlanPreview
+            planContent={planContent}
+            isStreaming={isStreaming}
+            isBuildDisabled={isAgentRunning}
+          />
         );
       }
       // Not the designated preview event for this phase - render nothing
