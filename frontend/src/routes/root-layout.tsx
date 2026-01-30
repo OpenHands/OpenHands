@@ -5,6 +5,7 @@ import {
   Outlet,
   useNavigate,
   useLocation,
+  useSearchParams,
 } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -67,6 +68,7 @@ export default function MainApp() {
   const appTitle = useAppTitle();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
   const isOnTosPage = useIsOnTosPage();
   const { data: settings } = useSettings();
   const { migrateUserConsent } = useMigrateUserConsent();
@@ -182,13 +184,18 @@ export default function MainApp() {
 
   React.useEffect(() => {
     if (shouldRedirectToLogin) {
-      const returnTo = pathname !== "/" ? pathname : "";
-      const loginUrl = returnTo
-        ? `/login?returnTo=${encodeURIComponent(returnTo)}`
+      // Include search params in returnTo to preserve query string (e.g., user_code for device OAuth)
+      const searchString = searchParams.toString();
+      let fullPath = "";
+      if (pathname !== "/") {
+        fullPath = searchString ? `${pathname}?${searchString}` : pathname;
+      }
+      const loginUrl = fullPath
+        ? `/login?returnTo=${encodeURIComponent(fullPath)}`
         : "/login";
       navigate(loginUrl, { replace: true });
     }
-  }, [shouldRedirectToLogin, pathname, navigate]);
+  }, [shouldRedirectToLogin, pathname, searchParams, navigate]);
 
   if (shouldRedirectToLogin) {
     return (
