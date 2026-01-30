@@ -213,6 +213,37 @@ export interface BrowserCloseTabAction extends ActionBase<"BrowserCloseTabAction
   tab_id: string;
 }
 
+export interface PlanningFileEditorAction extends ActionBase<"PlanningFileEditorAction"> {
+  /**
+   * The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`, `undo_edit`.
+   */
+  command: "view" | "create" | "str_replace" | "insert" | "undo_edit";
+  /**
+   * Absolute path to file (typically /workspace/project/PLAN.md).
+   */
+  path: string;
+  /**
+   * Required parameter of `create` command, with the content of the file to be created.
+   */
+  file_text: string | null;
+  /**
+   * Required parameter of `str_replace` command containing the string in `path` to replace.
+   */
+  old_str: string | null;
+  /**
+   * Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.
+   */
+  new_str: string | null;
+  /**
+   * Required parameter of `insert` command. The `new_str` will be inserted AFTER the line `insert_line` of `path`. Must be >= 1.
+   */
+  insert_line: number | null;
+  /**
+   * Optional parameter of `view` command when `path` points to a file. If none is given, the full file is shown.
+   */
+  view_range: [number, number] | null;
+}
+
 export type Action =
   | MCPToolAction
   | FinishAction
@@ -222,6 +253,7 @@ export type Action =
   | FileEditorAction
   | StrReplaceEditorAction
   | TaskTrackerAction
+  | PlanningFileEditorAction
   | BrowserNavigateAction
   | BrowserClickAction
   | BrowserTypeAction

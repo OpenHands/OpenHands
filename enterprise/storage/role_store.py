@@ -4,7 +4,9 @@ Store class for managing roles.
 
 from typing import List, Optional
 
-from storage.database import session_maker
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from storage.database import a_session_maker, session_maker
 from storage.role import Role
 
 
@@ -32,6 +34,20 @@ class RoleStore:
         """Get role by name."""
         with session_maker() as session:
             return session.query(Role).filter(Role.name == name).first()
+
+    @staticmethod
+    async def get_role_by_name_async(
+        name: str,
+        session: Optional[AsyncSession] = None,
+    ) -> Optional[Role]:
+        """Get role by name."""
+        if session is not None:
+            result = await session.execute(select(Role).where(Role.name == name))
+            return result.scalars().first()
+
+        async with a_session_maker() as session:
+            result = await session.execute(select(Role).where(Role.name == name))
+            return result.scalars().first()
 
     @staticmethod
     def list_roles() -> List[Role]:

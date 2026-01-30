@@ -27,6 +27,11 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
       return false;
     }
 
+    // Hide PlanningFileEditorAction - handled separately with PlanPreview component
+    if (actionType === "PlanningFileEditorAction") {
+      return false;
+    }
+
     return true;
   }
 

@@ -38,6 +38,7 @@ from server.routes.integration.linear import linear_integration_router  # noqa: 
 from server.routes.integration.slack import slack_router  # noqa: E402
 from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
+from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
 from server.sharing.shared_conversation_router import (  # noqa: E402
@@ -90,6 +91,7 @@ if GITLAB_APP_CLIENT_ID:
     base_app.include_router(gitlab_integration_router)
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
+base_app.include_router(org_router)  # Add routes for organization management
 add_github_proxy_routes(base_app)
 add_debugging_routes(
     base_app

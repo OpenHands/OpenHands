@@ -184,14 +184,6 @@ export function GitRepoDropdown({
     setInputValue("");
   }, [handleSelectionChange]);
 
-  // Handle input value change
-  const handleInputValueChange = useCallback(
-    ({ inputValue: newInputValue }: { inputValue?: string }) => {
-      setInputValue(newInputValue || "");
-    },
-    [],
-  );
-
   // Handle scroll to bottom for pagination
   const handleMenuScroll = useCallback(
     (event: React.UIEvent<HTMLUListElement>) => {
@@ -220,8 +212,14 @@ export function GitRepoDropdown({
     onSelectedItemChange: ({ selectedItem: newSelectedItem }) => {
       handleSelectionChange(newSelectedItem);
     },
-    onInputValueChange: handleInputValueChange,
     inputValue,
+    // Override Downshift's default input-click behavior to avoid closing/reopening
+    // the menu, which would reset scroll position and break search continuity.
+    stateReducer: (state, actionAndChanges) =>
+      actionAndChanges.type === useCombobox.stateChangeTypes.InputClick &&
+      state.isOpen
+        ? { ...actionAndChanges.changes, isOpen: true }
+        : actionAndChanges.changes,
   });
 
   // Sync localSelectedItem with external value prop
@@ -237,6 +235,8 @@ export function GitRepoDropdown({
   useEffect(() => {
     if (selectedRepository && !isOpen) {
       setInputValue(selectedRepository.full_name);
+    } else if (!selectedRepository && !isOpen) {
+      setInputValue("");
     }
   }, [selectedRepository, isOpen]);
 
@@ -335,6 +335,10 @@ export function GitRepoDropdown({
               "disabled:bg-[#363636] disabled:cursor-not-allowed disabled:opacity-60",
               "pl-7 pr-16 text-sm font-normal leading-5", // Space for clear and toggle buttons
             ),
+            // Direct onChange for cursor position preservation
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+              setInputValue(e.target.value);
+            },
           })}
           data-testid="git-repo-dropdown"
         />

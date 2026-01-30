@@ -46,6 +46,7 @@ import { useTracking } from "#/hooks/use-tracking";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
 import { I18nKey } from "#/i18n/declaration";
+import { useConversationHistory } from "#/hooks/query/use-conversation-history";
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type V1_WebSocketConnectionState =
@@ -109,7 +110,7 @@ export function ConversationWebSocketProvider({
     number | null
   >(null);
 
-  const { conversationMode, setPlanContent } = useConversationStore();
+  const { setPlanContent } = useConversationStore();
 
   // Hook for reading conversation file
   const { mutate: readConversationFile } = useReadConversationFile();
@@ -306,6 +307,21 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
+  const { data: preloadedEvents } = useConversationHistory(conversationId);
+
+  useEffect(() => {
+    if (!preloadedEvents || preloadedEvents.length === 0) {
+      setIsLoadingHistoryMain(false);
+      return;
+    }
+
+    for (const event of preloadedEvents) {
+      addEvent(event);
+    }
+
+    setIsLoadingHistoryMain(false);
+  }, [preloadedEvents, addEvent]);
+
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
@@ -340,10 +356,14 @@ export function ConversationWebSocketProvider({
 
           // Track credit limit reached if AgentErrorEvent has budget-related error
           if (isAgentErrorEvent(event)) {
+            // Use friendly i18n message for budget/credit errors instead of raw error
             if (isBudgetOrCreditError(event.error)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
               trackCreditLimitReached({
                 conversationId: conversationId || "unknown",
               });
+            } else {
+              setErrorMessage(event.error);
             }
           }
 
@@ -459,7 +479,12 @@ export function ConversationWebSocketProvider({
 
           // Handle AgentErrorEvent specifically
           if (isAgentErrorEvent(event)) {
-            setErrorMessage(event.error);
+            // Use friendly i18n message for budget/credit errors instead of raw error
+            if (isBudgetOrCreditError(event.error)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+            } else {
+              setErrorMessage(event.error);
+            }
           }
 
           // Clear optimistic user message when a user message is confirmed
@@ -716,15 +741,14 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
-  const socket = useMemo(
-    () => (conversationMode === "plan" ? planningAgentSocket : mainSocket),
-    [conversationMode, planningAgentSocket, mainSocket],
-  );
-
   // V1 send message function via WebSocket
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest) => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
+      const currentMode = useConversationStore.getState().conversationMode;
+      const currentSocket =
+        currentMode === "plan" ? planningAgentSocket : mainSocket;
+
+      if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
         const error = "WebSocket is not connected";
         setErrorMessage(error);
         throw new Error(error);
@@ -732,7 +756,7 @@ export function ConversationWebSocketProvider({
 
       try {
         // Send message through WebSocket as JSON
-        socket.send(JSON.stringify(message));
+        currentSocket.send(JSON.stringify(message));
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to send message";
@@ -740,7 +764,7 @@ export function ConversationWebSocketProvider({
         throw error;
       }
     },
-    [socket, setErrorMessage],
+    [mainSocket, planningAgentSocket, setErrorMessage],
   );
 
   // Track main socket state changes
