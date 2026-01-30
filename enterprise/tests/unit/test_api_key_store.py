@@ -32,6 +32,11 @@ def api_key_store(mock_session_maker):
     return ApiKeyStore(mock_session_maker)
 
 
+def run_sync(func, *args, **kwargs):
+    """Helper to execute sync functions directly (mocks call_sync_from_async)."""
+    return func(*args, **kwargs)
+
+
 def test_generate_api_key(api_key_store):
     """Test that generate_api_key returns a string with sk-oh- prefix and expected length."""
     key = api_key_store.generate_api_key(length=32)
@@ -41,8 +46,12 @@ def test_generate_api_key(api_key_store):
     assert len(key) == len('sk-oh-') + 32
 
 
-@patch('storage.api_key_store.UserStore.get_user_by_id')
-def test_create_api_key(mock_get_user, api_key_store, mock_session, mock_user):
+@pytest.mark.asyncio
+@patch('storage.api_key_store.call_sync_from_async', side_effect=run_sync)
+@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+async def test_create_api_key(
+    mock_get_user, mock_call_sync, api_key_store, mock_session, mock_user
+):
     """Test creating an API key."""
     # Setup
     user_id = 'test-user-123'
@@ -51,7 +60,7 @@ def test_create_api_key(mock_get_user, api_key_store, mock_session, mock_user):
     api_key_store.generate_api_key = MagicMock(return_value='test-api-key')
 
     # Execute
-    result = api_key_store.create_api_key(user_id, name)
+    result = await api_key_store.create_api_key(user_id, name)
 
     # Verify
     assert result == 'test-api-key'
@@ -219,8 +228,12 @@ def test_delete_api_key_by_id(api_key_store, mock_session):
     mock_session.commit.assert_called_once()
 
 
-@patch('storage.api_key_store.UserStore.get_user_by_id')
-def test_list_api_keys(mock_get_user, api_key_store, mock_session, mock_user):
+@pytest.mark.asyncio
+@patch('storage.api_key_store.call_sync_from_async', side_effect=run_sync)
+@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+async def test_list_api_keys(
+    mock_get_user, mock_call_sync, api_key_store, mock_session, mock_user
+):
     """Test listing API keys for a user."""
     # Setup
     user_id = 'test-user-123'
@@ -247,7 +260,7 @@ def test_list_api_keys(mock_get_user, api_key_store, mock_session, mock_user):
     mock_filter_org.all.return_value = [mock_key1, mock_key2]
 
     # Execute
-    result = api_key_store.list_api_keys(user_id)
+    result = await api_key_store.list_api_keys(user_id)
 
     # Verify
     mock_get_user.assert_called_once_with(user_id)
@@ -265,8 +278,12 @@ def test_list_api_keys(mock_get_user, api_key_store, mock_session, mock_user):
     assert result[1]['expires_at'] is None
 
 
-@patch('storage.api_key_store.UserStore.get_user_by_id')
-def test_retrieve_mcp_api_key(mock_get_user, api_key_store, mock_session, mock_user):
+@pytest.mark.asyncio
+@patch('storage.api_key_store.call_sync_from_async', side_effect=run_sync)
+@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+async def test_retrieve_mcp_api_key(
+    mock_get_user, mock_call_sync, api_key_store, mock_session, mock_user
+):
     """Test retrieving MCP API key for a user."""
     # Setup
     user_id = 'test-user-123'
@@ -287,16 +304,18 @@ def test_retrieve_mcp_api_key(mock_get_user, api_key_store, mock_session, mock_u
     mock_filter_org.all.return_value = [mock_other_key, mock_mcp_key]
 
     # Execute
-    result = api_key_store.retrieve_mcp_api_key(user_id)
+    result = await api_key_store.retrieve_mcp_api_key(user_id)
 
     # Verify
     mock_get_user.assert_called_once_with(user_id)
     assert result == 'mcp-test-key'
 
 
-@patch('storage.api_key_store.UserStore.get_user_by_id')
-def test_retrieve_mcp_api_key_not_found(
-    mock_get_user, api_key_store, mock_session, mock_user
+@pytest.mark.asyncio
+@patch('storage.api_key_store.call_sync_from_async', side_effect=run_sync)
+@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+async def test_retrieve_mcp_api_key_not_found(
+    mock_get_user, mock_call_sync, api_key_store, mock_session, mock_user
 ):
     """Test retrieving MCP API key when none exists."""
     # Setup
@@ -314,7 +333,7 @@ def test_retrieve_mcp_api_key_not_found(
     mock_filter_org.all.return_value = [mock_other_key]
 
     # Execute
-    result = api_key_store.retrieve_mcp_api_key(user_id)
+    result = await api_key_store.retrieve_mcp_api_key(user_id)
 
     # Verify
     mock_get_user.assert_called_once_with(user_id)

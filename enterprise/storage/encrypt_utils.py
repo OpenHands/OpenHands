@@ -98,6 +98,29 @@ def decrypt_legacy_value(value: str | SecretStr) -> str:
         return get_fernet().decrypt(b64decode(value.encode())).decode()
 
 
+def encrypt_legacy_model(encrypt_keys: list, model_instance) -> dict:
+    return encrypt_legacy_kwargs(encrypt_keys, model_to_kwargs(model_instance))
+
+
+def encrypt_legacy_kwargs(encrypt_keys: list, kwargs: dict) -> dict:
+    for key, value in kwargs.items():
+        if value is None:
+            continue
+        if key in encrypt_keys:
+            value = encrypt_legacy_value(value)
+            kwargs[key] = value
+    return kwargs
+
+
+def encrypt_legacy_value(value: str | SecretStr) -> str:
+    if isinstance(value, SecretStr):
+        return b64encode(
+            get_fernet().encrypt(value.get_secret_value().encode())
+        ).decode()
+    else:
+        return b64encode(get_fernet().encrypt(value.encode())).decode()
+
+
 def get_fernet():
     global _fernet
     if _fernet is None:

@@ -33,6 +33,7 @@ from server.utils.conversation_callback_utils import register_callback_processor
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderToken, ProviderType
+from openhands.integrations.service_types import AuthenticationError
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -348,7 +349,7 @@ class GithubManager(Manager):
 
                 msg_info = f'@{user_info.username} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
 
-            except (ExpiredError, SessionExpiredError) as e:
+            except (AuthenticationError, ExpiredError, SessionExpiredError) as e:
                 logger.warning(
                     f'[GitHub] Session expired for user {user_info.username}: {str(e)}'
                 )
