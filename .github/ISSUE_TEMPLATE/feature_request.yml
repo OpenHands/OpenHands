@@ -97,16 +97,6 @@ body:
       placeholder: |
         Example - "Could use ripgrep library for fast search. Expose results via /api/search endpoint. Frontend can use virtualized list for rendering large result sets."
 
-  - type: checkboxes
-    id: willingness-to-contribute
-    attributes:
-      label: Would you be willing to contribute this feature?
-      description: Community contributions are welcome! Select if you'd be open to implementing this (with guidance from maintainers).
-      options:
-        - label: "Yes, I'd be willing to submit a PR"
-        - label: "Maybe, depending on complexity and time commitment"
-        - label: "No, I cannot contribute to this feature request."
-
   - type: textarea
     id: additional-context
     attributes:
