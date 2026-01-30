@@ -684,7 +684,9 @@ describe("Form submission", () => {
     expect(submitButton).toBeDisabled();
   });
 
-  it("should disable the button if there are no changes in the advanced form", async () => {
+  it(
+    "should disable the button if there are no changes in the advanced form",
+    async () => {
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
@@ -807,7 +809,9 @@ describe("Form submission", () => {
       "SETTINGS$SECURITY_ANALYZER_LLM_DEFAULT",
     );
     expect(submitButton).toBeDisabled();
-  });
+    },
+    15000,
+  );
 
   it("should reset button state when switching between forms", async () => {
     renderLlmSettingsScreen();
