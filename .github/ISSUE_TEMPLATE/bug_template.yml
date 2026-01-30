@@ -10,7 +10,7 @@ body:
         
         **Please fill out all required fields.** Issues missing critical information (version, installation method, reproduction steps, etc.) will be delayed or closed until complete details are provided.
         
-        The team prioritizes bugs based on severity, impact, and available bandwidth. Clear, detailed reports help us resolve issues faster.
+        Clear, detailed reports help us resolve issues faster.
 
   - type: checkboxes
     attributes:
