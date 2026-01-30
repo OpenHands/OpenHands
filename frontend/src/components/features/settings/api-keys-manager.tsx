@@ -3,7 +3,7 @@ import { useTranslation, Trans } from "react-i18next";
 import { FaTrash, FaEye, FaEyeSlash, FaCopy } from "react-icons/fa6";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 import { ApiKey, CreateApiKeyResponse } from "#/api/api-keys";
 import {
   displayErrorToast,
