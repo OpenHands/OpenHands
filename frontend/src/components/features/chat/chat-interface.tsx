@@ -312,34 +312,38 @@ export function ChatInterface() {
           )}
         </div>
 
-        <div className="flex flex-col gap-[6px] bg-[#25272D] px-4">
-          <div className="flex justify-between relative">
-            <div className="flex items-end gap-1">
-              <ConfirmationModeEnabled />
-              {isStartingStatus && (
-                <ChatStatusIndicator
-                  statusColor={serverStatusColor}
-                  status={serverStatusText}
-                />
-              )}
-              {totalEvents > 0 && !isV1Conversation && (
-                <TrajectoryActions
-                  onPositiveFeedback={() =>
-                    onClickShareFeedbackActionButton("positive")
-                  }
-                  onNegativeFeedback={() =>
-                    onClickShareFeedbackActionButton("negative")
-                  }
-                  isSaasMode={config?.APP_MODE === "saas"}
-                />
+        <div className="flex flex-col gap-[6px]">
+          <div className="bg-[#25272D] pb-[6px]">
+            <div className="flex justify-between relative">
+              <div className="flex items-end gap-1">
+                <ConfirmationModeEnabled />
+                {isStartingStatus && (
+                  <ChatStatusIndicator
+                    statusColor={serverStatusColor}
+                    status={serverStatusText}
+                  />
+                )}
+                {totalEvents > 0 && !isV1Conversation && (
+                  <TrajectoryActions
+                    onPositiveFeedback={() =>
+                      onClickShareFeedbackActionButton("positive")
+                    }
+                    onNegativeFeedback={() =>
+                      onClickShareFeedbackActionButton("negative")
+                    }
+                    isSaasMode={config?.APP_MODE === "saas"}
+                  />
+                )}
+              </div>
+
+              <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0">
+                {curAgentState === AgentState.RUNNING && <TypingIndicator />}
+              </div>
+
+              {!hitBottom && (
+                <ScrollToBottomButton onClick={scrollDomToBottom} />
               )}
             </div>
-
-            <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0">
-              {curAgentState === AgentState.RUNNING && <TypingIndicator />}
-            </div>
-
-            {!hitBottom && <ScrollToBottomButton onClick={scrollDomToBottom} />}
           </div>
 
           {errorMessage && (
