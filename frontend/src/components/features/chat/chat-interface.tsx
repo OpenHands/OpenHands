@@ -20,7 +20,7 @@ import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState } from "#/hooks/use-agent-state";
 
 import { ScrollToBottomButton } from "#/components/shared/buttons/scroll-to-bottom-button";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 import { ChatMessagesSkeleton } from "./chat-messages-skeleton";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useErrorMessageStore } from "#/stores/error-message-store";

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import CloseIcon from "#/icons/close.svg?react";
 import { SuccessIndicator } from "../success-indicator";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 
 interface ConversationCreatedToastProps {
   conversationId: string;

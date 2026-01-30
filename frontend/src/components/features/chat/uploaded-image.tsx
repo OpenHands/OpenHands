@@ -1,6 +1,6 @@
 import React from "react";
 import { RemoveFileButton } from "./remove-file-button";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 
 interface UploadedImageProps {
   image: File;

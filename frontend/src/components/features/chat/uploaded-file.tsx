@@ -1,7 +1,7 @@
 import FileIcon from "#/icons/file.svg?react";
 import { RemoveFileButton } from "./remove-file-button";
 import { cn, getFileExtension } from "#/utils/utils";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 
 interface UploadedFileProps {
   file: File;

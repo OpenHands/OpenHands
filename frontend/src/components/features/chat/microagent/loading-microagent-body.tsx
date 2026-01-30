@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { ModalBody } from "#/components/shared/modals/modal-body";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 import { Typography } from "#/ui/typography";
 
 export function LoadingMicroagentBody() {
