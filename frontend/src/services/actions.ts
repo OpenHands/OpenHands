@@ -1,3 +1,4 @@
+import type { PostHog } from "posthog-js";
 import { trackError } from "#/utils/error-handler";
 import useMetricsStore from "#/stores/metrics-store";
 import { useStatusStore } from "#/stores/status-store";
@@ -54,7 +55,7 @@ export function handleActionMessage(message: ActionMessage) {
   }
 }
 
-export function handleStatusMessage(message: StatusMessage) {
+export function handleStatusMessage(message: StatusMessage, posthog?: PostHog) {
   // Info message with conversation_title indicates new title for conversation
   if (message.type === "info" && message.conversation_title) {
     const conversationId = message.message;
@@ -72,17 +73,20 @@ export function handleStatusMessage(message: StatusMessage) {
       message: message.message,
       source: "chat",
       metadata: { msgId: message.id },
-      posthog: undefined, // Service file - can't use hooks
+      posthog,
     });
   }
 }
 
-export function handleAssistantMessage(message: Record<string, unknown>) {
+export function handleAssistantMessage(
+  message: Record<string, unknown>,
+  posthog?: PostHog,
+) {
   if (message.action) {
     handleActionMessage(message as unknown as ActionMessage);
   } else if (message.observation) {
     handleObservationMessage(message as unknown as ObservationMessage);
   } else if (message.status_update) {
-    handleStatusMessage(message as unknown as StatusMessage);
+    handleStatusMessage(message as unknown as StatusMessage, posthog);
   }
 }

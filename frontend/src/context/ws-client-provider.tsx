@@ -186,7 +186,7 @@ export function WsClientProvider({
   }
 
   function handleMessage(event: Record<string, unknown>) {
-    handleAssistantMessage(event);
+    handleAssistantMessage(event, posthog);
 
     if (isOpenHandsEvent(event)) {
       const isStatusUpdateError =
@@ -196,11 +196,14 @@ export function WsClientProvider({
         isAgentStateChangeObservation(event) &&
         event.extras.agent_state === "error";
 
-      if (isStatusUpdateError || isAgentStateChangeError) {
-        const errorMessage = isStatusUpdate(event)
-          ? event.message
-          : event.extras.reason || "Unknown error";
+      if (isStatusUpdateError) {
+        // Error tracking is handled by handleStatusMessage (via handleAssistantMessage above)
+        setErrorMessage(event.message);
+        return;
+      }
 
+      if (isAgentStateChangeError) {
+        const errorMessage = event.extras.reason || "Unknown error";
         trackError({
           message: errorMessage,
           source: "chat",

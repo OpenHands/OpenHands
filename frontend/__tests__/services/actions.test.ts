@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { PostHog } from "posthog-js";
 import { handleStatusMessage } from "#/services/actions";
 import { StatusMessage } from "#/types/message";
 import { queryClient } from "#/query-client-config";
@@ -101,5 +102,24 @@ describe("handleStatusMessage", () => {
 
     // Verify that queryClient.invalidateQueries was not called
     expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it("should pass posthog instance to trackError for error messages", () => {
+    const mockPosthog = { captureException: vi.fn() } as unknown as PostHog;
+    const statusMessage: StatusMessage = {
+      status_update: true,
+      type: "error",
+      id: "ERROR_ID",
+      message: "Some error message",
+    };
+
+    handleStatusMessage(statusMessage, mockPosthog);
+
+    expect(trackError).toHaveBeenCalledWith({
+      message: "Some error message",
+      source: "chat",
+      metadata: { msgId: "ERROR_ID" },
+      posthog: mockPosthog,
+    });
   });
 });
