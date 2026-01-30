@@ -121,6 +121,7 @@ const renderUserMessageWithSkillReady = (
         <GenericEventMessageWrapper
           event={skillReadyEvent}
           isLastMessage={isLastMessage}
+          isFromPlanningAgent={commonProps.isFromPlanningAgent}
         />
       </>
     );
@@ -203,10 +204,15 @@ export function EventMessage({
   if (isActionEvent(event)) {
     return (
       <>
-        <ThoughtEventMessage event={event} actions={actions} />
+        <ThoughtEventMessage
+          event={event}
+          actions={actions}
+          isFromPlanningAgent={isFromPlanningAgent}
+        />
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          isFromPlanningAgent={isFromPlanningAgent}
         />
       </>
     );
@@ -246,11 +252,16 @@ export function EventMessage({
     return (
       <>
         {correspondingAction && isActionEvent(correspondingAction) && (
-          <ThoughtEventMessage event={correspondingAction} actions={actions} />
+          <ThoughtEventMessage
+            event={correspondingAction}
+            actions={actions}
+            isFromPlanningAgent={isFromPlanningAgent}
+          />
         )}
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          isFromPlanningAgent={isFromPlanningAgent}
         />
       </>
     );
@@ -281,6 +292,10 @@ export function EventMessage({
 
   // Generic fallback for all other events
   return (
-    <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
+    <GenericEventMessageWrapper
+      event={event}
+      isLastMessage={isLastMessage}
+      isFromPlanningAgent={isFromPlanningAgent}
+    />
   );
 }

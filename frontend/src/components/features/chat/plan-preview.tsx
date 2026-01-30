@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight } from "lucide-react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
@@ -13,6 +13,7 @@ import {
   planComponents,
   createPlanComponents,
 } from "#/components/features/markdown/plan-components";
+import { useScrollContext } from "#/context/scroll-context";
 
 const MAX_CONTENT_LENGTH = 300;
 
@@ -40,12 +41,44 @@ export function PlanPreview({
   const { t } = useTranslation();
   const { selectTab } = useSelectConversationTab();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
+  const { scrollDomToBottom } = useScrollContext();
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   const handleViewClick = () => {
     selectTab("planner");
   };
+
+  // Handle Build action with scroll to bottom
+  const handleBuildClick = useCallback(
+    (event?: React.MouseEvent<HTMLButtonElement> | KeyboardEvent) => {
+      handleBuildPlanClick(event);
+      scrollDomToBottom();
+    },
+    [handleBuildPlanClick, scrollDomToBottom],
+  );
+
+  // Handle Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) keyboard shortcut
+  useEffect(() => {
+    if (isBuildDisabled) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        handleBuildClick(event);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isBuildDisabled, handleBuildClick]);
 
   // Truncate plan content for preview
   const truncatedContent = useMemo(() => {
@@ -59,7 +92,7 @@ export function PlanPreview({
   }
 
   return (
-    <div className="bg-[#25272d] border border-[#597FF4] rounded-[12px] w-full mb-4 mt-2">
+    <div className="bg-[#25272d] border border-[#597FF4] rounded-[12px] w-full mt-2">
       {/* Header */}
       <div className="border-b border-[#525252] flex h-[41px] items-center px-2 gap-1">
         <LessonPlanIcon width={18} height={18} color="#9299aa" />
@@ -111,7 +144,7 @@ export function PlanPreview({
       <div className="border-t border-[#525252] flex h-[54px] items-center justify-start px-4">
         <button
           type="button"
-          onClick={handleBuildPlanClick}
+          onClick={handleBuildClick}
           disabled={isBuildDisabled}
           className={cn(
             "bg-white flex items-center justify-center h-[26px] px-2 rounded-[4px] w-[93px] transition-opacity",
