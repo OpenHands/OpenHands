@@ -9,7 +9,7 @@ import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation"
 import { useUnifiedPauseConversationSandbox } from "#/hooks/mutation/use-unified-stop-conversation";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";

@@ -8,7 +8,7 @@ import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { cn } from "#/utils/utils";
 import ChevronUp from "#/icons/chveron-up.svg?react";
 import { useUnifiedGitDiff } from "#/hooks/query/use-unified-git-diff";
-import { Spinner } from "#/components/shared/spinner";
+import { Spinner } from "#/ui/spinner";
 
 const STATUS_MAP: Record<GitChangeStatus, string | IconType> = {
   A: LuFilePlus,
