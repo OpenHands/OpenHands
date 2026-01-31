@@ -153,10 +153,13 @@ class LiteLlmManager:
                     max_budget *= billing_margin
                     spend *= billing_margin
 
-                # Check if max_budget is None (not 0.0) to determine if already migrated
+                # Check if max_budget is None (not 0.0) or set to unlimited to determine if already migrated
                 # A user with max_budget=0.0 is different from max_budget=None
-                if original_max_budget is None:
-                    # if max_budget is None, then we've already migrated the User
+                if (
+                    original_max_budget is None
+                    or original_max_budget == UNLIMITED_BUDGET_SETTING
+                ):
+                    # if max_budget is None or UNLIMITED, then we've already migrated the User
                     logger.info(
                         'LiteLlmManager:migrate_lite_llm_entries:already_migrated',
                         extra={
