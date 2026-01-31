@@ -173,14 +173,15 @@ export default function MainApp() {
     setLoginMethodExists(checkLoginMethodExists());
   }, [isAuthed, checkLoginMethodExists]);
 
+  const isInitializing = config.isLoading || isAuthLoading;
+
   const shouldRedirectToLogin =
-    config.isLoading ||
-    isAuthLoading ||
-    (!isAuthed &&
-      !isAuthError &&
-      !isOnTosPage &&
-      config.data?.APP_MODE === "saas" &&
-      !loginMethodExists);
+    !isInitializing &&
+    isAuthed === false &&
+    !isAuthError &&
+    !isOnTosPage &&
+    config.data?.APP_MODE === "saas" &&
+    !loginMethodExists;
 
   React.useEffect(() => {
     if (shouldRedirectToLogin) {
@@ -197,6 +198,14 @@ export default function MainApp() {
     }
   }, [shouldRedirectToLogin, pathname, searchParams, navigate]);
 
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-base">
+        <LoadingSpinner size="large" />
+      </div>
+    );
+  }
+
   if (shouldRedirectToLogin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base">
@@ -206,7 +215,7 @@ export default function MainApp() {
   }
 
   const renderReAuthModal =
-    !isAuthed &&
+    isAuthed === false &&
     !isAuthError &&
     !isFetchingAuth &&
     !isOnTosPage &&
