@@ -313,6 +313,18 @@ describe("MainApp", () => {
       });
     });
 
+    it("should not redirect to /login while config is still loading", async () => {
+      vi.spyOn(OptionService, "getConfig").mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      renderWithLoginStub(RouterStubWithLogin, ["/settings"]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+      });
+    });
+
     it("should redirect unauthenticated SaaS users to /login", async () => {
       renderWithLoginStub(RouterStubWithLogin, ["/"]);
 
