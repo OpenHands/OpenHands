@@ -1509,15 +1509,9 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
             ConversationExecutionStatus.FINISHED: RuntimeStatus.READY,
             ConversationExecutionStatus.STUCK: RuntimeStatus.ERROR,
         }
-        if app_conversation.execution_status is None:
-            # If the app_conversation.execution_status is None and the sandbox status
-            # is running, then we assume that we assume are still starting. There is
-            # no equivalent ConversationExecutionStatus for starting.
-            runtime_status = RuntimeStatus.STARTING_RUNTIME
-        else:
-            runtime_status = runtime_status_mapping.get(
-                app_conversation.execution_status, RuntimeStatus.ERROR
-            )
+        runtime_status = runtime_status_mapping.get(
+            app_conversation.execution_status, RuntimeStatus.ERROR
+        )
     else:
         runtime_status = None
 

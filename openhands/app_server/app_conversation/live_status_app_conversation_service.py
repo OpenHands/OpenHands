@@ -19,6 +19,7 @@ from openhands.agent_server.models import (
     SendMessageRequest,
     StartConversationRequest,
 )
+from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -353,22 +354,32 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         sandboxes_by_id = {sandbox.id: sandbox for sandbox in sandboxes if sandbox}
 
-        # Gather the running conversations
+        # Gather the running conversations along with their sandbox IDs
+        running_sandboxes = [
+            sandbox
+            for sandbox in sandboxes
+            if sandbox and sandbox.status == SandboxStatus.RUNNING
+        ]
         tasks = [
             self._get_live_conversation_info(
                 sandbox, sandbox_id_to_conversation_ids.get(sandbox.id)
             )
-            for sandbox in sandboxes
-            if sandbox and sandbox.status == SandboxStatus.RUNNING
+            for sandbox in running_sandboxes
         ]
         if tasks:
-            sandbox_conversation_infos = await asyncio.gather(*tasks)
+            sandbox_conversation_results = await asyncio.gather(*tasks)
         else:
-            sandbox_conversation_infos = []
+            sandbox_conversation_results = []
 
-        # Collect the results into a single dictionary
-        conversation_info_by_id = {}
-        for conversation_infos in sandbox_conversation_infos:
+        # Collect the results into dictionaries
+        conversation_info_by_id: dict[UUID, ConversationInfo] = {}
+        starting_sandbox_ids: set[str] = set()
+
+        for sandbox, (conversation_infos, is_starting) in zip(
+            running_sandboxes, sandbox_conversation_results
+        ):
+            if is_starting:
+                starting_sandbox_ids.add(sandbox.id)
             for conversation_info in conversation_infos:
                 conversation_info_by_id[conversation_info.id] = conversation_info
 
@@ -379,6 +390,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     app_conversation_info,
                     sandboxes_by_id.get(app_conversation_info.sandbox_id),
                     conversation_info_by_id.get(app_conversation_info.id),
+                    is_server_starting=(
+                        app_conversation_info.sandbox_id in starting_sandbox_ids
+                    ),
                 )
                 if app_conversation_info
                 else None
@@ -392,8 +406,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         self,
         sandbox: SandboxInfo,
         conversation_ids: list[str],
-    ) -> list[ConversationInfo]:
-        """Get agent status for multiple conversations from the Agent Server."""
+    ) -> tuple[list[ConversationInfo], bool]:
+        """Get agent status for multiple conversations from the Agent Server.
+
+        Returns:
+            A tuple of (conversation_infos, is_server_starting).
+            If is_server_starting is True, the server is still initializing and
+            the empty conversation_infos list should not be treated as an error.
+        """
         try:
             # Build the URL with query parameters
             agent_server_url = self._get_agent_server_url(sandbox)
@@ -411,8 +431,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             data = response.json()
             conversation_info = _conversation_info_type_adapter.validate_python(data)
             conversation_info = [c for c in conversation_info if c]
-            return conversation_info
+            return (conversation_info, False)
         except httpx.HTTPStatusError as exc:
+            # Check if this might be a race condition during server startup
+            if exc.response and exc.response.status_code in (404, 503):
+                is_starting = await self._is_server_starting(sandbox)
+                if is_starting:
+                    return ([], True)
+
             # The runtime API stops idle sandboxes all the time and they return a 503.
             # This is normal and should not be logged.
             if not exc.response or exc.response.status_code != 503:
@@ -421,27 +447,64 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     exc_info=True,
                     stack_info=True,
                 )
-            return []
+            return ([], False)
         except Exception:
             # Not getting a status is not a fatal error - we just mark the conversation as stopped
             _logger.exception(
                 f'Error getting conversation status from sandbox {sandbox.id}',
                 stack_info=True,
             )
-            return []
+            return ([], False)
+
+    async def _is_server_starting(
+        self, sandbox: SandboxInfo, threshold_seconds: float = 60.0
+    ) -> bool:
+        """Check if the agent server is still starting up (uptime < threshold).
+
+        This is used to distinguish between a server that's still initializing
+        (where 404/503 errors are expected) vs an actual error condition.
+        """
+        try:
+            agent_server_url = self._get_agent_server_url(sandbox)
+            headers = (
+                {'X-Session-API-Key': sandbox.session_api_key}
+                if sandbox.session_api_key
+                else {}
+            )
+            response = await self.httpx_client.get(
+                f'{agent_server_url}/server_info',
+                headers=headers,
+                timeout=5.0,
+            )
+            response.raise_for_status()
+            server_info = response.json()
+            uptime = server_info.get('uptime', float('inf'))
+            return uptime < threshold_seconds
+        except Exception:
+            # Can't determine server state, assume not starting
+            return False
 
     def _build_conversation(
         self,
         app_conversation_info: AppConversationInfo | None,
         sandbox: SandboxInfo | None,
         conversation_info: ConversationInfo | None,
+        is_server_starting: bool = False,
     ) -> AppConversation | None:
         if app_conversation_info is None:
             return None
         sandbox_status = sandbox.status if sandbox else SandboxStatus.MISSING
-        execution_status = (
-            conversation_info.execution_status if conversation_info else None
-        )
+
+        # Determine execution status
+        if conversation_info:
+            execution_status = conversation_info.execution_status
+        elif is_server_starting:
+            # Server is still starting up - use IDLE as a reasonable interim status
+            # indicating the conversation will be ready soon
+            execution_status = ConversationExecutionStatus.IDLE
+        else:
+            execution_status = None
+
         conversation_url = None
         session_api_key = None
         if sandbox and sandbox.exposed_urls:
