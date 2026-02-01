@@ -139,40 +139,6 @@ runtime = [
   "jupyterlab",
   "notebook",
 ]
-evaluation = [
-  "boto3-stubs[s3]>=1.37.19",
-  "browsergym==0.13.3",
-  "browsergym-miniwob==0.13.3",
-  "browsergym-visualwebarena==0.13.3",
-  "browsergym-webarena==0.13.3",
-  "commit0",
-  "datasets",
-  "evaluate",
-  "func-timeout",
-  "gdown",
-  "joblib",
-  "matplotlib",
-  "multi-swe-bench==0.1.2",
-  "pandas",
-  "pyarrow==21",
-  "retry",
-  "seaborn",
-  "streamlit",
-  "swebench",
-  "swegym",
-  "sympy",
-  "tabulate",
-  "visualswebench",
-  "whatthepatch",
-]
-testgeneval = [
-  "fuzzywuzzy>=0.18",
-  "python-levenshtein>=0.26.1,<0.28",
-  "rouge>=1.0.1",
-  "tree-sitter-python>=0.23.6",
-]
-
-# UV source configuration for git dependencies in evaluation group
 
 [tool.poetry]
 name = "openhands-ai"
@@ -328,44 +294,6 @@ jupyterlab = "*"
 notebook = "*"
 flake8 = "*"
 
-[tool.poetry.group.evaluation]
-optional = true
-
-[tool.poetry.group.evaluation.dependencies]
-streamlit = "*"
-whatthepatch = "*"
-retry = "*"
-evaluate = "*"
-visualswebench = { git = "https://github.com/luolin101/Visual-SWE-bench.git" }
-swegym = { git = "https://github.com/SWE-Gym/SWE-Bench-Package.git" }
-commit0 = "*"
-func_timeout = "*"
-sympy = "*"
-gdown = "*"
-matplotlib = "*"
-seaborn = "*"
-tabulate = "*"
-browsergym = "0.13.3"
-browsergym-webarena = "0.13.3"
-browsergym-miniwob = "0.13.3"
-browsergym-visualwebarena = "0.13.3"
-boto3-stubs = { extras = [ "s3" ], version = "^1.37.19" }
-# transitive dependency, pinned here to avoid conflicts
-pyarrow = "21.0.0"
-datasets = "*"
-joblib = "*"
-swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }
-multi-swe-bench = "0.1.2"
-pandas = "*"
-# tau-bench = { git = "https://github.com/sierra-research/tau-bench.git" }
-# bfcl-eval = "*" # TODO: Verify exact package name/source
-
-[tool.poetry.group.testgeneval.dependencies]
-fuzzywuzzy = "^0.18.0"
-rouge = "^1.0.1"
-python-levenshtein = ">=0.26.1,<0.28.0"
-tree-sitter-python = "^0.23.6"
-
 [tool.poetry-dynamic-versioning]
 enable = true
 style = "semver"
@@ -388,8 +316,3 @@ lint.pydocstyle.convention = "google"
 concurrency = [ "gevent" ]
 relative_files = true
 omit = [ "enterprise/tests/*", "**/test_*" ]
-
-[tool.uv.sources]
-visualswebench = { git = "https://github.com/luolin101/Visual-SWE-bench.git" }
-swegym = { git = "https://github.com/SWE-Gym/SWE-Bench-Package.git" }
-swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }
