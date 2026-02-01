@@ -621,7 +621,6 @@ async def _stream_app_conversation_start(
     user_context: UserContext,
 ) -> AsyncGenerator[str, None]:
     """Stream a json list, item by item."""
-
     # Because the original dependencies are closed after the method returns, we need
     # a new dependency context which will continue intil the stream finishes.
     state = InjectorState()

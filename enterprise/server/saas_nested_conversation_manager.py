@@ -516,11 +516,13 @@ class SaasNestedConversationManager(ConversationManager):
                     )
                     raise
 
-    def _get_mcp_config(self, user_id: str) -> MCPConfig | None:
+    async def _get_mcp_config(self, user_id: str) -> MCPConfig | None:
         api_key_store = ApiKeyStore.get_instance()
-        mcp_api_key = api_key_store.retrieve_mcp_api_key(user_id)
+        mcp_api_key = await api_key_store.retrieve_mcp_api_key(user_id)
         if not mcp_api_key:
-            mcp_api_key = api_key_store.create_api_key(user_id, 'MCP_API_KEY', None)
+            mcp_api_key = await api_key_store.create_api_key(
+                user_id, 'MCP_API_KEY', None
+            )
         if not mcp_api_key:
             return None
         web_host = os.environ.get('WEB_HOST', 'app.all-hands.dev')
@@ -547,7 +549,7 @@ class SaasNestedConversationManager(ConversationManager):
             'conversation_id': sid,
         }
 
-        mcp_config = self._get_mcp_config(user_id)
+        mcp_config = await self._get_mcp_config(user_id)
         if mcp_config:
             # Merge with any MCP config from settings
             if settings.mcp_config:
