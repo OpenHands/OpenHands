@@ -1,6 +1,6 @@
 """Unit tests for the app_conversation_router endpoints.
 
-This module tests the batch_get_app_conversations and get_app_conversation endpoints,
+This module tests the batch_get_app_conversations endpoint,
 focusing on UUID string parsing, validation, and error handling.
 """
 
@@ -15,7 +15,6 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.app_conversation_router import (
     batch_get_app_conversations,
-    get_app_conversation,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
@@ -208,122 +207,3 @@ class TestBatchGetAppConversations:
         assert result[0] is not None
         assert result[0].id == uuid1
         assert result[1] is None
-
-
-@pytest.mark.asyncio
-class TestGetAppConversation:
-    """Test suite for get_app_conversation endpoint."""
-
-    async def test_accepts_uuid_with_dashes(self):
-        """Test that standard UUIDs with dashes are accepted.
-
-        Arrange: Create UUID with dashes and mock service
-        Act: Call get_app_conversation
-        Assert: Service is called with parsed UUID and conversation is returned
-        """
-        # Arrange
-        uuid = uuid4()
-        conversation_id = str(uuid)
-
-        mock_conversation = _make_mock_app_conversation(uuid)
-        mock_service = _make_mock_service(get_conversation_return=mock_conversation)
-
-        # Act
-        result = await get_app_conversation(
-            conversation_id=conversation_id,
-            app_conversation_service=mock_service,
-        )
-
-        # Assert
-        mock_service.get_app_conversation.assert_called_once_with(uuid)
-        assert result == mock_conversation
-
-    async def test_accepts_uuid_without_dashes(self):
-        """Test that UUIDs without dashes are accepted and correctly parsed.
-
-        Arrange: Create UUID without dashes
-        Act: Call get_app_conversation
-        Assert: Service is called with correctly parsed UUID
-        """
-        # Arrange
-        uuid = uuid4()
-        # Remove dashes from UUID string
-        conversation_id = str(uuid).replace('-', '')
-
-        mock_conversation = _make_mock_app_conversation(uuid)
-        mock_service = _make_mock_service(get_conversation_return=mock_conversation)
-
-        # Act
-        result = await get_app_conversation(
-            conversation_id=conversation_id,
-            app_conversation_service=mock_service,
-        )
-
-        # Assert
-        mock_service.get_app_conversation.assert_called_once_with(uuid)
-        assert result == mock_conversation
-
-    async def test_returns_400_for_invalid_uuid_string(self):
-        """Test that invalid UUID strings return 400 Bad Request.
-
-        Arrange: Use invalid UUID string
-        Act: Call get_app_conversation
-        Assert: HTTPException is raised with 400 status
-        """
-        # Arrange
-        invalid_id = 'not-a-valid-uuid'
-        mock_service = _make_mock_service()
-
-        # Act & Assert
-        with pytest.raises(HTTPException) as exc_info:
-            await get_app_conversation(
-                conversation_id=invalid_id,
-                app_conversation_service=mock_service,
-            )
-
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'Invalid UUID format' in exc_info.value.detail
-        assert invalid_id in exc_info.value.detail
-
-    async def test_returns_404_for_missing_conversation(self):
-        """Test that missing conversation returns 404 Not Found.
-
-        Arrange: Mock service to return None
-        Act: Call get_app_conversation
-        Assert: HTTPException is raised with 404 status
-        """
-        # Arrange
-        uuid = uuid4()
-        conversation_id = str(uuid)
-        mock_service = _make_mock_service(get_conversation_return=None)
-
-        # Act & Assert
-        with pytest.raises(HTTPException) as exc_info:
-            await get_app_conversation(
-                conversation_id=conversation_id,
-                app_conversation_service=mock_service,
-            )
-
-        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
-        assert 'not found' in exc_info.value.detail
-        assert conversation_id in exc_info.value.detail
-
-    async def test_returns_400_for_empty_string(self):
-        """Test that empty string returns 400 Bad Request.
-
-        Arrange: Use empty string as conversation_id
-        Act: Call get_app_conversation
-        Assert: HTTPException is raised with 400 status
-        """
-        # Arrange
-        mock_service = _make_mock_service()
-
-        # Act & Assert
-        with pytest.raises(HTTPException) as exc_info:
-            await get_app_conversation(
-                conversation_id='',
-                app_conversation_service=mock_service,
-            )
-
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'Invalid UUID format' in exc_info.value.detail
