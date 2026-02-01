@@ -186,14 +186,39 @@ async def count_app_conversations(
 
 @router.get('')
 async def batch_get_app_conversations(
-    ids: Annotated[list[UUID], Query()],
+    ids: Annotated[list[str], Query()],
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
 ) -> list[AppConversation | None]:
-    """Get a batch of sandboxed conversations given their ids. Return None for any missing."""
-    assert len(ids) < 100
-    app_conversations = await app_conversation_service.batch_get_app_conversations(ids)
+    """Get a batch of sandboxed conversations given their ids. Return None for any missing.
+
+    Accepts UUIDs as strings (with or without dashes) and converts them internally.
+    Returns 400 Bad Request if any string cannot be converted to a valid UUID.
+    """
+    if len(ids) >= 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Too many ids requested. Maximum is 99.',
+        )
+
+    uuids: list[UUID] = []
+    invalid_ids: list[str] = []
+    for id_str in ids:
+        try:
+            uuids.append(UUID(id_str))
+        except ValueError:
+            invalid_ids.append(id_str)
+
+    if invalid_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Invalid UUID format for ids: {invalid_ids}',
+        )
+
+    app_conversations = await app_conversation_service.batch_get_app_conversations(
+        uuids
+    )
     return app_conversations
 
 
@@ -332,6 +357,38 @@ async def batch_get_app_conversation_start_tasks(
         ids
     )
     return start_tasks
+
+
+# NOTE: This endpoint must be defined AFTER all routes with static path prefixes
+# (like /search, /count, /stream-start, /start-tasks/*) to avoid route conflicts.
+@router.get('/{conversation_id}')
+async def get_app_conversation(
+    conversation_id: str,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+) -> AppConversation:
+    """Get a single sandboxed conversation by its id.
+
+    Accepts UUID as string (with or without dashes) and converts it internally.
+    Returns 400 Bad Request if the string cannot be converted to a valid UUID.
+    Returns 404 Not Found if the conversation does not exist.
+    """
+    try:
+        uuid = UUID(conversation_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Invalid UUID format: {conversation_id}',
+        )
+
+    app_conversation = await app_conversation_service.get_app_conversation(uuid)
+    if app_conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Conversation {conversation_id} not found',
+        )
+    return app_conversation
 
 
 @router.get('/{conversation_id}/file')
