@@ -19,7 +19,6 @@ from openhands.agent_server.models import (
     SendMessageRequest,
     StartConversationRequest,
 )
-from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
@@ -80,6 +79,7 @@ from openhands.app_server.utils.llm_metadata import (
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
 from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
