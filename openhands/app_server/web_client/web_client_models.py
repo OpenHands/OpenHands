@@ -26,4 +26,3 @@ class WebClientConfig(DiscriminatedUnionMixin):
     faulty_models: list[str]
     error_message: str | None
     github_app_slug: str | None
-    replicated_app_slug: str | None
