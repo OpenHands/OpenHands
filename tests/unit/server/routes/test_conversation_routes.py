@@ -36,8 +36,8 @@ from openhands.server.routes.conversation import (
     get_microagents,
 )
 from openhands.server.routes.manage_conversations import (
-    UpdateConversationRequest,
     _RESUME_GRACE_PERIOD,
+    UpdateConversationRequest,
     get_conversation,
     search_conversations,
     update_conversation,
@@ -1467,7 +1467,6 @@ async def test_search_conversations_include_sub_conversations_with_other_filters
                 assert call_kwargs.get('limit') == 50
 
 
-
 @pytest.mark.asyncio
 async def test_get_conversation_running_sandbox_no_execution_status_server_responds_within_grace_period():
     """Test that a RUNNING sandbox with no execution status shows STARTING if server uptime is within grace period."""
@@ -1487,7 +1486,9 @@ async def test_get_conversation_running_sandbox_no_execution_status_server_respo
 
     # Create mock services
     mock_app_conversation_service = AsyncMock(spec=AppConversationService)
-    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+    mock_app_conversation_service.get_app_conversation.return_value = (
+        mock_app_conversation
+    )
 
     mock_conversation_store = AsyncMock(spec=ConversationStore)
 
@@ -1530,7 +1531,9 @@ async def test_get_conversation_running_sandbox_no_execution_status_server_respo
     )
 
     mock_app_conversation_service = AsyncMock(spec=AppConversationService)
-    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+    mock_app_conversation_service.get_app_conversation.return_value = (
+        mock_app_conversation
+    )
 
     mock_conversation_store = AsyncMock(spec=ConversationStore)
 
@@ -1574,7 +1577,9 @@ async def test_get_conversation_running_sandbox_no_execution_status_server_unres
     )
 
     mock_app_conversation_service = AsyncMock(spec=AppConversationService)
-    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+    mock_app_conversation_service.get_app_conversation.return_value = (
+        mock_app_conversation
+    )
 
     mock_conversation_store = AsyncMock(spec=ConversationStore)
 
@@ -1613,7 +1618,9 @@ async def test_get_conversation_running_sandbox_with_execution_status_skips_serv
     )
 
     mock_app_conversation_service = AsyncMock(spec=AppConversationService)
-    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+    mock_app_conversation_service.get_app_conversation.return_value = (
+        mock_app_conversation
+    )
 
     mock_conversation_store = AsyncMock(spec=ConversationStore)
     mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
@@ -1648,7 +1655,9 @@ async def test_get_conversation_non_running_sandbox_skips_server_check():
     )
 
     mock_app_conversation_service = AsyncMock(spec=AppConversationService)
-    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+    mock_app_conversation_service.get_app_conversation.return_value = (
+        mock_app_conversation
+    )
 
     mock_conversation_store = AsyncMock(spec=ConversationStore)
     mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
@@ -1664,4 +1673,3 @@ async def test_get_conversation_non_running_sandbox_skips_server_check():
     assert result.status == ConversationStatus.STARTING
     # Should NOT call the server_info endpoint because sandbox is not RUNNING
     mock_httpx_client.get.assert_not_called()
-
