@@ -91,6 +91,13 @@ export function GitRepoDropdown({
     repositoryName,
   );
 
+  /**
+   * `selectedRepository` is derived from fetched/search results. A repo selected
+   * from "Most Recent" may not be present in those results yet, so use the
+   * locally selected item as a fallback to keep the UI stable.
+   */
+  const effectiveSelectedRepository = selectedRepository ?? localSelectedItem;
+
   // Get recent repositories filtered by provider and input keyword
   const recentRepositories = useMemo(() => {
     const allRecentRepos = storedRecentRepositories;
@@ -233,12 +240,9 @@ export function GitRepoDropdown({
 
   // Initialize input value when selectedRepository changes (but not when user is typing)
   useEffect(() => {
-    if (selectedRepository && !isOpen) {
-      setInputValue(selectedRepository.full_name);
-    } else if (!selectedRepository && !isOpen) {
-      setInputValue("");
-    }
-  }, [selectedRepository, isOpen]);
+    if (isOpen) return;
+    setInputValue(effectiveSelectedRepository?.full_name ?? "");
+  }, [effectiveSelectedRepository, isOpen]);
 
   const isLoadingState =
     isLoading || isSearchLoading || isFetchingNextPage || isUrlSearchLoading;
@@ -344,7 +348,7 @@ export function GitRepoDropdown({
         />
 
         <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex items-center">
-          {selectedRepository && (
+          {effectiveSelectedRepository && (
             <ClearButton disabled={disabled} onClear={handleClear} />
           )}
 
