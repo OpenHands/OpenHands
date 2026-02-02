@@ -12,6 +12,7 @@ import itertools
 import json
 import os
 import re
+from urllib.parse import urlparse
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -21,6 +22,8 @@ import httpx
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
+from numpy import stack
+from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -119,6 +122,7 @@ app_conversation_info_service_dependency = depends_app_conversation_info_service
 sandbox_service_dependency = depends_sandbox_service()
 db_session_dependency = depends_db_session()
 httpx_client_dependency = depends_httpx_client()
+_RESUME_GRACE_PERIOD = 60
 
 
 def _filter_conversations_by_age(
@@ -470,6 +474,7 @@ async def get_conversation(
     conversation_id: str = Depends(validate_conversation_id),
     conversation_store: ConversationStore = Depends(get_conversation_store),
     app_conversation_service: AppConversationService = app_conversation_service_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
 ) -> ConversationInfo | None:
     """Get a single conversation by ID.
 
@@ -484,6 +489,39 @@ async def get_conversation(
                 conversation_uuid
             )
             if app_conversation:
+                if (
+                    app_conversation.sandbox_status == SandboxStatus.RUNNING
+                    and app_conversation.execution_status is None
+                ):
+                    # The sandbox is running, but we were unable to determine a status for
+                    # the conversation. It may be that it is still starting, or that the
+                    # conversation has been stopped / deleted.
+                    try:
+                        # Check the server info is available
+                        conversation_url = urlparse(app_conversation.conversation_url)
+                        sandbox_info_url = f"{str(conversation_url.scheme)}://{str(conversation_url.netloc)}/server_info"
+                        response = await httpx_client.get(sandbox_info_url)
+                        response.raise_for_status()
+                        server_info = response.json()
+
+                        # If the server has not been running long, we consider it still starting
+                        uptime = int(server_info.get("uptime"))
+                        if uptime < _RESUME_GRACE_PERIOD:
+                            app_conversation.sandbox_status = SandboxStatus.STARTING
+
+                    except Exception:
+                        # The sandbox is marked as RUNNING, but the server is not responding.
+                        # There is a bug in runtime API which means that the server is marked
+                        # as RUNNING before it is actually started. (Primarily affecting resumed
+                        # runtimes) As a temporary work around for this, we mark the server as
+                        # STARTING. If the sandbox is actually in an error state, the API will
+                        # discover this quite quickly and mark the sandbox as ERROR
+                        logger.warning('get_sandbox_info_failed', extra={
+                            "conversation_id": app_conversation.id,
+                            "sandbox_id": app_conversation.sandbox_id,
+                        }, exc_info=True, stack_info=True)
+                        app_conversation.sandbox_status = SandboxStatus.STARTING
+
                 return _to_conversation_info(app_conversation)
         except (ValueError, TypeError, Exception):
             # Not a V1 conversation or service error
