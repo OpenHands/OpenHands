@@ -7,7 +7,6 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { useEventStore } from "#/stores/use-event-store";
@@ -72,6 +71,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
+  onDisconnect,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -79,6 +79,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: V1AppConversation[];
   subConversationIds?: string[];
+  onDisconnect?: () => void;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -125,8 +126,6 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
-
-  const { t } = useTranslation();
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -631,12 +630,10 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setMainConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
+        // Trigger silent recovery on unexpected disconnect
+        // Do NOT show error message - recovery happens automatically
         if (event.code !== 1000 && hasConnectedRefMain.current) {
-          setErrorMessage(
-            `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
-          );
+          onDisconnect?.();
         }
       },
       onError: () => {
@@ -655,6 +652,7 @@ export function ConversationWebSocketProvider({
     sessionApiKey,
     conversationId,
     conversationUrl,
+    onDisconnect,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -703,12 +701,10 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setPlanningConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
+        // Trigger silent recovery on unexpected disconnect
+        // Do NOT show error message - recovery happens automatically
         if (event.code !== 1000 && hasConnectedRefPlanning.current) {
-          setErrorMessage(
-            `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
-          );
+          onDisconnect?.();
         }
       },
       onError: () => {
@@ -726,6 +722,7 @@ export function ConversationWebSocketProvider({
     removeErrorMessage,
     sessionApiKey,
     subConversations,
+    onDisconnect,
   ]);
 
   // Only attempt WebSocket connection when we have a valid URL
