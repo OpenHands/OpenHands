@@ -46,6 +46,9 @@ from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
+from openhands.app_server.utils.conversation_validation import (
+    filter_null_secrets_from_conversation_data,
+)
 from openhands.app_server.utils.sql_utils import Base, UtcDateTime
 from openhands.sdk.utils.paging import page_iterator
 
@@ -709,7 +712,10 @@ async def refresh_conversation(
         )
         response.raise_for_status()
 
-        updated_conversation_info = ConversationInfo.model_validate(response.json())
+        raw = response.json()
+        updated_conversation_info = ConversationInfo.model_validate(
+            filter_null_secrets_from_conversation_data(raw)
+        )
 
         app_conversation_info.updated_at = updated_conversation_info.updated_at
 

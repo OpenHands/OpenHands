@@ -69,6 +69,9 @@ from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
+from openhands.app_server.utils.conversation_validation import (
+    filter_null_secrets_from_conversation_data,
+)
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
@@ -277,7 +280,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
             response.raise_for_status()
-            info = ConversationInfo.model_validate(response.json())
+            raw = response.json()
+            info = ConversationInfo.model_validate(
+                filter_null_secrets_from_conversation_data(raw)
+            )
 
             # Store info...
             user_id = await self.user_context.get_user_id()
