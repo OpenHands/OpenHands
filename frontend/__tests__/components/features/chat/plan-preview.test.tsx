@@ -1,11 +1,31 @@
+import React from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { PlanPreview } from "#/components/features/chat/plan-preview";
+import { ScrollProvider } from "#/context/scroll-context";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { createChatMessage } from "#/services/chat-service";
+
+// PlanPreview uses useScrollContext; wrap with ScrollProvider and a mock value.
+const mockScrollDomToBottom = vi.fn();
+const scrollContextValue = {
+  scrollRef: { current: null },
+  autoScroll: true,
+  setAutoScroll: vi.fn(),
+  scrollDomToBottom: mockScrollDomToBottom,
+  hitBottom: true,
+  setHitBottom: vi.fn(),
+  onChatBodyScroll: vi.fn(),
+};
+
+function renderPlanPreview(ui: React.ReactElement) {
+  return renderWithProviders(
+    <ScrollProvider value={scrollContextValue}>{ui}</ScrollProvider>,
+  );
+}
 
 // Mock the feature flag to always return true (not testing feature flag behavior)
 vi.mock("#/utils/feature-flags", () => ({
@@ -72,7 +92,7 @@ describe("PlanPreview", () => {
   });
 
   it("should render nothing when planContent is null", () => {
-    renderWithProviders(<PlanPreview planContent={null} />);
+    renderPlanPreview(<PlanPreview planContent={null} />);
 
     const contentDiv = screen.getByTestId("plan-preview-content");
     expect(contentDiv).toBeInTheDocument();
@@ -80,7 +100,7 @@ describe("PlanPreview", () => {
   });
 
   it("should render nothing when planContent is undefined", () => {
-    renderWithProviders(<PlanPreview planContent={undefined} />);
+    renderPlanPreview(<PlanPreview planContent={undefined} />);
 
     const contentDiv = screen.getByTestId("plan-preview-content");
     expect(contentDiv).toBeInTheDocument();
@@ -90,7 +110,7 @@ describe("PlanPreview", () => {
   it("should render markdown content when planContent is provided", () => {
     const planContent = "# Plan Title\n\nThis is the plan content.";
 
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent={planContent} />,
     );
 
@@ -103,7 +123,7 @@ describe("PlanPreview", () => {
   it("should render full content when length is less than or equal to 300 characters", () => {
     const planContent = "A".repeat(300);
 
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent={planContent} />,
     );
 
@@ -115,7 +135,7 @@ describe("PlanPreview", () => {
   it("should truncate content when length exceeds 300 characters", () => {
     const longContent = "A".repeat(350);
 
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent={longContent} />,
     );
 
@@ -126,7 +146,7 @@ describe("PlanPreview", () => {
   });
 
   it("should render Build button", () => {
-    renderWithProviders(<PlanPreview planContent="Plan content" />);
+    renderPlanPreview(<PlanPreview planContent="Plan content" />);
 
     const buildButton = screen.getByTestId("plan-preview-build-button");
     expect(buildButton).toBeInTheDocument();
@@ -136,7 +156,7 @@ describe("PlanPreview", () => {
     // Arrange
     useConversationStore.setState({ conversationMode: "plan" });
     const user = userEvent.setup();
-    renderWithProviders(<PlanPreview planContent="Plan content" />);
+    renderPlanPreview(<PlanPreview planContent="Plan content" />);
     const buildButton = screen.getByTestId("plan-preview-build-button");
 
     // Act
@@ -151,7 +171,7 @@ describe("PlanPreview", () => {
     const user = userEvent.setup();
     const expectedPrompt =
       "Execute the plan based on the workspace/project/PLAN.md file.";
-    renderWithProviders(<PlanPreview planContent="Plan content" />);
+    renderPlanPreview(<PlanPreview planContent="Plan content" />);
     const buildButton = screen.getByTestId("plan-preview-build-button");
 
     // Act
@@ -182,7 +202,7 @@ describe("PlanPreview", () => {
     const user = userEvent.setup();
     const expectedPrompt =
       "Execute the plan based on the workspace/project/PLAN.md file.";
-    renderWithProviders(<PlanPreview planContent="Plan content" />);
+    renderPlanPreview(<PlanPreview planContent="Plan content" />);
     const buildButton = screen.getByTestId("plan-preview-build-button");
 
     // Act
@@ -196,7 +216,7 @@ describe("PlanPreview", () => {
 
   it("should disable Build button when isBuildDisabled is true", () => {
     // Arrange
-    renderWithProviders(
+    renderPlanPreview(
       <PlanPreview planContent="Plan content" isBuildDisabled={true} />,
     );
 
@@ -209,7 +229,7 @@ describe("PlanPreview", () => {
 
   it("should not disable Build button when isBuildDisabled is false", () => {
     // Arrange
-    renderWithProviders(
+    renderPlanPreview(
       <PlanPreview planContent="Plan content" isBuildDisabled={false} />,
     );
 
@@ -222,7 +242,7 @@ describe("PlanPreview", () => {
 
   it("should not disable Build button when isBuildDisabled is undefined", () => {
     // Arrange
-    renderWithProviders(<PlanPreview planContent="Plan content" />);
+    renderPlanPreview(<PlanPreview planContent="Plan content" />);
 
     // Act
     const buildButton = screen.getByTestId("plan-preview-build-button");
@@ -236,7 +256,7 @@ describe("PlanPreview", () => {
     const user = userEvent.setup();
     const onBuildClick = vi.fn();
 
-    renderWithProviders(
+    renderPlanPreview(
       <PlanPreview planContent="Plan content" isBuildDisabled={true} />,
     );
 
@@ -250,7 +270,7 @@ describe("PlanPreview", () => {
   });
 
   it("should render header with PLAN_MD text", () => {
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent="Plan content" />,
     );
 
@@ -266,7 +286,7 @@ describe("PlanPreview", () => {
 
 **Bold text** and *italic text*`;
 
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent={planContent} />,
     );
 
@@ -279,7 +299,7 @@ describe("PlanPreview", () => {
     const planContent = "# Main Title";
 
     // Act
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent={planContent} />,
     );
 
@@ -294,7 +314,7 @@ describe("PlanPreview", () => {
     const planContent = "## Section Title";
 
     // Act
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent={planContent} />,
     );
 
@@ -309,7 +329,7 @@ describe("PlanPreview", () => {
     const planContent = "### Subsection Title";
 
     // Act
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent={planContent} />,
     );
 
@@ -329,7 +349,7 @@ describe("PlanPreview", () => {
 ###### H6 Title`;
 
     // Act
-    const { container } = renderWithProviders(
+    const { container } = renderPlanPreview(
       <PlanPreview planContent={planContent} />,
     );
 
@@ -354,7 +374,7 @@ describe("PlanPreview", () => {
       hasRightPanelToggled: false,
     });
 
-    renderWithProviders(<PlanPreview planContent={planContent} />);
+    renderPlanPreview(<PlanPreview planContent={planContent} />);
 
     // Act: Click the View button
     const viewButton = screen.getByTestId("plan-preview-view-button");
@@ -386,7 +406,7 @@ describe("PlanPreview", () => {
       hasRightPanelToggled: false,
     });
 
-    renderWithProviders(<PlanPreview planContent={longContent} />);
+    renderPlanPreview(<PlanPreview planContent={longContent} />);
 
     // Act: Click the Read more button
     const readMoreButton = screen.getByTestId("plan-preview-read-more-button");

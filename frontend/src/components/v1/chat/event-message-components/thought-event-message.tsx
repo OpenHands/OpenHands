@@ -9,11 +9,13 @@ interface ThoughtEventMessageProps {
     onClick: () => void;
     tooltip?: string;
   }>;
+  isFromPlanningAgent?: boolean;
 }
 
 export function ThoughtEventMessage({
   event,
   actions,
+  isFromPlanningAgent = false,
 }: ThoughtEventMessageProps) {
   // Extract thought content from the action event
   const thoughtContent = event.thought
@@ -27,6 +29,11 @@ export function ThoughtEventMessage({
   }
 
   return (
-    <ChatMessage type="agent" message={thoughtContent} actions={actions} />
+    <ChatMessage
+      type="agent"
+      message={thoughtContent}
+      actions={actions}
+      isFromPlanningAgent={isFromPlanningAgent}
+    />
   );
 }
