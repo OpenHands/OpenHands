@@ -2,9 +2,12 @@ import React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUnifiedResumeConversationSandbox } from "#/hooks/mutation/use-unified-start-conversation";
 import { useUserProviders } from "#/hooks/use-user-providers";
+import { useErrorMessageStore } from "#/stores/error-message-store";
+import { I18nKey } from "#/i18n/declaration";
 
 const MAX_RECOVERY_ATTEMPTS = 3;
 const RECOVERY_COOLDOWN_MS = 5000;
+const RECOVERY_SETTLED_DELAY_MS = 2000;
 
 /**
  * Hook that handles silent WebSocket recovery by resuming the sandbox
@@ -26,6 +29,9 @@ export function useWebSocketRecovery(conversationId: string) {
   const queryClient = useQueryClient();
   const { mutate: resumeConversation } = useUnifiedResumeConversationSandbox();
   const { providers } = useUserProviders();
+  const setErrorMessage = useErrorMessageStore(
+    (state) => state.setErrorMessage,
+  );
 
   // Reset recovery state when conversation changes
   React.useEffect(() => {
@@ -48,8 +54,9 @@ export function useWebSocketRecovery(conversationId: string) {
       return;
     }
 
-    // Check max attempts
+    // Check max attempts - notify user when recovery is exhausted
     if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
+      setErrorMessage(I18nKey.STATUS$CONNECTION_LOST);
       return;
     }
 
@@ -76,15 +83,28 @@ export function useWebSocketRecovery(conversationId: string) {
           recoveryInProgressRef.current = false;
           lastRecoveryAttemptRef.current = null;
         },
+        onError: () => {
+          // If this was the last attempt, show error to user
+          if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
+            setErrorMessage(I18nKey.STATUS$CONNECTION_LOST);
+          }
+          // recoveryInProgressRef will be reset by onSettled
+        },
         onSettled: () => {
           // Allow next attempt after a delay (covers both success and error)
           setTimeout(() => {
             recoveryInProgressRef.current = false;
-          }, 2000);
+          }, RECOVERY_SETTLED_DELAY_MS);
         },
       },
     );
-  }, [conversationId, providers, resumeConversation, queryClient]);
+  }, [
+    conversationId,
+    providers,
+    resumeConversation,
+    queryClient,
+    setErrorMessage,
+  ]);
 
   return { reconnectKey, handleDisconnect };
 }
