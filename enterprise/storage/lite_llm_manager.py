@@ -115,8 +115,24 @@ class LiteLlmManager:
                 if not user_json:
                     return None
                 user_info = user_json['user_info']
-                max_budget = user_info.get('max_budget', 0.0)
-                spend = user_info.get('spend', 0.0)
+
+                # Log original user values before any modifications for debugging
+                original_max_budget = user_info.get('max_budget')
+                original_spend = user_info.get('spend')
+                logger.info(
+                    'LiteLlmManager:migrate_lite_llm_entries:original_user_values',
+                    extra={
+                        'org_id': org_id,
+                        'user_id': keycloak_user_id,
+                        'original_max_budget': original_max_budget,
+                        'original_spend': original_spend,
+                    },
+                )
+
+                max_budget = (
+                    original_max_budget if original_max_budget is not None else 0.0
+                )
+                spend = original_spend if original_spend is not None else 0.0
                 # In upgrade to V4, we no longer use billing margin, but instead apply this directly
                 # in litellm. The default billing marign was 2 before this (hence the magic numbers below)
                 if (
@@ -137,10 +153,36 @@ class LiteLlmManager:
                     max_budget *= billing_margin
                     spend *= billing_margin
 
-                if not max_budget:
-                    # if max_budget is None, then we've already migrated the User
+                # Check if max_budget is None (not 0.0) or set to unlimited to determine if already migrated
+                # A user with max_budget=0.0 is different from max_budget=None
+                if (
+                    original_max_budget is None
+                    or original_max_budget == UNLIMITED_BUDGET_SETTING
+                ):
+                    # if max_budget is None or UNLIMITED, then we've already migrated the User
+                    logger.info(
+                        'LiteLlmManager:migrate_lite_llm_entries:already_migrated',
+                        extra={
+                            'org_id': org_id,
+                            'user_id': keycloak_user_id,
+                            'original_max_budget': original_max_budget,
+                        },
+                    )
                     return None
                 credits = max(max_budget - spend, 0.0)
+
+                # Log calculated migration values before performing updates
+                logger.info(
+                    'LiteLlmManager:migrate_lite_llm_entries:calculated_values',
+                    extra={
+                        'org_id': org_id,
+                        'user_id': keycloak_user_id,
+                        'adjusted_max_budget': max_budget,
+                        'adjusted_spend': spend,
+                        'calculated_credits': credits,
+                        'new_user_max_budget': UNLIMITED_BUDGET_SETTING,
+                    },
+                )
 
                 logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:create_team',
