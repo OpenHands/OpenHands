@@ -1,4 +1,6 @@
-from pydantic import BaseModel, EmailStr, Field
+from typing import Annotated
+
+from pydantic import BaseModel, EmailStr, Field, StringConstraints
 from storage.org import Org
 
 
@@ -53,9 +55,11 @@ class OrgCreate(BaseModel):
     """Request model for creating a new organization."""
 
     # Required fields
-    name: str = Field(min_length=1, max_length=255, strip_whitespace=True)
+    name: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
+    ]
     contact_name: str
-    contact_email: EmailStr = Field(strip_whitespace=True)
+    contact_email: EmailStr
 
 
 class OrgResponse(BaseModel):
@@ -145,7 +149,7 @@ class OrgUpdate(BaseModel):
 
     # Basic organization information (any authenticated user can update)
     contact_name: str | None = None
-    contact_email: EmailStr | None = Field(default=None, strip_whitespace=True)
+    contact_email: EmailStr | None = None
     conversation_expiration: int | None = None
     default_max_iterations: int | None = Field(default=None, gt=0)
     remote_runtime_resource_factor: int | None = Field(default=None, gt=0)
