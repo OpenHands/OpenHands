@@ -12,18 +12,16 @@ import itertools
 import json
 import os
 import re
-from urllib.parse import urlparse
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
+from urllib.parse import urlparse
 
 import base62
 import httpx
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
-from numpy import stack
-from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +41,7 @@ from openhands.app_server.config import (
     depends_httpx_client,
     depends_sandbox_service,
 )
+from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.sandbox.sandbox_service import SandboxService
 from openhands.app_server.services.db_session_injector import set_db_session_keep_open
 from openhands.app_server.services.httpx_client_injector import (
@@ -499,13 +498,13 @@ async def get_conversation(
                     try:
                         # Check the server info is available
                         conversation_url = urlparse(app_conversation.conversation_url)
-                        sandbox_info_url = f"{str(conversation_url.scheme)}://{str(conversation_url.netloc)}/server_info"
+                        sandbox_info_url = f'{str(conversation_url.scheme)}://{str(conversation_url.netloc)}/server_info'
                         response = await httpx_client.get(sandbox_info_url)
                         response.raise_for_status()
                         server_info = response.json()
 
                         # If the server has not been running long, we consider it still starting
-                        uptime = int(server_info.get("uptime"))
+                        uptime = int(server_info.get('uptime'))
                         if uptime < _RESUME_GRACE_PERIOD:
                             app_conversation.sandbox_status = SandboxStatus.STARTING
 
@@ -516,10 +515,15 @@ async def get_conversation(
                         # runtimes) As a temporary work around for this, we mark the server as
                         # STARTING. If the sandbox is actually in an error state, the API will
                         # discover this quite quickly and mark the sandbox as ERROR
-                        logger.warning('get_sandbox_info_failed', extra={
-                            "conversation_id": app_conversation.id,
-                            "sandbox_id": app_conversation.sandbox_id,
-                        }, exc_info=True, stack_info=True)
+                        logger.warning(
+                            'get_sandbox_info_failed',
+                            extra={
+                                'conversation_id': app_conversation.id,
+                                'sandbox_id': app_conversation.sandbox_id,
+                            },
+                            exc_info=True,
+                            stack_info=True,
+                        )
                         app_conversation.sandbox_status = SandboxStatus.STARTING
 
                 return _to_conversation_info(app_conversation)
