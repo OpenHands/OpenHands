@@ -55,7 +55,7 @@ export function ChatMessage({
         "flex flex-col gap-2",
         type === "user" && "p-4 bg-tertiary self-end",
         type === "agent" && "mt-6 w-full max-w-full bg-transparent",
-        isFromPlanningAgent && "border border-[#597ff4] bg-tertiary p-4",
+        isFromPlanningAgent && "border border-[#597ff4] bg-tertiary p-4 mt-2",
       )}
     >
       <div

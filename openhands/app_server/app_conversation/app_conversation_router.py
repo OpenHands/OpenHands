@@ -186,14 +186,39 @@ async def count_app_conversations(
 
 @router.get('')
 async def batch_get_app_conversations(
-    ids: Annotated[list[UUID], Query()],
+    ids: Annotated[list[str], Query()],
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
 ) -> list[AppConversation | None]:
-    """Get a batch of sandboxed conversations given their ids. Return None for any missing."""
-    assert len(ids) < 100
-    app_conversations = await app_conversation_service.batch_get_app_conversations(ids)
+    """Get a batch of sandboxed conversations given their ids. Return None for any missing.
+
+    Accepts UUIDs as strings (with or without dashes) and converts them internally.
+    Returns 400 Bad Request if any string cannot be converted to a valid UUID.
+    """
+    if len(ids) >= 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Too many ids requested. Maximum is 99.',
+        )
+
+    uuids: list[UUID] = []
+    invalid_ids: list[str] = []
+    for id_str in ids:
+        try:
+            uuids.append(UUID(id_str))
+        except ValueError:
+            invalid_ids.append(id_str)
+
+    if invalid_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Invalid UUID format for ids: {invalid_ids}',
+        )
+
+    app_conversations = await app_conversation_service.batch_get_app_conversations(
+        uuids
+    )
     return app_conversations
 
 
