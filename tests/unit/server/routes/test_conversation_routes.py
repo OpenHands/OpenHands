@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import status
 from fastapi.responses import JSONResponse
@@ -12,6 +13,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
+    AppConversation,
     AppConversationInfo,
     AppConversationPage,
     AppConversationStartRequest,
@@ -21,8 +23,10 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
+from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.microagent.microagent import KnowledgeMicroagent, RepoMicroagent
 from openhands.microagent.types import MicroagentMetadata, MicroagentType
+from openhands.server.data_models.conversation_info import ConversationStatus
 from openhands.server.data_models.conversation_info_result_set import (
     ConversationInfoResultSet,
 )
@@ -33,6 +37,8 @@ from openhands.server.routes.conversation import (
 )
 from openhands.server.routes.manage_conversations import (
     UpdateConversationRequest,
+    _RESUME_GRACE_PERIOD,
+    get_conversation,
     search_conversations,
     update_conversation,
 )
@@ -1459,3 +1465,203 @@ async def test_search_conversations_include_sub_conversations_with_other_filters
                 assert call_kwargs.get('include_sub_conversations') is True
                 assert call_kwargs.get('page_id') == 'test_v1_page_id'
                 assert call_kwargs.get('limit') == 50
+
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_running_sandbox_no_execution_status_server_responds_within_grace_period():
+    """Test that a RUNNING sandbox with no execution status shows STARTING if server uptime is within grace period."""
+    conversation_id = uuid4()
+
+    # Create a mock AppConversation with RUNNING status but no execution_status
+    mock_app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='test_user',
+        sandbox_id='test_sandbox',
+        sandbox_status=SandboxStatus.RUNNING,
+        execution_status=None,
+        conversation_url='https://sandbox.example.com/conversation',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    # Create mock services
+    mock_app_conversation_service = AsyncMock(spec=AppConversationService)
+    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+
+    mock_conversation_store = AsyncMock(spec=ConversationStore)
+
+    # Create mock httpx client that returns uptime within grace period
+    mock_response = MagicMock()
+    mock_response.json.return_value = {'uptime': 30}  # 30 seconds, within grace period
+    mock_response.raise_for_status = MagicMock()
+
+    mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_httpx_client.get.return_value = mock_response
+
+    result = await get_conversation(
+        conversation_id=str(conversation_id),
+        conversation_store=mock_conversation_store,
+        app_conversation_service=mock_app_conversation_service,
+        httpx_client=mock_httpx_client,
+    )
+
+    assert result is not None
+    assert result.status == ConversationStatus.STARTING
+    mock_httpx_client.get.assert_called_once_with(
+        'https://sandbox.example.com/server_info'
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_running_sandbox_no_execution_status_server_responds_past_grace_period():
+    """Test that a RUNNING sandbox with no execution status keeps RUNNING status if server uptime is past grace period."""
+    conversation_id = uuid4()
+
+    mock_app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='test_user',
+        sandbox_id='test_sandbox',
+        sandbox_status=SandboxStatus.RUNNING,
+        execution_status=None,
+        conversation_url='https://sandbox.example.com/conversation',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_app_conversation_service = AsyncMock(spec=AppConversationService)
+    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+
+    mock_conversation_store = AsyncMock(spec=ConversationStore)
+
+    # Create mock httpx client that returns uptime past grace period
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        'uptime': _RESUME_GRACE_PERIOD + 10
+    }  # Past grace period
+    mock_response.raise_for_status = MagicMock()
+
+    mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_httpx_client.get.return_value = mock_response
+
+    result = await get_conversation(
+        conversation_id=str(conversation_id),
+        conversation_store=mock_conversation_store,
+        app_conversation_service=mock_app_conversation_service,
+        httpx_client=mock_httpx_client,
+    )
+
+    assert result is not None
+    # Should remain RUNNING since server is running and past grace period
+    # (execution_status is None, which maps to ERROR in _to_conversation_info)
+    assert result.status == ConversationStatus.RUNNING
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_running_sandbox_no_execution_status_server_unresponsive():
+    """Test that a RUNNING sandbox with no execution status shows STARTING if server is unresponsive."""
+    conversation_id = uuid4()
+
+    mock_app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='test_user',
+        sandbox_id='test_sandbox',
+        sandbox_status=SandboxStatus.RUNNING,
+        execution_status=None,
+        conversation_url='https://sandbox.example.com/conversation',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_app_conversation_service = AsyncMock(spec=AppConversationService)
+    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+
+    mock_conversation_store = AsyncMock(spec=ConversationStore)
+
+    # Create mock httpx client that raises an exception (server unresponsive)
+    mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_httpx_client.get.side_effect = httpx.ConnectError('Connection refused')
+
+    result = await get_conversation(
+        conversation_id=str(conversation_id),
+        conversation_store=mock_conversation_store,
+        app_conversation_service=mock_app_conversation_service,
+        httpx_client=mock_httpx_client,
+    )
+
+    assert result is not None
+    # Should show STARTING because server is unresponsive (likely still starting)
+    assert result.status == ConversationStatus.STARTING
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_running_sandbox_with_execution_status_skips_server_check():
+    """Test that a RUNNING sandbox WITH execution status does not check server info."""
+    from openhands.sdk.conversation.state import ConversationExecutionStatus
+
+    conversation_id = uuid4()
+
+    mock_app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='test_user',
+        sandbox_id='test_sandbox',
+        sandbox_status=SandboxStatus.RUNNING,
+        execution_status=ConversationExecutionStatus.IDLE,  # Has execution status
+        conversation_url='https://sandbox.example.com/conversation',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_app_conversation_service = AsyncMock(spec=AppConversationService)
+    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+
+    mock_conversation_store = AsyncMock(spec=ConversationStore)
+    mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+
+    result = await get_conversation(
+        conversation_id=str(conversation_id),
+        conversation_store=mock_conversation_store,
+        app_conversation_service=mock_app_conversation_service,
+        httpx_client=mock_httpx_client,
+    )
+
+    assert result is not None
+    assert result.status == ConversationStatus.RUNNING
+    # Should NOT call the server_info endpoint because execution_status is set
+    mock_httpx_client.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_non_running_sandbox_skips_server_check():
+    """Test that a non-RUNNING sandbox does not check server info."""
+    conversation_id = uuid4()
+
+    mock_app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='test_user',
+        sandbox_id='test_sandbox',
+        sandbox_status=SandboxStatus.STARTING,  # Not RUNNING
+        execution_status=None,
+        conversation_url='https://sandbox.example.com/conversation',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_app_conversation_service = AsyncMock(spec=AppConversationService)
+    mock_app_conversation_service.get_app_conversation.return_value = mock_app_conversation
+
+    mock_conversation_store = AsyncMock(spec=ConversationStore)
+    mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+
+    result = await get_conversation(
+        conversation_id=str(conversation_id),
+        conversation_store=mock_conversation_store,
+        app_conversation_service=mock_app_conversation_service,
+        httpx_client=mock_httpx_client,
+    )
+
+    assert result is not None
+    assert result.status == ConversationStatus.STARTING
+    # Should NOT call the server_info endpoint because sandbox is not RUNNING
+    mock_httpx_client.get.assert_not_called()
+
