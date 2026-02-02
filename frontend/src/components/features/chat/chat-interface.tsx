@@ -312,8 +312,8 @@ export function ChatInterface() {
           )}
         </div>
 
-        <div className="flex flex-col gap-[6px]">
-          <div className="flex justify-between relative">
+        <div className="flex flex-col gap-[6px] bg-[#25272D]">
+          <div className="flex justify-between relative px-4 pt-2">
             <div className="flex items-end gap-1">
               <ConfirmationModeEnabled />
               {isStartingStatus && (
