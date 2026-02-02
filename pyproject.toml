@@ -26,9 +26,9 @@ build = "build_vscode.py" # Build VSCode extension during Poetry build
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.14"
-litellm = ">=1.74.3, <1.78.0, !=1.64.4, !=1.67.*"  # avoid 1.64.4 (known bug) & 1.67.* (known bug #10272)
-openai = "1.99.9"                                  # Pin due to litellm incompatibility with >=1.100.0 (BerriAI/litellm#13711)
-aiohttp = ">=3.9.0,!=3.11.13"                      # Pin to avoid yanked version 3.11.13
+litellm = ">=1.81.6"                               # Updated to support openai >= 2.8.0
+openai = ">=2.8.0,<3.0.0"                         # Updated to be compatible with litellm and browser-use
+aiohttp = ">=3.13.3"                               # Updated to address security vulnerabilities in versions <= 3.13.2
 google-genai = "*"                                 # To use litellm with Gemini Pro API
 google-api-python-client = "^2.164.0"              # For Google Sheets API
 google-auth-httplib2 = "*"                         # For Google Sheets authentication
@@ -60,7 +60,6 @@ whatthepatch = "^1.0.6"
 protobuf = "^5.0.0,<6.0.0"                         # Updated to support newer opentelemetry
 opentelemetry-api = "^1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
-
 libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
@@ -119,7 +118,8 @@ pybase62 = "^1.0.0"
 #openhands-tools = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-tools", rev = "f3c0c19cd134fbda84e07f152897a6d61e1e46c5" }
 openhands-sdk = "1.1.0"
 openhands-agent-server = "1.1.0"
-openhands-tools = "1.1.0"
+openhands-tools = "1.10.0"
+browser-use = ">=0.11.7"                          # Ensure compatibility with aiohttp >= 3.13.3
 python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
