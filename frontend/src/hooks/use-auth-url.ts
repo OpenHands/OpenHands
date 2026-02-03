@@ -12,7 +12,7 @@ export const useAuthUrl = (config: UseAuthUrlConfig) => {
     return generateAuthUrl(
       config.identityProvider,
       new URL(window.location.href),
-      config.authUrl ?? undefined,
+      config.authUrl,
     );
   }
 
