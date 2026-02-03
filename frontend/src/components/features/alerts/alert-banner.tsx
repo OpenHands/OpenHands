@@ -6,6 +6,7 @@ import { FaTriangleExclamation } from "react-icons/fa6";
 import CloseIcon from "#/icons/close.svg?react";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
+import { Typography } from "#/ui/typography";
 
 interface AlertBannerProps {
   maintenanceStartTime?: string | null;
@@ -80,25 +81,25 @@ export function AlertBanner({
 
     if (hasMaintenanceAlert && localTime) {
       messages.push(
-        <p key="maintenance" className="text-sm font-medium">
+        <Typography.Paragraph key="maintenance" className="text-sm font-medium">
           {t(I18nKey.MAINTENANCE$SCHEDULED_MESSAGE, { time: localTime })}
-        </p>,
+        </Typography.Paragraph>,
       );
     }
 
     if (hasFaultyModels) {
       messages.push(
-        <p key="faulty-models" className="text-sm font-medium">
+        <Typography.Paragraph key="faulty-models" className="text-sm font-medium">
           {t(I18nKey.ALERT$FAULTY_MODELS_MESSAGE)} {faultyModels!.join(", ")}
-        </p>,
+        </Typography.Paragraph>,
       );
     }
 
     if (hasErrorMessage && translatedErrorMessage) {
       messages.push(
-        <p key="error-message" className="text-sm font-medium">
+        <Typography.Paragraph key="error-message" className="text-sm font-medium">
           {translatedErrorMessage}
-        </p>,
+        </Typography.Paragraph>,
       );
     }
 
