@@ -11,7 +11,11 @@ from pydantic import SecretStr
 from server.constants import (
     get_default_litellm_model,
 )
-from storage.lite_llm_manager import LiteLlmManager
+from storage.lite_llm_manager import (
+    LiteLlmManager,
+    get_byor_key_alias,
+    get_openhands_cloud_key_alias,
+)
 from storage.user_settings import UserSettings
 
 from openhands.server.settings import Settings
@@ -1547,3 +1551,321 @@ class TestLiteLlmManager:
                     # making any LiteLLM calls
                     assert result is not None
                     assert result.agent == 'TestAgent'
+
+
+class TestGetAllKeysForUser:
+    """Test cases for _get_all_keys_for_user method."""
+
+    @pytest.mark.asyncio
+    async def test_get_all_keys_missing_config(self):
+        """Test _get_all_keys_for_user when LiteLLM config is missing."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', None):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', None):
+                result = await LiteLlmManager._get_all_keys_for_user(
+                    mock_client, 'test-user-id'
+                )
+                assert result == []
+                mock_client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_all_keys_success(self):
+        """Test _get_all_keys_for_user returns keys on success."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'keys': [
+                {
+                    'key_name': 'sk-test1234',
+                    'key_alias': 'test-alias',
+                    'team_id': 'test-org',
+                    'metadata': {'type': 'openhands'},
+                },
+                {
+                    'key_name': 'sk-test5678',
+                    'key_alias': 'another-alias',
+                    'team_id': 'test-org',
+                    'metadata': None,
+                },
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.get.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                result = await LiteLlmManager._get_all_keys_for_user(
+                    mock_client, 'test-user-id'
+                )
+
+                assert len(result) == 2
+                assert result[0]['key_name'] == 'sk-test1234'
+                assert result[1]['key_name'] == 'sk-test5678'
+
+                # Verify API key header is included
+                mock_client.get.assert_called_once()
+                call_kwargs = mock_client.get.call_args
+                assert call_kwargs.kwargs['headers'] == {
+                    'x-goog-api-key': 'test-api-key'
+                }
+
+    @pytest.mark.asyncio
+    async def test_get_all_keys_empty_response(self):
+        """Test _get_all_keys_for_user returns empty list when user has no keys."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {'keys': []}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.get.return_value = mock_response
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                result = await LiteLlmManager._get_all_keys_for_user(
+                    mock_client, 'test-user-id'
+                )
+                assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_all_keys_api_error(self):
+        """Test _get_all_keys_for_user handles API errors gracefully."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.get.side_effect = Exception('API Error')
+
+        with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
+                result = await LiteLlmManager._get_all_keys_for_user(
+                    mock_client, 'test-user-id'
+                )
+                assert result == []
+
+
+class TestVerifyExistingKey:
+    """Test cases for _verify_existing_key method."""
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_openhands_type_found(self):
+        """Test _verify_existing_key finds matching OpenHands key."""
+        mock_keys = [
+            {
+                'key_name': 'sk-test1234',
+                'key_alias': 'some-alias',
+                'team_id': 'test-org',
+                'metadata': {'type': 'openhands'},
+            }
+        ]
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = mock_keys
+
+            # Key ending with '1234' should match 'sk-test1234'
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'my-key-ending-with-1234',
+                'test-user-id',
+                'test-org',
+                openhands_type=True,
+            )
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_openhands_type_not_found(self):
+        """Test _verify_existing_key returns False when key doesn't match."""
+        mock_keys = [
+            {
+                'key_name': 'sk-test1234',
+                'key_alias': 'some-alias',
+                'team_id': 'test-org',
+                'metadata': {'type': 'openhands'},
+            }
+        ]
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = mock_keys
+
+            # Key ending with '5678' should NOT match 'sk-test1234'
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'my-key-ending-with-5678',
+                'test-user-id',
+                'test-org',
+                openhands_type=True,
+            )
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_by_alias_openhands_cloud(self):
+        """Test _verify_existing_key finds key by OpenHands Cloud alias."""
+        user_id = 'test-user-id'
+        org_id = 'test-org'
+        mock_keys = [
+            {
+                'key_name': 'sk-testABCD',
+                'key_alias': get_openhands_cloud_key_alias(user_id, org_id),
+                'team_id': org_id,
+                'metadata': None,
+            }
+        ]
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = mock_keys
+
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'my-key-ending-with-ABCD',
+                user_id,
+                org_id,
+                openhands_type=False,
+            )
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_by_alias_byor(self):
+        """Test _verify_existing_key finds key by BYOR alias."""
+        user_id = 'test-user-id'
+        org_id = 'test-org'
+        mock_keys = [
+            {
+                'key_name': 'sk-testXYZW',
+                'key_alias': get_byor_key_alias(user_id, org_id),
+                'team_id': org_id,
+                'metadata': None,
+            }
+        ]
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = mock_keys
+
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'my-key-ending-with-XYZW',
+                user_id,
+                org_id,
+                openhands_type=False,
+            )
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_wrong_team(self):
+        """Test _verify_existing_key returns False for wrong team_id."""
+        mock_keys = [
+            {
+                'key_name': 'sk-test1234',
+                'key_alias': 'some-alias',
+                'team_id': 'different-org',
+                'metadata': {'type': 'openhands'},
+            }
+        ]
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = mock_keys
+
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'my-key-ending-with-1234',
+                'test-user-id',
+                'test-org',
+                openhands_type=True,
+            )
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_no_keys(self):
+        """Test _verify_existing_key returns False when user has no keys."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = []
+
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'some-key-value',
+                'test-user-id',
+                'test-org',
+                openhands_type=True,
+            )
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_handles_none_key_name(self):
+        """Test _verify_existing_key handles None key_name gracefully."""
+        mock_keys = [
+            {
+                'key_name': None,
+                'key_alias': 'some-alias',
+                'team_id': 'test-org',
+                'metadata': {'type': 'openhands'},
+            }
+        ]
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = mock_keys
+
+            # Should not raise TypeError, should return False
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'some-key-value',
+                'test-user-id',
+                'test-org',
+                openhands_type=True,
+            )
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_handles_empty_key_name(self):
+        """Test _verify_existing_key handles empty key_name gracefully."""
+        mock_keys = [
+            {
+                'key_name': '',
+                'key_alias': 'some-alias',
+                'team_id': 'test-org',
+                'metadata': {'type': 'openhands'},
+            }
+        ]
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = mock_keys
+
+            # Should not raise error, should return False
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'some-key-value',
+                'test-user-id',
+                'test-org',
+                openhands_type=True,
+            )
+            assert result is False
