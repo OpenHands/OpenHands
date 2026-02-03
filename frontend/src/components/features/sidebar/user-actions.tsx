@@ -14,6 +14,10 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
   const { data: me } = useMe();
   const [accountContextMenuIsVisible, setAccountContextMenuIsVisible] =
     React.useState(false);
+  // Counter that increments each time the menu hides, used as a React key
+  // to force UserContextMenu to remount with fresh state (resets dropdown
+  // open/close, search text, and scroll position in the org selector).
+  const [menuResetCount, setMenuResetCount] = React.useState(0);
 
   // Use the shared hook to determine if user actions should be shown
   const shouldShowUserActions = useShouldShowUserFeatures();
@@ -24,11 +28,13 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
 
   const hideAccountMenu = () => {
     setAccountContextMenuIsVisible(false);
+    setMenuResetCount((c) => c + 1);
   };
 
   const closeAccountMenu = () => {
     if (accountContextMenuIsVisible) {
       setAccountContextMenuIsVisible(false);
+      setMenuResetCount((c) => c + 1);
     }
   };
 
@@ -52,6 +58,7 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
           )}
         >
           <UserContextMenu
+            key={menuResetCount}
             type={me?.role || "member"}
             onClose={closeAccountMenu}
           />

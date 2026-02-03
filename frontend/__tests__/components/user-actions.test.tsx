@@ -1,10 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach, beforeEach, test } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { ReactElement } from "react";
 import { UserActions } from "#/components/features/sidebar/user-actions";
+import { organizationService } from "#/api/organization-service/organization-service.api";
+import { MOCK_PERSONAL_ORG, MOCK_TEAM_ORG_ACME } from "#/mocks/org-handlers";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 import { renderWithProviders } from "../../test-utils";
 
 vi.mock("react-router", async (importActual) => ({
@@ -327,5 +330,96 @@ describe("UserActions", () => {
     expect(hoverBridgeContainer?.className).toContain(
       "before:pointer-events-none",
     );
+  });
+
+  describe("Org selector dropdown state reset when context menu hides", () => {
+    // These tests verify that the org selector dropdown resets its internal
+    // state (search text, open/closed) when the context menu hides and
+    // reappears. Without this, stale state persists because the context
+    // menu is hidden via CSS (opacity/pointer-events) rather than unmounted.
+
+    beforeEach(() => {
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+        MOCK_PERSONAL_ORG,
+        MOCK_TEAM_ORG_ACME,
+      ]);
+      useSelectedOrganizationStore.setState({ organizationId: null });
+    });
+
+    it("should reset org selector search text when context menu hides and reappears", async () => {
+      renderUserActions();
+      const userActions = screen.getByTestId("user-actions");
+
+      // Hover to show context menu
+      await user.hover(userActions);
+
+      // Wait for orgs to load and auto-select
+      await waitFor(() => {
+        expect(screen.getByRole("combobox")).toHaveValue(
+          MOCK_PERSONAL_ORG.name,
+        );
+      });
+
+      // Open dropdown and type search text
+      const trigger = screen.getByTestId("dropdown-trigger");
+      await user.click(trigger);
+      const input = screen.getByRole("combobox");
+      await user.clear(input);
+      await user.type(input, "search text");
+      expect(input).toHaveValue("search text");
+
+      // Unhover to hide context menu, then hover again
+      await user.unhover(userActions);
+      await user.hover(userActions);
+
+      // Org selector should be reset — showing selected org name, not search text
+      await waitFor(() => {
+        expect(screen.getByRole("combobox")).toHaveValue(
+          MOCK_PERSONAL_ORG.name,
+        );
+      });
+    });
+
+    it("should reset dropdown to collapsed state when context menu hides and reappears", async () => {
+      renderUserActions();
+      const userActions = screen.getByTestId("user-actions");
+
+      // Hover to show context menu
+      await user.hover(userActions);
+
+      // Wait for orgs to load
+      await waitFor(() => {
+        expect(screen.getByRole("combobox")).toHaveValue(
+          MOCK_PERSONAL_ORG.name,
+        );
+      });
+
+      // Open dropdown and type to change its state
+      const trigger = screen.getByTestId("dropdown-trigger");
+      await user.click(trigger);
+      const input = screen.getByRole("combobox");
+      await user.clear(input);
+      await user.type(input, "Acme");
+      expect(input).toHaveValue("Acme");
+
+      // Unhover to hide context menu, then hover again
+      await user.unhover(userActions);
+      await user.hover(userActions);
+
+      // Wait for fresh component with org data
+      await waitFor(() => {
+        expect(screen.getByRole("combobox")).toHaveValue(
+          MOCK_PERSONAL_ORG.name,
+        );
+      });
+
+      // Dropdown should be collapsed (closed) after reset
+      expect(screen.getByTestId("dropdown-trigger")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+      // No option elements should be rendered
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+    });
   });
 });
