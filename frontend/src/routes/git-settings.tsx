@@ -159,8 +159,7 @@ function GitSettingsScreen() {
     !bitbucketHostInputHasValue &&
     !azureDevOpsHostInputHasValue &&
     !forgejoHostInputHasValue;
-  const shouldRenderExternalConfigureButtons =
-    isSaas && config?.github_app_slug;
+  const shouldRenderExternalConfigureButtons = isSaas && config?.github_app_slug;
   const shouldRenderProjectManagementIntegrations =
     config?.feature_flags?.enable_jira ||
     config?.feature_flags?.enable_jira_dc ||
@@ -180,9 +179,7 @@ function GitSettingsScreen() {
                 <h3 className="text-xl font-medium text-white">
                   {t(I18nKey.SETTINGS$GITHUB)}
                 </h3>
-                <ConfigureGitHubRepositoriesAnchor
-                  slug={config.github_app_slug!}
-                />
+                <ConfigureGitHubRepositoriesAnchor slug={config.github_app_slug!} />
               </div>
               <div className="w-1/2 border-b border-gray-200" />
             </>
