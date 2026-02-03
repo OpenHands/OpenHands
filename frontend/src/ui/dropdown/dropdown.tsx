@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useCombobox } from "downshift";
 import { cn } from "#/utils/utils";
 import { DropdownOption } from "./types";
@@ -50,6 +50,11 @@ export function Dropdown({
     items: filteredOptions,
     itemToString: (item) => item?.label ?? "",
     inputValue,
+    stateReducer: (state, actionAndChanges) =>
+      actionAndChanges.type === useCombobox.stateChangeTypes.InputClick &&
+      state.isOpen
+        ? { ...actionAndChanges.changes, isOpen: true }
+        : actionAndChanges.changes,
     onInputValueChange: ({ inputValue: newValue }) => {
       setInputValue(newValue ?? "");
       setSearchTerm(newValue ?? "");
@@ -73,6 +78,19 @@ export function Dropdown({
 
   const isDisabled = loading || disabled;
 
+  // Wrap getInputProps to inject a direct onChange handler that preserves
+  // cursor position. Downshift's default onInputValueChange resets cursor
+  // to end of input on every keystroke; reading from e.target.value keeps
+  // the browser's native cursor position intact.
+  const getInputPropsWithCursorFix = (props?: object) =>
+    getInputProps({
+      ...props,
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+        setInputValue(e.target.value);
+        setSearchTerm(e.target.value);
+      },
+    });
+
   return (
     <div className="relative w-full" data-testid={testId}>
       <div
@@ -85,7 +103,7 @@ export function Dropdown({
         <DropdownInput
           placeholder={placeholder}
           isDisabled={isDisabled}
-          getInputProps={getInputProps}
+          getInputProps={getInputPropsWithCursorFix}
         />
         {loading && <LoadingSpinner />}
         {clearable && selectedItem && (

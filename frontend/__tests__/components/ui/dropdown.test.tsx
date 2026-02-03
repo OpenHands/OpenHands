@@ -384,4 +384,46 @@ describe("Dropdown", () => {
       expect(screen.getByTestId("org-dropdown")).toBeInTheDocument();
     });
   });
+
+  describe("Cursor position preservation", () => {
+    it("should keep menu open when clicking the input while dropdown is open", async () => {
+      // Without a stateReducer, Downshift's default InputClick behavior
+      // toggles the menu (closes it if already open). The stateReducer
+      // should override this to keep the menu open so users can click
+      // to reposition their cursor without losing the dropdown.
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} />);
+
+      const trigger = screen.getByTestId("dropdown-trigger");
+      await user.click(trigger);
+
+      // Menu should be open
+      expect(screen.getByText("Option 1")).toBeInTheDocument();
+
+      // Click the input itself (simulates clicking to reposition cursor)
+      const input = screen.getByRole("combobox");
+      await user.click(input);
+
+      // Menu should still be open — not toggled closed
+      expect(screen.getByText("Option 1")).toBeInTheDocument();
+    });
+
+    it("should still filter options correctly after typing with cursor fix", async () => {
+      // Verifies that the direct onChange handler (which bypasses Downshift's
+      // default onInputValueChange for cursor preservation) still updates
+      // the search/filter state correctly.
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} />);
+
+      const trigger = screen.getByTestId("dropdown-trigger");
+      await user.click(trigger);
+
+      const input = screen.getByRole("combobox");
+      await user.type(input, "Option 1");
+
+      expect(screen.getByText("Option 1")).toBeInTheDocument();
+      expect(screen.queryByText("Option 2")).not.toBeInTheDocument();
+      expect(screen.queryByText("Option 3")).not.toBeInTheDocument();
+    });
+  });
 });
