@@ -181,7 +181,7 @@ async def keycloak_callback(
         user = await UserStore.create_user(user_id, user_info)
     else:
         # Existing user — gradually backfill contact_name if it still has a username-style value
-        UserStore.backfill_contact_name(user_id, user_info)
+        await UserStore.backfill_contact_name(user_id, user_info)
 
     if not user:
         logger.error(f'Failed to authenticate user {user_info["preferred_username"]}')

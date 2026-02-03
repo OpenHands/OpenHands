@@ -1,4 +1,5 @@
 import uuid
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -404,7 +405,30 @@ async def test_create_user_contact_name_falls_back_to_username():
 # custom values set via the PATCH endpoint.
 
 
-def test_backfill_contact_name_updates_when_matches_preferred_username(session_maker):
+def _wrap_sync_as_async_session_maker(sync_sm):
+    """Wrap a sync session_maker so it can be used in place of a_session_maker."""
+
+    @asynccontextmanager
+    async def _async_sm():
+        session = sync_sm()
+        try:
+
+            class _AsyncWrapper:
+                async def execute(self, *args, **kwargs):
+                    return session.execute(*args, **kwargs)
+
+                async def commit(self):
+                    session.commit()
+
+            yield _AsyncWrapper()
+        finally:
+            session.close()
+
+    return _async_sm
+
+
+@pytest.mark.asyncio
+async def test_backfill_contact_name_updates_when_matches_preferred_username(session_maker):
     """When contact_name matches preferred_username and a real name is available, update it."""
     user_id = str(uuid.uuid4())
     # Create org with username-style contact_name (as create_user used to store)
@@ -423,15 +447,16 @@ def test_backfill_contact_name_updates_when_matches_preferred_username(session_m
         'name': 'John Doe',
     }
 
-    with patch('storage.user_store.session_maker', session_maker):
-        UserStore.backfill_contact_name(user_id, user_info)
+    with patch('storage.user_store.a_session_maker', _wrap_sync_as_async_session_maker(session_maker)):
+        await UserStore.backfill_contact_name(user_id, user_info)
 
     with session_maker() as session:
         org = session.query(Org).filter(Org.id == uuid.UUID(user_id)).first()
         assert org.contact_name == 'John Doe'
 
 
-def test_backfill_contact_name_updates_when_matches_username(session_maker):
+@pytest.mark.asyncio
+async def test_backfill_contact_name_updates_when_matches_username(session_maker):
     """When contact_name matches username (migrate_user legacy) and a real name is available, update it."""
     user_id = str(uuid.uuid4())
     # Create org with username-style contact_name (as migrate_user used to store)
@@ -451,15 +476,16 @@ def test_backfill_contact_name_updates_when_matches_username(session_maker):
         'family_name': 'Doe',
     }
 
-    with patch('storage.user_store.session_maker', session_maker):
-        UserStore.backfill_contact_name(user_id, user_info)
+    with patch('storage.user_store.a_session_maker', _wrap_sync_as_async_session_maker(session_maker)):
+        await UserStore.backfill_contact_name(user_id, user_info)
 
     with session_maker() as session:
         org = session.query(Org).filter(Org.id == uuid.UUID(user_id)).first()
         assert org.contact_name == 'Jane Doe'
 
 
-def test_backfill_contact_name_preserves_custom_value(session_maker):
+@pytest.mark.asyncio
+async def test_backfill_contact_name_preserves_custom_value(session_maker):
     """When contact_name differs from both username fields, do not overwrite it."""
     user_id = str(uuid.uuid4())
     # Org has a custom contact_name set via PATCH endpoint
@@ -479,8 +505,8 @@ def test_backfill_contact_name_preserves_custom_value(session_maker):
         'name': 'John Doe',
     }
 
-    with patch('storage.user_store.session_maker', session_maker):
-        UserStore.backfill_contact_name(user_id, user_info)
+    with patch('storage.user_store.a_session_maker', _wrap_sync_as_async_session_maker(session_maker)):
+        await UserStore.backfill_contact_name(user_id, user_info)
 
     with session_maker() as session:
         org = session.query(Org).filter(Org.id == uuid.UUID(user_id)).first()

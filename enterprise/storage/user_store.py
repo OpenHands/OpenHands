@@ -760,7 +760,7 @@ class UserStore:
             return session.query(User).all()
 
     @staticmethod
-    def backfill_contact_name(user_id: str, user_info: dict) -> None:
+    async def backfill_contact_name(user_id: str, user_info: dict) -> None:
         """Update contact_name on the personal org if it still has a username-style value.
 
         Called during login to gradually fix existing users whose contact_name
@@ -769,19 +769,38 @@ class UserStore:
         """
         real_name = resolve_display_name(user_info)
         if not real_name:
+            logger.debug(
+                'backfill_contact_name:no_real_name',
+                extra={'user_id': user_id},
+            )
             return
 
         preferred_username = user_info.get('preferred_username', '')
         username = user_info.get('username', '')
 
-        with session_maker() as session:
-            org = session.query(Org).filter(Org.id == uuid.UUID(user_id)).first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(Org).filter(Org.id == uuid.UUID(user_id))
+            )
+            org = result.scalars().first()
             if not org:
+                logger.debug(
+                    'backfill_contact_name:org_not_found',
+                    extra={'user_id': user_id},
+                )
                 return
 
             if org.contact_name in (preferred_username, username):
+                logger.info(
+                    'backfill_contact_name:updated',
+                    extra={
+                        'user_id': user_id,
+                        'old': org.contact_name,
+                        'new': real_name,
+                    },
+                )
                 org.contact_name = real_name
-                session.commit()
+                await session.commit()
 
     # Prevent circular imports
     from typing import TYPE_CHECKING
