@@ -103,7 +103,7 @@ class SetAuthCookieMiddleware:
         keycloak_auth_cookie = request.cookies.get('keycloak_auth')
         auth_header = request.headers.get('Authorization')
         mcp_auth_header = request.headers.get('X-Session-API-Key')
-        accepted_tos = False
+        accepted_tos: bool | None = False
         if (
             keycloak_auth_cookie is None
             and (auth_header is None or not auth_header.startswith('Bearer '))
@@ -119,7 +119,7 @@ class SetAuthCookieMiddleware:
                     jwt_secret.get_secret_value(),
                     algorithms=['HS256'],
                 )
-                accepted_tos: bool | None = decoded.get('accepted_tos')
+                accepted_tos = decoded.get('accepted_tos')
             except jwt.exceptions.InvalidSignatureError:
                 # If we can't decode the token, treat it as an auth error
                 logger.warning('Invalid JWT signature detected')
