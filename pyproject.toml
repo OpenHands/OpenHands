@@ -54,9 +54,9 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.2",
-  "openhands-agent-server==1.10",
-  "openhands-sdk==1.10",
-  "openhands-tools==1.10",
+  "openhands-agent-server==1.11",
+  "openhands-sdk==1.11",
+  "openhands-tools==1.11",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "pathspec>=0.12.1",
@@ -246,9 +246,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.10"
-openhands-agent-server = "1.10"
-openhands-tools = "1.10"
+openhands-sdk = "1.11.0"
+openhands-agent-server = "1.11.0"
+openhands-tools = "1.11.0"
 python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
