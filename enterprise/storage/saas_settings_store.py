@@ -230,19 +230,30 @@ class SaasSettingsStore(SettingsStore):
     async def _ensure_openhands_api_key(self, item: Settings, org_id: str) -> None:
         """Generate and set the OpenHands API key for the given settings.
 
-        First checks if an existing key exists for the user and reuses it
-        if found. Otherwise, generates a new key.
+        First checks if an existing key exists for the user and verifies it
+        is valid in LiteLLM. If valid, reuses it. Otherwise, generates a new key.
         """
         # Check if user already has keys in LiteLLM
         existing_keys = await LiteLlmManager.get_user_keys(self.user_id)
         if existing_keys:
-            logger.info(
-                'saas_settings_store:store:user_already_has_keys',
-                extra={'user_id': self.user_id, 'key_count': len(existing_keys)},
-            )
-            return
+            # Verify the first key is actually valid in LiteLLM before reusing
+            # This handles cases where keys exist in our DB but were orphaned in LiteLLM
+            key_to_reuse = existing_keys[0]
+            if await LiteLlmManager.verify_key(key_to_reuse, self.user_id):
+                item.llm_api_key = SecretStr(key_to_reuse)
+                logger.info(
+                    'saas_settings_store:store:reusing_verified_key',
+                    extra={'user_id': self.user_id, 'key_count': len(existing_keys)},
+                )
+                return
+            else:
+                logger.warning(
+                    'saas_settings_store:store:existing_key_invalid',
+                    extra={'user_id': self.user_id, 'key_count': len(existing_keys)},
+                )
+                # Fall through to generate a new key
 
-        # Generate new key only if none exists
+        # Generate new key if none exists or existing keys are invalid
         generated_key = await LiteLlmManager.generate_key(
             self.user_id,
             org_id,
