@@ -633,9 +633,9 @@ export const shouldIncludeRepository = (
  */
 export const getOpenHandsQuery = (provider: Provider | null): string => {
   const providerRepositorySuffix: Record<string, string> = {
-    gitlab: "agents-tmp-config",
-    azure_devops: "agents-tmp-config",
-    default: ".agents_tmp",
+    gitlab: "openhands-config",
+    azure_devops: "openhands-config",
+    default: ".openhands",
   } as const;
 
   return provider && provider in providerRepositorySuffix
