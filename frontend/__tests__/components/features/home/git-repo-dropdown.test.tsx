@@ -201,7 +201,7 @@ describe("GitRepoDropdown", () => {
       const selectedRepository = MOCK_REPOSITORIES[0];
 
       renderDropdown(
-        { value: selectedRepository.full_name },
+        { value: selectedRepository.id },
         { selectedRepository },
       );
 
@@ -229,6 +229,25 @@ describe("GitRepoDropdown", () => {
       await userEvent.click(screen.getByText("user/repo-two"));
 
       expect(mockOnChange).toHaveBeenCalledWith(MOCK_REPOSITORIES[1]);
+    });
+
+    it("should keep selected repo visible even if it's not in fetched results", async () => {
+      // selectedRepository from useRepositoryData stays null in our default mocks,
+      // which matches the real-world scenario where a recent repo isn't yet loaded.
+      renderDropdown();
+
+      const input = screen.getByTestId("git-repo-dropdown") as HTMLInputElement;
+      await userEvent.click(input);
+
+      await waitFor(() => {
+        expect(screen.getByText("user/repo-two")).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByText("user/repo-two"));
+
+      await waitFor(() => {
+        expect(input.value).toBe("user/repo-two");
+      });
     });
   });
 });

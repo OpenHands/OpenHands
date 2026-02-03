@@ -21,6 +21,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     recaptcha_site_key: str | None = None
     faulty_models: list[str] = Field(default_factory=list)
     error_message: str | None = None
+    github_app_slug: str | None = None
 
     async def get_web_client_config(self) -> WebClientConfig:
         from openhands.app_server.config import get_global_config
@@ -36,5 +37,6 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
             recaptcha_site_key=self.recaptcha_site_key,
             faulty_models=self.faulty_models,
             error_message=self.error_message,
+            github_app_slug=self.github_app_slug,
         )
         return result
