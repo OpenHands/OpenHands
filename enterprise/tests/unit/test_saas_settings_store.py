@@ -180,48 +180,40 @@ async def test_encryption(settings_store):
 
 
 @pytest.mark.asyncio
-async def test_ensure_openhands_api_key_sets_key_when_reusing_verified_key(mock_config):
-    """The old code returned early without setting item.llm_api_key."""
+async def test_ensure_api_key_keeps_valid_key(mock_config):
+    """When the existing key is valid, it should be kept unchanged."""
     store = SaasSettingsStore('test-user-id-123', MagicMock(), mock_config)
     existing_key = 'sk-existing-key'
-    item = DataSettings(llm_model='openhands/gpt-4')
+    item = DataSettings(
+        llm_model='openhands/gpt-4', llm_api_key=SecretStr(existing_key)
+    )
 
-    with (
-        patch(
-            'storage.saas_settings_store.LiteLlmManager.get_user_keys',
-            new_callable=AsyncMock,
-            return_value=[existing_key],
-        ),
-        patch(
-            'storage.saas_settings_store.LiteLlmManager.verify_key',
-            new_callable=AsyncMock,
-            return_value=True,
-        ),
+    with patch(
+        'storage.saas_settings_store.LiteLlmManager.verify_existing_key',
+        new_callable=AsyncMock,
+        return_value=True,
     ):
-        await store._ensure_openhands_api_key(item, 'org-123')
+        await store._ensure_api_key(item, 'org-123', openhands_type=True)
 
-        # This assertion failed with the old code
+        # Key should remain unchanged when it's valid
         assert item.llm_api_key is not None
         assert item.llm_api_key.get_secret_value() == existing_key
 
 
 @pytest.mark.asyncio
-async def test_ensure_openhands_api_key_generates_new_key_when_verification_fails(
+async def test_ensure_api_key_generates_new_key_when_verification_fails(
     mock_config,
 ):
-    """Handles orphaned keys that exist in our DB but not in LiteLLM."""
+    """When verification fails, a new key should be generated."""
     store = SaasSettingsStore('test-user-id-123', MagicMock(), mock_config)
     new_key = 'sk-new-key'
-    item = DataSettings(llm_model='openhands/gpt-4')
+    item = DataSettings(
+        llm_model='openhands/gpt-4', llm_api_key=SecretStr('sk-invalid-key')
+    )
 
     with (
         patch(
-            'storage.saas_settings_store.LiteLlmManager.get_user_keys',
-            new_callable=AsyncMock,
-            return_value=['sk-orphaned-key'],
-        ),
-        patch(
-            'storage.saas_settings_store.LiteLlmManager.verify_key',
+            'storage.saas_settings_store.LiteLlmManager.verify_existing_key',
             new_callable=AsyncMock,
             return_value=False,
         ),
@@ -231,7 +223,7 @@ async def test_ensure_openhands_api_key_generates_new_key_when_verification_fail
             return_value=new_key,
         ),
     ):
-        await store._ensure_openhands_api_key(item, 'org-123')
+        await store._ensure_api_key(item, 'org-123', openhands_type=True)
 
         assert item.llm_api_key is not None
         assert item.llm_api_key.get_secret_value() == new_key
