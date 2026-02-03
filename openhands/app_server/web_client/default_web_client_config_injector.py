@@ -21,7 +21,13 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     recaptcha_site_key: str | None = None
     faulty_models: list[str] = Field(default_factory=list)
     error_message: str | None = None
-    updated_at: datetime = Field(default=datetime.fromisoformat('2026-01-19T00:00:00Z'))
+    updated_at: datetime = Field(
+        default=datetime.fromisoformat('2026-01-01T00:00:00Z'),
+        description=(
+            "The timestamp when error messages and faulty models were last updated. "
+            "The frontend uses this value to determine whether error messages are "
+            "new and should be displayed. (Default to start of 2026)"
+        ))
     github_app_slug: str | None = None
 
     async def get_web_client_config(self) -> WebClientConfig:
