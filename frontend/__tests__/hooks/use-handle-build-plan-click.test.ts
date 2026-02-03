@@ -41,7 +41,7 @@ describe("useHandleBuildPlanClick", () => {
     (createChatMessage as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       action: "message",
       args: {
-        content: "Execute the plan based on the .openhands/PLAN.md file.",
+        content: "Execute the plan based on the .agents_tmp/PLAN.md file.",
         image_urls: [],
         file_urls: [],
         timestamp: expect.any(String),
@@ -108,7 +108,7 @@ describe("useHandleBuildPlanClick", () => {
     useOptimisticUserMessageStore.setState({ optimisticUserMessage: null });
     const { result } = renderHook(() => useHandleBuildPlanClick());
     const expectedPrompt =
-      "Execute the plan based on the .openhands/PLAN.md file.";
+      "Execute the plan based on the .agents_tmp/PLAN.md file.";
 
     // Act
     act(() => {
@@ -154,7 +154,7 @@ describe("useHandleBuildPlanClick", () => {
     expect(useConversationStore.getState().conversationMode).toBe("code");
     expect(mockSend).toHaveBeenCalledTimes(1);
     expect(useOptimisticUserMessageStore.getState().optimisticUserMessage).toBe(
-      "Execute the plan based on the .openhands/PLAN.md file.",
+      "Execute the plan based on the .agents_tmp/PLAN.md file.",
     );
   });
 

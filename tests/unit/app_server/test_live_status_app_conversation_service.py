@@ -682,8 +682,8 @@ class TestLiveStatusAppConversationService:
             == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
         )
 
-    def test_compute_plan_path_default_uses_openhands(self):
-        """Test _compute_plan_path returns .openhands/PLAN.md for default/GitHub."""
+    def test_compute_plan_path_default_uses_agents_tmp(self):
+        """Test _compute_plan_path returns .agents_tmp/PLAN.md for default/GitHub."""
         # Arrange
         working_dir = '/workspace/project'
 
@@ -692,11 +692,11 @@ class TestLiveStatusAppConversationService:
         path_github = self.service._compute_plan_path(working_dir, ProviderType.GITHUB)
 
         # Assert
-        assert path_none == '/workspace/project/.openhands/PLAN.md'
-        assert path_github == '/workspace/project/.openhands/PLAN.md'
+        assert path_none == '/workspace/project/.agents_tmp/PLAN.md'
+        assert path_github == '/workspace/project/.agents_tmp/PLAN.md'
 
-    def test_compute_plan_path_gitlab_uses_openhands_config(self):
-        """Test _compute_plan_path returns openhands-config/PLAN.md for GitLab."""
+    def test_compute_plan_path_gitlab_uses_agents_tmp_config(self):
+        """Test _compute_plan_path returns agents-tmp-config/PLAN.md for GitLab."""
         # Arrange
         working_dir = '/workspace/project'
 
@@ -704,10 +704,10 @@ class TestLiveStatusAppConversationService:
         path = self.service._compute_plan_path(working_dir, ProviderType.GITLAB)
 
         # Assert
-        assert path == '/workspace/project/openhands-config/PLAN.md'
+        assert path == '/workspace/project/agents-tmp-config/PLAN.md'
 
-    def test_compute_plan_path_azure_uses_openhands_config(self):
-        """Test _compute_plan_path returns openhands-config/PLAN.md for Azure."""
+    def test_compute_plan_path_azure_uses_agents_tmp_config(self):
+        """Test _compute_plan_path returns agents-tmp-config/PLAN.md for Azure."""
         # Arrange
         working_dir = '/workspace/project'
 
@@ -715,7 +715,7 @@ class TestLiveStatusAppConversationService:
         path = self.service._compute_plan_path(working_dir, ProviderType.AZURE_DEVOPS)
 
         # Assert
-        assert path == '/workspace/project/openhands-config/PLAN.md'
+        assert path == '/workspace/project/agents-tmp-config/PLAN.md'
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
@@ -762,7 +762,7 @@ class TestLiveStatusAppConversationService:
 
             # Assert
             mock_get_tools.assert_called_once_with(
-                plan_path='/workspace/project/.openhands/PLAN.md'
+                plan_path='/workspace/project/.agents_tmp/PLAN.md'
             )
             mock_agent_class.assert_called_once()
             call_kwargs = mock_agent_class.call_args[1]

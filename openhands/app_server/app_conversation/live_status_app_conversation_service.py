@@ -583,11 +583,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         Returns:
             Absolute path to PLAN.md file in the appropriate config directory
         """
-        # GitLab and Azure DevOps use openhands-config (since .openhands is invalid)
+        # GitLab and Azure DevOps use agents-tmp-config (since .agents_tmp is invalid)
         if git_provider in (ProviderType.GITLAB, ProviderType.AZURE_DEVOPS):
-            config_dir = 'openhands-config'
+            config_dir = 'agents-tmp-config'
         else:
-            config_dir = '.openhands'
+            config_dir = '.agents_tmp'
 
         return f'{working_dir}/{config_dir}/PLAN.md'
 

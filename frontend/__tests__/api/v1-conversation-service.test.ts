@@ -20,7 +20,7 @@ describe("V1ConversationService", () => {
       expect(mockGet).toHaveBeenCalledTimes(1);
       const callUrl = mockGet.mock.calls[0][0] as string;
       expect(callUrl).toContain(
-        "file_path=%2Fworkspace%2Fproject%2F.openhands%2FPLAN.md",
+        "file_path=%2Fworkspace%2Fproject%2F.agents_tmp%2FPLAN.md",
       );
     });
   });
