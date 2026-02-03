@@ -89,7 +89,10 @@ export function AlertBanner({
 
     if (hasFaultyModels) {
       messages.push(
-        <Typography.Paragraph key="faulty-models" className="text-sm font-medium">
+        <Typography.Paragraph
+          key="faulty-models"
+          className="text-sm font-medium"
+        >
           {t(I18nKey.ALERT$FAULTY_MODELS_MESSAGE)} {faultyModels!.join(", ")}
         </Typography.Paragraph>,
       );
@@ -97,7 +100,10 @@ export function AlertBanner({
 
     if (hasErrorMessage && translatedErrorMessage) {
       messages.push(
-        <Typography.Paragraph key="error-message" className="text-sm font-medium">
+        <Typography.Paragraph
+          key="error-message"
+          className="text-sm font-medium"
+        >
           {translatedErrorMessage}
         </Typography.Paragraph>,
       );
