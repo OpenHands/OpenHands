@@ -5,8 +5,9 @@ Store class for managing organization-member relationships.
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
-from storage.database import session_maker
+from storage.database import a_session_maker, session_maker
 from storage.org_member import OrgMember
 from storage.user_settings import UserSettings
 
@@ -39,7 +40,7 @@ class OrgMemberStore:
             return org_member
 
     @staticmethod
-    def get_org_member(org_id: UUID, user_id: int) -> Optional[OrgMember]:
+    def get_org_member(org_id: UUID, user_id: UUID) -> Optional[OrgMember]:
         """Get organization-user relationship."""
         with session_maker() as session:
             return (
@@ -49,7 +50,18 @@ class OrgMemberStore:
             )
 
     @staticmethod
-    def get_user_orgs(user_id: int) -> list[OrgMember]:
+    async def get_org_member_async(org_id: UUID, user_id: UUID) -> Optional[OrgMember]:
+        """Get organization-user relationship."""
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgMember).filter(
+                    OrgMember.org_id == org_id, OrgMember.user_id == user_id
+                )
+            )
+            return result.scalars().first()
+
+    @staticmethod
+    def get_user_orgs(user_id: UUID) -> list[OrgMember]:
         """Get all organizations for a user."""
         with session_maker() as session:
             return session.query(OrgMember).filter(OrgMember.user_id == user_id).all()
@@ -69,7 +81,7 @@ class OrgMemberStore:
 
     @staticmethod
     def update_user_role_in_org(
-        org_id: UUID, user_id: int, role_id: int, status: Optional[str] = None
+        org_id: UUID, user_id: UUID, role_id: int, status: Optional[str] = None
     ) -> Optional[OrgMember]:
         """Update user's role in an organization."""
         with session_maker() as session:
@@ -91,7 +103,7 @@ class OrgMemberStore:
             return org_member
 
     @staticmethod
-    def remove_user_from_org(org_id: UUID, user_id: int) -> bool:
+    def remove_user_from_org(org_id: UUID, user_id: UUID) -> bool:
         """Remove a user from an organization."""
         with session_maker() as session:
             org_member = (
