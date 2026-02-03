@@ -1596,9 +1596,7 @@ class TestGetAllKeysForUser:
         mock_client.get.return_value = mock_response
 
         with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
-            with patch(
-                'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
-            ):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
                 result = await LiteLlmManager._get_all_keys_for_user(
                     mock_client, 'test-user-id'
                 )
@@ -1626,9 +1624,7 @@ class TestGetAllKeysForUser:
         mock_client.get.return_value = mock_response
 
         with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
-            with patch(
-                'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
-            ):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
                 result = await LiteLlmManager._get_all_keys_for_user(
                     mock_client, 'test-user-id'
                 )
@@ -1641,9 +1637,7 @@ class TestGetAllKeysForUser:
         mock_client.get.side_effect = Exception('API Error')
 
         with patch('storage.lite_llm_manager.LITE_LLM_API_KEY', 'test-api-key'):
-            with patch(
-                'storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'
-            ):
+            with patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'http://test.com'):
                 result = await LiteLlmManager._get_all_keys_for_user(
                     mock_client, 'test-user-id'
                 )

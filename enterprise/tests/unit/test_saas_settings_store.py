@@ -184,7 +184,9 @@ async def test_ensure_api_key_keeps_valid_key(mock_config):
     """When the existing key is valid, it should be kept unchanged."""
     store = SaasSettingsStore('test-user-id-123', MagicMock(), mock_config)
     existing_key = 'sk-existing-key'
-    item = DataSettings(llm_model='openhands/gpt-4', llm_api_key=SecretStr(existing_key))
+    item = DataSettings(
+        llm_model='openhands/gpt-4', llm_api_key=SecretStr(existing_key)
+    )
 
     with patch(
         'storage.saas_settings_store.LiteLlmManager.verify_existing_key',
