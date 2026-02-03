@@ -24,7 +24,7 @@ from storage.user_settings import UserSettings
 from openhands.server.settings import Settings
 from openhands.utils.http_session import httpx_verify_option
 
-# Timeout in seconds for BYOR key verification requests to LiteLLM
+# Timeout in seconds for key verification requests to LiteLLM
 KEY_VERIFICATION_TIMEOUT = 5.0
 
 # A very large number to represent "unlimited" until LiteLLM fixes their unlimited update bug.
@@ -1068,7 +1068,7 @@ class LiteLlmManager:
                 # Only 200 status code indicates valid key
                 if response.status_code == 200:
                     logger.debug(
-                        'BYOR key verification successful',
+                        'Key verification successful',
                         extra={'user_id': user_id},
                     )
                     return True
@@ -1076,7 +1076,7 @@ class LiteLlmManager:
                 # All other status codes (401, 403, 500, etc.) are treated as invalid
                 # This includes authentication errors and server errors
                 logger.warning(
-                    'BYOR key verification failed - treating as invalid',
+                    'Key verification failed - treating as invalid',
                     extra={
                         'user_id': user_id,
                         'status_code': response.status_code,
@@ -1089,7 +1089,7 @@ class LiteLlmManager:
             # Any exception (timeout, network error, etc.) means we can't verify
             # Return False to trigger regeneration rather than returning potentially invalid key
             logger.warning(
-                'BYOR key verification error - treating as invalid to ensure key validity',
+                'Key verification error - treating as invalid to ensure key validity',
                 extra={
                     'user_id': user_id,
                     'error': str(e),
@@ -1181,11 +1181,14 @@ class LiteLlmManager:
         org_id: str,
         openhands_type: bool = False,
     ) -> bool:
-        """Check if an existing OpenHands key exists for the user/org and return it.
+        """Check if an existing key exists for the user/org in LiteLLM.
 
-        Looks for keys with metadata type='openhands' and matching team_id.
+        Verifies the provided key_value matches a key registered in LiteLLM for
+        the given user and organization. For openhands_type=True, looks for keys
+        with metadata type='openhands' and matching team_id. For openhands_type=False,
+        looks for keys with matching alias and team_id.
 
-        Returns the key value if found, None otherwise.
+        Returns True if the key is found and valid, False otherwise.
         """
         found = False
         keys = await LiteLlmManager._get_all_keys_for_user(client, keycloak_user_id)
