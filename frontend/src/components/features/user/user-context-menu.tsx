@@ -6,8 +6,8 @@ import {
   IoCardOutline,
   IoLogOutOutline,
   IoPersonAddOutline,
-  IoPersonOutline,
 } from "react-icons/io5";
+import { FiUsers } from "react-icons/fi";
 import { useLogout } from "#/hooks/mutation/use-logout";
 import { OrganizationUserRole } from "#/types/org";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
@@ -119,7 +119,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               onClick={handleManageOrganizationMembersClick}
               className={contextMenuListItemClassName}
             >
-              <IoPersonOutline className="text-white" size={14} />
+              <FiUsers className="text-white shrink-0" size={14} />
               {t(I18nKey.ORG$MANAGE_ORGANIZATION_MEMBERS)}
             </ContextMenuListItem>
           </>
