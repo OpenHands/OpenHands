@@ -244,8 +244,8 @@ class SaasSettingsStore(SettingsStore):
     ) -> None:
         """Generate and set the OpenHands API key for the given settings.
 
-        First checks if an existing key exists for the user and reuses it
-        if found. Otherwise, generates a new key.
+        First checks if an existing key exists for the user and verifies it
+        is valid in LiteLLM. If valid, reuses it. Otherwise, generates a new key.
         """
 
         # First, check if our current key is valid
