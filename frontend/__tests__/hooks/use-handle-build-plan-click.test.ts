@@ -77,7 +77,7 @@ describe("useHandleBuildPlanClick", () => {
     // Arrange
     const { result } = renderHook(() => useHandleBuildPlanClick());
     const expectedPrompt =
-      "Execute the plan based on the .openhands/PLAN.md file.";
+      "Execute the plan based on the .agents_tmp/PLAN.md file.";
 
     // Act
     act(() => {
