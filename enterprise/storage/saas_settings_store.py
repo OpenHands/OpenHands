@@ -12,7 +12,7 @@ from server.constants import LITE_LLM_API_URL
 from server.logger import logger
 from sqlalchemy.orm import joinedload, sessionmaker
 from storage.database import session_maker
-from storage.lite_llm_manager import LiteLlmManager
+from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.org_store import OrgStore
@@ -265,13 +265,12 @@ class SaasSettingsStore(SettingsStore):
                 )
             else:
                 # Must delete any existing key with the same alias first
-                await LiteLlmManager.delete_key_by_alias(
-                    key_alias=f'OpenHands Cloud - user {self.user_id} - org {org_id}',
-                )
+                key_alias = get_openhands_cloud_key_alias(self.user_id, org_id)
+                await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
                 generated_key = await LiteLlmManager.generate_key(
                     self.user_id,
                     org_id,
-                    f'OpenHands Cloud - user {self.user_id} - org {org_id}',
+                    key_alias,
                     None,
                 )
 

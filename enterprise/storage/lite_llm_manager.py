@@ -1158,6 +1158,7 @@ class LiteLlmManager:
         try:
             response = await client.get(
                 f'{LITE_LLM_API_URL}/user/info?user_id={keycloak_user_id}',
+                headers={'x-goog-api-key': LITE_LLM_API_KEY},
             )
             response.raise_for_status()
             user_json = response.json()
