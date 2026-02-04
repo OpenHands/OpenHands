@@ -11,10 +11,6 @@ import os
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
-LITE_LLM_API_URL = os.environ.get(
-    'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
-)
-
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
@@ -35,6 +31,10 @@ from openhands.server.user_auth import (
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
+
+LITE_LLM_API_URL = os.environ.get(
+    'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
+)
 
 app = APIRouter(prefix='/api', dependencies=get_dependencies())
 
