@@ -73,6 +73,8 @@ def settings_store(session_maker, mock_config):
                 del item_dict['email_verified']
             if 'secrets_store' in item_dict:
                 del item_dict['secrets_store']
+            if 'timeout' in item_dict:
+                del item_dict['timeout']
 
             # Continue with the original implementation
             with store.session_maker() as session:
@@ -94,7 +96,12 @@ def settings_store(session_maker, mock_config):
                     session.merge(existing)
                 else:
                     item_dict['keycloak_user_id'] = store.user_id
-                    settings = UserSettings(**item_dict)
+                    # Filter out any keys that aren't in UserSettings columns
+                    filtered_dict = {}
+                    for key, value in item_dict.items():
+                        if key in UserSettings.__table__.columns:
+                            filtered_dict[key] = value
+                    settings = UserSettings(**filtered_dict)
                     session.add(settings)
                 session.commit()
 
