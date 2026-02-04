@@ -428,7 +428,9 @@ def _wrap_sync_as_async_session_maker(sync_sm):
 
 
 @pytest.mark.asyncio
-async def test_backfill_contact_name_updates_when_matches_preferred_username(session_maker):
+async def test_backfill_contact_name_updates_when_matches_preferred_username(
+    session_maker,
+):
     """When contact_name matches preferred_username and a real name is available, update it."""
     user_id = str(uuid.uuid4())
     # Create org with username-style contact_name (as create_user used to store)
@@ -447,7 +449,10 @@ async def test_backfill_contact_name_updates_when_matches_preferred_username(ses
         'name': 'John Doe',
     }
 
-    with patch('storage.user_store.a_session_maker', _wrap_sync_as_async_session_maker(session_maker)):
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
         await UserStore.backfill_contact_name(user_id, user_info)
 
     with session_maker() as session:
@@ -476,7 +481,10 @@ async def test_backfill_contact_name_updates_when_matches_username(session_maker
         'family_name': 'Doe',
     }
 
-    with patch('storage.user_store.a_session_maker', _wrap_sync_as_async_session_maker(session_maker)):
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
         await UserStore.backfill_contact_name(user_id, user_info)
 
     with session_maker() as session:
@@ -505,7 +513,10 @@ async def test_backfill_contact_name_preserves_custom_value(session_maker):
         'name': 'John Doe',
     }
 
-    with patch('storage.user_store.a_session_maker', _wrap_sync_as_async_session_maker(session_maker)):
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
         await UserStore.backfill_contact_name(user_id, user_info)
 
     with session_maker() as session:
