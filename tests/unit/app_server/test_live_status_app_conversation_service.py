@@ -88,7 +88,6 @@ class TestLiveStatusAppConversationService:
         self.mock_user.condenser_max_size = None  # Default to None
         self.mock_user.llm_base_url = 'https://api.openai.com/v1'
         self.mock_user.mcp_config = None  # Default to None to avoid error handling path
-        self.mock_user.timeout = None  # Default to None for timeout parameter
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -698,8 +697,6 @@ class TestLiveStatusAppConversationService:
         """Test _create_agent_with_context for planning agent type."""
         # Arrange
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model_copy.return_value = mock_llm
         mock_get_tools.return_value = []
         mock_condenser = Mock()
@@ -752,8 +749,6 @@ class TestLiveStatusAppConversationService:
         """Test _create_agent_with_context for default agent type."""
         # Arrange
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model_copy.return_value = mock_llm
         mock_get_tools.return_value = []
         mock_condenser = Mock()
@@ -801,7 +796,6 @@ class TestLiveStatusAppConversationService:
 
         # Create mock LLM with required attributes for _update_agent_with_llm_metadata
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
         mock_llm.usage_id = 'agent'
 
@@ -869,7 +863,6 @@ class TestLiveStatusAppConversationService:
 
         # Create mock LLM with required attributes for _update_agent_with_llm_metadata
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
         mock_llm.usage_id = 'agent'
 
@@ -916,7 +909,6 @@ class TestLiveStatusAppConversationService:
 
         # Create mock LLM with required attributes for _update_agent_with_llm_metadata
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
         mock_llm.usage_id = 'agent'
 
@@ -969,7 +961,6 @@ class TestLiveStatusAppConversationService:
         # Mock all the helper methods
         mock_secrets = {'GITHUB_TOKEN': Mock()}
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_mcp_config = {'default': {'url': 'test'}}
         mock_agent = Mock(spec=Agent)
         mock_final_request = Mock(spec=StartConversationRequest)
@@ -1350,7 +1341,6 @@ class TestLiveStatusAppConversationService:
         # Mock build start conversation request
         mock_agent = Mock(spec=Agent)
         mock_agent.llm = Mock(spec=LLM)
-        mock_agent.llm.timeout = 300  # Default LLM timeout
         mock_agent.llm.model = 'gpt-4'
         mock_start_request = Mock(spec=StartConversationRequest)
         mock_start_request.agent = mock_agent
@@ -1847,7 +1837,6 @@ class TestPluginHandling:
         self.mock_user.condenser_max_size = None
         self.mock_user.mcp_config = None
         self.mock_user.security_analyzer = None
-        self.mock_user.timeout = None  # Default to None for timeout parameter
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -2041,7 +2030,6 @@ class TestPluginHandling:
         # Arrange
         mock_agent = Mock(spec=Agent)
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model = 'gpt-4'
         mock_llm.usage_id = 'agent'
 
@@ -2102,7 +2090,6 @@ class TestPluginHandling:
         # Arrange
         mock_agent = Mock(spec=Agent)
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model = 'gpt-4'
         mock_llm.usage_id = 'agent'
 
@@ -2150,7 +2137,6 @@ class TestPluginHandling:
         # Arrange
         mock_agent = Mock(spec=Agent)
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model = 'gpt-4'
         mock_llm.usage_id = 'agent'
 
@@ -2206,7 +2192,6 @@ class TestPluginHandling:
         # Arrange
         mock_agent = Mock(spec=Agent)
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model = 'gpt-4'
         mock_llm.usage_id = 'agent'
 
@@ -2267,7 +2252,6 @@ class TestPluginHandling:
         # Arrange
         mock_agent = Mock(spec=Agent)
         mock_llm = Mock(spec=LLM)
-        mock_llm.timeout = 300  # Default LLM timeout
         mock_llm.model = 'gpt-4'
         mock_llm.usage_id = 'agent'
 
