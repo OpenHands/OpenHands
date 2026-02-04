@@ -114,6 +114,10 @@ class SaasSettingsStore(SettingsStore):
             kwargs['llm_api_key_for_byor'] = org_member.llm_api_key_for_byor
         if org_member.llm_base_url:
             kwargs['llm_base_url'] = org_member.llm_base_url
+
+        # If the llm_base_url matches the default, we mark it as unset.
+        if kwargs.get('llm_base_url') == LITE_LLM_API_URL:
+            del kwargs['llm_base_url']
         if org.v1_enabled is None:
             kwargs['v1_enabled'] = True
 
@@ -160,17 +164,9 @@ class SaasSettingsStore(SettingsStore):
                 )
                 return None
 
-            llm_base_url = (
-                org_member.llm_base_url
-                if org_member.llm_base_url
-                else org.default_llm_base_url
-            )
-
             # Check if provider is OpenHands and generate API key if needed
-            if self._is_openhands_provider(item):
+            if self._is_openhands_provider(item) and item.llm_base_url == LITE_LLM_API_URL:
                 await self._ensure_api_key(item, str(org_id), openhands_type=True)
-            elif llm_base_url == LITE_LLM_API_URL:
-                await self._ensure_api_key(item, str(org_id))
 
             kwargs = item.model_dump(context={'expose_secrets': True})
             for model in (user, org, org_member):
