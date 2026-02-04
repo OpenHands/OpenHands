@@ -8,6 +8,7 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
+from server.constants import LITE_LLM_API_URL
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
@@ -29,7 +30,6 @@ from openhands.server.user_auth import (
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
-from server.constants import LITE_LLM_API_URL
 
 app = APIRouter(prefix='/api', dependencies=get_dependencies())
 
