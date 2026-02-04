@@ -173,6 +173,10 @@ class SaasSettingsStore(SettingsStore):
                 await self._ensure_api_key(item, str(org_id))
 
             kwargs = item.model_dump(context={'expose_secrets': True})
+            # Filter out timeout field as it's not supported in enterprise
+            if 'timeout' in kwargs:
+                del kwargs['timeout']
+            
             for model in (user, org, org_member):
                 for key, value in kwargs.items():
                     if hasattr(model, key):
@@ -194,6 +198,10 @@ class SaasSettingsStore(SettingsStore):
 
     def _decrypt_kwargs(self, kwargs: dict):
         fernet = self._fernet()
+        # Filter out timeout field as it's not supported in enterprise
+        if 'timeout' in kwargs:
+            del kwargs['timeout']
+        
         for key, value in kwargs.items():
             try:
                 if value is None:
@@ -211,6 +219,10 @@ class SaasSettingsStore(SettingsStore):
 
     def _encrypt_kwargs(self, kwargs: dict):
         fernet = self._fernet()
+        # Filter out timeout field as it's not supported in enterprise
+        if 'timeout' in kwargs:
+            del kwargs['timeout']
+        
         for key, value in kwargs.items():
             if value is None:
                 continue

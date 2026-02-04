@@ -65,7 +65,7 @@ def settings_store(session_maker, mock_config):
     # Patch the store method to write to UserSettings table directly (for testing)
     async def patched_store(item):
         if item:
-            # Make a copy of the item without email and email_verified
+            # Make a copy of the item without email, email_verified, secrets_store, and timeout
             item_dict = item.model_dump(context={'expose_secrets': True})
             if 'email' in item_dict:
                 del item_dict['email']
@@ -73,6 +73,8 @@ def settings_store(session_maker, mock_config):
                 del item_dict['email_verified']
             if 'secrets_store' in item_dict:
                 del item_dict['secrets_store']
+            if 'timeout' in item_dict:
+                del item_dict['timeout']
 
             # Continue with the original implementation
             with store.session_maker() as session:
@@ -227,3 +229,29 @@ async def test_ensure_api_key_generates_new_key_when_verification_fails(
 
         assert item.llm_api_key is not None
         assert item.llm_api_key.get_secret_value() == new_key
+
+
+@pytest.mark.asyncio
+async def test_timeout_field_excluded_from_enterprise(settings_store):
+    """Test that timeout field is excluded from enterprise settings storage."""
+    # Create settings with timeout field
+    settings = Settings(
+        llm_api_key=SecretStr('secret_key'),
+        llm_base_url=LITE_LLM_API_URL,
+        agent='smith',
+        email='test@example.com',
+        email_verified=True,
+        timeout=60  # Set a timeout value
+    )
+
+    # Store settings
+    await settings_store.store(settings)
+
+    # Load settings back
+    loaded_settings = await settings_store.load()
+    
+    # Verify timeout is None (excluded from enterprise)
+    assert loaded_settings is not None
+    assert loaded_settings.timeout is None
+    assert loaded_settings.llm_api_key.get_secret_value() == 'secret_key'
+    assert loaded_settings.agent == 'smith'
