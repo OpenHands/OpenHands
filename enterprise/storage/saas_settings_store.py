@@ -114,10 +114,6 @@ class SaasSettingsStore(SettingsStore):
             kwargs['llm_api_key_for_byor'] = org_member.llm_api_key_for_byor
         if org_member.llm_base_url:
             kwargs['llm_base_url'] = org_member.llm_base_url
-
-        # If the llm_base_url matches the default, we mark it as unset.
-        if kwargs.get('llm_base_url') == LITE_LLM_API_URL:
-            del kwargs['llm_base_url']
         if org.v1_enabled is None:
             kwargs['v1_enabled'] = True
 
