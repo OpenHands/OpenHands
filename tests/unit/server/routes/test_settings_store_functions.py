@@ -211,6 +211,7 @@ async def test_store_llm_settings_partial_update():
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
     # When llm_base_url is not provided, it defaults to the LiteLLM proxy URL
     import os
+
     expected_base_url = os.environ.get(
         'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
     )
