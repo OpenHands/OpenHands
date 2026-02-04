@@ -124,6 +124,7 @@ async def store_llm_settings(
             settings.llm_api_key = existing_settings.llm_api_key
         if settings.llm_model is None:
             settings.llm_model = existing_settings.llm_model
+        # if llm_base_url is missing or empty, set to default as this only happens for "basic" settings
         if not settings.llm_base_url:
             settings.llm_base_url = LITE_LLM_API_URL
         # Keep search API key if missing or empty
