@@ -161,7 +161,7 @@ class SaasSettingsStore(SettingsStore):
                 return None
 
             # Check if provider is OpenHands and generate API key if needed
-            if item.llm_base_url == LITE_LLM_API_URL:
+            if item.llm_base_url == LITE_LLM_API_URL or not item.llm_base_url:
                 await self._ensure_api_key(item, str(org_id), openhands_type=self._is_openhands_provider(item))
 
             kwargs = item.model_dump(context={'expose_secrets': True})
