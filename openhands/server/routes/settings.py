@@ -6,9 +6,14 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
+import os
+
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
-from server.constants import LITE_LLM_API_URL
+
+LITE_LLM_API_URL = os.environ.get(
+    'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
+)
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
