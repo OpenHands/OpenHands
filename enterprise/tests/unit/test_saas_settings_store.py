@@ -241,7 +241,7 @@ async def test_timeout_field_excluded_from_enterprise(settings_store):
         agent='smith',
         email='test@example.com',
         email_verified=True,
-        timeout=60  # Set a timeout value
+        timeout=60,  # Set a timeout value
     )
 
     # Store settings
@@ -249,7 +249,7 @@ async def test_timeout_field_excluded_from_enterprise(settings_store):
 
     # Load settings back
     loaded_settings = await settings_store.load()
-    
+
     # Verify timeout is None (excluded from enterprise)
     assert loaded_settings is not None
     assert loaded_settings.timeout is None

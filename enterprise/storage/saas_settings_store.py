@@ -176,7 +176,7 @@ class SaasSettingsStore(SettingsStore):
             # Filter out timeout field as it's not supported in enterprise
             if 'timeout' in kwargs:
                 del kwargs['timeout']
-            
+
             for model in (user, org, org_member):
                 for key, value in kwargs.items():
                     if hasattr(model, key):
@@ -201,7 +201,7 @@ class SaasSettingsStore(SettingsStore):
         # Filter out timeout field as it's not supported in enterprise
         if 'timeout' in kwargs:
             del kwargs['timeout']
-        
+
         for key, value in kwargs.items():
             try:
                 if value is None:
@@ -222,7 +222,7 @@ class SaasSettingsStore(SettingsStore):
         # Filter out timeout field as it's not supported in enterprise
         if 'timeout' in kwargs:
             del kwargs['timeout']
-        
+
         for key, value in kwargs.items():
             if value is None:
                 continue
