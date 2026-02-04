@@ -18,6 +18,7 @@ from openhands.core.logger import openhands_logger as logger
 class AssessmentResult:
     """Result of a reCAPTCHA Enterprise assessment."""
 
+    name: str
     score: float
     valid: bool
     action_valid: bool
@@ -100,6 +101,10 @@ class RecaptchaService:
 
         response = self.client.create_assessment(request)
 
+        # Capture assessment name for potential annotation later
+        # Format: projects/{project_id}/assessments/{assessment_id}
+        assessment_name = response.name
+
         token_properties = response.token_properties
         risk_analysis = response.risk_analysis
 
@@ -129,6 +134,7 @@ class RecaptchaService:
         logger.info(
             'recaptcha_assessment',
             extra={
+                'assessment_name': assessment_name,
                 'score': score,
                 'valid': valid,
                 'action_valid': action_valid,
@@ -141,6 +147,7 @@ class RecaptchaService:
         )
 
         return AssessmentResult(
+            name=assessment_name,
             score=score,
             valid=valid,
             action_valid=action_valid,
