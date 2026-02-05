@@ -1,12 +1,14 @@
-/* eslint-disable i18next/no-literal-string */
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
+import { I18nKey } from "#/i18n/declaration";
 import { ActionEvent } from "#/types/v1/core";
 import {
   ThinkingBlock,
   RedactedThinkingBlock,
 } from "#/types/v1/core/base/event";
+import { Typography } from "#/ui/typography";
 import { MarkdownRenderer } from "../../../features/markdown/markdown-renderer";
 
 interface ReasoningContentProps {
@@ -31,10 +33,13 @@ interface ReasoningContentSectionProps {
 }
 
 function ThinkingBlockItem({ block, index }: ThinkingBlockItemProps) {
+  const { t } = useTranslation();
   return (
     <div className="mb-2">
       <div className="text-xs text-gray-500 mb-1">
-        Thinking Block {index + 1}
+        {t(I18nKey.REASONING_CONTENT$THINKING_BLOCK_INDEX, {
+          index: index + 1,
+        })}
       </div>
       <div className="bg-gray-50 dark:bg-gray-800 rounded p-2 text-sm">
         <MarkdownRenderer includeStandard>{block.thinking}</MarkdownRenderer>
@@ -44,13 +49,16 @@ function ThinkingBlockItem({ block, index }: ThinkingBlockItemProps) {
 }
 
 function RedactedThinkingBlockItem({ index }: RedactedThinkingBlockItemProps) {
+  const { t } = useTranslation();
   return (
     <div className="mb-2">
       <div className="text-xs text-gray-500 mb-1">
-        Redacted Thinking Block {index + 1}
+        {t(I18nKey.REASONING_CONTENT$REDACTED_THINKING_BLOCK_INDEX, {
+          index: index + 1,
+        })}
       </div>
       <div className="bg-gray-50 dark:bg-gray-800 rounded p-2 text-sm italic text-gray-600">
-        [Redacted thinking content]
+        {t(I18nKey.REASONING_CONTENT$REDACTED_PLACEHOLDER)}
       </div>
     </div>
   );
@@ -73,9 +81,12 @@ function ThinkingBlocksList({ blocks }: ThinkingBlocksListProps) {
 }
 
 function ReasoningContentSection({ content }: ReasoningContentSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="mb-3">
-      <div className="text-xs text-gray-500 mb-1">Reasoning Content</div>
+      <div className="text-xs text-gray-500 mb-1">
+        {t(I18nKey.REASONING_CONTENT$REASONING_CONTENT_LABEL)}
+      </div>
       <div className="bg-gray-50 dark:bg-gray-800 rounded p-3 text-sm">
         <MarkdownRenderer includeStandard>{content}</MarkdownRenderer>
       </div>
@@ -84,6 +95,7 @@ function ReasoningContentSection({ content }: ReasoningContentSectionProps) {
 }
 
 export function ReasoningContent({ event }: ReasoningContentProps) {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Check if there's any reasoning content to display
@@ -108,7 +120,9 @@ export function ReasoningContent({ event }: ReasoningContentProps) {
         ) : (
           <ChevronRight className="h-3 w-3" />
         )}
-        <span>Reasoning</span>
+        <Typography.Text className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+          {t(I18nKey.REASONING_CONTENT$REASONING)}
+        </Typography.Text>
       </button>
 
       {isExpanded && (
@@ -119,7 +133,9 @@ export function ReasoningContent({ event }: ReasoningContentProps) {
 
           {hasThinkingBlocks && (
             <div>
-              <div className="text-xs text-gray-500 mb-2">Thinking Blocks</div>
+              <div className="text-xs text-gray-500 mb-2">
+                {t(I18nKey.REASONING_CONTENT$THINKING_BLOCKS)}
+              </div>
               <ThinkingBlocksList blocks={event.thinking_blocks} />
             </div>
           )}
