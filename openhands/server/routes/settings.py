@@ -122,6 +122,8 @@ async def reset_settings() -> JSONResponse:
 async def store_llm_settings(
     settings: Settings, existing_settings: Settings
 ) -> Settings:
+    from openhands.utils.llm import is_openhands_model
+
     # Convert to Settings model and merge with existing settings
     if existing_settings:
         # Keep existing LLM settings if not provided
@@ -129,8 +131,8 @@ async def store_llm_settings(
             settings.llm_api_key = existing_settings.llm_api_key
         if settings.llm_model is None:
             settings.llm_model = existing_settings.llm_model
-        # if llm_base_url is missing or empty, set to default as this only happens for "basic" settings
-        if not settings.llm_base_url:
+        # if llm_base_url is missing or empty, set to LiteLLM proxy URL for openhands models
+        if not settings.llm_base_url and is_openhands_model(settings.llm_model):
             settings.llm_base_url = LITE_LLM_API_URL
         # Keep search API key if missing or empty
         if not settings.search_api_key:

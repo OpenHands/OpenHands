@@ -188,12 +188,12 @@ async def test_store_llm_settings_update_existing():
 async def test_store_llm_settings_partial_update():
     """Test store_llm_settings with partial update.
 
-    Note: When llm_base_url is not provided in the update, it gets set to the default
-    LiteLLM proxy URL. This is intentional behavior for "basic" settings where users
-    don't specify a custom base URL.
+    Note: When llm_base_url is not provided in the update and the model is NOT an
+    openhands model, the base URL remains None. The LiteLLM proxy URL is only set
+    for openhands/ prefixed models.
     """
     settings = Settings(
-        llm_model='gpt-4'  # Only updating model
+        llm_model='gpt-4'  # Only updating model (not an openhands model)
     )
 
     # Create existing settings
@@ -209,9 +209,36 @@ async def test_store_llm_settings_partial_update():
     assert result.llm_model == 'gpt-4'
     # For SecretStr objects, we need to compare the secret value
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # When llm_base_url is not provided, it defaults to the LiteLLM proxy URL
+    # Non-openhands models don't get a default base URL
+    assert result.llm_base_url is None
+
+
+@pytest.mark.asyncio
+async def test_store_llm_settings_openhands_model_gets_default_url():
+    """Test store_llm_settings with openhands model gets LiteLLM proxy URL.
+
+    When llm_base_url is not provided and the model is an openhands model,
+    it gets set to the default LiteLLM proxy URL.
+    """
     import os
 
+    settings = Settings(
+        llm_model='openhands/claude-sonnet-4-5-20250929'  # openhands model
+    )
+
+    # Create existing settings
+    existing_settings = Settings(
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
+    )
+
+    result = await store_llm_settings(settings, existing_settings)
+
+    # Should return settings with updated model
+    assert result.llm_model == 'openhands/claude-sonnet-4-5-20250929'
+    # For SecretStr objects, we need to compare the secret value
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
+    # openhands models get the LiteLLM proxy URL
     expected_base_url = os.environ.get(
         'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
     )

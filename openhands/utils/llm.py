@@ -11,6 +11,18 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.llm import bedrock
 
 
+def is_openhands_model(model: str | None) -> bool:
+    """Check if the model uses the OpenHands provider.
+
+    Args:
+        model: The model name to check.
+
+    Returns:
+        True if the model starts with 'openhands/', False otherwise.
+    """
+    return bool(model and model.startswith('openhands/'))
+
+
 def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
     """Get all models supported by LiteLLM.
 
