@@ -1,12 +1,4 @@
-export type SubscriptionAccess = {
-  start_at: string;
-  end_at: string;
-  created_at: string;
-  cancelled_at?: string | null;
-  stripe_subscription_id?: string | null;
-};
+// Billing types - currently empty after removing unused subscription types
+// This file can be extended with future billing-related types
 
-export interface CancelSubscriptionResponse {
-  status: string;
-  message: string;
-}
+export {};
