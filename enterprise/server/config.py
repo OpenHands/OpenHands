@@ -17,6 +17,7 @@ from server.auth.constants import (
     GITHUB_APP_PRIVATE_KEY,
     GITHUB_APP_WEBHOOK_SECRET,
     GITLAB_APP_CLIENT_ID,
+    RECAPTCHA_SITE_KEY,
 )
 
 from openhands.core.config.utils import load_openhands_config
@@ -186,5 +187,8 @@ class SaaSServerConfig(ServerConfig):
 
         if self.auth_url:
             config['AUTH_URL'] = self.auth_url
+
+        if RECAPTCHA_SITE_KEY:
+            config['RECAPTCHA_SITE_KEY'] = RECAPTCHA_SITE_KEY
 
         return config

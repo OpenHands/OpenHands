@@ -75,7 +75,6 @@ async def v1_conversation_metadata(async_session, service):
     conversation_id = uuid4()
     stored = StoredConversationMetadata(
         conversation_id=str(conversation_id),
-        user_id='test_user_123',
         sandbox_id='sandbox_123',
         conversation_version='V1',
         title='Test Conversation',
@@ -267,7 +266,6 @@ class TestUpdateConversationStatistics:
         conversation_id = uuid4()
         stored = StoredConversationMetadata(
             conversation_id=str(conversation_id),
-            user_id='test_user_123',
             sandbox_id='sandbox_123',
             conversation_version='V0',  # V0 conversation
             title='V0 Conversation',

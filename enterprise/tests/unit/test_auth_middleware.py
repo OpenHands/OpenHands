@@ -234,3 +234,53 @@ async def test_middleware_with_other_auth_error(middleware, mock_request):
             assert 'set-cookie' in result.headers
             # Logger should be called for non-NoCredentialsError
             mock_logger.warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_middleware_ignores_email_resend_path(
+    middleware, mock_request, mock_response
+):
+    """Test middleware ignores /api/email/resend path and doesn't require authentication."""
+    # Arrange
+    mock_request.cookies = {}
+    mock_request.url = MagicMock()
+    mock_request.url.hostname = 'localhost'
+    mock_request.url.path = '/api/email/resend'
+    mock_call_next = AsyncMock(return_value=mock_response)
+
+    # Act
+    result = await middleware(mock_request, mock_call_next)
+
+    # Assert
+    assert result == mock_response
+    mock_call_next.assert_called_once_with(mock_request)
+    # Should not raise NoCredentialsError even without auth cookie
+
+
+@pytest.mark.asyncio
+async def test_middleware_ignores_email_resend_path_no_tos_check(
+    middleware, mock_request, mock_response
+):
+    """Test middleware doesn't check TOS for /api/email/resend path."""
+    # Arrange
+    mock_request.cookies = {'keycloak_auth': 'test_cookie'}
+    mock_request.url = MagicMock()
+    mock_request.url.hostname = 'localhost'
+    mock_request.url.path = '/api/email/resend'
+    mock_call_next = AsyncMock(return_value=mock_response)
+
+    with (
+        patch('server.middleware.jwt.decode') as mock_decode,
+        patch('server.middleware.config') as mock_config,
+    ):
+        # Even with accepted_tos=False, should not raise TosNotAcceptedError
+        mock_decode.return_value = {'accepted_tos': False}
+        mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
+
+        # Act
+        result = await middleware(mock_request, mock_call_next)
+
+        # Assert
+        assert result == mock_response
+        mock_call_next.assert_called_once_with(mock_request)
+        # Should not raise TosNotAcceptedError for this path

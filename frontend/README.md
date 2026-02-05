@@ -20,7 +20,7 @@ This is the frontend of the OpenHands project. It is a React application that pr
 
 ### Prerequisites
 
-- Node.js 20.x or later
+- Node.js 22.12.x or later
 - `npm`, `bun`, or any other package manager that supports the `package.json` file
 
 ### Installation

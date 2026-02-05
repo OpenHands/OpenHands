@@ -1,3 +1,11 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import os
 from typing import Any
 
@@ -39,6 +47,7 @@ app = APIRouter(
         404: {'description': 'Runtime not initialized', 'model': dict},
         500: {'description': 'Error listing or filtering files', 'model': dict},
     },
+    deprecated=True,
 )
 async def list_files(
     conversation: ServerConversation = Depends(get_conversation),
@@ -63,6 +72,9 @@ async def list_files(
 
     Raises:
         HTTPException: If there's an error listing the files.
+
+        For V1 conversations, file operations are handled through the agent server.
+        Use the sandbox's exposed agent server URL to access file operations.
     """
     if not conversation.runtime:
         return JSONResponse(
@@ -123,6 +135,7 @@ async def list_files(
         500: {'description': 'Error opening file', 'model': dict},
         415: {'description': 'Unsupported media type', 'model': dict},
     },
+    deprecated=True,
 )
 async def select_file(
     file: str, conversation: ServerConversation = Depends(get_conversation)
@@ -144,6 +157,9 @@ async def select_file(
 
     Raises:
         HTTPException: If there's an error opening the file.
+
+        For V1 conversations, file operations are handled through the agent server.
+        Use the sandbox's exposed agent server URL to access file operations.
     """
     runtime: Runtime = conversation.runtime
 
@@ -189,10 +205,16 @@ async def select_file(
         200: {'description': 'Zipped workspace returned as FileResponse'},
         500: {'description': 'Error zipping workspace', 'model': dict},
     },
+    deprecated=True,
 )
 def zip_current_workspace(
     conversation: ServerConversation = Depends(get_conversation),
 ) -> FileResponse | JSONResponse:
+    """Download the current workspace as a zip file.
+
+    For V1 conversations, file operations are handled through the agent server.
+    Use the sandbox's exposed agent server URL to access file operations.
+    """
     try:
         logger.debug('Zipping workspace')
         runtime: Runtime = conversation.runtime
@@ -226,12 +248,18 @@ def zip_current_workspace(
         404: {'description': 'Not a git repository', 'model': dict},
         500: {'description': 'Error getting changes', 'model': dict},
     },
+    deprecated=True,
 )
 async def git_changes(
     conversation: ServerConversation = Depends(get_conversation),
     conversation_store: ConversationStore = Depends(get_conversation_store),
     user_id: str = Depends(get_user_id),
 ) -> list[dict[str, str]] | JSONResponse:
+    """Get git changes in the workspace.
+
+    For V1 conversations, git operations are handled through the agent server.
+    Use the sandbox's exposed agent server URL to access git operations.
+    """
     runtime: Runtime = conversation.runtime
 
     cwd = runtime.config.workspace_mount_path_in_sandbox
@@ -263,12 +291,18 @@ async def git_changes(
     '/git/diff',
     response_model=dict[str, Any],
     responses={500: {'description': 'Error getting diff', 'model': dict}},
+    deprecated=True,
 )
 async def git_diff(
     path: str,
     conversation_store: Any = Depends(get_conversation_store),
     conversation: ServerConversation = Depends(get_conversation),
 ) -> dict[str, Any] | JSONResponse:
+    """Get git diff for a specific file.
+
+    For V1 conversations, git operations are handled through the agent server.
+    Use the sandbox's exposed agent server URL to access git operations.
+    """
     runtime: Runtime = conversation.runtime
 
     cwd = runtime.config.workspace_mount_path_in_sandbox
@@ -284,11 +318,16 @@ async def git_diff(
         )
 
 
-@app.post('/upload-files', response_model=POSTUploadFilesModel)
+@app.post('/upload-files', response_model=POSTUploadFilesModel, deprecated=True)
 async def upload_files(
     files: list[UploadFile],
     conversation: ServerConversation = Depends(get_conversation),
 ):
+    """Upload files to the workspace.
+
+    For V1 conversations, file operations are handled through the agent server.
+    Use the sandbox's exposed agent server URL to access file operations.
+    """
     uploaded_files = []
     skipped_files = []
     runtime: Runtime = conversation.runtime

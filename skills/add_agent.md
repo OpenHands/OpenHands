@@ -36,5 +36,5 @@ When creating a new microagent:
 
 For detailed information, see:
 
-- [Microagents Overview](https://docs.all-hands.dev/usage/prompting/microagents-overview)
+- [Microagents Overview](https://docs.OpenHnads.dev/usage/prompting/microagents-overview)
 - [Example GitHub Skill](https://github.com/OpenHands/OpenHands/blob/main/skills/github.md)

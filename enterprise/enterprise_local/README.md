@@ -2,7 +2,7 @@
 
 You have a few options here, which are expanded on below:
 
-- A simple local development setup, with live reloading for both OSS and this repo
+- A simple local development setup, with live reloading for both OpenHands and this repo
 - A more complex setup that includes Redis
 - An even more complex setup that includes GitHub events
 
@@ -26,7 +26,7 @@ Before starting, make sure you have the following tools installed:
 
 ## Option 1: Simple local development
 
-This option will allow you to modify the both the OSS code and the code in this repo,
+This option will allow you to modify both the OpenHands code and the code in this repo,
 and see the changes in real-time.
 
 This option works best for most scenarios. The only thing it's missing is
@@ -50,7 +50,7 @@ First run this to retrieve Github App secrets
 ```
 gcloud auth application-default login
 gcloud config set project global-432717
-local/decrypt_env.sh
+enterprise_local/decrypt_env.sh /path/to/root/of/deploy/repo
 ```
 
 Now run this to generate a `.env` file, which will used to run SAAS locally
@@ -105,9 +105,9 @@ export REDIS_PORT=6379
 
 (see above)
 
-### 2. Build OSS Openhands
+### 2. Build OpenHands
 
-Develop on [Openhands](https://github.com/All-Hands-AI/OpenHands) locally. When ready, run the following inside Openhands repo (not the Deploy repo)
+Develop on [Openhands](https://github.com/OpenHands/OpenHands) locally. When ready, run the following inside Openhands repo (not the Deploy repo)
 
 ```
 docker build -f containers/app/Dockerfile -t openhands .
@@ -155,7 +155,7 @@ Visit the tunnel domain found in Step 4 to run the app (`https://bc71-2603-7000-
 
 ### Local Debugging with VSCode
 
-Local Development necessitates running a version of OpenHands that is as similar as possible to the version running in the SAAS Environment. Before running these steps, it is assumed you have a local development version of the OSS OpenHands project running.
+Local Development necessitates running a version of OpenHands that is as similar as possible to the version running in the SAAS Environment. Before running these steps, it is assumed you have a local development version of OpenHands running.
 
 #### Redis
 
@@ -201,8 +201,8 @@ And then invoking `printenv`. NOTE: _DO NOT DO THIS WITH PROD!!!_ (Hopefully by 
                 "DEBUG": "1",
                 "FILE_STORE": "local",
                 "REDIS_HOST": "localhost:6379",
-                "OPENHANDS": "<YOUR LOCAL OSS OPENHANDS DIR>",
-                "FRONTEND_DIRECTORY": "<YOUR LOCAL OSS OPENHANDS DIR>/frontend/build",
+                "OPENHANDS": "<YOUR LOCAL OPENHANDS DIR>",
+                "FRONTEND_DIRECTORY": "<YOUR LOCAL OPENHANDS DIR>/frontend/build",
                 "SANDBOX_RUNTIME_CONTAINER_IMAGE": "ghcr.io/openhands/runtime:main-nikolaik",
                 "FILE_STORE_PATH": "<YOUR HOME DIRECTORY>>/.openhands-state",
                 "OPENHANDS_CONFIG_CLS": "server.config.SaaSServerConfig",
@@ -235,8 +235,8 @@ And then invoking `printenv`. NOTE: _DO NOT DO THIS WITH PROD!!!_ (Hopefully by 
                 "DEBUG": "1",
                 "FILE_STORE": "local",
                 "REDIS_HOST": "localhost:6379",
-                "OPENHANDS": "<YOUR LOCAL OSS OPENHANDS DIR>",
-                "FRONTEND_DIRECTORY": "<YOUR LOCAL OSS OPENHANDS DIR>/frontend/build",
+                "OPENHANDS": "<YOUR LOCAL OPENHANDS DIR>",
+                "FRONTEND_DIRECTORY": "<YOUR LOCAL OPENHANDS DIR>/frontend/build",
                 "SANDBOX_RUNTIME_CONTAINER_IMAGE": "ghcr.io/openhands/runtime:main-nikolaik",
                 "FILE_STORE_PATH": "<YOUR HOME DIRECTORY>>/.openhands-state",
                 "OPENHANDS_CONFIG_CLS": "server.config.SaaSServerConfig",

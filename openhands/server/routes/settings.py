@@ -1,3 +1,11 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
+# This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
@@ -106,10 +114,8 @@ async def reset_settings() -> JSONResponse:
 
 
 async def store_llm_settings(
-    settings: Settings, settings_store: SettingsStore
+    settings: Settings, existing_settings: Settings
 ) -> Settings:
-    existing_settings = await settings_store.load()
-
     # Convert to Settings model and merge with existing settings
     if existing_settings:
         # Keep existing LLM settings if not provided
@@ -119,8 +125,8 @@ async def store_llm_settings(
             settings.llm_model = existing_settings.llm_model
         if settings.llm_base_url is None:
             settings.llm_base_url = existing_settings.llm_base_url
-        # Keep existing search API key if not provided
-        if settings.search_api_key is None:
+        # Keep search API key if missing or empty
+        if not settings.search_api_key:
             settings.search_api_key = existing_settings.search_api_key
 
     return settings
@@ -148,7 +154,7 @@ async def store_settings(
 
         # Convert to Settings model and merge with existing settings
         if existing_settings:
-            settings = await store_llm_settings(settings, settings_store)
+            settings = await store_llm_settings(settings, existing_settings)
 
             # Keep existing analytics consent if not provided
             if settings.user_consents_to_analytics is None:

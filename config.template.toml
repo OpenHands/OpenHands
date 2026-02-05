@@ -440,12 +440,6 @@ type = "noop"
 #temperature = 0.1
 #max_input_tokens = 1024
 
-#################################### Eval ####################################
-# Configuration for the evaluation, please refer to the specific evaluation
-# plugin for the available options
-##############################################################################
-
-
 ########################### Kubernetes #######################################
 # Kubernetes configuration when using the Kubernetes runtime
 ##############################################################################

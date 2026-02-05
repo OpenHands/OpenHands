@@ -1,3 +1,4 @@
+import warnings
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -5,6 +6,38 @@ import pytest
 from openhands.integrations.service_types import GitService
 from openhands.server.routes.mcp import get_conversation_link
 from openhands.server.types import AppMode
+
+
+def test_mcp_server_no_stateless_http_deprecation_warning():
+    """Test that mcp_server is created without stateless_http deprecation warning.
+
+    This test verifies the fix for the fastmcp deprecation warning:
+    'Providing `stateless_http` when creating a server is deprecated.
+    Provide it when calling `run` or as a global setting instead.'
+
+    The fix moves the stateless_http parameter from FastMCP() constructor
+    to the http_app() method call.
+    """
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+
+        # Import the mcp_server which triggers FastMCP creation
+        from openhands.server.routes.mcp import mcp_server
+
+        # Check that no deprecation warning about stateless_http was raised
+        stateless_http_warnings = [
+            warning
+            for warning in w
+            if issubclass(warning.category, DeprecationWarning)
+            and 'stateless_http' in str(warning.message)
+        ]
+
+        assert len(stateless_http_warnings) == 0, (
+            f'Unexpected stateless_http deprecation warning: {stateless_http_warnings}'
+        )
+
+        # Verify mcp_server was created successfully
+        assert mcp_server is not None
 
 
 @pytest.mark.asyncio
@@ -15,7 +48,7 @@ async def test_get_conversation_link_non_saas_mode():
 
     # Test with non-SAAS mode
     with patch('openhands.server.routes.mcp.server_config') as mock_config:
-        mock_config.app_mode = AppMode.OSS
+        mock_config.app_mode = AppMode.OPENHANDS
 
         # Call the function
         result = await get_conversation_link(

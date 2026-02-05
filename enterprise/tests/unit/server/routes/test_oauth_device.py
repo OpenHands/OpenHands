@@ -1,7 +1,7 @@
 """Unit tests for OAuth2 Device Flow endpoints."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
@@ -22,8 +22,10 @@ def mock_device_code_store():
 
 @pytest.fixture
 def mock_api_key_store():
-    """Mock API key store."""
-    return MagicMock()
+    """Mock API key store with async create_api_key."""
+    mock = MagicMock()
+    mock.create_api_key = AsyncMock()
+    return mock
 
 
 @pytest.fixture
@@ -204,8 +206,9 @@ class TestDeviceVerificationAuthenticated:
         mock_store.get_by_user_code.return_value = mock_device
         mock_store.authorize_device_code.return_value = True
 
-        # Mock API key store
+        # Mock API key store with async create_api_key
         mock_api_key_store = MagicMock()
+        mock_api_key_store.create_api_key = AsyncMock()
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
         result = await device_verification_authenticated(
@@ -228,8 +231,9 @@ class TestDeviceVerificationAuthenticated:
     @patch('server.routes.oauth_device.device_code_store')
     async def test_multiple_device_authentication(self, mock_store, mock_api_key_class):
         """Test that multiple devices can authenticate simultaneously."""
-        # Mock API key store
+        # Mock API key store with async create_api_key
         mock_api_key_store = MagicMock()
+        mock_api_key_store.create_api_key = AsyncMock()
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
         # Simulate two different devices
@@ -486,8 +490,9 @@ class TestDeviceVerificationTransactionIntegrity:
         mock_store.get_by_user_code.return_value = mock_device
         mock_store.authorize_device_code.return_value = False  # Authorization fails
 
-        # Mock API key store
+        # Mock API key store with async create_api_key
         mock_api_key_store = MagicMock()
+        mock_api_key_store.create_api_key = AsyncMock()
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
         # Should raise HTTPException due to authorization failure
@@ -518,9 +523,11 @@ class TestDeviceVerificationTransactionIntegrity:
         mock_store.authorize_device_code.return_value = True  # Authorization succeeds
         mock_store.deny_device_code.return_value = True  # Cleanup succeeds
 
-        # Mock API key store to fail on creation
+        # Mock API key store to fail on creation (async)
         mock_api_key_store = MagicMock()
-        mock_api_key_store.create_api_key.side_effect = Exception('Database error')
+        mock_api_key_store.create_api_key = AsyncMock(
+            side_effect=Exception('Database error')
+        )
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
         # Should raise HTTPException due to API key creation failure
@@ -558,9 +565,11 @@ class TestDeviceVerificationTransactionIntegrity:
             'Cleanup failed'
         )  # Cleanup fails
 
-        # Mock API key store to fail on creation
+        # Mock API key store to fail on creation (async)
         mock_api_key_store = MagicMock()
-        mock_api_key_store.create_api_key.side_effect = Exception('Database error')
+        mock_api_key_store.create_api_key = AsyncMock(
+            side_effect=Exception('Database error')
+        )
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
         # Should still raise HTTPException for the original API key creation failure
@@ -589,8 +598,9 @@ class TestDeviceVerificationTransactionIntegrity:
         mock_store.get_by_user_code.return_value = mock_device
         mock_store.authorize_device_code.return_value = True  # Authorization succeeds
 
-        # Mock API key store
+        # Mock API key store with async create_api_key
         mock_api_key_store = MagicMock()
+        mock_api_key_store.create_api_key = AsyncMock()
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
         result = await device_verification_authenticated(

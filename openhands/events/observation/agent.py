@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 
 from openhands.core.schema import ObservationType
-from openhands.events.event import RecallType
 from openhands.events.observation.observation import Observation
+from openhands.events.recall_type import RecallType
 
 
 @dataclass

@@ -8,6 +8,7 @@ import { RepositorySelection } from "#/api/open-hands.types";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
+import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -46,6 +47,7 @@ export function ConversationCard({
 }: ConversationCardProps) {
   const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
+  const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -101,6 +103,18 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
+  const handleDownloadConversation = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (conversationId && conversationVersion === "V1") {
+      await downloadConversation(conversationId);
+    }
+    onContextMenuToggle?.(false);
+  };
+
   const hasContextMenu = !!(onDelete || onChangeTitle || showOptions);
 
   return (
@@ -130,6 +144,11 @@ export function ConversationCard({
             onStop={onStop && handleStop}
             onEdit={onChangeTitle && handleEdit}
             onDownloadViaVSCode={handleDownloadViaVSCode}
+            onDownloadConversation={
+              conversationVersion === "V1"
+                ? handleDownloadConversation
+                : undefined
+            }
             conversationStatus={conversationStatus}
             conversationId={conversationId}
             showOptions={showOptions}

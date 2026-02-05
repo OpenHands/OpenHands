@@ -28,15 +28,15 @@ export const VERIFIED_MODELS = [
   "devstral-medium-2507",
   "kimi-k2-0711-preview",
   "qwen3-coder-480b",
-  "gpt-5-2025-08-07",
-  "gpt-5-mini-2025-08-07",
+  "gpt-5.2",
+  "gpt-5.2-codex",
 ];
 
 // LiteLLM does not return OpenAI models with the provider, so we list them here to set them ourselves for consistency
 // (e.g., they return `gpt-4o` instead of `openai/gpt-4o`)
 export const VERIFIED_OPENAI_MODELS = [
-  "gpt-5-2025-08-07",
-  "gpt-5-mini-2025-08-07",
+  "gpt-5.2",
+  "gpt-5.2-codex",
   "gpt-4o",
   "gpt-4o-mini",
   "gpt-4.1",
@@ -77,8 +77,8 @@ export const VERIFIED_OPENHANDS_MODELS = [
   "claude-sonnet-4-20250514",
   "claude-sonnet-4-5-20250929",
   "claude-haiku-4-5-20251001",
-  "gpt-5-2025-08-07",
-  "gpt-5-mini-2025-08-07",
+  "gpt-5.2",
+  "gpt-5.2-codex",
   "claude-opus-4-20250514",
   "claude-opus-4-1-20250805",
   "claude-opus-4-5-20251101",
