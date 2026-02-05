@@ -3,22 +3,37 @@ import { PostHogProvider } from "posthog-js/react";
 import OptionService from "#/api/option-service/option-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
-function getBootstrapFromHash() {
+const POSTHOG_BOOTSTRAP_KEY = "posthog_bootstrap";
+
+function getBootstrapIds() {
+  // Try to extract from URL hash (e.g. #distinct_id=abc&session_id=xyz)
   const hash = window.location.hash.substring(1);
   const params = new URLSearchParams(hash);
-  const distinctId = params.get("ph_distinct_id");
-  const sessionId = params.get("ph_session_id");
+  const distinctId = params.get("distinct_id");
+  const sessionId = params.get("session_id");
 
   if (distinctId && sessionId) {
-    // Remove the PostHog tracking params from URL hash to keep URL clean
-    // replaceState(state, unused, url) - we pass null state, empty title (ignored by browsers), and the clean URL
+    const bootstrap = { distinctID: distinctId, sessionID: sessionId };
+
+    // Persist to sessionStorage so IDs survive full-page OAuth redirects
+    sessionStorage.setItem(POSTHOG_BOOTSTRAP_KEY, JSON.stringify(bootstrap));
+
+    // Clean the hash from the URL
     window.history.replaceState(
       null,
       "",
       window.location.pathname + window.location.search,
     );
-    return { distinctID: distinctId, sessionID: sessionId };
+    return bootstrap;
   }
+
+  // Fallback: check sessionStorage (covers return from OAuth redirect)
+  const stored = sessionStorage.getItem(POSTHOG_BOOTSTRAP_KEY);
+  if (stored) {
+    sessionStorage.removeItem(POSTHOG_BOOTSTRAP_KEY);
+    return JSON.parse(stored) as { distinctID: string; sessionID: string };
+  }
+
   return undefined;
 }
 
@@ -27,7 +42,7 @@ export function PostHogWrapper({ children }: { children: React.ReactNode }) {
     null,
   );
   const [isLoading, setIsLoading] = React.useState(true);
-  const bootstrapIds = React.useMemo(() => getBootstrapFromHash(), []);
+  const bootstrapIds = React.useMemo(() => getBootstrapIds(), []);
 
   React.useEffect(() => {
     (async () => {
