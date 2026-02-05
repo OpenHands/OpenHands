@@ -54,9 +54,9 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.2",
-  "openhands-agent-server==1.10",
-  "openhands-sdk==1.10",
-  "openhands-tools==1.10",
+  "openhands-agent-server==1.11",
+  "openhands-sdk==1.11",
+  "openhands-tools==1.11",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "pathspec>=0.12.1",
@@ -139,44 +139,10 @@ runtime = [
   "jupyterlab",
   "notebook",
 ]
-evaluation = [
-  "boto3-stubs[s3]>=1.37.19",
-  "browsergym==0.13.3",
-  "browsergym-miniwob==0.13.3",
-  "browsergym-visualwebarena==0.13.3",
-  "browsergym-webarena==0.13.3",
-  "commit0",
-  "datasets",
-  "evaluate",
-  "func-timeout",
-  "gdown",
-  "joblib",
-  "matplotlib",
-  "multi-swe-bench==0.1.2",
-  "pandas",
-  "pyarrow==21",
-  "retry",
-  "seaborn",
-  "streamlit",
-  "swebench",
-  "swegym",
-  "sympy",
-  "tabulate",
-  "visualswebench",
-  "whatthepatch",
-]
-testgeneval = [
-  "fuzzywuzzy>=0.18",
-  "python-levenshtein>=0.26.1,<0.28",
-  "rouge>=1.0.1",
-  "tree-sitter-python>=0.23.6",
-]
-
-# UV source configuration for git dependencies in evaluation group
 
 [tool.poetry]
 name = "openhands-ai"
-version = "1.2.1"
+version = "1.3.0"
 description = "OpenHands: Code Less, Make More"
 authors = [ "OpenHands" ]
 license = "MIT"
@@ -280,9 +246,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.10"
-openhands-agent-server = "1.10"
-openhands-tools = "1.10"
+openhands-sdk = "1.11.0"
+openhands-agent-server = "1.11.0"
+openhands-tools = "1.11.0"
 python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
@@ -328,44 +294,6 @@ jupyterlab = "*"
 notebook = "*"
 flake8 = "*"
 
-[tool.poetry.group.evaluation]
-optional = true
-
-[tool.poetry.group.evaluation.dependencies]
-streamlit = "*"
-whatthepatch = "*"
-retry = "*"
-evaluate = "*"
-visualswebench = { git = "https://github.com/luolin101/Visual-SWE-bench.git" }
-swegym = { git = "https://github.com/SWE-Gym/SWE-Bench-Package.git" }
-commit0 = "*"
-func_timeout = "*"
-sympy = "*"
-gdown = "*"
-matplotlib = "*"
-seaborn = "*"
-tabulate = "*"
-browsergym = "0.13.3"
-browsergym-webarena = "0.13.3"
-browsergym-miniwob = "0.13.3"
-browsergym-visualwebarena = "0.13.3"
-boto3-stubs = { extras = [ "s3" ], version = "^1.37.19" }
-# transitive dependency, pinned here to avoid conflicts
-pyarrow = "21.0.0"
-datasets = "*"
-joblib = "*"
-swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }
-multi-swe-bench = "0.1.2"
-pandas = "*"
-# tau-bench = { git = "https://github.com/sierra-research/tau-bench.git" }
-# bfcl-eval = "*" # TODO: Verify exact package name/source
-
-[tool.poetry.group.testgeneval.dependencies]
-fuzzywuzzy = "^0.18.0"
-rouge = "^1.0.1"
-python-levenshtein = ">=0.26.1,<0.28.0"
-tree-sitter-python = "^0.23.6"
-
 [tool.poetry-dynamic-versioning]
 enable = true
 style = "semver"
@@ -388,8 +316,3 @@ lint.pydocstyle.convention = "google"
 concurrency = [ "gevent" ]
 relative_files = true
 omit = [ "enterprise/tests/*", "**/test_*" ]
-
-[tool.uv.sources]
-visualswebench = { git = "https://github.com/luolin101/Visual-SWE-bench.git" }
-swegym = { git = "https://github.com/SWE-Gym/SWE-Bench-Package.git" }
-swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }

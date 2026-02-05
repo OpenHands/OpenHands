@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import traceback
+import warnings
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from types import TracebackType
@@ -19,6 +20,17 @@ from typing import Any, Literal, Mapping, MutableMapping, TextIO
 import litellm
 from pythonjsonlogger.json import JsonFormatter
 from termcolor import colored
+
+# Suppress deprecation warnings from dependencies before they're imported
+# aifc was removed in Python 3.13 but speech_recognition still references it
+with warnings.catch_warnings():
+    warnings.simplefilter('ignore')
+    import aifc
+
+    # Stop the linter from deleting the import
+    _AIFC = aifc.__name__
+
+warnings.filterwarnings('ignore', category=SyntaxWarning, module=r'pydub\.utils')
 
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 DEBUG = os.getenv('DEBUG', 'False').lower() in ['true', '1', 'yes']
@@ -419,6 +431,7 @@ LOQUACIOUS_LOGGERS = [
     'socketio.client',
     'socketio.server',
     'aiosqlite',
+    'alembic.runtime.plugins.setup',
 ]
 
 for logger_name in LOQUACIOUS_LOGGERS:

@@ -1,4 +1,4 @@
-<!-- Ideally you should open a PR when it is ready for review. Draft PRs will not be reviewed -->
+<!-- If you are still working on the PR, please mark it as draft. Maintainers will review PRs marked ready for review, which leads to lost time if your PR is actually not ready yet. Keep the PR marked as draft until it is finally ready for review -->
 
 ## Summary of PR
 

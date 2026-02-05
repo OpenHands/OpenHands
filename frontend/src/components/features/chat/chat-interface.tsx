@@ -18,6 +18,8 @@ import { ScrollProvider } from "#/context/scroll-context";
 import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState } from "#/hooks/use-agent-state";
+import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
+import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 
 import { ScrollToBottomButton } from "#/components/shared/buttons/scroll-to-bottom-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -88,6 +90,43 @@ export function ChatInterface() {
   const { data: config } = useConfig();
 
   const { curAgentState } = useAgentState();
+  const { handleBuildPlanClick } = useHandleBuildPlanClick();
+  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
+
+  // Disable Build button while agent is running (streaming)
+  const isAgentRunning =
+    curAgentState === AgentState.RUNNING ||
+    curAgentState === AgentState.LOADING;
+
+  // Global keyboard shortcut for Build button (Cmd+Enter / Ctrl+Enter)
+  // This is placed here instead of PlanPreview to avoid duplicate listeners
+  // when multiple PlanPreview components exist in the chat
+  React.useEffect(() => {
+    if (!shouldUsePlanningAgent || isAgentRunning) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        handleBuildPlanClick(event);
+        scrollDomToBottom();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    shouldUsePlanningAgent,
+    isAgentRunning,
+    handleBuildPlanClick,
+    scrollDomToBottom,
+  ]);
 
   const [feedbackPolarity, setFeedbackPolarity] = React.useState<
     "positive" | "negative"
