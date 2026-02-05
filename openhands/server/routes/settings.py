@@ -6,6 +6,8 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
+import os
+
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
@@ -29,6 +31,10 @@ from openhands.server.user_auth import (
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
+
+LITE_LLM_API_URL = os.environ.get(
+    'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
+)
 
 app = APIRouter(prefix='/api', dependencies=get_dependencies())
 
@@ -123,8 +129,9 @@ async def store_llm_settings(
             settings.llm_api_key = existing_settings.llm_api_key
         if settings.llm_model is None:
             settings.llm_model = existing_settings.llm_model
-        if settings.llm_base_url is None:
-            settings.llm_base_url = existing_settings.llm_base_url
+        # if llm_base_url is missing or empty, set to default as this only happens for "basic" settings
+        if not settings.llm_base_url:
+            settings.llm_base_url = LITE_LLM_API_URL
         # Keep search API key if missing or empty
         if not settings.search_api_key:
             settings.search_api_key = existing_settings.search_api_key
