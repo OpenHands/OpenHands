@@ -189,8 +189,8 @@ async def test_store_llm_settings_partial_update():
     """Test store_llm_settings with partial update.
 
     Note: When llm_base_url is not provided in the update and the model is NOT an
-    openhands model, we attempt to get the URL from litellm.get_model_info().
-    Since litellm doesn't provide api_base for most models, it remains None.
+    openhands model, we attempt to get the URL from litellm.get_api_base().
+    For OpenAI models, this returns https://api.openai.com.
     """
     settings = Settings(
         llm_model='gpt-4'  # Only updating model (not an openhands model)
@@ -209,14 +209,37 @@ async def test_store_llm_settings_partial_update():
     assert result.llm_model == 'gpt-4'
     # For SecretStr objects, we need to compare the secret value
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # Non-openhands models: litellm.get_model_info() is called but doesn't provide api_base
-    # so llm_base_url remains None
+    # OpenAI models: litellm.get_api_base() returns https://api.openai.com
+    assert result.llm_base_url == 'https://api.openai.com'
+
+
+@pytest.mark.asyncio
+async def test_store_llm_settings_model_without_api_base():
+    """Test store_llm_settings with a model that litellm doesn't have api_base for.
+
+    For models like Anthropic's Claude, litellm.get_api_base() returns None,
+    so llm_base_url remains None.
+    """
+    settings = Settings(
+        llm_model='anthropic/claude-sonnet-4-5-20250929'  # Anthropic model
+    )
+
+    existing_settings = Settings(
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
+    )
+
+    result = await store_llm_settings(settings, existing_settings)
+
+    assert result.llm_model == 'anthropic/claude-sonnet-4-5-20250929'
+    assert result.llm_api_key.get_secret_value() == 'existing-api-key'
+    # Anthropic models: litellm.get_api_base() returns None
     assert result.llm_base_url is None
 
 
 @pytest.mark.asyncio
 async def test_store_llm_settings_litellm_error_logged():
-    """Test that litellm errors are logged when getting model info fails."""
+    """Test that litellm errors are logged when getting api_base fails."""
     from unittest.mock import patch
 
     settings = Settings(
@@ -234,7 +257,7 @@ async def test_store_llm_settings_litellm_error_logged():
 
         # llm_base_url should remain None since litellm couldn't find the model
         assert result.llm_base_url is None
-        # Error should have been logged (either error or debug depending on failure type)
+        # Either error or debug should have been logged
         assert mock_logger.error.called or mock_logger.debug.called
 
 

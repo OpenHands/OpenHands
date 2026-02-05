@@ -137,18 +137,18 @@ async def store_llm_settings(
                 # OpenHands models use the LiteLLM proxy
                 settings.llm_base_url = LITE_LLM_API_URL
             elif settings.llm_model:
-                # For non-openhands models, try to get URL from litellm model info
+                # For non-openhands models, try to get URL from litellm
                 try:
-                    model_info = litellm.get_model_info(settings.llm_model)
-                    if model_info and 'api_base' in model_info:
-                        settings.llm_base_url = model_info['api_base']
+                    api_base = litellm.get_api_base(settings.llm_model, {})
+                    if api_base:
+                        settings.llm_base_url = api_base
                     else:
                         logger.debug(
-                            f'No api_base found in litellm model info for model: {settings.llm_model}'
+                            f'No api_base found in litellm for model: {settings.llm_model}'
                         )
                 except Exception as e:
                     logger.error(
-                        f'Failed to get model info from litellm for model {settings.llm_model}: {e}'
+                        f'Failed to get api_base from litellm for model {settings.llm_model}: {e}'
                     )
         # Keep search API key if missing or empty
         if not settings.search_api_key:
