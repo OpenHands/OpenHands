@@ -290,6 +290,64 @@ class TestRecaptchaServiceCreateAssessment:
             assert call_kwargs[1]['extra']['action_valid'] is True
             assert call_kwargs[1]['extra']['user_ip'] == '192.168.1.1'
 
+    def test_should_log_user_id_and_email_when_provided(
+        self, recaptcha_service, mock_gcp_client
+    ):
+        """Test that user_id and email are included in log when provided."""
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.name = 'projects/test-project/assessments/xyz123'
+        mock_response.token_properties.valid = True
+        mock_response.token_properties.action = 'LOGIN'
+        mock_response.risk_analysis.score = 0.9
+        mock_response.risk_analysis.reasons = []
+        mock_gcp_client.create_assessment.return_value = mock_response
+
+        with patch('server.auth.recaptcha_service.logger') as mock_logger:
+            # Act
+            recaptcha_service.create_assessment(
+                token='test-token',
+                action='LOGIN',
+                user_ip='192.168.1.1',
+                user_agent='Mozilla/5.0',
+                email='test@example.com',
+                user_id='keycloak-user-123',
+            )
+
+            # Assert
+            mock_logger.info.assert_called_once()
+            call_kwargs = mock_logger.info.call_args
+            assert call_kwargs[1]['extra']['user_id'] == 'keycloak-user-123'
+            assert call_kwargs[1]['extra']['email'] == 'test@example.com'
+
+    def test_should_log_none_for_user_id_and_email_when_not_provided(
+        self, recaptcha_service, mock_gcp_client
+    ):
+        """Test that user_id and email are logged as None when not provided."""
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.name = 'projects/test-project/assessments/abc456'
+        mock_response.token_properties.valid = True
+        mock_response.token_properties.action = 'LOGIN'
+        mock_response.risk_analysis.score = 0.9
+        mock_response.risk_analysis.reasons = []
+        mock_gcp_client.create_assessment.return_value = mock_response
+
+        with patch('server.auth.recaptcha_service.logger') as mock_logger:
+            # Act
+            recaptcha_service.create_assessment(
+                token='test-token',
+                action='LOGIN',
+                user_ip='192.168.1.1',
+                user_agent='Mozilla/5.0',
+            )
+
+            # Assert
+            mock_logger.info.assert_called_once()
+            call_kwargs = mock_logger.info.call_args
+            assert call_kwargs[1]['extra']['user_id'] is None
+            assert call_kwargs[1]['extra']['email'] is None
+
     def test_should_raise_exception_when_gcp_client_fails(
         self, recaptcha_service, mock_gcp_client
     ):

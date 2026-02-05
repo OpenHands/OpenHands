@@ -27,6 +27,7 @@ from storage.org_member import OrgMember
 from storage.role_store import RoleStore
 from storage.user import User
 from storage.user_settings import UserSettings
+from utils.identity import resolve_display_name
 
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 
@@ -53,7 +54,8 @@ class UserStore:
             org = Org(
                 id=uuid.UUID(user_id),
                 name=f'user_{user_id}_org',
-                contact_name=user_info['preferred_username'],
+                contact_name=resolve_display_name(user_info)
+                or user_info.get('preferred_username', ''),
                 contact_email=user_info['email'],
                 v1_enabled=True,
             )
@@ -175,7 +177,8 @@ class UserStore:
                 id=uuid.UUID(user_id),
                 name=f'user_{user_id}_org',
                 org_version=user_settings.user_version,
-                contact_name=user_info['username'],
+                contact_name=resolve_display_name(user_info)
+                or user_info.get('username', ''),
                 contact_email=user_info['email'],
             )
             session.add(org)
@@ -755,6 +758,49 @@ class UserStore:
         """List all users."""
         with session_maker() as session:
             return session.query(User).all()
+
+    @staticmethod
+    async def backfill_contact_name(user_id: str, user_info: dict) -> None:
+        """Update contact_name on the personal org if it still has a username-style value.
+
+        Called during login to gradually fix existing users whose contact_name
+        was stored as their username (before the resolve_display_name fix).
+        Preserves custom values that were set via the PATCH endpoint.
+        """
+        real_name = resolve_display_name(user_info)
+        if not real_name:
+            logger.debug(
+                'backfill_contact_name:no_real_name',
+                extra={'user_id': user_id},
+            )
+            return
+
+        preferred_username = user_info.get('preferred_username', '')
+        username = user_info.get('username', '')
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(Org).filter(Org.id == uuid.UUID(user_id))
+            )
+            org = result.scalars().first()
+            if not org:
+                logger.debug(
+                    'backfill_contact_name:org_not_found',
+                    extra={'user_id': user_id},
+                )
+                return
+
+            if org.contact_name in (preferred_username, username):
+                logger.info(
+                    'backfill_contact_name:updated',
+                    extra={
+                        'user_id': user_id,
+                        'old': org.contact_name,
+                        'new': real_name,
+                    },
+                )
+                org.contact_name = real_name
+                await session.commit()
 
     # Prevent circular imports
     from typing import TYPE_CHECKING
