@@ -219,6 +219,7 @@ async def keycloak_callback(
                 user_ip=user_ip,
                 user_agent=user_agent,
                 email=email,
+                user_id=user_id,
             )
 
             if not result.allowed:
