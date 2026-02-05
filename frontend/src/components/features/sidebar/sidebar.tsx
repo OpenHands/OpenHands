@@ -64,6 +64,7 @@ export function Sidebar() {
   return (
     <>
       <aside
+        aria-label="Main navigation sidebar"
         className={cn(
           "h-[54px] p-3 md:p-0 md:h-[40px] md:h-auto flex flex-row md:flex-col gap-1 bg-base md:w-[75px] md:min-w-[75px] sm:pt-0 sm:px-2 md:pt-[14px] md:px-0",
           pathname === "/" && "md:pt-6.5 md:pb-3",
