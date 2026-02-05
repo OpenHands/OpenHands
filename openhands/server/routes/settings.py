@@ -10,6 +10,7 @@ import os
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
+import litellm
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import (
@@ -31,6 +32,7 @@ from openhands.server.user_auth import (
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
+from openhands.utils.llm import is_openhands_model
 
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
@@ -122,14 +124,6 @@ async def reset_settings() -> JSONResponse:
 async def store_llm_settings(
     settings: Settings, existing_settings: Settings
 ) -> Settings:
-    import warnings
-
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        import litellm
-
-    from openhands.utils.llm import is_openhands_model
-
     # Convert to Settings model and merge with existing settings
     if existing_settings:
         # Keep existing LLM settings if not provided
