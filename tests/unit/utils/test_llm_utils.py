@@ -1,7 +1,5 @@
 """Tests for openhands.utils.llm module."""
 
-import pytest
-
 from openhands.utils.llm import get_provider_api_base, is_openhands_model
 
 
