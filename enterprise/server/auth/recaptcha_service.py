@@ -63,6 +63,7 @@ class RecaptchaService:
         user_ip: str,
         user_agent: str,
         email: str | None = None,
+        user_id: str | None = None,
     ) -> AssessmentResult:
         """Create a reCAPTCHA Enterprise assessment.
 
@@ -72,6 +73,7 @@ class RecaptchaService:
             user_ip: The user's IP address.
             user_agent: The user's browser user agent.
             email: Optional email for Account Defender hashing.
+            user_id: Optional Keycloak user ID for logging correlation.
 
         Returns:
             AssessmentResult with score, validity, and allowed status.
@@ -137,6 +139,8 @@ class RecaptchaService:
                 'has_suspicious_labels': has_suspicious_labels,
                 'allowed': allowed,
                 'user_ip': user_ip,
+                'user_id': user_id,
+                'email': email,
             },
         )
 
