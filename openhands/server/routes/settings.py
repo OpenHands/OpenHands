@@ -91,7 +91,9 @@ async def load_settings(
         if is_openhands_model(settings.llm_model):
             if settings.llm_base_url == LITE_LLM_API_URL:
                 settings_with_token_data.llm_base_url = None
-        elif settings.llm_base_url == get_provider_api_base(settings.llm_model):
+        elif settings.llm_model and settings.llm_base_url == get_provider_api_base(
+            settings.llm_model
+        ):
             settings_with_token_data.llm_base_url = None
 
         settings_with_token_data.llm_api_key = None
