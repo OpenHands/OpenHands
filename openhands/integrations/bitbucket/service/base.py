@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 from pydantic import SecretStr
 
+from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.protocols.http_client import HTTPClient
 from openhands.integrations.service_types import (
     BaseGitService,
@@ -23,6 +24,18 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
     """
 
     BASE_URL = 'https://api.bitbucket.org/2.0'
+
+    @staticmethod
+    def _resolve_primary_email(emails: list[dict]) -> str | None:
+        """Find the primary confirmed email from a list of Bitbucket email objects.
+
+        Bitbucket's /user/emails endpoint returns objects with
+        'email', 'is_primary', and 'is_confirmed' keys.
+        """
+        for entry in emails:
+            if entry.get('is_primary') and entry.get('is_confirmed'):
+                return entry.get('email')
+        return None
 
     def _extract_owner_and_repo(self, repository: str) -> tuple[str, str]:
         """Extract owner and repo from repository string.
@@ -137,6 +150,17 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
 
         return all_items[:max_items]
 
+    async def get_user_emails(self) -> list[dict]:
+        """Fetch the authenticated user's email addresses from Bitbucket.
+
+        Calls GET /user/emails which returns a paginated response with a
+        'values' list of email objects containing 'email', 'is_primary',
+        and 'is_confirmed' fields.
+        """
+        url = f'{self.BASE_URL}/user/emails'
+        response, _ = await self._make_request(url)
+        return response.get('values', [])
+
     async def get_user(self) -> User:
         """Get the authenticated user's information."""
         url = f'{self.BASE_URL}/user'
@@ -144,12 +168,22 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
 
         account_id = data.get('account_id', '')
 
+        email = None
+        try:
+            emails = await self.get_user_emails()
+            email = self._resolve_primary_email(emails)
+        except Exception:
+            logger.warning(
+                'bitbucket:get_user:email_fallback_failed',
+                exc_info=True,
+            )
+
         return User(
             id=account_id,
             login=data.get('username', ''),
             avatar_url=data.get('links', {}).get('avatar', {}).get('href', ''),
             name=data.get('display_name'),
-            email=None,  # Bitbucket API doesn't return email in this endpoint
+            email=email,
         )
 
     def _parse_repository(
