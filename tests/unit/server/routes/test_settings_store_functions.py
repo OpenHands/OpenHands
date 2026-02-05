@@ -214,11 +214,11 @@ async def test_store_llm_settings_partial_update():
 
 
 @pytest.mark.asyncio
-async def test_store_llm_settings_model_without_api_base():
-    """Test store_llm_settings with a model that litellm doesn't have api_base for.
+async def test_store_llm_settings_anthropic_model_gets_api_base():
+    """Test store_llm_settings with an Anthropic model.
 
-    For models like Anthropic's Claude, litellm.get_api_base() returns None,
-    so llm_base_url remains None.
+    For Anthropic models, get_provider_api_base() returns the Anthropic API base URL
+    via ProviderConfigManager.get_provider_model_info().
     """
     settings = Settings(
         llm_model='anthropic/claude-sonnet-4-5-20250929'  # Anthropic model
@@ -233,8 +233,8 @@ async def test_store_llm_settings_model_without_api_base():
 
     assert result.llm_model == 'anthropic/claude-sonnet-4-5-20250929'
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # Anthropic models: litellm.get_api_base() returns None
-    assert result.llm_base_url is None
+    # Anthropic models get https://api.anthropic.com via ProviderConfigManager
+    assert result.llm_base_url == 'https://api.anthropic.com'
 
 
 @pytest.mark.asyncio
