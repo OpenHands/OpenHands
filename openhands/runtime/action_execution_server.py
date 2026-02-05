@@ -66,6 +66,7 @@ from openhands.runtime.file_viewer_server import start_file_viewer_server
 # Import our custom MCP Proxy Manager
 from openhands.runtime.mcp.proxy import MCPProxyManager
 from openhands.runtime.plugins import ALL_PLUGINS, JupyterPlugin, Plugin, VSCodePlugin
+from openhands.runtime.plugins.tracing_proxy import TracingPluginProxy
 from openhands.runtime.utils import find_available_tcp_port
 from openhands.runtime.utils.bash import BashSession
 from openhands.runtime.utils.files import insert_lines, read_lines
@@ -79,6 +80,27 @@ from openhands.utils.async_utils import call_sync_from_async, wait_all
 
 if sys.platform == 'win32':
     from openhands.runtime.utils.windows_bash import WindowsPowershellSession
+
+try:
+    from lmnr import Laminar
+
+    LAMINAR_AVAILABLE = True
+except ImportError:
+    LAMINAR_AVAILABLE = False
+
+
+def _maybe_init_laminar():
+    """Initialize Laminar observability if configured."""
+    if not LAMINAR_AVAILABLE:
+        return
+    if os.getenv('LMNR_PROJECT_API_KEY') or os.getenv(
+        'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'
+    ):
+        try:
+            Laminar.initialize()
+            logger.info('Laminar observability initialized in runtime')
+        except Exception as e:
+            logger.warning(f'Failed to initialize Laminar: {e}')
 
 
 class ActionRequest(BaseModel):
@@ -684,12 +706,17 @@ if __name__ == '__main__':
     server_url, _ = start_file_viewer_server(port=_file_viewer_port)
     logger.info(f'File viewer server started at {server_url}')
 
+    _maybe_init_laminar()
+
     plugins_to_load: list[Plugin] = []
     if args.plugins:
         for plugin in args.plugins:
             if plugin not in ALL_PLUGINS:
                 raise ValueError(f'Plugin {plugin} not found')
-            plugins_to_load.append(ALL_PLUGINS[plugin]())  # type: ignore
+            plugin_instance = ALL_PLUGINS[plugin]()  # type: ignore
+            if LAMINAR_AVAILABLE and Laminar.is_initialized():
+                plugin_instance = TracingPluginProxy(plugin_instance)
+            plugins_to_load.append(plugin_instance)
 
     client: ActionExecutor | None = None
     mcp_proxy_manager: MCPProxyManager | None = None
