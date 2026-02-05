@@ -122,6 +122,12 @@ async def reset_settings() -> JSONResponse:
 async def store_llm_settings(
     settings: Settings, existing_settings: Settings
 ) -> Settings:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        import litellm
+
     from openhands.utils.llm import is_openhands_model
 
     # Convert to Settings model and merge with existing settings
@@ -131,9 +137,25 @@ async def store_llm_settings(
             settings.llm_api_key = existing_settings.llm_api_key
         if settings.llm_model is None:
             settings.llm_model = existing_settings.llm_model
-        # if llm_base_url is missing or empty, set to LiteLLM proxy URL for openhands models
-        if not settings.llm_base_url and is_openhands_model(settings.llm_model):
-            settings.llm_base_url = LITE_LLM_API_URL
+        # if llm_base_url is missing or empty, try to determine appropriate URL
+        if not settings.llm_base_url:
+            if is_openhands_model(settings.llm_model):
+                # OpenHands models use the LiteLLM proxy
+                settings.llm_base_url = LITE_LLM_API_URL
+            elif settings.llm_model:
+                # For non-openhands models, try to get URL from litellm model info
+                try:
+                    model_info = litellm.get_model_info(settings.llm_model)
+                    if model_info and 'api_base' in model_info:
+                        settings.llm_base_url = model_info['api_base']
+                    else:
+                        logger.debug(
+                            f'No api_base found in litellm model info for model: {settings.llm_model}'
+                        )
+                except Exception as e:
+                    logger.error(
+                        f'Failed to get model info from litellm for model {settings.llm_model}: {e}'
+                    )
         # Keep search API key if missing or empty
         if not settings.search_api_key:
             settings.search_api_key = existing_settings.search_api_key

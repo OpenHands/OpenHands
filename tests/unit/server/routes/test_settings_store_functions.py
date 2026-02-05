@@ -189,8 +189,8 @@ async def test_store_llm_settings_partial_update():
     """Test store_llm_settings with partial update.
 
     Note: When llm_base_url is not provided in the update and the model is NOT an
-    openhands model, the base URL remains None. The LiteLLM proxy URL is only set
-    for openhands/ prefixed models.
+    openhands model, we attempt to get the URL from litellm.get_model_info().
+    Since litellm doesn't provide api_base for most models, it remains None.
     """
     settings = Settings(
         llm_model='gpt-4'  # Only updating model (not an openhands model)
@@ -209,8 +209,33 @@ async def test_store_llm_settings_partial_update():
     assert result.llm_model == 'gpt-4'
     # For SecretStr objects, we need to compare the secret value
     assert result.llm_api_key.get_secret_value() == 'existing-api-key'
-    # Non-openhands models don't get a default base URL
+    # Non-openhands models: litellm.get_model_info() is called but doesn't provide api_base
+    # so llm_base_url remains None
     assert result.llm_base_url is None
+
+
+@pytest.mark.asyncio
+async def test_store_llm_settings_litellm_error_logged():
+    """Test that litellm errors are logged when getting model info fails."""
+    from unittest.mock import patch
+
+    settings = Settings(
+        llm_model='unknown-model-xyz'  # A model that litellm won't recognize
+    )
+
+    existing_settings = Settings(
+        llm_model='gpt-3.5',
+        llm_api_key=SecretStr('existing-api-key'),
+    )
+
+    # The function should not raise even if litellm fails
+    with patch('openhands.server.routes.settings.logger') as mock_logger:
+        result = await store_llm_settings(settings, existing_settings)
+
+        # llm_base_url should remain None since litellm couldn't find the model
+        assert result.llm_base_url is None
+        # Error should have been logged (either error or debug depending on failure type)
+        assert mock_logger.error.called or mock_logger.debug.called
 
 
 @pytest.mark.asyncio
