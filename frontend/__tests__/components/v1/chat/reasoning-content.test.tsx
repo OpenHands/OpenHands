@@ -74,7 +74,9 @@ describe("ReasoningContent", () => {
 
     renderWithProviders(<ReasoningContent event={mockActionEvent} />);
 
-    expect(screen.getByText("Reasoning")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$REASONING"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("This is the reasoning content"),
     ).not.toBeInTheDocument();
@@ -121,10 +123,14 @@ describe("ReasoningContent", () => {
 
     renderWithProviders(<ReasoningContent event={mockActionEvent} />);
 
-    expect(screen.getByText("Reasoning")).toBeInTheDocument();
-    expect(screen.queryByText("Thinking Block 1")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Redacted Thinking Block 2"),
+      screen.getByText("REASONING_CONTENT$REASONING"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("REASONING_CONTENT$THINKING_BLOCK_INDEX"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("REASONING_CONTENT$REDACTED_THINKING_BLOCK_INDEX"),
     ).not.toBeInTheDocument();
   });
 
@@ -166,14 +172,20 @@ describe("ReasoningContent", () => {
     const user = userEvent.setup();
     renderWithProviders(<ReasoningContent event={mockActionEvent} />);
 
-    await user.click(screen.getByText("Reasoning"));
+    await user.click(screen.getByText("REASONING_CONTENT$REASONING"));
 
-    expect(screen.getByText("Reasoning Content")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$REASONING_CONTENT_LABEL"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("This is the reasoning content from the AI model."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Thinking Blocks")).toBeInTheDocument();
-    expect(screen.getByText("Thinking Block 1")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$THINKING_BLOCKS"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$THINKING_BLOCK_INDEX"),
+    ).toBeInTheDocument();
     expect(screen.getByText("This is thinking block content.")).toBeInTheDocument();
   });
 
@@ -214,9 +226,11 @@ describe("ReasoningContent", () => {
     const user = userEvent.setup();
     renderWithProviders(<ReasoningContent event={mockActionEvent} />);
 
-    await user.click(screen.getByText("Reasoning"));
+    await user.click(screen.getByText("REASONING_CONTENT$REASONING"));
 
-    expect(screen.getByText("[Redacted thinking content]")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$REDACTED_PLACEHOLDER"),
+    ).toBeInTheDocument();
   });
 
   it("should render both reasoning content and thinking blocks", async () => {
@@ -257,11 +271,17 @@ describe("ReasoningContent", () => {
     const user = userEvent.setup();
     renderWithProviders(<ReasoningContent event={mockActionEvent} />);
 
-    await user.click(screen.getByText("Reasoning"));
+    await user.click(screen.getByText("REASONING_CONTENT$REASONING"));
 
-    expect(screen.getByText("Reasoning Content")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$REASONING_CONTENT_LABEL"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Main reasoning content")).toBeInTheDocument();
-    expect(screen.getByText("Thinking Blocks")).toBeInTheDocument();
-    expect(screen.getByText("Thinking Block 1")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$THINKING_BLOCKS"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$THINKING_BLOCK_INDEX"),
+    ).toBeInTheDocument();
   });
 });
