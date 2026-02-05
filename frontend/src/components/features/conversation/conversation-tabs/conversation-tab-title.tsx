@@ -1,5 +1,6 @@
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
+import { cn } from "#/utils/utils";
 
 type ConversationTabTitleProps = {
   title: string;
@@ -10,10 +11,12 @@ export function ConversationTabTitle({
   title,
   conversationKey,
 }: ConversationTabTitleProps) {
-  const { refetch } = useUnifiedGetGitChanges();
+  const { refetch, isFetching } = useUnifiedGetGitChanges();
 
   const handleRefresh = () => {
-    refetch();
+    if (!isFetching) {
+      refetch();
+    }
   };
 
   return (
@@ -22,10 +25,20 @@ export function ConversationTabTitle({
       {conversationKey === "editor" && (
         <button
           type="button"
-          className="flex w-[26px] py-1 justify-center items-center gap-[10px] rounded-[7px] hover:bg-[#474A54] cursor-pointer"
+          className={cn(
+            "flex w-[26px] py-1 justify-center items-center gap-[10px] rounded-[7px] hover:bg-[#474A54]",
+            isFetching ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+          )}
           onClick={handleRefresh}
+          disabled={isFetching}
+          aria-label={isFetching ? "Refreshing..." : "Refresh git changes"}
         >
-          <RefreshIcon width={12.75} height={15} color="#ffffff" />
+          <RefreshIcon
+            width={12.75}
+            height={15}
+            color="#ffffff"
+            className={cn(isFetching && "animate-spin")}
+          />
         </button>
       )}
     </div>
