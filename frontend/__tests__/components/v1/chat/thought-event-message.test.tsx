@@ -114,7 +114,9 @@ describe("ThoughtEventMessage", () => {
 
     renderWithProviders(<ThoughtEventMessage event={mockActionEvent} />);
 
-    expect(screen.getByText("Reasoning")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$REASONING"),
+    ).toBeInTheDocument();
   });
 
   it("should render both thought and reasoning content", () => {
@@ -156,7 +158,9 @@ describe("ThoughtEventMessage", () => {
     expect(
       screen.getByText("I need to run a command to help the user."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Reasoning")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$REASONING"),
+    ).toBeInTheDocument();
   });
 
   it("should render thinking blocks when there is no thought but thinking blocks exist", () => {
@@ -196,7 +200,9 @@ describe("ThoughtEventMessage", () => {
 
     renderWithProviders(<ThoughtEventMessage event={mockActionEvent} />);
 
-    expect(screen.getByText("Reasoning")).toBeInTheDocument();
+    expect(
+      screen.getByText("REASONING_CONTENT$REASONING"),
+    ).toBeInTheDocument();
   });
 
   it("should handle empty reasoning content gracefully", () => {
@@ -238,7 +244,9 @@ describe("ThoughtEventMessage", () => {
     expect(
       screen.getByText("I need to run a command to help the user."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Reasoning")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("REASONING_CONTENT$REASONING"),
+    ).not.toBeInTheDocument();
   });
 
   it("should handle whitespace-only reasoning content", () => {
@@ -280,6 +288,8 @@ describe("ThoughtEventMessage", () => {
     expect(
       screen.getByText("I need to run a command to help the user."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Reasoning")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("REASONING_CONTENT$REASONING"),
+    ).not.toBeInTheDocument();
   });
 });
