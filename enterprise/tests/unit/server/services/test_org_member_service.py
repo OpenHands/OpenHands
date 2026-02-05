@@ -1,7 +1,7 @@
 """Tests for OrgMemberService."""
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from server.services.org_member_service import OrgMemberService
@@ -141,7 +141,8 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_member'
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated'
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
             ) as mock_get_paginated,
         ):
             mock_get_member.return_value = requester_membership_owner
@@ -250,7 +251,8 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_member'
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated'
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
             ) as mock_get_paginated,
         ):
             mock_get_member.return_value = requester_membership_owner
@@ -283,7 +285,8 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_member'
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated'
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
             ) as mock_get_paginated,
         ):
             mock_get_member.return_value = requester_membership_owner
@@ -316,7 +319,8 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_member'
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated'
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
             ) as mock_get_paginated,
         ):
             mock_get_member.return_value = requester_membership_owner
@@ -346,7 +350,8 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_member'
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated'
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
             ) as mock_get_paginated,
         ):
             mock_get_member.return_value = requester_membership_owner
@@ -385,7 +390,8 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_member'
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated'
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
             ) as mock_get_paginated,
         ):
             mock_get_member.return_value = requester_membership_owner
@@ -424,7 +430,8 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_member'
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated'
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
             ) as mock_get_paginated,
         ):
             mock_get_member.return_value = requester_membership_owner
@@ -472,7 +479,8 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_member'
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated'
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
             ) as mock_get_paginated,
         ):
             mock_get_member.return_value = requester_membership_owner

@@ -138,7 +138,7 @@ class OrgMemberStore:
         return kwargs
 
     @staticmethod
-    def get_org_members_paginated(
+    async def get_org_members_paginated(
         org_id: UUID,
         offset: int = 0,
         limit: int = 100,
@@ -148,18 +148,19 @@ class OrgMemberStore:
         Returns:
             Tuple of (members_list, has_more) where has_more indicates if there are more results.
         """
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # Query for limit + 1 items to determine if there are more results
             # Order by user_id for consistent pagination
             query = (
-                session.query(OrgMember)
+                select(OrgMember)
                 .options(joinedload(OrgMember.user), joinedload(OrgMember.role))
                 .filter(OrgMember.org_id == org_id)
                 .order_by(OrgMember.user_id)
                 .offset(offset)
                 .limit(limit + 1)
             )
-            members = query.all()
+            result = await session.execute(query)
+            members = list(result.scalars().all())
 
             # Check if there are more results
             has_more = len(members) > limit
