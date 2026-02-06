@@ -8,12 +8,14 @@ from server.routes.org_models import (
     OrgAuthorizationError,
     OrgCreate,
     OrgDatabaseError,
+    OrgMemberPage,
     OrgNameExistsError,
     OrgNotFoundError,
     OrgPage,
     OrgResponse,
     OrgUpdate,
 )
+from server.services.org_member_service import OrgMemberService
 from storage.org_service import OrgService
 
 from openhands.core.logger import openhands_logger as logger
@@ -401,4 +403,70 @@ async def update_org(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An unexpected error occurred',
+        )
+
+
+@org_router.get('/{org_id}/members')
+async def get_org_members(
+    org_id: str,
+    page_id: Annotated[
+        str | None,
+        Query(title='Optional next_page_id from the previously returned page'),
+    ] = None,
+    limit: Annotated[
+        int,
+        Query(
+            title='The max number of results in the page',
+            gt=0,
+            lte=100,
+        ),
+    ] = 100,
+    current_user_id: str = Depends(get_user_id),
+) -> OrgMemberPage:
+    """Get all members of an organization with cursor-based pagination."""
+    try:
+        success, error_code, data = await OrgMemberService.get_org_members(
+            org_id=UUID(org_id),
+            current_user_id=UUID(current_user_id),
+            page_id=page_id,
+            limit=limit,
+        )
+
+        if not success:
+            error_map = {
+                'not_a_member': (
+                    status.HTTP_403_FORBIDDEN,
+                    'You are not a member of this organization',
+                ),
+                'invalid_page_id': (
+                    status.HTTP_400_BAD_REQUEST,
+                    'Invalid page_id format',
+                ),
+            }
+            status_code, detail = error_map.get(
+                error_code, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+            )
+            raise HTTPException(status_code=status_code, detail=detail)
+
+        if data is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Failed to retrieve members',
+            )
+
+        return data
+
+    except HTTPException:
+        raise
+    except ValueError:
+        logger.exception('Invalid UUID format')
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid organization ID format',
+        )
+    except Exception:
+        logger.exception('Error retrieving organization members')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve members',
         )

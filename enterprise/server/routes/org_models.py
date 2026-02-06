@@ -178,3 +178,21 @@ class OrgUpdate(BaseModel):
     confirmation_mode: bool | None = None
     enable_default_condenser: bool | None = None
     condenser_max_size: int | None = Field(default=None, ge=20)
+
+
+class OrgMemberResponse(BaseModel):
+    """Response model for a single organization member."""
+
+    user_id: str
+    email: str | None
+    role_id: int
+    role_name: str
+    role_rank: int
+    status: str | None
+
+
+class OrgMemberPage(BaseModel):
+    """Paginated response for organization members."""
+
+    items: list[OrgMemberResponse]
+    next_page_id: str | None = None

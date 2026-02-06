@@ -21,10 +21,12 @@ with patch('storage.database.engine', create=True), patch(
         LiteLLMIntegrationError,
         OrgAuthorizationError,
         OrgDatabaseError,
+        OrgMemberPage,
+        OrgMemberResponse,
         OrgNameExistsError,
         OrgNotFoundError,
     )
-    from server.routes.orgs import org_router
+    from server.routes.orgs import get_org_members, org_router
     from storage.org import Org
 
     from openhands.server.user_auth import get_user_id
@@ -43,6 +45,18 @@ def mock_app():
     app.dependency_overrides[get_admin_user_id] = mock_get_admin_user_id
 
     return app
+
+
+@pytest.fixture
+def org_id():
+    """Create a test organization ID."""
+    return str(uuid.uuid4())
+
+
+@pytest.fixture
+def current_user_id():
+    """Create a test current user ID."""
+    return str(uuid.uuid4())
 
 
 @pytest.mark.asyncio
@@ -1729,3 +1743,244 @@ async def test_update_org_invalid_email_format(mock_update_app):
 
         # Assert
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+class TestGetOrgMembersEndpoint:
+    """Test cases for GET /api/organizations/{org_id}/members endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_members_succeeds_returns_200(self, org_id, current_user_id):
+        """Test that successful retrieval returns 200 with paginated members."""
+        # Arrange
+        mock_page = OrgMemberPage(
+            items=[
+                OrgMemberResponse(
+                    user_id=str(uuid.uuid4()),
+                    email='user1@example.com',
+                    role_id=1,
+                    role_name='owner',
+                    role_rank=10,
+                    status='active',
+                )
+            ],
+            next_page_id=None,
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(True, None, mock_page)),
+        ) as mock_get:
+            # Act
+            result = await get_org_members(
+                org_id=org_id,
+                page_id=None,
+                limit=100,
+                current_user_id=current_user_id,
+            )
+
+            # Assert
+            assert isinstance(result, OrgMemberPage)
+            assert len(result.items) == 1
+            assert result.next_page_id is None
+            mock_get.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_not_a_member_returns_403(self, org_id, current_user_id):
+        """Test that not being a member returns 403 Forbidden."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(False, 'not_a_member', None)),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await get_org_members(
+                    org_id=org_id,
+                    page_id=None,
+                    limit=100,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert 'not a member of this organization' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_page_id_returns_400(self, org_id, current_user_id):
+        """Test that invalid page_id format returns 400 Bad Request."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(False, 'invalid_page_id', None)),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await get_org_members(
+                    org_id=org_id,
+                    page_id='invalid',
+                    limit=100,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+            assert 'Invalid page_id format' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_org_id_format_returns_400(self, current_user_id):
+        """Test that invalid org_id UUID format returns 400 Bad Request."""
+        # Arrange
+        invalid_org_id = 'not-a-uuid'
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await get_org_members(
+                org_id=invalid_org_id,
+                page_id=None,
+                limit=100,
+                current_user_id=current_user_id,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Invalid organization ID format' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_current_user_id_format_returns_400(self, org_id):
+        """Test that invalid current_user_id UUID format returns 400 Bad Request."""
+        # Arrange
+        invalid_current_user_id = 'not-a-uuid'
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await get_org_members(
+                org_id=org_id,
+                page_id=None,
+                limit=100,
+                current_user_id=invalid_current_user_id,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Invalid organization ID format' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_data_is_none_returns_500(self, org_id, current_user_id):
+        """Test that None data returns 500 Internal Server Error."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(True, None, None)),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await get_org_members(
+                    org_id=org_id,
+                    page_id=None,
+                    limit=100,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'Failed to retrieve members' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_unknown_error_returns_500(self, org_id, current_user_id):
+        """Test that unknown error returns 500 Internal Server Error."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(False, 'unknown_error', None)),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await get_org_members(
+                    org_id=org_id,
+                    page_id=None,
+                    limit=100,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'An error occurred' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_service_exception_returns_500(self, org_id, current_user_id):
+        """Test that service exception returns 500 Internal Server Error."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(side_effect=Exception('Database connection failed')),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await get_org_members(
+                    org_id=org_id,
+                    page_id=None,
+                    limit=100,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'Failed to retrieve members' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_http_exception_is_re_raised(self, org_id, current_user_id):
+        """Test that HTTPException from service is re-raised."""
+        # Arrange
+        original_exception = HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Service temporarily unavailable',
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(side_effect=original_exception),
+        ):
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await get_org_members(
+                    org_id=org_id,
+                    page_id=None,
+                    limit=100,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+            assert exc_info.value.detail == 'Service temporarily unavailable'
+
+    @pytest.mark.asyncio
+    async def test_pagination_with_page_id(self, org_id, current_user_id):
+        """Test that pagination works with page_id parameter."""
+        # Arrange
+        mock_page = OrgMemberPage(
+            items=[
+                OrgMemberResponse(
+                    user_id=str(uuid.uuid4()),
+                    email='user2@example.com',
+                    role_id=2,
+                    role_name='admin',
+                    role_rank=20,
+                    status='active',
+                )
+            ],
+            next_page_id='200',
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members',
+            AsyncMock(return_value=(True, None, mock_page)),
+        ) as mock_get:
+            # Act
+            result = await get_org_members(
+                org_id=org_id,
+                page_id='100',
+                limit=100,
+                current_user_id=current_user_id,
+            )
+
+            # Assert
+            assert isinstance(result, OrgMemberPage)
+            assert result.next_page_id == '200'
+            mock_get.assert_called_once_with(
+                org_id=uuid.UUID(org_id),
+                current_user_id=uuid.UUID(current_user_id),
+                page_id='100',
+                limit=100,
+            )
