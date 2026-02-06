@@ -1,5 +1,6 @@
 import React from "react";
 import { useLocation } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useGitUser } from "#/hooks/query/use-git-user";
 import { UserActions } from "./user-actions";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
@@ -12,10 +13,12 @@ import { ConversationPanelWrapper } from "../conversation-panel/conversation-pan
 import { useLogout } from "#/hooks/mutation/use-logout";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { I18nKey } from "#/i18n/declaration";
 import { MicroagentManagementButton } from "#/components/shared/buttons/microagent-management-button";
 import { cn } from "#/utils/utils";
 
 export function Sidebar() {
+  const { t } = useTranslation();
   const { pathname } = useLocation();
   const user = useGitUser();
   const { data: config } = useConfig();
@@ -46,9 +49,9 @@ export function Sidebar() {
         "Something went wrong while fetching settings. Please reload the page.",
       );
     } else if (
-      config?.APP_MODE === "oss" &&
+      config?.app_mode === "oss" &&
       settingsError?.status === 404 &&
-      !config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS
+      !config?.feature_flags?.hide_llm_settings
     ) {
       setSettingsModalIsOpen(true);
     }
@@ -57,13 +60,14 @@ export function Sidebar() {
     isFetchingSettings,
     settingsIsError,
     settingsError,
-    config?.APP_MODE,
-    config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS,
+    config?.app_mode,
+    config?.feature_flags?.hide_llm_settings,
   ]);
 
   return (
     <>
       <aside
+        aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
         className={cn(
           "h-[54px] p-3 md:p-0 md:h-[40px] md:h-auto flex flex-row md:flex-col gap-1 bg-base md:w-[75px] md:min-w-[75px] sm:pt-0 sm:px-2 md:pt-[14px] md:px-0",
           pathname === "/" && "md:pt-6.5 md:pb-3",

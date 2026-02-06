@@ -25,4 +25,5 @@ class WebClientConfig(DiscriminatedUnionMixin):
     recaptcha_site_key: str | None
     faulty_models: list[str]
     error_message: str | None
+    updated_at: datetime
     github_app_slug: str | None

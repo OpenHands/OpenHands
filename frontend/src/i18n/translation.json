@@ -15,6 +15,22 @@
     "de": "Die geplante Wartung beginnt um {{time}}",
     "uk": "Планове технічне обслуговування розпочнеться о {{time}}"
   },
+  "ALERT$FAULTY_MODELS_MESSAGE": {
+    "en": "The following models are currently reporting errors:",
+    "ja": "次のモデルで現在エラーが報告されています：",
+    "zh-CN": "以下模型当前报告错误：",
+    "zh-TW": "以下模型目前報告錯誤：",
+    "ko-KR": "다음 모델에서 현재 오류가 보고되고 있습니다:",
+    "no": "Følgende modeller rapporterer for øyeblikket feil:",
+    "it": "I seguenti modelli stanno attualmente segnalando errori:",
+    "pt": "Os seguintes modelos estão atualmente relatando erros:",
+    "es": "Los siguientes modelos están reportando errores actualmente:",
+    "ar": "النماذج التالية تُبلغ حاليًا عن أخطاء:",
+    "fr": "Les modèles suivants signalent actuellement des erreurs :",
+    "tr": "Aşağıdaki modeller şu anda hata bildiriyor:",
+    "de": "Die folgenden Modelle melden derzeit Fehler:",
+    "uk": "Наступні моделі наразі повідомляють про помилки:"
+  },
   "AZURE_DEVOPS$CONNECT_ACCOUNT": {
     "en": "Connect Azure DevOps Account",
     "ja": "Azure DevOps アカウントを接続",
@@ -7198,6 +7214,22 @@
     "pt": "Atualmente não há plano para este repositório",
     "es": "Actualmente no hay un plan para este repositorio",
     "tr": "Şu anda bu depo için bir plan yok"
+  },
+    "SIDEBAR$NAVIGATION_LABEL": {
+    "en": "Sidebar navigation",
+    "zh-CN": "侧边栏导航",
+    "zh-TW": "側邊欄導航",
+    "de": "Seitenleisten-Navigation",
+    "ko-KR": "사이드바 탐색",
+    "no": "Navigasjon i sidepanel",
+    "it": "Navigazione barra laterale",
+    "pt": "Navegação da barra lateral",
+    "es": "Navegación de la barra lateral",
+    "ar": "تنقل الشريط الجانبي",
+    "fr": "Navigation de la barre latérale",
+    "tr": "Kenar çubuğu gezintisi",
+    "ja": "サイドバーのナビゲーション",
+    "uk": "Навігація бічної панелі"
   },
   "FEEDBACK$PUBLIC_LABEL": {
     "en": "Public",
