@@ -301,7 +301,7 @@ export const ORG_HANDLERS = [
 
   http.get("/api/organizations", () => {
     const organizations = Array.from(orgs.values());
-    return HttpResponse.json(organizations);
+    return HttpResponse.json({ items: organizations });
   }),
 
   http.patch("/api/organizations/:orgId", async ({ request, params }) => {
