@@ -541,7 +541,8 @@ class SQLAppConversationInfoService(AppConversationInfoService):
 
     def _fix_timezone(self, value: datetime) -> datetime:
         """Sqlite does not stpre timezones - and since we can't update the existing models
-        we assume UTC if the timezone is missing."""
+        we assume UTC if the timezone is missing.
+        """
         if not value.tzinfo:
             value = value.replace(tzinfo=UTC)
         return value

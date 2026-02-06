@@ -1,4 +1,6 @@
-from pydantic import BaseModel, EmailStr, Field
+from typing import Annotated
+
+from pydantic import BaseModel, EmailStr, Field, StringConstraints
 from storage.org import Org
 
 
@@ -53,9 +55,11 @@ class OrgCreate(BaseModel):
     """Request model for creating a new organization."""
 
     # Required fields
-    name: str = Field(min_length=1, max_length=255, strip_whitespace=True)
+    name: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
+    ]
     contact_name: str
-    contact_email: EmailStr = Field(strip_whitespace=True)
+    contact_email: EmailStr
 
 
 class OrgResponse(BaseModel):
@@ -87,14 +91,18 @@ class OrgResponse(BaseModel):
     enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     credits: float | None = None
+    is_personal: bool = False
 
     @classmethod
-    def from_org(cls, org: Org, credits: float | None = None) -> 'OrgResponse':
+    def from_org(
+        cls, org: Org, credits: float | None = None, user_id: str | None = None
+    ) -> 'OrgResponse':
         """Create an OrgResponse from an Org entity.
 
         Args:
             org: The organization entity to convert
             credits: Optional credits value (defaults to None)
+            user_id: Optional user ID to determine if org is personal (defaults to None)
 
         Returns:
             OrgResponse: The response model instance
@@ -130,6 +138,7 @@ class OrgResponse(BaseModel):
             enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             credits=credits,
+            is_personal=str(org.id) == user_id if user_id else False,
         )
 
 
@@ -145,7 +154,7 @@ class OrgUpdate(BaseModel):
 
     # Basic organization information (any authenticated user can update)
     contact_name: str | None = None
-    contact_email: EmailStr | None = Field(default=None, strip_whitespace=True)
+    contact_email: EmailStr | None = None
     conversation_expiration: int | None = None
     default_max_iterations: int | None = Field(default=None, gt=0)
     remote_runtime_resource_factor: int | None = Field(default=None, gt=0)

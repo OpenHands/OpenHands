@@ -91,6 +91,13 @@ export function GitRepoDropdown({
     repositoryName,
   );
 
+  /**
+   * `selectedRepository` is derived from fetched/search results. A repo selected
+   * from "Most Recent" may not be present in those results yet, so use the
+   * locally selected item as a fallback to keep the UI stable.
+   */
+  const effectiveSelectedRepository = selectedRepository ?? localSelectedItem;
+
   // Get recent repositories filtered by provider and input keyword
   const recentRepositories = useMemo(() => {
     const allRecentRepos = storedRecentRepositories;
@@ -184,14 +191,6 @@ export function GitRepoDropdown({
     setInputValue("");
   }, [handleSelectionChange]);
 
-  // Handle input value change
-  const handleInputValueChange = useCallback(
-    ({ inputValue: newInputValue }: { inputValue?: string }) => {
-      setInputValue(newInputValue || "");
-    },
-    [],
-  );
-
   // Handle scroll to bottom for pagination
   const handleMenuScroll = useCallback(
     (event: React.UIEvent<HTMLUListElement>) => {
@@ -220,8 +219,14 @@ export function GitRepoDropdown({
     onSelectedItemChange: ({ selectedItem: newSelectedItem }) => {
       handleSelectionChange(newSelectedItem);
     },
-    onInputValueChange: handleInputValueChange,
     inputValue,
+    // Override Downshift's default input-click behavior to avoid closing/reopening
+    // the menu, which would reset scroll position and break search continuity.
+    stateReducer: (state, actionAndChanges) =>
+      actionAndChanges.type === useCombobox.stateChangeTypes.InputClick &&
+      state.isOpen
+        ? { ...actionAndChanges.changes, isOpen: true }
+        : actionAndChanges.changes,
   });
 
   // Sync localSelectedItem with external value prop
@@ -235,10 +240,9 @@ export function GitRepoDropdown({
 
   // Initialize input value when selectedRepository changes (but not when user is typing)
   useEffect(() => {
-    if (selectedRepository && !isOpen) {
-      setInputValue(selectedRepository.full_name);
-    }
-  }, [selectedRepository, isOpen]);
+    if (isOpen) return;
+    setInputValue(effectiveSelectedRepository?.full_name ?? "");
+  }, [effectiveSelectedRepository, isOpen]);
 
   const isLoadingState =
     isLoading || isSearchLoading || isFetchingNextPage || isUrlSearchLoading;
@@ -335,12 +339,16 @@ export function GitRepoDropdown({
               "disabled:bg-[#363636] disabled:cursor-not-allowed disabled:opacity-60",
               "pl-7 pr-16 text-sm font-normal leading-5", // Space for clear and toggle buttons
             ),
+            // Direct onChange for cursor position preservation
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+              setInputValue(e.target.value);
+            },
           })}
           data-testid="git-repo-dropdown"
         />
 
         <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex items-center">
-          {selectedRepository && (
+          {effectiveSelectedRepository && (
             <ClearButton disabled={disabled} onClear={handleClear} />
           )}
 

@@ -37,7 +37,11 @@ def mock_user_store():
 
 @pytest.mark.asyncio
 async def test_save_and_get(session_maker):
-    store = SaasConversationStore('5594c7b6-f959-4b81-92e9-b09c206f5081', session_maker)
+    store = SaasConversationStore(
+        '5594c7b6-f959-4b81-92e9-b09c206f5081',
+        UUID('5594c7b6-f959-4b81-92e9-b09c206f5081'),
+        session_maker,
+    )
     metadata = ConversationMetadata(
         conversation_id='my-conversation-id',
         user_id='5594c7b6-f959-4b81-92e9-b09c206f5081',
@@ -62,7 +66,11 @@ async def test_save_and_get(session_maker):
 
 @pytest.mark.asyncio
 async def test_search(session_maker):
-    store = SaasConversationStore('5594c7b6-f959-4b81-92e9-b09c206f5081', session_maker)
+    store = SaasConversationStore(
+        '5594c7b6-f959-4b81-92e9-b09c206f5081',
+        UUID('5594c7b6-f959-4b81-92e9-b09c206f5081'),
+        session_maker,
+    )
 
     # Create test conversations with different timestamps
     conversations = [
@@ -107,7 +115,11 @@ async def test_search(session_maker):
 
 @pytest.mark.asyncio
 async def test_delete_metadata(session_maker):
-    store = SaasConversationStore('5594c7b6-f959-4b81-92e9-b09c206f5081', session_maker)
+    store = SaasConversationStore(
+        '5594c7b6-f959-4b81-92e9-b09c206f5081',
+        UUID('5594c7b6-f959-4b81-92e9-b09c206f5081'),
+        session_maker,
+    )
     metadata = ConversationMetadata(
         conversation_id='to-delete',
         user_id='5594c7b6-f959-4b81-92e9-b09c206f5081',
@@ -127,14 +139,22 @@ async def test_delete_metadata(session_maker):
 
 @pytest.mark.asyncio
 async def test_get_nonexistent_metadata(session_maker):
-    store = SaasConversationStore('5594c7b6-f959-4b81-92e9-b09c206f5081', session_maker)
+    store = SaasConversationStore(
+        '5594c7b6-f959-4b81-92e9-b09c206f5081',
+        UUID('5594c7b6-f959-4b81-92e9-b09c206f5081'),
+        session_maker,
+    )
     with pytest.raises(FileNotFoundError):
         await store.get_metadata('nonexistent-id')
 
 
 @pytest.mark.asyncio
 async def test_exists(session_maker):
-    store = SaasConversationStore('5594c7b6-f959-4b81-92e9-b09c206f5081', session_maker)
+    store = SaasConversationStore(
+        '5594c7b6-f959-4b81-92e9-b09c206f5081',
+        UUID('5594c7b6-f959-4b81-92e9-b09c206f5081'),
+        session_maker,
+    )
     metadata = ConversationMetadata(
         conversation_id='exists-test',
         user_id='5594c7b6-f959-4b81-92e9-b09c206f5081',

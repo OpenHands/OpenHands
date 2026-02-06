@@ -7,7 +7,6 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePostHog } from "posthog-js/react";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
@@ -73,6 +72,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
+  onDisconnect,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -80,6 +80,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: V1AppConversation[];
   subConversationIds?: string[];
+  onDisconnect?: () => void;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -112,7 +113,7 @@ export function ConversationWebSocketProvider({
     number | null
   >(null);
 
-  const { conversationMode, setPlanContent } = useConversationStore();
+  const { setPlanContent } = useConversationStore();
 
   // Hook for reading conversation file
   const { mutate: readConversationFile } = useReadConversationFile();
@@ -127,8 +128,6 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
-
-  const { t } = useTranslation();
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -664,12 +663,10 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setMainConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
+        // Trigger silent recovery on unexpected disconnect
+        // Do NOT show error message - recovery happens automatically
         if (event.code !== 1000 && hasConnectedRefMain.current) {
-          setErrorMessage(
-            `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
-          );
+          onDisconnect?.();
         }
       },
       onError: () => {
@@ -688,6 +685,7 @@ export function ConversationWebSocketProvider({
     sessionApiKey,
     conversationId,
     conversationUrl,
+    onDisconnect,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -736,12 +734,10 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setPlanningConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
+        // Trigger silent recovery on unexpected disconnect
+        // Do NOT show error message - recovery happens automatically
         if (event.code !== 1000 && hasConnectedRefPlanning.current) {
-          setErrorMessage(
-            `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
-          );
+          onDisconnect?.();
         }
       },
       onError: () => {
@@ -759,6 +755,7 @@ export function ConversationWebSocketProvider({
     removeErrorMessage,
     sessionApiKey,
     subConversations,
+    onDisconnect,
   ]);
 
   // Only attempt WebSocket connection when we have a valid URL
@@ -774,15 +771,14 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
-  const socket = useMemo(
-    () => (conversationMode === "plan" ? planningAgentSocket : mainSocket),
-    [conversationMode, planningAgentSocket, mainSocket],
-  );
-
   // V1 send message function via WebSocket
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest) => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
+      const currentMode = useConversationStore.getState().conversationMode;
+      const currentSocket =
+        currentMode === "plan" ? planningAgentSocket : mainSocket;
+
+      if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
         const error = "WebSocket is not connected";
         setErrorMessage(error);
         throw new Error(error);
@@ -790,7 +786,7 @@ export function ConversationWebSocketProvider({
 
       try {
         // Send message through WebSocket as JSON
-        socket.send(JSON.stringify(message));
+        currentSocket.send(JSON.stringify(message));
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to send message";
@@ -798,7 +794,7 @@ export function ConversationWebSocketProvider({
         throw error;
       }
     },
-    [socket, setErrorMessage],
+    [mainSocket, planningAgentSocket, setErrorMessage],
   );
 
   // Track main socket state changes

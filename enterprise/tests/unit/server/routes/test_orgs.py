@@ -323,6 +323,50 @@ async def test_create_org_forbidden_non_openhands_email():
 
 
 @pytest.mark.asyncio
+async def test_create_org_is_not_personal(mock_app):
+    """
+    GIVEN: Admin creates a new team organization
+    WHEN: POST /api/organizations is called
+    THEN: is_personal field is False (team orgs have different ID than creator)
+    """
+    # Arrange
+    org_id = uuid.uuid4()  # Different from user_id
+    mock_org = Org(
+        id=org_id,
+        name='New Team Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+    )
+
+    request_data = {
+        'name': 'New Team Organization',
+        'contact_name': 'John Doe',
+        'contact_email': 'john@example.com',
+    }
+
+    with (
+        patch(
+            'server.routes.orgs.OrgService.create_org_with_owner',
+            AsyncMock(return_value=mock_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=100.0),
+        ),
+    ):
+        client = TestClient(mock_app)
+
+        # Act
+        response = client.post('/api/organizations', json=request_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_201_CREATED
+        response_data = response.json()
+        assert response_data['is_personal'] is False
+
+
+@pytest.mark.asyncio
 async def test_create_org_sensitive_fields_not_exposed(mock_app):
     """
     GIVEN: Organization is created successfully
@@ -395,6 +439,9 @@ def mock_app_list():
         return test_user_id
 
     app.dependency_overrides[get_user_id] = mock_get_user_id
+
+    # Store test_user_id for test access
+    app.state.test_user_id = test_user_id
 
     return app
 
@@ -582,6 +629,126 @@ async def test_list_user_orgs_unauthorized():
 
     # Assert
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_personal_org_identified(mock_app_list):
+    """
+    GIVEN: User has a personal organization (org.id == user_id)
+    WHEN: GET /api/organizations is called
+    THEN: is_personal field is True for personal org
+    """
+    # Arrange
+    user_id = mock_app_list.state.test_user_id
+    personal_org_id = uuid.UUID(user_id)
+
+    personal_org = Org(
+        id=personal_org_id,
+        name=f'user_{user_id}_org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    with patch(
+        'server.routes.orgs.OrgService.get_user_orgs_paginated',
+        return_value=([personal_org], None),
+    ):
+        client = TestClient(mock_app_list)
+
+        # Act
+        response = client.get('/api/organizations')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert len(response_data['items']) == 1
+        assert response_data['items'][0]['is_personal'] is True
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_team_org_identified(mock_app_list):
+    """
+    GIVEN: User has a team organization (org.id != user_id)
+    WHEN: GET /api/organizations is called
+    THEN: is_personal field is False for team org
+    """
+    # Arrange
+    team_org = Org(
+        id=uuid.uuid4(),  # Different from user_id
+        name='Team Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    with patch(
+        'server.routes.orgs.OrgService.get_user_orgs_paginated',
+        return_value=([team_org], None),
+    ):
+        client = TestClient(mock_app_list)
+
+        # Act
+        response = client.get('/api/organizations')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert len(response_data['items']) == 1
+        assert response_data['items'][0]['is_personal'] is False
+
+
+@pytest.mark.asyncio
+async def test_list_user_orgs_mixed_personal_and_team(mock_app_list):
+    """
+    GIVEN: User has both personal and team organizations
+    WHEN: GET /api/organizations is called
+    THEN: is_personal field correctly identifies each org type
+    """
+    # Arrange
+    user_id = mock_app_list.state.test_user_id
+    personal_org_id = uuid.UUID(user_id)
+
+    personal_org = Org(
+        id=personal_org_id,
+        name=f'user_{user_id}_org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    team_org = Org(
+        id=uuid.uuid4(),
+        name='Team Organization',
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
+    )
+
+    with patch(
+        'server.routes.orgs.OrgService.get_user_orgs_paginated',
+        return_value=([personal_org, team_org], None),
+    ):
+        client = TestClient(mock_app_list)
+
+        # Act
+        response = client.get('/api/organizations')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert len(response_data['items']) == 2
+
+        # Find personal and team orgs in response
+        personal_org_response = next(
+            item
+            for item in response_data['items']
+            if item['id'] == str(personal_org_id)
+        )
+        team_org_response = next(
+            item
+            for item in response_data['items']
+            if item['id'] != str(personal_org_id)
+        )
+
+        assert personal_org_response['is_personal'] is True
+        assert team_org_response['is_personal'] is False
 
 
 @pytest.mark.asyncio
@@ -831,6 +998,93 @@ async def test_get_org_unexpected_error(mock_app_with_get_user_id):
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert 'unexpected error' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_get_org_personal_workspace():
+    """
+    GIVEN: User retrieves their personal organization (org.id == user_id)
+    WHEN: GET /api/organizations/{org_id} is called
+    THEN: is_personal field is True
+    """
+    # Arrange
+    app = FastAPI()
+    app.include_router(org_router)
+
+    # Use a valid UUID for user_id
+    user_id = str(uuid.uuid4())
+    org_id = uuid.UUID(user_id)  # Personal org has same ID as user
+
+    def mock_get_user_id():
+        return user_id
+
+    app.dependency_overrides[get_user_id] = mock_get_user_id
+
+    mock_org = Org(
+        id=org_id,
+        name=f'user_{user_id}_org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+    )
+
+    with (
+        patch(
+            'server.routes.orgs.OrgService.get_org_by_id',
+            AsyncMock(return_value=mock_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=50.0),
+        ),
+    ):
+        client = TestClient(app)
+
+        # Act
+        response = client.get(f'/api/organizations/{org_id}')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['is_personal'] is True
+
+
+@pytest.mark.asyncio
+async def test_get_org_team_workspace(mock_app_with_get_user_id):
+    """
+    GIVEN: User retrieves a team organization (org.id != user_id)
+    WHEN: GET /api/organizations/{org_id} is called
+    THEN: is_personal field is False
+    """
+    # Arrange
+    org_id = uuid.uuid4()  # Different from user_id
+    mock_org = Org(
+        id=org_id,
+        name='Team Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+    )
+
+    with (
+        patch(
+            'server.routes.orgs.OrgService.get_org_by_id',
+            AsyncMock(return_value=mock_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=100.0),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get(f'/api/organizations/{org_id}')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['is_personal'] is False
 
 
 @pytest.mark.asyncio
@@ -1151,6 +1405,114 @@ def mock_update_app():
 
 # Note: Success cases for update endpoint are tested in test_org_service.py
 # Route handler tests focus on error handling and validation
+
+
+@pytest.mark.asyncio
+async def test_update_org_personal_workspace_preserved():
+    """
+    GIVEN: User updates their personal organization
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: is_personal field remains True in response
+    """
+    # Arrange
+    app = FastAPI()
+    app.include_router(org_router)
+
+    user_id = str(uuid.uuid4())
+    org_id = uuid.UUID(user_id)  # Personal org
+
+    async def mock_user_id():
+        return user_id
+
+    app.dependency_overrides[get_user_id] = mock_user_id
+
+    updated_org = Org(
+        id=org_id,
+        name=f'user_{user_id}_org',
+        contact_name='Updated Name',
+        contact_email='john@example.com',
+        org_version=5,
+    )
+
+    update_data = {'contact_name': 'Updated Name'}
+
+    with (
+        patch(
+            'server.routes.orgs.OrgService.update_org_with_permissions',
+            AsyncMock(return_value=updated_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=75.0),
+        ),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_200_OK
+            response_data = response.json()
+            assert response_data['is_personal'] is True
+            assert response_data['contact_name'] == 'Updated Name'
+
+
+@pytest.mark.asyncio
+async def test_update_org_team_workspace_preserved():
+    """
+    GIVEN: User updates a team organization
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: is_personal field remains False in response
+    """
+    # Arrange
+    app = FastAPI()
+    app.include_router(org_router)
+
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()  # Team org (different from user_id)
+
+    async def mock_user_id():
+        return user_id
+
+    app.dependency_overrides[get_user_id] = mock_user_id
+
+    updated_org = Org(
+        id=org_id,
+        name='Updated Team Org',
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
+        org_version=5,
+    )
+
+    update_data = {'name': 'Updated Team Org'}
+
+    with (
+        patch(
+            'server.routes.orgs.OrgService.update_org_with_permissions',
+            AsyncMock(return_value=updated_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=150.0),
+        ),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_200_OK
+            response_data = response.json()
+            assert response_data['is_personal'] is False
+            assert response_data['name'] == 'Updated Team Org'
 
 
 @pytest.mark.asyncio
