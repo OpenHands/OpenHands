@@ -317,9 +317,7 @@ async def test_success_callback_success():
         patch(
             'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'
         ) as mock_update_budget,
-        patch(
-            'server.routes.billing.OrgStore.update_org'
-        ) as mock_update_org,
+        patch('server.routes.billing.OrgStore.update_org') as mock_update_org,
     ):
         mock_db_session = MagicMock()
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
