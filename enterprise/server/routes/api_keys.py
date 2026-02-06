@@ -165,23 +165,26 @@ class LlmApiKeyResponse(BaseModel):
     key: str | None
 
 
-class ByorPermittedResponse(BaseModel):
-    permitted: bool
+class ByorOptionsResponse(BaseModel):
+    byor_enabled: bool
 
 
-@api_router.get('/llm/byor/permitted', response_model=ByorPermittedResponse)
-async def check_byor_permitted(user_id: str = Depends(get_user_id)):
-    """Check if BYOR key export is permitted for the user's current org."""
+@api_router.get('/llm/byor/options', response_model=ByorOptionsResponse)
+async def get_byor_options(user_id: str = Depends(get_user_id)):
+    """Get BYOR options for the user's current org.
+
+    Returns whether the user can export a BYOR key based on their org's settings.
+    """
     try:
-        permitted = await check_byor_export_enabled(user_id)
-        return {'permitted': permitted}
+        byor_enabled = await check_byor_export_enabled(user_id)
+        return {'byor_enabled': byor_enabled}
     except Exception as e:
         logger.exception(
-            'Error checking BYOR export permission', extra={'error': str(e)}
+            'Error getting BYOR options', extra={'error': str(e)}
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to check BYOR export permission',
+            detail='Failed to get BYOR options',
         )
 
 
