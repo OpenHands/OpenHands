@@ -6415,6 +6415,38 @@
     "ja": "APIキーを更新",
     "uk": "Оновити ключ API"
   },
+  "SETTINGS$LLM_API_KEY_PAYWALL_MESSAGE": {
+    "en": "Purchase at least $10 in credits to get access to OpenHands LLM key for use with OpenHands CLI and SDK.",
+    "zh-CN": "购买至少10美元的积分，即可获得OpenHands LLM密钥，用于OpenHands CLI和SDK。",
+    "zh-TW": "購買至少10美元的積分，即可獲得OpenHands LLM金鑰，用於OpenHands CLI和SDK。",
+    "de": "Kaufen Sie mindestens $10 an Guthaben, um Zugang zum OpenHands LLM-Schlüssel für die Verwendung mit OpenHands CLI und SDK zu erhalten.",
+    "ko-KR": "OpenHands CLI 및 SDK에서 사용할 OpenHands LLM 키에 액세스하려면 최소 $10의 크레딧을 구매하세요.",
+    "no": "Kjøp minst $10 i kreditter for å få tilgang til OpenHands LLM-nøkkel for bruk med OpenHands CLI og SDK.",
+    "it": "Acquista almeno $10 di crediti per ottenere l'accesso alla chiave LLM OpenHands per l'uso con OpenHands CLI e SDK.",
+    "pt": "Compre pelo menos $10 em créditos para obter acesso à chave LLM OpenHands para uso com OpenHands CLI e SDK.",
+    "es": "Compre al menos $10 en créditos para obtener acceso a la clave LLM de OpenHands para usar con OpenHands CLI y SDK.",
+    "ar": "اشترِ ما لا يقل عن 10 دولارات من الرصيد للحصول على مفتاح LLM OpenHands لاستخدامه مع OpenHands CLI و SDK.",
+    "fr": "Achetez au moins 10$ de crédits pour accéder à la clé LLM OpenHands à utiliser avec OpenHands CLI et SDK.",
+    "tr": "OpenHands CLI ve SDK ile kullanmak için OpenHands LLM Anahtarına erişim sağlamak için en az 10$ kredi satın alın.",
+    "ja": "OpenHands CLIおよびSDKで使用するOpenHands LLMキーにアクセスするには、少なくとも$10のクレジットを購入してください。",
+    "uk": "Придбайте кредитів мінімум на $10, щоб отримати доступ до ключа LLM OpenHands для використання з OpenHands CLI та SDK."
+  },
+  "SETTINGS$LLM_API_KEY_BUY_NOW": {
+    "en": "Buy Now",
+    "zh-CN": "立即购买",
+    "zh-TW": "立即購買",
+    "de": "Jetzt kaufen",
+    "ko-KR": "지금 구매",
+    "no": "Kjøp nå",
+    "it": "Acquista ora",
+    "pt": "Comprar agora",
+    "es": "Comprar ahora",
+    "ar": "اشترِ الآن",
+    "fr": "Acheter maintenant",
+    "tr": "Şimdi Satın Al",
+    "ja": "今すぐ購入",
+    "uk": "Купити зараз"
+  },
   "SETTINGS$CONFIRMATION_MODE": {
     "en": "Enable Confirmation Mode",
     "de": "Bestätigungsmodus aktivieren",
