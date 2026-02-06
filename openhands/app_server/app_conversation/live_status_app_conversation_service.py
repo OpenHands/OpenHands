@@ -1018,7 +1018,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             new_content[-1] = TextContent(
                 text=last_content.text + plugin_params_message,
                 cache_prompt=last_content.cache_prompt,
-                enable_truncation=last_content.enable_truncation,
             )
         else:
             # Add as new text content
