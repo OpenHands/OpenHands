@@ -34,6 +34,8 @@ export function useLlmApiKey() {
       }
       return failureCount < 3;
     },
+    // Disable global error toast - we handle 402 errors in the UI
+    meta: { disableToast: true },
   });
 
   // Check if the error is a 402 Payment Required
