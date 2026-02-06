@@ -79,6 +79,8 @@ base_app.include_router(shared_event_router)
 # Add GitHub integration router only if GITHUB_APP_CLIENT_ID is set
 if GITHUB_APP_CLIENT_ID:
     from server.routes.integration.github import github_integration_router  # noqa: E402
+    # Make sure that the callback processor is loaded here so we don't get an error when deserializing
+    from integrations.github.github_v1_callback_processor import GithubV1CallbackProcessor  # type: ignore
 
     base_app.include_router(
         github_integration_router
