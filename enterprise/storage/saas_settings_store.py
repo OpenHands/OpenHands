@@ -24,6 +24,7 @@ from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import call_sync_from_async
+from openhands.utils.llm import is_openhands_model
 
 
 @dataclass
@@ -163,7 +164,7 @@ class SaasSettingsStore(SettingsStore):
             # Check if we need to generate an LLM key.
             if item.llm_base_url == LITE_LLM_API_URL:
                 await self._ensure_api_key(
-                    item, str(org_id), openhands_type=self._is_openhands_provider(item)
+                    item, str(org_id), openhands_type=is_openhands_model(item.llm_model)
                 )
 
             kwargs = item.model_dump(context={'expose_secrets': True})
@@ -228,10 +229,6 @@ class SaasSettingsStore(SettingsStore):
         jwt_secret = self.config.jwt_secret.get_secret_value()
         fernet_key = b64encode(hashlib.sha256(jwt_secret.encode()).digest())
         return Fernet(fernet_key)
-
-    def _is_openhands_provider(self, item: Settings) -> bool:
-        """Check if the settings use the OpenHands provider."""
-        return bool(item.llm_model and item.llm_model.startswith('openhands/'))
 
     async def _ensure_api_key(
         self, item: Settings, org_id: str, openhands_type: bool = False
