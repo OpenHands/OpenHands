@@ -170,6 +170,19 @@ class UserStore:
         )
         decrypted_user_settings = UserSettings(**kwargs)
         with session_maker() as session:
+            # Check if user has completed billing sessions to enable BYOR export
+            from storage.billing_session import BillingSession
+
+            has_completed_billing = (
+                session.query(BillingSession)
+                .filter(
+                    BillingSession.user_id == user_id,
+                    BillingSession.status == 'completed',
+                )
+                .first()
+                is not None
+            )
+
             # create personal org
             org = Org(
                 id=uuid.UUID(user_id),
@@ -177,6 +190,7 @@ class UserStore:
                 org_version=user_settings.user_version,
                 contact_name=user_info['username'],
                 contact_email=user_info['email'],
+                byor_export_enabled=has_completed_billing,
             )
             session.add(org)
 

@@ -182,16 +182,18 @@ class TestGetLlmApiKeyForByor:
     """Test the get_llm_api_key_for_byor endpoint."""
 
     @pytest.mark.asyncio
+    @patch('server.routes.api_keys.check_byor_export_enabled')
     @patch('server.routes.api_keys.store_byor_key_in_db')
     @patch('server.routes.api_keys.generate_byor_key')
     @patch('server.routes.api_keys.get_byor_key_from_db')
     async def test_no_key_in_database_generates_new(
-        self, mock_get_key, mock_generate_key, mock_store_key
+        self, mock_get_key, mock_generate_key, mock_store_key, mock_check_enabled
     ):
         """Test that when no key exists in database, a new one is generated."""
         # Arrange
         user_id = 'user-123'
         new_key = 'sk-new-generated-key'
+        mock_check_enabled.return_value = True
         mock_get_key.return_value = None
         mock_generate_key.return_value = new_key
         mock_store_key.return_value = None
@@ -201,20 +203,23 @@ class TestGetLlmApiKeyForByor:
 
         # Assert
         assert result == {'key': new_key}
+        mock_check_enabled.assert_called_once_with(user_id)
         mock_get_key.assert_called_once_with(user_id)
         mock_generate_key.assert_called_once_with(user_id)
         mock_store_key.assert_called_once_with(user_id, new_key)
 
     @pytest.mark.asyncio
+    @patch('server.routes.api_keys.check_byor_export_enabled')
     @patch('storage.lite_llm_manager.LiteLlmManager.verify_key')
     @patch('server.routes.api_keys.get_byor_key_from_db')
     async def test_valid_key_in_database_returns_key(
-        self, mock_get_key, mock_verify_key
+        self, mock_get_key, mock_verify_key, mock_check_enabled
     ):
         """Test that when a valid key exists in database, it is returned."""
         # Arrange
         user_id = 'user-123'
         existing_key = 'sk-existing-valid-key'
+        mock_check_enabled.return_value = True
         mock_get_key.return_value = existing_key
         mock_verify_key.return_value = True
 
@@ -223,10 +228,12 @@ class TestGetLlmApiKeyForByor:
 
         # Assert
         assert result == {'key': existing_key}
+        mock_check_enabled.assert_called_once_with(user_id)
         mock_get_key.assert_called_once_with(user_id)
         mock_verify_key.assert_called_once_with(existing_key, user_id)
 
     @pytest.mark.asyncio
+    @patch('server.routes.api_keys.check_byor_export_enabled')
     @patch('server.routes.api_keys.store_byor_key_in_db')
     @patch('server.routes.api_keys.generate_byor_key')
     @patch('server.routes.api_keys.delete_byor_key_from_litellm')
@@ -239,12 +246,14 @@ class TestGetLlmApiKeyForByor:
         mock_delete_key,
         mock_generate_key,
         mock_store_key,
+        mock_check_enabled,
     ):
         """Test that when an invalid key exists in database, it is regenerated."""
         # Arrange
         user_id = 'user-123'
         invalid_key = 'sk-invalid-key'
         new_key = 'sk-new-generated-key'
+        mock_check_enabled.return_value = True
         mock_get_key.return_value = invalid_key
         mock_verify_key.return_value = False
         mock_delete_key.return_value = True
@@ -256,6 +265,7 @@ class TestGetLlmApiKeyForByor:
 
         # Assert
         assert result == {'key': new_key}
+        mock_check_enabled.assert_called_once_with(user_id)
         mock_get_key.assert_called_once_with(user_id)
         mock_verify_key.assert_called_once_with(invalid_key, user_id)
         mock_delete_key.assert_called_once_with(user_id, invalid_key)
@@ -263,6 +273,7 @@ class TestGetLlmApiKeyForByor:
         mock_store_key.assert_called_once_with(user_id, new_key)
 
     @pytest.mark.asyncio
+    @patch('server.routes.api_keys.check_byor_export_enabled')
     @patch('server.routes.api_keys.store_byor_key_in_db')
     @patch('server.routes.api_keys.generate_byor_key')
     @patch('server.routes.api_keys.delete_byor_key_from_litellm')
@@ -275,12 +286,14 @@ class TestGetLlmApiKeyForByor:
         mock_delete_key,
         mock_generate_key,
         mock_store_key,
+        mock_check_enabled,
     ):
         """Test that even if deletion fails, regeneration still proceeds."""
         # Arrange
         user_id = 'user-123'
         invalid_key = 'sk-invalid-key'
         new_key = 'sk-new-generated-key'
+        mock_check_enabled.return_value = True
         mock_get_key.return_value = invalid_key
         mock_verify_key.return_value = False
         mock_delete_key.return_value = False  # Deletion fails
@@ -292,19 +305,22 @@ class TestGetLlmApiKeyForByor:
 
         # Assert
         assert result == {'key': new_key}
+        mock_check_enabled.assert_called_once_with(user_id)
         mock_delete_key.assert_called_once_with(user_id, invalid_key)
         mock_generate_key.assert_called_once_with(user_id)
         mock_store_key.assert_called_once_with(user_id, new_key)
 
     @pytest.mark.asyncio
+    @patch('server.routes.api_keys.check_byor_export_enabled')
     @patch('server.routes.api_keys.generate_byor_key')
     @patch('server.routes.api_keys.get_byor_key_from_db')
     async def test_key_generation_failure_raises_exception(
-        self, mock_get_key, mock_generate_key
+        self, mock_get_key, mock_generate_key, mock_check_enabled
     ):
         """Test that when key generation fails, an HTTPException is raised."""
         # Arrange
         user_id = 'user-123'
+        mock_check_enabled.return_value = True
         mock_get_key.return_value = None
         mock_generate_key.return_value = None
 
@@ -316,11 +332,15 @@ class TestGetLlmApiKeyForByor:
         assert 'Failed to generate new BYOR LLM API key' in exc_info.value.detail
 
     @pytest.mark.asyncio
+    @patch('server.routes.api_keys.check_byor_export_enabled')
     @patch('server.routes.api_keys.get_byor_key_from_db')
-    async def test_database_error_raises_exception(self, mock_get_key):
+    async def test_database_error_raises_exception(
+        self, mock_get_key, mock_check_enabled
+    ):
         """Test that database errors are properly handled."""
         # Arrange
         user_id = 'user-123'
+        mock_check_enabled.return_value = True
         mock_get_key.side_effect = Exception('Database connection error')
 
         # Act & Assert
@@ -329,6 +349,21 @@ class TestGetLlmApiKeyForByor:
 
         assert exc_info.value.status_code == 500
         assert 'Failed to retrieve BYOR LLM API key' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    @patch('server.routes.api_keys.check_byor_export_enabled')
+    async def test_byor_export_disabled_returns_402(self, mock_check_enabled):
+        """Test that when BYOR export is disabled, 402 is returned."""
+        # Arrange
+        user_id = 'user-123'
+        mock_check_enabled.return_value = False
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await get_llm_api_key_for_byor(user_id=user_id)
+
+        assert exc_info.value.status_code == 402
+        assert 'BYOR key export is not enabled' in exc_info.value.detail
 
 
 class TestDeleteByorKeyFromLitellm:
