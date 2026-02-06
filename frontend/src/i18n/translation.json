@@ -15,6 +15,22 @@
     "de": "Die geplante Wartung beginnt um {{time}}",
     "uk": "Планове технічне обслуговування розпочнеться о {{time}}"
   },
+  "ALERT$FAULTY_MODELS_MESSAGE": {
+    "en": "The following models are currently reporting errors:",
+    "ja": "次のモデルで現在エラーが報告されています：",
+    "zh-CN": "以下模型当前报告错误：",
+    "zh-TW": "以下模型目前報告錯誤：",
+    "ko-KR": "다음 모델에서 현재 오류가 보고되고 있습니다:",
+    "no": "Følgende modeller rapporterer for øyeblikket feil:",
+    "it": "I seguenti modelli stanno attualmente segnalando errori:",
+    "pt": "Os seguintes modelos estão atualmente relatando erros:",
+    "es": "Los siguientes modelos están reportando errores actualmente:",
+    "ar": "النماذج التالية تُبلغ حاليًا عن أخطاء:",
+    "fr": "Les modèles suivants signalent actuellement des erreurs :",
+    "tr": "Aşağıdaki modeller şu anda hata bildiriyor:",
+    "de": "Die folgenden Modelle melden derzeit Fehler:",
+    "uk": "Наступні моделі наразі повідомляють про помилки:"
+  },
   "AZURE_DEVOPS$CONNECT_ACCOUNT": {
     "en": "Connect Azure DevOps Account",
     "ja": "Azure DevOps アカウントを接続",
@@ -6415,6 +6431,38 @@
     "ja": "APIキーを更新",
     "uk": "Оновити ключ API"
   },
+  "SETTINGS$LLM_API_KEY_PAYWALL_MESSAGE": {
+    "en": "Purchase at least $10 in credits to get access to OpenHands LLM key for use with OpenHands CLI and SDK.",
+    "zh-CN": "购买至少10美元的积分，即可获得OpenHands LLM密钥，用于OpenHands CLI和SDK。",
+    "zh-TW": "購買至少10美元的積分，即可獲得OpenHands LLM金鑰，用於OpenHands CLI和SDK。",
+    "de": "Kaufen Sie mindestens $10 an Guthaben, um Zugang zum OpenHands LLM-Schlüssel für die Verwendung mit OpenHands CLI und SDK zu erhalten.",
+    "ko-KR": "OpenHands CLI 및 SDK에서 사용할 OpenHands LLM 키에 액세스하려면 최소 $10의 크레딧을 구매하세요.",
+    "no": "Kjøp minst $10 i kreditter for å få tilgang til OpenHands LLM-nøkkel for bruk med OpenHands CLI og SDK.",
+    "it": "Acquista almeno $10 di crediti per ottenere l'accesso alla chiave LLM OpenHands per l'uso con OpenHands CLI e SDK.",
+    "pt": "Compre pelo menos $10 em créditos para obter acesso à chave LLM OpenHands para uso com OpenHands CLI e SDK.",
+    "es": "Compre al menos $10 en créditos para obtener acceso a la clave LLM de OpenHands para usar con OpenHands CLI y SDK.",
+    "ar": "اشترِ ما لا يقل عن 10 دولارات من الرصيد للحصول على مفتاح LLM OpenHands لاستخدامه مع OpenHands CLI و SDK.",
+    "fr": "Achetez au moins 10$ de crédits pour accéder à la clé LLM OpenHands à utiliser avec OpenHands CLI et SDK.",
+    "tr": "OpenHands CLI ve SDK ile kullanmak için OpenHands LLM Anahtarına erişim sağlamak için en az 10$ kredi satın alın.",
+    "ja": "OpenHands CLIおよびSDKで使用するOpenHands LLMキーにアクセスするには、少なくとも$10のクレジットを購入してください。",
+    "uk": "Придбайте кредитів мінімум на $10, щоб отримати доступ до ключа LLM OpenHands для використання з OpenHands CLI та SDK."
+  },
+  "SETTINGS$LLM_API_KEY_BUY_NOW": {
+    "en": "Buy Now",
+    "zh-CN": "立即购买",
+    "zh-TW": "立即購買",
+    "de": "Jetzt kaufen",
+    "ko-KR": "지금 구매",
+    "no": "Kjøp nå",
+    "it": "Acquista ora",
+    "pt": "Comprar agora",
+    "es": "Comprar ahora",
+    "ar": "اشترِ الآن",
+    "fr": "Acheter maintenant",
+    "tr": "Şimdi Satın Al",
+    "ja": "今すぐ購入",
+    "uk": "Купити зараз"
+  },
   "SETTINGS$CONFIRMATION_MODE": {
     "en": "Enable Confirmation Mode",
     "de": "Bestätigungsmodus aktivieren",
@@ -7166,6 +7214,22 @@
     "pt": "Atualmente não há plano para este repositório",
     "es": "Actualmente no hay un plan para este repositorio",
     "tr": "Şu anda bu depo için bir plan yok"
+  },
+    "SIDEBAR$NAVIGATION_LABEL": {
+    "en": "Sidebar navigation",
+    "zh-CN": "侧边栏导航",
+    "zh-TW": "側邊欄導航",
+    "de": "Seitenleisten-Navigation",
+    "ko-KR": "사이드바 탐색",
+    "no": "Navigasjon i sidepanel",
+    "it": "Navigazione barra laterale",
+    "pt": "Navegação da barra lateral",
+    "es": "Navegación de la barra lateral",
+    "ar": "تنقل الشريط الجانبي",
+    "fr": "Navigation de la barre latérale",
+    "tr": "Kenar çubuğu gezintisi",
+    "ja": "サイドバーのナビゲーション",
+    "uk": "Навігація бічної панелі"
   },
   "FEEDBACK$PUBLIC_LABEL": {
     "en": "Public",

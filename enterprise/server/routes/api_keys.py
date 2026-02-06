@@ -6,6 +6,7 @@ from storage.api_key_store import ApiKeyStore
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member import OrgMember
 from storage.org_member_store import OrgMemberStore
+from storage.org_service import OrgService
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
@@ -52,7 +53,6 @@ async def store_byor_key_in_db(user_id: str, key: str) -> None:
 
 async def generate_byor_key(user_id: str) -> str | None:
     """Generate a new BYOR key for a user."""
-
     try:
         user = await UserStore.get_user_by_id_async(user_id)
         if not user:
@@ -146,6 +146,26 @@ class ApiKeyCreateResponse(ApiKeyResponse):
 
 class LlmApiKeyResponse(BaseModel):
     key: str | None
+
+
+class ByorPermittedResponse(BaseModel):
+    permitted: bool
+
+
+@api_router.get('/llm/byor/permitted', response_model=ByorPermittedResponse)
+async def check_byor_permitted(user_id: str = Depends(get_user_id)):
+    """Check if BYOR key export is permitted for the user's current org."""
+    try:
+        permitted = await OrgService.check_byor_export_enabled(user_id)
+        return {'permitted': permitted}
+    except Exception as e:
+        logger.exception(
+            'Error checking BYOR export permission', extra={'error': str(e)}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to check BYOR export permission',
+        )
 
 
 @api_router.post('', response_model=ApiKeyCreateResponse)
@@ -253,8 +273,17 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
     This endpoint validates that the key exists in LiteLLM before returning it.
     If validation fails, it automatically generates a new key to ensure users
     always receive a working key.
+
+    Returns 402 Payment Required if BYOR export is not enabled for the user's org.
     """
     try:
+        # Check if BYOR export is enabled for the user's org
+        if not await OrgService.check_byor_export_enabled(user_id):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail='BYOR key export is not enabled. Purchase credits to enable this feature.',
+            )
+
         # Check if the BYOR key exists in the database
         byor_key = await get_byor_key_from_db(user_id)
         if byor_key:
@@ -310,10 +339,20 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
 
 @api_router.post('/llm/byor/refresh', response_model=LlmApiKeyResponse)
 async def refresh_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
-    """Refresh the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user."""
+    """Refresh the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user.
+
+    Returns 402 Payment Required if BYOR export is not enabled for the user's org.
+    """
     logger.info('Starting BYOR LLM API key refresh', extra={'user_id': user_id})
 
     try:
+        # Check if BYOR export is enabled for the user's org
+        if not await OrgService.check_byor_export_enabled(user_id):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail='BYOR key export is not enabled. Purchase credits to enable this feature.',
+            )
+
         # Get the existing BYOR key from the database
         existing_byor_key = await get_byor_key_from_db(user_id)
 

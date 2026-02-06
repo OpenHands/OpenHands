@@ -1,13 +1,45 @@
 import uuid
 from unittest.mock import patch
 
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
 # Mock the database module before importing OrgMemberStore
-with patch('storage.database.engine'), patch('storage.database.a_engine'):
+with patch('storage.database.engine', create=True), patch(
+    'storage.database.a_engine', create=True
+):
+    from storage.base import Base
     from storage.org import Org
     from storage.org_member import OrgMember
     from storage.org_member_store import OrgMemberStore
     from storage.role import Role
     from storage.user import User
+
+
+@pytest.fixture
+async def async_engine():
+    """Create an async SQLite engine for testing."""
+    engine = create_async_engine(
+        'sqlite+aiosqlite:///:memory:',
+        poolclass=StaticPool,
+        connect_args={'check_same_thread': False},
+        echo=False,
+    )
+
+    # Create all tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield engine
+
+    await engine.dispose()
+
+
+@pytest.fixture
+async def async_session_maker(async_engine):
+    """Create an async session maker for testing."""
+    return async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 def test_get_org_members(session_maker):
@@ -251,3 +283,324 @@ def test_remove_user_from_org_not_found(session_maker):
     with patch('storage.org_member_store.session_maker', session_maker):
         result = OrgMemberStore.remove_user_from_org(uuid4(), 99999)
         assert result is False
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_basic(async_session_maker):
+    """Test basic pagination returns correct number of items."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        # Create 5 users
+        users = [
+            User(id=uuid.uuid4(), current_org_id=org.id, email=f'user{i}@example.com')
+            for i in range(5)
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        # Create org members
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user.id,
+                role_id=role.id,
+                llm_api_key=f'test-key-{i}',
+                status='active',
+            )
+            for i, user in enumerate(users)
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        members, has_more = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=3
+        )
+
+        # Assert
+        assert len(members) == 3
+        assert has_more is True
+        # Verify user and role relationships are loaded
+        assert all(member.user is not None for member in members)
+        assert all(member.role is not None for member in members)
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_no_more(async_session_maker):
+    """Test pagination when there are no more results."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        # Create 3 users
+        users = [
+            User(id=uuid.uuid4(), current_org_id=org.id, email=f'user{i}@example.com')
+            for i in range(3)
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        # Create org members
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user.id,
+                role_id=role.id,
+                llm_api_key=f'test-key-{i}',
+                status='active',
+            )
+            for i, user in enumerate(users)
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        members, has_more = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=5
+        )
+
+        # Assert
+        assert len(members) == 3
+        assert has_more is False
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_exact_limit(async_session_maker):
+    """Test pagination when results exactly match limit."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        # Create exactly 5 users
+        users = [
+            User(id=uuid.uuid4(), current_org_id=org.id, email=f'user{i}@example.com')
+            for i in range(5)
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        # Create org members
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user.id,
+                role_id=role.id,
+                llm_api_key=f'test-key-{i}',
+                status='active',
+            )
+            for i, user in enumerate(users)
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        members, has_more = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=5
+        )
+
+        # Assert
+        assert len(members) == 5
+        assert has_more is False
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_with_offset(async_session_maker):
+    """Test pagination with offset skips correct number of items."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        # Create 10 users
+        users = [
+            User(id=uuid.uuid4(), current_org_id=org.id, email=f'user{i}@example.com')
+            for i in range(10)
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        # Create org members
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user.id,
+                role_id=role.id,
+                llm_api_key=f'test-key-{i}',
+                status='active',
+            )
+            for i, user in enumerate(users)
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Get first page
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        first_page, has_more_first = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=3
+        )
+
+        # Get second page
+        second_page, has_more_second = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=3, limit=3
+        )
+
+        # Assert
+        assert len(first_page) == 3
+        assert has_more_first is True
+        assert len(second_page) == 3
+        assert has_more_second is True
+
+        # Verify no overlap between pages
+        first_user_ids = {member.user_id for member in first_page}
+        second_user_ids = {member.user_id for member in second_page}
+        assert first_user_ids.isdisjoint(second_user_ids)
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_empty_org(async_session_maker):
+    """Test pagination with empty organization returns empty list."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        members, has_more = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=10
+        )
+
+        # Assert
+        assert len(members) == 0
+        assert has_more is False
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_ordering(async_session_maker):
+    """Test that pagination orders results by user_id."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        # Create users with specific IDs to test ordering
+        user_ids = [uuid.uuid4() for _ in range(5)]
+        user_ids.sort()  # Sort to verify ordering
+
+        users = [
+            User(id=user_id, current_org_id=org.id, email=f'user{i}@example.com')
+            for i, user_id in enumerate(user_ids)
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        # Create org members in reverse order to test that ordering works
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user_id,
+                role_id=role.id,
+                llm_api_key=f'test-key-{i}',
+                status='active',
+            )
+            for i, user_id in enumerate(reversed(user_ids))
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        members, has_more = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=10
+        )
+
+        # Assert
+        assert len(members) == 5
+        # Verify members are ordered by user_id
+        member_user_ids = [member.user_id for member in members]
+        assert member_user_ids == sorted(member_user_ids)
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_eager_loading(async_session_maker):
+    """Test that user and role relationships are eagerly loaded."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='owner', rank=10)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='test@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        members, has_more = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=10
+        )
+
+        # Assert
+        assert len(members) == 1
+        member = members[0]
+        # Verify relationships are loaded (not lazy)
+        assert member.user is not None
+        assert member.user.email == 'test@example.com'
+        assert member.role is not None
+        assert member.role.name == 'owner'
+        assert member.role.rank == 10

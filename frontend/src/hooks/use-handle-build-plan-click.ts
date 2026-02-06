@@ -24,7 +24,7 @@ export const useHandleBuildPlanClick = () => {
       setConversationMode("code");
 
       // Create the build prompt to execute the plan
-      const buildPrompt = `Execute the plan based on the workspace/project/PLAN.md file.`;
+      const buildPrompt = `Execute the plan based on the .agents_tmp/PLAN.md file.`;
 
       // Send the message to the code agent
       const timestamp = new Date().toISOString();

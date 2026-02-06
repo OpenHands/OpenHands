@@ -91,14 +91,18 @@ class OrgResponse(BaseModel):
     enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     credits: float | None = None
+    is_personal: bool = False
 
     @classmethod
-    def from_org(cls, org: Org, credits: float | None = None) -> 'OrgResponse':
+    def from_org(
+        cls, org: Org, credits: float | None = None, user_id: str | None = None
+    ) -> 'OrgResponse':
         """Create an OrgResponse from an Org entity.
 
         Args:
             org: The organization entity to convert
             credits: Optional credits value (defaults to None)
+            user_id: Optional user ID to determine if org is personal (defaults to None)
 
         Returns:
             OrgResponse: The response model instance
@@ -134,6 +138,7 @@ class OrgResponse(BaseModel):
             enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             credits=credits,
+            is_personal=str(org.id) == user_id if user_id else False,
         )
 
 
@@ -173,3 +178,21 @@ class OrgUpdate(BaseModel):
     confirmation_mode: bool | None = None
     enable_default_condenser: bool | None = None
     condenser_max_size: int | None = Field(default=None, ge=20)
+
+
+class OrgMemberResponse(BaseModel):
+    """Response model for a single organization member."""
+
+    user_id: str
+    email: str | None
+    role_id: int
+    role_name: str
+    role_rank: int
+    status: str | None
+
+
+class OrgMemberPage(BaseModel):
+    """Paginated response for organization members."""
+
+    items: list[OrgMemberResponse]
+    next_page_id: str | None = None

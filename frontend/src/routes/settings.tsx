@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Route } from "./+types/settings";
 import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
-import { GetConfigResponse } from "#/api/option-service/option.types";
+import { WebClientConfig } from "#/api/option-service/option.types";
 import { SettingsLayout } from "#/components/features/settings/settings-layout";
 import { Typography } from "#/ui/typography";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
@@ -20,20 +20,20 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
   const { pathname } = url;
 
-  let config = queryClient.getQueryData<GetConfigResponse>(["config"]);
+  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
   if (!config) {
     config = await OptionService.getConfig();
-    queryClient.setQueryData<GetConfigResponse>(["config"], config);
+    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
   }
 
-  const isSaas = config?.APP_MODE === "saas";
+  const isSaas = config?.app_mode === "saas";
 
   if (!isSaas && SAAS_ONLY_PATHS.includes(pathname)) {
     // if in OSS mode, do not allow access to saas-only paths
     return redirect("/settings");
   }
   // If LLM settings are hidden and user tries to access the LLM settings page
-  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS && pathname === "/settings") {
+  if (config?.feature_flags?.hide_llm_settings && pathname === "/settings") {
     // Redirect to the first available settings page
     return isSaas ? redirect("/settings/user") : redirect("/settings/mcp");
   }

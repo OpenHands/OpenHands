@@ -64,7 +64,7 @@ function GitSettingsScreen() {
   const existingAzureDevOpsHost = settings?.provider_tokens_set.azure_devops;
   const existingForgejoHost = settings?.provider_tokens_set.forgejo;
 
-  const isSaas = config?.APP_MODE === "saas";
+  const isSaas = config?.app_mode === "saas";
   const isGitHubTokenSet = providers.includes("github");
   const isGitLabTokenSet = providers.includes("gitlab");
   const isBitbucketTokenSet = providers.includes("bitbucket");
@@ -159,11 +159,12 @@ function GitSettingsScreen() {
     !bitbucketHostInputHasValue &&
     !azureDevOpsHostInputHasValue &&
     !forgejoHostInputHasValue;
-  const shouldRenderExternalConfigureButtons = isSaas && config.APP_SLUG;
+  const shouldRenderExternalConfigureButtons =
+    isSaas && config?.github_app_slug;
   const shouldRenderProjectManagementIntegrations =
-    config?.FEATURE_FLAGS?.ENABLE_JIRA ||
-    config?.FEATURE_FLAGS?.ENABLE_JIRA_DC ||
-    config?.FEATURE_FLAGS?.ENABLE_LINEAR;
+    config?.feature_flags?.enable_jira ||
+    config?.feature_flags?.enable_jira_dc ||
+    config?.feature_flags?.enable_linear;
 
   return (
     <form
@@ -179,7 +180,9 @@ function GitSettingsScreen() {
                 <h3 className="text-xl font-medium text-white">
                   {t(I18nKey.SETTINGS$GITHUB)}
                 </h3>
-                <ConfigureGitHubRepositoriesAnchor slug={config.APP_SLUG!} />
+                <ConfigureGitHubRepositoriesAnchor
+                  slug={config.github_app_slug!}
+                />
               </div>
               <div className="w-1/2 border-b border-gray-200" />
             </>
