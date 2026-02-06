@@ -39,14 +39,14 @@ export function PlanPreview({
   isBuildDisabled,
 }: PlanPreviewProps) {
   const { t } = useTranslation();
-  const { selectTab } = useSelectConversationTab();
+  const { navigateToTab } = useSelectConversationTab();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
   const { scrollDomToBottom } = useScrollContext();
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   const handleViewClick = () => {
-    selectTab("planner");
+    navigateToTab("planner");
   };
 
   // Handle Build action with scroll to bottom

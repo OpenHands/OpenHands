@@ -91,14 +91,18 @@ class OrgResponse(BaseModel):
     enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     credits: float | None = None
+    is_personal: bool = False
 
     @classmethod
-    def from_org(cls, org: Org, credits: float | None = None) -> 'OrgResponse':
+    def from_org(
+        cls, org: Org, credits: float | None = None, user_id: str | None = None
+    ) -> 'OrgResponse':
         """Create an OrgResponse from an Org entity.
 
         Args:
             org: The organization entity to convert
             credits: Optional credits value (defaults to None)
+            user_id: Optional user ID to determine if org is personal (defaults to None)
 
         Returns:
             OrgResponse: The response model instance
@@ -134,6 +138,7 @@ class OrgResponse(BaseModel):
             enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             credits=credits,
+            is_personal=str(org.id) == user_id if user_id else False,
         )
 
 
