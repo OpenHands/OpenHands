@@ -7,7 +7,7 @@ on:
     #   1. A new PR is opened (non-draft), OR
     #   2. A draft PR is marked as ready for review, OR
     #   3. A maintainer adds the 'review-this' label, OR
-    #   4. A maintainer requests openhands-agent as a reviewer
+    #   4. A maintainer requests openhands-agent or all-hands-bot as a reviewer
     # Only users with write access can add labels or request reviews, ensuring security.
     # The PR code is explicitly checked out for review, but secrets are only accessible
     # because the workflow runs in the base repository context
@@ -25,13 +25,14 @@ jobs:
         #   1. A new non-draft PR is opened by a trusted contributor, OR
         #   2. A draft PR is converted to ready for review by a trusted contributor, OR
         #   3. 'review-this' label is added, OR
-        #   4. openhands-agent is requested as a reviewer
+        #   4. openhands-agent or all-hands-bot is requested as a reviewer
         # Note: FIRST_TIME_CONTRIBUTOR PRs require manual trigger via label/reviewer request
         if: |
             (github.event.action == 'opened' && github.event.pull_request.draft == false && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR') ||
             (github.event.action == 'ready_for_review' && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR') ||
             github.event.label.name == 'review-this' ||
-            github.event.requested_reviewer.login == 'openhands-agent'
+            github.event.requested_reviewer.login == 'openhands-agent' ||
+            github.event.requested_reviewer.login == 'all-hands-bot'
         concurrency:
             group: pr-review-${{ github.event.pull_request.number }}
             cancel-in-progress: true
@@ -107,6 +108,7 @@ jobs:
               env:
                   LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
                   GITHUB_TOKEN: ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}
+                  LMNR_PROJECT_API_KEY: ${{ secrets.LMNR_SKILLS_API_KEY }}
               run: |
                   # Change to the PR repository directory so agent can analyze the code
                   cd pr-repo
