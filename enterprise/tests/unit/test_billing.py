@@ -317,6 +317,7 @@ async def test_success_callback_success():
         patch(
             'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'
         ) as mock_update_budget,
+        patch('server.routes.billing.OrgStore.update_org') as mock_update_org,
     ):
         mock_db_session = MagicMock()
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
@@ -338,6 +339,12 @@ async def test_success_callback_success():
         mock_update_budget.assert_called_once_with(
             'mock_org_id',
             125.0,  # 100 + (25.00 from Stripe)
+        )
+
+        # Verify BYOR export is enabled for the org
+        mock_update_org.assert_called_once_with(
+            'mock_org_id',
+            {'byor_export_enabled': True},
         )
 
         # Verify database updates
