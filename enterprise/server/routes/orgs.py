@@ -470,3 +470,74 @@ async def get_org_members(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve members',
         )
+
+
+@org_router.delete('/{org_id}/members/{user_id}')
+async def remove_org_member(
+    org_id: str,
+    user_id: str,
+    current_user_id: str = Depends(get_user_id),
+):
+    """Remove a member from an organization.
+
+    Only owners and admins can remove members:
+    - Owners can remove admins and regular users
+    - Admins can only remove regular users
+
+    Users cannot remove themselves. The last owner cannot be removed.
+    """
+    try:
+        success, error = await OrgMemberService.remove_org_member(
+            org_id=UUID(org_id),
+            target_user_id=UUID(user_id),
+            current_user_id=UUID(current_user_id),
+        )
+
+        if not success:
+            error_map = {
+                'not_a_member': (
+                    status.HTTP_403_FORBIDDEN,
+                    'You are not a member of this organization',
+                ),
+                'cannot_remove_self': (
+                    status.HTTP_403_FORBIDDEN,
+                    'Cannot remove yourself from an organization',
+                ),
+                'member_not_found': (
+                    status.HTTP_404_NOT_FOUND,
+                    'Member not found in this organization',
+                ),
+                'insufficient_permission': (
+                    status.HTTP_403_FORBIDDEN,
+                    'You do not have permission to remove this member',
+                ),
+                'cannot_remove_last_owner': (
+                    status.HTTP_400_BAD_REQUEST,
+                    'Cannot remove the last owner of an organization',
+                ),
+                'removal_failed': (
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'Failed to remove member',
+                ),
+            }
+            status_code, detail = error_map.get(
+                error, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+            )
+            raise HTTPException(status_code=status_code, detail=detail)
+
+        return {'message': 'Member removed successfully'}
+
+    except HTTPException:
+        raise
+    except ValueError:
+        logger.exception('Invalid UUID format')
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid organization or user ID format',
+        )
+    except Exception:
+        logger.exception('Error removing organization member')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to remove member',
+        )

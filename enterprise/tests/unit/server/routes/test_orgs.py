@@ -5,11 +5,11 @@ Tests the POST /api/organizations endpoint with various scenarios.
 """
 
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
 
 # Mock database before imports
@@ -26,7 +26,7 @@ with patch('storage.database.engine', create=True), patch(
         OrgNameExistsError,
         OrgNotFoundError,
     )
-    from server.routes.orgs import get_org_members, org_router
+    from server.routes.orgs import get_org_members, org_router, remove_org_member
     from storage.org import Org
 
     from openhands.server.user_auth import get_user_id
@@ -48,6 +48,13 @@ def mock_app():
 
 
 @pytest.fixture
+def mock_request():
+    """Create a mock request object."""
+    request = MagicMock(spec=Request)
+    return request
+
+
+@pytest.fixture
 def org_id():
     """Create a test organization ID."""
     return str(uuid.uuid4())
@@ -56,6 +63,12 @@ def org_id():
 @pytest.fixture
 def current_user_id():
     """Create a test current user ID."""
+    return str(uuid.uuid4())
+
+
+@pytest.fixture
+def target_user_id():
+    """Create a test target user ID."""
     return str(uuid.uuid4())
 
 
@@ -1984,3 +1997,295 @@ class TestGetOrgMembersEndpoint:
                 page_id='100',
                 limit=100,
             )
+
+
+class TestRemoveOrgMemberEndpoint:
+    """Test cases for DELETE /api/organizations/{org_id}/members/{user_id} endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_remove_member_succeeds_returns_200(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that successful removal returns 200 with success message."""
+        # Arrange
+        with (
+            patch(
+                'server.routes.orgs.get_user_id', return_value=current_user_id
+            ) as mock_get_user_id,
+            patch(
+                'server.routes.orgs.OrgMemberService.remove_org_member'
+            ) as mock_remove,
+        ):
+            mock_remove.return_value = (True, None)
+
+            # Act
+            result = await remove_org_member(
+                org_id=org_id,
+                user_id=target_user_id,
+                current_user_id=current_user_id,
+            )
+
+            # Assert
+            assert result == {'message': 'Member removed successfully'}
+            mock_get_user_id.assert_not_called()  # current_user_id is passed directly
+            mock_remove.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_not_a_member_returns_403(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that not being a member returns 403 Forbidden."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.return_value = (False, 'not_a_member')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert 'not a member of this organization' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_cannot_remove_self_returns_403(
+        self, mock_request, org_id, current_user_id
+    ):
+        """Test that trying to remove oneself returns 403 Forbidden."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.return_value = (False, 'cannot_remove_self')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=current_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert 'Cannot remove yourself' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_member_not_found_returns_404(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that member not found returns 404 Not Found."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.return_value = (False, 'member_not_found')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+            assert 'Member not found' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_insufficient_permission_returns_403(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that insufficient permission returns 403 Forbidden."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.return_value = (False, 'insufficient_permission')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert 'do not have permission' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_cannot_remove_last_owner_returns_400(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that removing last owner returns 400 Bad Request."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.return_value = (False, 'cannot_remove_last_owner')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+            assert 'Cannot remove the last owner' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_removal_failed_returns_500(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that removal failure returns 500 Internal Server Error."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.return_value = (False, 'removal_failed')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'Failed to remove member' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_unknown_error_returns_500(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that unknown error returns 500 Internal Server Error."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.return_value = (False, 'unknown_error')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'An error occurred' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_org_id_format_returns_400(
+        self, mock_request, current_user_id, target_user_id
+    ):
+        """Test that invalid org_id UUID format returns 400 Bad Request."""
+        # Arrange
+        invalid_org_id = 'not-a-uuid'
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await remove_org_member(
+                org_id=invalid_org_id,
+                user_id=target_user_id,
+                current_user_id=current_user_id,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Invalid organization or user ID format' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_user_id_format_returns_400(
+        self, mock_request, org_id, current_user_id
+    ):
+        """Test that invalid user_id UUID format returns 400 Bad Request."""
+        # Arrange
+        invalid_user_id = 'not-a-uuid'
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await remove_org_member(
+                org_id=org_id,
+                user_id=invalid_user_id,
+                current_user_id=current_user_id,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Invalid organization or user ID format' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_current_user_id_format_returns_400(
+        self, mock_request, org_id, target_user_id
+    ):
+        """Test that invalid current_user_id UUID format returns 400 Bad Request."""
+        # Arrange
+        invalid_current_user_id = 'not-a-uuid'
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await remove_org_member(
+                org_id=org_id,
+                user_id=target_user_id,
+                current_user_id=invalid_current_user_id,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Invalid organization or user ID format' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_service_exception_returns_500(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that service exception returns 500 Internal Server Error."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.side_effect = Exception('Database connection failed')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'Failed to remove member' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_http_exception_is_re_raised(
+        self, mock_request, org_id, current_user_id, target_user_id
+    ):
+        """Test that HTTPException from service is re-raised."""
+        # Arrange
+        original_exception = HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Service temporarily unavailable',
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.remove_org_member'
+        ) as mock_remove:
+            mock_remove.side_effect = original_exception
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await remove_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    current_user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+            assert exc_info.value.detail == 'Service temporarily unavailable'
