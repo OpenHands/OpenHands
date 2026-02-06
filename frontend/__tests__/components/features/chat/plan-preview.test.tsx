@@ -170,7 +170,7 @@ describe("PlanPreview", () => {
     // Arrange
     const user = userEvent.setup();
     const expectedPrompt =
-      "Execute the plan based on the workspace/project/PLAN.md file.";
+      "Execute the plan based on the .agents_tmp/PLAN.md file.";
     renderPlanPreview(<PlanPreview planContent="Plan content" />);
     const buildButton = screen.getByTestId("plan-preview-build-button");
 
@@ -201,7 +201,7 @@ describe("PlanPreview", () => {
     useOptimisticUserMessageStore.setState({ optimisticUserMessage: null });
     const user = userEvent.setup();
     const expectedPrompt =
-      "Execute the plan based on the workspace/project/PLAN.md file.";
+      "Execute the plan based on the .agents_tmp/PLAN.md file.";
     renderPlanPreview(<PlanPreview planContent="Plan content" />);
     const buildButton = screen.getByTestId("plan-preview-build-button");
 

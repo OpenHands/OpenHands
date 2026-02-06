@@ -709,6 +709,138 @@ async def test_bitbucket_get_repositories_mixed_owner_types():
         assert org_repo.owner_type == OwnerType.ORGANIZATION
 
 
+# ── Bitbucket email fallback tests ──
+
+
+@pytest.mark.asyncio
+async def test_resolve_primary_email_selects_primary_confirmed():
+    """_resolve_primary_email returns the email marked primary and confirmed."""
+    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+
+    emails = [
+        {'email': 'secondary@example.com', 'is_primary': False, 'is_confirmed': True},
+        {'email': 'primary@example.com', 'is_primary': True, 'is_confirmed': True},
+        {
+            'email': 'unconfirmed@example.com',
+            'is_primary': False,
+            'is_confirmed': False,
+        },
+    ]
+    result = BitBucketMixinBase._resolve_primary_email(emails)
+    assert result == 'primary@example.com'
+
+
+@pytest.mark.asyncio
+async def test_resolve_primary_email_returns_none_when_no_primary():
+    """_resolve_primary_email returns None when no email is marked primary."""
+    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+
+    emails = [
+        {'email': 'a@example.com', 'is_primary': False, 'is_confirmed': True},
+        {'email': 'b@example.com', 'is_primary': False, 'is_confirmed': True},
+    ]
+    result = BitBucketMixinBase._resolve_primary_email(emails)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_primary_email_returns_none_when_primary_not_confirmed():
+    """_resolve_primary_email returns None when primary email is not confirmed."""
+    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+
+    emails = [
+        {'email': 'primary@example.com', 'is_primary': True, 'is_confirmed': False},
+        {'email': 'other@example.com', 'is_primary': False, 'is_confirmed': True},
+    ]
+    result = BitBucketMixinBase._resolve_primary_email(emails)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_primary_email_returns_none_for_empty_list():
+    """_resolve_primary_email returns None for an empty list."""
+    from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
+
+    result = BitBucketMixinBase._resolve_primary_email([])
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_user_emails():
+    """get_user_emails calls /user/emails and returns the values list."""
+    service = BitBucketService(token=SecretStr('test-token'))
+
+    mock_response = {
+        'values': [
+            {'email': 'primary@example.com', 'is_primary': True, 'is_confirmed': True},
+            {
+                'email': 'secondary@example.com',
+                'is_primary': False,
+                'is_confirmed': True,
+            },
+        ]
+    }
+
+    with patch.object(service, '_make_request', return_value=(mock_response, {})):
+        emails = await service.get_user_emails()
+
+        assert emails == mock_response['values']
+
+
+@pytest.mark.asyncio
+async def test_get_user_falls_back_to_user_emails():
+    """get_user calls /user/emails to resolve email (Bitbucket /user never returns email)."""
+    service = BitBucketService(token=SecretStr('test-token'))
+
+    mock_user_response = {
+        'account_id': '123',
+        'username': 'testuser',
+        'display_name': 'Test User',
+        'links': {'avatar': {'href': 'https://example.com/avatar.jpg'}},
+    }
+
+    mock_emails = [
+        {'email': 'secondary@example.com', 'is_primary': False, 'is_confirmed': True},
+        {'email': 'primary@example.com', 'is_primary': True, 'is_confirmed': True},
+    ]
+
+    with (
+        patch.object(service, '_make_request', return_value=(mock_user_response, {})),
+        patch.object(service, 'get_user_emails', return_value=mock_emails),
+    ):
+        user = await service.get_user()
+
+        assert user.email == 'primary@example.com'
+
+
+@pytest.mark.asyncio
+async def test_get_user_handles_user_emails_api_failure():
+    """get_user handles /user/emails failure gracefully — email stays None."""
+    service = BitBucketService(token=SecretStr('test-token'))
+
+    mock_user_response = {
+        'account_id': '123',
+        'username': 'testuser',
+        'display_name': 'Test User',
+        'links': {'avatar': {'href': 'https://example.com/avatar.jpg'}},
+    }
+
+    with (
+        patch.object(service, '_make_request', return_value=(mock_user_response, {})),
+        patch.object(
+            service,
+            'get_user_emails',
+            side_effect=Exception('API Error'),
+        ),
+    ):
+        user = await service.get_user()
+
+        # Email should remain None — no crash
+        assert user.email is None
+        assert user.login == 'testuser'
+        assert user.name == 'Test User'
+
+
 # Setup.py Bitbucket Token Tests
 @patch('openhands.core.setup.call_async_from_sync')
 @patch('openhands.core.setup.get_file_store')

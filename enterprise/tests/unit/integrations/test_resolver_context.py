@@ -141,12 +141,14 @@ def test_custom_to_static_conversion():
 
 def create_provider_tokens(
     tokens_dict: dict[ProviderType, str],
-) -> dict[ProviderType, ProviderToken]:
-    """Helper to create provider tokens dictionary."""
-    return {
-        provider_type: ProviderToken(token=SecretStr(token_value))
-        for provider_type, token_value in tokens_dict.items()
-    }
+) -> MappingProxyType:
+    """Helper to create provider tokens as MappingProxyType."""
+    return MappingProxyType(
+        {
+            provider_type: ProviderToken(token=SecretStr(token_value))
+            for provider_type, token_value in tokens_dict.items()
+        }
+    )
 
 
 @pytest.mark.asyncio
@@ -264,3 +266,63 @@ async def test_get_latest_token_can_be_used_with_static_secret(
     # Assert - this should NOT raise a ValidationError
     static_secret = StaticSecret(value=token, description='GITHUB authentication token')
     assert static_secret.get_value() == token_value
+
+
+# ---------------------------------------------------------------------------
+# Tests for get_authenticated_git_url - ensuring proper authenticated URLs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_authenticated_git_url_raises_when_no_tokens(
+    resolver_context, mock_saas_user_auth
+):
+    """Test that get_authenticated_git_url raises error when no provider tokens available."""
+    # Arrange
+    mock_saas_user_auth.get_provider_tokens = AsyncMock(return_value=None)
+
+    # Act & Assert
+    with pytest.raises(ValueError, match='No provider tokens available'):
+        await resolver_context.get_authenticated_git_url('owner/repo')
+
+
+@pytest.mark.asyncio
+async def test_get_provider_handler_caches_instance(
+    resolver_context, mock_saas_user_auth
+):
+    """Test that _get_provider_handler caches the handler instance."""
+    # Arrange
+    token_value = 'ghp_test_token'
+    provider_tokens = create_provider_tokens({ProviderType.GITHUB: token_value})
+    mock_saas_user_auth.get_provider_tokens = AsyncMock(return_value=provider_tokens)
+    mock_saas_user_auth.get_user_id = AsyncMock(return_value='test-user-id')
+
+    # Act - call _get_provider_handler twice
+    handler1 = await resolver_context._get_provider_handler()
+    handler2 = await resolver_context._get_provider_handler()
+
+    # Assert - should be the same instance (cached)
+    assert handler1 is handler2
+    # get_provider_tokens should only be called once
+    assert mock_saas_user_auth.get_provider_tokens.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_get_provider_handler_creates_handler_with_correct_params(
+    resolver_context, mock_saas_user_auth
+):
+    """Test that _get_provider_handler creates ProviderHandler with correct parameters."""
+    # Arrange
+    token_value = 'ghp_test_token'
+    provider_tokens = create_provider_tokens({ProviderType.GITHUB: token_value})
+    mock_saas_user_auth.get_provider_tokens = AsyncMock(return_value=provider_tokens)
+    mock_saas_user_auth.get_user_id = AsyncMock(return_value='test-user-id')
+
+    # Act
+    handler = await resolver_context._get_provider_handler()
+
+    # Assert
+    from openhands.integrations.provider import ProviderHandler
+
+    assert isinstance(handler, ProviderHandler)
+    assert handler.provider_tokens == provider_tokens
