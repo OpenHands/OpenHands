@@ -6,28 +6,11 @@ from storage.api_key_store import ApiKeyStore
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member import OrgMember
 from storage.org_member_store import OrgMemberStore
-from storage.org_store import OrgStore
+from storage.org_service import OrgService
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
-
-
-async def check_byor_export_enabled(user_id: str) -> bool:
-    """Check if BYOR export is enabled for the user's current org.
-
-    Returns True if the user's current org has byor_export_enabled set to True.
-    Returns False if the user is not found, has no current org, or the flag is False.
-    """
-    user = await UserStore.get_user_by_id_async(user_id)
-    if not user or not user.current_org_id:
-        return False
-
-    org = OrgStore.get_org_by_id(user.current_org_id)
-    if not org:
-        return False
-
-    return org.byor_export_enabled
 
 
 # Helper functions for BYOR API key management
@@ -173,7 +156,7 @@ class ByorPermittedResponse(BaseModel):
 async def check_byor_permitted(user_id: str = Depends(get_user_id)):
     """Check if BYOR key export is permitted for the user's current org."""
     try:
-        permitted = await check_byor_export_enabled(user_id)
+        permitted = await OrgService.check_byor_export_enabled(user_id)
         return {'permitted': permitted}
     except Exception as e:
         logger.exception(
@@ -295,7 +278,7 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
     """
     try:
         # Check if BYOR export is enabled for the user's org
-        if not await check_byor_export_enabled(user_id):
+        if not await OrgService.check_byor_export_enabled(user_id):
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail='BYOR key export is not enabled. Purchase credits to enable this feature.',
@@ -364,7 +347,7 @@ async def refresh_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
 
     try:
         # Check if BYOR export is enabled for the user's org
-        if not await check_byor_export_enabled(user_id):
+        if not await OrgService.check_byor_export_enabled(user_id):
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail='BYOR key export is not enabled. Purchase credits to enable this feature.',
