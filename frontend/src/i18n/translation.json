@@ -16319,6 +16319,22 @@
     "de": "Bitte wählen Sie eine Organisation",
     "uk": "Будь ласка, виберіть організацію"
   },
+  "ORG$PERSONAL_WORKSPACE": {
+    "en": "Personal Workspace",
+    "ja": "個人ワークスペース",
+    "zh-CN": "个人工作区",
+    "zh-TW": "個人工作區",
+    "ko-KR": "개인 워크스페이스",
+    "no": "Personlig arbeidsområde",
+    "it": "Area di lavoro personale",
+    "pt": "Área de trabalho pessoal",
+    "es": "Espacio de trabajo personal",
+    "ar": "مساحة العمل الشخصية",
+    "fr": "Espace de travail personnel",
+    "tr": "Kişisel çalışma alanı",
+    "de": "Persönlicher Arbeitsbereich",
+    "uk": "Особистий робочий простір"
+  },
   "CONVERSATION$SHOW_SKILLS": {
     "en": "Show Available Skills",
     "ja": "利用可能なスキルを表示",
