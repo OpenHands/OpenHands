@@ -319,12 +319,12 @@ class V1ConversationService {
   /**
    * Read a file from a specific conversation's sandbox workspace
    * @param conversationId The conversation ID
-   * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/PLAN.md)
+   * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/.agents_tmp/PLAN.md)
    * @returns The content of the file or an empty string if the file doesn't exist
    */
   static async readConversationFile(
     conversationId: string,
-    filePath: string = "/workspace/project/PLAN.md",
+    filePath: string = "/workspace/project/.agents_tmp/PLAN.md",
   ): Promise<string> {
     const params = new URLSearchParams();
     params.append("file_path", filePath);

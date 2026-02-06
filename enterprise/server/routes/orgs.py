@@ -69,7 +69,9 @@ async def list_user_orgs(
         )
 
         # Convert Org entities to OrgResponse objects
-        org_responses = [OrgResponse.from_org(org, credits=None) for org in orgs]
+        org_responses = [
+            OrgResponse.from_org(org, credits=None, user_id=user_id) for org in orgs
+        ]
 
         logger.info(
             'Successfully retrieved organizations',
@@ -136,7 +138,7 @@ async def create_org(
         # Retrieve credits from LiteLLM
         credits = await OrgService.get_org_credits(user_id, org.id)
 
-        return OrgResponse.from_org(org, credits=credits)
+        return OrgResponse.from_org(org, credits=credits, user_id=user_id)
     except OrgNameExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -211,7 +213,7 @@ async def get_org(
         # Retrieve credits from LiteLLM
         credits = await OrgService.get_org_credits(user_id, org.id)
 
-        return OrgResponse.from_org(org, credits=credits)
+        return OrgResponse.from_org(org, credits=credits, user_id=user_id)
     except OrgNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -368,7 +370,7 @@ async def update_org(
         # Retrieve credits from LiteLLM (following same pattern as create endpoint)
         credits = await OrgService.get_org_credits(user_id, updated_org.id)
 
-        return OrgResponse.from_org(updated_org, credits=credits)
+        return OrgResponse.from_org(updated_org, credits=credits, user_id=user_id)
 
     except ValueError as e:
         # Organization not found
