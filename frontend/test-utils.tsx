@@ -46,7 +46,10 @@ i18n.use(initReactI18next).init({
   defaultNS: "translation",
   resources: {
     en: {
-      translation: {},
+      translation: {
+        "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+        "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
+      },
     },
   },
   interpolation: {
@@ -126,9 +129,13 @@ export const selectOrganization = async ({
   });
 
   // Get the combobox input and wait for it to reflect the selection
+  // For personal orgs, the display name is "Personal Workspace" (from i18n)
+  const expectedDisplayName = targetOrg.is_personal
+    ? "Personal Workspace"
+    : targetOrg.name;
   const combobox = screen.getByRole("combobox");
   await waitFor(() => {
-    expect(combobox).toHaveValue(targetOrg.name);
+    expect(combobox).toHaveValue(expectedDisplayName);
   });
 };
 

@@ -55,6 +55,26 @@ const { navigateMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
 }));
 
+vi.mock("react-i18next", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => {
+        const translations: Record<string, string> = {
+          "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
+          "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+        };
+        return translations[key] || key;
+      },
+      i18n: {
+        changeLanguage: vi.fn(),
+      },
+    }),
+  };
+});
+
 vi.mock("react-router", async () => ({
   ...(await vi.importActual("react-router")),
   useNavigate: () => navigateMock,

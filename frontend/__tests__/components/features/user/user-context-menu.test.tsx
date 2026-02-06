@@ -53,6 +53,26 @@ vi.mock("react-router", async (importActual) => ({
   }),
 }));
 
+vi.mock("react-i18next", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => {
+        const translations: Record<string, string> = {
+          "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
+          "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+        };
+        return translations[key] || key;
+      },
+      i18n: {
+        changeLanguage: vi.fn(),
+      },
+    }),
+  };
+});
+
 describe("UserContextMenu", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -444,10 +464,9 @@ describe("UserContextMenu", () => {
     expect(orgSelector).toBeInTheDocument();
 
     // Wait for organizations to load (indicated by org name appearing in the dropdown)
+    // INITIAL_MOCK_ORGS[0] is a personal org, so it displays "Personal Workspace"
     await waitFor(() => {
-      expect(screen.getByRole("combobox")).toHaveValue(
-        INITIAL_MOCK_ORGS[0].name,
-      );
+      expect(screen.getByRole("combobox")).toHaveValue("Personal Workspace");
     });
 
     // Open the dropdown by clicking the trigger
