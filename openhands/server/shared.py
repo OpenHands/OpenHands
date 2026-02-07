@@ -11,10 +11,9 @@ import os
 import socketio
 from dotenv import load_dotenv
 
-from openhands.core.logger import openhands_logger as logger
-
 from openhands.core.config import load_openhands_config
 from openhands.core.config.openhands_config import OpenHandsConfig
+from openhands.core.logger import openhands_logger as logger
 from openhands.server.config.server_config import ServerConfig, load_server_config
 from openhands.server.conversation_manager.conversation_manager import (
     ConversationManager,

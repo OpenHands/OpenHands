@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import pickle
 from dataclasses import dataclass, field
@@ -38,6 +39,16 @@ RESUMABLE_STATES = [
     AgentState.AWAITING_USER_INPUT,
     AgentState.FINISHED,
 ]
+
+
+def _get_metadata_filename(sid: str, user_id: str | None = None) -> str:
+    """Return the filename for the lightweight metadata file.
+
+    This sits alongside the full pickle state file but uses a .json extension.
+    """
+    base = get_conversation_agent_state_filename(sid, user_id)
+    # Replace .pkl extension with _meta.json
+    return base.rsplit('.', 1)[0] + '_meta.json'
 
 
 # NOTE: this is deprecated
@@ -126,6 +137,14 @@ class State:
 
     metrics: Metrics = field(default_factory=Metrics)
 
+    # Terminal states that warrant a full serialization rather than lightweight metadata
+    _FULL_SAVE_STATES = frozenset({
+        AgentState.FINISHED,
+        AgentState.ERROR,
+        AgentState.STOPPED,
+        AgentState.REJECTED,
+    })
+
     def save_to_session(
         self, sid: str, file_store: FileStore, user_id: str | None
     ) -> None:
@@ -153,11 +172,69 @@ class State:
 
         self.conversation_stats = conversation_stats  # restore reference
 
+    def save_lightweight_metadata(
+        self, sid: str, file_store: FileStore, user_id: str | None
+    ) -> None:
+        """Save only lightweight, frequently-changing metadata as JSON.
+
+        This is much faster than the full pickle+base64 serialization in save_to_session
+        because it only serializes the small metadata fields (agent_state, iteration,
+        budget, last_error) as a compact JSON string. This reduces save time from O(n)
+        to O(1) for frequent state saves during normal agent operation.
+
+        The full save_to_session is still used for terminal states (FINISHED, ERROR,
+        STOPPED, REJECTED) to ensure all data is persisted for session restore.
+        """
+        metadata = {
+            'agent_state': self.agent_state.value,
+            'iteration_current': self.iteration_flag.current_value,
+            'iteration_max': self.iteration_flag.max_value,
+            'last_error': self.last_error,
+            'accumulated_cost': self.metrics.accumulated_cost,
+        }
+        if self.budget_flag is not None:
+            metadata['budget_current'] = self.budget_flag.current_value
+            metadata['budget_max'] = self.budget_flag.max_value
+
+        try:
+            metadata_json = json.dumps(metadata)
+            metadata_filename = _get_metadata_filename(sid, user_id)
+            file_store.write(metadata_filename, metadata_json)
+            logger.debug(
+                f'Saved lightweight metadata for session {sid}:{self.agent_state}'
+            )
+        except Exception as e:
+            logger.warning(
+                f'Failed to save lightweight metadata, falling back to full save: {e}'
+            )
+            self.save_to_session(sid, file_store, user_id)
+
+    def save_to_session_smart(
+        self, sid: str, file_store: FileStore, user_id: str | None
+    ) -> None:
+        """Save state using the most efficient method based on the current agent state.
+
+        For terminal states (FINISHED, ERROR, STOPPED, REJECTED), performs a full
+        pickle-based serialization to ensure complete state persistence.
+
+        For all other states (RUNNING, PAUSED, etc.), saves only lightweight metadata
+        as JSON, which is significantly faster.
+        """
+        if self.agent_state in self._FULL_SAVE_STATES:
+            self.save_to_session(sid, file_store, user_id)
+        else:
+            self.save_lightweight_metadata(sid, file_store, user_id)
+
     @staticmethod
     def restore_from_session(
         sid: str, file_store: FileStore, user_id: str | None = None
     ) -> 'State':
-        """Restores the state from the previously saved session."""
+        """Restores the state from the previously saved session.
+
+        After restoring the full pickle state, checks for a more recent lightweight
+        metadata file and merges any updates (agent_state, iteration, budget, etc.)
+        that may have been saved more recently than the full state.
+        """
         state: State
         try:
             encoded = file_store.read(
@@ -181,6 +258,11 @@ class State:
             logger.debug(f'Could not restore state from session: {e}')
             raise e
 
+        # Merge lightweight metadata if a more recent metadata file exists.
+        # This covers the case where lightweight saves were performed after the
+        # last full save.
+        state._merge_lightweight_metadata(sid, file_store, user_id)
+
         # update state
         if state.agent_state in RESUMABLE_STATES:
             state.resume_state = state.agent_state
@@ -194,6 +276,43 @@ class State:
         # They will be handled by __getstate__ when the state is saved again
 
         return state
+
+    def _merge_lightweight_metadata(
+        self, sid: str, file_store: FileStore, user_id: str | None
+    ) -> None:
+        """Merge lightweight metadata from JSON file into this state, if available.
+
+        This updates the state with any metadata that was saved more recently via
+        save_lightweight_metadata(). If no metadata file exists, this is a no-op.
+        """
+        try:
+            metadata_json = file_store.read(_get_metadata_filename(sid, user_id))
+            metadata = json.loads(metadata_json)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return
+
+        # Apply metadata updates
+        if 'agent_state' in metadata:
+            try:
+                self.agent_state = AgentState(metadata['agent_state'])
+            except ValueError:
+                pass
+
+        if 'iteration_current' in metadata:
+            self.iteration_flag.current_value = metadata['iteration_current']
+        if 'iteration_max' in metadata:
+            self.iteration_flag.max_value = metadata['iteration_max']
+        if 'last_error' in metadata:
+            self.last_error = metadata['last_error']
+        if 'accumulated_cost' in metadata:
+            self.metrics.accumulated_cost = metadata['accumulated_cost']
+        if self.budget_flag is not None:
+            if 'budget_current' in metadata:
+                self.budget_flag.current_value = metadata['budget_current']
+            if 'budget_max' in metadata:
+                self.budget_flag.max_value = metadata['budget_max']
+
+        logger.debug(f'Merged lightweight metadata for session {sid}')
 
     def __getstate__(self) -> dict:
         # don't pickle history, it will be restored from the event stream
@@ -312,7 +431,17 @@ class State:
         # If the history has changed, we need to re-create the view and update
         # the caching.
         if history_checksum != old_history_checksum:
+            old_view = getattr(self, '_view', None)
+
+            if old_view is not None and old_history_checksum >= 0:
+                # Incremental path: only process new events
+                self._view = View.from_events_incremental(
+                    self.history, old_view, old_history_checksum
+                )
+            else:
+                # First build or after restore: full scan
+                self._view = View.from_events(self.history)
+
             self._history_checksum = history_checksum
-            self._view = View.from_events(self.history)
 
         return self._view

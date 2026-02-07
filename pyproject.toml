@@ -76,7 +76,7 @@ dependencies = [
   "python-docx",
   "python-dotenv",
   "python-frontmatter>=1.1",
-  "python-jose[cryptography]>=3.3",
+  "cryptography>=43.0",
   "python-json-logger>=3.2.1",
   "python-multipart",
   "python-pptx",
@@ -249,7 +249,7 @@ pybase62 = "^1.0.0"
 openhands-sdk = "1.11.1"
 openhands-agent-server = "1.11.1"
 openhands-tools = "1.11.1"
-python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
+cryptography = ">=43.0"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
 asyncpg = "^0.30.0"

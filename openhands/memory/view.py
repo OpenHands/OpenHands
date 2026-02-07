@@ -94,3 +94,78 @@ class View(BaseModel):
             unhandled_condensation_request=unhandled_condensation_request,
             forgotten_event_ids=forgotten_event_ids,
         )
+
+    @staticmethod
+    def from_events_incremental(
+        events: list[Event],
+        previous_view: View,
+        previous_event_count: int,
+    ) -> View:
+        """Create a view incrementally by only scanning new events appended since the last build.
+
+        When no new CondensationAction appears in the new events, we avoid rescanning
+        the entire history for forgotten IDs. We reuse the previous forgotten set and
+        only check new events for condensation markers.
+
+        If a new CondensationAction is found among new events, we fall back to a full
+        rebuild since the new condensation may reference events from any point in history.
+
+        Args:
+            events: The full list of events (history).
+            previous_view: The View from the previous build.
+            previous_event_count: How many events were in the history during the last build.
+
+        Returns:
+            A new View reflecting the current state of events.
+        """
+        new_events = events[previous_event_count:]
+
+        if not new_events:
+            return previous_view
+
+        # Scan only new events for condensation markers
+        has_new_condensation = False
+        for event in new_events:
+            if isinstance(event, CondensationAction):
+                has_new_condensation = True
+                break
+
+        if has_new_condensation:
+            # Fall back to full rebuild -- a new condensation may forget arbitrary old events
+            return View.from_events(events)
+
+        # Fast path: no new condensation action in new events.
+        # Incrementally update forgotten_event_ids with any new CondensationRequestActions.
+        forgotten_event_ids = set(previous_view.forgotten_event_ids)
+        for event in new_events:
+            if isinstance(event, CondensationRequestAction):
+                forgotten_event_ids.add(event.id)
+
+        # Build new kept events from new events only
+        new_kept = [
+            event for event in new_events if event.id not in forgotten_event_ids
+        ]
+
+        # Reconstruct the full kept_events list. The previous_view.events already contains
+        # the kept events (plus any inserted summary). We need to strip the summary insertion
+        # if present, then append new kept events, then re-insert the summary.
+        # Simpler approach: use previous_view.events (which includes summary) and append new.
+        # But the summary was inserted at a specific offset, so appending is correct since
+        # new events always come after the summary offset point.
+        old_kept_with_summary = list(previous_view.events)
+        kept_events = old_kept_with_summary + new_kept
+
+        # Check unhandled condensation request from the tail
+        unhandled_condensation_request = False
+        for event in reversed(events):
+            if isinstance(event, CondensationAction):
+                break
+            if isinstance(event, CondensationRequestAction):
+                unhandled_condensation_request = True
+                break
+
+        return View(
+            events=kept_events,
+            unhandled_condensation_request=unhandled_condensation_request,
+            forgotten_event_ids=forgotten_event_ids,
+        )

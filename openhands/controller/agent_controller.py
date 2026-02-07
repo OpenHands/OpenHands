@@ -168,6 +168,15 @@ class AgentController:
         self.is_delegate = is_delegate
         self.conversation_stats = conversation_stats
 
+        # Store a reference to the running event loop so that on_event()
+        # (which is invoked from a subscriber thread pool) can safely
+        # schedule coroutines without calling the deprecated
+        # asyncio.get_event_loop().run_until_complete().
+        try:
+            self._event_loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._event_loop = asyncio.get_event_loop()
+
         # the event stream must be set before maybe subscribing to it
         self.event_stream = event_stream
 
@@ -451,6 +460,10 @@ class AgentController:
     def on_event(self, event: Event) -> None:
         """Callback from the event stream. Notifies the controller of incoming events.
 
+        This method is called from the EventStream subscriber thread pool, so it
+        uses run_coroutine_threadsafe to schedule async work on the controller's
+        event loop instead of the deprecated get_event_loop().run_until_complete().
+
         Args:
             event (Event): The incoming event to process.
         """
@@ -470,9 +483,10 @@ class AgentController:
                 in self.delegate.state.last_error
             ):
                 # Forward the event to delegate and skip parent processing
-                asyncio.get_event_loop().run_until_complete(
-                    self.delegate._on_event(event)
+                future = asyncio.run_coroutine_threadsafe(
+                    self.delegate._on_event(event), self._event_loop
                 )
+                future.result()
                 return
             else:
                 # delegate is done or errored, so end it
@@ -480,7 +494,10 @@ class AgentController:
                 return
 
         # continue parent processing only if there's no active delegate
-        asyncio.get_event_loop().run_until_complete(self._on_event(event))
+        future = asyncio.run_coroutine_threadsafe(
+            self._on_event(event), self._event_loop
+        )
+        future.result()
 
     async def _on_event(self, event: Event) -> None:
         if hasattr(event, 'hidden') and event.hidden:
@@ -554,9 +571,7 @@ class AgentController:
             log_str = str(observation)
         # Use info level if LOG_ALL_EVENTS is set
         log_level = 'info' if os.getenv('LOG_ALL_EVENTS') in ('true', '1') else 'debug'
-        self.log(
-            log_level, log_str, extra={'msg_type': 'OBSERVATION'}
-        )
+        self.log(log_level, log_str, extra={'msg_type': 'OBSERVATION'})
 
         # this happens for runnable actions and microagent actions
         if self._pending_action and self._pending_action.id == observation.cause:
@@ -815,7 +830,10 @@ class AgentController:
         logger.info(f'Local metrics for delegate: {delegate_metrics}')
 
         # close the delegate controller before adding new events
-        asyncio.get_event_loop().run_until_complete(self.delegate.close())
+        future = asyncio.run_coroutine_threadsafe(
+            self.delegate.close(), self._event_loop
+        )
+        future.result()
 
         if delegate_state in (AgentState.FINISHED, AgentState.REJECTED):
             # retrieve delegate result

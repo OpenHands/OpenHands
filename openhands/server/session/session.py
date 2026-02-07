@@ -320,7 +320,8 @@ class WebSession:
         )
 
     def on_event(self, event: Event) -> None:
-        asyncio.get_event_loop().run_until_complete(self._on_event(event))
+        future = asyncio.run_coroutine_threadsafe(self._on_event(event), self.loop)
+        future.result()
 
     async def _on_event(self, event: Event) -> None:
         """Callback function for events that mainly come from the agent.

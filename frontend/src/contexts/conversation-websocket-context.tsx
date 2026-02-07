@@ -95,7 +95,7 @@ export function ConversationWebSocketProvider({
 
   const posthog = usePostHog();
   const queryClient = useQueryClient();
-  const { addEvent } = useEventStore();
+  const { addEvent, addEvents } = useEventStore();
   const { setErrorMessage, removeErrorMessage } = useErrorMessageStore();
   const { removeOptimisticUserMessage } = useOptimisticUserMessageStore();
   const { setExecutionStatus } = useV1ConversationStateStore();
@@ -128,6 +128,42 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
+
+  // Event batching during history replay: collect events and flush at ~16ms intervals
+  // to avoid triggering a React re-render for every single incoming WebSocket message.
+  const mainBatchBufferRef = useRef<Parameters<typeof addEvent>[0][]>([]);
+  const planningBatchBufferRef = useRef<Parameters<typeof addEvent>[0][]>([]);
+  const mainBatchRafRef = useRef<number | null>(null);
+  const planningBatchRafRef = useRef<number | null>(null);
+
+  const flushMainBatch = useCallback(() => {
+    mainBatchRafRef.current = null;
+    if (mainBatchBufferRef.current.length > 0) {
+      const batch = mainBatchBufferRef.current;
+      mainBatchBufferRef.current = [];
+      addEvents(batch);
+    }
+  }, [addEvents]);
+
+  const flushPlanningBatch = useCallback(() => {
+    planningBatchRafRef.current = null;
+    if (planningBatchBufferRef.current.length > 0) {
+      const batch = planningBatchBufferRef.current;
+      planningBatchBufferRef.current = [];
+      addEvents(batch);
+    }
+  }, [addEvents]);
+
+  // Clean up any pending rAF on unmount
+  useEffect(
+    () => () => {
+      if (mainBatchRafRef.current !== null)
+        cancelAnimationFrame(mainBatchRafRef.current);
+      if (planningBatchRafRef.current !== null)
+        cancelAnimationFrame(planningBatchRafRef.current);
+    },
+    [],
+  );
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -238,9 +274,20 @@ export function ConversationWebSocketProvider({
       receivedEventCountRefMain.current >= expectedEventCountMain &&
       isLoadingHistoryMain
     ) {
+      // Flush any remaining batched events before marking replay complete
+      if (mainBatchRafRef.current !== null) {
+        cancelAnimationFrame(mainBatchRafRef.current);
+        mainBatchRafRef.current = null;
+      }
+      flushMainBatch();
       setIsLoadingHistoryMain(false);
     }
-  }, [expectedEventCountMain, isLoadingHistoryMain, receivedEventCountRefMain]);
+  }, [
+    expectedEventCountMain,
+    isLoadingHistoryMain,
+    receivedEventCountRefMain,
+    flushMainBatch,
+  ]);
 
   useEffect(() => {
     if (
@@ -248,12 +295,19 @@ export function ConversationWebSocketProvider({
       receivedEventCountRefPlanning.current >= expectedEventCountPlanning &&
       isLoadingHistoryPlanning
     ) {
+      // Flush any remaining batched events before marking replay complete
+      if (planningBatchRafRef.current !== null) {
+        cancelAnimationFrame(planningBatchRafRef.current);
+        planningBatchRafRef.current = null;
+      }
+      flushPlanningBatch();
       setIsLoadingHistoryPlanning(false);
     }
   }, [
     expectedEventCountPlanning,
     isLoadingHistoryPlanning,
     receivedEventCountRefPlanning,
+    flushPlanningBatch,
   ]);
 
   // Call API once after history loading completes if we tracked any PlanningFileEditorObservation events
@@ -316,12 +370,11 @@ export function ConversationWebSocketProvider({
       return;
     }
 
-    for (const event of preloadedEvents) {
-      addEvent(event);
-    }
+    // Use batch insert for preloaded events to trigger a single state update
+    addEvents(preloadedEvents);
 
     setIsLoadingHistoryMain(false);
-  }, [preloadedEvents, addEvent]);
+  }, [preloadedEvents, addEvents]);
 
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
@@ -338,13 +391,28 @@ export function ConversationWebSocketProvider({
             expectedEventCountMain !== null &&
             receivedEventCountRefMain.current >= expectedEventCountMain
           ) {
+            // Flush remaining batched events before transitioning out of replay
+            if (mainBatchRafRef.current !== null) {
+              cancelAnimationFrame(mainBatchRafRef.current);
+              mainBatchRafRef.current = null;
+            }
+            flushMainBatch();
             setIsLoadingHistoryMain(false);
           }
         }
 
         // Use type guard to validate v1 event structure
         if (isV1Event(event)) {
-          addEvent(event);
+          // During history replay, batch events to reduce React re-renders.
+          // Live events are added immediately for instant UI feedback.
+          if (isLoadingHistoryMain) {
+            mainBatchBufferRef.current.push(event);
+            if (mainBatchRafRef.current === null) {
+              mainBatchRafRef.current = requestAnimationFrame(flushMainBatch);
+            }
+          } else {
+            addEvent(event);
+          }
 
           // Handle ConversationErrorEvent specifically - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
@@ -455,8 +523,10 @@ export function ConversationWebSocketProvider({
     },
     [
       addEvent,
+      addEvents,
       isLoadingHistoryMain,
       expectedEventCountMain,
+      flushMainBatch,
       setErrorMessage,
       removeErrorMessage,
       removeOptimisticUserMessage,
@@ -485,6 +555,12 @@ export function ConversationWebSocketProvider({
             expectedEventCountPlanning !== null &&
             receivedEventCountRefPlanning.current >= expectedEventCountPlanning
           ) {
+            // Flush remaining batched events before transitioning out of replay
+            if (planningBatchRafRef.current !== null) {
+              cancelAnimationFrame(planningBatchRafRef.current);
+              planningBatchRafRef.current = null;
+            }
+            flushPlanningBatch();
             setIsLoadingHistoryPlanning(false);
           }
         }
@@ -496,7 +572,18 @@ export function ConversationWebSocketProvider({
             ...event,
             isFromPlanningAgent: true,
           };
-          addEvent(eventWithPlanningFlag);
+
+          // During history replay, batch events to reduce React re-renders.
+          // Live events are added immediately for instant UI feedback.
+          if (isLoadingHistoryPlanning) {
+            planningBatchBufferRef.current.push(eventWithPlanningFlag);
+            if (planningBatchRafRef.current === null) {
+              planningBatchRafRef.current =
+                requestAnimationFrame(flushPlanningBatch);
+            }
+          } else {
+            addEvent(eventWithPlanningFlag);
+          }
 
           // Handle AgentErrorEvent specifically
           if (isAgentErrorEvent(event)) {
@@ -606,8 +693,10 @@ export function ConversationWebSocketProvider({
     },
     [
       addEvent,
+      addEvents,
       isLoadingHistoryPlanning,
       expectedEventCountPlanning,
+      flushPlanningBatch,
       setErrorMessage,
       removeOptimisticUserMessage,
       queryClient,

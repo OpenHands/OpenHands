@@ -10,6 +10,7 @@ from openhands.events.serialization.event import event_from_dict
 from openhands.storage.files import FileStore
 from openhands.storage.locations import (
     get_conversation_dir,
+    get_conversation_event_count_filename,
     get_conversation_event_filename,
     get_conversation_events_dir,
 )
@@ -63,13 +64,31 @@ class EventStore(EventStoreABC):
         self._cur_id = value
 
     def _calculate_cur_id(self) -> int:
-        """Calculate the current event ID based on file system content."""
+        """Calculate the current event ID.
+
+        First tries to read from the persisted event_count metadata file
+        (O(1)), falling back to the O(N) directory scan for backward
+        compatibility with sessions that pre-date the metadata file.
+        """
+        # Fast path: read from metadata file
+        try:
+            count_filename = get_conversation_event_count_filename(
+                self.sid, self.user_id
+            )
+            content = self.file_store.read(count_filename)
+            count = int(content.strip())
+            if count >= 0:
+                return count
+        except (FileNotFoundError, ValueError):
+            pass
+
+        # Slow path: scan the events directory
         events = []
         try:
             events_dir = get_conversation_events_dir(self.sid, self.user_id)
             events = self.file_store.list(events_dir)
         except FileNotFoundError:
-            logger.debug(f'No events found for session {self.sid} at {events_dir}')
+            logger.debug(f'No events found for session {self.sid}')
 
         if not events:
             return 0

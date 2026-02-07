@@ -495,7 +495,11 @@ def convert_fncall_messages_to_non_fncall_messages(
         role = message['role']
         # Deep copy only mutable (list) content to avoid mutating the caller's data;
         # strings are immutable and don't need copying.
-        content = copy.deepcopy(message['content']) if isinstance(message['content'], list) else message['content']
+        content = (
+            copy.deepcopy(message['content'])
+            if isinstance(message['content'], list)
+            else message['content']
+        )
 
         # 1. SYSTEM MESSAGES
         # append system prompt suffix to content

@@ -922,9 +922,7 @@ if __name__ == '__main__':
             # Strip any directory components and remove '..' segments.
             safe_filename = os.path.basename(file.filename)
             if not safe_filename:
-                raise HTTPException(
-                    status_code=400, detail='Invalid filename'
-                )
+                raise HTTPException(status_code=400, detail='Invalid filename')
 
             if recursive or safe_filename.endswith('.zip'):
                 # For recursive uploads, we expect a zip file
@@ -944,7 +942,10 @@ if __name__ == '__main__':
                         member_path = os.path.realpath(
                             os.path.join(full_dest_path, member)
                         )
-                        if not member_path.startswith(dest_realpath + os.sep) and member_path != dest_realpath:
+                        if (
+                            not member_path.startswith(dest_realpath + os.sep)
+                            and member_path != dest_realpath
+                        ):
                             raise HTTPException(
                                 status_code=400,
                                 detail=f'Zip entry {member!r} would extract outside destination directory',

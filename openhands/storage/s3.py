@@ -127,9 +127,7 @@ class S3FileStore(FileStore):
             paginator = self.client.get_paginator('list_objects_v2')
             for page in paginator.paginate(Bucket=self.bucket, Prefix=f'{path}/'):
                 for content in page.get('Contents') or []:
-                    self.client.delete_object(
-                        Bucket=self.bucket, Key=content['Key']
-                    )
+                    self.client.delete_object(Bucket=self.bucket, Key=content['Key'])
 
             # Next try to delete item as a file
             self.client.delete_object(Bucket=self.bucket, Key=path)

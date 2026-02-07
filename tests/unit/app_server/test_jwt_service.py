@@ -13,10 +13,9 @@ from unittest.mock import patch
 
 import jwt
 import pytest
-from jose import jwe
 from pydantic import SecretStr
 
-from openhands.app_server.services.jwt_service import JwtService
+from openhands.app_server.services.jwt_service import JwtService, _jwe_encrypt
 from openhands.app_server.utils.encryption_key import EncryptionKey
 
 
@@ -257,14 +256,28 @@ class TestJwtService:
 
     def test_jwe_token_decryption_no_kid_header(self, jwt_service):
         """Test JWE token decryption fails when token has no kid header."""
-        # Create a JWE token without kid header using python-jose directly
-        payload = {'user_id': '123'}
-        # Create a proper 32-byte key for A256GCM
-        key = b'12345678901234567890123456789012'  # Exactly 32 bytes
+        import base64
+        import os
 
-        token = jwe.encrypt(
-            json.dumps(payload), key, algorithm='dir', encryption='A256GCM'
-        )
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        # Create a JWE token without kid header manually
+        key = b'12345678901234567890123456789012'  # Exactly 32 bytes
+        # Header without kid
+        header = json.dumps({'alg': 'dir', 'enc': 'A256GCM'}, separators=(',', ':'))
+        protected = base64.urlsafe_b64encode(header.encode()).rstrip(b'=').decode()
+        iv = os.urandom(12)
+        aad = protected.encode('ascii')
+        aesgcm = AESGCM(key)
+        ct_tag = aesgcm.encrypt(iv, json.dumps({'user_id': '123'}).encode(), aad)
+        ct, tag = ct_tag[:-16], ct_tag[-16:]
+        token = '.'.join([
+            protected,
+            '',
+            base64.urlsafe_b64encode(iv).rstrip(b'=').decode(),
+            base64.urlsafe_b64encode(ct).rstrip(b'=').decode(),
+            base64.urlsafe_b64encode(tag).rstrip(b'=').decode(),
+        ])
 
         with pytest.raises(ValueError, match='Invalid JWE token format'):
             jwt_service.decrypt_jwe_token(token)

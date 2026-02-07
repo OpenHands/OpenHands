@@ -1460,7 +1460,12 @@ async def test_streaming_reasoning_effort_passthrough(mock_call):
 
 @patch('openhands.llm.async_llm.litellm_acompletion')
 @pytest.mark.asyncio
-async def test_async_streaming_no_thinking_for_gemini(mock_acompletion):
+async def test_async_gemini_thinking_budget_applied(mock_acompletion):
+    """Test that async path correctly applies Gemini thinking budget for low reasoning effort.
+
+    This was previously inconsistent: the sync path applied the thinking budget
+    but async/streaming paths did not. Now all paths use _apply_reasoning_effort.
+    """
     mock_acompletion.return_value = {
         'choices': [{'message': {'content': 'ok'}}],
     }
@@ -1468,7 +1473,9 @@ async def test_async_streaming_no_thinking_for_gemini(mock_acompletion):
     llm = AsyncLLM(config, service_id='svc')
     await llm.async_completion(messages=[{'role': 'user', 'content': 'hi'}])
     call_kwargs = mock_acompletion.call_args[1]
-    assert 'thinking' not in call_kwargs
+    assert 'thinking' in call_kwargs
+    assert call_kwargs['thinking'] == {'budget_tokens': 128}
+    assert call_kwargs.get('reasoning_effort') is None
 
 
 @patch('openhands.llm.llm.litellm_completion')

@@ -85,6 +85,7 @@ class LLM(RetryMixin, DebugMixin):
             metrics: The metrics to use.
         """
         self._tried_model_info = False
+        self._proxy_model_info_pending = False
         self.cost_metric_supported: bool = True
         self._cost_calc_consecutive_errors: int = 0
         self.config: LLMConfig = copy.deepcopy(config)
@@ -103,8 +104,10 @@ class LLM(RetryMixin, DebugMixin):
                 )
             os.makedirs(self.config.log_completions_folder, exist_ok=True)
 
-        # call init_model_info to initialize config.max_output_tokens
-        # which is used in partial function
+        # Model info initialization: for litellm_proxy models, the HTTP call
+        # to fetch model info is deferred to first use via _ensure_model_info()
+        # to avoid multi-second event loop blocking in the constructor.
+        # For all other models, init_model_info() runs eagerly (local lookups only).
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             self.init_model_info()
@@ -243,42 +246,15 @@ class LLM(RetryMixin, DebugMixin):
         )
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             """Wrapper for the litellm completion function. Logs the input and output of the completion function."""
+            # Ensure deferred proxy model info is fetched before first completion
+            self._ensure_model_info()
+
             from openhands.io import json
 
-            messages_kwarg: (
-                dict[str, Any] | Message | list[dict[str, Any]] | list[Message]
-            ) = []
             mock_function_calling = not self.is_function_calling_active()
 
-            # some callers might send the model and messages directly
-            # litellm allows positional args, like completion(model, messages, **kwargs)
-            if len(args) > 1:
-                # ignore the first argument if it's provided (it would be the model)
-                # design wise: we don't allow overriding the configured values
-                # implementation wise: the partial function set the model as a kwarg already
-                # as well as other kwargs
-                messages_kwarg = args[1] if len(args) > 1 else args[0]
-                kwargs['messages'] = messages_kwarg
-
-                # remove the first args, they're sent in kwargs
-                args = args[2:]
-            elif 'messages' in kwargs:
-                messages_kwarg = kwargs['messages']
-
-            # ensure we work with a list of messages
-            messages_list = (
-                messages_kwarg if isinstance(messages_kwarg, list) else [messages_kwarg]
-            )
-            # Format Message objects to dict format if needed
-            messages: list[dict] = []
-            if messages_list and isinstance(messages_list[0], Message):
-                messages = self.format_messages_for_llm(
-                    cast(list[Message], messages_list)
-                )
-            else:
-                messages = cast(list[dict[str, Any]], messages_list)
-
-            kwargs['messages'] = messages
+            # Extract and normalize messages from args/kwargs
+            args, messages = self._extract_messages(args, kwargs)
 
             # handle conversion of to non-function calling messages if needed
             original_fncall_messages = None
@@ -316,12 +292,6 @@ class LLM(RetryMixin, DebugMixin):
                 else:
                     # tool_choice should not be specified when mocking function calling
                     kwargs.pop('tool_choice', None)
-
-            # if we have no messages, something went very wrong
-            if not messages:
-                raise ValueError(
-                    'The messages list is empty. At least one message is required.'
-                )
 
             # log the entire LLM prompt
             self.log_prompt(messages)
@@ -441,7 +411,148 @@ class LLM(RetryMixin, DebugMixin):
         """
         return self._completion
 
+    def _extract_messages(
+        self,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> tuple[tuple[Any, ...], list[dict[str, Any]]]:
+        """Extract and normalize messages from positional/keyword arguments.
+
+        Handles the litellm calling convention where positional args can be
+        (model, messages, **kwargs). Converts Message objects to dicts.
+
+        Returns:
+            A tuple of (remaining_args, messages_list) where remaining_args
+            has the model/messages positional args removed.
+        """
+        messages_kwarg: (
+            dict[str, Any] | Message | list[dict[str, Any]] | list[Message]
+        ) = []
+
+        if len(args) > 1:
+            messages_kwarg = args[1] if len(args) > 1 else args[0]
+            kwargs['messages'] = messages_kwarg
+            args = args[2:]
+        elif 'messages' in kwargs:
+            messages_kwarg = kwargs['messages']
+
+        # ensure we work with a list of messages
+        messages_list = (
+            messages_kwarg if isinstance(messages_kwarg, list) else [messages_kwarg]
+        )
+
+        # Format Message objects to dict format if needed
+        messages: list[dict] = []
+        if messages_list and isinstance(messages_list[0], Message):
+            messages = self.format_messages_for_llm(cast(list[Message], messages_list))
+        else:
+            messages = cast(list[dict[str, Any]], messages_list)
+
+        kwargs['messages'] = messages
+
+        if not messages:
+            raise ValueError(
+                'The messages list is empty. At least one message is required.'
+            )
+
+        return args, messages
+
+    def _apply_reasoning_effort(self, kwargs: dict[str, Any]) -> None:
+        """Apply reasoning effort settings to completion kwargs.
+
+        Handles Gemini thinking budget, Claude-specific exclusions, and
+        generic reasoning_effort passthrough. This ensures consistent
+        behavior across sync, async, and streaming completion paths.
+        """
+        features = self._features
+        if not features.supports_reasoning_effort:
+            return
+        if self.config.reasoning_effort is None:
+            # For Gemini models with no explicit reasoning_effort, apply
+            # the optimized thinking budget
+            if 'gemini-2.5-pro' in self.config.model:
+                kwargs['thinking'] = {'budget_tokens': 128}
+                kwargs['allowed_openai_params'] = ['thinking']
+            return
+
+        # Gemini models: map 'low'/'none' to thinking budget, pass others through
+        if 'gemini-2.5-pro' in self.config.model:
+            if self.config.reasoning_effort in {'low', 'none'}:
+                kwargs['thinking'] = {'budget_tokens': 128}
+                kwargs['allowed_openai_params'] = ['thinking']
+                kwargs.pop('reasoning_effort', None)
+            else:
+                kwargs['reasoning_effort'] = self.config.reasoning_effort
+        elif any(
+            k in self.config.model
+            for k in ('claude-sonnet-4-5', 'claude-haiku-4-5-20251001')
+        ):
+            # Don't send reasoning_effort to specific Claude variants
+            kwargs.pop('reasoning_effort', None)
+        else:
+            kwargs['reasoning_effort'] = self.config.reasoning_effort
+
+    def _ensure_model_info(self) -> None:
+        """Execute deferred LiteLLM proxy model info fetch if pending.
+
+        Called lazily on first use of methods that need model info, so the
+        blocking HTTP call to the proxy does not happen in the constructor.
+        """
+        if not getattr(self, '_proxy_model_info_pending', False):
+            return
+        self._proxy_model_info_pending = False
+        self._fetch_litellm_proxy_model_info()
+        # Apply model info settings that depend on the proxy response
+        self._apply_model_info_settings()
+
+    def _fetch_litellm_proxy_model_info(self) -> None:
+        """Fetch model info from LiteLLM proxy via HTTP.
+
+        Separated from init_model_info() so this blocking HTTP call can be
+        deferred until first actual use, avoiding multi-second event loop
+        blocking during LLM construction.
+        """
+        base_url = self.config.base_url.strip() if self.config.base_url else ''
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = 'http://' + base_url
+
+        response = httpx.get(
+            f'{base_url}/v1/model/info',
+            headers={
+                'Authorization': f'Bearer {self.config.api_key.get_secret_value() if self.config.api_key else None}'
+            },
+        )
+
+        try:
+            resp_json = response.json()
+            if 'data' not in resp_json:
+                logger.info(
+                    f'No data field in model info response from LiteLLM proxy: {resp_json}'
+                )
+            all_model_info = resp_json.get('data', [])
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning(f'Error parsing JSON response from LiteLLM proxy: {e}')
+            all_model_info = []
+        current_model_info = next(
+            (
+                info
+                for info in all_model_info
+                if info['model_name']
+                == self.config.model.removeprefix('litellm_proxy/')
+            ),
+            None,
+        )
+        if current_model_info:
+            self.model_info = current_model_info['model_info']
+            logger.debug(f'Got model info from litellm proxy: {self.model_info}')
+
     def init_model_info(self) -> None:
+        from openhands.io import json as oh_json
+
+        # If there's a pending proxy fetch (deferred from constructor),
+        # resolve it now since the caller explicitly requested model info.
+        if self._proxy_model_info_pending:
+            self._ensure_model_info()
         if self._tried_model_info:
             return
         self._tried_model_info = True
@@ -452,63 +563,41 @@ class LLM(RetryMixin, DebugMixin):
             logger.warning(f'Error getting model info for openrouter: {e}')
 
         if self.config.model.startswith('litellm_proxy/'):
-            # IF we are using LiteLLM proxy, get model info from LiteLLM proxy
-            # GET {base_url}/v1/model/info with litellm_model_id as path param
-            base_url = self.config.base_url.strip() if self.config.base_url else ''
-            if not base_url.startswith(('http://', 'https://')):
-                base_url = 'http://' + base_url
-
-            response = httpx.get(
-                f'{base_url}/v1/model/info',
-                headers={
-                    'Authorization': f'Bearer {self.config.api_key.get_secret_value() if self.config.api_key else None}'
-                },
-            )
-
-            try:
-                resp_json = response.json()
-                if 'data' not in resp_json:
-                    logger.info(
-                        f'No data field in model info response from LiteLLM proxy: {resp_json}'
-                    )
-                all_model_info = resp_json.get('data', [])
-            except (json.JSONDecodeError, ValueError, KeyError) as e:
-                logger.warning(f'Error parsing JSON response from LiteLLM proxy: {e}')
-                all_model_info = []
-            current_model_info = next(
-                (
-                    info
-                    for info in all_model_info
-                    if info['model_name']
-                    == self.config.model.removeprefix('litellm_proxy/')
-                ),
-                None,
-            )
-            if current_model_info:
-                self.model_info = current_model_info['model_info']
-                logger.debug(f'Got model info from litellm proxy: {self.model_info}')
+            # Defer the blocking HTTP call to _ensure_model_info() which runs
+            # lazily on first use. This avoids multi-second event loop blocking
+            # during LLM initialization when using a LiteLLM proxy.
+            self._proxy_model_info_pending = True
 
         # Last two attempts to get model info from NAME
-        if not self.model_info:
+        if not self.model_info and not getattr(
+            self, '_proxy_model_info_pending', False
+        ):
             try:
                 self.model_info = litellm.get_model_info(
                     self.config.model.split(':')[0]
                 )
-            except (litellm.NotFoundError, httpx.HTTPError, json.JSONDecodeError) as e:
+            except Exception as e:
                 logger.warning(f'Could not get model info by prefix: {e}')
         if not self.model_info:
             try:
                 self.model_info = litellm.get_model_info(
                     self.config.model.split('/')[-1]
                 )
-            except (litellm.NotFoundError, httpx.HTTPError, json.JSONDecodeError) as e:
+            except Exception as e:
                 logger.warning(f'Could not get model info by basename: {e}')
-        from openhands.io import json
 
         logger.debug(
-            f'Model info: {json.dumps({"model": self.config.model, "base_url": self.config.base_url}, indent=2)}'
+            f'Model info: {oh_json.dumps({"model": self.config.model, "base_url": self.config.base_url}, indent=2)}'
         )
 
+        self._apply_model_info_settings()
+
+    def _apply_model_info_settings(self) -> None:
+        """Apply configuration settings derived from model info.
+
+        Called from init_model_info() and again after deferred proxy fetch
+        completes via _ensure_model_info().
+        """
         if self.config.model.startswith('huggingface'):
             # HF doesn't support the OpenAI default value for top_p (1)
             logger.debug(
@@ -614,6 +703,7 @@ class LLM(RetryMixin, DebugMixin):
 
         Logs the cost and usage stats of the completion call.
         """
+        self._ensure_model_info()
         try:
             cur_cost = self._completion_cost(response)
         except Exception:
@@ -823,9 +913,7 @@ class LLM(RetryMixin, DebugMixin):
             self._cost_calc_consecutive_errors += 1
             if self._cost_calc_consecutive_errors >= 3:
                 self.cost_metric_supported = False
-                logger.debug(
-                    'Cost calculation disabled after 3 consecutive errors.'
-                )
+                logger.debug('Cost calculation disabled after 3 consecutive errors.')
             else:
                 logger.debug(
                     f'Transient cost calculation error (attempt {self._cost_calc_consecutive_errors}/3).'

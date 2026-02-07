@@ -166,7 +166,9 @@ async def disconnect(connection_id: str) -> None:
     await conversation_manager.disconnect_from_session(connection_id)
 
 
-def _invalid_session_api_key(query_params: dict[str, list[Any]], environ: dict | None = None):
+def _invalid_session_api_key(
+    query_params: dict[str, list[Any]], environ: dict | None = None
+):
     import hmac
 
     session_api_key = os.getenv('SESSION_API_KEY')

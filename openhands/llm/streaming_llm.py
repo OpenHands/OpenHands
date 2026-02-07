@@ -12,7 +12,6 @@ from typing import Any, Callable
 from openhands.core.exceptions import UserCancelledError
 from openhands.core.logger import openhands_logger as logger
 from openhands.llm.async_llm import LLM_RETRY_EXCEPTIONS, AsyncLLM
-from openhands.llm.model_features import get_features
 
 
 class StreamingLLM(AsyncLLM):
@@ -48,35 +47,11 @@ class StreamingLLM(AsyncLLM):
             retry_multiplier=self.config.retry_multiplier,
         )
         async def async_streaming_completion_wrapper(*args: Any, **kwargs: Any) -> Any:
-            messages: list[dict[str, Any]] | dict[str, Any] = []
+            # Use shared message extraction from base class
+            args, messages = self._extract_messages(args, kwargs)
 
-            # some callers might send the model and messages directly
-            # litellm allows positional args, like completion(model, messages, **kwargs)
-            # see llm.py for more details
-            if len(args) > 1:
-                messages = args[1] if len(args) > 1 else args[0]
-                kwargs['messages'] = messages
-
-                # remove the first args, they're sent in kwargs
-                args = args[2:]
-            elif 'messages' in kwargs:
-                messages = kwargs['messages']
-
-            # ensure we work with a list of messages
-            messages = messages if isinstance(messages, list) else [messages]
-
-            # if we have no messages, something went very wrong
-            if not messages:
-                raise ValueError(
-                    'The messages list is empty. At least one message is required.'
-                )
-
-            # Set reasoning effort for models that support it, only if explicitly provided
-            if (
-                get_features(self.config.model).supports_reasoning_effort
-                and self.config.reasoning_effort is not None
-            ):
-                kwargs['reasoning_effort'] = self.config.reasoning_effort
+            # Apply reasoning effort with Gemini/Claude handling from base class
+            self._apply_reasoning_effort(kwargs)
 
             self.log_prompt(messages)
 

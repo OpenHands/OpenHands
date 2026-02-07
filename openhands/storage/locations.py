@@ -18,6 +18,10 @@ def get_conversation_event_filename(
     return f'{get_conversation_events_dir(sid, user_id)}{id}.json'
 
 
+def get_conversation_event_count_filename(sid: str, user_id: str | None = None) -> str:
+    return f'{get_conversation_dir(sid, user_id)}event_count'
+
+
 def get_conversation_metadata_filename(sid: str, user_id: str | None = None) -> str:
     return f'{get_conversation_dir(sid, user_id)}metadata.json'
 

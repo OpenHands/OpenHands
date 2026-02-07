@@ -55,11 +55,26 @@ from openhands.utils.prompt import (
 
 
 class ConversationMemory:
-    """Processes event history into a coherent conversation for the agent."""
+    """Processes event history into a coherent conversation for the agent.
+
+    Supports incremental message construction: on each call to process_events(),
+    only newly appended events are converted to messages. Cached state is invalidated
+    when a condensation changes the forgotten_event_ids set (indicating the event
+    list has been restructured).
+    """
 
     def __init__(self, config: AgentConfig, prompt_manager: PromptManager):
         self.agent_config = config
         self.prompt_manager = prompt_manager
+        self._reset_cache()
+
+    def _reset_cache(self) -> None:
+        """Reset the incremental message construction cache."""
+        self._cached_event_count: int = 0
+        self._cached_raw_messages: list[Message] = []
+        self._cached_pending_tool_calls: dict[str, Message] = {}
+        self._cached_tool_call_id_to_message: dict[str, Message] = {}
+        self._cached_forgotten_ids_hash: int = 0
 
     @staticmethod
     def _is_valid_image_url(url: str | None) -> bool:
@@ -83,6 +98,10 @@ class ConversationMemory:
     ) -> list[Message]:
         """Process state history into a list of messages for the LLM.
 
+        Uses incremental processing: only events appended since the last call are
+        converted to messages. The cache is invalidated when the forgotten_event_ids
+        set changes (indicating a condensation restructured the event list).
+
         Ensures that tool call actions are processed correctly in function calling mode.
 
         Args:
@@ -105,17 +124,45 @@ class ConversationMemory:
             events, initial_user_action, forgotten_event_ids
         )
 
+        # Check if the cache is still valid. We use the hash of the frozenset of
+        # forgotten_event_ids as the invalidation signal -- when a condensation
+        # happens, this set changes and we must reprocess everything.
+        forgotten_ids_hash = hash(frozenset(forgotten_event_ids))
+        event_count = len(events)
+
+        cache_valid = (
+            forgotten_ids_hash == self._cached_forgotten_ids_hash
+            and self._cached_event_count <= event_count
+            and self._cached_event_count > 0
+        )
+
+        if not cache_valid:
+            # Full rebuild needed (first call, or condensation changed the event list)
+            self._reset_cache()
+
         # log visual browsing status
         logger.debug(f'Visual browsing: {self.agent_config.enable_som_visual_browsing}')
 
-        # Initialize empty messages list
-        messages = []
+        start_index = self._cached_event_count
+        if start_index >= event_count:
+            # No new events; reuse cached result with final filtering/formatting
+            messages = list(
+                ConversationMemory._filter_unmatched_tool_calls(
+                    list(self._cached_raw_messages)
+                )
+            )
+            return self._apply_user_message_formatting(messages)
 
-        # Process regular events
-        pending_tool_call_action_messages: dict[str, Message] = {}
-        tool_call_id_to_message: dict[str, Message] = {}
+        # Restore tool-call matching state from cache
+        pending_tool_call_action_messages = dict(self._cached_pending_tool_calls)
+        tool_call_id_to_message = dict(self._cached_tool_call_id_to_message)
 
-        for i, event in enumerate(events):
+        # Start from cached messages (copy to avoid mutating the cache during build)
+        messages = list(self._cached_raw_messages)
+
+        # Process only new events
+        for i in range(start_index, event_count):
+            event = events[i]
             # create a regular message from an event
             if isinstance(event, Action):
                 messages_to_add = self._process_action(
@@ -164,6 +211,13 @@ class ConversationMemory:
 
             messages += messages_to_add
 
+        # Update the cache with the raw messages and tool-call state
+        self._cached_event_count = event_count
+        self._cached_raw_messages = list(messages)
+        self._cached_pending_tool_calls = dict(pending_tool_call_action_messages)
+        self._cached_tool_call_id_to_message = dict(tool_call_id_to_message)
+        self._cached_forgotten_ids_hash = forgotten_ids_hash
+
         # Apply final filtering so that the messages in context don't have unmatched tool calls
         # and tool responses, for example
         messages = list(ConversationMemory._filter_unmatched_tool_calls(messages))
@@ -174,18 +228,27 @@ class ConversationMemory:
         return messages
 
     def _apply_user_message_formatting(self, messages: list[Message]) -> list[Message]:
-        """Applies formatting rules, such as adding newlines between consecutive user messages."""
+        """Applies formatting rules, such as adding newlines between consecutive user messages.
+
+        Creates shallow copies of messages that need modification to avoid mutating
+        cached message objects.
+        """
         formatted_messages = []
         prev_role = None
         for msg in messages:
             # Add double newline between consecutive user messages
             if msg.role == 'user' and prev_role == 'user' and len(msg.content) > 0:
-                # Find the first TextContent in the message to add newlines
-                for content_item in msg.content:
+                # Copy the message to avoid mutating cached objects
+                new_content = list(msg.content)
+                for idx, content_item in enumerate(new_content):
                     if isinstance(content_item, TextContent):
-                        # Prepend two newlines to ensure visual separation
-                        content_item.text = '\n\n' + content_item.text
+                        # Create a new TextContent with the prefix to avoid mutation
+                        new_content[idx] = TextContent(
+                            text='\n\n' + content_item.text,
+                            cache_prompt=content_item.cache_prompt,
+                        )
                         break
+                msg = msg.model_copy(update={'content': new_content})
             formatted_messages.append(msg)
             prev_role = msg.role  # Update prev_role after processing each message
         return formatted_messages

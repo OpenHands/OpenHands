@@ -287,7 +287,9 @@ export function WsClientProvider({
       return;
     }
     sio.io.opts.query = sio.io.opts.query || {};
-    sio.io.opts.query.latest_event_id = lastEventRef.current?.id;
+    sio.io.opts.query.latest_event_id = lastEventRef.current?.id as
+      | string
+      | number;
 
     updateStatusWhenErrorMessagePresent(data, posthog);
     setErrorMessage(hasValidMessageProperty(data) ? data.message : "");
@@ -366,7 +368,7 @@ export function WsClientProvider({
 
     const lastEvent = lastEventRef.current;
     const query: Record<string, string | number | string[]> = {
-      latest_event_id: lastEvent?.id ?? -1,
+      latest_event_id: (lastEvent?.id as string | number) ?? -1,
       conversation_id: conversationId,
       providers_set: providers,
     };

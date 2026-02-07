@@ -1,13 +1,14 @@
+import base64
 import hashlib
 import json
+import os
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
 import jwt
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import Request
-from jose import jwe
-from jose.constants import ALGORITHMS
 from pydantic import BaseModel, PrivateAttr
 
 from openhands.agent_server.utils import utc_now
@@ -16,6 +17,116 @@ from openhands.app_server.utils.encryption_key import (
     EncryptionKey,
     get_default_encryption_keys,
 )
+
+
+def _b64url_encode(data: bytes) -> str:
+    """Base64url-encode bytes without padding (per RFC 7515)."""
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+
+
+def _b64url_decode(s: str) -> bytes:
+    """Base64url-decode a string, adding back padding as needed."""
+    # Add padding
+    padding = 4 - len(s) % 4
+    if padding != 4:
+        s += '=' * padding
+    return base64.urlsafe_b64decode(s)
+
+
+def _jwe_encrypt(plaintext: bytes, key: bytes, kid: str) -> str:
+    """Create a JWE compact token using dir + A256GCM.
+
+    Implements RFC 7516 JWE Compact Serialization with:
+    - alg: dir (direct key agreement, no key wrapping)
+    - enc: A256GCM (AES-256-GCM content encryption)
+
+    Args:
+        plaintext: The data to encrypt.
+        key: 256-bit (32-byte) encryption key.
+        kid: Key ID to include in the JWE header.
+
+    Returns:
+        JWE compact serialization string.
+    """
+    # Build the protected header
+    header = {'alg': 'dir', 'enc': 'A256GCM', 'kid': kid}
+    header_json = json.dumps(header, separators=(',', ':'), sort_keys=False)
+    protected_header = _b64url_encode(header_json.encode('utf-8'))
+
+    # For "dir" algorithm, the encrypted key is empty
+    encrypted_key = ''
+
+    # Generate a random 96-bit (12-byte) IV for AES-256-GCM
+    iv = os.urandom(12)
+    iv_b64 = _b64url_encode(iv)
+
+    # AAD is the ASCII bytes of the base64url-encoded protected header (RFC 7516 sec 5.1)
+    aad = protected_header.encode('ascii')
+
+    # Encrypt using AES-256-GCM
+    aesgcm = AESGCM(key)
+    ciphertext_and_tag = aesgcm.encrypt(iv, plaintext, aad)
+
+    # AES-GCM appends the 16-byte tag to the ciphertext
+    ciphertext = ciphertext_and_tag[:-16]
+    tag = ciphertext_and_tag[-16:]
+
+    ciphertext_b64 = _b64url_encode(ciphertext)
+    tag_b64 = _b64url_encode(tag)
+
+    # JWE Compact Serialization: Header.EncryptedKey.IV.Ciphertext.Tag
+    return f'{protected_header}.{encrypted_key}.{iv_b64}.{ciphertext_b64}.{tag_b64}'
+
+
+def _jwe_get_header(token: str) -> dict[str, Any]:
+    """Extract and decode the unverified header from a JWE compact token.
+
+    Args:
+        token: JWE compact serialization string.
+
+    Returns:
+        The decoded header dictionary.
+
+    Raises:
+        ValueError: If the token format is invalid.
+    """
+    parts = token.split('.')
+    if len(parts) != 5:
+        raise ValueError('Invalid JWE token format: expected 5 parts')
+    return json.loads(_b64url_decode(parts[0]))
+
+
+def _jwe_decrypt(token: str, key: bytes) -> bytes:
+    """Decrypt a JWE compact token using dir + A256GCM.
+
+    Args:
+        token: JWE compact serialization string.
+        key: 256-bit (32-byte) decryption key.
+
+    Returns:
+        The decrypted plaintext bytes.
+
+    Raises:
+        ValueError: If the token format is invalid.
+        Exception: If decryption fails.
+    """
+    parts = token.split('.')
+    if len(parts) != 5:
+        raise ValueError('Invalid JWE token format: expected 5 parts')
+
+    protected_header_b64, _encrypted_key_b64, iv_b64, ciphertext_b64, tag_b64 = parts
+
+    iv = _b64url_decode(iv_b64)
+    ciphertext = _b64url_decode(ciphertext_b64)
+    tag = _b64url_decode(tag_b64)
+
+    # AAD is the ASCII bytes of the base64url-encoded protected header
+    aad = protected_header_b64.encode('ascii')
+
+    # Reconstruct ciphertext + tag for AESGCM.decrypt
+    aesgcm = AESGCM(key)
+    plaintext = aesgcm.decrypt(iv, ciphertext + tag, aad)
+    return plaintext
 
 
 class JwtService:
@@ -134,6 +245,9 @@ class JwtService:
     ) -> str:
         """Create a JWE (JSON Web Encryption) token.
 
+        Uses dir + A256GCM via the cryptography library, replacing python-jose
+        to eliminate known token/algorithm confusion vulnerabilities.
+
         Args:
             payload: The JWT payload to encrypt
             key_id: The key ID to use for encryption. If None, uses the newest key.
@@ -168,21 +282,9 @@ class JwtService:
         # Derive a 256-bit key using SHA256
         key_256 = hashlib.sha256(key_bytes).digest()
 
-        # Encrypt the payload (convert to JSON string first)
+        # Encrypt the payload
         payload_json = json.dumps(jwt_payload)
-        encrypted_token = jwe.encrypt(
-            payload_json,
-            key_256,
-            algorithm=ALGORITHMS.DIR,
-            encryption=ALGORITHMS.A256GCM,
-            kid=key_id,
-        )
-        # Ensure we return a string
-        return (
-            encrypted_token.decode('utf-8')
-            if isinstance(encrypted_token, bytes)
-            else encrypted_token
-        )
+        return _jwe_encrypt(payload_json.encode('utf-8'), key_256, kid=key_id)
 
     def decrypt_jwe_token(
         self, token: str, key_id: str | None = None
@@ -204,7 +306,7 @@ class JwtService:
         if key_id is None:
             # Try to extract key_id from the token's header
             try:
-                header = jwe.get_unverified_header(token)
+                header = _jwe_get_header(token)
                 key_id = header.get('kid')
                 if not key_id:
                     raise ValueError("Token does not contain 'kid' header with key ID")
@@ -221,10 +323,9 @@ class JwtService:
         key_256 = hashlib.sha256(key_bytes).digest()
 
         try:
-            payload_json = jwe.decrypt(token, key_256)
-            assert payload_json is not None
+            plaintext = _jwe_decrypt(token, key_256)
             # Parse the JSON string back to dictionary
-            payload = json.loads(payload_json)
+            payload = json.loads(plaintext)
             return payload
         except Exception as e:
             raise Exception(f'Token decryption failed: {str(e)}')

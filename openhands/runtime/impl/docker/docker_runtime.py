@@ -7,7 +7,9 @@
 # Tag: Legacy-V0
 import os
 import platform
+import threading
 import typing
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from typing import Callable
 from uuid import UUID
@@ -49,10 +51,13 @@ from openhands.utils.tenacity_stop import stop_if_should_exit
 
 CONTAINER_NAME_PREFIX = 'openhands-runtime-'
 
-# Docker kwargs that could allow sandbox escape or privilege escalation
+# Docker kwargs that could allow sandbox escape or privilege escalation.
+# cap_drop/cap_add/security_opt are set directly in containers.run() and
+# must not be overridden by user-provided docker_runtime_kwargs.
 BLOCKED_DOCKER_KWARGS = frozenset({
     'privileged',
     'cap_add',
+    'cap_drop',
     'pid_mode',
     'security_opt',
     'devices',
@@ -106,6 +111,10 @@ class DockerRuntime(ActionExecutionClient):
     """
 
     _shutdown_listener_id: UUID | None = None
+    # Build coordination lock: prevents redundant builds when concurrent sessions
+    # target the same image. Keyed by image name.
+    _build_locks: dict[str, threading.Lock] = {}
+    _build_locks_guard: threading.Lock = threading.Lock()
 
     def __init__(
         self,
@@ -250,22 +259,34 @@ class DockerRuntime(ActionExecutionClient):
                 )
                 self.log('error', str(e))
 
+    @classmethod
+    def _get_build_lock(cls, image_name: str) -> threading.Lock:
+        """Get or create a per-image build lock to prevent redundant concurrent builds."""
+        with cls._build_locks_guard:
+            if image_name not in cls._build_locks:
+                cls._build_locks[image_name] = threading.Lock()
+            return cls._build_locks[image_name]
+
     def maybe_build_runtime_container_image(self):
         if self.runtime_container_image is None:
             if self.base_container_image is None:
                 raise ValueError(
                     'Neither runtime container image nor base container image is set'
                 )
-            self.set_runtime_status(RuntimeStatus.BUILDING_RUNTIME)
-            self.runtime_container_image = build_runtime_image(
-                self.base_container_image,
-                self.runtime_builder,
-                platform=self.config.sandbox.platform,
-                extra_deps=self.config.sandbox.runtime_extra_deps,
-                force_rebuild=self.config.sandbox.force_rebuild_runtime,
-                extra_build_args=self.config.sandbox.runtime_extra_build_args,
-                enable_browser=self.config.enable_browser,
-            )
+            # Use a per-image lock so concurrent sessions targeting the same base
+            # image do not trigger redundant builds.
+            build_lock = self._get_build_lock(self.base_container_image)
+            with build_lock:
+                self.set_runtime_status(RuntimeStatus.BUILDING_RUNTIME)
+                self.runtime_container_image = build_runtime_image(
+                    self.base_container_image,
+                    self.runtime_builder,
+                    platform=self.config.sandbox.platform,
+                    extra_deps=self.config.sandbox.runtime_extra_deps,
+                    force_rebuild=self.config.sandbox.force_rebuild_runtime,
+                    extra_build_args=self.config.sandbox.runtime_extra_build_args,
+                    enable_browser=self.config.enable_browser,
+                )
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -412,24 +433,39 @@ class DockerRuntime(ActionExecutionClient):
         self.log('debug', 'Preparing to start container...')
         self.set_runtime_status(RuntimeStatus.STARTING_RUNTIME)
 
-        # Allocate host port with locking to prevent race conditions
-        self._host_port, self._host_port_lock = self._find_available_port_with_lock(
-            EXECUTION_SERVER_PORT_RANGE
-        )
+        # Allocate all ports in parallel to reduce cold start time.
+        # Each port range is independent, so we can search them concurrently.
+        use_configured_vscode = bool(self.config.sandbox.vscode_port)
+
+        port_ranges: list[tuple[str, tuple[int, int]]] = [
+            ('exec', EXECUTION_SERVER_PORT_RANGE),
+            ('app1', APP_PORT_RANGE_1),
+            ('app2', APP_PORT_RANGE_2),
+        ]
+        if not use_configured_vscode:
+            port_ranges.append(('vscode', VSCODE_PORT_RANGE))
+
+        port_results: dict[str, tuple[int, PortLock | None]] = {}
+        with ThreadPoolExecutor(max_workers=len(port_ranges)) as pool:
+            futures = {
+                pool.submit(self._find_available_port_with_lock, pr): name
+                for name, pr in port_ranges
+            }
+            for future in as_completed(futures):
+                name = futures[future]
+                port_results[name] = future.result()
+
+        self._host_port, self._host_port_lock = port_results['exec']
         self._container_port = self._host_port
 
-        # Use the configured vscode_port if provided, otherwise find an available port
-        if self.config.sandbox.vscode_port:
-            self._vscode_port = self.config.sandbox.vscode_port
-            self._vscode_port_lock = None  # No lock needed for configured port
+        if use_configured_vscode:
+            self._vscode_port = self.config.sandbox.vscode_port or -1
+            self._vscode_port_lock = None
         else:
-            self._vscode_port, self._vscode_port_lock = (
-                self._find_available_port_with_lock(VSCODE_PORT_RANGE)
-            )
+            self._vscode_port, self._vscode_port_lock = port_results['vscode']
 
-        # Allocate app ports with locking
-        app_port_1, app_lock_1 = self._find_available_port_with_lock(APP_PORT_RANGE_1)
-        app_port_2, app_lock_2 = self._find_available_port_with_lock(APP_PORT_RANGE_2)
+        app_port_1, app_lock_1 = port_results['app1']
+        app_port_2, app_lock_2 = port_results['app2']
 
         self._app_ports = [app_port_1, app_port_2]
         self._app_port_locks = [
@@ -555,6 +591,19 @@ class DockerRuntime(ActionExecutionClient):
                 volumes=volumes,  # type: ignore
                 mounts=overlay_mounts,  # type: ignore
                 device_requests=device_requests,
+                # Security hardening: drop all capabilities and re-add only
+                # the minimal set needed for the sandbox to function.
+                cap_drop=['ALL'],
+                cap_add=[
+                    'CHOWN',        # File ownership changes inside container
+                    'DAC_OVERRIDE', # Bypass file permission checks (needed for root ops)
+                    'FOWNER',       # Bypass permission checks on file owner operations
+                    'SETUID',       # Needed for sudo / user switching
+                    'SETGID',       # Needed for sudo / group switching
+                    'NET_BIND_SERVICE',  # Bind to ports < 1024
+                    'KILL',         # Send signals to processes
+                ],
+                security_opt=['no-new-privileges:true'],
                 **self._sanitize_docker_kwargs(
                     self.config.sandbox.docker_runtime_kwargs
                 ),
@@ -603,7 +652,7 @@ class DockerRuntime(ActionExecutionClient):
         stop=tenacity.stop_after_delay(120) | stop_if_should_exit(),
         retry=tenacity.retry_if_exception(_is_retryablewait_until_alive_error),
         reraise=True,
-        wait=tenacity.wait_fixed(2),
+        wait=tenacity.wait_exponential(multiplier=0.2, min=0.2, max=5),
     )
     def wait_until_alive(self) -> None:
         try:

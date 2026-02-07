@@ -251,9 +251,15 @@ class StateTracker:
         return self.state.metrics.copy()
 
     def save_state(self):
-        """Save's current state to persistent store"""
+        """Save current state to persistent store.
+
+        Uses smart serialization: lightweight JSON metadata for frequent saves during
+        normal operation, and full pickle serialization for terminal states.
+        """
         if self.sid and self.file_store:
-            self.state.save_to_session(self.sid, self.file_store, self.user_id)
+            self.state.save_to_session_smart(
+                self.sid, self.file_store, self.user_id
+            )
 
         if self.state.conversation_stats:
             self.state.conversation_stats.save_metrics()
