@@ -19,6 +19,13 @@ export const handleEventForUI = (
       return newUiEvents;
     }
 
+    // Don't add FinishObservation at all - we keep the FinishAction instead
+    // Both contain the same message content, so we only need to display one
+    // This also prevents duplicate messages when events arrive out of order due to React batching
+    if (event.observation.kind === "FinishObservation") {
+      return newUiEvents;
+    }
+
     // Find and replace the corresponding action from uiEvents
     const actionIndex = newUiEvents.findIndex(
       (uiEvent) => uiEvent.id === event.action_id,

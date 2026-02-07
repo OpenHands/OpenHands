@@ -53,6 +53,23 @@ class OrgNotFoundError(Exception):
         super().__init__(f'Organization with id "{org_id}" not found')
 
 
+class OrgMemberNotFoundError(Exception):
+    """Raised when a member is not found in an organization."""
+
+    def __init__(self, org_id: str, user_id: str):
+        self.org_id = org_id
+        self.user_id = user_id
+        super().__init__(f'Member not found in organization "{org_id}"')
+
+
+class RoleNotFoundError(Exception):
+    """Raised when a role is not found."""
+
+    def __init__(self, role_id: int):
+        self.role_id = role_id
+        super().__init__(f'Role with id "{role_id}" not found')
+
+
 class OrgCreate(BaseModel):
     """Request model for creating a new organization."""
 
@@ -93,14 +110,18 @@ class OrgResponse(BaseModel):
     enable_solvability_analysis: bool | None = None
     v1_enabled: bool | None = None
     credits: float | None = None
+    is_personal: bool = False
 
     @classmethod
-    def from_org(cls, org: Org, credits: float | None = None) -> 'OrgResponse':
+    def from_org(
+        cls, org: Org, credits: float | None = None, user_id: str | None = None
+    ) -> 'OrgResponse':
         """Create an OrgResponse from an Org entity.
 
         Args:
             org: The organization entity to convert
             credits: Optional credits value (defaults to None)
+            user_id: Optional user ID to determine if org is personal (defaults to None)
 
         Returns:
             OrgResponse: The response model instance
@@ -136,6 +157,7 @@ class OrgResponse(BaseModel):
             enable_solvability_analysis=org.enable_solvability_analysis,
             v1_enabled=org.v1_enabled,
             credits=credits,
+            is_personal=str(org.id) == user_id if user_id else False,
         )
 
 
@@ -177,8 +199,26 @@ class OrgUpdate(BaseModel):
     condenser_max_size: int | None = Field(default=None, ge=20)
 
 
-class MemberResponse(BaseModel):
-    """Response model for an organization member."""
+class OrgMemberResponse(BaseModel):
+    """Response model for a single organization member."""
+
+    user_id: str
+    email: str | None
+    role_id: int
+    role_name: str
+    role_rank: int
+    status: str | None
+
+
+class OrgMemberPage(BaseModel):
+    """Paginated response for organization members."""
+
+    items: list[OrgMemberResponse]
+    next_page_id: str | None = None
+
+
+class MeResponse(BaseModel):
+    """Response model for the current user's membership in an organization."""
 
     org_id: str
     user_id: str
@@ -204,10 +244,8 @@ class MemberResponse(BaseModel):
         return '****' + raw[-4:]
 
     @classmethod
-    def from_org_member(
-        cls, member: OrgMember, role: Role, email: str
-    ) -> 'MemberResponse':
-        """Create a MemberResponse from an OrgMember, Role, and user email.
+    def from_org_member(cls, member: OrgMember, role: Role, email: str) -> 'MeResponse':
+        """Create a MeResponse from an OrgMember, Role, and user email.
 
         Args:
             member: The OrgMember entity
@@ -215,7 +253,7 @@ class MemberResponse(BaseModel):
             email: The user's email address
 
         Returns:
-            MemberResponse with masked API keys
+            MeResponse with masked API keys
         """
         return cls(
             org_id=str(member.org_id),

@@ -842,3 +842,26 @@ class OrgService:
                 extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
             )
             raise OrgDatabaseError(f'Failed to delete organization: {str(e)}')
+
+    @staticmethod
+    async def check_byor_export_enabled(user_id: str) -> bool:
+        """Check if BYOR export is enabled for the user's current org.
+
+        Returns True if the user's current org has byor_export_enabled set to True.
+        Returns False if the user is not found, has no current org, or the flag is False.
+
+        Args:
+            user_id: User ID to check
+
+        Returns:
+            bool: True if BYOR export is enabled, False otherwise
+        """
+        user = await UserStore.get_user_by_id_async(user_id)
+        if not user or not user.current_org_id:
+            return False
+
+        org = OrgStore.get_org_by_id(user.current_org_id)
+        if not org:
+            return False
+
+        return org.byor_export_enabled

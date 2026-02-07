@@ -48,7 +48,7 @@ export function PostHogWrapper({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const config = await OptionService.getConfig();
-        setPosthogClientKey(config.POSTHOG_CLIENT_KEY);
+        setPosthogClientKey(config.posthog_client_key);
       } catch {
         displayErrorToast("Error fetching PostHog client key");
       } finally {

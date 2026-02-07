@@ -22,7 +22,7 @@ describe("PostHogWrapper", () => {
     // Mock the config fetch
     // @ts-expect-error - partial mock
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      POSTHOG_CLIENT_KEY: "test-posthog-key",
+      posthog_client_key: "test-posthog-key",
     });
   });
 

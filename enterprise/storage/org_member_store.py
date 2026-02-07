@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker, session_maker
 from storage.org_member import OrgMember
 from storage.user_settings import UserSettings
@@ -135,3 +136,36 @@ class OrgMemberStore:
             if (normalized := c.name.lstrip('_')) and hasattr(user_settings, normalized)
         }
         return kwargs
+
+    @staticmethod
+    async def get_org_members_paginated(
+        org_id: UUID,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[OrgMember], bool]:
+        """Get paginated list of organization members with user and role info.
+
+        Returns:
+            Tuple of (members_list, has_more) where has_more indicates if there are more results.
+        """
+        async with a_session_maker() as session:
+            # Query for limit + 1 items to determine if there are more results
+            # Order by user_id for consistent pagination
+            query = (
+                select(OrgMember)
+                .options(joinedload(OrgMember.user), joinedload(OrgMember.role))
+                .filter(OrgMember.org_id == org_id)
+                .order_by(OrgMember.user_id)
+                .offset(offset)
+                .limit(limit + 1)
+            )
+            result = await session.execute(query)
+            members = list(result.scalars().all())
+
+            # Check if there are more results
+            has_more = len(members) > limit
+            if has_more:
+                # Remove the extra item
+                members = members[:limit]
+
+            return members, has_more

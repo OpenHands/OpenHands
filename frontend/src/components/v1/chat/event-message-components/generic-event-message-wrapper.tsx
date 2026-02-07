@@ -1,6 +1,5 @@
 import { OpenHandsEvent } from "#/types/v1/core";
 import { GenericEventMessage } from "../../../features/chat/generic-event-message";
-import { ChatMessage } from "../../../features/chat/chat-message";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import { getObservationResult } from "../event-content-helpers/get-observation-result";
 import { isObservationEvent } from "#/types/v1/type-guards";
@@ -14,13 +13,11 @@ import { ObservationResultStatus } from "../../../features/chat/event-content-he
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
   isLastMessage: boolean;
-  isFromPlanningAgent?: boolean;
 }
 
 export function GenericEventMessageWrapper({
   event,
   isLastMessage,
-  isFromPlanningAgent = false,
 }: GenericEventMessageWrapperProps) {
   const { title, details } = getEventContent(event);
 
@@ -29,17 +26,6 @@ export function GenericEventMessageWrapper({
     if (isObservationEvent(event)) {
       if (event.observation.kind === "TaskTrackerObservation") {
         return <div>{details}</div>;
-      }
-      if (event.observation.kind === "FinishObservation") {
-        const message = typeof details === "string" ? details : String(details);
-        // Use ChatMessage for proper styling (blue border for planning agent, text-sm)
-        return (
-          <ChatMessage
-            type="agent"
-            message={message}
-            isFromPlanningAgent={isFromPlanningAgent}
-          />
-        );
       }
     }
   }

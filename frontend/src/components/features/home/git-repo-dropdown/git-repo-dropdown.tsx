@@ -247,34 +247,6 @@ export function GitRepoDropdown({
   const isLoadingState =
     isLoading || isSearchLoading || isFetchingNextPage || isUrlSearchLoading;
 
-  // Create sticky footer item for GitHub provider
-  const stickyFooterItem = useMemo(() => {
-    if (
-      !config?.APP_SLUG ||
-      provider !== ProviderOptions.github ||
-      config.APP_MODE !== "saas"
-    )
-      return null;
-
-    const githubHref = `https://github.com/apps/${config.APP_SLUG}/installations/new`;
-
-    return (
-      <a
-        href={githubHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center w-full px-2 py-2 text-sm text-white hover:bg-[#5C5D62] rounded-md transition-colors duration-150 font-normal"
-        onMouseDown={(e) => {
-          // Prevent downshift from closing the menu when clicking the sticky footer
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-      >
-        {t(I18nKey.HOME$ADD_GITHUB_REPOS)}
-      </a>
-    );
-  }, [provider, config, t]);
-
   const renderItem = (
     item: GitRepository,
     index: number,
@@ -316,6 +288,34 @@ export function GitRepoDropdown({
       </div>
     );
   }, [recentRepositories, localSelectedItem, getItemProps, t]);
+
+  // Create sticky footer item for GitHub provider
+  const stickyFooterItem = useMemo(() => {
+    if (
+      !config?.github_app_slug ||
+      provider !== ProviderOptions.github ||
+      config.app_mode !== "saas"
+    )
+      return null;
+
+    const githubHref = `https://github.com/apps/${config.github_app_slug}/installations/new`;
+
+    return (
+      <a
+        href={githubHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center w-full px-2 py-2 text-sm text-white hover:bg-[#5C5D62] rounded-md transition-colors duration-150 font-normal"
+        onMouseDown={(e) => {
+          // Prevent downshift from closing the menu when clicking the sticky footer
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        {t(I18nKey.HOME$ADD_GITHUB_REPOS)}
+      </a>
+    );
+  }, [provider, config, t]);
 
   return (
     <div className={cn("relative", className)}>
