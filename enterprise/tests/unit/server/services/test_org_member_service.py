@@ -4,9 +4,16 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
+from server.routes.org_models import (
+    MeResponse,
+    OrgMemberNotFoundError,
+    RoleNotFoundError,
+)
 from server.services.org_member_service import OrgMemberService
 from storage.org_member import OrgMember
 from storage.role import Role
+from storage.user import User
 
 
 @pytest.fixture
@@ -1138,3 +1145,137 @@ class TestOrgMemberServiceIsLastOwner:
 
             # Assert
             assert result is False
+
+
+class TestOrgMemberServiceGetMe:
+    """Test cases for OrgMemberService.get_me."""
+
+    @pytest.fixture
+    def mock_org_member(self, org_id, current_user_id):
+        """Create a mock OrgMember with LLM fields."""
+        member = MagicMock(spec=OrgMember)
+        member.org_id = org_id
+        member.user_id = current_user_id
+        member.role_id = 1
+        member.llm_api_key = SecretStr('sk-test-key-12345')
+        member.llm_api_key_for_byor = None
+        member.llm_model = 'gpt-4'
+        member.llm_base_url = 'https://api.example.com'
+        member.max_iterations = 50
+        member.status = 'active'
+        return member
+
+    @pytest.fixture
+    def mock_user(self, current_user_id):
+        """Create a mock User."""
+        user = MagicMock(spec=User)
+        user.id = current_user_id
+        user.email = 'test@example.com'
+        return user
+
+    def test_get_me_success_returns_me_response(
+        self, org_id, current_user_id, mock_org_member, mock_user, owner_role
+    ):
+        """GIVEN: User is a member of the organization
+        WHEN: get_me is called
+        THEN: Returns MeResponse with user's membership data
+        """
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+        ):
+            mock_get_member.return_value = mock_org_member
+            mock_get_role.return_value = owner_role
+            mock_get_user.return_value = mock_user
+
+            # Act
+            result = OrgMemberService.get_me(org_id, current_user_id)
+
+            # Assert
+            assert isinstance(result, MeResponse)
+            assert result.org_id == str(org_id)
+            assert result.user_id == str(current_user_id)
+            assert result.email == 'test@example.com'
+            assert result.role == 'owner'
+            assert result.llm_model == 'gpt-4'
+            assert result.max_iterations == 50
+            assert result.status == 'active'
+
+    def test_get_me_member_not_found_raises_error(self, org_id, current_user_id):
+        """GIVEN: User is not a member of the organization
+        WHEN: get_me is called
+        THEN: Raises OrgMemberNotFoundError
+        """
+        # Arrange
+        with patch(
+            'server.services.org_member_service.OrgMemberStore.get_org_member'
+        ) as mock_get_member:
+            mock_get_member.return_value = None
+
+            # Act & Assert
+            with pytest.raises(OrgMemberNotFoundError) as exc_info:
+                OrgMemberService.get_me(org_id, current_user_id)
+
+            assert str(org_id) in str(exc_info.value)
+
+    def test_get_me_role_not_found_raises_error(
+        self, org_id, current_user_id, mock_org_member
+    ):
+        """GIVEN: Member exists but role lookup fails
+        WHEN: get_me is called
+        THEN: Raises RoleNotFoundError
+        """
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+        ):
+            mock_get_member.return_value = mock_org_member
+            mock_get_role.return_value = None
+
+            # Act & Assert
+            with pytest.raises(RoleNotFoundError) as exc_info:
+                OrgMemberService.get_me(org_id, current_user_id)
+
+            assert exc_info.value.role_id == mock_org_member.role_id
+
+    def test_get_me_user_not_found_returns_empty_email(
+        self, org_id, current_user_id, mock_org_member, owner_role
+    ):
+        """GIVEN: Member exists but user lookup returns None
+        WHEN: get_me is called
+        THEN: Returns MeResponse with empty email
+        """
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+        ):
+            mock_get_member.return_value = mock_org_member
+            mock_get_role.return_value = owner_role
+            mock_get_user.return_value = None
+
+            # Act
+            result = OrgMemberService.get_me(org_id, current_user_id)
+
+            # Assert
+            assert result.email == ''
