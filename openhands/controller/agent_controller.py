@@ -542,15 +542,20 @@ class AgentController:
         Args:
             observation (observation): The observation to handle.
         """
-        observation_to_print = copy.deepcopy(observation)
-        if len(observation_to_print.content) > self.agent.llm.config.max_message_chars:
-            observation_to_print.content = truncate_content(
-                observation_to_print.content, self.agent.llm.config.max_message_chars
-            )
+        max_chars = self.agent.llm.config.max_message_chars
+        if len(observation.content) > max_chars:
+            # Truncate the content string directly for logging instead of
+            # deep copying the entire observation object.
+            original_content = observation.content
+            observation.content = truncate_content(original_content, max_chars)
+            log_str = str(observation)
+            observation.content = original_content
+        else:
+            log_str = str(observation)
         # Use info level if LOG_ALL_EVENTS is set
         log_level = 'info' if os.getenv('LOG_ALL_EVENTS') in ('true', '1') else 'debug'
         self.log(
-            log_level, str(observation_to_print), extra={'msg_type': 'OBSERVATION'}
+            log_level, log_str, extra={'msg_type': 'OBSERVATION'}
         )
 
         # this happens for runnable actions and microagent actions

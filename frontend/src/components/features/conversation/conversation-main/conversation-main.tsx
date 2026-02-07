@@ -1,13 +1,24 @@
-import { useWindowSize } from "@uidotdev/usehooks";
+import React from "react";
 import { MobileLayout } from "./mobile-layout";
 import { DesktopLayout } from "./desktop-layout";
 import { useConversationStore } from "#/stores/conversation-store";
 
+const mql = window.matchMedia("(max-width: 1024px)");
+
+function subscribe(callback: () => void) {
+  mql.addEventListener("change", callback);
+  return () => mql.removeEventListener("change", callback);
+}
+
+function getSnapshot() {
+  return mql.matches;
+}
+
 export function ConversationMain() {
-  const { width } = useWindowSize();
+  const isMobile = React.useSyncExternalStore(subscribe, getSnapshot);
   const { isRightPanelShown } = useConversationStore();
 
-  if (width && width <= 1024) {
+  if (isMobile) {
     return <MobileLayout isRightPanelShown={isRightPanelShown} />;
   }
 

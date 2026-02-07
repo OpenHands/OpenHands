@@ -7,6 +7,7 @@
 # Tag: Legacy-V0
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
 from fnmatch import fnmatch
 
@@ -144,6 +145,7 @@ SUPPORTS_STOP_WORDS_FALSE_PATTERNS: list[str] = [
 ]
 
 
+@functools.lru_cache(maxsize=64)
 def get_features(model: str) -> ModelFeatures:
     return ModelFeatures(
         supports_function_calling=model_matches(model, FUNCTION_CALLING_PATTERNS),

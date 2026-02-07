@@ -68,7 +68,7 @@ async def connect(connection_id: str, environ: dict) -> None:
             logger.error('No conversation_id in query params')
             raise ConnectionRefusedError('No conversation_id in query params')
 
-        if _invalid_session_api_key(query_params):
+        if _invalid_session_api_key(query_params, environ):
             raise ConnectionRefusedError('invalid_session_api_key')
 
         cookies_str = environ.get('HTTP_COOKIE', '')
@@ -166,13 +166,25 @@ async def disconnect(connection_id: str) -> None:
     await conversation_manager.disconnect_from_session(connection_id)
 
 
-def _invalid_session_api_key(query_params: dict[str, list[Any]]):
+def _invalid_session_api_key(query_params: dict[str, list[Any]], environ: dict | None = None):
     import hmac
 
     session_api_key = os.getenv('SESSION_API_KEY')
     if not session_api_key:
         return False
-    query_api_keys = query_params.get('session_api_key')
-    if not query_api_keys or not query_api_keys[0]:
+
+    # Prefer the session API key from the header over query params to avoid
+    # leaking the key in server access logs, browser history, and proxy logs.
+    client_key = None
+    if environ:
+        client_key = environ.get('HTTP_SESSION_API_KEY')
+
+    # Fall back to query params for backwards compatibility
+    if not client_key:
+        query_api_keys = query_params.get('session_api_key')
+        if query_api_keys and query_api_keys[0]:
+            client_key = query_api_keys[0]
+
+    if not client_key:
         return True
-    return not hmac.compare_digest(query_api_keys[0], session_api_key)
+    return not hmac.compare_digest(client_key, session_api_key)

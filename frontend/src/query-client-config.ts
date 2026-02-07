@@ -13,6 +13,11 @@ const handle401Error = (error: AxiosError, queryClient: QueryClient) => {
 
 const shownErrors = new Set<string>();
 export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+    },
+  },
   queryCache: new QueryCache({
     onError: (error, query) => {
       const isAuthQuery =

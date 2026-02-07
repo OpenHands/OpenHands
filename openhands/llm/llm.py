@@ -7,6 +7,7 @@
 # Tag: Legacy-V0
 # V1 replacement for this module lives in the Software Agent SDK.
 import copy
+import json
 import os
 import time
 import warnings
@@ -85,6 +86,7 @@ class LLM(RetryMixin, DebugMixin):
         """
         self._tried_model_info = False
         self.cost_metric_supported: bool = True
+        self._cost_calc_consecutive_errors: int = 0
         self.config: LLMConfig = copy.deepcopy(config)
         self.service_id = service_id
         self.metrics: Metrics = (
@@ -141,7 +143,8 @@ class LLM(RetryMixin, DebugMixin):
                 f'Rewrote openhands/{model_name} to {self.config.model} with base URL {self.config.base_url}'
             )
 
-        features = get_features(self.config.model)
+        self._features = get_features(self.config.model)
+        features = self._features
         if features.supports_reasoning_effort:
             # For Gemini models, only map 'low' to optimized thinking budget
             # Let other reasoning_effort values pass through to API as-is
@@ -278,10 +281,11 @@ class LLM(RetryMixin, DebugMixin):
             kwargs['messages'] = messages
 
             # handle conversion of to non-function calling messages if needed
-            original_fncall_messages = copy.deepcopy(messages)
+            original_fncall_messages = None
             mock_fncall_tools = None
             # if the agent or caller has defined tools, and we mock via prompting, convert the messages
             if mock_function_calling and 'tools' in kwargs:
+                original_fncall_messages = copy.deepcopy(messages)
                 add_in_context_learning_example = True
                 if (
                     'openhands-lm' in self.config.model
@@ -298,7 +302,7 @@ class LLM(RetryMixin, DebugMixin):
 
                 # add stop words if the model supports it and stop words are not disabled
                 if (
-                    get_features(self.config.model).supports_stop_words
+                    self._features.supports_stop_words
                     and not self.config.disable_stop_word
                 ):
                     kwargs['stop'] = STOP_WORDS
@@ -354,10 +358,11 @@ class LLM(RetryMixin, DebugMixin):
             response_id = resp.get('id', 'unknown')
             self.metrics.add_response_latency(latency, response_id)
 
-            non_fncall_response = copy.deepcopy(resp)
+            non_fncall_response = None
 
             # if we mocked function calling, and we have tools, convert the response back to function calling format
             if mock_function_calling and mock_fncall_tools is not None:
+                non_fncall_response = copy.deepcopy(resp)
                 if len(resp.choices) < 1:
                     raise LLMNoResponseError(
                         'Response choices is less than 1 - This is only seen in Gemini models so far. Response: '
@@ -413,8 +418,8 @@ class LLM(RetryMixin, DebugMixin):
                     'cost': cost,
                 }
 
-                # if non-native function calling, save messages/response separately
-                if mock_function_calling:
+                # if non-native function calling was applied, save messages/response separately
+                if mock_function_calling and mock_fncall_tools is not None:
                     # Overwrite response as non-fncall to be consistent with messages
                     _d['response'] = non_fncall_response
 
@@ -443,8 +448,8 @@ class LLM(RetryMixin, DebugMixin):
         try:
             if self.config.model.startswith('openrouter'):
                 self.model_info = litellm.get_model_info(self.config.model)
-        except Exception as e:
-            logger.debug(f'Error getting model info: {e}')
+        except (litellm.NotFoundError, httpx.HTTPError, json.JSONDecodeError) as e:
+            logger.warning(f'Error getting model info for openrouter: {e}')
 
         if self.config.model.startswith('litellm_proxy/'):
             # IF we are using LiteLLM proxy, get model info from LiteLLM proxy
@@ -467,8 +472,8 @@ class LLM(RetryMixin, DebugMixin):
                         f'No data field in model info response from LiteLLM proxy: {resp_json}'
                     )
                 all_model_info = resp_json.get('data', [])
-            except Exception as e:
-                logger.info(f'Error parsing JSON response from LiteLLM proxy: {e}')
+            except (json.JSONDecodeError, ValueError, KeyError) as e:
+                logger.warning(f'Error parsing JSON response from LiteLLM proxy: {e}')
                 all_model_info = []
             current_model_info = next(
                 (
@@ -489,17 +494,15 @@ class LLM(RetryMixin, DebugMixin):
                 self.model_info = litellm.get_model_info(
                     self.config.model.split(':')[0]
                 )
-            # noinspection PyBroadException
-            except Exception:
-                pass
+            except (litellm.NotFoundError, httpx.HTTPError, json.JSONDecodeError) as e:
+                logger.warning(f'Could not get model info by prefix: {e}')
         if not self.model_info:
             try:
                 self.model_info = litellm.get_model_info(
                     self.config.model.split('/')[-1]
                 )
-            # noinspection PyBroadException
-            except Exception:
-                pass
+            except (litellm.NotFoundError, httpx.HTTPError, json.JSONDecodeError) as e:
+                logger.warning(f'Could not get model info by basename: {e}')
         from openhands.io import json
 
         logger.debug(
@@ -810,10 +813,23 @@ class LLM(RetryMixin, DebugMixin):
                     f'Using fallback model name {_model_name} to get cost: {cost}'
                 )
             self.metrics.add_cost(float(cost))
+            self._cost_calc_consecutive_errors = 0
             return float(cost)
-        except Exception:
+        except litellm.NotFoundError:
+            # Model truly not supported for cost tracking
             self.cost_metric_supported = False
             logger.debug('Cost calculation not supported for this model.')
+        except Exception:
+            self._cost_calc_consecutive_errors += 1
+            if self._cost_calc_consecutive_errors >= 3:
+                self.cost_metric_supported = False
+                logger.debug(
+                    'Cost calculation disabled after 3 consecutive errors.'
+                )
+            else:
+                logger.debug(
+                    f'Transient cost calculation error (attempt {self._cost_calc_consecutive_errors}/3).'
+                )
         return 0.0
 
     def __str__(self) -> str:

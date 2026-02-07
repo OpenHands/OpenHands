@@ -84,6 +84,9 @@ class StreamingLLM(AsyncLLM):
                 # Directly call and await litellm_acompletion
                 resp = await async_streaming_completion_unwrapped(*args, **kwargs)
 
+                # Track the last chunk for post-completion processing
+                last_chunk = None
+
                 # For streaming we iterate over the chunks
                 async for chunk in resp:
                     # Check for cancellation before yielding the chunk
@@ -99,9 +102,14 @@ class StreamingLLM(AsyncLLM):
                     message_back = chunk['choices'][0]['delta'].get('content', '')
                     if message_back:
                         self.log_response(message_back)
-                    self._post_completion(chunk)
+                    last_chunk = chunk
 
                     yield chunk
+
+                # Call _post_completion once after stream completes with the
+                # final chunk (which typically contains usage data)
+                if last_chunk is not None:
+                    self._post_completion(last_chunk)
 
             except UserCancelledError:
                 logger.debug('LLM request cancelled by user.')

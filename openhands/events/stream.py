@@ -176,7 +176,6 @@ class EventStream(EventStore):
 
             data = event_to_dict(event)
             data = self._replace_secrets(data)
-            event = event_from_dict(data)
             current_write_page.append(data)
 
             # If the page is full, create a new page for future events / other threads to use

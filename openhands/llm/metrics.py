@@ -60,6 +60,10 @@ class Metrics:
       - A list of TokenUsage (one per call).
     """
 
+    # Maximum number of per-call records to keep in lists.
+    # Running totals (_accumulated_cost, _accumulated_token_usage) are always accurate.
+    _MAX_LIST_SIZE: int = 500
+
     def __init__(self, model_name: str = 'default') -> None:
         self._accumulated_cost: float = 0.0
         self._max_budget_per_task: float | None = None
@@ -139,6 +143,8 @@ class Metrics:
             raise ValueError('Added cost cannot be negative.')
         self._accumulated_cost += value
         self._costs.append(Cost(cost=value, model=self.model_name))
+        if len(self._costs) > self._MAX_LIST_SIZE:
+            self._costs = self._costs[-self._MAX_LIST_SIZE :]
 
     def add_response_latency(self, value: float, response_id: str) -> None:
         self._response_latencies.append(
@@ -146,6 +152,8 @@ class Metrics:
                 latency=max(0.0, value), model=self.model_name, response_id=response_id
             )
         )
+        if len(self._response_latencies) > self._MAX_LIST_SIZE:
+            self._response_latencies = self._response_latencies[-self._MAX_LIST_SIZE :]
 
     def add_token_usage(
         self,
@@ -171,6 +179,8 @@ class Metrics:
             response_id=response_id,
         )
         self._token_usages.append(usage)
+        if len(self._token_usages) > self._MAX_LIST_SIZE:
+            self._token_usages = self._token_usages[-self._MAX_LIST_SIZE :]
 
         # Update accumulated token usage using the __add__ operator
         self._accumulated_token_usage = self.accumulated_token_usage + TokenUsage(

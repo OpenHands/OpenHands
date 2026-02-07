@@ -77,7 +77,7 @@ class SandboxConfig(BaseModel):
     )  # once enabled, OpenHands would lint files after editing
     use_host_network: bool = Field(default=False)
     additional_networks: list[str] = Field(default=[])
-    runtime_binding_address: str = Field(default='0.0.0.0')
+    runtime_binding_address: str = Field(default='127.0.0.1')
     runtime_extra_build_args: list[str] | None = Field(default=None)
     initialize_plugins: bool = Field(default=True)
     force_rebuild_runtime: bool = Field(default=False)

@@ -6,7 +6,6 @@ import { TabWrapper } from "./tab-wrapper";
 import { TabContainer } from "./tab-container";
 import { TabContentArea } from "./tab-content-area";
 import { ConversationTabTitle } from "../conversation-tab-title";
-import Terminal from "#/components/features/terminal/terminal";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useConversationId } from "#/hooks/use-conversation-id";
 
@@ -16,6 +15,7 @@ const BrowserTab = lazy(() => import("#/routes/browser-tab"));
 const ServedTab = lazy(() => import("#/routes/served-tab"));
 const VSCodeTab = lazy(() => import("#/routes/vscode-tab"));
 const PlannerTab = lazy(() => import("#/routes/planner-tab"));
+const Terminal = lazy(() => import("#/components/features/terminal/terminal"));
 
 const TAB_CONFIG = {
   editor: {

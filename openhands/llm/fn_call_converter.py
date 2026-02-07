@@ -484,8 +484,6 @@ def convert_fncall_messages_to_non_fncall_messages(
     add_in_context_learning_example: bool = True,
 ) -> list[dict]:
     """Convert function calling messages to non-function calling messages."""
-    messages = copy.deepcopy(messages)
-
     formatted_tools = convert_tools_to_description(tools)
     system_prompt_suffix = SYSTEM_PROMPT_SUFFIX_TEMPLATE.format(
         description=formatted_tools
@@ -495,7 +493,9 @@ def convert_fncall_messages_to_non_fncall_messages(
     first_user_message_encountered = False
     for message in messages:
         role = message['role']
-        content = message['content']
+        # Deep copy only mutable (list) content to avoid mutating the caller's data;
+        # strings are immutable and don't need copying.
+        content = copy.deepcopy(message['content']) if isinstance(message['content'], list) else message['content']
 
         # 1. SYSTEM MESSAGES
         # append system prompt suffix to content

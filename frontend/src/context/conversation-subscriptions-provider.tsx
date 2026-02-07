@@ -203,14 +203,19 @@ export function ConversationSubscriptionsProvider({
 
       try {
         // Create socket connection
+        const extraHeaders: Record<string, string> = {};
+        if (sessionApiKey) {
+          extraHeaders.session_api_key = sessionApiKey;
+        }
+
         const socket = io(baseUrl, {
           transports: ["websocket"],
           path: socketPath ?? "/socket.io",
           query: {
             conversation_id: conversationId,
-            session_api_key: sessionApiKey,
             providers_set: providersSet,
           },
+          extraHeaders,
           reconnection: true,
           reconnectionAttempts: 5,
           reconnectionDelay: 1000,

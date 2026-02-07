@@ -6,7 +6,7 @@ import {
   useLayoutEffect,
 } from "react";
 
-export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
+export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>, messageCount?: number) {
   // Track whether we should auto-scroll to the bottom when content changes
   const [autoscroll, setAutoscroll] = useState(true);
 
@@ -76,7 +76,7 @@ export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
         dom.scrollTop = dom.scrollHeight;
       }
     }
-  }); // No dependency array - runs after every render to follow new content
+  }, [autoscroll, messageCount, scrollRef]);
 
   return {
     scrollRef,

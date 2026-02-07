@@ -365,12 +365,16 @@ export function WsClientProvider({
     setWebSocketStatus("CONNECTING");
 
     const lastEvent = lastEventRef.current;
-    const query = {
+    const query: Record<string, string | number | string[]> = {
       latest_event_id: lastEvent?.id ?? -1,
       conversation_id: conversationId,
       providers_set: providers,
-      session_api_key: conversation.session_api_key, // Have to set here because socketio doesn't support custom headers. :(
     };
+
+    const extraHeaders: Record<string, string> = {};
+    if (conversation.session_api_key) {
+      extraHeaders.session_api_key = conversation.session_api_key;
+    }
 
     let baseUrl: string | null = null;
     let socketPath: string;
@@ -391,6 +395,7 @@ export function WsClientProvider({
       transports: ["websocket"],
       path: socketPath,
       query,
+      extraHeaders,
     });
 
     sio.on("connect", handleConnect);

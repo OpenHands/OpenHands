@@ -86,7 +86,7 @@ export function ChatInterface() {
     autoScroll,
     setAutoScroll,
     setHitBottom,
-  } = useScrollToBottom(scrollRef);
+  } = useScrollToBottom(scrollRef, storeEvents.length);
   const { data: config } = useConfig();
 
   const { curAgentState } = useAgentState();
@@ -172,15 +172,25 @@ export function ChatInterface() {
   const isChatLoading = isHistoryLoading && !isTask;
 
   // Filter V0 events
-  const v0Events = storeEvents
-    .filter(isV0Event)
-    .filter(isActionOrObservation)
-    .filter(shouldRenderEvent);
+  const v0Events = React.useMemo(
+    () =>
+      storeEvents
+        .filter(isV0Event)
+        .filter(isActionOrObservation)
+        .filter(shouldRenderEvent),
+    [storeEvents],
+  );
 
   // Filter V1 events - use uiEvents for rendering (actions replaced by observations)
-  const v1UiEvents = uiEvents.filter(isV1Event).filter(shouldRenderV1Event);
+  const v1UiEvents = React.useMemo(
+    () => uiEvents.filter(isV1Event).filter(shouldRenderV1Event),
+    [uiEvents],
+  );
   // Keep full v1 events for lookups (includes both actions and observations)
-  const v1FullEvents = storeEvents.filter(isV1Event);
+  const v1FullEvents = React.useMemo(
+    () => storeEvents.filter(isV1Event),
+    [storeEvents],
+  );
 
   // Combined events count for tracking
   const totalEvents = v0Events.length || v1UiEvents.length;

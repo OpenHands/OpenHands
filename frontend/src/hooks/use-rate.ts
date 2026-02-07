@@ -20,7 +20,7 @@ export const useRate = (config = DEFAULT_CONFIG) => {
    * record(new Date().getTime());
    */
   const record = (entry: number) => {
-    setItems((prev) => [...prev, entry]);
+    setItems((prev) => [...prev.slice(-1), entry]);
     setLastUpdated(new Date().getTime());
   };
 

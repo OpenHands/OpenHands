@@ -25,6 +25,23 @@ export default defineConfig(({ mode }) => {
   const FE_PORT = Number.parseInt(VITE_FRONTEND_PORT, 10);
 
   return {
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            "vendor-react": ["react", "react-dom", "react-router", "zustand"],
+            "vendor-editor": ["@monaco-editor/react", "monaco-editor"],
+            "vendor-terminal": ["@xterm/xterm", "@xterm/addon-fit"],
+            "vendor-ui": ["@heroui/react", "framer-motion"],
+            "vendor-query": [
+              "@tanstack/react-query",
+              "axios",
+              "socket.io-client",
+            ],
+          },
+        },
+      },
+    },
     plugins: [
       !process.env.VITEST && reactRouter(),
       viteTsconfigPaths(),
