@@ -271,7 +271,7 @@ async def get_me(
             detail=f'Organization with id "{org_id}" not found',
         )
     except RoleNotFoundError as e:
-        logger.error(
+        logger.exception(
             'Role not found for org member',
             extra={
                 'user_id': user_id,
