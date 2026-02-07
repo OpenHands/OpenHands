@@ -6,6 +6,7 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
+import hmac
 import os
 
 from fastapi import Depends, HTTPException, status
@@ -21,7 +22,9 @@ def check_session_api_key(
     """Check the session API key and throw an exception if incorrect. Having this as a dependency
     means it appears in OpenAPI Docs
     """
-    if session_api_key != _SESSION_API_KEY:
+    if not session_api_key or not _SESSION_API_KEY:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+    if not hmac.compare_digest(session_api_key, _SESSION_API_KEY):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
 
 

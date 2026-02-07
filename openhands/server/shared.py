@@ -11,6 +11,8 @@ import os
 import socketio
 from dotenv import load_dotenv
 
+from openhands.core.logger import openhands_logger as logger
+
 from openhands.core.config import load_openhands_config
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.config.server_config import ServerConfig, load_server_config
@@ -51,9 +53,23 @@ if redis_host:
     )
 
 
+_cors_origins_env = os.environ.get('OPENHANDS_CORS_ORIGINS', '')
+if _cors_origins_env:
+    _cors_allowed_origins = [
+        origin.strip() for origin in _cors_origins_env.split(',') if origin.strip()
+    ]
+else:
+    _cors_allowed_origins = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3001',
+    ]
+logger.info(f'Socket.IO CORS allowed origins: {_cors_allowed_origins}')
+
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*',
+    cors_allowed_origins=_cors_allowed_origins,
     client_manager=client_manager,
     # Increase buffer size to 4MB (to handle 3MB files with base64 overhead)
     max_http_buffer_size=4 * 1024 * 1024,

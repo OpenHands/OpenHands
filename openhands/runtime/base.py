@@ -100,6 +100,11 @@ def _default_env_vars(sandbox_config: SandboxConfig) -> dict[str, str]:
             ret[sandbox_key] = os.environ[key]
     if sandbox_config.enable_auto_lint:
         ret['ENABLE_AUTO_LINT'] = 'true'
+    # Forward SESSION_API_KEY so the action execution server inside the
+    # sandbox can authenticate requests from the host.
+    session_api_key = os.environ.get('SESSION_API_KEY')
+    if session_api_key:
+        ret['SESSION_API_KEY'] = session_api_key
     return ret
 
 

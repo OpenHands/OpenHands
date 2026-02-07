@@ -95,22 +95,23 @@ class S3FileStore(FileStore):
         # prefix="foo", delimiter="/"  yields  []  # :(
         results: set[str] = set()
         prefix_len = len(path)
-        response: ListObjectsV2OutputDict = self.client.list_objects_v2(
-            Bucket=self.bucket, Prefix=path
-        )
-        contents = response.get('Contents')
-        if not contents:
-            return []
-        paths = [obj['Key'] for obj in contents]
-        for sub_path in paths:
-            if sub_path == path:
+
+        # Use paginator to handle >1000 objects correctly
+        paginator = self.client.get_paginator('list_objects_v2')
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=path):
+            contents = page.get('Contents')
+            if not contents:
                 continue
-            try:
-                index = sub_path.index('/', prefix_len + 1)
-                if index != prefix_len:
-                    results.add(sub_path[: index + 1])
-            except ValueError:
-                results.add(sub_path)
+            for obj in contents:
+                sub_path = obj['Key']
+                if sub_path == path:
+                    continue
+                try:
+                    index = sub_path.index('/', prefix_len + 1)
+                    if index != prefix_len:
+                        results.add(sub_path[: index + 1])
+                except ValueError:
+                    results.add(sub_path)
         return list(results)
 
     def delete(self, path: str) -> None:
@@ -122,11 +123,13 @@ class S3FileStore(FileStore):
                 path = path[:-1]
 
             # Try to delete any child resources (Assume the path is a directory)
-            response = self.client.list_objects_v2(
-                Bucket=self.bucket, Prefix=f'{path}/'
-            )
-            for content in response.get('Contents') or []:
-                self.client.delete_object(Bucket=self.bucket, Key=content['Key'])
+            # Use paginator to handle >1000 objects correctly
+            paginator = self.client.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=f'{path}/'):
+                for content in page.get('Contents') or []:
+                    self.client.delete_object(
+                        Bucket=self.bucket, Key=content['Key']
+                    )
 
             # Next try to delete item as a file
             self.client.delete_object(Bucket=self.bucket, Key=path)

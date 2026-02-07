@@ -95,12 +95,21 @@ class ActionRequest(BaseModel):
 ROOT_GID = 0
 
 SESSION_API_KEY = os.environ.get('SESSION_API_KEY')
+if not SESSION_API_KEY:
+    logger.warning(
+        'ACTION EXECUTION SERVER: No SESSION_API_KEY set. '
+        'All endpoints are accessible without authentication. '
+        'Set SESSION_API_KEY to secure this server.'
+    )
 api_key_header = APIKeyHeader(name='X-Session-API-Key', auto_error=False)
 
 
 def verify_api_key(api_key: str = Depends(api_key_header)):
-    if SESSION_API_KEY and api_key != SESSION_API_KEY:
-        raise HTTPException(status_code=403, detail='Invalid API Key')
+    import hmac
+
+    if SESSION_API_KEY:
+        if not api_key or not hmac.compare_digest(api_key, SESSION_API_KEY):
+            raise HTTPException(status_code=403, detail='Invalid API Key')
     return api_key
 
 

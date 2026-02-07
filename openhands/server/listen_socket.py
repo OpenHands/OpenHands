@@ -167,10 +167,12 @@ async def disconnect(connection_id: str) -> None:
 
 
 def _invalid_session_api_key(query_params: dict[str, list[Any]]):
+    import hmac
+
     session_api_key = os.getenv('SESSION_API_KEY')
     if not session_api_key:
         return False
-    query_api_keys = query_params['session_api_key']
-    if not query_api_keys:
+    query_api_keys = query_params.get('session_api_key')
+    if not query_api_keys or not query_api_keys[0]:
         return True
-    return query_api_keys[0] != session_api_key
+    return not hmac.compare_digest(query_api_keys[0], session_api_key)

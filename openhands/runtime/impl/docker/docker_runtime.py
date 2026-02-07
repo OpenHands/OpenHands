@@ -49,6 +49,19 @@ from openhands.utils.tenacity_stop import stop_if_should_exit
 
 CONTAINER_NAME_PREFIX = 'openhands-runtime-'
 
+# Docker kwargs that could allow sandbox escape or privilege escalation
+BLOCKED_DOCKER_KWARGS = frozenset({
+    'privileged',
+    'cap_add',
+    'pid_mode',
+    'security_opt',
+    'devices',
+    'ipc_mode',
+    'userns_mode',
+    'sysctls',
+    'runtime',
+})
+
 EXECUTION_SERVER_PORT_RANGE = (30000, 39999)
 VSCODE_PORT_RANGE = (40000, 49999)
 APP_PORT_RANGE_1 = (50000, 54999)
@@ -542,7 +555,9 @@ class DockerRuntime(ActionExecutionClient):
                 volumes=volumes,  # type: ignore
                 mounts=overlay_mounts,  # type: ignore
                 device_requests=device_requests,
-                **(self.config.sandbox.docker_runtime_kwargs or {}),
+                **self._sanitize_docker_kwargs(
+                    self.config.sandbox.docker_runtime_kwargs
+                ),
             )
             self.log('debug', f'Container started. Server url: {self.api_url}')
             self.set_runtime_status(RuntimeStatus.RUNTIME_STARTED)
@@ -646,12 +661,43 @@ class DockerRuntime(ActionExecutionClient):
 
         self._app_port_locks.clear()
 
+    @staticmethod
+    def _sanitize_docker_kwargs(kwargs: dict | None) -> dict:
+        """Filter out dangerous Docker kwargs that could allow sandbox escape."""
+        if not kwargs:
+            return {}
+        blocked = {k: v for k, v in kwargs.items() if k in BLOCKED_DOCKER_KWARGS}
+        if blocked:
+            logger.warning(
+                f'Blocked dangerous docker_runtime_kwargs: {list(blocked.keys())}. '
+                f'These options are not allowed as they could compromise sandbox isolation.'
+            )
+        return {k: v for k, v in kwargs.items() if k not in BLOCKED_DOCKER_KWARGS}
+
     def _is_port_in_use_docker(self, port: int) -> bool:
         containers = self.docker_client.containers.list()
         for container in containers:
             container_ports = container.ports
-            if str(port) in str(container_ports):
-                return True
+            if not container_ports:
+                continue
+            # Check exact port match against parsed port mappings
+            # container.ports is a dict like {'3000/tcp': [{'HostIp': '', 'HostPort': '3000'}]}
+            for container_port_key, bindings in container_ports.items():
+                # Check the container-side port (e.g., '3000' from '3000/tcp')
+                try:
+                    container_port_num = int(container_port_key.split('/')[0])
+                    if container_port_num == port:
+                        return True
+                except (ValueError, IndexError):
+                    pass
+                # Check host-side port bindings
+                if bindings:
+                    for binding in bindings:
+                        try:
+                            if int(binding.get('HostPort', 0)) == port:
+                                return True
+                        except (ValueError, TypeError):
+                            pass
         return False
 
     def _find_available_port_with_lock(
