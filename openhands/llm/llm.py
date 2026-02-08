@@ -18,6 +18,7 @@ import httpx
 from openhands.core.config import LLMConfig
 from openhands.llm.metrics import Metrics
 from openhands.llm.model_features import get_features
+from openhands.version import __version__
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -212,6 +213,10 @@ class LLM(RetryMixin, DebugMixin):
         # Add completion_kwargs if present
         if self.config.completion_kwargs is not None:
             kwargs.update(self.config.completion_kwargs)
+
+        # Add User-Agent header for API calls
+        kwargs['extra_headers'] = kwargs.get('extra_headers', {})
+        kwargs['extra_headers'].setdefault('User-Agent', f'openhands/{__version__}')
 
         self._completion = partial(
             litellm_completion,

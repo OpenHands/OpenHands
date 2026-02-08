@@ -1528,3 +1528,22 @@ def test_gemini_performance_optimization_end_to_end(mock_completion):
     # Verify temperature and top_p were removed for reasoning models
     assert 'temperature' not in call_kwargs
     assert 'top_p' not in call_kwargs
+
+
+@patch('openhands.llm.llm.litellm_completion')
+def test_user_agent_header_set(mock_litellm_completion, default_config):
+    """Test that the User-Agent header is set in extra_headers for LLM API calls."""
+    from openhands.version import __version__
+
+    mock_litellm_completion.return_value = {
+        'choices': [{'message': {'content': 'Test response'}}]
+    }
+
+    llm = LLM(config=default_config, service_id='test-service')
+    llm.completion(messages=[{'role': 'user', 'content': 'Hello!'}])
+
+    # Verify extra_headers contains the User-Agent header with openhands/ prefix
+    call_kwargs = mock_litellm_completion.call_args[1]
+    assert 'extra_headers' in call_kwargs
+    assert 'User-Agent' in call_kwargs['extra_headers']
+    assert call_kwargs['extra_headers']['User-Agent'] == f'openhands/{__version__}'
