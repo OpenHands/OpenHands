@@ -32,6 +32,7 @@ describe("Changes Tab", () => {
     vi.mocked(useUnifiedGetGitChanges).mockReturnValue({
       data: [],
       isLoading: false,
+      isFetching: false,
       isSuccess: true,
       isError: false,
       error: null,
@@ -50,6 +51,7 @@ describe("Changes Tab", () => {
     vi.mocked(useUnifiedGetGitChanges).mockReturnValue({
       data: [{ path: "src/file.ts", status: "M" }],
       isLoading: false,
+      isFetching: false,
       isSuccess: true,
       isError: false,
       error: null,
