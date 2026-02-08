@@ -5,15 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     LiteLLMIntegrationError,
+    MeResponse,
     OrgAuthorizationError,
     OrgCreate,
     OrgDatabaseError,
+    OrgMemberNotFoundError,
     OrgMemberPage,
     OrgNameExistsError,
     OrgNotFoundError,
     OrgPage,
     OrgResponse,
     OrgUpdate,
+    RoleNotFoundError,
 )
 from server.services.org_member_service import OrgMemberService
 from storage.org_service import OrgService
@@ -224,6 +227,65 @@ async def get_org(
     except Exception as e:
         logger.exception(
             'Unexpected error retrieving organization',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.get('/{org_id}/me', response_model=MeResponse)
+async def get_me(
+    org_id: UUID,
+    user_id: str = Depends(get_user_id),
+) -> MeResponse:
+    """Get the current user's membership record for an organization.
+
+    Returns the authenticated user's role, status, email, and LLM override
+    fields (with masked API keys) within the specified organization.
+
+    Args:
+        org_id: Organization ID (UUID)
+        user_id: Authenticated user ID (injected by dependency)
+
+    Returns:
+        MeResponse: The user's membership data
+
+    Raises:
+        HTTPException: 404 if user is not a member or org doesn't exist
+        HTTPException: 500 if retrieval fails
+    """
+    logger.info(
+        'Retrieving current member details',
+        extra={'user_id': user_id, 'org_id': str(org_id)},
+    )
+
+    try:
+        user_uuid = UUID(user_id)
+        return OrgMemberService.get_me(org_id, user_uuid)
+
+    except OrgMemberNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Organization with id "{org_id}" not found',
+        )
+    except RoleNotFoundError as e:
+        logger.exception(
+            'Role not found for org member',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'role_id': e.role_id,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error retrieving member details',
             extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(

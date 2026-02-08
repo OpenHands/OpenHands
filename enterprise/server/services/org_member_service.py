@@ -2,9 +2,16 @@
 
 from uuid import UUID
 
-from server.routes.org_models import OrgMemberPage, OrgMemberResponse
+from server.routes.org_models import (
+    MeResponse,
+    OrgMemberNotFoundError,
+    OrgMemberPage,
+    OrgMemberResponse,
+    RoleNotFoundError,
+)
 from storage.org_member_store import OrgMemberStore
 from storage.role_store import RoleStore
+from storage.user_store import UserStore
 
 from openhands.utils.async_utils import call_sync_from_async
 
@@ -15,6 +22,40 @@ ADMIN_RANK = 20
 
 class OrgMemberService:
     """Service for organization member operations."""
+
+    @staticmethod
+    def get_me(org_id: UUID, user_id: UUID) -> MeResponse:
+        """Get the current user's membership record for an organization.
+
+        Retrieves the authenticated user's role, status, email, and LLM override
+        fields (with masked API keys) within the specified organization.
+
+        Args:
+            org_id: Organization ID (UUID)
+            user_id: User ID (UUID)
+
+        Returns:
+            MeResponse: The user's membership data with masked API keys
+
+        Raises:
+            OrgMemberNotFoundError: If user is not a member of the organization
+            RoleNotFoundError: If the role associated with the member is not found
+        """
+        # Look up the user's membership in this org
+        org_member = OrgMemberStore.get_org_member(org_id, user_id)
+        if org_member is None:
+            raise OrgMemberNotFoundError(str(org_id), str(user_id))
+
+        # Resolve role name from role_id
+        role = RoleStore.get_role_by_id(org_member.role_id)
+        if role is None:
+            raise RoleNotFoundError(org_member.role_id)
+
+        # Get user email
+        user = UserStore.get_user_by_id(str(user_id))
+        email = user.email if user and user.email else ''
+
+        return MeResponse.from_org_member(org_member, role, email)
 
     @staticmethod
     async def get_org_members(

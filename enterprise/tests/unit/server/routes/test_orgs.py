@@ -19,14 +19,22 @@ with patch('storage.database.engine', create=True), patch(
     from server.email_validation import get_admin_user_id
     from server.routes.org_models import (
         LiteLLMIntegrationError,
+        MeResponse,
         OrgAuthorizationError,
         OrgDatabaseError,
+        OrgMemberNotFoundError,
         OrgMemberPage,
         OrgMemberResponse,
         OrgNameExistsError,
         OrgNotFoundError,
+        RoleNotFoundError,
     )
-    from server.routes.orgs import get_org_members, org_router, remove_org_member
+    from server.routes.orgs import (
+        get_me,
+        get_org_members,
+        org_router,
+        remove_org_member,
+    )
     from storage.org import Org
 
     from openhands.server.user_auth import get_user_id
@@ -2289,3 +2297,341 @@ class TestRemoveOrgMemberEndpoint:
 
             assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
             assert exc_info.value.detail == 'Service temporarily unavailable'
+
+
+class TestGetMeEndpoint:
+    """Tests for GET /api/organizations/{org_id}/me endpoint.
+
+    This endpoint returns the current authenticated user's membership record
+    for the specified organization, including role, status, email, and LLM
+    override fields (with masked API key).
+
+    Why: The frontend useMe() hook calls this endpoint to determine the user's
+    role in the org, which gates read-only mode on settings pages. Without it,
+    all role-based access control on settings pages is broken (returns 404).
+    """
+
+    @pytest.fixture
+    def test_user_id(self):
+        """Create a test user ID."""
+        return str(uuid.uuid4())
+
+    @pytest.fixture
+    def test_org_id(self):
+        """Create a test organization ID."""
+        return uuid.uuid4()
+
+    @pytest.fixture
+    def mock_me_app(self, test_user_id):
+        """Create a test FastAPI app with org routes and mocked auth."""
+        app = FastAPI()
+        app.include_router(org_router)
+
+        def mock_get_user_id():
+            return test_user_id
+
+        app.dependency_overrides[get_user_id] = mock_get_user_id
+        return app
+
+    def _make_me_response(
+        self,
+        org_id,
+        user_id,
+        email='test@example.com',
+        role='owner',
+        llm_api_key='****2345',
+        llm_model='gpt-4',
+        llm_base_url='https://api.example.com',
+        max_iterations=50,
+        llm_api_key_for_byor=None,
+        status_val='active',
+    ):
+        """Create a MeResponse for testing."""
+        return MeResponse(
+            org_id=str(org_id),
+            user_id=str(user_id),
+            email=email,
+            role=role,
+            llm_api_key=llm_api_key,
+            llm_model=llm_model,
+            llm_base_url=llm_base_url,
+            max_iterations=max_iterations,
+            llm_api_key_for_byor=llm_api_key_for_byor,
+            status=status_val,
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_me_success(self, mock_me_app, test_user_id, test_org_id):
+        """GIVEN: Authenticated user who is a member of the organization
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: Returns 200 with the user's membership data including role name and email
+        """
+        me_response = self._make_me_response(
+            org_id=test_org_id,
+            user_id=test_user_id,
+            email='owner@example.com',
+            role='owner',
+            llm_model='gpt-4',
+            llm_base_url='https://api.example.com',
+            max_iterations=50,
+            status_val='active',
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            return_value=me_response,
+        ):
+            client = TestClient(mock_me_app)
+            response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data['org_id'] == str(test_org_id)
+        assert data['user_id'] == test_user_id
+        assert data['email'] == 'owner@example.com'
+        assert data['role'] == 'owner'
+        assert data['llm_model'] == 'gpt-4'
+        assert data['llm_base_url'] == 'https://api.example.com'
+        assert data['max_iterations'] == 50
+        assert data['status'] == 'active'
+
+    @pytest.mark.asyncio
+    async def test_get_me_masks_llm_api_key(
+        self, mock_me_app, test_user_id, test_org_id
+    ):
+        """GIVEN: User is a member with an LLM API key set
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: The llm_api_key field is masked (not the raw secret value)
+
+        Why: API keys must never be returned in plaintext in API responses.
+        The frontend only needs to know if a key is set, not its value.
+        """
+        me_response = self._make_me_response(
+            org_id=test_org_id,
+            user_id=test_user_id,
+            llm_api_key='****cdef',  # Masked key
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            return_value=me_response,
+        ):
+            client = TestClient(mock_me_app)
+            response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        # The raw key must NOT appear in the response
+        assert data['llm_api_key'] != 'sk-secret-real-key-abcdef'
+        # Should be masked with stars
+        assert '**' in data['llm_api_key']
+
+    @pytest.mark.asyncio
+    async def test_get_me_not_a_member(self, mock_me_app, test_org_id):
+        """GIVEN: Authenticated user who is NOT a member of the organization
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: Returns 404 (to avoid leaking org existence per spec)
+        """
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            side_effect=OrgMemberNotFoundError(str(test_org_id), 'user-id'),
+        ):
+            client = TestClient(mock_me_app)
+            response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_me_invalid_uuid(self, mock_me_app):
+        """GIVEN: Invalid UUID format for org_id
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: Returns 422 (FastAPI validates UUID path parameter)
+        """
+        client = TestClient(mock_me_app)
+        response = client.get('/api/organizations/not-a-valid-uuid/me')
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_get_me_unauthenticated(self, test_org_id):
+        """GIVEN: User is not authenticated
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: Returns 401
+        """
+        app = FastAPI()
+        app.include_router(org_router)
+
+        async def mock_unauthenticated():
+            raise HTTPException(status_code=401, detail='User not authenticated')
+
+        app.dependency_overrides[get_user_id] = mock_unauthenticated
+
+        client = TestClient(app)
+        response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_get_me_unexpected_error(self, mock_me_app, test_org_id):
+        """GIVEN: An unexpected error occurs during membership lookup
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: Returns 500
+        """
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            side_effect=RuntimeError('Database connection failed'),
+        ):
+            client = TestClient(mock_me_app)
+            response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    @pytest.mark.asyncio
+    async def test_get_me_with_null_optional_fields(
+        self, mock_me_app, test_user_id, test_org_id
+    ):
+        """GIVEN: User is a member with null optional fields (llm_model, llm_base_url, etc.)
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: Returns 200 with null values for optional fields
+        """
+        me_response = self._make_me_response(
+            org_id=test_org_id,
+            user_id=test_user_id,
+            llm_model=None,
+            llm_base_url=None,
+            max_iterations=None,
+            llm_api_key='',
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            return_value=me_response,
+        ):
+            client = TestClient(mock_me_app)
+            response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data['llm_model'] is None
+        assert data['llm_base_url'] is None
+        assert data['max_iterations'] is None
+
+    @pytest.mark.asyncio
+    async def test_get_me_with_admin_role(self, mock_me_app, test_user_id, test_org_id):
+        """GIVEN: User is an admin member of the organization
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: Returns correct role name 'admin'
+
+        Why: The frontend uses the role to determine if settings are read-only.
+        Admins and owners can edit; members see read-only.
+        """
+        me_response = self._make_me_response(
+            org_id=test_org_id,
+            user_id=test_user_id,
+            role='admin',
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            return_value=me_response,
+        ):
+            client = TestClient(mock_me_app)
+            response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data['role'] == 'admin'
+
+    @pytest.mark.asyncio
+    async def test_get_me_masks_byor_api_key(
+        self, mock_me_app, test_user_id, test_org_id
+    ):
+        """GIVEN: User has an llm_api_key_for_byor set
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: The llm_api_key_for_byor field is also masked
+        """
+        me_response = self._make_me_response(
+            org_id=test_org_id,
+            user_id=test_user_id,
+            llm_api_key_for_byor='****-key',  # Masked key
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            return_value=me_response,
+        ):
+            client = TestClient(mock_me_app)
+            response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data['llm_api_key_for_byor'] != 'sk-byor-secret-key'
+        assert (
+            data['llm_api_key_for_byor'] is None or '**' in data['llm_api_key_for_byor']
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_me_role_not_found_returns_500(self, mock_me_app, test_org_id):
+        """GIVEN: Role lookup fails (data integrity issue)
+        WHEN: GET /api/organizations/{org_id}/me is called
+        THEN: Returns 500 Internal Server Error
+        """
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            side_effect=RoleNotFoundError(role_id=999),
+        ):
+            client = TestClient(mock_me_app)
+            response = client.get(f'/api/organizations/{test_org_id}/me')
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert 'unexpected error' in response.json()['detail'].lower()
+
+    @pytest.mark.asyncio
+    async def test_get_me_direct_function_call_success(self, test_user_id, test_org_id):
+        """Test direct function call to get_me returns MeResponse."""
+        me_response = self._make_me_response(
+            org_id=test_org_id,
+            user_id=test_user_id,
+            email='test@example.com',
+            role='owner',
+        )
+
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            return_value=me_response,
+        ):
+            result = await get_me(org_id=test_org_id, user_id=test_user_id)
+
+        assert isinstance(result, MeResponse)
+        assert result.org_id == str(test_org_id)
+        assert result.user_id == test_user_id
+        assert result.role == 'owner'
+
+    @pytest.mark.asyncio
+    async def test_get_me_direct_function_call_member_not_found(
+        self, test_user_id, test_org_id
+    ):
+        """Test direct function call to get_me raises HTTPException on member not found."""
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            side_effect=OrgMemberNotFoundError(str(test_org_id), test_user_id),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_me(org_id=test_org_id, user_id=test_user_id)
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert str(test_org_id) in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_get_me_direct_function_call_role_not_found(
+        self, test_user_id, test_org_id
+    ):
+        """Test direct function call to get_me raises HTTPException on role not found."""
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_me',
+            side_effect=RoleNotFoundError(role_id=999),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_me(org_id=test_org_id, user_id=test_user_id)
+
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
