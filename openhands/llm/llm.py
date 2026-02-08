@@ -160,7 +160,11 @@ class LLM(RetryMixin, DebugMixin):
                 )
             elif any(
                 k in self.config.model
-                for k in ('claude-sonnet-4-5', 'claude-haiku-4-5-20251001', 'claude-opus-4-6')
+                for k in (
+                    'claude-sonnet-4-5',
+                    'claude-haiku-4-5-20251001',
+                    'claude-opus-4-6',
+                )
             ):
                 # don't send reasoning_effort to specific Claude Sonnet/Haiku 4.5 variants or Claude Opus 4.6
                 kwargs.pop('reasoning_effort', None)
