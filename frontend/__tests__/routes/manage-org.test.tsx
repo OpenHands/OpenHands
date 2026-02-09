@@ -7,11 +7,20 @@ import { selectOrganization } from "test-utils";
 import ManageOrg from "#/routes/manage-org";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsScreen, { clientLoader } from "#/routes/settings";
-import { resetOrgMockData } from "#/mocks/org-handlers";
+import { resetOrgMockData, MOCK_TEAM_ORG_ACME } from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 import BillingService from "#/api/billing-service/billing-service.api";
 import { OrganizationMember } from "#/types/org";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+
+const mockQueryClient = vi.hoisted(() => {
+  const { QueryClient } = require("@tanstack/react-query");
+  return new QueryClient();
+});
+
+vi.mock("#/query-client-config", () => ({
+  queryClient: mockQueryClient,
+}));
 
 function ManageOrgWithPortalRoot() {
   return (
@@ -128,8 +137,10 @@ describe("Manage Org Route", () => {
   };
 
   beforeEach(() => {
-    // Reset Zustand store to ensure clean state before each test
-    useSelectedOrganizationStore.setState({ organizationId: null });
+    // Set Zustand store to a team org so clientLoader's org route protection allows access
+    useSelectedOrganizationStore.setState({ organizationId: MOCK_TEAM_ORG_ACME.id });
+    // Seed organizations into the module-level queryClient used by clientLoader
+    mockQueryClient.setQueryData(["organizations"], [MOCK_TEAM_ORG_ACME]);
 
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     // @ts-expect-error - partial mock for testing
@@ -154,7 +165,8 @@ describe("Manage Org Route", () => {
     resetOrgMockData();
     // Reset Zustand store to ensure clean state between tests
     useSelectedOrganizationStore.setState({ organizationId: null });
-    vi.clearAllMocks();
+    // Clear module-level queryClient used by clientLoader
+    mockQueryClient.clear();
   });
 
   it("should render the available credits", async () => {
@@ -196,8 +208,8 @@ describe("Manage Org Route", () => {
     await selectOrganization({ orgIndex: 0 }); // user is owner in org 1
 
     expect(screen.queryByTestId("add-credits-form")).not.toBeInTheDocument();
-    // Simulate adding credits
-    const addCreditsButton = screen.getByText(/add/i);
+    // Simulate adding credits — wait for permissions-dependent button
+    const addCreditsButton = await waitFor(() => screen.getByText(/add/i));
     await userEvent.click(addCreditsButton);
 
     const addCreditsForm = screen.getByTestId("add-credits-form");
@@ -230,8 +242,8 @@ describe("Manage Org Route", () => {
     await selectOrganization({ orgIndex: 0 }); // user is owner in org 1
 
     expect(screen.queryByTestId("add-credits-form")).not.toBeInTheDocument();
-    // Simulate adding credits
-    const addCreditsButton = screen.getByText(/add/i);
+    // Simulate adding credits — wait for permissions-dependent button
+    const addCreditsButton = await waitFor(() => screen.getByText(/add/i));
     await userEvent.click(addCreditsButton);
 
     const addCreditsForm = screen.getByTestId("add-credits-form");
@@ -255,7 +267,7 @@ describe("Manage Org Route", () => {
 
       await selectOrganization({ orgIndex: 0 }); // user is owner in org 1
 
-      const addCreditsButton = screen.getByText(/add/i);
+      const addCreditsButton = await waitFor(() => screen.getByText(/add/i));
       await user.click(addCreditsButton);
 
       const addCreditsForm = screen.getByTestId("add-credits-form");
@@ -675,9 +687,11 @@ describe("Manage Org Route", () => {
         screen.queryByTestId("delete-org-confirmation"),
       ).not.toBeInTheDocument();
 
-      const deleteOrgButton = screen.getByRole("button", {
-        name: /ORG\$DELETE_ORGANIZATION/i,
-      });
+      const deleteOrgButton = await waitFor(() =>
+        screen.getByRole("button", {
+          name: /ORG\$DELETE_ORGANIZATION/i,
+        }),
+      );
       await userEvent.click(deleteOrgButton);
 
       const deleteConfirmation = screen.getByTestId("delete-org-confirmation");
@@ -716,37 +730,56 @@ describe("Manage Org Route", () => {
       expect(deleteButton).not.toBeDisabled();
     });
 
-    it.each<{ role: "admin" | "member"; roleName: string }>([
-      { role: "admin", roleName: "Admin" },
-      { role: "member", roleName: "Member" },
-    ])(
-      "should not show delete organization button when user lacks canDeleteOrganization permission ($roleName role)",
-      async ({ role }) => {
-        setupUserMock({
-          org_id: "1",
-          user_id: "1",
-          email: "test@example.com",
-          role,
-          llm_api_key: "**********",
-          max_iterations: 20,
-          llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
-          llm_base_url: "https://api.openai.com",
-          status: "active",
-        });
+    it("should not show delete organization button when user lacks canDeleteOrganization permission ('Admin' role)", async () => {
+      setupUserMock({
+        org_id: "1",
+        user_id: "1",
+        email: "test@example.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
 
-        renderManageOrg();
-        await screen.findByTestId("manage-org-screen");
+      renderManageOrg();
+      await screen.findByTestId("manage-org-screen");
 
-        await selectOrganization({ orgIndex: 0 });
+      await selectOrganization({ orgIndex: 0 });
 
-        const deleteButton = screen.queryByRole("button", {
-          name: /ORG\$DELETE_ORGANIZATION/i,
-        });
+      const deleteButton = screen.queryByRole("button", {
+        name: /ORG\$DELETE_ORGANIZATION/i,
+      });
 
-        expect(deleteButton).not.toBeInTheDocument();
-      },
-    );
+      expect(deleteButton).not.toBeInTheDocument();
+    });
+
+    it("should not show delete organization button when user lacks canDeleteOrganization permission ('Member' role)", async () => {
+      setupUserMock({
+        org_id: "1",
+        user_id: "1",
+        email: "test@example.com",
+        role: "member",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      // Members lack view_billing permission, so the clientLoader redirects away from /settings/org
+      renderManageOrg();
+
+      // The manage-org screen should NOT be accessible — clientLoader redirects
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("manage-org-screen"),
+        ).not.toBeInTheDocument();
+      });
+    });
 
     it("should open delete confirmation modal when delete button is clicked (with permission)", async () => {
       setupUserMock(TEST_USERS.OWNER);
