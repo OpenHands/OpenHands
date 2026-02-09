@@ -17,7 +17,6 @@ import { ReauthModal } from "#/components/features/waitlist/reauth-modal";
 import { AnalyticsConsentFormModal } from "#/components/features/analytics/analytics-consent-form-modal";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
-import { SetupPaymentModal } from "#/components/features/payment/setup-payment-modal";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
 import { useAutoLogin } from "#/hooks/use-auto-login";
@@ -256,10 +255,6 @@ export default function MainApp() {
           }}
         />
       )}
-
-      {config.data?.feature_flags.enable_billing &&
-        config.data?.app_mode === "saas" &&
-        settings?.is_new_user && <SetupPaymentModal />}
     </div>
   );
 }

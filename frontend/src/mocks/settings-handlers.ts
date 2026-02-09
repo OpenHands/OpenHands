@@ -73,8 +73,8 @@ export const SETTINGS_HANDLERS = [
       app_mode: mockSaas ? "saas" : "oss",
       posthog_client_key: "fake-posthog-client-key",
       feature_flags: {
-        enable_billing: false,
-        hide_llm_settings: mockSaas,
+        enable_billing: mockSaas,
+        hide_llm_settings: false,
         enable_jira: false,
         enable_jira_dc: false,
         enable_linear: false,
