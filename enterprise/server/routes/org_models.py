@@ -217,6 +217,12 @@ class OrgMemberPage(BaseModel):
     next_page_id: str | None = None
 
 
+class OrgMemberUpdate(BaseModel):
+    """Request model for updating an organization member."""
+
+    role: str | None = None  # Role name: 'owner', 'admin', or 'user'
+
+
 class MeResponse(BaseModel):
     """Response model for the current user's membership in an organization."""
 

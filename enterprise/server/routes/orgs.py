@@ -11,6 +11,8 @@ from server.routes.org_models import (
     OrgDatabaseError,
     OrgMemberNotFoundError,
     OrgMemberPage,
+    OrgMemberResponse,
+    OrgMemberUpdate,
     OrgNameExistsError,
     OrgNotFoundError,
     OrgPage,
@@ -602,4 +604,93 @@ async def remove_org_member(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to remove member',
+        )
+
+
+@org_router.patch('/{org_id}/members/{user_id}', response_model=OrgMemberResponse)
+async def update_org_member(
+    org_id: str,
+    user_id: str,
+    update_data: OrgMemberUpdate,
+    current_user_id: str = Depends(get_user_id),
+) -> OrgMemberResponse:
+    """Update a member's role in an organization.
+
+    Permission rules:
+    - Admins can change roles of regular users to Admin or User
+    - Admins cannot modify other Admins or Owners
+    - Owners can change roles of Admins and Users to any role (Owner, Admin, User)
+    - Owners cannot modify other Owners
+
+    Users cannot modify their own role. The last owner cannot be demoted.
+    """
+    try:
+        success, error, data = await OrgMemberService.update_org_member(
+            org_id=UUID(org_id),
+            target_user_id=UUID(user_id),
+            current_user_id=UUID(current_user_id),
+            new_role_name=update_data.role,
+        )
+
+        if not success:
+            error_map = {
+                'not_a_member': (
+                    status.HTTP_403_FORBIDDEN,
+                    'You are not a member of this organization',
+                ),
+                'cannot_modify_self': (
+                    status.HTTP_403_FORBIDDEN,
+                    'Cannot modify your own role',
+                ),
+                'member_not_found': (
+                    status.HTTP_404_NOT_FOUND,
+                    'Member not found in this organization',
+                ),
+                'role_not_found': (
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'Role configuration error',
+                ),
+                'invalid_role': (
+                    status.HTTP_400_BAD_REQUEST,
+                    'Invalid role specified',
+                ),
+                'insufficient_permission': (
+                    status.HTTP_403_FORBIDDEN,
+                    'You do not have permission to modify this member',
+                ),
+                'cannot_demote_last_owner': (
+                    status.HTTP_400_BAD_REQUEST,
+                    'Cannot demote the last owner of an organization',
+                ),
+                'update_failed': (
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'Failed to update member',
+                ),
+            }
+            status_code, detail = error_map.get(
+                error, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+            )
+            raise HTTPException(status_code=status_code, detail=detail)
+
+        if data is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Failed to update member',
+            )
+
+        return data
+
+    except HTTPException:
+        raise
+    except ValueError:
+        logger.exception('Invalid UUID format')
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid organization or user ID format',
+        )
+    except Exception:
+        logger.exception('Error updating organization member')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update member',
         )

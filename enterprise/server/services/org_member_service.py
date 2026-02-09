@@ -18,6 +18,7 @@ from openhands.utils.async_utils import call_sync_from_async
 # Role rank constants
 OWNER_RANK = 10
 ADMIN_RANK = 20
+USER_RANK = 1000
 
 
 class OrgMemberService:
@@ -168,6 +169,141 @@ class OrgMemberService:
             return True, None
 
         return await call_sync_from_async(_remove_member)
+
+    @staticmethod
+    async def update_org_member(
+        org_id: UUID,
+        target_user_id: UUID,
+        current_user_id: UUID,
+        new_role_name: str | None = None,
+    ) -> tuple[bool, str | None, OrgMemberResponse | None]:
+        """Update a member's role in an organization.
+
+        Permission rules:
+        - Admins can change roles of users (rank > ADMIN_RANK) to Admin or User
+        - Admins cannot modify other Admins or Owners
+        - Owners can change roles of non-owners (rank > OWNER_RANK) to any role
+        - Owners cannot modify other Owners
+
+        Args:
+            org_id: Organization ID
+            target_user_id: User ID of the member to update
+            current_user_id: User ID of the requester
+            new_role_name: New role name ('owner', 'admin', or 'user')
+
+        Returns:
+            Tuple of (success, error_code, data). If success is True, error_code is None.
+        """
+
+        def _update_member():
+            # Get current user's membership in the org
+            requester_membership = OrgMemberStore.get_org_member(
+                org_id, current_user_id
+            )
+            if not requester_membership:
+                return False, 'not_a_member', None
+
+            # Check if trying to modify self
+            if str(current_user_id) == str(target_user_id):
+                return False, 'cannot_modify_self', None
+
+            # Get target user's membership
+            target_membership = OrgMemberStore.get_org_member(org_id, target_user_id)
+            if not target_membership:
+                return False, 'member_not_found', None
+
+            # Get roles
+            requester_role = RoleStore.get_role_by_id(requester_membership.role_id)
+            target_role = RoleStore.get_role_by_id(target_membership.role_id)
+
+            if not requester_role or not target_role:
+                return False, 'role_not_found', None
+
+            # If no role change requested, return current state
+            if new_role_name is None:
+                user = UserStore.get_user_by_id(str(target_user_id))
+                return (
+                    True,
+                    None,
+                    OrgMemberResponse(
+                        user_id=str(target_membership.user_id),
+                        email=user.email if user else None,
+                        role_id=target_membership.role_id,
+                        role_name=target_role.name,
+                        role_rank=target_role.rank,
+                        status=target_membership.status,
+                    ),
+                )
+
+            # Validate new role exists
+            new_role = RoleStore.get_role_by_name(new_role_name.lower())
+            if not new_role:
+                return False, 'invalid_role', None
+
+            # Check permission to modify target
+            if not OrgMemberService._can_update_member_role(
+                requester_role.rank, target_role.rank, new_role.rank
+            ):
+                return False, 'insufficient_permission', None
+
+            # Check if demoting the last owner
+            if (
+                target_role.rank == OWNER_RANK
+                and new_role.rank > OWNER_RANK
+                and OrgMemberService._is_last_owner(org_id, target_user_id)
+            ):
+                return False, 'cannot_demote_last_owner', None
+
+            # Perform the update
+            updated_member = OrgMemberStore.update_user_role_in_org(
+                org_id, target_user_id, new_role.id
+            )
+            if not updated_member:
+                return False, 'update_failed', None
+
+            # Get user email for response
+            user = UserStore.get_user_by_id(str(target_user_id))
+
+            return (
+                True,
+                None,
+                OrgMemberResponse(
+                    user_id=str(updated_member.user_id),
+                    email=user.email if user else None,
+                    role_id=updated_member.role_id,
+                    role_name=new_role.name,
+                    role_rank=new_role.rank,
+                    status=updated_member.status,
+                ),
+            )
+
+        return await call_sync_from_async(_update_member)
+
+    @staticmethod
+    def _can_update_member_role(
+        requester_rank: int, target_rank: int, new_role_rank: int
+    ) -> bool:
+        """Check if requester can change target's role to new_role.
+
+        Permission rules:
+        - Owners (rank 10) can modify admins and users, can set any role
+        - Owners cannot modify other owners
+        - Admins (rank 20) can only modify users (rank > 20)
+        - Admins can only set admin or user roles (not owner)
+        """
+        if requester_rank == OWNER_RANK:
+            # Owners cannot modify other owners
+            if target_rank == OWNER_RANK:
+                return False
+            # Owners can set any role (owner, admin, user)
+            return True
+        elif requester_rank == ADMIN_RANK:
+            # Admins cannot modify owners or other admins
+            if target_rank <= ADMIN_RANK:
+                return False
+            # Admins can only set admin or user roles (not owner)
+            return new_role_rank >= ADMIN_RANK
+        return False
 
     @staticmethod
     def _can_remove_member(requester_rank: int, target_rank: int) -> bool:
