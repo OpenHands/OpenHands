@@ -2341,7 +2341,7 @@ class TestUpdateOrgMemberEndpoint:
                 org_id=uuid.UUID(org_id),
                 target_user_id=uuid.UUID(target_user_id),
                 current_user_id=uuid.UUID(current_user_id),
-                new_role_name='admin',
+                update_data=OrgMemberUpdate(role='admin'),
             )
 
     @pytest.mark.asyncio
