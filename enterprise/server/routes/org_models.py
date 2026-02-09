@@ -59,7 +59,7 @@ class OrgMemberNotFoundError(Exception):
     def __init__(self, org_id: str, user_id: str):
         self.org_id = org_id
         self.user_id = user_id
-        super().__init__(f'Member not found in organization "{org_id}"')
+        super().__init__(f'Member "{user_id}" not found in organization "{org_id}"')
 
 
 class RoleNotFoundError(Exception):

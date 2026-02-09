@@ -18,6 +18,10 @@ with patch('storage.database.engine', create=True), patch(
 ):
     from server.email_validation import get_admin_user_id
     from server.routes.org_models import (
+        CannotModifySelfError,
+        InsufficientPermissionError,
+        InvalidRoleError,
+        LastOwnerError,
         LiteLLMIntegrationError,
         MeResponse,
         OrgAuthorizationError,
@@ -2321,7 +2325,7 @@ class TestUpdateOrgMemberEndpoint:
         with patch(
             'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.return_value = (True, None, updated)
+            mock_update.return_value = updated
 
             # Act
             result = await update_org_member(
@@ -2349,7 +2353,7 @@ class TestUpdateOrgMemberEndpoint:
         with patch(
             'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.return_value = (False, 'not_a_member', None)
+            mock_update.side_effect = OrgMemberNotFoundError(org_id, current_user_id)
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2369,7 +2373,7 @@ class TestUpdateOrgMemberEndpoint:
         with patch(
             'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.return_value = (False, 'cannot_modify_self', None)
+            mock_update.side_effect = CannotModifySelfError('modify')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2391,7 +2395,7 @@ class TestUpdateOrgMemberEndpoint:
         with patch(
             'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.return_value = (False, 'member_not_found', None)
+            mock_update.side_effect = OrgMemberNotFoundError(org_id, target_user_id)
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2413,7 +2417,7 @@ class TestUpdateOrgMemberEndpoint:
         with patch(
             'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.return_value = (False, 'invalid_role', None)
+            mock_update.side_effect = InvalidRoleError('superuser')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2435,7 +2439,9 @@ class TestUpdateOrgMemberEndpoint:
         with patch(
             'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.return_value = (False, 'insufficient_permission', None)
+            mock_update.side_effect = InsufficientPermissionError(
+                'You do not have permission to modify this member'
+            )
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -2457,7 +2463,7 @@ class TestUpdateOrgMemberEndpoint:
         with patch(
             'server.routes.orgs.OrgMemberService.update_org_member'
         ) as mock_update:
-            mock_update.return_value = (False, 'cannot_demote_last_owner', None)
+            mock_update.side_effect = LastOwnerError('demote')
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
