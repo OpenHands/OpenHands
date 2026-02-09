@@ -22,6 +22,7 @@ interface LlmApiKeyManagerProps {
   isLoadingLlmKey: boolean;
   isPaymentRequired: boolean;
   refreshLlmApiKey: ReturnType<typeof useRefreshLlmApiKey>;
+  foobar?: string;
 }
 
 function LlmApiKeyPaywall() {
