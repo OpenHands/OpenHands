@@ -1801,3 +1801,114 @@ async def test_check_byor_export_enabled_returns_false_when_org_not_found():
 
         # Assert
         assert result is False
+
+
+@pytest.mark.asyncio
+async def test_switch_org_success():
+    """
+    GIVEN: Valid org_id and user_id where user is a member
+    WHEN: switch_org is called
+    THEN: User's current_org_id is updated and org is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    mock_org = Org(
+        id=org_id,
+        name='Target Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+    mock_updated_user = User(id=uuid.UUID(user_id), current_org_id=org_id)
+
+    with (
+        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch('storage.org_service.OrgService.is_org_member', return_value=True),
+        patch(
+            'storage.org_service.UserStore.update_current_org',
+            return_value=mock_updated_user,
+        ),
+    ):
+        # Act
+        result = await OrgService.switch_org(user_id, org_id)
+
+        # Assert
+        assert result is not None
+        assert result.id == org_id
+        assert result.name == 'Target Organization'
+
+
+@pytest.mark.asyncio
+async def test_switch_org_org_not_found():
+    """
+    GIVEN: Organization does not exist
+    WHEN: switch_org is called
+    THEN: OrgNotFoundError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+
+    with patch('storage.org_service.OrgStore.get_org_by_id', return_value=None):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError) as exc_info:
+            await OrgService.switch_org(user_id, org_id)
+
+        assert str(org_id) in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_switch_org_user_not_member():
+    """
+    GIVEN: User is not a member of the organization
+    WHEN: switch_org is called
+    THEN: OrgAuthorizationError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    mock_org = Org(
+        id=org_id,
+        name='Target Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    with (
+        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch('storage.org_service.OrgService.is_org_member', return_value=False),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgAuthorizationError) as exc_info:
+            await OrgService.switch_org(user_id, org_id)
+
+        assert 'member' in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_switch_org_user_not_found():
+    """
+    GIVEN: User does not exist in database
+    WHEN: switch_org is called
+    THEN: OrgDatabaseError is raised
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    mock_org = Org(
+        id=org_id,
+        name='Target Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+    )
+
+    with (
+        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch('storage.org_service.OrgService.is_org_member', return_value=True),
+        patch('storage.org_service.UserStore.update_current_org', return_value=None),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgDatabaseError) as exc_info:
+            await OrgService.switch_org(user_id, org_id)
+
+        assert 'User not found' in str(exc_info.value)

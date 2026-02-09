@@ -603,3 +603,78 @@ async def remove_org_member(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to remove member',
         )
+
+
+@org_router.post(
+    '/{org_id}/switch', response_model=OrgResponse, status_code=status.HTTP_200_OK
+)
+async def switch_org(
+    org_id: UUID,
+    user_id: str = Depends(get_user_id),
+) -> OrgResponse:
+    """Switch to a different organization.
+
+    This endpoint allows authenticated users to switch their current active
+    organization. The user must be a member of the target organization.
+
+    Args:
+        org_id: Organization ID to switch to (UUID)
+        user_id: Authenticated user ID (injected by dependency)
+
+    Returns:
+        OrgResponse: The organization details that was switched to
+
+    Raises:
+        HTTPException: 422 if org_id is not a valid UUID (handled by FastAPI)
+        HTTPException: 403 if user is not a member of the organization
+        HTTPException: 404 if organization not found
+        HTTPException: 500 if switch fails
+    """
+    logger.info(
+        'Switching organization',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+        },
+    )
+
+    try:
+        # Use service layer to switch organization with membership validation
+        org = await OrgService.switch_org(
+            user_id=user_id,
+            org_id=org_id,
+        )
+
+        # Retrieve credits from LiteLLM for the new current org
+        credits = await OrgService.get_org_credits(user_id, org.id)
+
+        return OrgResponse.from_org(org, credits=credits, user_id=user_id)
+
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except OrgAuthorizationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except OrgDatabaseError as e:
+        logger.error(
+            'Database operation failed during organization switch',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to switch organization',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error switching organization',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
