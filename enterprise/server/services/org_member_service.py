@@ -12,6 +12,7 @@ from server.routes.org_models import (
     OrgMemberNotFoundError,
     OrgMemberPage,
     OrgMemberResponse,
+    OrgMemberUpdate,
     RoleNotFoundError,
 )
 from storage.org_member_store import OrgMemberStore
@@ -180,7 +181,7 @@ class OrgMemberService:
         org_id: UUID,
         target_user_id: UUID,
         current_user_id: UUID,
-        new_role_name: str | None = None,
+        update_data: OrgMemberUpdate,
     ) -> OrgMemberResponse:
         """Update a member's role in an organization.
 
@@ -194,7 +195,7 @@ class OrgMemberService:
             org_id: Organization ID
             target_user_id: User ID of the member to update
             current_user_id: User ID of the requester
-            new_role_name: New role name ('owner', 'admin', or 'user')
+            update_data: Update data containing fields to modify
 
         Returns:
             OrgMemberResponse: The updated member data
@@ -208,6 +209,7 @@ class OrgMemberService:
             LastOwnerError: If trying to demote the last owner
             MemberUpdateError: If update operation fails
         """
+        new_role_name = update_data.role
 
         def _update_member():
             # Get current user's membership in the org

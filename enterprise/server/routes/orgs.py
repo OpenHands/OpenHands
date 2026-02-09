@@ -634,7 +634,7 @@ async def update_org_member(
             org_id=UUID(org_id),
             target_user_id=UUID(user_id),
             current_user_id=UUID(current_user_id),
-            new_role_name=update_data.role,
+            update_data=update_data,
         )
     except OrgMemberNotFoundError as e:
         # Distinguish between requester not being a member vs target not found

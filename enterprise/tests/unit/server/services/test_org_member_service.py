@@ -13,6 +13,7 @@ from server.routes.org_models import (
     MeResponse,
     OrgMemberNotFoundError,
     OrgMemberResponse,
+    OrgMemberUpdate,
     RoleNotFoundError,
 )
 from server.services.org_member_service import OrgMemberService
@@ -1117,7 +1118,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Act
             data = await OrgMemberService.update_org_member(
-                org_id, target_user_id, current_user_id, new_role_name='admin'
+                org_id, target_user_id, current_user_id, OrgMemberUpdate(role='admin')
             )
 
             # Assert
@@ -1173,7 +1174,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Act
             data = await OrgMemberService.update_org_member(
-                org_id, target_user_id, current_user_id, new_role_name='admin'
+                org_id, target_user_id, current_user_id, OrgMemberUpdate(role='admin')
             )
 
             # Assert
@@ -1214,7 +1215,10 @@ class TestOrgMemberServiceUpdateOrgMember:
             # Act & Assert
             with pytest.raises(InsufficientPermissionError):
                 await OrgMemberService.update_org_member(
-                    org_id, target_user_id, current_user_id, new_role_name='user'
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='user'),
                 )
 
     @pytest.mark.asyncio
@@ -1251,7 +1255,10 @@ class TestOrgMemberServiceUpdateOrgMember:
             # Act & Assert
             with pytest.raises(InsufficientPermissionError):
                 await OrgMemberService.update_org_member(
-                    org_id, target_user_id, current_user_id, new_role_name='admin'
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='admin'),
                 )
 
     @pytest.mark.asyncio
@@ -1268,7 +1275,10 @@ class TestOrgMemberServiceUpdateOrgMember:
             # Act & Assert
             with pytest.raises(OrgMemberNotFoundError):
                 await OrgMemberService.update_org_member(
-                    org_id, target_user_id, current_user_id, new_role_name='user'
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='user'),
                 )
 
     @pytest.mark.asyncio
@@ -1285,7 +1295,10 @@ class TestOrgMemberServiceUpdateOrgMember:
             # Act & Assert
             with pytest.raises(CannotModifySelfError):
                 await OrgMemberService.update_org_member(
-                    org_id, current_user_id, current_user_id, new_role_name='user'
+                    org_id,
+                    current_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='user'),
                 )
 
     @pytest.mark.asyncio
@@ -1307,7 +1320,10 @@ class TestOrgMemberServiceUpdateOrgMember:
             # Act & Assert
             with pytest.raises(OrgMemberNotFoundError):
                 await OrgMemberService.update_org_member(
-                    org_id, target_user_id, current_user_id, new_role_name='user'
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='user'),
                 )
 
     @pytest.mark.asyncio
@@ -1344,7 +1360,10 @@ class TestOrgMemberServiceUpdateOrgMember:
             # Act & Assert
             with pytest.raises(InvalidRoleError):
                 await OrgMemberService.update_org_member(
-                    org_id, target_user_id, current_user_id, new_role_name='superuser'
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='superuser'),
                 )
 
     @pytest.mark.asyncio
@@ -1389,7 +1408,10 @@ class TestOrgMemberServiceUpdateOrgMember:
             # Act & Assert
             with pytest.raises(LastOwnerError):
                 await OrgMemberService.update_org_member(
-                    org_id, target_user_id, current_user_id, new_role_name='admin'
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='admin'),
                 )
 
     @pytest.mark.asyncio
@@ -1428,7 +1450,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Act
             data = await OrgMemberService.update_org_member(
-                org_id, target_user_id, current_user_id, new_role_name=None
+                org_id, target_user_id, current_user_id, OrgMemberUpdate(role=None)
             )
 
             # Assert
