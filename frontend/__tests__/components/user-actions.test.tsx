@@ -1,10 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach, beforeEach, test } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { ReactElement } from "react";
 import { UserActions } from "#/components/features/sidebar/user-actions";
+import { organizationService } from "#/api/organization-service/organization-service.api";
+import { MOCK_PERSONAL_ORG, MOCK_TEAM_ORG_ACME } from "#/mocks/org-handlers";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 import { renderWithProviders } from "../../test-utils";
 
 vi.mock("react-router", async (importActual) => ({
@@ -14,6 +17,26 @@ vi.mock("react-router", async (importActual) => ({
     revalidate: vi.fn(),
   }),
 }));
+
+vi.mock("react-i18next", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => {
+        const translations: Record<string, string> = {
+          ORG$SELECT_ORGANIZATION_PLACEHOLDER: "Please select an organization",
+          ORG$PERSONAL_WORKSPACE: "Personal Workspace",
+        };
+        return translations[key] || key;
+      },
+      i18n: {
+        changeLanguage: vi.fn(),
+      },
+    }),
+  };
+});
 
 const renderUserActions = (props = { hasAvatar: true }) => {
   render(
@@ -43,7 +66,7 @@ const useIsAuthedMock = vi
 
 const useConfigMock = vi
   .fn()
-  .mockReturnValue({ data: { APP_MODE: "saas" }, isLoading: false });
+  .mockReturnValue({ data: { app_mode: "saas" }, isLoading: false });
 
 const useUserProvidersMock = vi
   .fn()
@@ -75,7 +98,7 @@ describe("UserActions", () => {
     // Reset all mocks to default values before each test
     useIsAuthedMock.mockReturnValue({ data: true, isLoading: false });
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "saas" },
+      data: { app_mode: "saas" },
       isLoading: false,
     });
     useUserProvidersMock.mockReturnValue({
@@ -100,7 +123,7 @@ describe("UserActions", () => {
     useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
     // Keep other mocks with default values
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "saas" },
+      data: { app_mode: "saas" },
       isLoading: false,
     });
     useUserProvidersMock.mockReturnValue({
@@ -139,7 +162,7 @@ describe("UserActions", () => {
     useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
     // Keep other mocks with default values
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "saas" },
+      data: { app_mode: "saas" },
       isLoading: false,
     });
     useUserProvidersMock.mockReturnValue({
@@ -165,7 +188,7 @@ describe("UserActions", () => {
     useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
     // Keep other mocks with default values
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "saas" },
+      data: { app_mode: "saas" },
       isLoading: false,
     });
     useUserProvidersMock.mockReturnValue({
@@ -186,7 +209,7 @@ describe("UserActions", () => {
     useIsAuthedMock.mockReturnValue({ data: true, isLoading: false });
     // Ensure config and providers are set correctly
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "saas" },
+      data: { app_mode: "saas" },
       isLoading: false,
     });
     useUserProvidersMock.mockReturnValue({
@@ -213,7 +236,7 @@ describe("UserActions", () => {
     // Start with authentication and providers
     useIsAuthedMock.mockReturnValue({ data: true, isLoading: false });
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "saas" },
+      data: { app_mode: "saas" },
       isLoading: false,
     });
     useUserProvidersMock.mockReturnValue({
@@ -233,7 +256,7 @@ describe("UserActions", () => {
     useIsAuthedMock.mockReturnValue({ data: false, isLoading: false });
     // Keep other mocks with default values
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "saas" },
+      data: { app_mode: "saas" },
       isLoading: false,
     });
     useUserProvidersMock.mockReturnValue({
@@ -257,6 +280,16 @@ describe("UserActions", () => {
   });
 
   it("should work with loading state and user provided", async () => {
+    // Ensure authentication and providers are set correctly
+    useIsAuthedMock.mockReturnValue({ data: true, isLoading: false });
+    useConfigMock.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
+    });
+    useUserProvidersMock.mockReturnValue({
+      providers: [{ id: "github", name: "GitHub" }],
+    });
+
     renderUserActions();
     const userActions = screen.getByTestId("user-actions");
     await user.hover(userActions);
@@ -310,5 +343,113 @@ describe("UserActions", () => {
 
     // Menu should be visible on hover (CSS classes change via group-hover)
     expect(contextMenu).toBeVisible();
+  });
+
+  it("should have pointer-events-none on hover bridge pseudo-element to allow menu item clicks", async () => {
+    renderUserActions();
+
+    const userActions = screen.getByTestId("user-actions");
+    await user.hover(userActions);
+
+    const contextMenu = screen.getByTestId("user-context-menu");
+    const hoverBridgeContainer = contextMenu.parentElement;
+
+    // The hover bridge uses a ::before pseudo-element for diagonal mouse movement
+    // This pseudo-element MUST have pointer-events-none to allow clicks through to menu items
+    // The class should include "before:pointer-events-none" to prevent the hover bridge from blocking clicks
+    expect(hoverBridgeContainer?.className).toContain(
+      "before:pointer-events-none",
+    );
+  });
+
+  describe("Org selector dropdown state reset when context menu hides", () => {
+    // These tests verify that the org selector dropdown resets its internal
+    // state (search text, open/closed) when the context menu hides and
+    // reappears. Without this, stale state persists because the context
+    // menu is hidden via CSS (opacity/pointer-events) rather than unmounted.
+
+    beforeEach(() => {
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+        MOCK_PERSONAL_ORG,
+        MOCK_TEAM_ORG_ACME,
+      ]);
+      useSelectedOrganizationStore.setState({ organizationId: null });
+    });
+
+    it("should reset org selector search text when context menu hides and reappears", async () => {
+      renderUserActions();
+      const userActions = screen.getByTestId("user-actions");
+
+      // Hover to show context menu
+      await user.hover(userActions);
+
+      // Wait for orgs to load and auto-select
+      await waitFor(() => {
+        expect(screen.getByRole("combobox")).toHaveValue(
+          MOCK_PERSONAL_ORG.name,
+        );
+      });
+
+      // Open dropdown and type search text
+      const trigger = screen.getByTestId("dropdown-trigger");
+      await user.click(trigger);
+      const input = screen.getByRole("combobox");
+      await user.clear(input);
+      await user.type(input, "search text");
+      expect(input).toHaveValue("search text");
+
+      // Unhover to hide context menu, then hover again
+      await user.unhover(userActions);
+      await user.hover(userActions);
+
+      // Org selector should be reset — showing selected org name, not search text
+      await waitFor(() => {
+        expect(screen.getByRole("combobox")).toHaveValue(
+          MOCK_PERSONAL_ORG.name,
+        );
+      });
+    });
+
+    it("should reset dropdown to collapsed state when context menu hides and reappears", async () => {
+      renderUserActions();
+      const userActions = screen.getByTestId("user-actions");
+
+      // Hover to show context menu
+      await user.hover(userActions);
+
+      // Wait for orgs to load
+      await waitFor(() => {
+        expect(screen.getByRole("combobox")).toHaveValue(
+          MOCK_PERSONAL_ORG.name,
+        );
+      });
+
+      // Open dropdown and type to change its state
+      const trigger = screen.getByTestId("dropdown-trigger");
+      await user.click(trigger);
+      const input = screen.getByRole("combobox");
+      await user.clear(input);
+      await user.type(input, "Acme");
+      expect(input).toHaveValue("Acme");
+
+      // Unhover to hide context menu, then hover again
+      await user.unhover(userActions);
+      await user.hover(userActions);
+
+      // Wait for fresh component with org data
+      await waitFor(() => {
+        expect(screen.getByRole("combobox")).toHaveValue(
+          MOCK_PERSONAL_ORG.name,
+        );
+      });
+
+      // Dropdown should be collapsed (closed) after reset
+      expect(screen.getByTestId("dropdown-trigger")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+      // No option elements should be rendered
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+    });
   });
 });

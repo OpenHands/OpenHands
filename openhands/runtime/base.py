@@ -1,3 +1,10 @@
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
+# This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
+# OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
+#   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
+#   - V1 application server (in this repo): openhands/app_server/
+# Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
+# Tag: Legacy-V0
 import asyncio
 import atexit
 import copy
@@ -8,6 +15,7 @@ import shlex
 import shutil
 import string
 import tempfile
+import time
 from abc import abstractmethod
 from pathlib import Path
 from types import MappingProxyType
@@ -77,6 +85,11 @@ from openhands.utils.async_utils import (
 )
 
 DISABLE_VSCODE_PLUGIN = os.getenv('DISABLE_VSCODE_PLUGIN', 'false').lower() == 'true'
+
+# Command retry config for bash session busy race condition (issue #12265)
+CMD_RETRY_MAX_ATTEMPTS = 3
+CMD_RETRY_BASE_DELAY_SECONDS = 1.0
+CMD_RETRY_TIMEOUT_EXIT_CODE = -1
 
 
 def _default_env_vars(sandbox_config: SandboxConfig) -> dict[str, str]:
@@ -242,11 +255,68 @@ class Runtime(FileEditRuntimeMixin):
         self, runtime_status: RuntimeStatus, msg: str = '', level: str = 'info'
     ):
         """Sends a status message if the callback function was provided."""
+
         self.runtime_status = runtime_status
         if self.status_callback:
             self.status_callback(level, runtime_status, msg)
 
-    # ====================================================================
+    def _is_bash_session_timeout(self, obs: Observation) -> bool:
+        return (
+            isinstance(obs, CmdOutputObservation)
+            and obs.exit_code == CMD_RETRY_TIMEOUT_EXIT_CODE
+        )
+
+    def _calculate_retry_delay(self, attempt: int) -> float:
+        return CMD_RETRY_BASE_DELAY_SECONDS * (2**attempt)
+
+    def _run_cmd_with_retry(
+        self,
+        cmd: str,
+        error_context: str,
+        max_retries: int = CMD_RETRY_MAX_ATTEMPTS,
+    ) -> CmdOutputObservation:
+        """Run command with exponential backoff retry on bash session timeout."""
+
+        if not cmd or not cmd.strip():
+            raise ValueError('Command cannot be empty')
+        if max_retries < 1:
+            raise ValueError('max_retries must be at least 1')
+
+        last_obs: Observation | None = None
+
+        for attempt in range(max_retries):
+            obs = self.run(CmdRunAction(cmd))
+
+            if isinstance(obs, CmdOutputObservation) and obs.exit_code == 0:
+                if attempt > 0:
+                    logger.info(f'Command succeeded after {attempt + 1} attempts')
+                return obs
+
+            last_obs = obs
+            is_retryable = self._is_bash_session_timeout(obs)
+
+            if is_retryable and attempt < max_retries - 1:
+                delay = self._calculate_retry_delay(attempt)
+                logger.warning(
+                    f'Bash session busy, retrying in {delay:.1f}s '
+                    f'(attempt {attempt + 1}/{max_retries})'
+                )
+                time.sleep(delay)
+                continue
+
+            break
+
+        error_content = self._extract_error_content(last_obs)
+        raise RuntimeError(f'{error_context}: {error_content}')
+
+    def _extract_error_content(self, obs: Observation | None) -> str:
+        if obs is None:
+            return 'No observation received'
+        if isinstance(obs, CmdOutputObservation):
+            return f'{obs.content} (exit_code={obs.exit_code})'
+        if isinstance(obs, ErrorObservation):
+            return obs.content
+        return str(obs)
 
     def add_env_vars(self, env_vars: dict[str, str]) -> None:
         env_vars = {key.upper(): value for key, value in env_vars.items()}
@@ -282,11 +352,9 @@ class Runtime(FileEditRuntimeMixin):
             cmd = cmd.strip()
             logger.debug('Adding env vars to PowerShell')  # don't log the values
 
-            obs = self.run(CmdRunAction(cmd))
-            if not isinstance(obs, CmdOutputObservation) or obs.exit_code != 0:
-                raise RuntimeError(
-                    f'Failed to add env vars [{env_vars.keys()}] to environment: {obs.content}'
-                )
+            self._run_cmd_with_retry(
+                cmd, f'Failed to add env vars [{env_vars.keys()}] to environment'
+            )
 
             # We don't add to profile persistence on Windows as it's more complex
             # and varies between PowerShell versions
@@ -308,20 +376,16 @@ class Runtime(FileEditRuntimeMixin):
             cmd = cmd.strip()
             logger.debug('Adding env vars to bash')  # don't log the values
 
-            obs = self.run(CmdRunAction(cmd))
-            if not isinstance(obs, CmdOutputObservation) or obs.exit_code != 0:
-                raise RuntimeError(
-                    f'Failed to add env vars [{env_vars.keys()}] to environment: {obs.content}'
-                )
+            self._run_cmd_with_retry(
+                cmd, f'Failed to add env vars [{env_vars.keys()}] to environment'
+            )
 
             # Add to .bashrc for persistence
             bashrc_cmd = bashrc_cmd.strip()
             logger.debug(f'Adding env var to .bashrc: {env_vars.keys()}')
-            obs = self.run(CmdRunAction(bashrc_cmd))
-            if not isinstance(obs, CmdOutputObservation) or obs.exit_code != 0:
-                raise RuntimeError(
-                    f'Failed to add env vars [{env_vars.keys()}] to .bashrc: {obs.content}'
-                )
+            self._run_cmd_with_retry(
+                bashrc_cmd, f'Failed to add env vars [{env_vars.keys()}] to .bashrc'
+            )
 
     def on_event(self, event: Event) -> None:
         if isinstance(event, Action):

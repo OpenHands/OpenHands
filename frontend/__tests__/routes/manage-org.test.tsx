@@ -11,6 +11,7 @@ import { resetOrgMockData } from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 import BillingService from "#/api/billing-service/billing-service.api";
 import { OrganizationMember } from "#/types/org";
+import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
 
 function ManageOrgWithPortalRoot() {
   return (
@@ -53,6 +54,26 @@ const renderManageOrg = () =>
 const { navigateMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
 }));
+
+vi.mock("react-i18next", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => {
+        const translations: Record<string, string> = {
+          "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
+          "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+        };
+        return translations[key] || key;
+      },
+      i18n: {
+        changeLanguage: vi.fn(),
+      },
+    }),
+  };
+});
 
 vi.mock("react-router", async () => ({
   ...(await vi.importActual("react-router")),
@@ -107,10 +128,20 @@ describe("Manage Org Route", () => {
   };
 
   beforeEach(() => {
+    // Reset Zustand store to ensure clean state before each test
+    useSelectedOrganizationStore.setState({ organizationId: null });
+
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    // @ts-expect-error - only return APP_MODE for these tests
+    // @ts-expect-error - partial mock for testing
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "saas",
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: true, // Enable billing by default so billing UI is shown
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+      },
     });
 
     // Set default mock for user (owner role has all permissions)
@@ -121,6 +152,8 @@ describe("Manage Org Route", () => {
     vi.clearAllMocks();
     // Reset organization mock data to ensure clean state between tests
     resetOrgMockData();
+    // Reset Zustand store to ensure clean state between tests
+    useSelectedOrganizationStore.setState({ organizationId: null });
     vi.clearAllMocks();
   });
 
@@ -132,18 +165,19 @@ describe("Manage Org Route", () => {
 
     await waitFor(() => {
       const credits = screen.getByTestId("available-credits");
-      expect(credits).toHaveTextContent("1000");
+      expect(credits).toHaveTextContent("100");
     });
   });
 
   it("should render account details", async () => {
     renderManageOrg();
+    await screen.findByTestId("manage-org-screen");
 
     await selectOrganization({ orgIndex: 0 });
 
     await waitFor(() => {
       const orgName = screen.getByTestId("org-name");
-      expect(orgName).toHaveTextContent("Acme Corp");
+      expect(orgName).toHaveTextContent("Personal Workspace");
 
       const billingInfo = screen.getByTestId("billing-info");
       expect(billingInfo).toHaveTextContent("**** **** **** 1234");
@@ -526,7 +560,7 @@ describe("Manage Org Route", () => {
     renderManageOrg();
     await screen.findByTestId("manage-org-screen");
 
-    await selectOrganization({ orgIndex: 2 }); // user is admin in org 3
+    await selectOrganization({ orgIndex: 3 }); // user is admin in org 4 (All Hands AI)
 
     // Verify credits are shown
     await waitFor(() => {
@@ -549,7 +583,7 @@ describe("Manage Org Route", () => {
 
       // @ts-expect-error - only return the properties we need for this test
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas", // required to enable getMe
+        app_mode: "saas", // required to enable getMe
       });
 
       renderManageOrg();
@@ -558,7 +592,9 @@ describe("Manage Org Route", () => {
       await selectOrganization({ orgIndex: 0 });
 
       const orgName = screen.getByTestId("org-name");
-      await waitFor(() => expect(orgName).toHaveTextContent("Acme Corp"));
+      await waitFor(() =>
+        expect(orgName).toHaveTextContent("Personal Workspace"),
+      );
 
       expect(
         screen.queryByTestId("update-org-name-form"),
@@ -598,7 +634,7 @@ describe("Manage Org Route", () => {
       renderManageOrg();
       await screen.findByTestId("manage-org-screen");
 
-      await selectOrganization({ orgIndex: 2 }); // user is admin in org 3
+      await selectOrganization({ orgIndex: 3 }); // user is admin in org 4 (All Hands AI)
 
       const orgName = screen.getByTestId("org-name");
       const changeOrgNameButton = within(orgName).queryByRole("button", {
@@ -613,13 +649,13 @@ describe("Manage Org Route", () => {
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
       // @ts-expect-error - only return the properties we need for this test
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas", // required to enable getMe
+        app_mode: "saas", // required to enable getMe
       });
 
       renderManageOrg();
       await screen.findByTestId("manage-org-screen");
 
-      await selectOrganization({ orgIndex: 2 }); // user is admin in org 3
+      await selectOrganization({ orgIndex: 3 }); // user is admin in org 4 (All Hands AI)
 
       const deleteOrgButton = screen.queryByRole("button", {
         name: /ORG\$DELETE_ORGANIZATION/i,
@@ -733,21 +769,104 @@ describe("Manage Org Route", () => {
     });
   });
 
-  describe("HIDE_BILLING feature flag", () => {
-    it("should hide credits section when HIDE_BILLING is true", async () => {
+  describe("enable_billing feature flag", () => {
+    it("should show credits section when enable_billing is true", async () => {
       // Arrange
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - partial mock for testing
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test",
-        POSTHOG_CLIENT_KEY: "test",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          HIDE_BILLING: true,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
+      });
+
+      // Act
+      renderManageOrg();
+      await screen.findByTestId("manage-org-screen");
+      await selectOrganization({ orgIndex: 0 });
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByTestId("available-credits")).toBeInTheDocument();
+      });
+
+      getConfigSpy.mockRestore();
+    });
+
+    it("should show billing information section when enable_billing is true", async () => {
+      // Arrange
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - partial mock for testing
+      getConfigSpy.mockResolvedValue({
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
+      });
+
+      // Act
+      renderManageOrg();
+      await screen.findByTestId("manage-org-screen");
+      await selectOrganization({ orgIndex: 0 });
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByTestId("billing-info")).toBeInTheDocument();
+      });
+
+      getConfigSpy.mockRestore();
+    });
+
+    it("should show Add Credits button when enable_billing is true", async () => {
+      // Arrange
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - partial mock for testing
+      getConfigSpy.mockResolvedValue({
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
+      });
+
+      // Act
+      renderManageOrg();
+      await screen.findByTestId("manage-org-screen");
+      await selectOrganization({ orgIndex: 0 });
+
+      // Assert
+      await waitFor(() => {
+        const addButton = screen.getByText(/add/i);
+        expect(addButton).toBeInTheDocument();
+      });
+
+      getConfigSpy.mockRestore();
+    });
+
+    it("should hide all billing-related elements when enable_billing is false", async () => {
+      // Arrange
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+      // @ts-expect-error - partial mock for testing
+      getConfigSpy.mockResolvedValue({
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 
@@ -761,99 +880,8 @@ describe("Manage Org Route", () => {
         expect(
           screen.queryByTestId("available-credits"),
         ).not.toBeInTheDocument();
-      });
-
-      getConfigSpy.mockRestore();
-    });
-
-    it("should hide billing information section when HIDE_BILLING is true", async () => {
-      // Arrange
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test",
-        POSTHOG_CLIENT_KEY: "test",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          HIDE_BILLING: true,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
-        },
-      });
-
-      // Act
-      renderManageOrg();
-      await screen.findByTestId("manage-org-screen");
-      await selectOrganization({ orgIndex: 0 });
-
-      // Assert
-      await waitFor(() => {
         expect(screen.queryByTestId("billing-info")).not.toBeInTheDocument();
-      });
-
-      getConfigSpy.mockRestore();
-    });
-
-    it("should hide Add Credits button when HIDE_BILLING is true", async () => {
-      // Arrange
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test",
-        POSTHOG_CLIENT_KEY: "test",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          HIDE_BILLING: true,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
-        },
-      });
-
-      // Act
-      renderManageOrg();
-      await screen.findByTestId("manage-org-screen");
-      await selectOrganization({ orgIndex: 0 });
-
-      // Assert
-      await waitFor(() => {
-        const addButton = screen.queryByText(/add/i);
-        expect(addButton).not.toBeInTheDocument();
-      });
-
-      getConfigSpy.mockRestore();
-    });
-
-    it("should show all billing-related elements when HIDE_BILLING is false", async () => {
-      // Arrange
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test",
-        POSTHOG_CLIENT_KEY: "test",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          HIDE_BILLING: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
-        },
-      });
-
-      // Act
-      renderManageOrg();
-      await screen.findByTestId("manage-org-screen");
-      await selectOrganization({ orgIndex: 0 });
-
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByTestId("available-credits")).toBeInTheDocument();
-        expect(screen.getByTestId("billing-info")).toBeInTheDocument();
-        expect(screen.getByText(/add/i)).toBeInTheDocument();
+        expect(screen.queryByText(/add/i)).not.toBeInTheDocument();
       });
 
       getConfigSpy.mockRestore();

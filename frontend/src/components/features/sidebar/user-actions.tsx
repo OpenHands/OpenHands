@@ -14,6 +14,10 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
   const { data: me } = useMe();
   const [accountContextMenuIsVisible, setAccountContextMenuIsVisible] =
     React.useState(false);
+  // Counter that increments each time the menu hides, used as a React key
+  // to force UserContextMenu to remount with fresh state (resets dropdown
+  // open/close, search text, and scroll position in the org selector).
+  const [menuResetCount, setMenuResetCount] = React.useState(0);
 
   // Use the shared hook to determine if user actions should be shown
   const shouldShowUserActions = useShouldShowUserFeatures();
@@ -24,11 +28,13 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
 
   const hideAccountMenu = () => {
     setAccountContextMenuIsVisible(false);
+    setMenuResetCount((c) => c + 1);
   };
 
   const closeAccountMenu = () => {
     if (accountContextMenuIsVisible) {
       setAccountContextMenuIsVisible(false);
+      setMenuResetCount((c) => c + 1);
     }
   };
 
@@ -48,10 +54,11 @@ export function UserActions({ user, isLoading }: UserActionsProps) {
             accountContextMenuIsVisible && "opacity-100 pointer-events-auto",
             // Invisible hover bridge: extends hover zone to create a "safe corridor"
             // for diagonal mouse movement to the menu (only active when menu is visible)
-            "group-hover:before:content-[''] group-hover:before:block group-hover:before:absolute group-hover:before:inset-[-320px] group-hover:before:z-50",
+            "group-hover:before:content-[''] group-hover:before:block group-hover:before:absolute group-hover:before:inset-[-320px] group-hover:before:z-50 before:pointer-events-none",
           )}
         >
           <UserContextMenu
+            key={menuResetCount}
             type={me?.role ?? "member"}
             onClose={closeAccountMenu}
           />

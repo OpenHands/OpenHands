@@ -6,10 +6,11 @@ Thanks for your interest in contributing to OpenHands! We welcome and appreciate
 
 To understand the codebase, please refer to the README in each module:
 - [frontend](./frontend/README.md)
-- [evaluation](./evaluation/README.md)
 - [openhands](./openhands/README.md)
    - [agenthub](./openhands/agenthub/README.md)
    - [server](./openhands/server/README.md)
+
+For benchmarks and evaluation, see the [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks) repository.
 
 ## Setting up Your Development Environment
 

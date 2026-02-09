@@ -6,7 +6,11 @@ import { MemoryRouter } from "react-router";
 import { UserContextMenu } from "#/components/features/user/user-context-menu";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { GetComponentPropTypes } from "#/utils/get-component-prop-types";
-import { INITIAL_MOCK_ORGS } from "#/mocks/org-handlers";
+import {
+  INITIAL_MOCK_ORGS,
+  MOCK_PERSONAL_ORG,
+  MOCK_TEAM_ORG_ACME,
+} from "#/mocks/org-handlers";
 import AuthService from "#/api/auth-service/auth-service.api";
 import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import OptionService from "#/api/option-service/option-service.api";
@@ -73,9 +77,30 @@ const seedActiveUser = (user: Partial<OrganizationMember>) => {
   );
 };
 
+vi.mock("react-i18next", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => {
+        const translations: Record<string, string> = {
+          "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
+          "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+        };
+        return translations[key] || key;
+      },
+      i18n: {
+        changeLanguage: vi.fn(),
+      },
+    }),
+  };
+});
+
 describe("UserContextMenu", () => {
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    navigateMock.mockClear();
   });
 
   it("should render the default context items for a user", () => {
@@ -93,18 +118,17 @@ describe("UserContextMenu", () => {
     expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
   });
 
-  it("should NOT render the 'Billing' Nav Item from SAAS_NAV_ITEMS when user role is member", async () => {
+  it("should render navigation items from SAAS_NAV_ITEMS (except organization-members/org)", async () => {
+    // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test",
-      POSTHOG_CLIENT_KEY: "test",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: true,
-        HIDE_LLM_SETTINGS: false,
-        HIDE_BILLING: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      posthog_client_key: "test",
+      feature_flags: {
+        enable_billing: true,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
 
@@ -124,17 +148,16 @@ describe("UserContextMenu", () => {
   });
 
   it("should render navigation items from SAAS_NAV_ITEMS when user role is admin (except organization-members/org)", async () => {
+    // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test",
-      POSTHOG_CLIENT_KEY: "test",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: true,
-        HIDE_LLM_SETTINGS: false,
-        HIDE_BILLING: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      posthog_client_key: "test",
+      feature_flags: {
+        enable_billing: true,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
 
@@ -172,17 +195,16 @@ describe("UserContextMenu", () => {
 
   describe("OSS mode", () => {
     beforeEach(() => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "oss",
-        GITHUB_CLIENT_ID: "test",
-        POSTHOG_CLIENT_KEY: "test",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          HIDE_BILLING: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "oss",
+        posthog_client_key: "test",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
     });
@@ -220,17 +242,16 @@ describe("UserContextMenu", () => {
 
   describe("HIDE_LLM_SETTINGS feature flag", () => {
     it("should hide LLM settings link when HIDE_LLM_SETTINGS is true", async () => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test",
-        POSTHOG_CLIENT_KEY: "test",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: true,
-          HIDE_BILLING: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "saas",
+        posthog_client_key: "test",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: true,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 
@@ -247,17 +268,16 @@ describe("UserContextMenu", () => {
     });
 
     it("should show LLM settings link when HIDE_LLM_SETTINGS is false", async () => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test",
-        POSTHOG_CLIENT_KEY: "test",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          HIDE_BILLING: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "saas",
+        posthog_client_key: "test",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 
@@ -300,17 +320,16 @@ describe("UserContextMenu", () => {
   });
 
   it("should have correct navigation links for nav items", async () => {
+    // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test",
-      POSTHOG_CLIENT_KEY: "test",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: false,
-        HIDE_BILLING: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      posthog_client_key: "test",
+      feature_flags: {
+        enable_billing: true, // Enable billing so billing link is shown
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
 
@@ -343,9 +362,15 @@ describe("UserContextMenu", () => {
   });
 
   it("should navigate to /settings/org-members when Manage Organization Members is clicked", async () => {
+    // Mock a team org so org management buttons are visible (not personal org)
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+      MOCK_TEAM_ORG_ACME,
+    ]);
+
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
-    const manageOrganizationMembersButton = screen.getByText(
+    // Wait for orgs to load so org management buttons are visible
+    const manageOrganizationMembersButton = await screen.findByText(
       "ORG$MANAGE_ORGANIZATION_MEMBERS",
     );
     await userEvent.click(manageOrganizationMembersButton);
@@ -356,9 +381,15 @@ describe("UserContextMenu", () => {
   });
 
   it("should navigate to /settings/org when Manage Account is clicked", async () => {
+    // Mock a team org so org management buttons are visible (not personal org)
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+      MOCK_TEAM_ORG_ACME,
+    ]);
+
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
-    const manageAccountButton = screen.getByText("ORG$MANAGE_ACCOUNT");
+    // Wait for orgs to load so org management buttons are visible
+    const manageAccountButton = await screen.findByText("ORG$MANAGE_ACCOUNT");
     await userEvent.click(manageAccountButton);
 
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings/org");
@@ -380,6 +411,11 @@ describe("UserContextMenu", () => {
   });
 
   it("should call the onClose handler after each action", async () => {
+    // Mock a team org so org management buttons are visible
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+      MOCK_TEAM_ORG_ACME,
+    ]);
+
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "owner", onClose: onCloseMock });
 
@@ -387,7 +423,8 @@ describe("UserContextMenu", () => {
     await userEvent.click(logoutButton);
     expect(onCloseMock).toHaveBeenCalledTimes(1);
 
-    const manageOrganizationMembersButton = screen.getByText(
+    // Wait for orgs to load so org management buttons are visible
+    const manageOrganizationMembersButton = await screen.findByText(
       "ORG$MANAGE_ORGANIZATION_MEMBERS",
     );
     await userEvent.click(manageOrganizationMembersButton);
@@ -396,6 +433,69 @@ describe("UserContextMenu", () => {
     const manageAccountButton = screen.getByText("ORG$MANAGE_ACCOUNT");
     await userEvent.click(manageAccountButton);
     expect(onCloseMock).toHaveBeenCalledTimes(3);
+  });
+
+  describe("Personal org vs team org visibility", () => {
+    it("should not show Organization and Organization Members settings items when personal org is selected", async () => {
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+        MOCK_PERSONAL_ORG,
+      ]);
+      vi.spyOn(organizationService, "getMe").mockResolvedValue({
+        org_id: "1",
+        user_id: "99",
+        email: "me@test.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      // Pre-select the personal org in the Zustand store
+      useSelectedOrganizationStore.setState({ organizationId: "1" });
+
+      renderUserContextMenu({ type: "admin", onClose: vi.fn });
+
+      // Wait for org selector to load and org management buttons to disappear
+      // (they disappear when personal org is selected)
+      await waitFor(() => {
+        expect(
+          screen.queryByText("ORG$MANAGE_ORGANIZATION_MEMBERS"),
+        ).not.toBeInTheDocument();
+      });
+
+      expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
+    });
+
+    it("should not show Billing settings item when team org is selected", async () => {
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+        MOCK_TEAM_ORG_ACME,
+      ]);
+      vi.spyOn(organizationService, "getMe").mockResolvedValue({
+        org_id: "1",
+        user_id: "99",
+        email: "me@test.com",
+        role: "admin",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      renderUserContextMenu({ type: "admin", onClose: vi.fn });
+
+      // Wait for org selector to load and billing to disappear
+      // (billing disappears when team org is selected)
+      await waitFor(() => {
+        expect(
+          screen.queryByText("SETTINGS$NAV_BILLING"),
+        ).not.toBeInTheDocument();
+      });
+    });
   });
 
   it("should render the invite user modal when Invite Organization Member is clicked", async () => {
@@ -417,55 +517,32 @@ describe("UserContextMenu", () => {
   });
 
   test("the user can change orgs", async () => {
+    const user = userEvent.setup();
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "member", onClose: onCloseMock });
 
     const orgSelector = screen.getByTestId("org-selector");
     expect(orgSelector).toBeInTheDocument();
 
-    // Simulate changing the organization
-    await userEvent.click(orgSelector);
-    const orgOption = screen.getByText(INITIAL_MOCK_ORGS[1].name);
-    await userEvent.click(orgOption);
+    // Wait for organizations to load (indicated by org name appearing in the dropdown)
+    // INITIAL_MOCK_ORGS[0] is a personal org, so it displays "Personal Workspace"
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("Personal Workspace");
+    });
+
+    // Open the dropdown by clicking the trigger
+    const trigger = screen.getByTestId("dropdown-trigger");
+    await user.click(trigger);
+
+    // Select a different organization
+    const orgOption = screen.getByRole("option", {
+      name: INITIAL_MOCK_ORGS[1].name,
+    });
+    await user.click(orgOption);
 
     expect(onCloseMock).not.toHaveBeenCalled();
 
     // Verify that the dropdown shows the selected organization
-    // The dropdown should now display the selected org name
-    expect(orgSelector).toHaveValue(INITIAL_MOCK_ORGS[1].name);
-  });
-
-  it("should have Personal Account as the default selected option with null value", async () => {
-    const onCloseMock = vi.fn();
-    renderUserContextMenu({ type: "member", onClose: onCloseMock });
-
-    const orgSelector = screen.getByTestId("org-selector");
-
-    // Should default to "Personal Account" when orgId is null
-    expect(orgSelector).toHaveValue("Personal Account");
-
-    // Click to open dropdown
-    await userEvent.click(orgSelector);
-
-    // Should have "Personal Account" as an option
-    const personalAccountOption = screen.getByText("Personal Account");
-    expect(personalAccountOption).toBeInTheDocument();
-
-    // Select an organization
-    const orgOption = screen.getByText(INITIAL_MOCK_ORGS[1].name);
-    await userEvent.click(orgOption);
-
-    // Should now show the selected organization
-    expect(orgSelector).toHaveValue(INITIAL_MOCK_ORGS[1].name);
-
-    // Click to open dropdown again
-    await userEvent.click(orgSelector);
-
-    // Click on Personal Account to go back
-    const personalAccountOptionAgain = screen.getByText("Personal Account");
-    await userEvent.click(personalAccountOptionAgain);
-
-    // Should show "Personal Account" after going back
-    expect(orgSelector).toHaveValue("Personal Account");
+    expect(screen.getByRole("combobox")).toHaveValue(INITIAL_MOCK_ORGS[1].name);
   });
 });

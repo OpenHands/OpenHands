@@ -1,4 +1,4 @@
-import { GetConfigResponse } from "#/api/option-service/option.types";
+import { WebClientConfig } from "#/api/option-service/option.types";
 
 /**
  * Determines whether billing should be hidden based on feature flags and user permissions.
@@ -11,9 +11,9 @@ import { GetConfigResponse } from "#/api/option-service/option.types";
  * @param hasViewBillingPermission - Whether the current user has the view_billing permission.
  */
 export function isBillingHidden(
-  config: GetConfigResponse | undefined,
+  config: WebClientConfig | undefined,
   hasViewBillingPermission: boolean,
 ): boolean {
   if (!config) return true;
-  return !!config.FEATURE_FLAGS?.HIDE_BILLING || !hasViewBillingPermission;
+  return !config.feature_flags?.enable_billing || !hasViewBillingPermission;
 }

@@ -126,6 +126,7 @@ async def on_conversation_update(
         pr_number=existing.pr_number,
         # Preserve parent/child relationship and other metadata
         parent_conversation_id=existing.parent_conversation_id,
+        metrics=conversation_info.stats.get_combined_metrics(),
     )
     await app_conversation_info_service.save_app_conversation_info(
         app_conversation_info

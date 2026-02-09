@@ -6,62 +6,53 @@ from storage.api_key_store import ApiKeyStore
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member import OrgMember
 from storage.org_member_store import OrgMemberStore
+from storage.org_service import OrgService
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
-from openhands.utils.async_utils import call_sync_from_async
 
 
 # Helper functions for BYOR API key management
 async def get_byor_key_from_db(user_id: str) -> str | None:
     """Get the BYOR key from the database for a user."""
-
-    def _get_byor_key():
-        user = UserStore.get_user_by_id(user_id)
-        if not user:
-            return None
-
-        current_org_id = user.current_org_id
-        current_org_member: OrgMember = None
-        for org_member in user.org_members:
-            if org_member.org_id == current_org_id:
-                current_org_member = org_member
-                break
-        if not current_org_member:
-            return None
-        if current_org_member.llm_api_key_for_byor:
-            return current_org_member.llm_api_key_for_byor.get_secret_value()
+    user = await UserStore.get_user_by_id_async(user_id)
+    if not user:
         return None
 
-    return await call_sync_from_async(_get_byor_key)
+    current_org_id = user.current_org_id
+    current_org_member: OrgMember = None
+    for org_member in user.org_members:
+        if org_member.org_id == current_org_id:
+            current_org_member = org_member
+            break
+    if not current_org_member:
+        return None
+    if current_org_member.llm_api_key_for_byor:
+        return current_org_member.llm_api_key_for_byor.get_secret_value()
+    return None
 
 
 async def store_byor_key_in_db(user_id: str, key: str) -> None:
     """Store the BYOR key in the database for a user."""
+    user = await UserStore.get_user_by_id_async(user_id)
+    if not user:
+        return None
 
-    def _update_user_settings():
-        user = UserStore.get_user_by_id(user_id)
-        if not user:
-            return None
-
-        current_org_id = user.current_org_id
-        current_org_member: OrgMember = None
-        for org_member in user.org_members:
-            if org_member.org_id == current_org_id:
-                current_org_member = org_member
-                break
-        if not current_org_member:
-            return None
-        current_org_member.llm_api_key_for_byor = key
-        OrgMemberStore.update_org_member(current_org_member)
-
-    await call_sync_from_async(_update_user_settings)
+    current_org_id = user.current_org_id
+    current_org_member: OrgMember = None
+    for org_member in user.org_members:
+        if org_member.org_id == current_org_id:
+            current_org_member = org_member
+            break
+    if not current_org_member:
+        return None
+    current_org_member.llm_api_key_for_byor = key
+    OrgMemberStore.update_org_member(current_org_member)
 
 
 async def generate_byor_key(user_id: str) -> str | None:
     """Generate a new BYOR key for a user."""
-
     try:
         user = await UserStore.get_user_by_id_async(user_id)
         if not user:
@@ -157,15 +148,35 @@ class LlmApiKeyResponse(BaseModel):
     key: str | None
 
 
+class ByorPermittedResponse(BaseModel):
+    permitted: bool
+
+
+@api_router.get('/llm/byor/permitted', response_model=ByorPermittedResponse)
+async def check_byor_permitted(user_id: str = Depends(get_user_id)):
+    """Check if BYOR key export is permitted for the user's current org."""
+    try:
+        permitted = await OrgService.check_byor_export_enabled(user_id)
+        return {'permitted': permitted}
+    except Exception as e:
+        logger.exception(
+            'Error checking BYOR export permission', extra={'error': str(e)}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to check BYOR export permission',
+        )
+
+
 @api_router.post('', response_model=ApiKeyCreateResponse)
 async def create_api_key(key_data: ApiKeyCreate, user_id: str = Depends(get_user_id)):
     """Create a new API key for the authenticated user."""
     try:
-        api_key = api_key_store.create_api_key(
+        api_key = await api_key_store.create_api_key(
             user_id, key_data.name, key_data.expires_at
         )
         # Get the created key details
-        keys = api_key_store.list_api_keys(user_id)
+        keys = await api_key_store.list_api_keys(user_id)
         for key in keys:
             if key['name'] == key_data.name:
                 return {
@@ -193,7 +204,7 @@ async def create_api_key(key_data: ApiKeyCreate, user_id: str = Depends(get_user
 async def list_api_keys(user_id: str = Depends(get_user_id)):
     """List all API keys for the authenticated user."""
     try:
-        keys = api_key_store.list_api_keys(user_id)
+        keys = await api_key_store.list_api_keys(user_id)
         return [
             {
                 **key,
@@ -222,7 +233,7 @@ async def delete_api_key(key_id: int, user_id: str = Depends(get_user_id)):
     """Delete an API key."""
     try:
         # First, verify the key belongs to the user
-        keys = api_key_store.list_api_keys(user_id)
+        keys = await api_key_store.list_api_keys(user_id)
         key_to_delete = None
 
         for key in keys:
@@ -262,8 +273,17 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
     This endpoint validates that the key exists in LiteLLM before returning it.
     If validation fails, it automatically generates a new key to ensure users
     always receive a working key.
+
+    Returns 402 Payment Required if BYOR export is not enabled for the user's org.
     """
     try:
+        # Check if BYOR export is enabled for the user's org
+        if not await OrgService.check_byor_export_enabled(user_id):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail='BYOR key export is not enabled. Purchase credits to enable this feature.',
+            )
+
         # Check if the BYOR key exists in the database
         byor_key = await get_byor_key_from_db(user_id)
         if byor_key:
@@ -319,10 +339,20 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
 
 @api_router.post('/llm/byor/refresh', response_model=LlmApiKeyResponse)
 async def refresh_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
-    """Refresh the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user."""
+    """Refresh the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user.
+
+    Returns 402 Payment Required if BYOR export is not enabled for the user's org.
+    """
     logger.info('Starting BYOR LLM API key refresh', extra={'user_id': user_id})
 
     try:
+        # Check if BYOR export is enabled for the user's org
+        if not await OrgService.check_byor_export_enabled(user_id):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail='BYOR key export is not enabled. Purchase credits to enable this feature.',
+            )
+
         # Get the existing BYOR key from the database
         existing_byor_key = await get_byor_key_from_db(user_id)
 

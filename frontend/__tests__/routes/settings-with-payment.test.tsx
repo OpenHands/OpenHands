@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoutesStub } from "react-router";
-import { renderWithProviders } from "test-utils";
 import SettingsScreen from "#/routes/settings";
 import { PaymentForm } from "#/components/features/payment/payment-form";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -79,12 +78,16 @@ describe("Settings Billing", () => {
       defaultOptions: { queries: { retry: false } },
     });
 
+    // Set default config to OSS mode with lowercase keys
     mockUseConfig.mockReturnValue({
       data: {
-        APP_MODE: "oss",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
+        app_mode: "oss",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       },
       isLoading: false,
@@ -96,25 +99,6 @@ describe("Settings Billing", () => {
     });
 
     mockUsePermission.mockReturnValue(false); // default: no billing access
-  });
-
-  beforeEach(() => {
-    // Set default config to OSS mode
-    mockUseConfig.mockReturnValue({
-      data: {
-        APP_MODE: "oss",
-        GITHUB_CLIENT_ID: "123",
-        POSTHOG_CLIENT_KEY: "456",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
-        },
-      },
-      isLoading: false,
-    });
   });
 
   const RoutesStub = createRoutesStub([
@@ -152,8 +136,14 @@ describe("Settings Billing", () => {
   it("should not render the billing tab if OSS mode", async () => {
     mockUseConfig.mockReturnValue({
       data: {
-        APP_MODE: "oss",
-        FEATURE_FLAGS: { ENABLE_BILLING: true },
+        app_mode: "oss",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
       },
       isLoading: false,
     });
@@ -175,8 +165,14 @@ describe("Settings Billing", () => {
   it("should render the billing tab if: SaaS mode, billing enabled, admin user", async () => {
     mockUseConfig.mockReturnValue({
       data: {
-        APP_MODE: "saas",
-        FEATURE_FLAGS: { ENABLE_BILLING: true },
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
       },
       isLoading: false,
     });
@@ -197,8 +193,14 @@ describe("Settings Billing", () => {
   it("should NOT render the billing tab if: SaaS mode, billing is enabled, and member user", async () => {
     mockUseConfig.mockReturnValue({
       data: {
-        APP_MODE: "saas",
-        FEATURE_FLAGS: { ENABLE_BILLING: true },
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
       },
       isLoading: false,
     });
@@ -218,10 +220,17 @@ describe("Settings Billing", () => {
 
   it("should render the billing settings if clicking the billing item", async () => {
     const user = userEvent.setup();
+    // When enable_billing is true, the billing nav item is shown
     mockUseConfig.mockReturnValue({
       data: {
-        APP_MODE: "saas",
-        FEATURE_FLAGS: { ENABLE_BILLING: true },
+        app_mode: "saas",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
       },
       isLoading: false,
     });

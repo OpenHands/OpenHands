@@ -4,19 +4,48 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import OptionService from "#/api/option-service/option-service.api";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
-import { OrganizationMember } from "#/types/org";
-import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
-import { organizationService } from "#/api/organization-service/organization-service.api";
+
+// Mock useOrgTypeAndAccess
+const mockOrgTypeAndAccess = vi.hoisted(() => ({
+  isPersonalOrg: false,
+  isTeamOrg: false,
+  organizationId: null as string | null,
+  selectedOrg: null,
+  canViewOrgRoutes: false,
+}));
+
+vi.mock("#/hooks/use-org-type-and-access", () => ({
+  useOrgTypeAndAccess: () => mockOrgTypeAndAccess,
+}));
+
+// Mock useMe
+const mockMe = vi.hoisted(() => ({
+  data: null as { role: string } | null | undefined,
+}));
+
+vi.mock("#/hooks/query/use-me", () => ({
+  useMe: () => mockMe,
+}));
 
 const queryClient = new QueryClient();
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 );
 
-const mockConfig = (appMode: "saas" | "oss", hideLlmSettings = false) => {
+const mockConfig = (
+  appMode: "saas" | "oss",
+  hideLlmSettings = false,
+  enableBilling = true,
+) => {
   vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-    APP_MODE: appMode,
-    FEATURE_FLAGS: { HIDE_LLM_SETTINGS: hideLlmSettings },
+    app_mode: appMode,
+    feature_flags: {
+      hide_llm_settings: hideLlmSettings,
+      enable_billing: enableBilling,
+      enable_jira: false,
+      enable_jira_dc: false,
+      enable_linear: false,
+    },
   } as Awaited<ReturnType<typeof OptionService.getConfig>>);
 };
 
@@ -24,38 +53,23 @@ vi.mock("react-router", () => ({
   useRevalidator: () => ({ revalidate: vi.fn() }),
 }));
 
-const createMockUser = (
-  overrides: Partial<OrganizationMember> = {},
-): OrganizationMember => ({
-  org_id: "org-1",
-  user_id: "user-1",
-  email: "test@example.com",
-  role: "member",
-  llm_api_key: "",
-  max_iterations: 100,
-  llm_model: "gpt-4",
-  llm_api_key_for_byor: null,
-  llm_base_url: "",
-  status: "active",
-  ...overrides,
-});
-
-const seedActiveUser = (user: Partial<OrganizationMember>) => {
-  useSelectedOrganizationStore.setState({ organizationId: "org-1" });
-  vi.spyOn(organizationService, "getMe").mockResolvedValue(
-    createMockUser(user),
-  );
-};
-
 describe("useSettingsNavItems", () => {
   beforeEach(() => {
     queryClient.clear();
     vi.restoreAllMocks();
+    // Reset mock state
+    mockOrgTypeAndAccess.isPersonalOrg = false;
+    mockOrgTypeAndAccess.isTeamOrg = false;
+    mockOrgTypeAndAccess.organizationId = null;
+    mockOrgTypeAndAccess.selectedOrg = null;
+    mockOrgTypeAndAccess.canViewOrgRoutes = false;
+    mockMe.data = null;
   });
 
-  it("should return SAAS_NAV_ITEMS when APP_MODE is 'saas' and userRole is 'member'", async () => {
+  it("should return SAAS_NAV_ITEMS minus billing/org/org-members when userRole is 'member'", async () => {
     mockConfig("saas");
-    seedActiveUser({ role: "member" });
+    mockMe.data = { role: "member" };
+    mockOrgTypeAndAccess.organizationId = "org-1";
 
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
@@ -71,19 +85,9 @@ describe("useSettingsNavItems", () => {
     });
   });
 
-  it("should return SAAS_NAV_ITEMS when APP_MODE is 'saas' and userRole is NOT 'member'", async () => {
-    mockConfig("saas");
-    seedActiveUser({ role: "admin" });
-    const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current).toEqual(SAAS_NAV_ITEMS);
-    });
-  });
-
-  it("should return OSS_NAV_ITEMS when APP_MODE is 'oss'", async () => {
+  it("should return OSS_NAV_ITEMS when app_mode is 'oss'", async () => {
     mockConfig("oss");
-    seedActiveUser({ role: "admin" });
+    mockMe.data = { role: "admin" };
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {
@@ -91,9 +95,10 @@ describe("useSettingsNavItems", () => {
     });
   });
 
-  it("should filter out '/settings' item when HIDE_LLM_SETTINGS feature flag is enabled", async () => {
+  it("should filter out '/settings' item when hide_llm_settings feature flag is enabled", async () => {
     mockConfig("saas", true);
-    seedActiveUser({ role: "admin" });
+    mockMe.data = { role: "admin" };
+    mockOrgTypeAndAccess.organizationId = "org-1";
     const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
     await waitFor(() => {
@@ -103,49 +108,151 @@ describe("useSettingsNavItems", () => {
     });
   });
 
-  it("should filter out org nav items for members who lack org permissions", async () => {
-    mockConfig("saas");
-    seedActiveUser({ role: "member" });
-    const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+  describe("org-type and role-based filtering", () => {
+    it("should include org routes by default for team org admin", async () => {
+      mockConfig("saas");
+      mockOrgTypeAndAccess.isTeamOrg = true;
+      mockOrgTypeAndAccess.organizationId = "org-123";
+      mockMe.data = { role: "admin" };
 
-    // Wait for SAAS items to load (billing is filtered for members, so check another SAAS-only item)
-    await waitFor(() => {
+      const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+      // Wait for config to load (check that any SAAS item is present)
+      await waitFor(() => {
+        expect(result.current.length).toBeGreaterThan(0);
+        expect(
+          result.current.find((item) => item.to === "/settings/user"),
+        ).toBeDefined();
+      });
+
+      // Org routes should be included for team org admin
       expect(
-        result.current.find((item) => item.to === "/settings/api-keys"),
+        result.current.find((item) => item.to === "/settings/org"),
+      ).toBeDefined();
+      expect(
+        result.current.find((item) => item.to === "/settings/org-members"),
       ).toBeDefined();
     });
 
-    // Now verify org items are filtered out
-    expect(
-      result.current.find((item) => item.to === "/settings/org"),
-    ).toBeUndefined();
-    expect(
-      result.current.find((item) => item.to === "/settings/org-members"),
-    ).toBeUndefined();
-  });
+    it("should hide org routes when isPersonalOrg is true", async () => {
+      mockConfig("saas");
+      mockOrgTypeAndAccess.isPersonalOrg = true;
+      mockOrgTypeAndAccess.organizationId = "org-123";
+      mockMe.data = { role: "admin" };
 
-  it("should filter out org nav items when no organization is selected", async () => {
-    mockConfig("saas");
-    // Set up an admin user but with no org selected
-    useSelectedOrganizationStore.setState({ organizationId: null });
-    vi.spyOn(organizationService, "getMe").mockResolvedValue(
-      createMockUser({ role: "admin" }),
-    );
-    const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+      const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
 
-    // Wait for SAAS items to load (api-keys is always present in SAAS mode regardless of role)
-    await waitFor(() => {
+      // Wait for config to load (check that any SAAS item is present)
+      await waitFor(() => {
+        expect(result.current.length).toBeGreaterThan(0);
+        expect(
+          result.current.find((item) => item.to === "/settings/user"),
+        ).toBeDefined();
+      });
+
+      // Org routes should be filtered out for personal orgs
       expect(
-        result.current.find((item) => item.to === "/settings/api-keys"),
-      ).toBeDefined();
+        result.current.find((item) => item.to === "/settings/org"),
+      ).toBeUndefined();
+      expect(
+        result.current.find((item) => item.to === "/settings/org-members"),
+      ).toBeUndefined();
     });
 
-    // Now verify org items are filtered out despite admin having permissions
-    expect(
-      result.current.find((item) => item.to === "/settings/org"),
-    ).toBeUndefined();
-    expect(
-      result.current.find((item) => item.to === "/settings/org-members"),
-    ).toBeUndefined();
+    it("should hide org routes when user role is member", async () => {
+      mockConfig("saas");
+      mockOrgTypeAndAccess.isTeamOrg = true;
+      mockOrgTypeAndAccess.organizationId = "org-123";
+      mockMe.data = { role: "member" };
+
+      const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+      // Wait for config to load
+      await waitFor(() => {
+        expect(result.current.length).toBeGreaterThan(0);
+        expect(
+          result.current.find((item) => item.to === "/settings/user"),
+        ).toBeDefined();
+      });
+
+      // Org routes should be hidden for members
+      expect(
+        result.current.find((item) => item.to === "/settings/org"),
+      ).toBeUndefined();
+      expect(
+        result.current.find((item) => item.to === "/settings/org-members"),
+      ).toBeUndefined();
+    });
+
+    it("should hide org routes when no organization is selected", async () => {
+      mockConfig("saas");
+      mockOrgTypeAndAccess.isTeamOrg = false;
+      mockOrgTypeAndAccess.isPersonalOrg = false;
+      mockOrgTypeAndAccess.organizationId = null;
+      mockMe.data = { role: "admin" };
+
+      const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+      // Wait for config to load
+      await waitFor(() => {
+        expect(result.current.length).toBeGreaterThan(0);
+        expect(
+          result.current.find((item) => item.to === "/settings/user"),
+        ).toBeDefined();
+      });
+
+      // Org routes should be hidden when no org is selected
+      expect(
+        result.current.find((item) => item.to === "/settings/org"),
+      ).toBeUndefined();
+      expect(
+        result.current.find((item) => item.to === "/settings/org-members"),
+      ).toBeUndefined();
+    });
+
+    it("should hide billing route when isTeamOrg is true", async () => {
+      mockConfig("saas");
+      mockOrgTypeAndAccess.isTeamOrg = true;
+      mockOrgTypeAndAccess.organizationId = "org-123";
+      mockMe.data = { role: "admin" };
+
+      const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+      // Wait for config to load
+      await waitFor(() => {
+        expect(result.current.length).toBeGreaterThan(0);
+        expect(
+          result.current.find((item) => item.to === "/settings/user"),
+        ).toBeDefined();
+      });
+
+      // Billing should be hidden for team orgs
+      expect(
+        result.current.find((item) => item.to === "/settings/billing"),
+      ).toBeUndefined();
+    });
+
+    it("should show billing route for personal org", async () => {
+      mockConfig("saas");
+      mockOrgTypeAndAccess.isPersonalOrg = true;
+      mockOrgTypeAndAccess.isTeamOrg = false;
+      mockOrgTypeAndAccess.organizationId = "org-123";
+      mockMe.data = { role: "admin" };
+
+      const { result } = renderHook(() => useSettingsNavItems(), { wrapper });
+
+      // Wait for config to load
+      await waitFor(() => {
+        expect(result.current.length).toBeGreaterThan(0);
+        expect(
+          result.current.find((item) => item.to === "/settings/user"),
+        ).toBeDefined();
+      });
+
+      // Billing should be visible for personal orgs
+      expect(
+        result.current.find((item) => item.to === "/settings/billing"),
+      ).toBeDefined();
+    });
   });
 });

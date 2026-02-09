@@ -7,8 +7,15 @@ export const useRemoveMember = () => {
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
-    mutationFn: ({ userId }: { userId: string }) =>
-      organizationService.removeMember({ orgId: organizationId!, userId }),
+    mutationFn: ({ userId }: { userId: string }) => {
+      if (!organizationId) {
+        throw new Error("Organization ID is required");
+      }
+      return organizationService.removeMember({
+        orgId: organizationId,
+        userId,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["organizations", "members", organizationId],

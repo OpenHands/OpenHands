@@ -14,7 +14,7 @@ vi.mock("react-router", async () => ({
 
 const mockConfig = () => {
   vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-    APP_MODE: "saas",
+    app_mode: "saas",
   } as Awaited<ReturnType<typeof OptionService.getConfig>>);
 };
 

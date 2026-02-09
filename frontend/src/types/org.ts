@@ -30,6 +30,7 @@ export interface Organization {
   enable_solvability_analysis: boolean;
   v1_enabled: boolean;
   credits: number;
+  is_personal?: boolean;
 }
 
 export interface OrganizationMember {

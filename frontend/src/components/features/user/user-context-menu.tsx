@@ -6,16 +6,15 @@ import {
   IoCardOutline,
   IoLogOutOutline,
   IoPersonAddOutline,
-  IoPersonOutline,
 } from "react-icons/io5";
+import { FiUsers } from "react-icons/fi";
 import { useLogout } from "#/hooks/mutation/use-logout";
 import { OrganizationUserRole } from "#/types/org";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { cn } from "#/utils/utils";
 import { InviteOrganizationMemberModal } from "../org/invite-organization-member-modal";
-import { useSelectedOrganizationId } from "#/context/use-selected-organization";
-import { useOrganizations } from "#/hooks/query/use-organizations";
-import { SettingsDropdownInput } from "../settings/settings-dropdown-input";
+import { OrgSelector } from "../org/org-selector";
 import { I18nKey } from "#/i18n/declaration";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import DocumentIcon from "#/icons/document.svg?react";
@@ -36,17 +35,15 @@ interface UserContextMenuProps {
 export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { organizationId, setOrganizationId } = useSelectedOrganizationId();
-  const { data: organizations } = useOrganizations();
   const { mutate: logout } = useLogout();
+  const { isPersonalOrg } = useOrgTypeAndAccess();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
-
-  // Get nav items from the shared hook (already filtered by feature flags)
-  // Then filter out org-related items since they're handled separately in this menu
   const settingsNavItems = useSettingsNavItems();
+
+  // Filter out org routes since they're handled separately via buttons in this menu
   const navItems = settingsNavItems.filter(
     (item) =>
-      item.to !== "/settings/org-members" && item.to !== "/settings/org",
+      item.to !== "/settings/org" && item.to !== "/settings/org-members",
   );
 
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
@@ -96,31 +93,10 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
 
       <div className="flex flex-col items-start gap-2">
         <div className="w-full relative">
-          <SettingsDropdownInput
-            testId="org-selector"
-            name="organization"
-            placeholder="Please select an organization"
-            selectedKey={organizationId || "personal"}
-            items={[
-              { key: "personal", label: "Personal Account" },
-              ...(organizations?.map((org) => ({
-                key: org.id,
-                label: org.name,
-              })) || []),
-            ]}
-            onSelectionChange={(org) => {
-              if (org === "personal") {
-                setOrganizationId(null);
-              } else if (org) {
-                setOrganizationId(org.toString());
-              } else {
-                setOrganizationId(null);
-              }
-            }}
-          />
+          <OrgSelector />
         </div>
 
-        {!isMember && (
+        {!isMember && !isPersonalOrg && (
           <>
             <ContextMenuListItem
               onClick={handleInviteMemberClick}
@@ -143,7 +119,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               onClick={handleManageOrganizationMembersClick}
               className={contextMenuListItemClassName}
             >
-              <IoPersonOutline className="text-white" size={14} />
+              <FiUsers className="text-white shrink-0" size={14} />
               {t(I18nKey.ORG$MANAGE_ORGANIZATION_MEMBERS)}
             </ContextMenuListItem>
           </>

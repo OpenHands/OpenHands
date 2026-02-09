@@ -7,8 +7,8 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePostHog } from "posthog-js/react";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
@@ -41,7 +41,7 @@ import type {
 } from "#/api/conversation-service/v1-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
-import { isBudgetOrCreditError } from "#/utils/error-handler";
+import { isBudgetOrCreditError, trackError } from "#/utils/error-handler";
 import { useTracking } from "#/hooks/use-tracking";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
@@ -72,6 +72,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
+  onDisconnect,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -79,6 +80,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: V1AppConversation[];
   subConversationIds?: string[];
+  onDisconnect?: () => void;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -91,6 +93,7 @@ export function ConversationWebSocketProvider({
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
+  const posthog = usePostHog();
   const queryClient = useQueryClient();
   const { addEvent } = useEventStore();
   const { setErrorMessage, removeErrorMessage } = useErrorMessageStore();
@@ -110,7 +113,7 @@ export function ConversationWebSocketProvider({
     number | null
   >(null);
 
-  const { conversationMode, setPlanContent } = useConversationStore();
+  const { setPlanContent } = useConversationStore();
 
   // Hook for reading conversation file
   const { mutate: readConversationFile } = useReadConversationFile();
@@ -125,8 +128,6 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
-
-  const { t } = useTranslation();
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
@@ -348,6 +349,15 @@ export function ConversationWebSocketProvider({
           // Handle ConversationErrorEvent specifically - show error banner
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isConversationErrorEvent(event)) {
+            trackError({
+              message: event.detail,
+              source: "conversation",
+              metadata: {
+                eventId: event.id,
+                errorCode: event.code,
+              },
+              posthog,
+            });
             setErrorMessage(event.detail);
           } else {
             // Clear error message on any non-ConversationErrorEvent
@@ -356,6 +366,16 @@ export function ConversationWebSocketProvider({
 
           // Track credit limit reached if AgentErrorEvent has budget-related error
           if (isAgentErrorEvent(event)) {
+            trackError({
+              message: event.error,
+              source: "agent",
+              metadata: {
+                eventId: event.id,
+                toolName: event.tool_name,
+                toolCallId: event.tool_call_id,
+              },
+              posthog,
+            });
             // Use friendly i18n message for budget/credit errors instead of raw error
             if (isBudgetOrCreditError(event.error)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
@@ -447,6 +467,7 @@ export function ConversationWebSocketProvider({
       appendOutput,
       updateMetricsFromStats,
       trackCreditLimitReached,
+      posthog,
     ],
   );
 
@@ -479,6 +500,16 @@ export function ConversationWebSocketProvider({
 
           // Handle AgentErrorEvent specifically
           if (isAgentErrorEvent(event)) {
+            trackError({
+              message: event.error,
+              source: "planning_agent",
+              metadata: {
+                eventId: event.id,
+                toolName: event.tool_name,
+                toolCallId: event.tool_call_id,
+              },
+              posthog,
+            });
             // Use friendly i18n message for budget/credit errors instead of raw error
             if (isBudgetOrCreditError(event.error)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
@@ -587,6 +618,7 @@ export function ConversationWebSocketProvider({
       readConversationFile,
       setPlanContent,
       updateMetricsFromStats,
+      posthog,
     ],
   );
 
@@ -631,12 +663,10 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setMainConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
+        // Trigger silent recovery on unexpected disconnect
+        // Do NOT show error message - recovery happens automatically
         if (event.code !== 1000 && hasConnectedRefMain.current) {
-          setErrorMessage(
-            `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
-          );
+          onDisconnect?.();
         }
       },
       onError: () => {
@@ -655,6 +685,7 @@ export function ConversationWebSocketProvider({
     sessionApiKey,
     conversationId,
     conversationUrl,
+    onDisconnect,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -703,12 +734,10 @@ export function ConversationWebSocketProvider({
       },
       onClose: (event: CloseEvent) => {
         setPlanningConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        // This prevents showing errors during initial connection attempts (e.g., when auto-starting a conversation)
+        // Trigger silent recovery on unexpected disconnect
+        // Do NOT show error message - recovery happens automatically
         if (event.code !== 1000 && hasConnectedRefPlanning.current) {
-          setErrorMessage(
-            `${t(I18nKey.STATUS$CONNECTION_LOST)}: ${event.reason || t(I18nKey.STATUS$DISCONNECTED_REFRESH_PAGE)}`,
-          );
+          onDisconnect?.();
         }
       },
       onError: () => {
@@ -726,6 +755,7 @@ export function ConversationWebSocketProvider({
     removeErrorMessage,
     sessionApiKey,
     subConversations,
+    onDisconnect,
   ]);
 
   // Only attempt WebSocket connection when we have a valid URL
@@ -741,15 +771,14 @@ export function ConversationWebSocketProvider({
     planningWebsocketOptions,
   );
 
-  const socket = useMemo(
-    () => (conversationMode === "plan" ? planningAgentSocket : mainSocket),
-    [conversationMode, planningAgentSocket, mainSocket],
-  );
-
   // V1 send message function via WebSocket
   const sendMessage = useCallback(
     async (message: V1SendMessageRequest) => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
+      const currentMode = useConversationStore.getState().conversationMode;
+      const currentSocket =
+        currentMode === "plan" ? planningAgentSocket : mainSocket;
+
+      if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
         const error = "WebSocket is not connected";
         setErrorMessage(error);
         throw new Error(error);
@@ -757,7 +786,7 @@ export function ConversationWebSocketProvider({
 
       try {
         // Send message through WebSocket as JSON
-        socket.send(JSON.stringify(message));
+        currentSocket.send(JSON.stringify(message));
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to send message";
@@ -765,7 +794,7 @@ export function ConversationWebSocketProvider({
         throw error;
       }
     },
-    [socket, setErrorMessage],
+    [mainSocket, planningAgentSocket, setErrorMessage],
   );
 
   // Track main socket state changes

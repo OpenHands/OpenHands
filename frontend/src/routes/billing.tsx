@@ -13,7 +13,7 @@ import { rolePermissions } from "#/utils/org/permissions";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
 import { queryClient } from "#/query-client-config";
 import OptionService from "#/api/option-service/option-service.api";
-import { GetConfigResponse } from "#/api/option-service/option.types";
+import { WebClientConfig } from "#/api/option-service/option.types";
 
 export const clientLoader = async () => {
   const user = await getActiveOrganizationUser();
@@ -24,10 +24,10 @@ export const clientLoader = async () => {
 
   const userRole = user.role ?? "member";
 
-  let config = queryClient.getQueryData<GetConfigResponse>(["config"]);
+  let config = queryClient.getQueryData<WebClientConfig>(["config"]);
   if (!config) {
     config = await OptionService.getConfig();
-    queryClient.setQueryData<GetConfigResponse>(["config"], config);
+    queryClient.setQueryData<WebClientConfig>(["config"], config);
   }
 
   if (

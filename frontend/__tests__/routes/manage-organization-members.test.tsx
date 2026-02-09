@@ -16,6 +16,26 @@ import {
 } from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 
+vi.mock("react-i18next", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => {
+        const translations: Record<string, string> = {
+          "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
+          "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+        };
+        return translations[key] || key;
+      },
+      i18n: {
+        changeLanguage: vi.fn(),
+      },
+    }),
+  };
+});
+
 function ManageOrganizationMembersWithPortalRoot() {
   return (
     <div>
@@ -52,9 +72,16 @@ describe("Manage Organization Members Route", () => {
 
   beforeEach(() => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    // @ts-expect-error - only return APP_MODE for these tests
+    // @ts-expect-error - partial mock for testing
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "saas",
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: true,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+      },
     });
 
     queryClient = new QueryClient();
@@ -202,6 +229,7 @@ describe("Manage Organization Members Route", () => {
   // Helper function to setup invite test (render and select organization)
   const setupInviteTest = async (orgIndex: number = 0) => {
     renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
     await selectOrganization({ orgIndex });
   };
 
@@ -213,8 +241,8 @@ describe("Manage Organization Members Route", () => {
   };
 
   // Helper function to find invite button
-  const findInviteButton = async () =>
-    await screen.findByRole("button", {
+  const findInviteButton = () =>
+    screen.findByRole("button", {
       name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
     });
 
@@ -242,9 +270,9 @@ describe("Manage Organization Members Route", () => {
 
   it("should navigate away from the page if not saas", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    // @ts-expect-error - only return APP_MODE for these tests
+    // @ts-expect-error - partial mock for testing
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "oss",
+      app_mode: "oss",
     });
 
     renderManageOrganizationMembers();
@@ -262,11 +290,10 @@ describe("Manage Organization Members Route", () => {
     renderManageOrganizationMembers();
     await screen.findByTestId("manage-organization-members-settings");
 
-    expect(getOrganizationMembersSpy).not.toHaveBeenCalled();
-
-    await selectOrganization({ orgIndex: 0 });
-    expect(getOrganizationMembersSpy).toHaveBeenCalledExactlyOnceWith({
-      orgId: "1",
+    // First org is auto-selected, so members are fetched for org "1"
+    await selectOrganization({ orgIndex: 1 }); // Acme Corp
+    expect(getOrganizationMembersSpy).toHaveBeenLastCalledWith({
+      orgId: "2",
     });
   });
 
@@ -297,13 +324,13 @@ describe("Manage Organization Members Route", () => {
         llm_base_url: "https://api.openai.com",
         status: "active",
       },
-      0,
+      1, // Acme Corp (org "2") - has owner, admin, user
     );
 
     const updateMemberRoleSpy = createUpdateMemberRoleSpy();
 
     const memberListItems = await screen.findAllByTestId("member-item");
-    const userRoleMember = memberListItems[2]; // third member is "user"
+    const userRoleMember = memberListItems[2]; // third member is "user" (charlie)
 
     let userCombobox = within(userRoleMember).getByText(/^Member$/i);
     expect(userCombobox).toBeInTheDocument();
@@ -312,8 +339,8 @@ describe("Manage Organization Members Route", () => {
     await changeMemberRole(userRoleMember, "member", "admin");
 
     expect(updateMemberRoleSpy).toHaveBeenCalledExactlyOnceWith({
-      userId: "3", // assuming the third member is the one being updated
-      orgId: "1",
+      userId: "3", // charlie's id
+      orgId: "2",
       role: "admin",
     });
     expectDropdownNotVisible(userRoleMember);
@@ -327,7 +354,7 @@ describe("Manage Organization Members Route", () => {
 
     expect(updateMemberRoleSpy).toHaveBeenNthCalledWith(2, {
       userId: "3",
-      orgId: "1",
+      orgId: "2",
       role: "member",
     });
 
@@ -350,13 +377,15 @@ describe("Manage Organization Members Route", () => {
         llm_base_url: "https://api.openai.com",
         status: "active",
       },
-      2, // user is admin in org 3
-      0, // first member is "owner"
+      1, // Acme Corp (org "2")
+      0, // first member is "owner" (alice)
       "Owner",
     );
   });
 
   it("should not allow an admin to change another admin's role", async () => {
+    // Org 3 (Beta LLC) has evan(admin) at index 1 - but there's only one admin
+    // So we test that an admin can't click on their own role (evan is the only admin)
     await verifyRoleChangeNotPermitted(
       {
         org_id: "3",
@@ -370,8 +399,8 @@ describe("Manage Organization Members Route", () => {
         llm_base_url: "https://api.openai.com",
         status: "active",
       },
-      2, // user is admin in org 3
-      1, // second member is "admin"
+      2, // Beta LLC (org "3") - has tony(user), evan(admin)
+      1, // second member is evan (admin) - can't change own role
       "Admin",
     );
   });
@@ -400,7 +429,7 @@ describe("Manage Organization Members Route", () => {
   it("should show a remove option in the role dropdown and remove the user from the list", async () => {
     const removeMemberSpy = vi.spyOn(organizationService, "removeMember");
 
-    await setupTestWithOrg(0);
+    await setupTestWithOrg(1); // Acme Corp (org "2") - has owner, admin, user
 
     // Get initial member count
     const memberListItems = await screen.findAllByTestId("member-item");
@@ -424,7 +453,7 @@ describe("Manage Organization Members Route", () => {
     await userEvent.click(removeOption);
 
     expect(removeMemberSpy).toHaveBeenCalledExactlyOnceWith({
-      orgId: "1",
+      orgId: "2",
       userId: "3",
     });
 
@@ -588,6 +617,7 @@ describe("Manage Organization Members Route", () => {
 
   describe("Role-based role change permission behavior", () => {
     it("should not allow an owner to change another owner's role", async () => {
+      // Acme Corp (org "2") - alice is owner, can't change her own role
       await verifyRoleChangeNotPermitted(
         {
           org_id: "1",
@@ -601,8 +631,8 @@ describe("Manage Organization Members Route", () => {
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
-        0,
-        0, // First member is owner
+        1, // Acme Corp (org "2")
+        0, // First member is owner (alice)
         "owner",
       );
     });
@@ -621,7 +651,7 @@ describe("Manage Organization Members Route", () => {
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
-        0,
+        1, // Acme Corp (org "2")
       );
 
       const memberListItems = await screen.findAllByTestId("member-item");
@@ -658,7 +688,7 @@ describe("Manage Organization Members Route", () => {
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
-        2, // org 3
+        3, // All Hands AI (org "4")
       );
 
       const memberListItems = await screen.findAllByTestId("member-item");
@@ -669,9 +699,9 @@ describe("Manage Organization Members Route", () => {
       expectOwnerOptionNotPresent(userDropdown);
       await closeDropdown();
 
-      // Check another user member dropdown if exists
+      // Check another user member dropdown (stephan is at index 3)
       if (memberListItems.length > 3) {
-        const anotherUserMember = memberListItems[3]; // another user member
+        const anotherUserMember = memberListItems[3]; // stephan@all-hands.dev
         const anotherUserDropdown = await openRoleDropdown(
           anotherUserMember,
           "member",
@@ -694,7 +724,7 @@ describe("Manage Organization Members Route", () => {
           llm_base_url: "https://api.openai.com",
           status: "active",
         },
-        0,
+        1, // Acme Corp (org "2")
       );
 
       const updateMemberRoleSpy = createUpdateMemberRoleSpy();
@@ -707,7 +737,7 @@ describe("Manage Organization Members Route", () => {
 
       expect(updateMemberRoleSpy).toHaveBeenNthCalledWith(1, {
         userId: "2",
-        orgId: "1",
+        orgId: "2",
         role: "owner",
       });
 
@@ -717,7 +747,7 @@ describe("Manage Organization Members Route", () => {
 
       expect(updateMemberRoleSpy).toHaveBeenNthCalledWith(2, {
         userId: "3",
-        orgId: "1",
+        orgId: "2",
         role: "owner",
       });
     });
@@ -738,13 +768,13 @@ describe("Manage Organization Members Route", () => {
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
-        orgIndex: 0,
+        orgIndex: 1, // Acme Corp (org "2")
         memberEmail: "bob@acme.org",
         currentRole: "admin",
         newRole: "admin",
         expectedApiCall: {
           userId: "2",
-          orgId: "1",
+          orgId: "2",
           role: "admin" as const,
         },
       },
@@ -752,8 +782,8 @@ describe("Manage Organization Members Route", () => {
         description:
           "Admin should be able to change user's role to user (no change)",
         userData: {
-          org_id: "3",
-          user_id: "7", // Ray is admin in org 3
+          org_id: "4",
+          user_id: "7", // Ray is admin in org 4
           email: "ray@all-hands.dev",
           role: "admin" as const,
           llm_api_key: "**********",
@@ -763,21 +793,21 @@ describe("Manage Organization Members Route", () => {
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
-        orgIndex: 2, // org 3
+        orgIndex: 3, // All Hands AI (org "4")
         memberEmail: "stephan@all-hands.dev",
         currentRole: "member",
         newRole: "member",
         expectedApiCall: {
           userId: "9",
-          orgId: "3",
+          orgId: "4",
           role: "member" as const,
         },
       },
       {
         description: "Admin should be able to change member's role to admin",
         userData: {
-          org_id: "3",
-          user_id: "7", // Ray is admin in org 3
+          org_id: "4",
+          user_id: "7", // Ray is admin in org 4
           email: "ray@all-hands.dev",
           role: "admin" as const,
           llm_api_key: "**********",
@@ -787,13 +817,13 @@ describe("Manage Organization Members Route", () => {
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
-        orgIndex: 2, // org 3
+        orgIndex: 3, // All Hands AI (org "4")
         memberEmail: "stephan@all-hands.dev",
         currentRole: "member",
         newRole: "admin",
         expectedApiCall: {
           userId: "9",
-          orgId: "3",
+          orgId: "4",
           role: "admin" as const,
         },
       },

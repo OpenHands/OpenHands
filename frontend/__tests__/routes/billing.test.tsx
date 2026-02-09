@@ -71,17 +71,16 @@ describe("Billing Route", () => {
   };
 
   const setupSaasMode = (featureFlags = {}) => {
+    // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test",
-      POSTHOG_CLIENT_KEY: "test",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: false,
-        HIDE_BILLING: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      posthog_client_key: "test",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
         ...featureFlags,
       },
     });
@@ -229,9 +228,9 @@ describe("Billing Route", () => {
       });
     });
 
-    it("should redirect all users when HIDE_BILLING is true", async () => {
-      // Arrange
-      setupSaasMode({ HIDE_BILLING: true });
+    it("should redirect all users when enable_billing is false", async () => {
+      // Arrange: enable_billing=false means billing is hidden for everyone
+      setupSaasMode({ enable_billing: false });
       seedActiveUser({ role: "owner" }); // Even owners should be redirected
 
       const RouterStub = createRoutesStub([

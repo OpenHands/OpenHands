@@ -4,11 +4,13 @@ import { useTranslation } from "react-i18next";
 import { Route } from "./+types/settings";
 import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
-import { GetConfigResponse } from "#/api/option-service/option.types";
-import { SettingsLayout } from "#/components/features/settings/settings-layout";
+import { SettingsLayout } from "#/components/features/settings";
+import { WebClientConfig } from "#/api/option-service/option.types";
+import { Organization } from "#/types/org";
 import { Typography } from "#/ui/typography";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import { getActiveOrganizationUser } from "#/utils/org/permission-checks";
+import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organization-store";
 import { rolePermissions } from "#/utils/org/permissions";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
 
@@ -26,37 +28,64 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const { pathname } = url;
   const user = await getActiveOrganizationUser();
 
-  let config = queryClient.getQueryData<GetConfigResponse>(["config"]);
+  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
   if (!config) {
     config = await OptionService.getConfig();
-    queryClient.setQueryData<GetConfigResponse>(["config"], config);
+    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
   }
 
-  const isSaas = config?.APP_MODE === "saas";
+  const isSaas = config?.app_mode === "saas";
 
   if (!isSaas && SAAS_ONLY_PATHS.includes(pathname)) {
     // if in OSS mode, do not allow access to saas-only paths
     return redirect("/settings");
   }
   // If LLM settings are hidden and user tries to access the LLM settings page
-  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS && pathname === "/settings") {
+  if (config?.feature_flags?.hide_llm_settings && pathname === "/settings") {
     // Redirect to the first available settings page
     return isSaas ? redirect("/settings/user") : redirect("/settings/mcp");
   }
 
-  if (
-    (!user ||
+  // Org-type detection for route protection
+  const orgId = getSelectedOrganizationIdFromStore();
+  const organizations = queryClient.getQueryData<Organization[]>([
+    "organizations",
+  ]);
+  const selectedOrg = organizations?.find((org) => org.id === orgId);
+  const isPersonalOrg = selectedOrg?.is_personal === true;
+  const isTeamOrg = !!selectedOrg && !selectedOrg.is_personal;
+
+  // Billing route protection
+  if (pathname === "/settings/billing") {
+    if (
+      !user ||
       isBillingHidden(
         config,
         rolePermissions[user.role ?? "member"].includes("view_billing"),
-      )) &&
-    pathname === "/settings/billing"
-  ) {
-    // Redirect to the first available settings page
-    if (isSaas) {
-      return redirect("/settings/user");
+      ) ||
+      isTeamOrg
+    ) {
+      if (isSaas) {
+        return redirect("/settings/user");
+      }
     }
-    return redirect("/settings/mcp");
+  }
+
+  // Org route protection: redirect if user lacks required permissions or personal org
+  if (pathname === "/settings/org" || pathname === "/settings/org-members") {
+    const role = user?.role ?? "member";
+    const requiredPermission =
+      pathname === "/settings/org"
+        ? "view_billing"
+        : "invite_user_to_organization";
+
+    if (
+      !user ||
+      !rolePermissions[role].includes(requiredPermission) ||
+      isPersonalOrg
+    ) {
+      return redirect("/settings");
+    }
   }
 
   return null;

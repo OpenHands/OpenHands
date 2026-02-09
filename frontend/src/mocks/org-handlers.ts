@@ -17,10 +17,11 @@ const MOCK_ME: Omit<OrganizationMember, "role" | "org_id"> = {
   status: "active",
 };
 
-const createMockOrganization = (
+export const createMockOrganization = (
   id: string,
   name: string,
   credits: number,
+  is_personal?: boolean,
 ): Organization => ({
   id,
   name,
@@ -51,18 +52,53 @@ const createMockOrganization = (
   enable_solvability_analysis: false,
   v1_enabled: true,
   credits,
+  is_personal,
 });
 
+// Named mock organizations for test convenience
+export const MOCK_PERSONAL_ORG = createMockOrganization(
+  "1",
+  "Personal Workspace",
+  100,
+  true,
+);
+export const MOCK_TEAM_ORG_ACME = createMockOrganization(
+  "2",
+  "Acme Corp",
+  1000,
+);
+export const MOCK_TEAM_ORG_BETA = createMockOrganization("3", "Beta LLC", 500);
+export const MOCK_TEAM_ORG_ALLHANDS = createMockOrganization(
+  "4",
+  "All Hands AI",
+  750,
+);
+
 export const INITIAL_MOCK_ORGS: Organization[] = [
-  createMockOrganization("1", "Acme Corp", 1000),
-  createMockOrganization("2", "Beta LLC", 500),
-  createMockOrganization("3", "All Hands AI", 750),
+  MOCK_PERSONAL_ORG,
+  MOCK_TEAM_ORG_ACME,
+  MOCK_TEAM_ORG_BETA,
+  MOCK_TEAM_ORG_ALLHANDS,
 ];
 
 const INITIAL_MOCK_MEMBERS: Record<string, OrganizationMember[]> = {
   "1": [
     {
       org_id: "1",
+      user_id: "99",
+      email: "me@acme.org",
+      role: "owner",
+      llm_api_key: "**********",
+      max_iterations: 20,
+      llm_model: "gpt-4",
+      llm_api_key_for_byor: null,
+      llm_base_url: "https://api.openai.com",
+      status: "active",
+    },
+  ],
+  "2": [
+    {
+      org_id: "2",
       user_id: "1",
       email: "alice@acme.org",
       role: "owner",
@@ -98,7 +134,7 @@ const INITIAL_MOCK_MEMBERS: Record<string, OrganizationMember[]> = {
       status: "active",
     },
   ],
-  "2": [
+  "3": [
     {
       org_id: "2",
       user_id: "4",
@@ -124,7 +160,7 @@ const INITIAL_MOCK_MEMBERS: Record<string, OrganizationMember[]> = {
       status: "active",
     },
   ],
-  "3": [
+  "4": [
     {
       org_id: "3",
       user_id: "6",
@@ -192,6 +228,7 @@ export const ORGS_AND_MEMBERS: Record<string, OrganizationMember[]> = {
   "1": INITIAL_MOCK_MEMBERS["1"].map((member) => ({ ...member })),
   "2": INITIAL_MOCK_MEMBERS["2"].map((member) => ({ ...member })),
   "3": INITIAL_MOCK_MEMBERS["3"].map((member) => ({ ...member })),
+  "4": INITIAL_MOCK_MEMBERS["4"].map((member) => ({ ...member })),
 };
 
 const orgs = new Map(INITIAL_MOCK_ORGS.map((org) => [org.id, org]));
@@ -226,13 +263,16 @@ export const ORG_HANDLERS = [
 
     let role: OrganizationUserRole = "member";
     switch (orgId) {
-      case "1":
+      case "1": // Personal Workspace
         role = "owner";
         break;
-      case "2":
+      case "2": // Acme Corp
+        role = "owner";
+        break;
+      case "3": // Beta LLC
         role = "member";
         break;
-      case "3":
+      case "4": // All Hands AI
         role = "admin";
         break;
       default:
@@ -261,7 +301,7 @@ export const ORG_HANDLERS = [
 
   http.get("/api/organizations", () => {
     const organizations = Array.from(orgs.values());
-    return HttpResponse.json(organizations);
+    return HttpResponse.json({ items: organizations });
   }),
 
   http.patch("/api/organizations/:orgId", async ({ request, params }) => {

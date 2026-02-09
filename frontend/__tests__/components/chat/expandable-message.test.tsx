@@ -113,17 +113,15 @@ describe("ExpandableMessage", () => {
 
   it("should render the out of credits message when the user is out of credits", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+    // @ts-expect-error - partial mock for testing
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test",
-      POSTHOG_CLIENT_KEY: "test",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: true,
-        HIDE_LLM_SETTINGS: false,
-        HIDE_BILLING: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      feature_flags: {
+        enable_billing: true,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
     const RouterStub = createRoutesStub([

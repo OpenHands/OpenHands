@@ -7,7 +7,7 @@ export const useMe = () => {
   const { data: config } = useConfig();
   const { organizationId } = useSelectedOrganizationId();
 
-  const isSaas = config?.APP_MODE === "saas";
+  const isSaas = config?.app_mode === "saas";
 
   return useQuery({
     queryKey: ["organizations", organizationId, "me"],

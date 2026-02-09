@@ -7,8 +7,15 @@ export const useInviteMembersBatch = () => {
   const { organizationId } = useSelectedOrganizationId();
 
   return useMutation({
-    mutationFn: ({ emails }: { emails: string[] }) =>
-      organizationService.inviteMembers({ orgId: organizationId!, emails }),
+    mutationFn: ({ emails }: { emails: string[] }) => {
+      if (!organizationId) {
+        throw new Error("Organization ID is required");
+      }
+      return organizationService.inviteMembers({
+        orgId: organizationId,
+        emails,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["organizations", "members", organizationId],

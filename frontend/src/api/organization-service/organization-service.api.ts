@@ -22,8 +22,10 @@ export const organizationService = {
   },
 
   getOrganizations: async () => {
-    const { data } = await openHands.get<Organization[]>("/api/organizations");
-    return data;
+    const { data } = await openHands.get<{ items: Organization[] }>(
+      "/api/organizations",
+    );
+    return data?.items || [];
   },
 
   updateOrganization: async ({

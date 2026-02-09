@@ -110,7 +110,7 @@ beforeEach(() => {
 
   // Default mock for useConfig - returns SaaS mode by default
   mockUseConfig.mockReturnValue({
-    data: { APP_MODE: "saas" },
+    data: { app_mode: "saas" },
     isLoading: false,
   });
 
@@ -138,7 +138,7 @@ describe("Content", () => {
     it("should render the basic form by default", async () => {
       // Use OSS mode so API key input is visible
       mockUseConfig.mockReturnValue({
-        data: { APP_MODE: "oss" },
+        data: { app_mode: "oss" },
         isLoading: false,
       });
 
@@ -155,7 +155,7 @@ describe("Content", () => {
     it("should render the default values if non exist", async () => {
       // Use OSS mode so API key input is visible
       mockUseConfig.mockReturnValue({
-        data: { APP_MODE: "oss" },
+        data: { app_mode: "oss" },
         isLoading: false,
       });
 
@@ -240,7 +240,7 @@ describe("Content", () => {
     it("should render the advanced form if the switch is toggled", async () => {
       // Use OSS mode so agent-input is visible
       mockUseConfig.mockReturnValue({
-        data: { APP_MODE: "oss" },
+        data: { app_mode: "oss" },
         isLoading: false,
       });
 
@@ -280,7 +280,7 @@ describe("Content", () => {
     it("should render the default advanced settings", async () => {
       // Use OSS mode so agent-input is visible
       mockUseConfig.mockReturnValue({
-        data: { APP_MODE: "oss" },
+        data: { app_mode: "oss" },
         isLoading: false,
       });
 
@@ -325,7 +325,7 @@ describe("Content", () => {
     it("should render existing advanced settings correctly", async () => {
       // Use OSS mode so agent-input is visible
       mockUseConfig.mockReturnValue({
-        data: { APP_MODE: "oss" },
+        data: { app_mode: "oss" },
         isLoading: false,
       });
 
@@ -450,10 +450,10 @@ describe("Content", () => {
 
   describe("API key visibility in Basic Settings", () => {
     it("should hide API key input when SaaS mode is enabled and OpenHands provider is selected", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
+      // SaaS mode is already the default from beforeEach, but let's be explicit
+      mockUseConfig.mockReturnValue({
+        data: { app_mode: "saas" },
+        isLoading: false,
       });
 
       renderLlmSettingsScreen();
@@ -477,10 +477,10 @@ describe("Content", () => {
     });
 
     it("should show API key input when SaaS mode is enabled and non-OpenHands provider is selected", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
+      // SaaS mode is already the default from beforeEach, but let's be explicit
+      mockUseConfig.mockReturnValue({
+        data: { app_mode: "saas" },
+        isLoading: false,
       });
 
       renderLlmSettingsScreen();
@@ -508,9 +508,8 @@ describe("Content", () => {
     });
 
     it("should show API key input when OSS mode is enabled and OpenHands provider is selected", async () => {
-      // Use OSS mode
       mockUseConfig.mockReturnValue({
-        data: { APP_MODE: "oss" },
+        data: { app_mode: "oss" },
         isLoading: false,
       });
 
@@ -535,10 +534,9 @@ describe("Content", () => {
     });
 
     it("should show API key input when OSS mode is enabled and non-OpenHands provider is selected", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "oss",
+      mockUseConfig.mockReturnValue({
+        data: { app_mode: "oss" },
+        isLoading: false,
       });
 
       renderLlmSettingsScreen();
@@ -566,10 +564,10 @@ describe("Content", () => {
     });
 
     it("should hide API key input when switching from non-OpenHands to OpenHands provider in SaaS mode", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
+      // SaaS mode is already the default from beforeEach, but let's be explicit
+      mockUseConfig.mockReturnValue({
+        data: { app_mode: "saas" },
+        isLoading: false,
       });
 
       renderLlmSettingsScreen();
@@ -611,10 +609,10 @@ describe("Content", () => {
     });
 
     it("should show API key input when switching from OpenHands to non-OpenHands provider in SaaS mode", async () => {
-      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
-      getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
+      // SaaS mode is already the default from beforeEach, but let's be explicit
+      mockUseConfig.mockReturnValue({
+        data: { app_mode: "saas" },
+        isLoading: false,
       });
 
       renderLlmSettingsScreen();
@@ -695,7 +693,7 @@ describe("Form submission", () => {
   it("should submit the advanced form with the correct values", async () => {
     // Use OSS mode so agent-input is visible
     mockUseConfig.mockReturnValue({
-      data: { APP_MODE: "oss" },
+      data: { app_mode: "oss" },
       isLoading: false,
     });
 
@@ -809,7 +807,7 @@ describe("Form submission", () => {
   it("should disable the button if there are no changes in the advanced form", async () => {
     // Use OSS mode so agent-input is visible
     mockUseConfig.mockReturnValue({
-      data: { APP_MODE: "oss" },
+      data: { app_mode: "oss" },
       isLoading: false,
     });
 
@@ -1147,19 +1145,7 @@ describe("View persistence after saving advanced settings", () => {
   it("should remain on Advanced view after saving when search API key is set", async () => {
     // Arrange: Start with default settings (non-SaaS mode to show search API key field)
     mockUseConfig.mockReturnValue({
-      data: {
-        APP_MODE: "oss",
-        GITHUB_CLIENT_ID: "fake-github-client-id",
-        POSTHOG_CLIENT_KEY: "fake-posthog-client-key",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          HIDE_BILLING: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
-        },
-      },
+      data: { app_mode: "oss" },
       isLoading: false,
     });
 
@@ -1304,7 +1290,7 @@ describe("Status toasts", () => {
     it("should call displaySuccessToast when the settings are saved", async () => {
       // Use OSS mode to ensure API key input is visible
       mockUseConfig.mockReturnValue({
-        data: { APP_MODE: "oss" },
+        data: { app_mode: "oss" },
         isLoading: false,
       });
 
@@ -1340,7 +1326,7 @@ describe("Status toasts", () => {
     it("should call displayErrorToast when the settings fail to save", async () => {
       // Use OSS mode to ensure API key input is visible
       mockUseConfig.mockReturnValue({
-        data: { APP_MODE: "oss" },
+        data: { app_mode: "oss" },
         isLoading: false,
       });
 
@@ -1375,13 +1361,12 @@ describe("Status toasts", () => {
 });
 
 describe("Role-based permissions", () => {
-  const getConfigSpy = vi.spyOn(OptionService, "getConfig");
   const getMeSpy = vi.spyOn(organizationService, "getMe");
 
   beforeEach(() => {
-    // @ts-expect-error - only return APP_MODE for these tests
-    getConfigSpy.mockResolvedValue({
-      APP_MODE: "saas",
+    mockUseConfig.mockReturnValue({
+      data: { app_mode: "saas" },
+      isLoading: false,
     });
   });
 

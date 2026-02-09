@@ -5,9 +5,7 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
-import { SettingsDropdownInput } from "./settings-dropdown-input";
-import { useSelectedOrganizationId } from "#/context/use-selected-organization";
-import { useOrganizations } from "#/hooks/query/use-organizations";
+import { OrgSelector } from "../org/org-selector";
 import { SettingsNavItem } from "#/constants/settings-nav";
 
 interface SettingsNavigationProps {
@@ -21,9 +19,6 @@ export function SettingsNavigation({
   onCloseMobileMenu,
   navigationItems,
 }: SettingsNavigationProps) {
-  const { organizationId, setOrganizationId } = useSelectedOrganizationId();
-  const { data: organizations } = useOrganizations();
-
   const { t } = useTranslation();
 
   return (
@@ -47,26 +42,8 @@ export function SettingsNavigation({
           "md:relative md:translate-x-0 md:w-64 md:p-0 md:bg-transparent",
         )}
       >
-        <div className="px-3 py-2">
-          <SettingsDropdownInput
-            testId="org-select"
-            name="organization"
-            placeholder="Please select an organization"
-            selectedKey={organizationId || ""}
-            items={
-              organizations?.map((org) => ({
-                key: org.id,
-                label: org.name,
-              })) || []
-            }
-            onSelectionChange={(org) => {
-              if (org) {
-                setOrganizationId(org.toString());
-              } else {
-                setOrganizationId(null);
-              }
-            }}
-          />
+        <div className="py-2">
+          <OrgSelector />
         </div>
 
         <div className="flex items-center justify-between">
@@ -78,7 +55,7 @@ export function SettingsNavigation({
           <button
             type="button"
             onClick={onCloseMobileMenu}
-            className="md:hidden p-0.5 hover:bg-[#454545] rounded-md transition-colors cursor-pointer"
+            className="md:hidden p-0.5 hover:bg-tertiary rounded-md transition-colors cursor-pointer"
             aria-label="Close navigation menu"
           >
             <CloseIcon width={32} height={32} />
@@ -94,8 +71,8 @@ export function SettingsNavigation({
               onClick={onCloseMobileMenu}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 p-1 sm:px-[14px] sm:py-2 rounded-md transition-colors",
-                  isActive ? "bg-[#454545]" : "hover:bg-[#454545]",
+                  "flex items-center gap-3 p-1 sm:px-3.5 sm:py-2 rounded-md transition-colors",
+                  isActive ? "bg-tertiary" : "hover:bg-tertiary",
                 )
               }
             >
