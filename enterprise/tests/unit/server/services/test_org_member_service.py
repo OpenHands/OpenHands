@@ -995,73 +995,49 @@ class TestOrgMemberServiceCanRemoveMember:
     """Test cases for OrgMemberService._can_remove_member."""
 
     def test_owner_can_remove_admin(self):
-        """Test that owner (rank 10) can remove admin (rank 20)."""
-        # Arrange
-        requester_rank = 10
-        target_rank = 20
-
+        """Test that owner can remove admin."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('owner', 'admin')
 
         # Assert
         assert result is True
 
     def test_owner_can_remove_user(self):
-        """Test that owner (rank 10) can remove user (rank 1000)."""
-        # Arrange
-        requester_rank = 10
-        target_rank = 1000
-
+        """Test that owner can remove user."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('owner', 'user')
 
         # Assert
         assert result is True
 
     def test_admin_can_remove_user(self):
-        """Test that admin (rank 20) can remove user (rank 1000)."""
-        # Arrange
-        requester_rank = 20
-        target_rank = 1000
-
+        """Test that admin can remove user."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('admin', 'user')
 
         # Assert
         assert result is True
 
     def test_admin_cannot_remove_admin(self):
-        """Test that admin (rank 20) cannot remove another admin (rank 20)."""
-        # Arrange
-        requester_rank = 20
-        target_rank = 20
-
+        """Test that admin cannot remove another admin."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('admin', 'admin')
 
         # Assert
         assert result is False
 
     def test_admin_cannot_remove_owner(self):
-        """Test that admin (rank 20) cannot remove owner (rank 10)."""
-        # Arrange
-        requester_rank = 20
-        target_rank = 10
-
+        """Test that admin cannot remove owner."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('admin', 'owner')
 
         # Assert
         assert result is False
 
     def test_user_cannot_remove_anyone(self):
-        """Test that user (rank 1000) cannot remove anyone."""
-        # Arrange
-        requester_rank = 1000
-        target_rank = 1000
-
+        """Test that user cannot remove anyone."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('user', 'user')
 
         # Assert
         assert result is False
@@ -1464,31 +1440,49 @@ class TestOrgMemberServiceCanUpdateMemberRole:
 
     def test_owner_can_set_any_role_for_non_owner(self):
         """Owner can change admin/user target to any role."""
-        assert OrgMemberService._can_update_member_role(10, 20, 10) is True
-        assert OrgMemberService._can_update_member_role(10, 20, 20) is True
-        assert OrgMemberService._can_update_member_role(10, 1000, 10) is True
+        assert (
+            OrgMemberService._can_update_member_role('owner', 'admin', 'owner') is True
+        )
+        assert (
+            OrgMemberService._can_update_member_role('owner', 'admin', 'admin') is True
+        )
+        assert (
+            OrgMemberService._can_update_member_role('owner', 'user', 'owner') is True
+        )
 
     def test_owner_cannot_modify_owner(self):
         """Owner cannot change another owner's role."""
-        assert OrgMemberService._can_update_member_role(10, 10, 20) is False
+        assert (
+            OrgMemberService._can_update_member_role('owner', 'owner', 'admin') is False
+        )
 
     def test_admin_can_set_admin_or_user_for_user(self):
         """Admin can set admin or user role for a user target."""
-        assert OrgMemberService._can_update_member_role(20, 1000, 20) is True
-        assert OrgMemberService._can_update_member_role(20, 1000, 1000) is True
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'user', 'admin') is True
+        )
+        assert OrgMemberService._can_update_member_role('admin', 'user', 'user') is True
 
     def test_admin_cannot_modify_admin_or_owner(self):
         """Admin cannot modify admin or owner targets."""
-        assert OrgMemberService._can_update_member_role(20, 20, 1000) is False
-        assert OrgMemberService._can_update_member_role(20, 10, 20) is False
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'admin', 'user') is False
+        )
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'owner', 'admin') is False
+        )
 
     def test_admin_cannot_set_owner_role(self):
         """Admin cannot set role to owner."""
-        assert OrgMemberService._can_update_member_role(20, 1000, 10) is False
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'user', 'owner') is False
+        )
 
     def test_user_cannot_update_anyone(self):
-        """User (rank 1000) cannot update any member's role."""
-        assert OrgMemberService._can_update_member_role(1000, 1000, 20) is False
+        """User cannot update any member's role."""
+        assert (
+            OrgMemberService._can_update_member_role('user', 'user', 'admin') is False
+        )
 
 
 class TestOrgMemberServiceIsLastOwner:
