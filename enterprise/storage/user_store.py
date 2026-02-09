@@ -786,7 +786,12 @@ class UserStore:
             User: The updated user object, or None if user not found
         """
         with session_maker() as session:
-            user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+            user = (
+                session.query(User)
+                .filter(User.id == uuid.UUID(user_id))
+                .with_for_update()
+                .first()
+            )
             if not user:
                 return None
 
