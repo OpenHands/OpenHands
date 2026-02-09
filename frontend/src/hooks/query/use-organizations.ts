@@ -6,10 +6,14 @@ export const useOrganizations = () =>
     queryKey: ["organizations"],
     queryFn: organizationService.getOrganizations,
     select: (data) =>
-      // Sort organizations with personal workspace first
+      // Sort organizations with personal workspace first, then alphabetically by name
       [...data].sort((a, b) => {
-        if (a.is_personal && !b.is_personal) return -1;
-        if (!a.is_personal && b.is_personal) return 1;
-        return 0;
+        const aIsPersonal = a.is_personal ?? false;
+        const bIsPersonal = b.is_personal ?? false;
+        if (aIsPersonal && !bIsPersonal) return -1;
+        if (!aIsPersonal && bIsPersonal) return 1;
+        return (a.name ?? "").localeCompare(b.name ?? "", undefined, {
+          sensitivity: "base",
+        });
       }),
   });
