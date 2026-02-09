@@ -70,6 +70,44 @@ class RoleNotFoundError(Exception):
         super().__init__(f'Role with id "{role_id}" not found')
 
 
+class InvalidRoleError(Exception):
+    """Raised when an invalid role name is specified."""
+
+    def __init__(self, role_name: str):
+        self.role_name = role_name
+        super().__init__(f'Invalid role: "{role_name}"')
+
+
+class InsufficientPermissionError(Exception):
+    """Raised when user lacks permission to perform an operation."""
+
+    def __init__(self, message: str = 'Insufficient permission'):
+        super().__init__(message)
+
+
+class CannotModifySelfError(Exception):
+    """Raised when user attempts to modify their own membership."""
+
+    def __init__(self, action: str = 'modify'):
+        self.action = action
+        super().__init__(f'Cannot {action} your own membership')
+
+
+class LastOwnerError(Exception):
+    """Raised when attempting to remove or demote the last owner."""
+
+    def __init__(self, action: str = 'remove'):
+        self.action = action
+        super().__init__(f'Cannot {action} the last owner of an organization')
+
+
+class MemberUpdateError(Exception):
+    """Raised when member update operation fails."""
+
+    def __init__(self, message: str = 'Failed to update member'):
+        super().__init__(message)
+
+
 class OrgCreate(BaseModel):
     """Request model for creating a new organization."""
 

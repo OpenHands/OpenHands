@@ -3,6 +3,11 @@
 from uuid import UUID
 
 from server.routes.org_models import (
+    CannotModifySelfError,
+    InsufficientPermissionError,
+    InvalidRoleError,
+    LastOwnerError,
+    MemberUpdateError,
     MeResponse,
     OrgMemberNotFoundError,
     OrgMemberPage,
@@ -176,7 +181,7 @@ class OrgMemberService:
         target_user_id: UUID,
         current_user_id: UUID,
         new_role_name: str | None = None,
-    ) -> tuple[bool, str | None, OrgMemberResponse | None]:
+    ) -> OrgMemberResponse:
         """Update a member's role in an organization.
 
         Permission rules:
@@ -192,7 +197,16 @@ class OrgMemberService:
             new_role_name: New role name ('owner', 'admin', or 'user')
 
         Returns:
-            Tuple of (success, error_code, data). If success is True, error_code is None.
+            OrgMemberResponse: The updated member data
+
+        Raises:
+            OrgMemberNotFoundError: If requester or target is not a member
+            CannotModifySelfError: If trying to modify self
+            RoleNotFoundError: If role configuration is invalid
+            InvalidRoleError: If new_role_name is not a valid role
+            InsufficientPermissionError: If requester lacks permission
+            LastOwnerError: If trying to demote the last owner
+            MemberUpdateError: If update operation fails
         """
 
         def _update_member():
@@ -201,50 +215,50 @@ class OrgMemberService:
                 org_id, current_user_id
             )
             if not requester_membership:
-                return False, 'not_a_member', None
+                raise OrgMemberNotFoundError(str(org_id), str(current_user_id))
 
             # Check if trying to modify self
             if str(current_user_id) == str(target_user_id):
-                return False, 'cannot_modify_self', None
+                raise CannotModifySelfError('modify')
 
             # Get target user's membership
             target_membership = OrgMemberStore.get_org_member(org_id, target_user_id)
             if not target_membership:
-                return False, 'member_not_found', None
+                raise OrgMemberNotFoundError(str(org_id), str(target_user_id))
 
             # Get roles
             requester_role = RoleStore.get_role_by_id(requester_membership.role_id)
             target_role = RoleStore.get_role_by_id(target_membership.role_id)
 
-            if not requester_role or not target_role:
-                return False, 'role_not_found', None
+            if not requester_role:
+                raise RoleNotFoundError(requester_membership.role_id)
+            if not target_role:
+                raise RoleNotFoundError(target_membership.role_id)
 
             # If no role change requested, return current state
             if new_role_name is None:
                 user = UserStore.get_user_by_id(str(target_user_id))
-                return (
-                    True,
-                    None,
-                    OrgMemberResponse(
-                        user_id=str(target_membership.user_id),
-                        email=user.email if user else None,
-                        role_id=target_membership.role_id,
-                        role_name=target_role.name,
-                        role_rank=target_role.rank,
-                        status=target_membership.status,
-                    ),
+                return OrgMemberResponse(
+                    user_id=str(target_membership.user_id),
+                    email=user.email if user else None,
+                    role_id=target_membership.role_id,
+                    role_name=target_role.name,
+                    role_rank=target_role.rank,
+                    status=target_membership.status,
                 )
 
             # Validate new role exists
             new_role = RoleStore.get_role_by_name(new_role_name.lower())
             if not new_role:
-                return False, 'invalid_role', None
+                raise InvalidRoleError(new_role_name)
 
             # Check permission to modify target
             if not OrgMemberService._can_update_member_role(
                 requester_role.rank, target_role.rank, new_role.rank
             ):
-                return False, 'insufficient_permission', None
+                raise InsufficientPermissionError(
+                    'You do not have permission to modify this member'
+                )
 
             # Check if demoting the last owner
             if (
@@ -252,29 +266,25 @@ class OrgMemberService:
                 and new_role.rank > OWNER_RANK
                 and OrgMemberService._is_last_owner(org_id, target_user_id)
             ):
-                return False, 'cannot_demote_last_owner', None
+                raise LastOwnerError('demote')
 
             # Perform the update
             updated_member = OrgMemberStore.update_user_role_in_org(
                 org_id, target_user_id, new_role.id
             )
             if not updated_member:
-                return False, 'update_failed', None
+                raise MemberUpdateError('Failed to update member')
 
             # Get user email for response
             user = UserStore.get_user_by_id(str(target_user_id))
 
-            return (
-                True,
-                None,
-                OrgMemberResponse(
-                    user_id=str(updated_member.user_id),
-                    email=user.email if user else None,
-                    role_id=updated_member.role_id,
-                    role_name=new_role.name,
-                    role_rank=new_role.rank,
-                    status=updated_member.status,
-                ),
+            return OrgMemberResponse(
+                user_id=str(updated_member.user_id),
+                email=user.email if user else None,
+                role_id=updated_member.role_id,
+                role_name=new_role.name,
+                role_rank=new_role.rank,
+                status=updated_member.status,
             )
 
         return await call_sync_from_async(_update_member)

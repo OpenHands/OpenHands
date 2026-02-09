@@ -4,7 +4,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
+    CannotModifySelfError,
+    InsufficientPermissionError,
+    InvalidRoleError,
+    LastOwnerError,
     LiteLLMIntegrationError,
+    MemberUpdateError,
     MeResponse,
     OrgAuthorizationError,
     OrgCreate,
@@ -625,63 +630,53 @@ async def update_org_member(
     Users cannot modify their own role. The last owner cannot be demoted.
     """
     try:
-        success, error, data = await OrgMemberService.update_org_member(
+        return await OrgMemberService.update_org_member(
             org_id=UUID(org_id),
             target_user_id=UUID(user_id),
             current_user_id=UUID(current_user_id),
             new_role_name=update_data.role,
         )
-
-        if not success:
-            error_map = {
-                'not_a_member': (
-                    status.HTTP_403_FORBIDDEN,
-                    'You are not a member of this organization',
-                ),
-                'cannot_modify_self': (
-                    status.HTTP_403_FORBIDDEN,
-                    'Cannot modify your own role',
-                ),
-                'member_not_found': (
-                    status.HTTP_404_NOT_FOUND,
-                    'Member not found in this organization',
-                ),
-                'role_not_found': (
-                    status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    'Role configuration error',
-                ),
-                'invalid_role': (
-                    status.HTTP_400_BAD_REQUEST,
-                    'Invalid role specified',
-                ),
-                'insufficient_permission': (
-                    status.HTTP_403_FORBIDDEN,
-                    'You do not have permission to modify this member',
-                ),
-                'cannot_demote_last_owner': (
-                    status.HTTP_400_BAD_REQUEST,
-                    'Cannot demote the last owner of an organization',
-                ),
-                'update_failed': (
-                    status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    'Failed to update member',
-                ),
-            }
-            status_code, detail = error_map.get(
-                error, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
-            )
-            raise HTTPException(status_code=status_code, detail=detail)
-
-        if data is None:
+    except OrgMemberNotFoundError as e:
+        # Distinguish between requester not being a member vs target not found
+        if str(current_user_id) in str(e):
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail='Failed to update member',
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='You are not a member of this organization',
             )
-
-        return data
-
-    except HTTPException:
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Member not found in this organization',
+        )
+    except CannotModifySelfError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Cannot modify your own role',
+        )
+    except RoleNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Role configuration error',
+        )
+    except InvalidRoleError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid role specified',
+        )
+    except InsufficientPermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='You do not have permission to modify this member',
+        )
+    except LastOwnerError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Cannot demote the last owner of an organization',
+        )
+    except MemberUpdateError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update member',
+        )
     except ValueError:
         logger.exception('Invalid UUID format')
         raise HTTPException(
