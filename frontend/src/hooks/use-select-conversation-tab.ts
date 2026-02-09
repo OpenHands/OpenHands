@@ -49,6 +49,19 @@ export function useSelectConversationTab() {
   };
 
   /**
+   * Navigates to a tab without toggle behavior.
+   * Always shows the panel and selects the tab, even if already selected.
+   * Use this for "View" or "Read More" buttons that should always navigate.
+   */
+  const navigateToTab = (tab: ConversationTab) => {
+    onTabChange(tab);
+    if (!isRightPanelShown) {
+      setHasRightPanelToggled(true);
+      setPersistedRightPanelShown(true);
+    }
+  };
+
+  /**
    * Checks if a specific tab is currently active (selected and panel is visible).
    */
   const isTabActive = (tab: ConversationTab) =>
@@ -56,6 +69,7 @@ export function useSelectConversationTab() {
 
   return {
     selectTab,
+    navigateToTab,
     isTabActive,
     onTabChange,
     selectedTab,

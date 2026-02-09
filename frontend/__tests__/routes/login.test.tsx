@@ -87,18 +87,18 @@ describe("LoginPage", () => {
     vi.clearAllMocks();
     vi.stubGlobal("location", { href: "" });
 
+    // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test-client-id",
-      POSTHOG_CLIENT_KEY: "test-posthog-key",
-      PROVIDERS_CONFIGURED: ["github", "gitlab", "bitbucket"],
-      AUTH_URL: "https://auth.example.com",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github", "gitlab", "bitbucket"],
+      auth_url: "https://auth.example.com",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
 
@@ -151,18 +151,18 @@ describe("LoginPage", () => {
     });
 
     it("should only display configured providers", async () => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test-client-id",
-        POSTHOG_CLIENT_KEY: "test-posthog-key",
-        PROVIDERS_CONFIGURED: ["github"],
-        AUTH_URL: "https://auth.example.com",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "saas",
+        posthog_client_key: "test-posthog-key",
+        providers_configured: ["github"],
+        auth_url: "https://auth.example.com",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 
@@ -187,18 +187,18 @@ describe("LoginPage", () => {
     });
 
     it("should display message when no providers are configured", async () => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test-client-id",
-        POSTHOG_CLIENT_KEY: "test-posthog-key",
-        PROVIDERS_CONFIGURED: [],
-        AUTH_URL: "https://auth.example.com",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "saas",
+        posthog_client_key: "test-posthog-key",
+        providers_configured: [],
+        auth_url: "https://auth.example.com",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 
@@ -320,16 +320,16 @@ describe("LoginPage", () => {
     });
 
     it("should redirect OSS mode users to home", async () => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "oss",
-        GITHUB_CLIENT_ID: "test-client-id",
-        POSTHOG_CLIENT_KEY: "test-posthog-key",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "oss",
+        posthog_client_key: "test-posthog-key",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 

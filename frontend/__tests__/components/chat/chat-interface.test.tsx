@@ -125,7 +125,7 @@ describe("ChatInterface - Chat Suggestions", () => {
     });
 
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      data: { APP_MODE: "local" },
+      data: { app_mode: "local" },
     });
     (useGetTrajectory as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       mutate: vi.fn(),
@@ -258,7 +258,7 @@ describe("ChatInterface - Empty state", () => {
       errorMessage: null,
     });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      data: { APP_MODE: "local" },
+      data: { app_mode: "local" },
     });
     (useGetTrajectory as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       mutate: vi.fn(),

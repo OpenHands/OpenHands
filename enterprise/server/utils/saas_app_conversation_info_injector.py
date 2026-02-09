@@ -233,7 +233,13 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         result = result_set.first()
         if result:
             stored_metadata, saas_metadata = result
-            return self._to_info_with_user_id(stored_metadata, saas_metadata)
+            # Fetch sub-conversation IDs
+            sub_conversation_ids = await self.get_sub_conversation_ids(conversation_id)
+            return self._to_info_with_user_id(
+                stored_metadata,
+                saas_metadata,
+                sub_conversation_ids=sub_conversation_ids,
+            )
         return None
 
     async def batch_get_app_conversation_info(
@@ -262,8 +268,16 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         for conversation_id in conversation_id_strs:
             if conversation_id in info_by_id:
                 stored_metadata, saas_metadata = info_by_id[conversation_id]
+                # Fetch sub-conversation IDs for each conversation
+                sub_conversation_ids = await self.get_sub_conversation_ids(
+                    UUID(conversation_id)
+                )
                 results.append(
-                    self._to_info_with_user_id(stored_metadata, saas_metadata)
+                    self._to_info_with_user_id(
+                        stored_metadata,
+                        saas_metadata,
+                        sub_conversation_ids=sub_conversation_ids,
+                    )
                 )
             else:
                 results.append(None)
@@ -316,10 +330,11 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         self,
         stored: StoredConversationMetadata,
         saas_metadata: StoredConversationMetadataSaas,
+        sub_conversation_ids: list[UUID] | None = None,
     ) -> AppConversationInfo:
         """Convert stored metadata to AppConversationInfo with user_id from SAAS metadata."""
         # Use the base _to_info method to get the basic info
-        info = self._to_info(stored)
+        info = self._to_info(stored, sub_conversation_ids=sub_conversation_ids)
 
         # Override the created_by_user_id with the user_id from SAAS metadata
         info.created_by_user_id = (

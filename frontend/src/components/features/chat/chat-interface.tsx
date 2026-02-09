@@ -369,7 +369,7 @@ export function ChatInterface() {
                   onNegativeFeedback={() =>
                     onClickShareFeedbackActionButton("negative")
                   }
-                  isSaasMode={config?.APP_MODE === "saas"}
+                  isSaasMode={config?.app_mode === "saas"}
                 />
               )}
             </div>
@@ -391,7 +391,7 @@ export function ChatInterface() {
           <InteractiveChatBox onSubmit={handleSendMessage} />
         </div>
 
-        {config?.APP_MODE !== "saas" && !isV1Conversation && (
+        {config?.app_mode !== "saas" && !isV1Conversation && (
           <FeedbackModal
             isOpen={feedbackModalIsOpen}
             onClose={() => setFeedbackModalIsOpen(false)}

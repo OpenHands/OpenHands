@@ -73,7 +73,7 @@ export function ConversationNameContextMenu({
   // Check if we should show the public sharing option
   // Only show for V1 conversations in SAAS mode
   const shouldShowPublicSharing =
-    isV1Conversation && config?.APP_MODE === "saas" && onTogglePublic;
+    isV1Conversation && config?.app_mode === "saas" && onTogglePublic;
 
   const hasDownload = Boolean(onDownloadViaVSCode || onDownloadConversation);
   const hasExport = Boolean(onExportConversation);

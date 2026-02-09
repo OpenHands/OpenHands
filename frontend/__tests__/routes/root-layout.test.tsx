@@ -160,18 +160,18 @@ describe("MainApp", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test-client-id",
-      POSTHOG_CLIENT_KEY: "test-posthog-key",
-      PROVIDERS_CONFIGURED: ["github"],
-      AUTH_URL: "https://auth.example.com",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github"],
+      auth_url: "https://auth.example.com",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
 
