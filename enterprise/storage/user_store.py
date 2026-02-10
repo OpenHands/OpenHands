@@ -5,6 +5,7 @@ Store class for managing users.
 import asyncio
 import uuid
 from typing import Optional
+from uuid import UUID
 
 from server.auth.token_manager import TokenManager
 from server.constants import (
@@ -772,6 +773,32 @@ class UserStore:
         """List all users."""
         with session_maker() as session:
             return session.query(User).all()
+
+    @staticmethod
+    def update_current_org(user_id: str, org_id: UUID) -> Optional[User]:
+        """Update the user's current organization.
+
+        Args:
+            user_id: The user's ID (Keycloak user ID)
+            org_id: The organization ID to set as current
+
+        Returns:
+            User: The updated user object, or None if user not found
+        """
+        with session_maker() as session:
+            user = (
+                session.query(User)
+                .filter(User.id == uuid.UUID(user_id))
+                .with_for_update()
+                .first()
+            )
+            if not user:
+                return None
+
+            user.current_org_id = org_id
+            session.commit()
+            session.refresh(user)
+            return user
 
     @staticmethod
     async def backfill_contact_name(user_id: str, user_info: dict) -> None:
