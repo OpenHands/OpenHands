@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import overload
 
 from pydantic import BaseModel
@@ -24,7 +25,7 @@ class View(BaseModel):
     def __len__(self) -> int:
         return len(self.events)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Event]:
         return iter(self.events)
 
     # To preserve list-like indexing, we ideally support slicing and position-based indexing.
