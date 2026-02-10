@@ -445,6 +445,20 @@ export const ORG_HANDLERS = [
     return HttpResponse.json({ message: "Member removed" }, { status: 200 });
   }),
 
+  http.post("/api/organizations/:orgId/switch", ({ params }) => {
+    const orgId = params.orgId?.toString();
+
+    if (orgId) {
+      const org = orgs.get(orgId);
+      if (org) return HttpResponse.json(org);
+    }
+
+    return HttpResponse.json(
+      { error: "Organization not found" },
+      { status: 404 },
+    );
+  }),
+
   http.post(
     "/api/organizations/:orgId/members/invite",
     async ({ request, params }) => {

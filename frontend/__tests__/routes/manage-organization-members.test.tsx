@@ -13,9 +13,19 @@ import {
   ORGS_AND_MEMBERS,
   resetOrgMockData,
   resetOrgsAndMembersMockData,
+  MOCK_TEAM_ORG_ACME,
 } from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+
+const mockQueryClient = vi.hoisted(() => {
+  const { QueryClient } = require("@tanstack/react-query");
+  return new QueryClient();
+});
+
+vi.mock("#/query-client-config", () => ({
+  queryClient: mockQueryClient,
+}));
 
 vi.mock("react-i18next", async () => {
   const actual =
@@ -72,8 +82,10 @@ describe("Manage Organization Members Route", () => {
   const getMeSpy = vi.spyOn(organizationService, "getMe");
 
   beforeEach(() => {
-    // Reset Zustand store to ensure clean state and avoid loader redirects
-    useSelectedOrganizationStore.setState({ organizationId: null });
+    // Set Zustand store to a team org so clientLoader allows access to /settings/org-members
+    useSelectedOrganizationStore.setState({ organizationId: MOCK_TEAM_ORG_ACME.id });
+    // Seed organizations into the module-level queryClient used by clientLoader
+    mockQueryClient.setQueryData(["organizations"], [MOCK_TEAM_ORG_ACME]);
 
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     // @ts-expect-error - partial mock for testing
@@ -113,8 +125,9 @@ describe("Manage Organization Members Route", () => {
     resetOrgsAndMembersMockData();
     // Clear queryClient cache to ensure fresh data for next test
     queryClient.clear();
-    // Reset Zustand store to avoid polluting other test files
+    // Reset Zustand store and module-level queryClient
     useSelectedOrganizationStore.setState({ organizationId: null });
+    mockQueryClient.clear();
   });
 
   const renderManageOrganizationMembers = () =>
