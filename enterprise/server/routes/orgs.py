@@ -686,6 +686,7 @@ async def switch_org(
             detail='An unexpected error occurred',
         )
 
+
 @org_router.patch('/{org_id}/members/{user_id}', response_model=OrgMemberResponse)
 async def update_org_member(
     org_id: str,
