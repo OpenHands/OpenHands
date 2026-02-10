@@ -133,35 +133,19 @@ export function ChatInterface() {
 
   const isV1Conversation = conversation?.conversation_version === "V1";
 
-  // Track when we should show V1 messages (after DOM has rendered)
-  const [showV1Messages, setShowV1Messages] = React.useState(false);
-  const prevV1LoadingRef = React.useRef(
-    conversationWebSocket?.isLoadingHistory,
-  );
-
-  // Wait for DOM to render before showing V1 messages
-  React.useEffect(() => {
-    const wasLoading = prevV1LoadingRef.current;
-    const isLoading = conversationWebSocket?.isLoadingHistory;
-
-    if (wasLoading && !isLoading) {
-      // Loading just finished - wait for next frame to ensure DOM is ready
-      requestAnimationFrame(() => {
-        setShowV1Messages(true);
-      });
-    } else if (isLoading) {
-      // Reset when loading starts
-      setShowV1Messages(false);
-    }
-
-    prevV1LoadingRef.current = isLoading;
-  }, [conversationWebSocket?.isLoadingHistory]);
+  // Show V1 messages immediately if events exist in store (e.g., remount),
+  // or once loading completes. This replaces the old transition-observation
+  // pattern (useState + useEffect watching loading→loaded) which always showed
+  // skeleton on remount because local state initialized to false.
+  const showV1Messages =
+    v1FullEvents.length > 0 || !conversationWebSocket?.isLoadingHistory;
 
   const isReturningToConversation = !!params.conversationId;
+  // Only show loading skeleton when genuinely loading AND no events in store yet.
+  // If events exist (e.g., remount after data was already fetched), skip skeleton.
   const isHistoryLoading =
-    (isLoadingMessages && !isV1Conversation) ||
-    (isV1Conversation &&
-      (conversationWebSocket?.isLoadingHistory || !showV1Messages));
+    (isLoadingMessages && !isV1Conversation && v0Events.length === 0) ||
+    (isV1Conversation && !showV1Messages);
   const isChatLoading = isHistoryLoading && !isTask;
 
   const handleSendMessage = async (
@@ -289,7 +273,7 @@ export function ChatInterface() {
             </div>
           )}
 
-          {!isLoadingMessages && v0UserEventsExist && (
+          {(!isLoadingMessages || v0Events.length > 0) && v0UserEventsExist && (
             <V0Messages
               messages={v0Events}
               isAwaitingUserConfirmation={
