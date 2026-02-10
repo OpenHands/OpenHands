@@ -45,6 +45,16 @@ class OrgAuthorizationError(OrgDeletionError):
         super().__init__(message)
 
 
+class OrphanedUserError(OrgDeletionError):
+    """Raised when deleting an org would leave users without any organization."""
+
+    def __init__(self, user_ids: list[str]):
+        self.user_ids = user_ids
+        super().__init__(
+            f'Cannot delete organization: {len(user_ids)} user(s) would have no remaining organization'
+        )
+
+
 class OrgNotFoundError(Exception):
     """Raised when organization is not found or user doesn't have access."""
 
