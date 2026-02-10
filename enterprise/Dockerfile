@@ -34,7 +34,8 @@ RUN /app/.venv/bin/pip install poetry poetry-plugin-export && \
     sed -i '/^-e /d; /openhands-ai/d' requirements.txt && \
     # Install pinned dependencies from lock file
     /app/.venv/bin/pip install -r requirements.txt && \
-    # Cleanup
+    # Cleanup - return to /app before removing /tmp/enterprise
+    cd /app && \
     rm -rf /tmp/enterprise && \
     /app/.venv/bin/pip uninstall -y poetry poetry-plugin-export
 
