@@ -507,6 +507,7 @@ function LlmSettingsScreen() {
             defaultIsToggled={view === "advanced"}
             onToggle={handleToggleAdvancedSettings}
             isToggled={view === "advanced"}
+            isDisabled={isReadOnly}
           >
             {t(I18nKey.SETTINGS$ADVANCED)}
           </SettingsSwitch>

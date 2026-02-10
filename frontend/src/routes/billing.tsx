@@ -8,6 +8,8 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { useTracking } from "#/hooks/use-tracking";
+import { useMe } from "#/hooks/query/use-me";
+import { usePermission } from "#/hooks/organizations/use-permissions";
 import { getActiveOrganizationUser } from "#/utils/org/permission-checks";
 import { rolePermissions } from "#/utils/org/permissions";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
@@ -24,10 +26,10 @@ export const clientLoader = async () => {
 
   const userRole = user.role ?? "member";
 
-  let config = queryClient.getQueryData<WebClientConfig>(["config"]);
+  let config = queryClient.getQueryData<WebClientConfig>(["web-client-config"]);
   if (!config) {
     config = await OptionService.getConfig();
-    queryClient.setQueryData<WebClientConfig>(["config"], config);
+    queryClient.setQueryData<WebClientConfig>(["web-client-config"], config);
   }
 
   if (
@@ -43,6 +45,9 @@ function BillingSettingsScreen() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { trackCreditsPurchased } = useTracking();
+  const { data: me } = useMe();
+  const { hasPermission } = usePermission(me?.role ?? "member");
+  const canAddCredits = !!me && hasPermission("add_credits");
   const checkoutStatus = searchParams.get("checkout");
 
   React.useEffect(() => {
@@ -68,7 +73,7 @@ function BillingSettingsScreen() {
     }
   }, [checkoutStatus, searchParams, setSearchParams, t, trackCreditsPurchased]);
 
-  return <PaymentForm />;
+  return <PaymentForm isDisabled={!canAddCredits} />;
 }
 
 export default BillingSettingsScreen;

@@ -3,6 +3,7 @@ import { createRoutesStub } from "react-router";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
 import BillingSettingsScreen, { clientLoader } from "#/routes/billing";
+import { PaymentForm } from "#/components/features/payment/payment-form";
 import OptionService from "#/api/option-service/option-service.api";
 import { OrganizationMember } from "#/types/org";
 import * as orgStore from "#/stores/selected-organization-store";
@@ -29,6 +30,23 @@ vi.mock("#/hooks/use-tracking", () => ({
     trackCreditsPurchased: vi.fn(),
   }),
 }));
+
+// Mock useBalance hook
+const mockUseBalance = vi.fn();
+vi.mock("#/hooks/query/use-balance", () => ({
+  useBalance: () => mockUseBalance(),
+}));
+
+// Mock useCreateStripeCheckoutSession hook
+vi.mock(
+  "#/hooks/mutation/stripe/use-create-stripe-checkout-session",
+  () => ({
+    useCreateStripeCheckoutSession: () => ({
+      mutate: vi.fn(),
+      isPending: false,
+    }),
+  }),
+);
 
 describe("Billing Route", () => {
   const { mockQueryClient } = vi.hoisted(() => ({
@@ -92,6 +110,34 @@ describe("Billing Route", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe("clientLoader cache key", () => {
+    it("should use the 'web-client-config' query key to read cached config", async () => {
+      // Arrange: pre-populate the cache under the canonical key
+      seedActiveUser({ role: "admin" });
+      const cachedConfig = {
+        app_mode: "saas" as const,
+        posthog_client_key: "test",
+        feature_flags: {
+          enable_billing: true,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
+      };
+      mockQueryClient.setQueryData(["web-client-config"], cachedConfig);
+
+      const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+
+      // Act: invoke the clientLoader directly
+      const result = await clientLoader();
+
+      // Assert: the loader should have found the cached config and NOT called getConfig
+      expect(getConfigSpy).not.toHaveBeenCalled();
+      expect(result).toBeNull(); // admin with billing enabled = no redirect
+    });
   });
 
   describe("clientLoader permission checks", () => {
@@ -258,6 +304,60 @@ describe("Billing Route", () => {
       await waitFor(() => {
         expect(screen.getByTestId("user-settings-screen")).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("PaymentForm permission behavior", () => {
+    beforeEach(() => {
+      mockUseBalance.mockReturnValue({
+        data: "150.00",
+        isLoading: false,
+      });
+    });
+
+    it("should disable input and button when isDisabled is true, but show balance", async () => {
+      // Arrange & Act
+      render(<PaymentForm isDisabled />, {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={mockQueryClient}>
+            {children}
+          </QueryClientProvider>
+        ),
+      });
+
+      // Assert - balance is visible
+      const balance = screen.getByTestId("user-balance");
+      expect(balance).toBeInTheDocument();
+      expect(balance).toHaveTextContent("$150.00");
+
+      // Assert - input is disabled
+      const topUpInput = screen.getByTestId("top-up-input");
+      expect(topUpInput).toBeDisabled();
+
+      // Assert - button is disabled
+      const submitButton = screen.getByRole("button");
+      expect(submitButton).toBeDisabled();
+    });
+
+    it("should enable input and button when isDisabled is false", async () => {
+      // Arrange & Act
+      render(<PaymentForm isDisabled={false} />, {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={mockQueryClient}>
+            {children}
+          </QueryClientProvider>
+        ),
+      });
+
+      // Assert - input is enabled
+      const topUpInput = screen.getByTestId("top-up-input");
+      expect(topUpInput).not.toBeDisabled();
+
+      // Assert - button starts disabled (no amount entered) but is NOT
+      // permanently disabled by the isDisabled prop
+      const submitButton = screen.getByRole("button");
+      // The button is disabled because no valid amount is entered, not because of isDisabled
+      expect(submitButton).toBeDisabled();
     });
   });
 });
