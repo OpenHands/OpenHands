@@ -11,7 +11,6 @@ import os
 
 from playwright.sync_api import Page, expect
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -92,7 +91,9 @@ def test_github_token_configuration(page: Page, base_url: str):
             )
 
             if navigate_to_settings_button.is_visible(timeout=3000):
-                logger.info('GitHub token not configured. Need to navigate to settings...')
+                logger.info(
+                    'GitHub token not configured. Need to navigate to settings...'
+                )
 
                 # Click the Settings button to navigate to the settings page
                 navigate_to_settings_button.click()
@@ -100,7 +101,9 @@ def test_github_token_configuration(page: Page, base_url: str):
                 page.wait_for_timeout(3000)  # Wait for navigation to complete
 
                 # We should now be on the /settings/integrations page
-                logger.info('Navigated to settings page, looking for GitHub token input...')
+                logger.info(
+                    'Navigated to settings page, looking for GitHub token input...'
+                )
 
                 # Check if we're on the settings page with the integrations tab
                 settings_screen = page.locator('[data-testid="settings-screen"]')
@@ -190,12 +193,18 @@ def test_github_token_configuration(page: Page, base_url: str):
                             else:
                                 logger.warning('Save Changes button not found')
                         else:
-                            logger.warning('No GitHub token found in environment variables')
+                            logger.warning(
+                                'No GitHub token found in environment variables'
+                            )
                     else:
-                        logger.warning('GitHub token input field not found on settings page')
+                        logger.warning(
+                            'GitHub token input field not found on settings page'
+                        )
                         # Take a screenshot to see what's on the page
                         page.screenshot(path='test-results/token_02_settings_debug.png')
-                        logger.info('Debug screenshot saved: token_02_settings_debug.png')
+                        logger.info(
+                            'Debug screenshot saved: token_02_settings_debug.png'
+                        )
                 else:
                     logger.warning('Settings screen not found')
             else:
@@ -263,11 +272,15 @@ def test_github_token_configuration(page: Page, base_url: str):
                             page.goto(base_url)
                             page.wait_for_load_state('networkidle')
                     else:
-                        logger.warning('Integrations tab not found, going back to home page')
+                        logger.warning(
+                            'Integrations tab not found, going back to home page'
+                        )
                         page.goto(base_url)
                         page.wait_for_load_state('networkidle')
                 else:
-                    logger.info('Settings button not found, continuing with existing token')
+                    logger.info(
+                        'Settings button not found, continuing with existing token'
+                    )
         else:
             logger.warning('Could not find "Connect to a Repository" section')
 
