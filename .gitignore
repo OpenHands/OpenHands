@@ -240,6 +240,7 @@ logs
 /_test_workspace
 /debug
 cache
+ralph/
 
 # configuration
 config.toml
