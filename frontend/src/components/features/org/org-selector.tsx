@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
+import { useSwitchOrganization } from "#/hooks/mutation/use-switch-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { I18nKey } from "#/i18n/declaration";
 import { Organization } from "#/types/org";
@@ -10,6 +11,8 @@ export function OrgSelector() {
   const { t } = useTranslation();
   const { organizationId, setOrganizationId } = useSelectedOrganizationId();
   const { data: organizations, isLoading } = useOrganizations();
+  const { mutate: switchOrganization, isPending: isSwitching } =
+    useSwitchOrganization();
 
   const getOrgDisplayName = React.useCallback(
     (org: Organization) =>
@@ -41,10 +44,12 @@ export function OrgSelector() {
         value: selectedOrg?.id || "",
       }}
       onChange={(item) => {
-        setOrganizationId(item ? item.value : null);
+        if (item && item.value !== organizationId) {
+          switchOrganization(item.value);
+        }
       }}
       placeholder={t(I18nKey.ORG$SELECT_ORGANIZATION_PLACEHOLDER)}
-      loading={isLoading}
+      loading={isLoading || isSwitching}
       options={
         organizations?.map((org) => ({
           value: org.id,
