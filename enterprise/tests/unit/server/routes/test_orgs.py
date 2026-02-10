@@ -2635,3 +2635,136 @@ class TestGetMeEndpoint:
                 await get_me(org_id=test_org_id, user_id=test_user_id)
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+@pytest.mark.asyncio
+async def test_switch_org_success(mock_app_with_get_user_id):
+    """
+    GIVEN: Valid org_id and authenticated user who is a member
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: User's current org is switched and org details returned with 200 status
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Target Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+        default_llm_model='claude-opus-4-5-20251101',
+    )
+
+    with (
+        patch(
+            'server.routes.orgs.OrgService.switch_org',
+            AsyncMock(return_value=mock_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=100.0),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(f'/api/organizations/{org_id}/switch')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['id'] == str(org_id)
+        assert response_data['name'] == 'Target Organization'
+        assert response_data['credits'] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_switch_org_not_member(mock_app_with_get_user_id):
+    """
+    GIVEN: User is not a member of the target organization
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: 403 Forbidden error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+
+    with patch(
+        'server.routes.orgs.OrgService.switch_org',
+        AsyncMock(
+            side_effect=OrgAuthorizationError(
+                'User must be a member of the organization to switch to it'
+            )
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(f'/api/organizations/{org_id}/switch')
+
+        # Assert
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'member' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_switch_org_not_found(mock_app_with_get_user_id):
+    """
+    GIVEN: Organization does not exist
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: 404 Not Found error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+
+    with patch(
+        'server.routes.orgs.OrgService.switch_org',
+        AsyncMock(side_effect=OrgNotFoundError(str(org_id))),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(f'/api/organizations/{org_id}/switch')
+
+        # Assert
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_switch_org_invalid_uuid(mock_app_with_get_user_id):
+    """
+    GIVEN: Invalid UUID format for org_id
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: 422 Unprocessable Entity error is returned
+    """
+    # Arrange
+    client = TestClient(mock_app_with_get_user_id)
+
+    # Act
+    response = client.post('/api/organizations/not-a-valid-uuid/switch')
+
+    # Assert
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_switch_org_database_error(mock_app_with_get_user_id):
+    """
+    GIVEN: Database operation fails during switch
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: 500 Internal Server Error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+
+    with patch(
+        'server.routes.orgs.OrgService.switch_org',
+        AsyncMock(side_effect=OrgDatabaseError('Database connection failed')),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(f'/api/organizations/{org_id}/switch')
+
+        # Assert
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert 'Failed to switch organization' in response.json()['detail']

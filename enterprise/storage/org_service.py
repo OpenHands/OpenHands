@@ -865,3 +865,71 @@ class OrgService:
             return False
 
         return org.byor_export_enabled
+
+    @staticmethod
+    async def switch_org(user_id: str, org_id: UUID) -> Org:
+        """
+        Switch user's current organization to the specified organization.
+
+        This method:
+        1. Validates that the organization exists
+        2. Validates that the user is a member of the organization
+        3. Updates the user's current_org_id
+
+        Args:
+            user_id: User ID (string that will be converted to UUID)
+            org_id: Organization ID to switch to
+
+        Returns:
+            Org: The organization that was switched to
+
+        Raises:
+            OrgNotFoundError: If organization doesn't exist
+            OrgAuthorizationError: If user is not a member of the organization
+            OrgDatabaseError: If database update fails
+        """
+        logger.info(
+            'Switching user organization',
+            extra={'user_id': user_id, 'org_id': str(org_id)},
+        )
+
+        # Step 1: Check if organization exists
+        org = OrgStore.get_org_by_id(org_id)
+        if not org:
+            raise OrgNotFoundError(str(org_id))
+
+        # Step 2: Validate user is a member of the organization
+        if not OrgService.is_org_member(user_id, org_id):
+            logger.warning(
+                'User attempted to switch to organization they are not a member of',
+                extra={'user_id': user_id, 'org_id': str(org_id)},
+            )
+            raise OrgAuthorizationError(
+                'User must be a member of the organization to switch to it'
+            )
+
+        # Step 3: Update user's current_org_id
+        try:
+            updated_user = UserStore.update_current_org(user_id, org_id)
+            if not updated_user:
+                raise OrgDatabaseError('User not found')
+
+            logger.info(
+                'Successfully switched user organization',
+                extra={
+                    'user_id': user_id,
+                    'org_id': str(org_id),
+                    'org_name': org.name,
+                },
+            )
+
+            return org
+
+        except OrgDatabaseError:
+            raise
+        except Exception as e:
+            logger.error(
+                'Failed to switch user organization',
+                extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+            )
+            raise OrgDatabaseError(f'Failed to switch organization: {str(e)}')

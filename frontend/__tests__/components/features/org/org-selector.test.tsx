@@ -100,4 +100,62 @@ describe("OrgSelector", () => {
     expect(options[1]).toHaveTextContent("Acme Corp");
     expect(options[2]).toHaveTextContent("Test Organization");
   });
+
+  it("should call switchOrganization API when selecting a different organization", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+      MOCK_PERSONAL_ORG,
+      MOCK_TEAM_ORG_ACME,
+    ]);
+    const switchOrgSpy = vi
+      .spyOn(organizationService, "switchOrganization")
+      .mockResolvedValue(MOCK_TEAM_ORG_ACME);
+
+    renderOrgSelector();
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("Personal Workspace");
+    });
+
+    // Act
+    const trigger = screen.getByTestId("dropdown-trigger");
+    await user.click(trigger);
+    const listbox = await screen.findByRole("listbox");
+    const acmeOption = within(listbox).getByText("Acme Corp");
+    await user.click(acmeOption);
+
+    // Assert
+    expect(switchOrgSpy).toHaveBeenCalledWith({ orgId: MOCK_TEAM_ORG_ACME.id });
+  });
+
+  it("should show loading state while switching organizations", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+      MOCK_PERSONAL_ORG,
+      MOCK_TEAM_ORG_ACME,
+    ]);
+    vi.spyOn(organizationService, "switchOrganization").mockImplementation(
+      () => new Promise(() => {}), // never resolves to keep loading state
+    );
+
+    renderOrgSelector();
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("Personal Workspace");
+    });
+
+    // Act
+    const trigger = screen.getByTestId("dropdown-trigger");
+    await user.click(trigger);
+    const listbox = await screen.findByRole("listbox");
+    const acmeOption = within(listbox).getByText("Acme Corp");
+    await user.click(acmeOption);
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.getByTestId("dropdown-trigger")).toBeDisabled();
+    });
+  });
 });

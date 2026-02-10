@@ -102,4 +102,11 @@ export const organizationService = {
 
     return data;
   },
+
+  switchOrganization: async ({ orgId }: { orgId: string }) => {
+    const { data } = await openHands.post<Organization>(
+      `/api/organizations/${orgId}/switch`,
+    );
+    return data;
+  },
 };
