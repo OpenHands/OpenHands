@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import zipfile
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
@@ -37,6 +38,23 @@ from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
+
+# Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
+_ALLOW_SHORT_CONTEXT_WINDOWS = 'ALLOW_SHORT_CONTEXT_WINDOWS'
+
+
+@pytest.fixture(autouse=True)
+def allow_short_context_windows():
+    """Allow small context windows so unit tests can create LLM with gpt-4 etc."""
+    old = os.environ.pop(_ALLOW_SHORT_CONTEXT_WINDOWS, None)
+    os.environ[_ALLOW_SHORT_CONTEXT_WINDOWS] = 'true'
+    try:
+        yield
+    finally:
+        if old is not None:
+            os.environ[_ALLOW_SHORT_CONTEXT_WINDOWS] = old
+        else:
+            os.environ.pop(_ALLOW_SHORT_CONTEXT_WINDOWS, None)
 
 
 class TestLiveStatusAppConversationService:
