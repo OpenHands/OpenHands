@@ -1099,7 +1099,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Assert
             assert isinstance(data, OrgMemberResponse)
-            assert data.role_name == 'admin'
+            assert data.role == 'admin'
             assert data.role_rank == 20
             mock_update.assert_called_once_with(org_id, target_user_id, admin_role.id)
 
@@ -1431,7 +1431,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Assert
             assert data is not None
-            assert data.role_name == 'user'
+            assert data.role == 'user'
             assert data.role_rank == 1000
 
 

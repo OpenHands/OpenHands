@@ -2318,7 +2318,7 @@ class TestUpdateOrgMemberEndpoint:
             user_id=target_user_id,
             email='user@example.com',
             role_id=2,
-            role_name='admin',
+            role='admin',
             role_rank=20,
             status='active',
         )
