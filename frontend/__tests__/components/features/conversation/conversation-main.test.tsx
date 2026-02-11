@@ -1,14 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mutable mock state for controlling viewport width
-let mockWidth = 1200;
+// Mutable mock state for controlling breakpoint
+let mockIsMobile = false;
 
 // Track ChatInterface unmount via vi.fn()
 const chatInterfaceUnmount = vi.fn();
 
-vi.mock("@uidotdev/usehooks", () => ({
-  useWindowSize: () => ({ width: mockWidth, height: 800 }),
+vi.mock("#/hooks/use-breakpoint", () => ({
+  useBreakpoint: () => mockIsMobile,
 }));
 
 vi.mock("#/hooks/use-resizable-panels", () => ({
@@ -52,29 +52,29 @@ import { ConversationMain } from "#/components/features/conversation/conversatio
 
 describe("ConversationMain - Layout Transition Stability", () => {
   beforeEach(() => {
-    mockWidth = 1200;
+    mockIsMobile = false;
     chatInterfaceUnmount.mockClear();
   });
 
   it("renders ChatInterface at desktop width", () => {
-    mockWidth = 1200;
+    mockIsMobile = false;
     render(<ConversationMain />);
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
   it("renders ChatInterface at mobile width", () => {
-    mockWidth = 800;
+    mockIsMobile = true;
     render(<ConversationMain />);
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
   it("does not unmount ChatInterface when crossing from desktop to mobile", () => {
-    mockWidth = 1200;
+    mockIsMobile = false;
     const { rerender } = render(<ConversationMain />);
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();
 
-    // Cross the 1024px breakpoint to mobile
-    mockWidth = 800;
+    // Cross the breakpoint to mobile
+    mockIsMobile = true;
     rerender(<ConversationMain />);
 
     // ChatInterface must NOT have been unmounted and remounted
@@ -83,12 +83,12 @@ describe("ConversationMain - Layout Transition Stability", () => {
   });
 
   it("does not unmount ChatInterface when crossing from mobile to desktop", () => {
-    mockWidth = 800;
+    mockIsMobile = true;
     const { rerender } = render(<ConversationMain />);
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();
 
-    // Cross the 1024px breakpoint to desktop
-    mockWidth = 1200;
+    // Cross the breakpoint to desktop
+    mockIsMobile = false;
     rerender(<ConversationMain />);
 
     // ChatInterface must NOT have been unmounted and remounted
@@ -97,12 +97,12 @@ describe("ConversationMain - Layout Transition Stability", () => {
   });
 
   it("survives rapid back-and-forth resize without unmounting ChatInterface", () => {
-    mockWidth = 1200;
+    mockIsMobile = false;
     const { rerender } = render(<ConversationMain />);
 
     // Simulate rapid resize back and forth across the breakpoint
-    for (const width of [800, 1200, 800, 1200, 800]) {
-      mockWidth = width;
+    for (const mobile of [true, false, true, false, true]) {
+      mockIsMobile = mobile;
       rerender(<ConversationMain />);
     }
 

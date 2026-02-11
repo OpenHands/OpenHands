@@ -1,10 +1,10 @@
-import { useWindowSize } from "@uidotdev/usehooks";
 import { cn } from "#/utils/utils";
 import { ChatInterfaceWrapper } from "./chat-interface-wrapper";
 import { ConversationTabContent } from "../conversation-tabs/conversation-tab-content/conversation-tab-content";
 import { ResizeHandle } from "../../../ui/resize-handle";
 import { useResizablePanels } from "#/hooks/use-resizable-panels";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
 
 function getMobileChatPanelClass(isRightPanelShown: boolean) {
   return isRightPanelShown ? "h-160" : "flex-1";
@@ -17,9 +17,8 @@ function getDesktopTabPanelClass(isRightPanelShown: boolean) {
 }
 
 export function ConversationMain() {
-  const { width } = useWindowSize();
+  const isMobile = useBreakpoint();
   const { isRightPanelShown } = useConversationStore();
-  const isMobile = !!(width && width <= 1024);
 
   const { leftWidth, rightWidth, isDragging, containerRef, handleMouseDown } =
     useResizablePanels({
