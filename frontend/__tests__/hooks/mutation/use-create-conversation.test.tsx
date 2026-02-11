@@ -32,7 +32,32 @@ describe("useCreateConversation", () => {
       .spyOn(V1ConversationService, "createConversation")
       .mockResolvedValue({
         id: "task-id",
+        created_by_user_id: null,
+        status: "READY",
+        detail: null,
+        app_conversation_id: null,
+        sandbox_id: null,
         agent_server_url: "http://agent-server.local",
+        request: {
+          sandbox_id: null,
+          initial_message: {
+            role: "user",
+            content: [{ type: "text", text: "Please address the comments" }],
+          },
+          processors: [],
+          llm_model: null,
+          selected_repository: null,
+          selected_branch: null,
+          git_provider: "github",
+          suggested_task: null,
+          title: null,
+          trigger: null,
+          pr_number: [],
+          parent_conversation_id: null,
+          agent_type: "default",
+        },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       });
 
     const { result } = renderHook(() => useCreateConversation(), {
