@@ -522,3 +522,46 @@ async def test_backfill_contact_name_preserves_custom_value(session_maker):
     with session_maker() as session:
         org = session.query(Org).filter(Org.id == uuid.UUID(user_id)).first()
         assert org.contact_name == 'Custom Corp Name'
+
+
+def test_update_current_org_success(session_maker):
+    """
+    GIVEN: User exists in database
+    WHEN: update_current_org is called with new org_id
+    THEN: User's current_org_id is updated and user is returned
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+    initial_org_id = uuid.uuid4()
+    new_org_id = uuid.uuid4()
+
+    with session_maker() as session:
+        user = User(id=uuid.UUID(user_id), current_org_id=initial_org_id)
+        session.add(user)
+        session.commit()
+
+    # Act
+    with patch('storage.user_store.session_maker', session_maker):
+        result = UserStore.update_current_org(user_id, new_org_id)
+
+    # Assert
+    assert result is not None
+    assert result.current_org_id == new_org_id
+
+
+def test_update_current_org_user_not_found(session_maker):
+    """
+    GIVEN: User does not exist in database
+    WHEN: update_current_org is called
+    THEN: None is returned
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+
+    # Act
+    with patch('storage.user_store.session_maker', session_maker):
+        result = UserStore.update_current_org(user_id, org_id)
+
+    # Assert
+    assert result is None

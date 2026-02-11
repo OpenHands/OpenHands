@@ -4,13 +4,20 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
+    CannotModifySelfError,
+    InsufficientPermissionError,
+    InvalidRoleError,
+    LastOwnerError,
     LiteLLMIntegrationError,
+    MemberUpdateError,
     MeResponse,
     OrgAuthorizationError,
     OrgCreate,
     OrgDatabaseError,
     OrgMemberNotFoundError,
     OrgMemberPage,
+    OrgMemberResponse,
+    OrgMemberUpdate,
     OrgNameExistsError,
     OrgNotFoundError,
     OrgPage,
@@ -602,4 +609,158 @@ async def remove_org_member(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to remove member',
+        )
+
+
+@org_router.post(
+    '/{org_id}/switch', response_model=OrgResponse, status_code=status.HTTP_200_OK
+)
+async def switch_org(
+    org_id: UUID,
+    user_id: str = Depends(get_user_id),
+) -> OrgResponse:
+    """Switch to a different organization.
+
+    This endpoint allows authenticated users to switch their current active
+    organization. The user must be a member of the target organization.
+
+    Args:
+        org_id: Organization ID to switch to (UUID)
+        user_id: Authenticated user ID (injected by dependency)
+
+    Returns:
+        OrgResponse: The organization details that was switched to
+
+    Raises:
+        HTTPException: 422 if org_id is not a valid UUID (handled by FastAPI)
+        HTTPException: 403 if user is not a member of the organization
+        HTTPException: 404 if organization not found
+        HTTPException: 500 if switch fails
+    """
+    logger.info(
+        'Switching organization',
+        extra={
+            'user_id': user_id,
+            'org_id': str(org_id),
+        },
+    )
+
+    try:
+        # Use service layer to switch organization with membership validation
+        org = await OrgService.switch_org(
+            user_id=user_id,
+            org_id=org_id,
+        )
+
+        # Retrieve credits from LiteLLM for the new current org
+        credits = await OrgService.get_org_credits(user_id, org.id)
+
+        return OrgResponse.from_org(org, credits=credits, user_id=user_id)
+
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except OrgAuthorizationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except OrgDatabaseError as e:
+        logger.error(
+            'Database operation failed during organization switch',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to switch organization',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error switching organization',
+            extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.patch('/{org_id}/members/{user_id}', response_model=OrgMemberResponse)
+async def update_org_member(
+    org_id: str,
+    user_id: str,
+    update_data: OrgMemberUpdate,
+    current_user_id: str = Depends(get_user_id),
+) -> OrgMemberResponse:
+    """Update a member's role in an organization.
+
+    Permission rules:
+    - Admins can change roles of regular users to Admin or User
+    - Admins cannot modify other Admins or Owners
+    - Owners can change roles of Admins and Users to any role (Owner, Admin, User)
+    - Owners cannot modify other Owners
+
+    Users cannot modify their own role. The last owner cannot be demoted.
+    """
+    try:
+        return await OrgMemberService.update_org_member(
+            org_id=UUID(org_id),
+            target_user_id=UUID(user_id),
+            current_user_id=UUID(current_user_id),
+            update_data=update_data,
+        )
+    except OrgMemberNotFoundError as e:
+        # Distinguish between requester not being a member vs target not found
+        if str(current_user_id) in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='You are not a member of this organization',
+            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Member not found in this organization',
+        )
+    except CannotModifySelfError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Cannot modify your own role',
+        )
+    except RoleNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Role configuration error',
+        )
+    except InvalidRoleError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid role specified',
+        )
+    except InsufficientPermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='You do not have permission to modify this member',
+        )
+    except LastOwnerError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Cannot demote the last owner of an organization',
+        )
+    except MemberUpdateError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update member',
+        )
+    except ValueError:
+        logger.exception('Invalid UUID format')
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid organization or user ID format',
+        )
+    except Exception:
+        logger.exception('Error updating organization member')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update member',
         )
