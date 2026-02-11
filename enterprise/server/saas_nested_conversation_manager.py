@@ -95,6 +95,15 @@ _POLLING_INTERVAL = 10
 # Timeout for http operations
 _HTTP_TIMEOUT = 15
 
+# Timeout for nested server proxy operations
+_NESTED_PROXY_TIMEOUT = 30
+
+# Maximum number of retries for nested server proxy operations
+_NESTED_PROXY_MAX_RETRIES = 3
+
+# Base delay between retries in seconds (exponential backoff)
+_NESTED_PROXY_RETRY_BASE_DELAY = 1.0
+
 
 class EventRetrieval(Enum):
     """Determine mode for getting events out of the nested runtime back into the main app."""
@@ -605,18 +614,8 @@ class SaasNestedConversationManager(ConversationManager):
         raise ValueError('unsupported_operation')
 
     async def send_event_to_conversation(self, sid: str, data: dict):
-        runtime = await self._get_runtime(sid)
-        if runtime is None:
-            raise ValueError(f'no_such_conversation:{sid}')
-        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
-        async with httpx.AsyncClient(
-            verify=httpx_verify_option(),
-            headers={
-                'X-Session-API-Key': runtime['session_api_key'],
-            },
-        ) as client:
-            response = await client.post(f'{nested_url}/events', json=data)
-            response.raise_for_status()
+        """Send an event to a conversation by proxying to the nested server."""
+        await self._proxy_post_to_nested_server(sid, '/events', data)
 
     async def disconnect_from_session(self, connection_id: str):
         # Not supported - clients should connect directly to the nested server!
@@ -978,6 +977,255 @@ class SaasNestedConversationManager(ConversationManager):
             timeout=_HTTP_TIMEOUT,
         ) as client:
             yield client
+
+    @contextlib.asynccontextmanager
+    async def _nested_httpx_client(self, session_api_key: str):
+        """Create an httpx client configured for nested server requests."""
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
+            headers={'X-Session-API-Key': session_api_key},
+            timeout=_NESTED_PROXY_TIMEOUT,
+        ) as client:
+            yield client
+
+    async def _proxy_get_to_nested_server(
+        self,
+        sid: str,
+        endpoint: str,
+    ) -> dict[str, Any]:
+        """Proxy a GET request to the nested server with retries and error handling.
+
+        Args:
+            sid: The session/conversation ID
+            endpoint: The endpoint path to call (e.g., '/vscode-url', '/web-hosts')
+
+        Returns:
+            The JSON response from the nested server
+
+        Raises:
+            ValueError: If the runtime is not found or the request fails after retries
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None:
+            raise ValueError(f'no_such_conversation:{sid}')
+
+        session_api_key = runtime.get('session_api_key')
+        if not session_api_key:
+            raise ValueError(f'no_session_api_key:{sid}')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        url = f'{nested_url}{endpoint}'
+
+        last_error: Exception | None = None
+
+        for attempt in range(_NESTED_PROXY_MAX_RETRIES):
+            try:
+                async with self._nested_httpx_client(session_api_key) as client:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    return response.json()
+            except httpx.TimeoutException as e:
+                last_error = e
+                logger.warning(
+                    'nested_proxy_timeout',
+                    extra={
+                        'sid': sid,
+                        'endpoint': endpoint,
+                        'attempt': attempt + 1,
+                        'error': str(e),
+                    },
+                )
+            except httpx.HTTPStatusError as e:
+                # Don't retry on client errors (4xx)
+                if 400 <= e.response.status_code < 500:
+                    logger.warning(
+                        'nested_proxy_client_error',
+                        extra={
+                            'sid': sid,
+                            'endpoint': endpoint,
+                            'status_code': e.response.status_code,
+                            'error': str(e),
+                        },
+                    )
+                    raise ValueError(
+                        f'nested_server_error:{sid}:{e.response.status_code}'
+                    )
+                last_error = e
+                logger.warning(
+                    'nested_proxy_server_error',
+                    extra={
+                        'sid': sid,
+                        'endpoint': endpoint,
+                        'attempt': attempt + 1,
+                        'status_code': e.response.status_code,
+                        'error': str(e),
+                    },
+                )
+            except httpx.RequestError as e:
+                last_error = e
+                logger.warning(
+                    'nested_proxy_request_error',
+                    extra={
+                        'sid': sid,
+                        'endpoint': endpoint,
+                        'attempt': attempt + 1,
+                        'error': str(e),
+                    },
+                )
+
+            # Exponential backoff before retry
+            if attempt < _NESTED_PROXY_MAX_RETRIES - 1:
+                delay = _NESTED_PROXY_RETRY_BASE_DELAY * (2**attempt)
+                await asyncio.sleep(delay)
+
+        # All retries exhausted
+        logger.error(
+            'nested_proxy_failed',
+            extra={
+                'sid': sid,
+                'endpoint': endpoint,
+                'max_retries': _NESTED_PROXY_MAX_RETRIES,
+                'error': str(last_error),
+            },
+        )
+        raise ValueError(f'nested_proxy_failed:{sid}:{endpoint}')
+
+    async def _proxy_post_to_nested_server(
+        self,
+        sid: str,
+        endpoint: str,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Proxy a POST request to the nested server with retries and error handling.
+
+        Args:
+            sid: The session/conversation ID
+            endpoint: The endpoint path to call (e.g., '/events')
+            data: The JSON data to send in the request body
+
+        Returns:
+            The JSON response from the nested server
+
+        Raises:
+            ValueError: If the runtime is not found or the request fails after retries
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None:
+            raise ValueError(f'no_such_conversation:{sid}')
+
+        session_api_key = runtime.get('session_api_key')
+        if not session_api_key:
+            raise ValueError(f'no_session_api_key:{sid}')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        url = f'{nested_url}{endpoint}'
+
+        last_error: Exception | None = None
+
+        for attempt in range(_NESTED_PROXY_MAX_RETRIES):
+            try:
+                async with self._nested_httpx_client(session_api_key) as client:
+                    response = await client.post(url, json=data)
+                    response.raise_for_status()
+                    return response.json()
+            except httpx.TimeoutException as e:
+                last_error = e
+                logger.warning(
+                    'nested_proxy_timeout',
+                    extra={
+                        'sid': sid,
+                        'endpoint': endpoint,
+                        'attempt': attempt + 1,
+                        'error': str(e),
+                    },
+                )
+            except httpx.HTTPStatusError as e:
+                # Don't retry on client errors (4xx)
+                if 400 <= e.response.status_code < 500:
+                    logger.warning(
+                        'nested_proxy_client_error',
+                        extra={
+                            'sid': sid,
+                            'endpoint': endpoint,
+                            'status_code': e.response.status_code,
+                            'error': str(e),
+                        },
+                    )
+                    raise ValueError(
+                        f'nested_server_error:{sid}:{e.response.status_code}'
+                    )
+                last_error = e
+                logger.warning(
+                    'nested_proxy_server_error',
+                    extra={
+                        'sid': sid,
+                        'endpoint': endpoint,
+                        'attempt': attempt + 1,
+                        'status_code': e.response.status_code,
+                        'error': str(e),
+                    },
+                )
+            except httpx.RequestError as e:
+                last_error = e
+                logger.warning(
+                    'nested_proxy_request_error',
+                    extra={
+                        'sid': sid,
+                        'endpoint': endpoint,
+                        'attempt': attempt + 1,
+                        'error': str(e),
+                    },
+                )
+
+            # Exponential backoff before retry
+            if attempt < _NESTED_PROXY_MAX_RETRIES - 1:
+                delay = _NESTED_PROXY_RETRY_BASE_DELAY * (2**attempt)
+                await asyncio.sleep(delay)
+
+        # All retries exhausted
+        logger.error(
+            'nested_proxy_failed',
+            extra={
+                'sid': sid,
+                'endpoint': endpoint,
+                'max_retries': _NESTED_PROXY_MAX_RETRIES,
+                'error': str(last_error),
+            },
+        )
+        raise ValueError(f'nested_proxy_failed:{sid}:{endpoint}')
+
+    async def get_vscode_url(self, sid: str) -> dict[str, str | None]:
+        """Get the VSCode URL for a conversation by proxying to the nested server.
+
+        Args:
+            sid: The session/conversation ID
+
+        Returns:
+            Dictionary with 'vscode_url' key
+        """
+        return await self._proxy_get_to_nested_server(sid, '/vscode-url')
+
+    async def get_web_hosts(self, sid: str) -> dict[str, list[str]]:
+        """Get the web hosts for a conversation by proxying to the nested server.
+
+        Args:
+            sid: The session/conversation ID
+
+        Returns:
+            Dictionary with 'hosts' key containing list of host URLs
+        """
+        return await self._proxy_get_to_nested_server(sid, '/web-hosts')
+
+    async def get_microagents(self, sid: str) -> dict[str, Any]:
+        """Get the microagents for a conversation by proxying to the nested server.
+
+        Args:
+            sid: The session/conversation ID
+
+        Returns:
+            Dictionary with 'microagents' key containing list of microagent info
+        """
+        return await self._proxy_get_to_nested_server(sid, '/microagents')
 
     async def _get_runtimes(self) -> list[dict]:
         async with self._httpx_client() as client:
