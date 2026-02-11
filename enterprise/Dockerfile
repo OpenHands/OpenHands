@@ -23,11 +23,13 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Install poetry and export so we can get the dependencies from the poetry.lock
+RUN /app/.venv/bin/pip install poetry poetry-plugin-export
+
 # Install Python dependencies from poetry.lock for reproducible builds
 # Copy lock files first for better Docker layer caching
 COPY --chown=openhands:openhands enterprise/pyproject.toml enterprise/poetry.lock /tmp/enterprise/
-RUN /app/.venv/bin/pip install poetry poetry-plugin-export && \
-    cd /tmp/enterprise && \
+RUN cd /tmp/enterprise && \
     # Export only main dependencies (exclude dev/test groups and the local openhands-ai package)
     /app/.venv/bin/poetry export --only main --without-hashes -o requirements.txt && \
     # Remove the local path dependency (openhands-ai is already in base image)
