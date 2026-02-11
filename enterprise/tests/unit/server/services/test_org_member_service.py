@@ -179,7 +179,7 @@ class TestOrgMemberServiceGetOrgMembers:
             assert data.items[0].user_id == str(current_user_id)
             assert data.items[0].email == 'test@example.com'
             assert data.items[0].role_id == 1
-            assert data.items[0].role_name == 'owner'
+            assert data.items[0].role == 'owner'
             assert data.items[0].role_rank == 10
             assert data.items[0].status == 'active'
 
@@ -462,7 +462,7 @@ class TestOrgMemberServiceGetOrgMembers:
             assert success is True
             assert data is not None
             assert len(data.items) == 1
-            assert data.items[0].role_name == ''
+            assert data.items[0].role == ''
             assert data.items[0].role_rank == 0
 
     @pytest.mark.asyncio

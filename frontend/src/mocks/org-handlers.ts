@@ -296,7 +296,7 @@ export const ORG_HANDLERS = [
       );
     }
     const members = ORGS_AND_MEMBERS[orgId];
-    return HttpResponse.json(members);
+    return HttpResponse.json({ items: members });
   }),
 
   http.get("/api/organizations", () => {

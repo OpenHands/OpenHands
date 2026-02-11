@@ -104,7 +104,7 @@ class OrgMemberService:
                     user_id=str(member.user_id),
                     email=user.email if user else None,
                     role_id=member.role_id,
-                    role_name=role.name if role else '',
+                    role=role.name if role else '',
                     role_rank=role.rank if role else 0,
                     status=member.status,
                 )
