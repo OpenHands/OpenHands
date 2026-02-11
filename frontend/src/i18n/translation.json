@@ -16319,6 +16319,38 @@
     "de": "Organisation löschen",
     "uk": "Видалити організацію"
   },
+  "ORG$DELETE_ORGANIZATION_WARNING": {
+    "en": "Are you sure you want to delete this organization? This action cannot be undone.",
+    "ja": "この組織を削除してもよろしいですか？この操作は元に戻せません。",
+    "zh-CN": "您确定要删除此组织吗？此操作无法撤消。",
+    "zh-TW": "您確定要刪除此組織嗎？此操作無法撤銷。",
+    "ko-KR": "이 조직을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+    "no": "Er du sikker på at du vil slette denne organisasjonen? Denne handlingen kan ikke angres.",
+    "it": "Sei sicuro di voler eliminare questa organizzazione? Questa azione non può essere annullata.",
+    "pt": "Tem certeza de que deseja excluir esta organização? Esta ação não pode ser desfeita.",
+    "es": "¿Está seguro de que desea eliminar esta organización? Esta acción no se puede deshacer.",
+    "ar": "هل أنت متأكد من أنك تريد حذف هذه المنظمة؟ لا يمكن التراجع عن هذا الإجراء.",
+    "fr": "Êtes-vous sûr de vouloir supprimer cette organisation ? Cette action ne peut pas être annulée.",
+    "tr": "Bu organizasyonu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+    "de": "Sind Sie sicher, dass Sie diese Organisation löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "uk": "Ви впевнені, що хочете видалити цю організацію? Цю дію не можна скасувати."
+  },
+  "ORG$DELETE_ORGANIZATION_WARNING_WITH_NAME": {
+    "en": "Are you sure you want to delete the \"<name>{{name}}</name>\" organization? This action cannot be undone.",
+    "ja": "「<name>{{name}}</name>」組織を削除してもよろしいですか？この操作は元に戻せません。",
+    "zh-CN": "您确定要删除\"<name>{{name}}</name>\"组织吗？此操作无法撤消。",
+    "zh-TW": "您確定要刪除「<name>{{name}}</name>」組織嗎？此操作無法撤銷。",
+    "ko-KR": "\"<name>{{name}}</name>\" 조직을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+    "no": "Er du sikker på at du vil slette organisasjonen \"<name>{{name}}</name>\"? Denne handlingen kan ikke angres.",
+    "it": "Sei sicuro di voler eliminare l'organizzazione \"<name>{{name}}</name>\"? Questa azione non può essere annullata.",
+    "pt": "Tem certeza de que deseja excluir a organização \"<name>{{name}}</name>\"? Esta ação não pode ser desfeita.",
+    "es": "¿Está seguro de que desea eliminar la organización \"<name>{{name}}</name>\"? Esta acción no se puede deshacer.",
+    "ar": "هل أنت متأكد من أنك تريد حذف المنظمة \"<name>{{name}}</name>\"؟ لا يمكن التراجع عن هذا الإجراء.",
+    "fr": "Êtes-vous sûr de vouloir supprimer l'organisation \\u00AB <name>{{name}}</name> \\u00BB ? Cette action ne peut pas être annulée.",
+    "tr": "\"<name>{{name}}</name>\" organizasyonunu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+    "de": "Sind Sie sicher, dass Sie die Organisation \\u201E<name>{{name}}</name>\\u201C löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "uk": "Ви впевнені, що хочете видалити організацію \\u00AB<name>{{name}}</name>\\u00BB? Цю дію не можна скасувати."
+  },
   "ACCOUNT_SETTINGS$SETTINGS": {
     "en": "Settings",
     "ja": "設定",

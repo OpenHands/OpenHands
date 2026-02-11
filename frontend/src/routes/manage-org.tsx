@@ -12,12 +12,12 @@ import { useConfig } from "#/hooks/query/use-config";
 import { I18nKey } from "#/i18n/declaration";
 import { amountIsValid } from "#/utils/amount-is-valid";
 import { useUpdateOrganization } from "#/hooks/mutation/use-update-organization";
-import { useDeleteOrganization } from "#/hooks/mutation/use-delete-organization";
 import { CreditsChip } from "#/ui/credits-chip";
 import { InteractiveChip } from "#/ui/interactive-chip";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
+import { DeleteOrgConfirmationModal } from "#/components/features/org/delete-org-confirmation-modal";
 
 interface ChangeOrgNameModalProps {
   onClose: () => void;
@@ -71,32 +71,6 @@ function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
         </BrandButton>
       </form>
     </ModalBackdrop>
-  );
-}
-
-interface DeleteOrgConfirmationModalProps {
-  onClose: () => void;
-}
-
-function DeleteOrgConfirmationModal({
-  onClose,
-}: DeleteOrgConfirmationModalProps) {
-  const { t } = useTranslation();
-  const { mutate: deleteOrganization } = useDeleteOrganization();
-
-  return (
-    <div data-testid="delete-org-confirmation">
-      <button
-        type="button"
-        onClick={() =>
-          deleteOrganization(undefined, {
-            onSuccess: onClose,
-          })
-        }
-      >
-        {t(I18nKey.BUTTON$CONFIRM)}
-      </button>
-    </div>
   );
 }
 
