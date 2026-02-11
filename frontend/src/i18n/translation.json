@@ -16351,6 +16351,22 @@
     "de": "Sind Sie sicher, dass Sie die Organisation \\u201E<name>{{name}}</name>\\u201C löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
     "uk": "Ви впевнені, що хочете видалити організацію \\u00AB<name>{{name}}</name>\\u00BB? Цю дію не можна скасувати."
   },
+  "ORG$DELETE_ORGANIZATION_ERROR": {
+    "en": "Failed to delete organization",
+    "ja": "組織の削除に失敗しました",
+    "zh-CN": "删除组织失败",
+    "zh-TW": "刪除組織失敗",
+    "ko-KR": "조직 삭제에 실패했습니다",
+    "no": "Kunne ikke slette organisasjonen",
+    "it": "Impossibile eliminare l'organizzazione",
+    "pt": "Falha ao excluir a organização",
+    "es": "Error al eliminar la organización",
+    "ar": "فشل في حذف المنظمة",
+    "fr": "Échec de la suppression de l'organisation",
+    "tr": "Organizasyon silinemedi",
+    "de": "Organisation konnte nicht gelöscht werden",
+    "uk": "Не вдалося видалити організацію"
+  },
   "ACCOUNT_SETTINGS$SETTINGS": {
     "en": "Settings",
     "ja": "設定",

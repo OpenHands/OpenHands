@@ -10,6 +10,7 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { I18nKey } from "#/i18n/declaration";
 import { useDeleteOrganization } from "#/hooks/mutation/use-delete-organization";
 import { useOrganization } from "#/hooks/query/use-organization";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface DeleteOrgConfirmationModalProps {
   onClose: () => void;
@@ -25,6 +26,9 @@ export function DeleteOrgConfirmationModal({
   const handleConfirm = () => {
     deleteOrganization(undefined, {
       onSuccess: onClose,
+      onError: () => {
+        displayErrorToast(t(I18nKey.ORG$DELETE_ORGANIZATION_ERROR));
+      },
     });
   };
 
@@ -39,16 +43,16 @@ export function DeleteOrgConfirmationModal({
   );
 
   return (
-    <ModalBackdrop onClose={onClose}>
+    <ModalBackdrop
+      onClose={isPending ? undefined : onClose}
+      aria-label={t(I18nKey.ORG$DELETE_ORGANIZATION)}
+    >
       <ModalBody className="items-start border border-tertiary">
         <div className="flex flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.ORG$DELETE_ORGANIZATION)} />
           <BaseModalDescription>{confirmationMessage}</BaseModalDescription>
         </div>
-        <div
-          className="flex flex-col gap-2 w-full"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div className="flex flex-col gap-2 w-full">
           <BrandButton
             type="button"
             variant="primary"
