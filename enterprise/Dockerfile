@@ -34,10 +34,7 @@ RUN cd /tmp/enterprise && \
     /app/.venv/bin/poetry export --only main --without-hashes -o requirements.txt && \
     # Remove the local path dependency (openhands-ai is already in base image)
     sed -i '/^-e /d; /openhands-ai/d' requirements.txt && \
-    # Export dependencies and filter out the local openhands-ai package
-    /app/.venv/bin/poetry export --only main --without-hashes -o requirements.txt && \
-    grep -v '^openhands-ai @' requirements.txt > requirements.filtered.txt && \
-    mv requirements.filtered.txt requirements.txt && \
+    # Install pinned dependencies from lock file
     /app/.venv/bin/pip install -r requirements.txt && \
     # Cleanup - return to /app before removing /tmp/enterprise
     cd /app && \
