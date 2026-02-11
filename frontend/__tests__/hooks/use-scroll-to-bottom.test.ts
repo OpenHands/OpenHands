@@ -6,11 +6,6 @@ import type { RefObject } from "react";
 /**
  * Creates a mock scroll element with a trackable scrollTop setter.
  *
- * Why: We need to distinguish between "the hook read scrollTop" and
- * "the hook wrote scrollTop". The scrollTopSetter spy records every
- * write, letting us verify whether the useLayoutEffect actually
- * performed a scroll operation vs skipping it.
- *
  * state.scrollTop can be set directly (bypassing the spy) to position
  * the element for onChatBodyScroll calls without polluting the spy.
  */
@@ -52,75 +47,80 @@ describe("useScrollToBottom", () => {
     ref = { current: mock.element } as RefObject<HTMLDivElement>;
   });
 
-  describe("auto-scroll performance", () => {
-    it("scrolls to bottom on initial render when autoscroll is true (default)", () => {
+  describe("no automatic scrolling on render", () => {
+    it("does NOT scroll on initial render", () => {
       renderHook(() => useScrollToBottom(ref));
 
-      expect(mock.scrollTopSetter).toHaveBeenCalledWith(1000);
-    });
-
-    it("does NOT re-scroll when re-rendered with unchanged scrollHeight", () => {
-      // Core performance test: during resize, scrollHeight doesn't change,
-      // so the hook should skip the DOM scroll operation entirely.
-      const { rerender } = renderHook(() => useScrollToBottom(ref));
-      mock.scrollTopSetter.mockClear();
-
-      // Re-render without changing scrollHeight (simulates resize re-render)
-      rerender();
-
+      // No useLayoutEffect means no automatic scroll-to-bottom
       expect(mock.scrollTopSetter).not.toHaveBeenCalled();
     });
 
-    it("scrolls to bottom when scrollHeight increases (new content)", () => {
+    it("does NOT scroll when re-rendered (e.g., during resize)", () => {
       const { rerender } = renderHook(() => useScrollToBottom(ref));
-      mock.scrollTopSetter.mockClear();
 
-      // Simulate new message arriving — content height grows
-      mock.state.scrollHeight = 1500;
-      rerender();
-
-      expect(mock.scrollTopSetter).toHaveBeenCalledWith(1500);
-    });
-
-    it("does not scroll when autoscroll is disabled", () => {
-      const { result, rerender } = renderHook(() => useScrollToBottom(ref));
-      mock.scrollTopSetter.mockClear();
-
-      // Disable autoscroll
-      act(() => {
-        result.current.setAutoScroll(false);
-      });
-      expect(result.current.autoScroll).toBe(false);
-      mock.scrollTopSetter.mockClear();
-
-      // New content arrives while autoscroll is off
       mock.state.scrollHeight = 1500;
       rerender();
 
       expect(mock.scrollTopSetter).not.toHaveBeenCalled();
     });
+  });
 
-    it("scrolls after autoscroll is re-enabled when scrollHeight changed while disabled", () => {
-      const { result, rerender } = renderHook(() => useScrollToBottom(ref));
+  describe("scroll position tracking", () => {
+    it("tracks hitBottom correctly via onChatBodyScroll", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref));
 
-      // Disable autoscroll
+      // Position at bottom: scrollTop(480) + clientHeight(500) = 980 >= 1000 - 20
+      mock.state.scrollTop = 480;
       act(() => {
-        result.current.setAutoScroll(false);
+        result.current.onChatBodyScroll(mock.element);
+      });
+      expect(result.current.hitBottom).toBe(true);
+
+      // Position not at bottom: scrollTop(200) + clientHeight(500) = 700 < 980
+      mock.state.scrollTop = 200;
+      act(() => {
+        result.current.onChatBodyScroll(mock.element);
+      });
+      expect(result.current.hitBottom).toBe(false);
+    });
+
+    it("disables autoScroll when user scrolls up", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref));
+
+      // First scroll to establish prevScrollTopRef
+      mock.state.scrollTop = 400;
+      act(() => {
+        result.current.onChatBodyScroll(mock.element);
+      });
+
+      // Scroll up (lower scrollTop than previous)
+      mock.state.scrollTop = 200;
+      act(() => {
+        result.current.onChatBodyScroll(mock.element);
+      });
+      expect(result.current.autoScroll).toBe(false);
+    });
+
+    it("re-enables autoScroll when user reaches bottom", () => {
+      const { result } = renderHook(() => useScrollToBottom(ref));
+
+      // Scroll up to disable autoScroll
+      mock.state.scrollTop = 400;
+      act(() => {
+        result.current.onChatBodyScroll(mock.element);
+      });
+      mock.state.scrollTop = 200;
+      act(() => {
+        result.current.onChatBodyScroll(mock.element);
       });
       expect(result.current.autoScroll).toBe(false);
 
-      // New content arrives while autoscroll is off
-      mock.state.scrollHeight = 2000;
-      rerender();
-      mock.scrollTopSetter.mockClear();
-
-      // Re-enable autoscroll
+      // Scroll to bottom
+      mock.state.scrollTop = 500; // 500 + 500 = 1000 >= 980
       act(() => {
-        result.current.setAutoScroll(true);
+        result.current.onChatBodyScroll(mock.element);
       });
-
-      // The effect should scroll since scrollHeight changed while autoscroll was off
-      expect(mock.scrollTopSetter).toHaveBeenCalledWith(2000);
+      expect(result.current.autoScroll).toBe(true);
     });
   });
 });
