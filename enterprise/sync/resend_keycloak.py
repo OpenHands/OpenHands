@@ -26,6 +26,7 @@ Optional environment variables:
 """
 
 import os
+import re
 import sys
 import time
 from typing import Any, Dict, List, Optional
@@ -88,6 +89,31 @@ class ResendAPIError(ResendSyncError):
     """Exception for Resend API errors."""
 
     pass
+
+
+# Email validation regex pattern - matches standard email format
+# This pattern is intentionally strict to avoid Resend API validation errors
+# It rejects special characters like ! that some email providers technically allow
+# but Resend's API does not accept
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+
+def is_valid_email(email: str) -> bool:
+    """Validate an email address format.
+
+    This uses a regex pattern that matches most valid email addresses
+    while rejecting addresses with special characters that Resend's API
+    does not accept (e.g., exclamation marks).
+
+    Args:
+        email: The email address to validate.
+
+    Returns:
+        True if the email is valid, False otherwise.
+    """
+    if not email:
+        return False
+    return bool(EMAIL_REGEX.match(email))
 
 
 def get_keycloak_users(offset: int = 0, limit: int = 100) -> List[Dict[str, Any]]:
@@ -336,6 +362,7 @@ def sync_users_to_resend():
             'total_users': total_users,
             'existing_contacts': len(resend_contacts),
             'added_contacts': 0,
+            'skipped_invalid_emails': 0,
             'errors': 0,
         }
 
@@ -353,6 +380,12 @@ def sync_users_to_resend():
                 email = email.lower()
                 if email in resend_contacts:
                     logger.debug(f'User {email} already exists in Resend, skipping')
+                    continue
+
+                # Validate email format before attempting to add to Resend
+                if not is_valid_email(email):
+                    logger.warning(f'Skipping user with invalid email format: {email}')
+                    stats['skipped_invalid_emails'] += 1
                     continue
 
                 try:

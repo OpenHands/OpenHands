@@ -18,6 +18,10 @@ with patch('storage.database.engine', create=True), patch(
 ):
     from server.email_validation import get_admin_user_id
     from server.routes.org_models import (
+        CannotModifySelfError,
+        InsufficientPermissionError,
+        InvalidRoleError,
+        LastOwnerError,
         LiteLLMIntegrationError,
         MeResponse,
         OrgAuthorizationError,
@@ -25,8 +29,10 @@ with patch('storage.database.engine', create=True), patch(
         OrgMemberNotFoundError,
         OrgMemberPage,
         OrgMemberResponse,
+        OrgMemberUpdate,
         OrgNameExistsError,
         OrgNotFoundError,
+        OrphanedUserError,
         RoleNotFoundError,
     )
     from server.routes.orgs import (
@@ -34,6 +40,7 @@ with patch('storage.database.engine', create=True), patch(
         get_org_members,
         org_router,
         remove_org_member,
+        update_org_member,
     )
     from storage.org import Org
 
@@ -1397,30 +1404,52 @@ async def test_delete_org_invalid_uuid(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_delete_org_unauthorized():
+async def test_delete_org_unauthorized(mock_app):
     """
     GIVEN: User is not authenticated
     WHEN: DELETE /api/organizations/{org_id} is called
-    THEN: 401 Unauthorized error is returned
+    THEN: 403 Forbidden error is returned (user not authorized)
     """
     # Arrange
-    app = FastAPI()
-    app.include_router(org_router)
-
-    # Override to simulate unauthenticated user
-    async def mock_unauthenticated():
-        raise HTTPException(status_code=401, detail='User not authenticated')
-
-    app.dependency_overrides[get_admin_user_id] = mock_unauthenticated
-
     org_id = uuid.uuid4()
-    client = TestClient(app)
 
-    # Act
-    response = client.delete(f'/api/organizations/{org_id}')
+    with patch(
+        'server.routes.orgs.OrgService.delete_org_with_cleanup',
+        AsyncMock(side_effect=OrgAuthorizationError('User not authorized')),
+    ):
+        client = TestClient(mock_app)
 
-    # Assert
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        # Act
+        response = client.delete(f'/api/organizations/{org_id}')
+
+        # Assert
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_delete_org_orphaned_users(mock_app):
+    """
+    GIVEN: Deleting org would leave users without any organization
+    WHEN: DELETE /api/organizations/{org_id} is called
+    THEN: 400 Bad Request error is returned with user count in message
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    orphaned_user_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+
+    with patch(
+        'server.routes.orgs.OrgService.delete_org_with_cleanup',
+        AsyncMock(side_effect=OrphanedUserError(orphaned_user_ids)),
+    ):
+        client = TestClient(mock_app)
+
+        # Act
+        response = client.delete(f'/api/organizations/{org_id}')
+
+        # Assert
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert '2 user(s)' in response.json()['detail']
+        assert 'no remaining organization' in response.json()['detail']
 
 
 @pytest.fixture
@@ -1646,6 +1675,34 @@ async def test_update_org_permission_denied_llm_settings(mock_update_app):
 
 
 @pytest.mark.asyncio
+async def test_update_org_duplicate_name_returns_409(mock_update_app):
+    """
+    GIVEN: User updates organization name to one already used by another org
+    WHEN: PATCH /api/organizations/{org_id} is called with that name
+    THEN: 409 Conflict is returned with message about name already existing
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'name': 'Existing Organization'}
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(side_effect=OrgNameExistsError('Existing Organization')),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_409_CONFLICT
+            assert 'already exists' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
 async def test_update_org_database_error(mock_update_app):
     """
     GIVEN: Database operation fails during update
@@ -1734,6 +1791,27 @@ async def test_update_org_invalid_field_values(mock_update_app):
     # Arrange
     org_id = uuid.uuid4()
     update_data = {'default_max_iterations': -1}  # Invalid: must be > 0
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+    ) as client:
+        # Act
+        response = await client.patch(f'/api/organizations/{org_id}', json=update_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_empty_name_returns_422(mock_update_app):
+    """
+    GIVEN: Update request with empty organization name (after strip)
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 422 validation error is returned (OrgUpdate name min_length=1)
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'name': '   '}
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
@@ -2299,6 +2377,195 @@ class TestRemoveOrgMemberEndpoint:
             assert exc_info.value.detail == 'Service temporarily unavailable'
 
 
+class TestUpdateOrgMemberEndpoint:
+    """Test cases for PATCH /api/organizations/{org_id}/members/{user_id} endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_update_member_role_succeeds_returns_member_response(
+        self, org_id, current_user_id, target_user_id
+    ):
+        """GIVEN valid role update request WHEN PATCH is called THEN returns 200 with updated OrgMemberResponse."""
+        # Arrange
+        updated = OrgMemberResponse(
+            user_id=target_user_id,
+            email='user@example.com',
+            role_id=2,
+            role_name='admin',
+            role_rank=20,
+            status='active',
+        )
+        with patch(
+            'server.routes.orgs.OrgMemberService.update_org_member'
+        ) as mock_update:
+            mock_update.return_value = updated
+
+            # Act
+            result = await update_org_member(
+                org_id=org_id,
+                user_id=target_user_id,
+                update_data=OrgMemberUpdate(role='admin'),
+                current_user_id=current_user_id,
+            )
+
+            # Assert
+            assert result == updated
+            mock_update.assert_called_once_with(
+                org_id=uuid.UUID(org_id),
+                target_user_id=uuid.UUID(target_user_id),
+                current_user_id=uuid.UUID(current_user_id),
+                update_data=OrgMemberUpdate(role='admin'),
+            )
+
+    @pytest.mark.asyncio
+    async def test_not_a_member_returns_403(
+        self, org_id, current_user_id, target_user_id
+    ):
+        """GIVEN requester is not a member WHEN PATCH is called THEN returns 403."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.update_org_member'
+        ) as mock_update:
+            mock_update.side_effect = OrgMemberNotFoundError(org_id, current_user_id)
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await update_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    update_data=OrgMemberUpdate(role='user'),
+                    current_user_id=current_user_id,
+                )
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert 'not a member' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_cannot_modify_self_returns_403(self, org_id, current_user_id):
+        """GIVEN target user is self WHEN PATCH is called THEN returns 403."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.update_org_member'
+        ) as mock_update:
+            mock_update.side_effect = CannotModifySelfError('modify')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await update_org_member(
+                    org_id=org_id,
+                    user_id=current_user_id,
+                    update_data=OrgMemberUpdate(role='admin'),
+                    current_user_id=current_user_id,
+                )
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert 'Cannot modify your own role' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_member_not_found_returns_404(
+        self, org_id, current_user_id, target_user_id
+    ):
+        """GIVEN target member does not exist WHEN PATCH is called THEN returns 404."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.update_org_member'
+        ) as mock_update:
+            mock_update.side_effect = OrgMemberNotFoundError(org_id, target_user_id)
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await update_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    update_data=OrgMemberUpdate(role='user'),
+                    current_user_id=current_user_id,
+                )
+            assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+            assert 'Member not found' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_role_returns_400(
+        self, org_id, current_user_id, target_user_id
+    ):
+        """GIVEN invalid role name WHEN PATCH is called THEN returns 400."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.update_org_member'
+        ) as mock_update:
+            mock_update.side_effect = InvalidRoleError('superuser')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await update_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    update_data=OrgMemberUpdate(role='superuser'),
+                    current_user_id=current_user_id,
+                )
+            assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+            assert 'Invalid role' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_insufficient_permission_returns_403(
+        self, org_id, current_user_id, target_user_id
+    ):
+        """GIVEN requester lacks permission to change target WHEN PATCH is called THEN returns 403."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.update_org_member'
+        ) as mock_update:
+            mock_update.side_effect = InsufficientPermissionError(
+                'You do not have permission to modify this member'
+            )
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await update_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    update_data=OrgMemberUpdate(role='admin'),
+                    current_user_id=current_user_id,
+                )
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert 'do not have permission' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_cannot_demote_last_owner_returns_400(
+        self, org_id, current_user_id, target_user_id
+    ):
+        """GIVEN demoting last owner WHEN PATCH is called THEN returns 400."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.update_org_member'
+        ) as mock_update:
+            mock_update.side_effect = LastOwnerError('demote')
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await update_org_member(
+                    org_id=org_id,
+                    user_id=target_user_id,
+                    update_data=OrgMemberUpdate(role='admin'),
+                    current_user_id=current_user_id,
+                )
+            assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+            assert 'Cannot demote the last owner' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_org_id_returns_400(self, current_user_id, target_user_id):
+        """GIVEN invalid org_id UUID WHEN PATCH is called THEN returns 400."""
+        # Arrange
+        invalid_org_id = 'not-a-uuid'
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await update_org_member(
+                org_id=invalid_org_id,
+                user_id=target_user_id,
+                update_data=OrgMemberUpdate(role='user'),
+                current_user_id=current_user_id,
+            )
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Invalid organization or user ID format' in exc_info.value.detail
+
+
 class TestGetMeEndpoint:
     """Tests for GET /api/organizations/{org_id}/me endpoint.
 
@@ -2635,3 +2902,136 @@ class TestGetMeEndpoint:
                 await get_me(org_id=test_org_id, user_id=test_user_id)
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+@pytest.mark.asyncio
+async def test_switch_org_success(mock_app_with_get_user_id):
+    """
+    GIVEN: Valid org_id and authenticated user who is a member
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: User's current org is switched and org details returned with 200 status
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Target Organization',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+        default_llm_model='claude-opus-4-5-20251101',
+    )
+
+    with (
+        patch(
+            'server.routes.orgs.OrgService.switch_org',
+            AsyncMock(return_value=mock_org),
+        ),
+        patch(
+            'server.routes.orgs.OrgService.get_org_credits',
+            AsyncMock(return_value=100.0),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(f'/api/organizations/{org_id}/switch')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['id'] == str(org_id)
+        assert response_data['name'] == 'Target Organization'
+        assert response_data['credits'] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_switch_org_not_member(mock_app_with_get_user_id):
+    """
+    GIVEN: User is not a member of the target organization
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: 403 Forbidden error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+
+    with patch(
+        'server.routes.orgs.OrgService.switch_org',
+        AsyncMock(
+            side_effect=OrgAuthorizationError(
+                'User must be a member of the organization to switch to it'
+            )
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(f'/api/organizations/{org_id}/switch')
+
+        # Assert
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'member' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_switch_org_not_found(mock_app_with_get_user_id):
+    """
+    GIVEN: Organization does not exist
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: 404 Not Found error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+
+    with patch(
+        'server.routes.orgs.OrgService.switch_org',
+        AsyncMock(side_effect=OrgNotFoundError(str(org_id))),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(f'/api/organizations/{org_id}/switch')
+
+        # Assert
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_switch_org_invalid_uuid(mock_app_with_get_user_id):
+    """
+    GIVEN: Invalid UUID format for org_id
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: 422 Unprocessable Entity error is returned
+    """
+    # Arrange
+    client = TestClient(mock_app_with_get_user_id)
+
+    # Act
+    response = client.post('/api/organizations/not-a-valid-uuid/switch')
+
+    # Assert
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_switch_org_database_error(mock_app_with_get_user_id):
+    """
+    GIVEN: Database operation fails during switch
+    WHEN: POST /api/organizations/{org_id}/switch is called
+    THEN: 500 Internal Server Error is returned
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+
+    with patch(
+        'server.routes.orgs.OrgService.switch_org',
+        AsyncMock(side_effect=OrgDatabaseError('Database connection failed')),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(f'/api/organizations/{org_id}/switch')
+
+        # Assert
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert 'Failed to switch organization' in response.json()['detail']

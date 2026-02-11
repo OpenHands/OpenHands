@@ -10,6 +10,7 @@ from server.constants import (
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
 )
+from server.routes.org_models import OrphanedUserError
 from sqlalchemy import text
 from sqlalchemy.orm import joinedload
 from storage.database import session_maker
@@ -320,17 +321,41 @@ class OrgStore:
                     {'org_id': str(org_id)},
                 )
 
-                # 3. Delete organization memberships
+                # 3. Handle users with this as current_org_id BEFORE deleting memberships
+                # Single query to find orphaned users (those with no alternative org)
+                orphaned_users = session.execute(
+                    text("""
+                        SELECT u.id
+                        FROM "user" u
+                        WHERE u.current_org_id = :org_id
+                        AND NOT EXISTS (
+                            SELECT 1 FROM org_member om
+                            WHERE om.user_id = u.id AND om.org_id != :org_id
+                        )
+                    """),
+                    {'org_id': str(org_id)},
+                ).fetchall()
+
+                if orphaned_users:
+                    raise OrphanedUserError([str(row[0]) for row in orphaned_users])
+
+                # Batch update: reassign current_org_id to an alternative org for all affected users
                 session.execute(
-                    text('DELETE FROM org_member WHERE org_id = :org_id'),
+                    text("""
+                        UPDATE "user" u
+                        SET current_org_id = (
+                            SELECT om.org_id FROM org_member om
+                            WHERE om.user_id = u.id AND om.org_id != :org_id
+                            LIMIT 1
+                        )
+                        WHERE u.current_org_id = :org_id
+                    """),
                     {'org_id': str(org_id)},
                 )
 
-                # 4. Handle users with this as current_org_id
+                # 4. Delete organization memberships (now safe)
                 session.execute(
-                    text(
-                        'UPDATE "user" SET current_org_id = NULL WHERE current_org_id = :org_id'
-                    ),
+                    text('DELETE FROM org_member WHERE org_id = :org_id'),
                     {'org_id': str(org_id)},
                 )
 
