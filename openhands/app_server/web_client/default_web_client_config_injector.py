@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from pydantic import Field
@@ -12,13 +13,19 @@ from openhands.app_server.web_client.web_client_models import (
 from openhands.integrations.service_types import ProviderType
 
 
+def _get_recaptcha_site_key() -> str | None:
+    """Get reCAPTCHA site key from environment variable."""
+    key = os.getenv('RECAPTCHA_SITE_KEY', '').strip()
+    return key if key else None
+
+
 class DefaultWebClientConfigInjector(WebClientConfigInjector):
     posthog_client_key: str | None = 'phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA'
     feature_flags: WebClientFeatureFlags = Field(default_factory=WebClientFeatureFlags)
     providers_configured: list[ProviderType] = Field(default_factory=list)
     maintenance_start_time: datetime | None = None
     auth_url: str | None = None
-    recaptcha_site_key: str | None = None
+    recaptcha_site_key: str | None = Field(default_factory=_get_recaptcha_site_key)
     faulty_models: list[str] = Field(default_factory=list)
     error_message: str | None = None
     updated_at: datetime = Field(
