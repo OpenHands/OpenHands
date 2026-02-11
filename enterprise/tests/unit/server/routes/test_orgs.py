@@ -1652,6 +1652,34 @@ async def test_update_org_permission_denied_llm_settings(mock_update_app):
 
 
 @pytest.mark.asyncio
+async def test_update_org_duplicate_name_returns_409(mock_update_app):
+    """
+    GIVEN: User updates organization name to one already used by another org
+    WHEN: PATCH /api/organizations/{org_id} is called with that name
+    THEN: 409 Conflict is returned with message about name already existing
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'name': 'Existing Organization'}
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(side_effect=OrgNameExistsError('Existing Organization')),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_409_CONFLICT
+            assert 'already exists' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
 async def test_update_org_database_error(mock_update_app):
     """
     GIVEN: Database operation fails during update
@@ -1740,6 +1768,27 @@ async def test_update_org_invalid_field_values(mock_update_app):
     # Arrange
     org_id = uuid.uuid4()
     update_data = {'default_max_iterations': -1}  # Invalid: must be > 0
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+    ) as client:
+        # Act
+        response = await client.patch(f'/api/organizations/{org_id}', json=update_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_empty_name_returns_422(mock_update_app):
+    """
+    GIVEN: Update request with empty organization name (after strip)
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 422 validation error is returned (OrgUpdate name min_length=1)
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'name': '   '}
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'

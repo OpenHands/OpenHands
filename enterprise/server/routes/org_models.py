@@ -210,6 +210,10 @@ class OrgUpdate(BaseModel):
     """Request model for updating an organization."""
 
     # Basic organization information (any authenticated user can update)
+    name: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+    ] = None
     contact_name: str | None = None
     contact_email: EmailStr | None = None
     conversation_expiration: int | None = None

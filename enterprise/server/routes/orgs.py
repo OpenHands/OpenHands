@@ -449,6 +449,11 @@ async def update_org(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+    except OrgNameExistsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
     except PermissionError as e:
         # User lacks permission for LLM settings
         raise HTTPException(
