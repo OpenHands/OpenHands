@@ -23,7 +23,7 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install poetry and export so we can get the dependencies from the poetry.lock
+# Install poetry and export before importing current code.
 RUN /app/.venv/bin/pip install poetry poetry-plugin-export
 
 # Install Python dependencies from poetry.lock for reproducible builds
