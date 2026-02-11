@@ -6,6 +6,7 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { I18nKey } from "#/i18n/declaration";
 import { useUpdateOrganization } from "#/hooks/mutation/use-update-organization";
 import { cn } from "#/utils/utils";
+import { Typography } from "#/ui/typography";
 
 interface ChangeOrgNameModalProps {
   onClose: () => void;
@@ -35,12 +36,12 @@ export function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
         className="bg-base rounded-xl p-4 border w-sm border-tertiary items-start flex flex-col gap-6"
       >
         <div className="flex flex-col gap-2 w-full">
-          <h3 className="text-lg font-semibold">
+          <Typography.H3 className="text-lg text-white font-semibold">
             {t(I18nKey.ORG$CHANGE_ORG_NAME)}
-          </h3>
-          <p className="text-xs text-gray-400">
+          </Typography.H3>
+          <Typography.Text className="text-xs text-gray-400">
             {t(I18nKey.ORG$MODIFY_ORG_NAME_DESCRIPTION)}
-          </p>
+          </Typography.Text>
           <SettingsInput
             name="org-name"
             type="text"
