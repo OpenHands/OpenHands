@@ -50,9 +50,6 @@ pandas = "^2.2.0"
 numpy = "^2.2.0"
 mcp = "^1.10.0"
 pillow = "^12.1.0"
-openhands-sdk = "1.11.4"
-openhands-tools = "1.11.4"
-openhands-agent-server = "1.11.4"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "0.8.3"
