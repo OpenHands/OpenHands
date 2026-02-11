@@ -16399,6 +16399,22 @@
     "de": "Persönlicher Arbeitsbereich",
     "uk": "Особистий робочий простір"
   },
+  "ORG$ENTER_NEW_ORGANIZATION_NAME": {
+    "en": "Enter new organization name",
+    "ja": "新しい組織名を入力してください",
+    "zh-CN": "请输入新的组织名称",
+    "zh-TW": "請輸入新的組織名稱",
+    "ko-KR": "새 조직 이름을 입력하세요",
+    "no": "Skriv inn nytt organisasjonsnavn",
+    "it": "Inserisci il nuovo nome dell'organizzazione",
+    "pt": "Digite o novo nome da organização",
+    "es": "Ingrese el nuevo nombre de la organización",
+    "ar": "أدخل اسم المنظمة الجديد",
+    "fr": "Entrez le nouveau nom de l'organisation",
+    "tr": "Yeni organizasyon adını girin",
+    "de": "Geben Sie den neuen Organisationsnamen ein",
+    "uk": "Введіть нову назву організації"
+  },
   "CONVERSATION$SHOW_SKILLS": {
     "en": "Show Available Skills",
     "ja": "利用可能なスキルを表示",

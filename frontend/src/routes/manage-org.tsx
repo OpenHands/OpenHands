@@ -5,74 +5,18 @@ import { useOrganization } from "#/hooks/query/use-organization";
 import { useOrganizationPaymentInfo } from "#/hooks/query/use-organization-payment-info";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { cn } from "#/utils/utils";
-import { SettingsInput } from "#/components/features/settings/settings-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useMe } from "#/hooks/query/use-me";
 import { useConfig } from "#/hooks/query/use-config";
 import { I18nKey } from "#/i18n/declaration";
 import { amountIsValid } from "#/utils/amount-is-valid";
-import { useUpdateOrganization } from "#/hooks/mutation/use-update-organization";
 import { useDeleteOrganization } from "#/hooks/mutation/use-delete-organization";
 import { CreditsChip } from "#/ui/credits-chip";
 import { InteractiveChip } from "#/ui/interactive-chip";
 import { usePermission } from "#/hooks/organizations/use-permissions";
 import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
-
-interface ChangeOrgNameModalProps {
-  onClose: () => void;
-}
-
-function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
-  const { t } = useTranslation();
-  const { mutate: updateOrganization } = useUpdateOrganization();
-
-  const formAction = (formData: FormData) => {
-    const orgName = formData.get("org-name")?.toString();
-
-    if (orgName?.trim()) {
-      updateOrganization(orgName, {
-        onSuccess: () => {
-          onClose();
-        },
-      });
-    }
-  };
-
-  return (
-    <ModalBackdrop onClose={onClose}>
-      <form
-        action={formAction}
-        data-testid="update-org-name-form"
-        className={cn(
-          "bg-base rounded-xl p-4 border w-sm border-tertiary items-start",
-          "flex flex-col gap-6",
-        )}
-      >
-        <div className="flex flex-col gap-2 w-full">
-          <h3 className="text-lg font-semibold">
-            {t(I18nKey.ORG$CHANGE_ORG_NAME)}
-          </h3>
-          <p className="text-xs text-gray-400">
-            {t(I18nKey.ORG$MODIFY_ORG_NAME_DESCRIPTION)}
-          </p>
-          <SettingsInput
-            name="org-name"
-            type="text"
-            required
-            className="w-full"
-            label="Organization Name"
-            placeholder="Enter new organization name"
-          />
-        </div>
-
-        <BrandButton variant="primary" type="submit" className="w-full">
-          {t(I18nKey.BUTTON$SAVE)}
-        </BrandButton>
-      </form>
-    </ModalBackdrop>
-  );
-}
+import { ChangeOrgNameModal } from "#/components/features/org/change-org-name-modal";
 
 interface DeleteOrgConfirmationModalProps {
   onClose: () => void;

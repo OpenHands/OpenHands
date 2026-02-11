@@ -38,7 +38,7 @@ export function OrgSelector() {
   return (
     <Dropdown
       testId="org-selector"
-      key={selectedOrg?.id}
+      key={`${selectedOrg?.id}-${selectedOrg?.name}`}
       defaultValue={{
         label: selectedOrg ? getOrgDisplayName(selectedOrg) : "",
         value: selectedOrg?.id || "",

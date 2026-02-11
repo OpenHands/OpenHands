@@ -15,8 +15,13 @@ export const useUpdateOrganization = () => {
       });
     },
     onSuccess: () => {
+      // Invalidate the specific organization query
       queryClient.invalidateQueries({
         queryKey: ["organizations", organizationId],
+      });
+      // Invalidate the organizations list to refresh org-selector
+      queryClient.invalidateQueries({
+        queryKey: ["organizations"],
       });
     },
   });
