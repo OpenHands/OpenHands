@@ -32,6 +32,7 @@ with patch('storage.database.engine', create=True), patch(
         OrgMemberUpdate,
         OrgNameExistsError,
         OrgNotFoundError,
+        OrphanedUserError,
         RoleNotFoundError,
     )
     from server.routes.orgs import (
@@ -1403,30 +1404,52 @@ async def test_delete_org_invalid_uuid(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_delete_org_unauthorized():
+async def test_delete_org_unauthorized(mock_app):
     """
     GIVEN: User is not authenticated
     WHEN: DELETE /api/organizations/{org_id} is called
-    THEN: 401 Unauthorized error is returned
+    THEN: 403 Forbidden error is returned (user not authorized)
     """
     # Arrange
-    app = FastAPI()
-    app.include_router(org_router)
-
-    # Override to simulate unauthenticated user
-    async def mock_unauthenticated():
-        raise HTTPException(status_code=401, detail='User not authenticated')
-
-    app.dependency_overrides[get_admin_user_id] = mock_unauthenticated
-
     org_id = uuid.uuid4()
-    client = TestClient(app)
 
-    # Act
-    response = client.delete(f'/api/organizations/{org_id}')
+    with patch(
+        'server.routes.orgs.OrgService.delete_org_with_cleanup',
+        AsyncMock(side_effect=OrgAuthorizationError('User not authorized')),
+    ):
+        client = TestClient(mock_app)
 
-    # Assert
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        # Act
+        response = client.delete(f'/api/organizations/{org_id}')
+
+        # Assert
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_delete_org_orphaned_users(mock_app):
+    """
+    GIVEN: Deleting org would leave users without any organization
+    WHEN: DELETE /api/organizations/{org_id} is called
+    THEN: 400 Bad Request error is returned with user count in message
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    orphaned_user_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+
+    with patch(
+        'server.routes.orgs.OrgService.delete_org_with_cleanup',
+        AsyncMock(side_effect=OrphanedUserError(orphaned_user_ids)),
+    ):
+        client = TestClient(mock_app)
+
+        # Act
+        response = client.delete(f'/api/organizations/{org_id}')
+
+        # Assert
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert '2 user(s)' in response.json()['detail']
+        assert 'no remaining organization' in response.json()['detail']
 
 
 @pytest.fixture
@@ -1652,6 +1675,34 @@ async def test_update_org_permission_denied_llm_settings(mock_update_app):
 
 
 @pytest.mark.asyncio
+async def test_update_org_duplicate_name_returns_409(mock_update_app):
+    """
+    GIVEN: User updates organization name to one already used by another org
+    WHEN: PATCH /api/organizations/{org_id} is called with that name
+    THEN: 409 Conflict is returned with message about name already existing
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'name': 'Existing Organization'}
+
+    with patch(
+        'server.routes.orgs.OrgService.update_org_with_permissions',
+        AsyncMock(side_effect=OrgNameExistsError('Existing Organization')),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+        ) as client:
+            # Act
+            response = await client.patch(
+                f'/api/organizations/{org_id}', json=update_data
+            )
+
+            # Assert
+            assert response.status_code == status.HTTP_409_CONFLICT
+            assert 'already exists' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
 async def test_update_org_database_error(mock_update_app):
     """
     GIVEN: Database operation fails during update
@@ -1740,6 +1791,27 @@ async def test_update_org_invalid_field_values(mock_update_app):
     # Arrange
     org_id = uuid.uuid4()
     update_data = {'default_max_iterations': -1}  # Invalid: must be > 0
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'
+    ) as client:
+        # Act
+        response = await client.patch(f'/api/organizations/{org_id}', json=update_data)
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_empty_name_returns_422(mock_update_app):
+    """
+    GIVEN: Update request with empty organization name (after strip)
+    WHEN: PATCH /api/organizations/{org_id} is called
+    THEN: 422 validation error is returned (OrgUpdate name min_length=1)
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    update_data = {'name': '   '}
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=mock_update_app), base_url='http://test'

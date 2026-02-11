@@ -45,6 +45,16 @@ class OrgAuthorizationError(OrgDeletionError):
         super().__init__(message)
 
 
+class OrphanedUserError(OrgDeletionError):
+    """Raised when deleting an org would leave users without any organization."""
+
+    def __init__(self, user_ids: list[str]):
+        self.user_ids = user_ids
+        super().__init__(
+            f'Cannot delete organization: {len(user_ids)} user(s) would have no remaining organization'
+        )
+
+
 class OrgNotFoundError(Exception):
     """Raised when organization is not found or user doesn't have access."""
 
@@ -210,6 +220,10 @@ class OrgUpdate(BaseModel):
     """Request model for updating an organization."""
 
     # Basic organization information (any authenticated user can update)
+    name: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+    ] = None
     contact_name: str | None = None
     contact_email: EmailStr | None = None
     conversation_expiration: int | None = None

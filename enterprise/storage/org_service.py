@@ -521,6 +521,7 @@ class OrgService:
         Raises:
             ValueError: If organization not found
             PermissionError: If user is not a member, or lacks admin/owner role for LLM settings
+            OrgNameExistsError: If new name already exists for another organization
             OrgDatabaseError: If database update fails
         """
         logger.info(
@@ -549,6 +550,24 @@ class OrgService:
             raise PermissionError(
                 'User must be a member of the organization to update it'
             )
+
+        # Check if name is being updated and validate uniqueness
+        if update_data.name is not None:
+            # Check if new name conflicts with another org
+            existing_org_with_name = OrgStore.get_org_by_name(update_data.name)
+            if (
+                existing_org_with_name is not None
+                and existing_org_with_name.id != org_id
+            ):
+                logger.warning(
+                    'Attempted to update organization with duplicate name',
+                    extra={
+                        'user_id': user_id,
+                        'org_id': str(org_id),
+                        'attempted_name': update_data.name,
+                    },
+                )
+                raise OrgNameExistsError(update_data.name)
 
         # Check if update contains any LLM settings
         llm_fields_being_updated = OrgService._has_llm_settings_updates(update_data)

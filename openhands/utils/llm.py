@@ -111,18 +111,15 @@ def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
 
     # Add OpenHands provider models
     openhands_models = [
-        'openhands/claude-sonnet-4-20250514',
-        'openhands/claude-sonnet-4-5-20250929',
-        'openhands/gpt-5-2025-08-07',
-        'openhands/gpt-5-mini-2025-08-07',
-        'openhands/claude-opus-4-20250514',
         'openhands/claude-opus-4-5-20251101',
-        'openhands/gemini-2.5-pro',
-        'openhands/o3',
-        'openhands/o4-mini',
-        'openhands/devstral-small-2505',
-        'openhands/devstral-small-2507',
-        'openhands/devstral-medium-2507',
+        'openhands/claude-sonnet-4-5-20250929',
+        'openhands/gpt-5.2-codex',
+        'openhands/gpt-5.2',
+        'openhands/minimax-m2.5',
+        'openhands/gemini-3-pro-preview',
+        'openhands/gemini-3-flash-preview',
+        'openhands/deepseek-chat',
+        'openhands/devstral-medium-2512',
         'openhands/kimi-k2-0711-preview',
         'openhands/qwen3-coder-480b',
     ]
