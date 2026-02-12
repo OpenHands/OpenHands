@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useSwitchOrganization } from "#/hooks/mutation/use-switch-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
+import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
 import { I18nKey } from "#/i18n/declaration";
 import { Organization } from "#/types/org";
 import { Dropdown } from "#/ui/dropdown/dropdown";
@@ -13,6 +14,7 @@ export function OrgSelector() {
   const { data: organizations, isLoading } = useOrganizations();
   const { mutate: switchOrganization, isPending: isSwitching } =
     useSwitchOrganization();
+  const shouldHideSelector = useShouldHideOrgSelector();
 
   const getOrgDisplayName = React.useCallback(
     (org: Organization) =>
@@ -35,10 +37,14 @@ export function OrgSelector() {
     return organizations?.[0];
   }, [organizationId, organizations]);
 
+  if (shouldHideSelector) {
+    return null;
+  }
+
   return (
     <Dropdown
       testId="org-selector"
-      key={selectedOrg?.id}
+      key={`${selectedOrg?.id}-${selectedOrg?.name}`}
       defaultValue={{
         label: selectedOrg ? getOrgDisplayName(selectedOrg) : "",
         value: selectedOrg?.id || "",

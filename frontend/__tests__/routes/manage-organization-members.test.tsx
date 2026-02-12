@@ -473,6 +473,10 @@ describe("Manage Organization Members Route", () => {
 
     await userEvent.click(removeOption);
 
+    // Wait for confirmation modal to appear and click confirm
+    const confirmButton = await screen.findByTestId("confirm-button");
+    await userEvent.click(confirmButton);
+
     expect(removeMemberSpy).toHaveBeenCalledExactlyOnceWith({
       orgId: "2",
       userId: "3",

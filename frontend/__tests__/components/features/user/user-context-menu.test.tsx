@@ -98,9 +98,17 @@ vi.mock("react-i18next", async () => {
 });
 
 describe("UserContextMenu", () => {
+  beforeEach(() => {
+    // Ensure clean state at the start of each test
+    vi.restoreAllMocks();
+    useSelectedOrganizationStore.setState({ organizationId: null });
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     navigateMock.mockClear();
+    // Reset Zustand store to ensure clean state between tests
+    useSelectedOrganizationStore.setState({ organizationId: null });
   });
 
   it("should render the default context items for a user", () => {
@@ -499,6 +507,11 @@ describe("UserContextMenu", () => {
   });
 
   it("should render the invite user modal when Invite Organization Member is clicked", async () => {
+    // Mock a team org so org management buttons are visible (not personal org)
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+      MOCK_TEAM_ORG_ACME,
+    ]);
+
     const inviteMembersBatchSpy = vi.spyOn(
       organizationService,
       "inviteMembers",
@@ -506,13 +519,20 @@ describe("UserContextMenu", () => {
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "admin", onClose: onCloseMock });
 
-    const inviteButton = screen.getByText("ORG$INVITE_ORGANIZATION_MEMBER");
+    // Wait for orgs to load so org management buttons are visible
+    const inviteButton = await screen.findByText(
+      "ORG$INVITE_ORGANIZATION_MEMBER",
+    );
     await userEvent.click(inviteButton);
 
     const portalRoot = screen.getByTestId("portal-root");
-    expect(within(portalRoot).getByTestId("invite-modal")).toBeInTheDocument();
+    expect(
+      await within(portalRoot).findByTestId("invite-modal"),
+    ).toBeInTheDocument();
 
-    await userEvent.click(within(portalRoot).getByText("BUTTON$CANCEL"));
+    await userEvent.click(
+      await within(portalRoot).findByText("BUTTON$CANCEL"),
+    );
     expect(inviteMembersBatchSpy).not.toHaveBeenCalled();
   });
 

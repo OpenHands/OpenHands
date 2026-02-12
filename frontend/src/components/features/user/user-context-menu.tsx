@@ -20,6 +20,7 @@ import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import DocumentIcon from "#/icons/document.svg?react";
 import { Divider } from "#/ui/divider";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
+import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
 
 // Shared className for context menu list items in the user context menu
 // Removes default padding and hover background to match the simpler text-hover style
@@ -39,6 +40,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const { isPersonalOrg } = useOrgTypeAndAccess();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
   const settingsNavItems = useSettingsNavItems();
+  const shouldHideSelector = useShouldHideOrgSelector();
 
   // Filter out org routes since they're handled separately via buttons in this menu
   const navItems = settingsNavItems.filter(
@@ -92,9 +94,11 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
       </h3>
 
       <div className="flex flex-col items-start gap-2">
-        <div className="w-full relative">
-          <OrgSelector />
-        </div>
+        {!shouldHideSelector && (
+          <div className="w-full relative">
+            <OrgSelector />
+          </div>
+        )}
 
         {!isMember && !isPersonalOrg && (
           <>

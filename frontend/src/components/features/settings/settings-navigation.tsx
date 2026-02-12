@@ -7,6 +7,7 @@ import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
 import { OrgSelector } from "../org/org-selector";
 import { SettingsNavItem } from "#/constants/settings-nav";
+import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
@@ -20,6 +21,7 @@ export function SettingsNavigation({
   navigationItems,
 }: SettingsNavigationProps) {
   const { t } = useTranslation();
+  const shouldHideSelector = useShouldHideOrgSelector();
 
   return (
     <>
@@ -42,9 +44,11 @@ export function SettingsNavigation({
           "md:relative md:translate-x-0 md:w-64 md:p-0 md:bg-transparent",
         )}
       >
-        <div className="py-2">
-          <OrgSelector />
-        </div>
+        {!shouldHideSelector && (
+          <div className="py-2">
+            <OrgSelector />
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 ml-1 sm:ml-4.5">
