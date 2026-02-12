@@ -272,7 +272,7 @@ class OrgMemberPage(BaseModel):
 class OrgMemberUpdate(BaseModel):
     """Request model for updating an organization member."""
 
-    role: str | None = None  # Role name: 'owner', 'admin', or 'user'
+    role: str | None = None  # Role name: 'owner', 'admin', or 'member'
 
 
 class MeResponse(BaseModel):

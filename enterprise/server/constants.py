@@ -18,7 +18,7 @@ IS_LOCAL_ENV = bool(HOST == 'localhost')
 # Role name constants
 ROLE_OWNER = 'owner'
 ROLE_ADMIN = 'admin'
-ROLE_USER = 'user'
+ROLE_MEMBER = 'member'
 
 # Deprecated - billing margins are now handled internally in litellm
 DEFAULT_BILLING_MARGIN = float(os.environ.get('DEFAULT_BILLING_MARGIN', '1.0'))
