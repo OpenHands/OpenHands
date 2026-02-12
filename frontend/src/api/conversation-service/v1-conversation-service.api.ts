@@ -78,8 +78,8 @@ class V1ConversationService {
       agent_type,
     };
 
-    // Add initial message if provided
-    if (initialUserMsg) {
+    // suggested_task implies the backend will construct the initial_message
+    if (!suggestedTask && initialUserMsg) {
       body.initial_message = {
         role: "user",
         content: [

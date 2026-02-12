@@ -580,6 +580,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not suggested_task:
             return
 
+        if request.initial_message is not None:
+            raise ValueError(
+                'initial_message cannot be provided when suggested_task is present'
+            )
+
         prompt = suggested_task.get_prompt_for_task()
         request.initial_message = SendMessageRequest(
             role='user',

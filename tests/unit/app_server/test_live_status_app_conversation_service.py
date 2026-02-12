@@ -136,7 +136,28 @@ class TestLiveStatusAppConversationService:
         assert request.selected_repository == suggested_task.repo
         assert request.git_provider == suggested_task.git_provider
 
-    @pytest.mark.asyncio
+    def test_apply_suggested_task_raises_if_initial_message_present(self):
+        suggested_task = SuggestedTask(
+            repo='foo/bar',
+            git_provider=ProviderType.GITHUB,
+            title='Some title',
+            query='Some query',
+            task_type=TaskType.OPEN_ISSUE,
+            issue_number=123,
+        )
+        from openhands.agent_server.models import TextContent
+
+        request = AppConversationStartRequest(
+            suggested_task=suggested_task,
+            initial_message=SendMessageRequest(
+                role='user',
+                content=[TextContent(text='User provided message')],
+            ),
+        )
+
+        with pytest.raises(ValueError, match='initial_message cannot be provided'):
+            self.service._apply_suggested_task(request)
+
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
