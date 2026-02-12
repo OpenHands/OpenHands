@@ -458,6 +458,8 @@ class StandaloneConversationManager(ConversationManager):
         runtime = agent_session.runtime
         file_list = await call_sync_from_async(runtime.list_files, path)
 
+        # runtime.list_files returns relative filenames within the specified directory,
+        # so we need to join with the path to get paths relative to workspace root
         if path:
             file_list = [os.path.join(path, f) for f in file_list]
 
@@ -465,21 +467,22 @@ class StandaloneConversationManager(ConversationManager):
         return file_list
 
     async def _filter_for_gitignore(
-        self, runtime: Any, file_list: list[str], base_path: str = ''
+        self, runtime: Any, file_list: list[str]
     ) -> list[str]:
-        """Filter file list based on .gitignore rules.
+        """Filter file list based on root-level .gitignore rules.
+
+        Note: Only the .gitignore file at the workspace root is supported.
+        Nested .gitignore files in subdirectories are not processed.
 
         Args:
             runtime: The runtime to read the .gitignore file from.
             file_list: List of file paths to filter.
-            base_path: Base path for the .gitignore file.
 
         Returns:
             Filtered list of files excluding those matching .gitignore patterns.
         """
-        gitignore_path = os.path.join(base_path, '.gitignore')
         try:
-            read_action = FileReadAction(gitignore_path)
+            read_action = FileReadAction('.gitignore')
             observation = await call_sync_from_async(runtime.run_action, read_action)
             spec = PathSpec.from_lines(
                 GitWildMatchPattern, observation.content.splitlines()
