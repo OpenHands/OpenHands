@@ -44,6 +44,31 @@ const renderOrgSelector = () =>
   });
 
 describe("OrgSelector", () => {
+  it("should not render when user only has a personal workspace", async () => {
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+      MOCK_PERSONAL_ORG,
+    ]);
+
+    const { container } = renderOrgSelector();
+
+    await waitFor(() => {
+      expect(container).toBeEmptyDOMElement();
+    });
+  });
+
+  it("should render when user only has a team organization", async () => {
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
+      MOCK_TEAM_ORG_ACME,
+    ]);
+
+    const { container } = renderOrgSelector();
+
+    await waitFor(() => {
+      expect(container).not.toBeEmptyDOMElement();
+    });
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
+  });
+
   it("should show a loading indicator when fetching organizations", () => {
     vi.spyOn(organizationService, "getOrganizations").mockImplementation(
       () => new Promise(() => {}), // never resolves
