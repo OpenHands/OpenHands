@@ -123,9 +123,6 @@ async def list_files(
             content={'error': f'Error listing files: {e}'},
         )
 
-    if path:
-        file_list = [os.path.join(path, f) for f in file_list]
-
     file_list = [f for f in file_list if f not in FILES_TO_IGNORE]
 
     return file_list

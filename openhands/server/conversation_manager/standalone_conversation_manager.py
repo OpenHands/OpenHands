@@ -7,12 +7,15 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import asyncio
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 
 import socketio
+from pathspec import PathSpec
+from pathspec.patterns import GitWildMatchPattern
 
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -20,7 +23,7 @@ from openhands.core.exceptions import AgentRuntimeUnavailableError
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
 from openhands.core.schema.observation import ObservationType
-from openhands.events.action import MessageAction
+from openhands.events.action import FileReadAction, MessageAction
 from openhands.events.observation.commands import CmdOutputObservation
 from openhands.events.stream import EventStreamSubscriber, session_exists
 from openhands.llm.llm_registry import LLMRegistry
@@ -443,7 +446,7 @@ class StandaloneConversationManager(ConversationManager):
             path: Optional path to list files from. If None, lists from workspace root.
 
         Returns:
-            A list of file paths.
+            A list of file paths, filtered by .gitignore rules if present.
 
         Raises:
             ValueError: If the runtime is not available.
@@ -454,6 +457,36 @@ class StandaloneConversationManager(ConversationManager):
 
         runtime = agent_session.runtime
         file_list = await call_sync_from_async(runtime.list_files, path)
+
+        if path:
+            file_list = [os.path.join(path, f) for f in file_list]
+
+        file_list = await self._filter_for_gitignore(runtime, file_list)
+        return file_list
+
+    async def _filter_for_gitignore(
+        self, runtime: Any, file_list: list[str], base_path: str = ''
+    ) -> list[str]:
+        """Filter file list based on .gitignore rules.
+
+        Args:
+            runtime: The runtime to read the .gitignore file from.
+            file_list: List of file paths to filter.
+            base_path: Base path for the .gitignore file.
+
+        Returns:
+            Filtered list of files excluding those matching .gitignore patterns.
+        """
+        gitignore_path = os.path.join(base_path, '.gitignore')
+        try:
+            read_action = FileReadAction(gitignore_path)
+            observation = await call_sync_from_async(runtime.run_action, read_action)
+            spec = PathSpec.from_lines(
+                GitWildMatchPattern, observation.content.splitlines()
+            )
+            file_list = [entry for entry in file_list if not spec.match_file(entry)]
+        except Exception as e:
+            logger.warning(f'Could not read .gitignore for filtering: {e}')
         return file_list
 
     async def _close_session(self, sid: str):
