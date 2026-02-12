@@ -1167,7 +1167,8 @@ class SaasNestedConversationManager(ConversationManager):
         ) as client:
             url = f'{nested_url}/list-files'
             if path:
-                url = f'{url}?path={path}'
+            params = {"path": path} if path else {}
+            response = await client.get(f"{nested_url}/list-files", params=params)
             response = await client.get(url)
             response.raise_for_status()
             return response.json()
