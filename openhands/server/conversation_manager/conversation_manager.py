@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+import httpx
 import socketio
 
 from openhands.core.config import OpenHandsConfig
 from openhands.core.config.llm_config import LLMConfig
+from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import MessageAction
 from openhands.server.config.server_config import ServerConfig
 from openhands.server.data_models.agent_loop_info import AgentLoopInfo
@@ -23,6 +25,7 @@ from openhands.server.session.conversation import ServerConversation
 from openhands.storage.conversation.conversation_store import ConversationStore
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
+from openhands.utils.http_session import httpx_verify_option
 
 
 class ConversationManager(ABC):
@@ -169,6 +172,60 @@ class ConversationManager(ABC):
         Raises:
             ValueError: If the conversation is not running (for nested managers).
         """
+
+    async def _fetch_list_files_from_nested(
+        self,
+        sid: str,
+        nested_url: str,
+        session_api_key: str | None,
+        path: str | None = None,
+    ) -> list[str]:
+        """Fetch file list from a nested runtime container.
+
+        This is a helper method used by nested conversation managers to make HTTP
+        requests to the nested runtime's list-files endpoint.
+
+        Args:
+            sid: The session/conversation ID (for logging).
+            nested_url: The base URL of the nested runtime.
+            session_api_key: The session API key for authentication.
+            path: Optional path to list files from.
+
+        Returns:
+            A list of file paths.
+
+        Raises:
+            httpx.TimeoutException: If the request times out.
+            httpx.ConnectError: If unable to connect to the nested runtime.
+            httpx.HTTPStatusError: If the nested runtime returns an error status.
+        """
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
+            headers={'X-Session-API-Key': session_api_key} if session_api_key else {},
+        ) as client:
+            params = {'path': path} if path else {}
+            try:
+                response = await client.get(f'{nested_url}/list-files', params=params)
+                response.raise_for_status()
+                return response.json()
+            except httpx.TimeoutException:
+                logger.error(
+                    'Timeout fetching files from nested runtime',
+                    extra={'session_id': sid},
+                )
+                raise
+            except httpx.ConnectError as e:
+                logger.error(
+                    f'Failed to connect to nested runtime: {e}',
+                    extra={'session_id': sid},
+                )
+                raise
+            except httpx.HTTPStatusError as e:
+                logger.error(
+                    f'Nested runtime returned error: {e.response.status_code}',
+                    extra={'session_id': sid},
+                )
+                raise
 
     @classmethod
     @abstractmethod

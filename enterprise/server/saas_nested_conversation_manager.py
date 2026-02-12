@@ -1153,6 +1153,7 @@ class SaasNestedConversationManager(ConversationManager):
 
         Raises:
             ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
         """
         runtime = await self._get_runtime(sid)
         if runtime is None or runtime.get('status') != 'running':
@@ -1161,17 +1162,9 @@ class SaasNestedConversationManager(ConversationManager):
         nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
         session_api_key = runtime.get('session_api_key')
 
-        async with httpx.AsyncClient(
-            verify=httpx_verify_option(),
-            headers={'X-Session-API-Key': session_api_key},
-        ) as client:
-            url = f'{nested_url}/list-files'
-            if path:
-            params = {"path": path} if path else {}
-            response = await client.get(f"{nested_url}/list-files", params=params)
-            response = await client.get(url)
-            response.raise_for_status()
-            return response.json()
+        return await self._fetch_list_files_from_nested(
+            sid, nested_url, session_api_key, path
+        )
 
 
 def _last_updated_at_key(conversation: ConversationMetadata) -> float:

@@ -9,6 +9,7 @@
 import os
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.background import BackgroundTask
@@ -95,6 +96,26 @@ async def list_files(
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': f'Error listing files: {e}'},
+        )
+    except httpx.TimeoutException:
+        logger.error(f'Timeout listing files for conversation {conversation_id}')
+        return JSONResponse(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            content={'error': 'Request to runtime timed out'},
+        )
+    except httpx.ConnectError:
+        logger.error(
+            f'Connection error listing files for conversation {conversation_id}'
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={'error': 'Unable to connect to runtime'},
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(f'HTTP error listing files: {e.response.status_code}')
+        return JSONResponse(
+            status_code=e.response.status_code,
+            content={'error': f'Runtime returned error: {e.response.status_code}'},
         )
     except Exception as e:
         logger.error(f'Error listing files: {e}')
