@@ -12,10 +12,11 @@ from fastapi.responses import JSONResponse
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.async_event_store_wrapper import AsyncEventStoreWrapper
 from openhands.events.event_filter import EventFilter
+from openhands.events.event_store import EventStore
 from openhands.events.serialization import event_to_trajectory
 from openhands.server.dependencies import get_dependencies
-from openhands.server.session.conversation import ServerConversation
-from openhands.server.utils import get_conversation
+from openhands.server.shared import file_store
+from openhands.server.user_auth import get_user_id
 
 app = APIRouter(
     prefix='/api/conversations/{conversation_id}', dependencies=get_dependencies()
@@ -24,22 +25,31 @@ app = APIRouter(
 
 @app.get('/trajectory')
 async def get_trajectory(
-    conversation: ServerConversation = Depends(get_conversation),
+    conversation_id: str,
+    user_id: str | None = Depends(get_user_id),
 ) -> JSONResponse:
     """Get trajectory.
 
     This function retrieves the current trajectory and returns it.
+    Uses the local EventStore which reads events from the file store,
+    so it works with both standalone and nested conversation managers.
 
     Args:
-        request (Request): The incoming request object.
+        conversation_id: The conversation ID.
+        user_id: The user ID (from auth).
 
     Returns:
         JSONResponse: A JSON response containing the trajectory as a list of
         events.
     """
     try:
+        event_store = EventStore(
+            sid=conversation_id,
+            file_store=file_store,
+            user_id=user_id,
+        )
         async_store = AsyncEventStoreWrapper(
-            conversation.event_stream, filter=EventFilter(exclude_hidden=True)
+            event_store, filter=EventFilter(exclude_hidden=True)
         )
         trajectory = []
         async for event in async_store:

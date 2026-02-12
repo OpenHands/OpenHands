@@ -1139,6 +1139,39 @@ class SaasNestedConversationManager(ConversationManager):
         }
         update_conversation_metadata(conversation_id, metadata_content)
 
+    async def list_files(self, sid: str, path: str | None = None) -> list[str]:
+        """List files in the workspace for a conversation.
+
+        Delegates to the nested container's list-files endpoint.
+
+        Args:
+            sid: The session/conversation ID.
+            path: Optional path to list files from. If None, lists from workspace root.
+
+        Returns:
+            A list of file paths.
+
+        Raises:
+            ValueError: If the conversation is not running.
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None or runtime.get('status') != 'running':
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        session_api_key = runtime.get('session_api_key')
+
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
+            headers={'X-Session-API-Key': session_api_key},
+        ) as client:
+            url = f'{nested_url}/list-files'
+            if path:
+                url = f'{url}?path={path}'
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+
 
 def _last_updated_at_key(conversation: ConversationMetadata) -> float:
     last_updated_at = conversation.last_updated_at

@@ -11,8 +11,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
-from pathspec import PathSpec
-from pathspec.patterns import GitWildMatchPattern
 from starlette.background import BackgroundTask
 
 from openhands.core.exceptions import AgentRuntimeUnavailableError
@@ -30,6 +28,7 @@ from openhands.server.dependencies import get_dependencies
 from openhands.server.file_config import FILES_TO_IGNORE
 from openhands.server.files import POSTUploadFilesModel
 from openhands.server.session.conversation import ServerConversation
+from openhands.server.shared import conversation_manager
 from openhands.server.user_auth import get_user_id
 from openhands.server.utils import get_conversation, get_conversation_store
 from openhands.storage.conversation.conversation_store import ConversationStore
@@ -50,7 +49,7 @@ app = APIRouter(
     deprecated=True,
 )
 async def list_files(
-    conversation: ServerConversation = Depends(get_conversation),
+    conversation_id: str,
     path: str | None = None,
 ) -> list[str] | JSONResponse:
     """List files in the specified path.
@@ -64,7 +63,7 @@ async def list_files(
     ```
 
     Args:
-        request (Request): The incoming request object.
+        conversation_id: The conversation ID.
         path (str, optional): The path to list files from. Defaults to None.
 
     Returns:
@@ -76,48 +75,31 @@ async def list_files(
         For V1 conversations, file operations are handled through the agent server.
         Use the sandbox's exposed agent server URL to access file operations.
     """
-    if not conversation.runtime:
+    try:
+        file_list = await conversation_manager.list_files(conversation_id, path)
+    except ValueError as e:
+        logger.error(f'Error listing files: {e}')
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={'error': 'Runtime not yet initialized'},
+            content={'error': str(e)},
         )
-
-    runtime: Runtime = conversation.runtime
-    try:
-        file_list = await call_sync_from_async(runtime.list_files, path)
     except AgentRuntimeUnavailableError as e:
         logger.error(f'Error listing files: {e}')
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': f'Error listing files: {e}'},
         )
+    except Exception as e:
+        logger.error(f'Error listing files: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': f'Error listing files: {e}'},
+        )
+
     if path:
         file_list = [os.path.join(path, f) for f in file_list]
 
     file_list = [f for f in file_list if f not in FILES_TO_IGNORE]
-
-    async def filter_for_gitignore(file_list: list[str], base_path: str) -> list[str]:
-        gitignore_path = os.path.join(base_path, '.gitignore')
-        try:
-            read_action = FileReadAction(gitignore_path)
-            observation = await call_sync_from_async(runtime.run_action, read_action)
-            spec = PathSpec.from_lines(
-                GitWildMatchPattern, observation.content.splitlines()
-            )
-        except Exception as e:
-            logger.warning(e)
-            return file_list
-        file_list = [entry for entry in file_list if not spec.match_file(entry)]
-        return file_list
-
-    try:
-        file_list = await filter_for_gitignore(file_list, '')
-    except AgentRuntimeUnavailableError as e:
-        logger.error(f'Error filtering files: {e}')
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={'error': f'Error filtering files: {e}'},
-        )
 
     return file_list
 

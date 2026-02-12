@@ -644,6 +644,38 @@ class DockerNestedConversationManager(ConversationManager):
         except docker.errors.NotFound:
             return False
 
+    async def list_files(self, sid: str, path: str | None = None) -> list[str]:
+        """List files in the workspace for a conversation.
+
+        Delegates to the nested container's list-files endpoint.
+
+        Args:
+            sid: The session/conversation ID.
+            path: Optional path to list files from. If None, lists from workspace root.
+
+        Returns:
+            A list of file paths.
+
+        Raises:
+            ValueError: If the conversation is not running.
+        """
+        if not await self.is_agent_loop_running(sid):
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url(sid)
+        session_api_key = self._get_session_api_key_for_conversation(sid)
+
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(),
+            headers={'X-Session-API-Key': session_api_key},
+        ) as client:
+            url = f'{nested_url}/list-files'
+            if path:
+                url = f'{url}?path={path}'
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+
 
 def _last_updated_at_key(conversation: ConversationMetadata) -> float:
     last_updated_at = conversation.last_updated_at

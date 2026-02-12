@@ -155,6 +155,21 @@ class ConversationManager(ABC):
     ) -> str:
         """Request extraneous llm completions for a conversation"""
 
+    @abstractmethod
+    async def list_files(self, sid: str, path: str | None = None) -> list[str]:
+        """List files in the workspace for a conversation.
+
+        Args:
+            sid: The session/conversation ID.
+            path: Optional path to list files from. If None, lists from workspace root.
+
+        Returns:
+            A list of file paths.
+
+        Raises:
+            ValueError: If the conversation is not running (for nested managers).
+        """
+
     @classmethod
     @abstractmethod
     def get_instance(

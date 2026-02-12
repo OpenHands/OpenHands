@@ -40,6 +40,7 @@ from openhands.storage.files import FileStore
 from openhands.utils.async_utils import (
     GENERAL_TIMEOUT,
     call_async_from_sync,
+    call_sync_from_async,
     run_in_loop,
     wait_all,
 )
@@ -433,6 +434,27 @@ class StandaloneConversationManager(ConversationManager):
         if session:
             return session.agent_session
         return None
+
+    async def list_files(self, sid: str, path: str | None = None) -> list[str]:
+        """List files in the workspace for a conversation.
+
+        Args:
+            sid: The session/conversation ID.
+            path: Optional path to list files from. If None, lists from workspace root.
+
+        Returns:
+            A list of file paths.
+
+        Raises:
+            ValueError: If the runtime is not available.
+        """
+        agent_session = self.get_agent_session(sid)
+        if not agent_session or not agent_session.runtime:
+            raise ValueError(f'Runtime not available for conversation {sid}')
+
+        runtime = agent_session.runtime
+        file_list = await call_sync_from_async(runtime.list_files, path)
+        return file_list
 
     async def _close_session(self, sid: str):
         logger.info(f'_close_session:{sid}', extra={'session_id': sid})
