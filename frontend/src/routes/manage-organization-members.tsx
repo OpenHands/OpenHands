@@ -3,6 +3,7 @@ import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { InviteOrganizationMemberModal } from "#/components/features/org/invite-organization-member-modal";
+import { ConfirmRemoveMemberModal } from "#/components/features/org/confirm-remove-member-modal";
 import { useOrganizationMembers } from "#/hooks/query/use-organization-members";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
 import { OrganizationMemberListItem } from "#/components/features/org/organization-member-list-item";
@@ -25,8 +26,11 @@ function ManageOrganizationMembers() {
   const { data: organizationMembers } = useOrganizationMembers();
   const { data: user } = useMe();
   const { mutate: updateMemberRole } = useUpdateMemberRole();
-  const { mutate: removeMember } = useRemoveMember();
+  const { mutate: removeMember, isPending: isRemovingMember } =
+    useRemoveMember();
   const [inviteModalOpen, setInviteModalOpen] = React.useState(false);
+  const [memberToRemove, setMemberToRemove] =
+    React.useState<OrganizationMember | null>(null);
 
   const currentUserRole = user?.role ?? "member";
 
@@ -37,8 +41,17 @@ function ManageOrganizationMembers() {
     updateMemberRole({ userId: id, role });
   };
 
-  const handleRemoveMember = (userId: string) => {
-    removeMember({ userId });
+  const handleRemoveMember = (member: OrganizationMember) => {
+    setMemberToRemove(member);
+  };
+
+  const handleConfirmRemoveMember = () => {
+    if (memberToRemove) {
+      removeMember(
+        { userId: memberToRemove.user_id },
+        { onSettled: () => setMemberToRemove(null) },
+      );
+    }
   };
 
   const availableRolesToChangeTo = getAvailableRolesAUserCanAssign(
@@ -93,11 +106,20 @@ function ManageOrganizationMembers() {
                 onRoleChange={(role) =>
                   handleRoleSelectionClick(member.user_id, role)
                 }
-                onRemove={() => handleRemoveMember(member.user_id)}
+                onRemove={() => handleRemoveMember(member)}
               />
             </li>
           ))}
         </ul>
+      )}
+
+      {memberToRemove && (
+        <ConfirmRemoveMemberModal
+          memberEmail={memberToRemove.email}
+          onConfirm={handleConfirmRemoveMember}
+          onCancel={() => setMemberToRemove(null)}
+          isLoading={isRemovingMember}
+        />
       )}
     </div>
   );
