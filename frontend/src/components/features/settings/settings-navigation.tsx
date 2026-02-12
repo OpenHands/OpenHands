@@ -7,7 +7,7 @@ import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
 import { OrgSelector } from "../org/org-selector";
 import { SettingsNavItem } from "#/constants/settings-nav";
-import { useOrganizationStore } from "#/stores/organization-store";
+import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
@@ -21,7 +21,7 @@ export function SettingsNavigation({
   navigationItems,
 }: SettingsNavigationProps) {
   const { t } = useTranslation();
-  const { shouldHideSelector } = useOrganizationStore();
+  const shouldHideSelector = useShouldHideOrgSelector();
 
   return (
     <>
