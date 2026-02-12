@@ -47,7 +47,10 @@ export function DeleteOrgConfirmationModal({
       onClose={isPending ? undefined : onClose}
       aria-label={t(I18nKey.ORG$DELETE_ORGANIZATION)}
     >
-      <ModalBody className="items-start border border-tertiary">
+      <ModalBody
+        className="items-start border border-tertiary"
+        testID="delete-org-confirmation"
+      >
         <div className="flex flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.ORG$DELETE_ORGANIZATION)} />
           <BaseModalDescription>{confirmationMessage}</BaseModalDescription>
@@ -59,7 +62,6 @@ export function DeleteOrgConfirmationModal({
             onClick={handleConfirm}
             className="w-full flex items-center justify-center"
             isDisabled={isPending}
-            data-testid="delete-org-confirmation"
           >
             {isPending ? (
               <LoadingSpinner size="small" />

@@ -696,7 +696,7 @@ describe("Manage Org Route", () => {
 
       const deleteConfirmation = screen.getByTestId("delete-org-confirmation");
       const confirmButton = within(deleteConfirmation).getByRole("button", {
-        name: /BUTTON\$CONFIRM/i,
+        name: /ACTION\$CONFIRM_DELETE/i,
       });
 
       await userEvent.click(confirmButton);
