@@ -30,8 +30,13 @@ from openhands.server.files import POSTUploadFilesModel
 from openhands.server.session.conversation import ServerConversation
 from openhands.server.shared import conversation_manager
 from openhands.server.user_auth import get_user_id
-from openhands.server.utils import get_conversation, get_conversation_store
+from openhands.server.utils import (
+    get_conversation,
+    get_conversation_metadata,
+    get_conversation_store,
+)
 from openhands.storage.conversation.conversation_store import ConversationStore
+from openhands.storage.data_models.conversation_metadata import ConversationMetadata
 from openhands.utils.async_utils import call_sync_from_async
 
 app = APIRouter(
@@ -50,6 +55,7 @@ app = APIRouter(
 )
 async def list_files(
     conversation_id: str,
+    metadata: ConversationMetadata = Depends(get_conversation_metadata),
     path: str | None = None,
 ) -> list[str] | JSONResponse:
     """List files in the specified path.
@@ -64,6 +70,7 @@ async def list_files(
 
     Args:
         conversation_id: The conversation ID.
+        metadata: The conversation metadata (used for user access validation).
         path (str, optional): The path to list files from. Defaults to None.
 
     Returns:
