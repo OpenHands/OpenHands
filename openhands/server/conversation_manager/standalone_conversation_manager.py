@@ -565,26 +565,6 @@ class StandaloneConversationManager(ConversationManager):
 
         return uploaded_files, skipped_files
 
-    def zip_directory(self, sid: str, path: str) -> str:
-        """Zip a directory from the workspace.
-
-        Args:
-            sid: The session/conversation ID.
-            path: The path to zip.
-
-        Returns:
-            The path to the created zip file.
-
-        Raises:
-            ValueError: If the runtime is not available.
-        """
-        agent_session = self.get_agent_session(sid)
-        if not agent_session or not agent_session.runtime:
-            raise ValueError(f'Runtime not available for conversation {sid}')
-
-        runtime = agent_session.runtime
-        return str(runtime.copy_from(path))
-
     async def _close_session(self, sid: str):
         logger.info(f'_close_session:{sid}', extra={'session_id': sid})
 

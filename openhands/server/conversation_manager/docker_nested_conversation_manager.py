@@ -706,21 +706,6 @@ class DockerNestedConversationManager(ConversationManager):
             sid, nested_url, session_api_key, files
         )
 
-    def zip_directory(self, sid: str, path: str) -> str:
-        """Zip a directory from the workspace.
-
-        Note: This operation is not supported for nested containers as it requires
-        direct file system access. The nested container's zip endpoint should be
-        called directly by the client.
-
-        Raises:
-            NotImplementedError: Always, as this requires direct runtime access.
-        """
-        raise NotImplementedError(
-            'zip_directory is not supported for nested containers. '
-            "Use the nested container's /zip-directory endpoint directly."
-        )
-
 
 def _last_updated_at_key(conversation: ConversationMetadata) -> float:
     last_updated_at = conversation.last_updated_at

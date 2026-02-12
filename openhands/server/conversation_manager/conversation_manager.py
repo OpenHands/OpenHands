@@ -208,21 +208,6 @@ class ConversationManager(ABC):
             ValueError: If the conversation is not running (for nested managers).
         """
 
-    @abstractmethod
-    def zip_directory(self, sid: str, path: str) -> str:
-        """Zip a directory from the workspace.
-
-        Args:
-            sid: The session/conversation ID.
-            path: The path to zip (relative to workspace root or absolute).
-
-        Returns:
-            The path to the created zip file.
-
-        Raises:
-            ValueError: If the conversation is not running (for nested managers).
-        """
-
     async def _fetch_list_files_from_nested(
         self,
         sid: str,

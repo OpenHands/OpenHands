@@ -219,49 +219,35 @@ async def select_file(
     deprecated=True,
 )
 def zip_current_workspace(
-    metadata: ConversationMetadata = Depends(get_conversation_metadata),
+    conversation: ServerConversation = Depends(get_conversation),
 ) -> FileResponse | JSONResponse:
     """Download the current workspace as a zip file.
 
     For V1 conversations, file operations are handled through the agent server.
     Use the sandbox's exposed agent server URL to access file operations.
     """
-    conversation_id = metadata.conversation_id
     try:
         logger.debug('Zipping workspace')
-        # Note: For nested containers, this will raise NotImplementedError
-        # The client should call the nested container's endpoint directly
-        zip_file_path = conversation_manager.zip_directory(
-            conversation_id, '/workspace'
-        )
+        runtime: Runtime = conversation.runtime
+        path = runtime.config.workspace_mount_path_in_sandbox
+        try:
+            zip_file_path = runtime.copy_from(path)
+        except AgentRuntimeUnavailableError as e:
+            logger.error(f'Error zipping workspace: {e}')
+            return JSONResponse(
+                status_code=500,
+                content={'error': f'Error zipping workspace: {e}'},
+            )
         return FileResponse(
             path=zip_file_path,
             filename='workspace.zip',
             media_type='application/zip',
             background=BackgroundTask(lambda: os.unlink(zip_file_path)),
         )
-    except ValueError as e:
-        logger.error(f'Error zipping workspace: {e}')
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={'error': str(e)},
-        )
-    except NotImplementedError as e:
-        logger.error(f'Error zipping workspace: {e}')
-        return JSONResponse(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            content={'error': str(e)},
-        )
-    except AgentRuntimeUnavailableError as e:
-        logger.error(f'Error zipping workspace: {e}')
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={'error': f'Error zipping workspace: {e}'},
-        )
     except Exception as e:
         logger.error(f'Error zipping workspace: {e}')
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail='Failed to zip workspace',
         )
 
