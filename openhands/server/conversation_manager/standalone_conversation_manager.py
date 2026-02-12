@@ -489,6 +489,102 @@ class StandaloneConversationManager(ConversationManager):
             logger.warning(f'Could not read .gitignore for filtering: {e}')
         return file_list
 
+    async def select_file(self, sid: str, file: str) -> tuple[str | None, str | None]:
+        """Read a file from the workspace.
+
+        Args:
+            sid: The session/conversation ID.
+            file: The file path relative to the workspace root.
+
+        Returns:
+            A tuple of (content, error). If successful, content is the file content
+            and error is None. If failed, content is None and error is the error message.
+
+        Raises:
+            ValueError: If the runtime is not available.
+        """
+        from openhands.events.observation import ErrorObservation, FileReadObservation
+
+        agent_session = self.get_agent_session(sid)
+        if not agent_session or not agent_session.runtime:
+            raise ValueError(f'Runtime not available for conversation {sid}')
+
+        runtime = agent_session.runtime
+        file_path = os.path.join(runtime.config.workspace_mount_path_in_sandbox, file)
+        read_action = FileReadAction(file_path)
+
+        observation = await call_sync_from_async(runtime.run_action, read_action)
+
+        if isinstance(observation, FileReadObservation):
+            return observation.content, None
+        elif isinstance(observation, ErrorObservation):
+            if 'ERROR_BINARY_FILE' in observation.message:
+                return None, f'BINARY_FILE:{file}'
+            return None, str(observation)
+        else:
+            return None, f'Unexpected observation type: {type(observation)}'
+
+    async def upload_files(
+        self, sid: str, files: list[tuple[str, bytes]]
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        """Upload files to the workspace.
+
+        Args:
+            sid: The session/conversation ID.
+            files: List of (filename, content) tuples to upload.
+
+        Returns:
+            A tuple of (uploaded_files, skipped_files).
+
+        Raises:
+            ValueError: If the runtime is not available.
+        """
+        from openhands.events.action.files import FileWriteAction
+
+        agent_session = self.get_agent_session(sid)
+        if not agent_session or not agent_session.runtime:
+            raise ValueError(f'Runtime not available for conversation {sid}')
+
+        runtime = agent_session.runtime
+        uploaded_files: list[str] = []
+        skipped_files: list[dict[str, str]] = []
+
+        for filename, content in files:
+            file_path = os.path.join(
+                runtime.config.workspace_mount_path_in_sandbox, filename
+            )
+            try:
+                write_action = FileWriteAction(
+                    path=file_path,
+                    content=content.decode('utf-8', errors='replace'),
+                )
+                await call_sync_from_async(runtime.run_action, write_action)
+                uploaded_files.append(file_path)
+            except Exception as e:
+                skipped_files.append({'name': filename, 'reason': str(e)})
+
+        return uploaded_files, skipped_files
+
+    def zip_directory(self, sid: str, path: str) -> str:
+        """Zip a directory from the workspace.
+
+        Args:
+            sid: The session/conversation ID.
+            path: The path to zip.
+
+        Returns:
+            The path to the created zip file.
+
+        Raises:
+            ValueError: If the runtime is not available.
+        """
+        agent_session = self.get_agent_session(sid)
+        if not agent_session or not agent_session.runtime:
+            raise ValueError(f'Runtime not available for conversation {sid}')
+
+        runtime = agent_session.runtime
+        return str(runtime.copy_from(path))
+
     async def _close_session(self, sid: str):
         logger.info(f'_close_session:{sid}', extra={'session_id': sid})
 
