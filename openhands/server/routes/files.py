@@ -55,7 +55,6 @@ app = APIRouter(
     deprecated=True,
 )
 async def list_files(
-    conversation_id: str,
     metadata: ConversationMetadata = Depends(get_conversation_metadata),
     path: str | None = None,
 ) -> list[str] | JSONResponse:
@@ -70,8 +69,7 @@ async def list_files(
     ```
 
     Args:
-        conversation_id: The conversation ID.
-        metadata: The conversation metadata (used for user access validation).
+        metadata: The conversation metadata (provides conversation_id and user access validation).
         path (str, optional): The path to list files from. Defaults to None.
 
     Returns:
@@ -83,6 +81,7 @@ async def list_files(
         For V1 conversations, file operations are handled through the agent server.
         Use the sandbox's exposed agent server URL to access file operations.
     """
+    conversation_id = metadata.conversation_id
     try:
         file_list = await conversation_manager.list_files(conversation_id, path)
     except ValueError as e:

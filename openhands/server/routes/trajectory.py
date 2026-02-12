@@ -16,7 +16,8 @@ from openhands.events.event_store import EventStore
 from openhands.events.serialization import event_to_trajectory
 from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import file_store
-from openhands.server.user_auth import get_user_id
+from openhands.server.utils import get_conversation_metadata
+from openhands.storage.data_models.conversation_metadata import ConversationMetadata
 
 app = APIRouter(
     prefix='/api/conversations/{conversation_id}', dependencies=get_dependencies()
@@ -25,8 +26,7 @@ app = APIRouter(
 
 @app.get('/trajectory')
 async def get_trajectory(
-    conversation_id: str,
-    user_id: str | None = Depends(get_user_id),
+    metadata: ConversationMetadata = Depends(get_conversation_metadata),
 ) -> JSONResponse:
     """Get trajectory.
 
@@ -35,8 +35,7 @@ async def get_trajectory(
     so it works with both standalone and nested conversation managers.
 
     Args:
-        conversation_id: The conversation ID.
-        user_id: The user ID (from auth).
+        metadata: The conversation metadata (provides conversation_id and user access validation).
 
     Returns:
         JSONResponse: A JSON response containing the trajectory as a list of
@@ -44,9 +43,9 @@ async def get_trajectory(
     """
     try:
         event_store = EventStore(
-            sid=conversation_id,
+            sid=metadata.conversation_id,
             file_store=file_store,
-            user_id=user_id,
+            user_id=metadata.user_id,
         )
         async_store = AsyncEventStoreWrapper(
             event_store, filter=EventFilter(exclude_hidden=True)
