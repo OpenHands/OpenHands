@@ -716,12 +716,12 @@ async def update_org_member(
     """Update a member's role in an organization.
 
     Permission rules:
-    - Admins can change roles of regular users to Admin or User
+    - Admins can change roles of regular members to Admin or Member
     - Admins cannot modify other Admins or Owners
-    - Owners can change roles of Admins and Users to any role (Owner, Admin, User)
+    - Owners can change roles of Admins and Members to any role (Owner, Admin, Member)
     - Owners cannot modify other Owners
 
-    Users cannot modify their own role. The last owner cannot be demoted.
+    Members cannot modify their own role. The last owner cannot be demoted.
     """
     try:
         return await OrgMemberService.update_org_member(

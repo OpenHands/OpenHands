@@ -9,30 +9,27 @@
 import os
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
-from pathspec import PathSpec
-from pathspec.patterns import GitWildMatchPattern
 from starlette.background import BackgroundTask
 
 from openhands.core.exceptions import AgentRuntimeUnavailableError
 from openhands.core.logger import openhands_logger as logger
-from openhands.events.action import (
-    FileReadAction,
-)
-from openhands.events.action.files import FileWriteAction
-from openhands.events.observation import (
-    ErrorObservation,
-    FileReadObservation,
-)
 from openhands.runtime.base import Runtime
 from openhands.server.dependencies import get_dependencies
 from openhands.server.file_config import FILES_TO_IGNORE
 from openhands.server.files import POSTUploadFilesModel
 from openhands.server.session.conversation import ServerConversation
+from openhands.server.shared import conversation_manager
 from openhands.server.user_auth import get_user_id
-from openhands.server.utils import get_conversation, get_conversation_store
+from openhands.server.utils import (
+    get_conversation,
+    get_conversation_metadata,
+    get_conversation_store,
+)
 from openhands.storage.conversation.conversation_store import ConversationStore
+from openhands.storage.data_models.conversation_metadata import ConversationMetadata
 from openhands.utils.async_utils import call_sync_from_async
 
 app = APIRouter(
@@ -50,7 +47,7 @@ app = APIRouter(
     deprecated=True,
 )
 async def list_files(
-    conversation: ServerConversation = Depends(get_conversation),
+    metadata: ConversationMetadata = Depends(get_conversation_metadata),
     path: str | None = None,
 ) -> list[str] | JSONResponse:
     """List files in the specified path.
@@ -64,7 +61,7 @@ async def list_files(
     ```
 
     Args:
-        request (Request): The incoming request object.
+        metadata: The conversation metadata (provides conversation_id and user access validation).
         path (str, optional): The path to list files from. Defaults to None.
 
     Returns:
@@ -76,48 +73,49 @@ async def list_files(
         For V1 conversations, file operations are handled through the agent server.
         Use the sandbox's exposed agent server URL to access file operations.
     """
-    if not conversation.runtime:
+    conversation_id = metadata.conversation_id
+    try:
+        file_list = await conversation_manager.list_files(conversation_id, path)
+    except ValueError as e:
+        logger.error(f'Error listing files: {e}')
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={'error': 'Runtime not yet initialized'},
+            content={'error': str(e)},
         )
-
-    runtime: Runtime = conversation.runtime
-    try:
-        file_list = await call_sync_from_async(runtime.list_files, path)
     except AgentRuntimeUnavailableError as e:
         logger.error(f'Error listing files: {e}')
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': f'Error listing files: {e}'},
         )
-    if path:
-        file_list = [os.path.join(path, f) for f in file_list]
-
-    file_list = [f for f in file_list if f not in FILES_TO_IGNORE]
-
-    async def filter_for_gitignore(file_list: list[str], base_path: str) -> list[str]:
-        gitignore_path = os.path.join(base_path, '.gitignore')
-        try:
-            read_action = FileReadAction(gitignore_path)
-            observation = await call_sync_from_async(runtime.run_action, read_action)
-            spec = PathSpec.from_lines(
-                GitWildMatchPattern, observation.content.splitlines()
-            )
-        except Exception as e:
-            logger.warning(e)
-            return file_list
-        file_list = [entry for entry in file_list if not spec.match_file(entry)]
-        return file_list
-
-    try:
-        file_list = await filter_for_gitignore(file_list, '')
-    except AgentRuntimeUnavailableError as e:
-        logger.error(f'Error filtering files: {e}')
+    except httpx.TimeoutException:
+        logger.error(f'Timeout listing files for conversation {conversation_id}')
+        return JSONResponse(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            content={'error': 'Request to runtime timed out'},
+        )
+    except httpx.ConnectError:
+        logger.error(
+            f'Connection error listing files for conversation {conversation_id}'
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={'error': 'Unable to connect to runtime'},
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(f'HTTP error listing files: {e.response.status_code}')
+        return JSONResponse(
+            status_code=e.response.status_code,
+            content={'error': f'Runtime returned error: {e.response.status_code}'},
+        )
+    except Exception as e:
+        logger.error(f'Error listing files: {e}')
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={'error': f'Error filtering files: {e}'},
+            content={'error': f'Error listing files: {e}'},
         )
+
+    file_list = [f for f in file_list if f not in FILES_TO_IGNORE]
 
     return file_list
 
@@ -138,19 +136,19 @@ async def list_files(
     deprecated=True,
 )
 async def select_file(
-    file: str, conversation: ServerConversation = Depends(get_conversation)
+    file: str,
+    metadata: ConversationMetadata = Depends(get_conversation_metadata),
 ) -> FileResponse | JSONResponse:
     """Retrieve the content of a specified file.
 
     To select a file:
     ```sh
-    curl http://localhost:3000/api/conversations/{conversation_id}select-file?file=<file_path>
+    curl http://localhost:3000/api/conversations/{conversation_id}/select-file?file=<file_path>
     ```
 
     Args:
-        file (str): The path of the file to be retrieved.
-            Expect path to be absolute inside the runtime.
-        request (Request): The incoming request object.
+        file (str): The path of the file to be retrieved (relative to workspace root).
+        metadata: The conversation metadata (provides conversation_id and user access validation).
 
     Returns:
         dict: A dictionary containing the file content.
@@ -161,40 +159,53 @@ async def select_file(
         For V1 conversations, file operations are handled through the agent server.
         Use the sandbox's exposed agent server URL to access file operations.
     """
-    runtime: Runtime = conversation.runtime
-
-    file = os.path.join(runtime.config.workspace_mount_path_in_sandbox, file)
-    read_action = FileReadAction(file)
+    conversation_id = metadata.conversation_id
     try:
-        observation = await call_sync_from_async(runtime.run_action, read_action)
+        content, error = await conversation_manager.select_file(conversation_id, file)
+    except ValueError as e:
+        logger.error(f'Error opening file {file}: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': str(e)},
+        )
     except AgentRuntimeUnavailableError as e:
         logger.error(f'Error opening file {file}: {e}')
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': f'Error opening file: {e}'},
         )
-
-    if isinstance(observation, FileReadObservation):
-        content = observation.content
-        return JSONResponse(content={'code': content})
-    elif isinstance(observation, ErrorObservation):
-        logger.error(f'Error opening file {file}: {observation}')
-
-        if 'ERROR_BINARY_FILE' in observation.message:
-            return JSONResponse(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                content={'error': f'Unable to open binary file: {file}'},
-            )
-
+    except httpx.TimeoutException:
+        logger.error(f'Timeout reading file for conversation {conversation_id}')
+        return JSONResponse(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            content={'error': 'Request to runtime timed out'},
+        )
+    except httpx.ConnectError:
+        logger.error(
+            f'Connection error reading file for conversation {conversation_id}'
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={'error': 'Unable to connect to runtime'},
+        )
+    except Exception as e:
+        logger.error(f'Error opening file {file}: {e}')
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={'error': f'Error opening file: {observation}'},
+            content={'error': f'Error opening file: {e}'},
+        )
+
+    if content is not None:
+        return JSONResponse(content={'code': content})
+    elif error and error.startswith('BINARY_FILE:'):
+        return JSONResponse(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            content={'error': f'Unable to open binary file: {file}'},
         )
     else:
-        # Handle unexpected observation types
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={'error': f'Unexpected observation type: {type(observation)}'},
+            content={'error': f'Error opening file: {error}'},
         )
 
 
@@ -321,33 +332,58 @@ async def git_diff(
 @app.post('/upload-files', response_model=POSTUploadFilesModel, deprecated=True)
 async def upload_files(
     files: list[UploadFile],
-    conversation: ServerConversation = Depends(get_conversation),
+    metadata: ConversationMetadata = Depends(get_conversation_metadata),
 ):
     """Upload files to the workspace.
 
     For V1 conversations, file operations are handled through the agent server.
     Use the sandbox's exposed agent server URL to access file operations.
     """
-    uploaded_files = []
-    skipped_files = []
-    runtime: Runtime = conversation.runtime
+    conversation_id = metadata.conversation_id
 
+    # Read all file contents
+    file_data: list[tuple[str, bytes]] = []
     for file in files:
-        file_path = os.path.join(
-            runtime.config.workspace_mount_path_in_sandbox, str(file.filename)
+        content = await file.read()
+        file_data.append((str(file.filename), content))
+
+    try:
+        uploaded_files, skipped_files = await conversation_manager.upload_files(
+            conversation_id, file_data
         )
-        try:
-            file_content = await file.read()
-            write_action = FileWriteAction(
-                # TODO: DISCUSS UTF8 encoding here
-                path=file_path,
-                content=file_content.decode('utf-8', errors='replace'),
-            )
-            # TODO: DISCUSS file name unique issues
-            await call_sync_from_async(runtime.run_action, write_action)
-            uploaded_files.append(file_path)
-        except Exception as e:
-            skipped_files.append({'name': file.filename, 'reason': str(e)})
+    except ValueError as e:
+        logger.error(f'Error uploading files: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': str(e)},
+        )
+    except httpx.TimeoutException:
+        logger.error(f'Timeout uploading files for conversation {conversation_id}')
+        return JSONResponse(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            content={'error': 'Request to runtime timed out'},
+        )
+    except httpx.ConnectError:
+        logger.error(
+            f'Connection error uploading files for conversation {conversation_id}'
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={'error': 'Unable to connect to runtime'},
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(f'HTTP error uploading files: {e.response.status_code}')
+        return JSONResponse(
+            status_code=e.response.status_code,
+            content={'error': f'Runtime returned error: {e.response.status_code}'},
+        )
+    except Exception as e:
+        logger.error(f'Error uploading files: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': f'Error uploading files: {e}'},
+        )
+
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={
