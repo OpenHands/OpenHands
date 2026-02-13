@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { InviteOrganizationMemberModal } from "#/components/features/org/invite-organization-member-modal";
 import { ConfirmRemoveMemberModal } from "#/components/features/org/confirm-remove-member-modal";
+import { ConfirmUpdateRoleModal } from "#/components/features/org/confirm-update-role-modal";
 import { useOrganizationMembers } from "#/hooks/query/use-organization-members";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
 import { OrganizationMemberListItem } from "#/components/features/org/organization-member-list-item";
@@ -25,20 +26,44 @@ function ManageOrganizationMembers() {
   const { t } = useTranslation();
   const { data: organizationMembers } = useOrganizationMembers();
   const { data: user } = useMe();
-  const { mutate: updateMemberRole } = useUpdateMemberRole();
+  const { mutate: updateMemberRole, isPending: isUpdatingRole } =
+    useUpdateMemberRole();
   const { mutate: removeMember, isPending: isRemovingMember } =
     useRemoveMember();
   const [inviteModalOpen, setInviteModalOpen] = React.useState(false);
   const [memberToRemove, setMemberToRemove] =
     React.useState<OrganizationMember | null>(null);
+  const [memberToUpdateRole, setMemberToUpdateRole] = React.useState<{
+    member: OrganizationMember;
+    newRole: OrganizationUserRole;
+  } | null>(null);
 
   const currentUserRole = user?.role ?? "member";
 
   const { hasPermission } = usePermission(currentUserRole);
   const hasPermissionToInvite = hasPermission("invite_user_to_organization");
 
-  const handleRoleSelectionClick = (id: string, role: OrganizationUserRole) => {
-    updateMemberRole({ userId: id, role });
+  const handleRoleSelectionClick = (
+    member: OrganizationMember,
+    role: OrganizationUserRole,
+  ) => {
+    // Don't show modal if the role is the same
+    if (member.role === role) {
+      return;
+    }
+    setMemberToUpdateRole({ member, newRole: role });
+  };
+
+  const handleConfirmUpdateRole = () => {
+    if (memberToUpdateRole) {
+      updateMemberRole(
+        {
+          userId: memberToUpdateRole.member.user_id,
+          role: memberToUpdateRole.newRole,
+        },
+        { onSettled: () => setMemberToUpdateRole(null) },
+      );
+    }
   };
 
   const handleRemoveMember = (member: OrganizationMember) => {
@@ -103,9 +128,7 @@ function ManageOrganizationMembers() {
                 status={member.status}
                 hasPermissionToChangeRole={canAssignUserRole(member)}
                 availableRolesToChangeTo={availableRolesToChangeTo}
-                onRoleChange={(role) =>
-                  handleRoleSelectionClick(member.user_id, role)
-                }
+                onRoleChange={(role) => handleRoleSelectionClick(member, role)}
                 onRemove={() => handleRemoveMember(member)}
               />
             </li>
@@ -119,6 +142,16 @@ function ManageOrganizationMembers() {
           onConfirm={handleConfirmRemoveMember}
           onCancel={() => setMemberToRemove(null)}
           isLoading={isRemovingMember}
+        />
+      )}
+
+      {memberToUpdateRole && (
+        <ConfirmUpdateRoleModal
+          memberEmail={memberToUpdateRole.member.email}
+          newRole={memberToUpdateRole.newRole}
+          onConfirm={handleConfirmUpdateRole}
+          onCancel={() => setMemberToUpdateRole(null)}
+          isLoading={isUpdatingRole}
         />
       )}
     </div>
