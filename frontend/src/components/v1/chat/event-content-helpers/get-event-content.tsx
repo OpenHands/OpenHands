@@ -37,6 +37,92 @@ const createTitleFromKey = (
   );
 };
 
+const isPartialActionEvent = (event: OpenHandsEvent): boolean => {
+  if (event.source !== "agent") {
+    return false;
+  }
+
+  if (!("tool_name" in event) || !("tool_call_id" in event)) {
+    return false;
+  }
+
+  if (
+    typeof event.tool_name !== "string" ||
+    typeof event.tool_call_id !== "string"
+  ) {
+    return false;
+  }
+
+   if ("action" in event) {
+    return event.action === null;
+  }
+
+  return true;
+};
+
+const getPartialActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
+  if (!isPartialActionEvent(event)) {
+    return "";
+  }
+
+  const toolName = (event as OpenHandsEvent & { tool_name: string }).tool_name;
+  let actionKey = "";
+  let actionValues: Record<string, unknown> = {};
+
+  let path: string | undefined;
+  let command: string | undefined;
+
+  if ("tool_call" in event && event.tool_call) {
+    try {
+      const args = JSON.parse(event.tool_call.function.arguments);
+      path = args.path;
+      command = args.command;
+    } catch {
+
+    }
+  }
+
+  switch (toolName) {
+    case "str_replace_editor":
+    case "edit_file":
+      if (command === "view") {
+        actionKey = "ACTION_MESSAGE$READ";
+      } else if (command === "create") {
+        actionKey = "ACTION_MESSAGE$WRITE";
+      } else {
+        actionKey = "ACTION_MESSAGE$EDIT";
+      }
+      if (path) {
+        actionValues = { path };
+      }
+      break;
+    case "execute_bash":
+      actionKey = "ACTION_MESSAGE$RUN";
+      if (command) {
+        actionValues = { command: trimText(command, 80) };
+      }
+      break;
+    case "browser":
+      actionKey = "ACTION_MESSAGE$BROWSE";
+      break;
+    case "finish":
+      actionKey = "ACTION_MESSAGE$FINISH";
+      break;
+    case "task_tracker":
+      actionKey = "ACTION_MESSAGE$TASK_TRACKING";
+      break;
+    default:
+      // For unknown tool names, return empty string
+      return "";
+  }
+
+  if (actionKey) {
+    return createTitleFromKey(actionKey, actionValues);
+  }
+
+  return "";
+};
+
 // Action Event Processing
 const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
   // Early return if not an action event
@@ -177,6 +263,7 @@ const getObservationEventTitle = (event: OpenHandsEvent): React.ReactNode => {
 export const getEventContent = (event: OpenHandsEvent | SkillReadyEvent) => {
   let title: React.ReactNode = "";
   let details: string | React.ReactNode = "";
+  let isPartialAction = false;
 
   // Handle Skill Ready events first
   if (isSkillReadyEvent(event)) {
@@ -191,6 +278,10 @@ export const getEventContent = (event: OpenHandsEvent | SkillReadyEvent) => {
   } else if (isActionEvent(event)) {
     title = getActionEventTitle(event);
     details = getActionContent(event);
+  } else if (isPartialActionEvent(event)) {
+    isPartialAction = true;
+    title = getPartialActionEventTitle(event);
+    details = "";
   } else if (isObservationEvent(event)) {
     title = getObservationEventTitle(event);
 
@@ -208,6 +299,7 @@ export const getEventContent = (event: OpenHandsEvent | SkillReadyEvent) => {
 
   return {
     title: title || i18n.t("EVENT$UNKNOWN_EVENT"),
-    details: details || i18n.t("EVENT$UNKNOWN_EVENT"),
+    details:
+      isPartialAction && title ? "" : details || i18n.t("EVENT$UNKNOWN_EVENT"),
   };
 };
