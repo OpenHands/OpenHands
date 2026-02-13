@@ -176,6 +176,12 @@ describe("Manage Organization Members Route", () => {
     const dropdown = await openRoleDropdown(memberElement, currentRole);
     const roleOption = within(dropdown).getByText(new RegExp(newRole, "i"));
     await userEvent.click(roleOption);
+
+    // If role is changing, confirm the modal
+    if (currentRole.toLowerCase() !== newRole.toLowerCase()) {
+      const confirmButton = await screen.findByTestId("confirm-button");
+      await userEvent.click(confirmButton);
+    }
   };
 
   // Helper function to verify dropdown is not visible
@@ -777,11 +783,39 @@ describe("Manage Organization Members Route", () => {
       });
     });
 
-    it.each([
-      {
-        description:
-          "Owner should be able to change admin's role to admin (no change)",
-        userData: {
+    it("Admin should be able to change member's role to admin", async () => {
+      await setupTestWithUserAndOrg(
+        {
+          org_id: "4",
+          user_id: "7", // Ray is admin in org 4
+          email: "ray@all-hands.dev",
+          role: "admin" as const,
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
+          status: "active" as const,
+        },
+        3, // All Hands AI (org "4")
+      );
+
+      const updateMemberRoleSpy = createUpdateMemberRoleSpy();
+
+      const member = await findMemberByEmail("stephan@all-hands.dev");
+
+      await changeMemberRole(member, "member", "admin");
+
+      expect(updateMemberRoleSpy).toHaveBeenCalledExactlyOnceWith({
+        userId: "9",
+        orgId: "4",
+        role: "admin" as const,
+      });
+    });
+
+    it("should not show confirmation modal or call API when selecting the same role", async () => {
+      await setupTestWithUserAndOrg(
+        {
           org_id: "1",
           user_id: "1", // First member is owner in org 1
           email: "alice@acme.org",
@@ -793,87 +827,23 @@ describe("Manage Organization Members Route", () => {
           llm_base_url: "https://api.openai.com",
           status: "active" as const,
         },
-        orgIndex: 1, // Acme Corp (org "2")
-        memberEmail: "bob@acme.org",
-        currentRole: "admin",
-        newRole: "admin",
-        expectedApiCall: {
-          userId: "2",
-          orgId: "2",
-          role: "admin" as const,
-        },
-      },
-      {
-        description:
-          "Admin should be able to change user's role to user (no change)",
-        userData: {
-          org_id: "4",
-          user_id: "7", // Ray is admin in org 4
-          email: "ray@all-hands.dev",
-          role: "admin" as const,
-          llm_api_key: "**********",
-          max_iterations: 20,
-          llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
-          llm_base_url: "https://api.openai.com",
-          status: "active" as const,
-        },
-        orgIndex: 3, // All Hands AI (org "4")
-        memberEmail: "stephan@all-hands.dev",
-        currentRole: "member",
-        newRole: "member",
-        expectedApiCall: {
-          userId: "9",
-          orgId: "4",
-          role: "member" as const,
-        },
-      },
-      {
-        description: "Admin should be able to change member's role to admin",
-        userData: {
-          org_id: "4",
-          user_id: "7", // Ray is admin in org 4
-          email: "ray@all-hands.dev",
-          role: "admin" as const,
-          llm_api_key: "**********",
-          max_iterations: 20,
-          llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
-          llm_base_url: "https://api.openai.com",
-          status: "active" as const,
-        },
-        orgIndex: 3, // All Hands AI (org "4")
-        memberEmail: "stephan@all-hands.dev",
-        currentRole: "member",
-        newRole: "admin",
-        expectedApiCall: {
-          userId: "9",
-          orgId: "4",
-          role: "admin" as const,
-        },
-      },
-    ])(
-      "$description",
-      async ({
-        userData,
-        orgIndex,
-        memberEmail,
-        currentRole,
-        newRole,
-        expectedApiCall,
-      }) => {
-        await setupTestWithUserAndOrg(userData, orgIndex);
+        1, // Acme Corp (org "2")
+      );
 
-        const updateMemberRoleSpy = createUpdateMemberRoleSpy();
+      const updateMemberRoleSpy = createUpdateMemberRoleSpy();
 
-        const member = await findMemberByEmail(memberEmail);
+      const member = await findMemberByEmail("bob@acme.org");
 
-        await changeMemberRole(member, currentRole, newRole);
+      // Open dropdown and select the same role (admin -> admin)
+      const dropdown = await openRoleDropdown(member, "admin");
+      const roleOption = within(dropdown).getByText(/admin/i);
+      await userEvent.click(roleOption);
 
-        expect(updateMemberRoleSpy).toHaveBeenCalledExactlyOnceWith(
-          expectedApiCall,
-        );
-      },
-    );
+      // Verify no confirmation modal appears
+      expect(screen.queryByTestId("confirm-button")).not.toBeInTheDocument();
+
+      // Verify no API call was made
+      expect(updateMemberRoleSpy).not.toHaveBeenCalled();
+    });
   });
 });

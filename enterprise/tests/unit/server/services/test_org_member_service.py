@@ -1431,7 +1431,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Assert
             assert data is not None
-            assert data.role_name == 'member'
+            assert data.role == 'member'
             assert data.role_rank == 1000
 
 
