@@ -14,6 +14,7 @@ from pydantic import SecretStr
 from openhands.agent_server.models import (
     SendMessageRequest,
     StartConversationRequest,
+    TextContent,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
@@ -145,7 +146,6 @@ class TestLiveStatusAppConversationService:
             task_type=TaskType.OPEN_ISSUE,
             issue_number=123,
         )
-        from openhands.agent_server.models import TextContent
 
         request = AppConversationStartRequest(
             suggested_task=suggested_task,

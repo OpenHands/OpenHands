@@ -586,6 +586,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
 
         prompt = suggested_task.get_prompt_for_task()
+        if not prompt:
+            raise ValueError(
+                f'Suggested task returned empty prompt for task type {suggested_task.task_type}'
+            )
         request.initial_message = SendMessageRequest(
             role='user',
             content=[TextContent(text=prompt)],
