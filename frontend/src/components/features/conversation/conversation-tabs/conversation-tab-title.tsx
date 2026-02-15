@@ -17,12 +17,12 @@ export function ConversationTabTitle({
   };
 
   return (
-    <div className="flex flex-row items-center justify-between border-b border-[#474A54] py-2 px-3">
-      <span className="text-xs font-medium text-white">{title}</span>
+    <div className="flex flex-row items-center justify-between border-b border-[#27272A] py-2 px-3">
+      <span className="text-xs font-medium text-[#FAFAFA]">{title}</span>
       {conversationKey === "editor" && (
         <button
           type="button"
-          className="flex w-[26px] py-1 justify-center items-center gap-[10px] rounded-[7px] hover:bg-[#474A54] cursor-pointer"
+          className="flex w-[26px] py-1 justify-center items-center gap-[10px] rounded-lg hover:bg-[#27272A] transition-colors duration-150 cursor-pointer"
           onClick={handleRefresh}
         >
           <RefreshIcon width={12.75} height={15} color="#ffffff" />

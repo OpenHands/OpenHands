@@ -9,38 +9,58 @@
   preferredstrategy: "pseudoelements";
 }
 
-/* OLD TAILWIND STYLES */
+/* ═══════════════════════════════════════════════════════
+   NEWW.AI DESIGN SYSTEM — Tailwind Theme Override
+   Premium dark theme with indigo accent palette
+   ═══════════════════════════════════════════════════════ */
+
 @theme {
-  --color-primary: #c9b974;
-  --color-logo: #cfb755;
-  --color-base: #0d0f11;
-  --color-base-secondary: #24272e;
-  --color-danger: #e76a5e;
-  --color-success: #a5e75e;
-  --color-basic: #9099ac;
-  --color-tertiary: #454545;
-  --color-tertiary-light: #b7bdc2;
-  --color-content: #ecedee;
-  --color-content-2: #f9fbfe;
+  --color-primary: #6366F1;
+  --color-logo: #818CF8;
+  --color-base: #09090B;
+  --color-base-secondary: #18181B;
+  --color-danger: #F43F5E;
+  --color-success: #22C55E;
+  --color-basic: #A1A1AA;
+  --color-tertiary: #27272A;
+  --color-tertiary-light: #A1A1AA;
+  --color-content: #FAFAFA;
+  --color-content-2: #F4F4F5;
+
+  /* neww.ai extended palette */
+  --color-surface: #111113;
+  --color-surface-elevated: #1C1C1F;
+  --color-surface-hover: #232326;
+  --color-border-subtle: #27272A;
+  --color-border-default: #3F3F46;
+  --color-text-primary: #FAFAFA;
+  --color-text-secondary: #A1A1AA;
+  --color-text-tertiary: #71717A;
+  --color-accent: #818CF8;
+  --color-accent-hover: #6366F1;
+  --color-accent-subtle: rgba(99, 102, 241, 0.12);
 }
 
 .button-base {
-  @apply bg-tertiary border border-neutral-600 rounded-xs;
+  @apply bg-tertiary border border-neutral-600 rounded-lg transition-all duration-200 ease-out;
 }
 
 .skeleton {
-  @apply bg-gray-400 rounded-md animate-pulse;
+  @apply bg-zinc-800 rounded-lg animate-pulse;
 }
 
 .skeleton-round {
-  @apply bg-gray-400 rounded-full animate-pulse;
+  @apply bg-zinc-800 rounded-full animate-pulse;
 }
 
 .heading {
-  @apply text-[28px] leading-8 -tracking-[0.02em] font-bold text-content-2;
+  @apply text-[28px] leading-8 -tracking-[0.03em] font-semibold text-content-2;
 }
 
-/* Custom Chat Input */
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR — Refined, Apple-inspired
+   ═══════════════════════════════════════════════════════ */
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -50,7 +70,6 @@
   background: transparent;
 }
 
-/* Hide scrollbar by default */
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 3px;
@@ -58,17 +77,15 @@
   opacity: 0;
 }
 
-/* Show scrollbar on hover */
 .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgba(208, 217, 250, 0.3);
+  background: rgba(161, 161, 170, 0.2);
   opacity: 1;
 }
 
 .custom-scrollbar:hover::-webkit-scrollbar-thumb:hover {
-  background: rgba(208, 217, 250, 0.5);
+  background: rgba(161, 161, 170, 0.35);
 }
 
-/* Firefox scrollbar styling */
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
@@ -76,10 +93,10 @@
 }
 
 .custom-scrollbar:hover {
-  scrollbar-color: rgba(208, 217, 250, 0.3) transparent;
+  scrollbar-color: rgba(161, 161, 170, 0.2) transparent;
 }
 
-/* Always visible scrollbar for chat interface */
+/* Always visible scrollbar */
 .custom-scrollbar-always::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -90,29 +107,31 @@
 }
 
 .custom-scrollbar-always::-webkit-scrollbar-thumb {
-  background: rgba(208, 217, 250, 0.3);
+  background: rgba(161, 161, 170, 0.15);
   border-radius: 3px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .custom-scrollbar-always::-webkit-scrollbar-thumb:hover {
-  background: rgba(208, 217, 250, 0.5);
+  background: rgba(161, 161, 170, 0.3);
 }
 
-/* Firefox scrollbar styling for always visible */
 .custom-scrollbar-always {
   scrollbar-width: thin;
-  scrollbar-color: rgba(208, 217, 250, 0.3) transparent;
+  scrollbar-color: rgba(161, 161, 170, 0.15) transparent;
 }
 
-/* Custom styles for contenteditable */
+/* ═══════════════════════════════════════════════════════
+   CHAT INPUT — Clean, minimal
+   ═══════════════════════════════════════════════════════ */
+
 .chat-input:empty:before {
   content: attr(data-placeholder);
-  color: #a1a1a1;
+  color: #71717A;
   pointer-events: none;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 400;
-  line-height: 20px;
+  line-height: 22px;
 }
 
 .chat-input:focus {
@@ -127,17 +146,22 @@
   box-sizing: border-box;
 }
 
-/* Drag and drop styles */
+/* ═══════════════════════════════════════════════════════
+   DRAG & DROP — Glass morphism effect
+   ═══════════════════════════════════════════════════════ */
+
 .drag-over {
-  backdrop-filter: blur(2px);
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 15px;
+  backdrop-filter: blur(12px) saturate(180%);
+  background: rgba(99, 102, 241, 0.08);
+  border: 2px dashed rgba(99, 102, 241, 0.3);
+  border-radius: 16px;
   height: 100%;
   left: 0;
   position: absolute;
   top: 0;
   width: 100%;
   z-index: 100;
+  transition: all 0.2s ease-out;
 }
 
 .drag-over-content-wrapper {
@@ -154,24 +178,33 @@
 }
 
 .drag-over-ui-content {
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 20px;
-  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 22px;
+  color: #E4E4E7;
 }
 
-/* File preview styles */
+/* ═══════════════════════════════════════════════════════
+   FILE PREVIEW — Elevated card style
+   ═══════════════════════════════════════════════════════ */
+
 .file-preview {
-  background: rgba(208, 217, 250, 0.1);
-  border: 1px solid rgba(208, 217, 250, 0.3);
-  border-radius: 8px;
-  padding: 8px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 10px;
+  padding: 8px 12px;
   margin: 4px 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  color: #d0d9fa;
+  font-size: 13px;
+  color: #E4E4E7;
+  transition: all 0.15s ease-out;
+}
+
+.file-preview:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.25);
 }
 
 .file-preview .file-icon {
@@ -188,66 +221,73 @@
 }
 
 .file-preview .file-size {
-  color: #959cb2;
-  font-size: 10px;
+  color: #71717A;
+  font-size: 11px;
 }
 
 .file-preview .remove-file {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
   border: none;
-  border-radius: 50%;
-  width: 16px;
-  height: 16px;
+  border-radius: 6px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #d0d9fa;
+  color: #A1A1AA;
   font-size: 10px;
-  transition: background-color 0.2s;
+  transition: all 0.15s ease-out;
 }
 
 .file-preview .remove-file:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(244, 63, 94, 0.15);
+  color: #FB7185;
 }
 
+/* ═══════════════════════════════════════════════════════
+   LOADER — neww.ai branded
+   ═══════════════════════════════════════════════════════ */
+
 .loader {
-  background: #c9b974;
+  background: #6366F1;
   animation: l5 1s infinite linear alternate;
 }
 
 @keyframes l5 {
   0% {
     box-shadow:
-      20px 0 #c9b974,
-      -20px 0 rgba(201, 185, 116, 0.1);
-    background: #c9b974;
+      20px 0 #6366F1,
+      -20px 0 rgba(99, 102, 241, 0.15);
+    background: #6366F1;
   }
   33% {
     box-shadow:
-      20px 0 #c9b974,
-      -20px 0 rgba(201, 185, 116, 0.1);
-    background: rgba(201, 185, 116, 0.1);
+      20px 0 #6366F1,
+      -20px 0 rgba(99, 102, 241, 0.15);
+    background: rgba(99, 102, 241, 0.15);
   }
   66% {
     box-shadow:
-      20px 0 rgba(201, 185, 116, 0.1),
-      -20px 0 #c9b974;
-    background: rgba(201, 185, 116, 0.1);
+      20px 0 rgba(99, 102, 241, 0.15),
+      -20px 0 #6366F1;
+    background: rgba(99, 102, 241, 0.15);
   }
   100% {
     box-shadow:
-      20px 0 rgba(201, 185, 116, 0.1),
-      -20px 0 #c9b974;
-    background: #c9b974;
+      20px 0 rgba(99, 102, 241, 0.15),
+      -20px 0 #6366F1;
+    background: #6366F1;
   }
 }
 
-/* Custom styling for xterm */
-/* XTerm.js scrollbar styling - follows custom-scrollbar pattern */
+/* ═══════════════════════════════════════════════════════
+   TERMINAL — Dark, crisp xterm styling
+   ═══════════════════════════════════════════════════════ */
+
 .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .xterm-viewport::-webkit-scrollbar-track {
@@ -255,33 +295,31 @@
 }
 
 .xterm-viewport::-webkit-scrollbar-thumb {
-  background: rgba(71, 74, 84, 0.5);
-  border-radius: 4px;
+  background: rgba(63, 63, 70, 0.5);
+  border-radius: 3px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: 1;
 }
 
 .xterm-viewport:hover::-webkit-scrollbar-thumb {
-  background: rgba(71, 74, 84, 0.7);
+  background: rgba(63, 63, 70, 0.7);
   opacity: 1;
 }
 
 .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: rgba(90, 93, 103, 0.7);
+  background: rgba(82, 82, 91, 0.7);
 }
 
-/* Firefox scrollbar styling for xterm */
 .xterm-viewport {
   scrollbar-width: thin;
-  scrollbar-color: rgba(71, 74, 84, 0.5) transparent;
+  scrollbar-color: rgba(63, 63, 70, 0.5) transparent;
   transition: scrollbar-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .xterm-viewport:hover {
-  scrollbar-color: rgba(71, 74, 84, 0.7) transparent;
+  scrollbar-color: rgba(63, 63, 70, 0.7) transparent;
 }
 
-/* Force text wrapping and proper overflow handling for xterm */
 .xterm {
   word-wrap: break-word;
   white-space: pre-wrap;
@@ -306,7 +344,6 @@
   max-width: 100%;
 }
 
-/* Ensure terminal text doesn't overflow horizontally */
 .xterm .xterm-viewport {
   overflow-x: hidden !important;
   background: transparent !important;
@@ -318,12 +355,10 @@
   background: transparent !important;
 }
 
-/* Ensure all xterm DOM elements have transparent backgrounds. Exclude canvas elements */
 .xterm {
   background: transparent !important;
 }
 
-/* Ensure xterm respects container boundaries */
 .xterm-viewport {
   box-sizing: border-box !important;
   max-width: 100% !important;
@@ -336,22 +371,31 @@
   width: 100% !important;
 }
 
+/* ═══════════════════════════════════════════════════════
+   CONTEXT MENU & UTILITIES
+   ═══════════════════════════════════════════════════════ */
+
 .context-menu-box-shadow {
   box-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -2px rgba(0, 0, 0, 0.05),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 10px 38px -10px rgba(0, 0, 0, 0.55),
+    0 10px 20px -15px rgba(0, 0, 0, 0.4);
 }
 
 .git-external-link-icon {
-  background: linear-gradient(90deg, rgba(69, 69, 69, 0) 0.35%, #454545 41.39%);
+  background: linear-gradient(90deg, rgba(39, 39, 42, 0) 0.35%, #27272A 41.39%);
 }
 
 .api-configuration-modal {
-  box-shadow: 0 183px 51px 0 rgba(0, 0, 0, 0.00), 0 117px 47px 0 rgba(0, 0, 0, 0.01), 0 66px 40px 0 rgba(0, 0, 0, 0.03), 0 29px 29px 0 rgba(0, 0, 0, 0.04), 0 7px 16px 0 rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 24px 48px -12px rgba(0, 0, 0, 0.55);
 }
 
-/* Shine text effect for streaming content */
+/* ═══════════════════════════════════════════════════════
+   SHINE TEXT — Refined streaming animation
+   ═══════════════════════════════════════════════════════ */
+
 @keyframes shine {
   0% {
     background-position: 200% 0%;
@@ -366,5 +410,91 @@
   -webkit-background-clip: text !important;
   background-clip: text !important;
   animation: shine 2s linear infinite;
-  background: radial-gradient(circle at center, rgb(24 24 27 / 85%), transparent) -200% 50% / 200% 100% no-repeat, #f4f4f5;
+  background: radial-gradient(circle at center, rgb(9 9 11 / 85%), transparent) -200% 50% / 200% 100% no-repeat, #E4E4E7;
+}
+
+/* ═══════════════════════════════════════════════════════
+   NEWW.AI — Premium glass effects & micro-interactions
+   ═══════════════════════════════════════════════════════ */
+
+@keyframes neww-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes neww-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.15); }
+  50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.25); }
+}
+
+.neww-glass {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(17, 17, 19, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.neww-glass-elevated {
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  background: rgba(28, 28, 31, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.neww-gradient-text {
+  background: linear-gradient(135deg, #818CF8 0%, #A78BFA 50%, #C4B5FD 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.neww-gradient-border {
+  position: relative;
+}
+
+.neww-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(167, 139, 250, 0.2));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.neww-card {
+  background: #18181B;
+  border: 1px solid rgba(63, 63, 70, 0.5);
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.neww-card:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.neww-btn-primary {
+  background: linear-gradient(135deg, #6366F1, #4F46E5);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
+}
+
+.neww-btn-primary:hover {
+  background: linear-gradient(135deg, #818CF8, #6366F1);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+  transform: translateY(-1px);
+}
+
+.neww-btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
 }

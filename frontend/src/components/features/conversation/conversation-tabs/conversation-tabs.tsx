@@ -173,8 +173,10 @@ export function ConversationTabs() {
           type="button"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           className={cn(
-            "p-1 pl-0 rounded-md cursor-pointer",
-            "text-[#9299AA] bg-[#0D0F11]",
+            "p-1 pl-0 rounded-lg cursor-pointer",
+            "transition-colors duration-150",
+            "text-[#A1A1AA] bg-[#09090B]",
+            "hover:text-[#FAFAFA] hover:bg-[#18181B]",
           )}
           aria-label={t(I18nKey.COMMON$MORE_OPTIONS)}
         >

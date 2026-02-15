@@ -138,7 +138,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
           scrollContainerRef.current = node;
       }}
       data-testid="conversation-panel"
-      className="w-full md:w-[400px] h-full border border-[#525252] bg-[#25272D] rounded-lg overflow-y-auto absolute custom-scrollbar-always"
+      className="w-full md:w-[400px] h-full border border-[#27272A] bg-[#0F0F11] rounded-lg overflow-y-auto absolute custom-scrollbar-always"
     >
       {isFetching && conversations.length === 0 && (
         <div className="space-y-2">
@@ -155,7 +155,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
       )}
       {!isFetching && conversations?.length === 0 && !startTasks?.length && (
         <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-neutral-400">
+          <p className="text-[#A1A1AA]">
             {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
           </p>
         </div>

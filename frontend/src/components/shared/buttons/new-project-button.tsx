@@ -26,11 +26,14 @@ export function NewProjectButton({ disabled = false }: NewProjectButtonProps) {
             e.preventDefault();
           }
         }}
-        className={cn("inline-flex items-center justify-center", {
-          "pointer-events-none opacity-50": disabled,
-        })}
+        className={cn(
+          "inline-flex items-center justify-center rounded-lg p-1.5 transition-all duration-150 hover:bg-[#18181B] active:scale-95",
+          {
+            "pointer-events-none opacity-50": disabled,
+          },
+        )}
       >
-        <PlusIcon width={24} height={24} />
+        <PlusIcon width={22} height={22} className="text-[#A1A1AA]" />
       </NavLink>
     </StyledTooltip>
   );

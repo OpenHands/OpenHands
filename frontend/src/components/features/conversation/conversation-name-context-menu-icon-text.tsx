@@ -14,7 +14,7 @@ export function ConversationNameContextMenuIconText({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 p-2 hover:bg-[#5C5D62] rounded",
+        "flex items-center gap-2 p-2 hover:bg-[#27272A] rounded",
         className,
       )}
     >

@@ -1,147 +1,152 @@
 @theme {
 
-  /* COLOR VARIABLES */
+  /* ═══════════════════════════════════════════════════════
+     NEWW.AI DESIGN SYSTEM — Premium Dark Theme
+     Inspired by Apple HIG + Google Material Design 3
+     ═══════════════════════════════════════════════════════ */
 
-  --color-primary-15:  #FFFCF0;
-  --color-primary-30:  #FFF9E1;
-  --color-primary-50:  #FFF7D7;
-  --color-primary-100: #FFF3C0;
-  --color-primary-200: #FFEEAA;
-  --color-primary-300: #FFEA92;
-  --color-primary-400: #FFE57B;
-  --color-primary-500: #FFE165;
-  --color-primary-600: #DCC257;
-  --color-primary-700: #BBA54A;
-  --color-primary-800: #99873D;
-  --color-primary-900: #76682F;
-  --color-primary-950: #534921;
-  --color-primary-970: #433B1B;
-  --color-primary-985: #2D2812;
+  /* PRIMARY — Indigo/Violet (Trust, Intelligence, Innovation) */
+  --color-primary-15:  #F5F3FF;
+  --color-primary-30:  #EDE9FE;
+  --color-primary-50:  #E0E7FF;
+  --color-primary-100: #C7D2FE;
+  --color-primary-200: #A5B4FC;
+  --color-primary-300: #818CF8;
+  --color-primary-400: #6366F1;
+  --color-primary-500: #6366F1;
+  --color-primary-600: #4F46E5;
+  --color-primary-700: #4338CA;
+  --color-primary-800: #3730A3;
+  --color-primary-900: #312E81;
+  --color-primary-950: #1E1B4B;
+  --color-primary-970: #1A1744;
+  --color-primary-985: #13103A;
 
-  /* Light Neutral */
-  --color-light-neutral-15: #F7F8FB;
-  --color-light-neutral-30: #F0F2F7;
-  --color-light-neutral-50: #EBEDF3;
-  --color-light-neutral-100: #DFE2ED;
-  --color-light-neutral-200: #D4D8E7;
-  --color-light-neutral-300: #C8CDE0;
-  --color-light-neutral-400: #BCC3D9;
-  --color-light-neutral-500: #B1B9D3;
-  --color-light-neutral-600: #99A0B6;
-  --color-light-neutral-700: #82889B;
-  --color-light-neutral-800: #6A6F7F;
-  --color-light-neutral-900: #525662;
-  --color-light-neutral-950: #3A3C45;
-  --color-light-neutral-970: #2F3137;
-  --color-light-neutral-985: #1F2125;
+  /* Light Neutral — Cool slate tones */
+  --color-light-neutral-15: #F8FAFC;
+  --color-light-neutral-30: #F1F5F9;
+  --color-light-neutral-50: #E2E8F0;
+  --color-light-neutral-100: #CBD5E1;
+  --color-light-neutral-200: #94A3B8;
+  --color-light-neutral-300: #94A3B8;
+  --color-light-neutral-400: #64748B;
+  --color-light-neutral-500: #475569;
+  --color-light-neutral-600: #475569;
+  --color-light-neutral-700: #334155;
+  --color-light-neutral-800: #1E293B;
+  --color-light-neutral-900: #0F172A;
+  --color-light-neutral-950: #0B1120;
+  --color-light-neutral-970: #080E1A;
+  --color-light-neutral-985: #050912;
 
-  /* Grey */
-  --color-grey-15: #EDEDEF;
-  --color-grey-30: #DCDDDF;
-  --color-grey-50: #CFD0D3;
-  --color-grey-100: #B5B6BA;
-  --color-grey-200: #9A9CA2;
-  --color-grey-300: #7E8088;
-  --color-grey-400: #63666F;
-  --color-grey-500: #494C57;
-  --color-grey-600: #3F424B;
-  --color-grey-700: #363840;
-  --color-grey-800: #2C2E34;
-  --color-grey-900: #222328;
-  --color-grey-950: #18191C;
-  --color-grey-970: #131417;
-  --color-grey-985: #0D0D0F;
+  /* Grey — Refined neutral scale */
+  --color-grey-15: #F1F5F9;
+  --color-grey-30: #E2E8F0;
+  --color-grey-50: #CBD5E1;
+  --color-grey-100: #94A3B8;
+  --color-grey-200: #64748B;
+  --color-grey-300: #475569;
+  --color-grey-400: #334155;
+  --color-grey-500: #1E293B;
+  --color-grey-600: #192337;
+  --color-grey-700: #141D2E;
+  --color-grey-800: #0F172A;
+  --color-grey-900: #0B1222;
+  --color-grey-950: #080D1A;
+  --color-grey-970: #060A14;
+  --color-grey-985: #03060C;
 
-  /* Green */
-  --color-green-15: #F8FFF4;
-  --color-green-30: #F2FFE9;
-  --color-green-50: #EDFFE1;
-  --color-green-100: #E4FFD0;
-  --color-green-200: #DAFFBF;
-  --color-green-300: #CFFFAD;
-  --color-green-400: #C6FF9D;
-  --color-green-500: #BCFF8C;
-  --color-green-600: #A2DC79;
-  --color-green-700: #8ABB67;
-  --color-green-800: #719954;
-  --color-green-900: #577641;
-  --color-green-950: #3D532E;
-  --color-green-970: #314325;
-  --color-green-985: #212D19;
+  /* Green — Success states */
+  --color-green-15: #F0FDF4;
+  --color-green-30: #DCFCE7;
+  --color-green-50: #BBF7D0;
+  --color-green-100: #86EFAC;
+  --color-green-200: #4ADE80;
+  --color-green-300: #22C55E;
+  --color-green-400: #16A34A;
+  --color-green-500: #15803D;
+  --color-green-600: #166534;
+  --color-green-700: #14532D;
+  --color-green-800: #104226;
+  --color-green-900: #0C331E;
+  --color-green-950: #082517;
+  --color-green-970: #061D12;
+  --color-green-985: #04140D;
 
-  /* Aqua */
-  --color-aqua-15: #F4FFFE;
-  --color-aqua-30: #E9FFFE;
-  --color-aqua-50: #E1FFFD;
-  --color-aqua-100: #D1FFFD;
-  --color-aqua-200: #C0FFFC;
-  --color-aqua-300: #AEFFFB;
-  --color-aqua-400: #9EFFFA;
-  --color-aqua-500: #8DFFF9;
-  --color-aqua-600: #7ADCD7;
-  --color-aqua-700: #67BBB7;
-  --color-aqua-800: #559995;
-  --color-aqua-900: #417673;
-  --color-aqua-950: #2E5351;
-  --color-aqua-970: #254341;
-  --color-aqua-985: #192D2C;
+  /* Aqua — Info/Accent states */
+  --color-aqua-15: #ECFEFF;
+  --color-aqua-30: #CFFAFE;
+  --color-aqua-50: #A5F3FC;
+  --color-aqua-100: #67E8F9;
+  --color-aqua-200: #22D3EE;
+  --color-aqua-300: #06B6D4;
+  --color-aqua-400: #0891B2;
+  --color-aqua-500: #0E7490;
+  --color-aqua-600: #155E75;
+  --color-aqua-700: #164E63;
+  --color-aqua-800: #134152;
+  --color-aqua-900: #103442;
+  --color-aqua-950: #0C2733;
+  --color-aqua-970: #091E28;
+  --color-aqua-985: #06141C;
 
-  /* Red */
-  --color-red-15: #FFF0EE;
-  --color-red-30: #FFE2DD;
-  --color-red-50: #FFD7D0;
-  --color-red-100: #FFC1B7;
-  --color-red-200: #FFAC9D;
-  --color-red-300: #FF9481;
-  --color-red-400: #FF7E68;
-  --color-red-500: #FF684E;
-  --color-red-600: #DC5A43;
-  --color-red-700: #BB4C39;
-  --color-red-800: #993E2F;
-  --color-red-900: #763024;
-  --color-red-950: #532219;
-  --color-red-970: #431B14;
-  --color-red-985: #2D120E;
+  /* Red — Danger/Error states */
+  --color-red-15: #FFF1F2;
+  --color-red-30: #FFE4E6;
+  --color-red-50: #FECDD3;
+  --color-red-100: #FDA4AF;
+  --color-red-200: #FB7185;
+  --color-red-300: #F43F5E;
+  --color-red-400: #E11D48;
+  --color-red-500: #BE123C;
+  --color-red-600: #9F1239;
+  --color-red-700: #881337;
+  --color-red-800: #6E1030;
+  --color-red-900: #570D27;
+  --color-red-950: #400A1E;
+  --color-red-970: #330816;
+  --color-red-985: #22050F;
 
-  /* OpacityBlue */
-  --color-blue: #DCE5FF;
+  /* Accent Blue */
+  --color-blue: #DBEAFE;
 
-  /* TYPOGRAPHY VARIABLES */
+  /* ═══════════════════════════════════════════════════════
+     TYPOGRAPHY — Apple-inspired type scale
+     ═══════════════════════════════════════════════════════ */
 
+  --font-size-xxs: 0.6875rem;  /* 11px */
+  --font-size-xs:  0.8125rem;  /* 13px */
+  --font-size-s:   0.9375rem;  /* 15px */
+  --font-size-m:   1.0625rem;  /* 17px */
+  --font-size-l:   1.375rem;   /* 22px */
+  --font-size-xl:  1.75rem;    /* 28px */
+  --font-size-xxl: 2.125rem;   /* 34px */
+  --font-size-xxxl: 2.75rem;   /* 44px */
 
-  --font-size-xxs: 0.75rem;   /* 12px */
-  --font-size-xs:  0.875rem;  /* 14px */
-  --font-size-s:   1rem;      /* 16px */
-  --font-size-m:   1.125rem;  /* 18px */
-  --font-size-l:   1.5rem;    /* 24px */
-  --font-size-xl:  2rem;      /* 32px */
-  --font-size-xxl: 2.25rem;   /* 36px */
-  --font-size-xxxl:  3rem;      /* 48px */
+  /* ═══════════════════════════════════════════════════════
+     LEGACY THEME TOKENS — neww.ai branded
+     ═══════════════════════════════════════════════════════ */
 
-
-  /* OLD TAILWIND STYLES */
-
-    --color-primary: #C9B974;
-  --color-logo: #CFB755;
-  --color-base: #0D0F11;
-  --color-base-secondary: #24272E;
-  --color-danger: #E76A5E;
-  --color-success: #A5E75E;
-  --color-basic: #9099AC;
-  --color-tertiary: #454545;
-  --color-tertiary-light: #B7BDC2;
-  --color-content: #ECEDEE;
-  --color-content-2: #F9FBFE;
+  --color-primary: #6366F1;
+  --color-logo: #818CF8;
+  --color-base: #09090B;
+  --color-base-secondary: #18181B;
+  --color-danger: #F43F5E;
+  --color-success: #22C55E;
+  --color-basic: #A1A1AA;
+  --color-tertiary: #27272A;
+  --color-tertiary-light: #A1A1AA;
+  --color-content: #FAFAFA;
+  --color-content-2: #F4F4F5;
 
 }
 
 @layer utilities {
   .tg-family-outfit {
-    font-family: Outfit;
-
+    font-family: Inter, -apple-system, "SF Pro Display", BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
   .tg-family-ibm-plex {
-    font-family:  IBM Plex Mono
+    font-family: "JetBrains Mono", "SF Mono", "IBM Plex Mono", Menlo, Monaco, monospace;
   }
 
   .tg-xxs {

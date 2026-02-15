@@ -217,15 +217,15 @@ export default function MainApp() {
     <div
       data-testid="root-layout"
       className={cn(
-        "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base",
-        pathname === "/" ? "p-0" : "p-0 md:p-3 md:pl-0",
+        "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-[#09090B]",
+        pathname === "/" ? "p-0" : "p-0 md:p-2 md:pl-0",
         isMobileDevice() && "overflow-hidden",
       )}
     >
       <title>{appTitle}</title>
       <Sidebar />
 
-      <div className="flex flex-col w-full h-[calc(100%-50px)] md:h-full gap-3">
+      <div className="flex flex-col w-full h-[calc(100%-50px)] md:h-full gap-2">
         {config.data &&
           (config.data.maintenance_start_time ||
             (config.data.faulty_models &&

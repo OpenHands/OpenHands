@@ -32,8 +32,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export const meta: MetaFunction = () => [
-  { title: "OpenHands" },
-  { name: "description", content: "Let's Start Building!" },
+  { title: "neww.ai — AI Coding Agent" },
+  { name: "description", content: "Ship production code 10x faster with the most advanced AI coding agent. Build, debug, and deploy with neww.ai." },
+  { name: "theme-color", content: "#09090B" },
 ];
 
 export default function App() {

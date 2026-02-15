@@ -1,0 +1,19 @@
+<svg width="46" height="30" viewBox="0 0 46 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- neww.ai wordmark - clean geometric sans-serif -->
+  <defs>
+    <linearGradient id="logoGrad" x1="0" y1="0" x2="46" y2="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="50%" stop-color="#818CF8"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+  <!-- Abstract "N" mark with forward momentum -->
+  <path d="M4 24V6h3.2l8.8 12.8V6h3.2v18h-3.2L7.2 11.2V24H4z" fill="url(#logoGrad)"/>
+  <!-- Dot accent representing AI -->
+  <circle cx="38" cy="8" r="3.5" fill="#818CF8"/>
+  <!-- Horizontal bar - representing "new" energy -->
+  <rect x="24" y="13" width="18" height="3" rx="1.5" fill="url(#logoGrad)" opacity="0.9"/>
+  <!-- Small dots for ".ai" -->
+  <circle cx="32" cy="24" r="1.5" fill="#818CF8" opacity="0.7"/>
+  <circle cx="38" cy="24" r="1.5" fill="#A78BFA"/>
+</svg>

@@ -26,14 +26,15 @@ export function ConversationTabNav({
       }}
       data-testid={`conversation-tab-${tabValue}`}
       className={cn(
-        "flex items-center gap-2 rounded-md cursor-pointer",
+        "flex items-center gap-2 rounded-lg cursor-pointer",
         "pl-1.5 pr-2 py-1",
-        "text-[#9299AA] bg-[#0D0F11]",
-        isActive && "bg-[#25272D] text-white",
+        "transition-colors duration-150",
+        "text-[#A1A1AA] bg-[#09090B]",
+        isActive && "bg-[#6366F1] text-[#FAFAFA]",
         isActive
-          ? "hover:text-white hover:bg-tertiary"
-          : "hover:text-white hover:bg-[#0D0F11]",
-        isActive ? "focus-within:text-white" : "focus-within:text-[#9299AA]",
+          ? "hover:text-[#FAFAFA] hover:bg-[#6366F1]/90"
+          : "hover:text-[#FAFAFA] hover:bg-[#18181B]",
+        isActive ? "focus-within:text-[#FAFAFA]" : "focus-within:text-[#A1A1AA]",
         className,
       )}
     >

@@ -1,4 +1,3 @@
-import LoadingSpinnerOuter from "#/icons/loading-outer.svg?react";
 import { cn } from "#/utils/utils";
 
 interface LoadingSpinnerProps {
@@ -13,11 +12,16 @@ export function LoadingSpinner({ size }: LoadingSpinnerProps) {
     <div data-testid="loading-spinner" className={cn("relative", sizeStyle)}>
       <div
         className={cn(
-          "rounded-full border-4 border-[#525252] absolute",
+          "rounded-full border-[3px] border-[#27272A] absolute",
           sizeStyle,
         )}
       />
-      <LoadingSpinnerOuter className={cn("absolute animate-spin", sizeStyle)} />
+      <div
+        className={cn(
+          "rounded-full border-[3px] border-transparent border-t-[#6366F1] absolute animate-spin",
+          sizeStyle,
+        )}
+      />
     </div>
   );
 }

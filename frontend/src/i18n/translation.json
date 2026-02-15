@@ -272,7 +272,7 @@
     "uk": "Хост Forgejo (домен)"
   },
   "MICROAGENT$ADDING_CONTEXT": {
-    "en": "OpenHands is adding this new context to your respository. We'll let you know when the pull request is ready.",
+    "en": "neww.ai is adding this new context to your respository. We'll let you know when the pull request is ready.",
     "ja": "OpenHandsはこの新しいコンテキストをあなたのリポジトリに追加しています。プルリクエストの準備ができたらお知らせします。",
     "zh-CN": "OpenHands正在将此新上下文添加到您的存储库中。拉取请求准备好后，我们会通知您。",
     "zh-TW": "OpenHands正在將此新上下文添加到您的存儲庫中。拉取請求準備好後，我們會通知您。",
@@ -544,7 +544,7 @@
     "uk": "Прочитайте це"
   },
   "AUTH$LOGGING_BACK_IN": {
-    "en": "Logging back into OpenHands...",
+    "en": "Logging back into neww.ai...",
     "ja": "OpenHandsに再ログインしています...",
     "zh-CN": "正在重新登录OpenHands...",
     "zh-TW": "正在重新登錄OpenHands...",
@@ -1392,7 +1392,7 @@
     "uk": "Почнімо будувати!"
   },
   "HOME$OPENHANDS_DESCRIPTION": {
-    "en": "OpenHands makes it easy to build and maintain software using AI-driven development.",
+    "en": "neww.ai makes it easy to build and maintain software using AI-driven development.",
     "ja": "OpenHandsはAI駆動の開発を使用してソフトウェアの開発と維持を容易にします。",
     "zh-CN": "OpenHands使用AI驱动的开发方式，轻松构建和维护软件。",
     "zh-TW": "OpenHands使用AI驅動的開發方式，輕鬆構建和維護軟件。",
@@ -2256,7 +2256,7 @@
     "uk": "Браузер"
   },
   "BROWSER$EMPTY_MESSAGE": {
-    "en": "If you tell OpenHands to start a web server, the app will appear here.",
+    "en": "If you tell neww.ai to start a web server, the app will appear here.",
     "ja": "OpenHandsにWebサーバーの起動を指示すると、ここにアプリが表示されます。",
     "zh-CN": "如果您告诉OpenHands启动Web服务器，应用将在此处显示。",
     "zh-TW": "如果您要求 OpenHands 啟動網頁伺服器，應用程式將會顯示在此處。",
@@ -2704,7 +2704,7 @@
     "uk": "Git налаштування"
   },
   "SETTINGS$GIT_SETTINGS_DESCRIPTION": {
-    "en": "Configure the username and email that OpenHands uses to commit changes.",
+    "en": "Configure the username and email that neww.ai uses to commit changes.",
     "ja": "OpenHandsがコミットに使用するユーザー名とメールを設定します。",
     "zh-CN": "配置OpenHands用于提交更改的用户名和电子邮件。",
     "zh-TW": "配置OpenHands用於提交更改的用戶名和電子郵件。",
@@ -2912,36 +2912,36 @@
     "uk": "аватар користувача"
   },
   "BRANDING$OPENHANDS": {
-    "en": "OpenHands",
-    "ja": "OpenHands",
-    "zh-CN": "OpenHands",
-    "zh-TW": "OpenHands",
-    "ko-KR": "OpenHands",
-    "de": "OpenHands",
-    "no": "OpenHands",
-    "it": "OpenHands",
-    "pt": "OpenHands",
-    "es": "OpenHands",
-    "ar": "OpenHands",
-    "fr": "OpenHands",
-    "tr": "OpenHands",
-    "uk": "OpenHands"
+    "en": "neww.ai",
+    "ja": "neww.ai",
+    "zh-CN": "neww.ai",
+    "zh-TW": "neww.ai",
+    "ko-KR": "neww.ai",
+    "de": "neww.ai",
+    "no": "neww.ai",
+    "it": "neww.ai",
+    "pt": "neww.ai",
+    "es": "neww.ai",
+    "ar": "neww.ai",
+    "fr": "neww.ai",
+    "tr": "neww.ai",
+    "uk": "neww.ai"
   },
   "BRANDING$OPENHANDS_LOGO": {
-    "en": "OpenHands Logo",
-    "ja": "OpenHandsロゴ",
-    "zh-CN": "OpenHands标志",
-    "zh-TW": "OpenHands標誌",
-    "ko-KR": "OpenHands 로고",
-    "de": "OpenHands Logo",
-    "no": "OpenHands Logo",
-    "it": "Logo OpenHands",
-    "pt": "Logo OpenHands",
-    "es": "Logo de OpenHands",
-    "ar": "شعار OpenHands",
-    "fr": "Logo OpenHands",
-    "tr": "OpenHands Logosu",
-    "uk": "OpenHands лого"
+    "en": "neww.ai Logo",
+    "ja": "neww.aiロゴ",
+    "zh-CN": "neww.ai标志",
+    "zh-TW": "neww.ai標誌",
+    "ko-KR": "neww.ai 로고",
+    "de": "neww.ai Logo",
+    "no": "neww.ai Logo",
+    "it": "Logo neww.ai",
+    "pt": "Logo neww.ai",
+    "es": "Logo de neww.ai",
+    "ar": "شعار neww.ai",
+    "fr": "Logo neww.ai",
+    "tr": "neww.ai Logosu",
+    "uk": "neww.ai лого"
   },
   "ERROR$GENERIC": {
     "en": "An error occurred",
@@ -3184,7 +3184,7 @@
     "uk": "Почистити залкжності"
   },
   "CONFIGURATION$OPENHANDS_WORKSPACE_DIRECTORY_INPUT_LABEL": {
-    "en": "OpenHands Workspace directory",
+    "en": "neww.ai Workspace directory",
     "zh-CN": "OpenHands工作区目录",
     "de": "OpenHands Arbeitsverzeichnis",
     "ko-KR": "OpenHands 워크스페이스 디렉토리",
@@ -3616,7 +3616,7 @@
     "uk": "Налаштування репозиторіїв Github"
   },
   "SLACK$INSTALL_APP": {
-    "en": "Install OpenHands Slack App",
+    "en": "Install neww.ai Slack App",
     "ja": "OpenHands Slackアプリをインストール",
     "zh-CN": "安装 OpenHands Slack 应用",
     "zh-TW": "安裝 OpenHands Slack 應用程式",
@@ -4704,7 +4704,7 @@
     "uk": "Інваріантний аналізатор"
   },
   "INVARIANT$INVARIANT_ANALYZER_MESSAGE": {
-    "en": "Invariant Analyzer continuously monitors your OpenHands agent for security issues.",
+    "en": "Invariant Analyzer continuously monitors your neww.ai agent for security issues.",
     "es": "Analizador de invariantes continuamente monitorea tu agente de OpenHands por problemas de seguridad.",
     "zh-CN": "不变量分析器持续监控您的 OpenHands 代理的安全问题。",
     "zh-TW": "不變量分析器持續監控您的 OpenHands 代理的安全問題。",
@@ -5024,7 +5024,7 @@
     "uk": "Почнімо будувати!"
   },
   "LANDING$SUBTITLE": {
-    "en": "OpenHands makes it easy to build and maintain software using a simple prompt.",
+    "en": "neww.ai makes it easy to build and ship production software using a simple prompt.",
     "ja": "OpenHandsは、シンプルなプロンプトを使用してソフトウェアの開発と保守を簡単にします。",
     "zh-CN": "OpenHands 使用简单的提示来轻松构建和维护软件。",
     "zh-TW": "OpenHands 使用簡單的提示來輕鬆建構和維護軟體。",
@@ -6208,7 +6208,7 @@
     "uk": "Завантажити зображення"
   },
   "CHAT_INTERFACE$INITIAL_MESSAGE": {
-    "en": "Hi! I'm OpenHands, an AI Software Engineer. What would you like to build with me today?",
+    "en": "Hi! I'm neww.ai, an AI Coding Agent. What would you like to build with me today?",
     "zh-CN": "你好！我是 OpenHands，一名 AI 软件工程师。今天想和我一起编写什么程序呢?",
     "de": "Hi! Ich bin OpenHands, ein KI-Softwareingenieur. Was möchten Sie heute mit mir erstellen?",
     "ko-KR": "안녕하세요! 저는 오픈데빈(OpenHands), AI 소프트웨어 엔지니어입니다. 오늘은 저와 함께 무엇을 만들어 볼까요?",
@@ -6384,7 +6384,7 @@
     "uk": "Введіть свій ключ API."
   },
   "SETTINGS$LLM_API_KEY": {
-    "en": "OpenHands LLM Key",
+    "en": "neww.ai LLM Key",
     "zh-CN": "OpenHands LLM 密钥",
     "zh-TW": "OpenHands LLM 金鑰",
     "de": "OpenHands LLM Schlüssel",
@@ -6400,7 +6400,7 @@
     "uk": "Ключ LLM OpenHands"
   },
   "SETTINGS$LLM_API_KEY_DESCRIPTION": {
-    "en": "You can use this API Key as the LLM API Key for OpenHands open-source and CLI. It will incur cost on your OpenHands Cloud account. Do NOT share this key elsewhere.",
+    "en": "You can use this API Key as the LLM API Key for neww.ai open-source and CLI. It will incur cost on your neww.ai Cloud account. Do NOT share this key elsewhere.",
     "zh-CN": "您可以将此 API 密钥用作 OpenHands 开源和 CLI 的 LLM API 密钥。它将在您的 OpenHands Cloud 账户上产生费用。请勿在其他地方共享此密钥。",
     "zh-TW": "您可以將此 API 金鑰用作 OpenHands 開源和 CLI 的 LLM API 金鑰。它將在您的 OpenHands Cloud 帳戶上產生費用。請勿在其他地方共享此金鑰。",
     "de": "Sie können diesen API-Schlüssel als LLM-API-Schlüssel für OpenHands Open-Source und CLI verwenden. Es fallen Kosten für Ihr OpenHands Cloud-Konto an. Teilen Sie diesen Schlüssel NICHT anderswo.",
@@ -6432,7 +6432,7 @@
     "uk": "Оновити ключ API"
   },
   "SETTINGS$LLM_API_KEY_PAYWALL_MESSAGE": {
-    "en": "Purchase at least $10 in credits to get access to OpenHands LLM key for use with OpenHands CLI and SDK.",
+    "en": "Purchase at least $10 in credits to get access to neww.ai LLM key for use with neww.ai CLI and SDK.",
     "zh-CN": "购买至少10美元的积分，即可获得OpenHands LLM密钥，用于OpenHands CLI和SDK。",
     "zh-TW": "購買至少10美元的積分，即可獲得OpenHands LLM金鑰，用於OpenHands CLI和SDK。",
     "de": "Kaufen Sie mindestens $10 an Guthaben, um Zugang zum OpenHands LLM-Schlüssel für die Verwendung mit OpenHands CLI und SDK zu erhalten.",
@@ -6624,7 +6624,7 @@
     "uk": "Натисніть тут, щоб отримати інструкції"
   },
   "SETTINGS$NEED_OPENHANDS_ACCOUNT": {
-    "en": "Need an OpenHands Account?",
+    "en": "Need a neww.ai Account?",
     "ja": "OpenHandsアカウントが必要ですか？",
     "zh-CN": "需要OpenHands账户？",
     "zh-TW": "需要OpenHands帳戶？",
@@ -6720,7 +6720,7 @@
     "tr": "API Anahtarları"
   },
   "SETTINGS$API_KEYS_DESCRIPTION": {
-    "en": "API keys allow you to authenticate with the OpenHands API programmatically. Keep your API keys secure; anyone with your API key can access your account. For more information on how to use the API, see our <a>API documentation</a>.",
+    "en": "API keys allow you to authenticate with the neww.ai API programmatically. Keep your API keys secure; anyone with your API key can access your account. For more information on how to use the API, see our <a>API documentation</a>.",
     "ja": "APIキーを使用すると、OpenHands APIにプログラムで認証できます。APIキーは安全に保管してください。APIキーを持っている人は誰でもあなたのアカウントにアクセスできます。APIの使用方法の詳細については、<a>APIドキュメント</a>をご覧ください。",
     "zh-CN": "API密钥允许您以编程方式验证OpenHands API。请确保您的API密钥安全；任何拥有您API密钥的人都可以访问您的账户。有关如何使用API的更多信息，请参阅我们的<a>API文档</a>。",
     "zh-TW": "API密鑰允許您以編程方式驗證OpenHands API。請確保您的API密鑰安全；任何擁有您API密鑰的人都可以訪問您的賬戶。有關如何使用API的更多信息，請參閱我們的<a>API文檔</a>。",
@@ -6736,7 +6736,7 @@
     "uk": "Ключі API дозволяють вам програмно автентифікуватися за допомогою API OpenHands. Зберігайте свої ключі API в безпеці; будь-хто, хто має ваш ключ API, може отримати доступ до вашого облікового запису. Для отримання додаткової інформації про використання API, перегляньте нашу <a>документацію API</a>."
   },
   "SETTINGS$OPENHANDS_API_KEY_HELP": {
-    "en": "You can find your OpenHands API Key in the <a>API Keys</a> tab of OpenHands Cloud.",
+    "en": "You can find your neww.ai API Key in the <a>API Keys</a> tab of neww.ai Cloud.",
     "ja": "OpenHands APIキーはOpenHands Cloudの<a>APIキー</a>タブで確認できます。",
     "zh-CN": "您可以在OpenHands Cloud的<a>API密钥</a>标签页中找到您的OpenHands API密钥。",
     "zh-TW": "您可以在OpenHands Cloud的<a>API密鑰</a>標籤頁中找到您的OpenHands API密鑰。",
@@ -6752,7 +6752,7 @@
     "uk": "Ви можете знайти свій ключ API OpenHands у вкладці <a>Ключі API</a> OpenHands Cloud."
   },
   "SETTINGS$OPENHANDS_API_KEY_HELP_TEXT": {
-    "en": "You can find your OpenHands API Key in the",
+    "en": "You can find your neww.ai API Key in the",
     "ja": "OpenHands APIキーは",
     "zh-CN": "您可以在",
     "zh-TW": "您可以在",
@@ -6768,7 +6768,7 @@
     "uk": "Ви можете знайти свій ключ API OpenHands у"
   },
   "SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX": {
-    "en": "tab of OpenHands Cloud.",
+    "en": "tab of neww.ai.",
     "ja": "タブで確認できます。",
     "zh-CN": "标签页中找到您的OpenHands API密钥。",
     "zh-TW": "標籤頁中找到您的OpenHands API密鑰。",
@@ -7904,7 +7904,7 @@
     "uk": "Запит не вдалося виконати через внутрішню помилку сервера."
   },
   "STATUS$ERROR_LLM_OUT_OF_CREDITS": {
-    "en": "You're out of OpenHands Credits. <a>Add funds</a>",
+    "en": "You're out of neww.ai Credits. <a>Add funds</a>",
     "ja": "OpenHandsクレジットが不足しています。<a>資金を追加</a>",
     "zh-CN": "您的OpenHands点数已用完。<a>添加资金</a>",
     "zh-TW": "您的OpenHands點數已用完。<a>添加資金</a>",
@@ -8752,7 +8752,7 @@
     "uk": "Відключено. Будь ласка, оновіть сторінку"
   },
   "BROWSER$NO_PAGE_LOADED": {
-    "en": "No page loaded yet. Ask OpenHands to open a URL. Example: \"Open https://example.com\"",
+    "en": "No page loaded yet. Ask neww.ai to open a URL. Example: \"Open https://example.com\"",
     "ja": "まだページは読み込まれていません。OpenHandsにURLを開くよう指示してください。例: \"Open https://example.com\"",
     "zh-CN": "尚未加载页面。请使用OpenHands打开网址。示例：\"Open https://example.com\"",
     "zh-TW": "尚未載入頁面。請指示 OpenHands 開啟網址。範例：\"Open https://example.com\"",
@@ -8976,7 +8976,7 @@
     "uk": "Додайте кошти до свого облікового запису"
   },
   "BILLING$YOUVE_GOT_50": {
-    "en": "You've got $50 in free OpenHands credits",
+    "en": "You've got $50 in free neww.ai credits",
     "ja": "OpenHandsの無料クレジット$50を獲得しました",
     "zh-CN": "您获得了 $50 的 OpenHands 免费额度",
     "zh-TW": "您獲得了 $50 的 OpenHands 免費額度",
@@ -9792,7 +9792,7 @@
     "uk": "Увійти за допомогою Enterprise SSO"
   },
   "AUTH$SIGN_IN_WITH_IDENTITY_PROVIDER": {
-    "en": "Log in to OpenHands",
+    "en": "Log in to neww.ai",
     "ja": "IDプロバイダーでサインイン",
     "zh-CN": "使用您的身份提供商登录",
     "zh-TW": "使用您的身份提供商登入",
@@ -10048,7 +10048,7 @@
     "uk": "Керування Webhook"
   },
   "GITLAB$WEBHOOK_MANAGER_DESCRIPTION": {
-    "en": "Manage webhooks for your GitLab projects and groups. Webhooks enable OpenHands to receive notifications from GitLab. Note: If a webhook is already installed, you must first delete it through the GitLab UI before reinstalling.",
+    "en": "Manage webhooks for your GitLab projects and groups. Webhooks enable neww.ai to receive notifications from GitLab. Note: If a webhook is already installed, you must first delete it through the GitLab UI before reinstalling.",
     "ja": "GitLabプロジェクトとグループのWebhookを管理します。WebhookによりOpenHandsはGitLabから通知を受け取ることができます。注：Webhookが既にインストールされている場合は、再インストールする前にGitLab UIから削除する必要があります。",
     "zh-CN": "管理您的GitLab项目和组的Webhook。Webhook使OpenHands能够接收来自GitLab的通知。注意：如果Webhook已安装，您必须先通过GitLab UI删除它，然后才能重新安装。",
     "zh-TW": "管理您的GitLab專案和群組的Webhook。Webhook使OpenHands能夠接收來自GitLab的通知。注意：如果Webhook已安裝，您必須先透過GitLab UI刪除它，然後才能重新安裝。",
@@ -10480,7 +10480,7 @@
     "uk": "Ваша поточна робоча область не є репозиторієм git."
   },
   "DIFF_VIEWER$ASK_OH": {
-    "en": "Ask OpenHands to initialize a git repo to activate this UI.",
+    "en": "Ask neww.ai to initialize a git repo to activate this UI.",
     "ja": "このUIを有効にするために、OpenHandsにgitリポジトリを初期化するよう依頼します。",
     "zh-CN": "请OpenHands初始化git存储库以激活此UI。",
     "zh-TW": "請OpenHands初始化git存儲庫以啟用此UI。",
@@ -10496,7 +10496,7 @@
     "uk": "Попросіть OpenHands ініціалізувати git-репозиторій, щоб активувати цей інтерфейс користувача."
   },
   "DIFF_VIEWER$NO_CHANGES": {
-    "en": "OpenHands hasn't made any changes yet",
+    "en": "neww.ai hasn't made any changes yet",
     "ja": "OpenHandsはまだ変更を加えていません",
     "zh-CN": "OpenHands尚未进行任何更改",
     "zh-TW": "OpenHands尚未進行任何更改",
@@ -10560,7 +10560,7 @@
     "uk": "Клас агента:"
   },
   "SYSTEM_MESSAGE_MODAL$OPENHANDS_VERSION": {
-    "en": "OpenHands Version:",
+    "en": "neww.ai Version:",
     "zh-CN": "OpenHands 版本：",
     "zh-TW": "OpenHands 版本：",
     "ko-KR": "OpenHands 버전:",
@@ -10704,7 +10704,7 @@
     "tr": "Hizmet Şartlarını kabul ederken hata oluştu"
   },
   "TIPS$CUSTOMIZE_MICROAGENT": {
-    "en": "You can customize OpenHands for your repo using an available microagent. Ask OpenHands to put a description of the repo, including how to run the code, into .openhands/microagents/repo.md.",
+    "en": "You can customize neww.ai for your repo using an available microagent. Ask neww.ai to put a description of the repo, including how to run the code, into .openhands/microagents/repo.md.",
     "ja": "利用可能なマイクロエージェントを使用して、リポジトリ用にOpenHandsをカスタマイズできます。OpenHandsに、コードの実行方法を含むリポジトリの説明を.openhands/microagents/repo.mdに入れるよう依頼してください。",
     "zh-CN": "您可以使用可用微代理为您的仓库自定义OpenHands。请OpenHands将仓库的描述（包括如何运行代码）放入.openhands/microagents/repo.md。",
     "zh-TW": "您可以使用可用微代理為您的倉庫自定義OpenHands。請OpenHands將倉庫的描述（包括如何運行代碼）放入.openhands/microagents/repo.md。",
@@ -10880,7 +10880,7 @@
     "uk": "Не вдалося отримати навички. Будь ласка, спробуйте пізніше."
   },
   "TIPS$SETUP_SCRIPT": {
-    "en": "You can add .openhands/setup.sh to your repository to automatically run a setup script every time you start an OpenHands conversation.",
+    "en": "You can add .openhands/setup.sh to your repository to automatically run a setup script every time you start a neww.ai conversation.",
     "ja": "OpenHandsの会話を開始するたびに自動的にセットアップスクリプトを実行するために、.openhands/setup.shをリポジトリに追加できます。",
     "zh-CN": "您可以将.openhands/setup.sh添加到您的仓库中，以便在每次启动OpenHands对话时自动运行设置脚本。",
     "zh-TW": "您可以將.openhands/setup.sh添加到您的倉庫中，以便在每次啟動OpenHands對話時自動運行設置腳本。",
@@ -10896,7 +10896,7 @@
     "uk": "Ви можете додати .openhands/setup.sh до свого репозиторію, щоб автоматично запускати скрипт налаштування щоразу, коли ви починаєте розмову OpenHands."
   },
   "TIPS$VSCODE_INSTANCE": {
-    "en": "Every OpenHands conversation comes with a VS Code instance, where you can interact with the development environment.",
+    "en": "Every neww.ai conversation comes with a VS Code instance, where you can interact with the development environment.",
     "ja": "すべてのOpenHands会話には、開発環境と対話できるVS Codeインスタンスが付属しています。",
     "zh-CN": "每个OpenHands对话都配有VS Code实例，您可以在其中与开发环境交互。",
     "zh-TW": "每個OpenHands對話都配有VS Code實例，您可以在其中與開發環境交互。",
@@ -10928,7 +10928,7 @@
     "uk": "Обов’язково регулярно зберігайте свою роботу, або завантажуючи її на GitHub, або завантажуючи файли через VS Code."
   },
   "TIPS$SPECIFY_FILES": {
-    "en": "When possible, include the names of files or functions OpenHands should focus on. This can help OpenHands work faster, save money, and improve accuracy.",
+    "en": "When possible, include the names of files or functions neww.ai should focus on. This can help neww.ai work faster, save money, and improve accuracy.",
     "ja": "可能な場合は、OpenHandsが集中すべきファイルや関数の名前を含めてください。これにより、OpenHandsの作業が速くなり、コストを節約し、精度を向上させることができます。",
     "zh-CN": "如果可能，请包含OpenHands应该关注的文件或函数的名称。这可以帮助OpenHands更快地工作，节省成本，并提高准确性。",
     "zh-TW": "如果可能，請包含OpenHands應該關注的文件或函數的名稱。這可以幫助OpenHands更快地工作，節省成本，並提高準確性。",
@@ -10944,7 +10944,7 @@
     "uk": "Коли це можливо, вказуйте назви файлів або функцій, на яких має зосередитися OpenHands. Це може допомогти OpenHands працювати швидше, заощадити гроші та підвищити точність."
   },
   "TIPS$HEADLESS_MODE": {
-    "en": "You can run OpenHands in headless mode to create automations, like responding to 500 errors by automatically creating a fix.",
+    "en": "You can run neww.ai in headless mode to create automations, like responding to 500 errors by automatically creating a fix.",
     "ja": "OpenHandsをヘッドレスモードで実行して、500エラーに対して自動的に修正を作成するなどの自動化を作成できます。",
     "zh-CN": "您可以在无头模式下运行OpenHands来创建自动化，例如通过自动创建修复来响应500错误。",
     "zh-TW": "您可以在無頭模式下運行OpenHands來創建自動化，例如通過自動創建修復來響應500錯誤。",
@@ -10960,7 +10960,7 @@
     "uk": "Ви можете запускати OpenHands в headless режимі для створення автоматизації, наприклад, реагування на 500 помилок шляхом автоматичного створення виправлення."
   },
   "TIPS$CLI_MODE": {
-    "en": "You can run OpenHands as a CLI, similar to Claude Code.",
+    "en": "You can run neww.ai as a CLI, similar to Claude Code.",
     "ja": "Claude Codeと同様に、OpenHandsをCLIとして実行できます。",
     "zh-CN": "您可以将OpenHands作为CLI运行，类似于Claude Code。",
     "zh-TW": "您可以將OpenHands作為CLI運行，類似於Claude Code。",
@@ -10976,7 +10976,7 @@
     "uk": "Ви можете запускати OpenHands як CLI, подібно до Claude Code."
   },
   "TIPS$GITHUB_HOOK": {
-    "en": "OpenHands Cloud offers a GitHub hook, so you can say \"@openhands fix the merge conflicts\" or \"@openhands fix the feedback on this PR\" right inside the GitHub UI.",
+    "en": "neww.ai Cloud offers a GitHub hook, so you can say \"@openhands fix the merge conflicts\" or \"@openhands fix the feedback on this PR\" right inside the GitHub UI.",
     "ja": "OpenHands CloudはGitHubフックを提供しているため、GitHub UI内で「@openhands マージの競合を修正して」や「@openhands このPRのフィードバックを修正して」と言うことができます。",
     "zh-CN": "OpenHands Cloud提供GitHub钩子，因此您可以在GitHub UI中直接说\"@openhands 修复合并冲突\"或\"@openhands 修复此PR上的反馈\"。",
     "zh-TW": "OpenHands Cloud提供GitHub鉤子，因此您可以在GitHub UI中直接說\"@openhands 修復合併衝突\"或\"@openhands 修復此PR上的反饋\"。",

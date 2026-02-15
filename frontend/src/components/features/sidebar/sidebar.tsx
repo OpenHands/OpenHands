@@ -43,8 +43,6 @@ export function Sidebar() {
       settingsIsError &&
       settingsError?.status !== 404
     ) {
-      // We don't show toast errors for settings in the global error handler
-      // because we have a special case for 404 errors
       displayErrorToast(
         "Something went wrong while fetching settings. Please reload the page.",
       );
@@ -69,15 +67,16 @@ export function Sidebar() {
       <aside
         aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
         className={cn(
-          "h-[54px] p-3 md:p-0 md:h-[40px] md:h-auto flex flex-row md:flex-col gap-1 bg-base md:w-[75px] md:min-w-[75px] sm:pt-0 sm:px-2 md:pt-[14px] md:px-0",
-          pathname === "/" && "md:pt-6.5 md:pb-3",
+          "h-[54px] p-3 md:p-0 md:h-auto flex flex-row md:flex-col gap-1 bg-[#09090B] md:w-[72px] md:min-w-[72px] sm:pt-0 sm:px-2 md:pt-[16px] md:px-0 border-r border-[#18181B]",
+          pathname === "/" && "md:pt-6 md:pb-3",
         )}
       >
         <nav className="flex flex-row md:flex-col items-center justify-between w-full h-auto md:w-auto md:h-full">
-          <div className="flex flex-row md:flex-col items-center gap-[26px]">
+          <div className="flex flex-row md:flex-col items-center gap-6">
             <div className="flex items-center justify-center">
               <OpenHandsLogoButton />
             </div>
+            <div className="w-8 h-[1px] bg-[#27272A] hidden md:block" />
             <div>
               <NewProjectButton disabled={settings?.email_verified === false} />
             </div>
@@ -95,7 +94,7 @@ export function Sidebar() {
             />
           </div>
 
-          <div className="flex flex-row md:flex-col md:items-center gap-[26px]">
+          <div className="flex flex-row md:flex-col md:items-center gap-6 md:pb-4">
             <UserActions
               user={
                 user.data ? { avatar_url: user.data.avatar_url } : undefined

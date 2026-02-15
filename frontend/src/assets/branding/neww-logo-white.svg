@@ -1,0 +1,16 @@
+<svg width="106" height="72" viewBox="0 0 106 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logoGradWhite" x1="0" y1="0" x2="106" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#818CF8"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+  <!-- neww wordmark -->
+  <text x="53" y="38" text-anchor="middle" font-family="Inter, -apple-system, SF Pro Display, system-ui, sans-serif" font-size="28" font-weight="700" letter-spacing="-1" fill="white">neww</text>
+  <!-- .ai suffix with accent color -->
+  <text x="53" y="58" text-anchor="middle" font-family="Inter, -apple-system, SF Pro Display, system-ui, sans-serif" font-size="16" font-weight="500" letter-spacing="2" fill="url(#logoGradWhite)">.ai</text>
+  <!-- Accent dot -->
+  <circle cx="86" cy="14" r="4" fill="#818CF8" opacity="0.8"/>
+  <!-- Subtle glow ring -->
+  <circle cx="86" cy="14" r="7" stroke="#818CF8" stroke-width="1" fill="none" opacity="0.3"/>
+</svg>

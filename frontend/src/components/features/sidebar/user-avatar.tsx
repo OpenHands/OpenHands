@@ -19,7 +19,7 @@ export function UserAvatar({ onClick, avatarUrl, isLoading }: UserAvatarProps) {
       type="button"
       data-testid="user-avatar"
       className={cn(
-        "w-8 h-8 rounded-full flex items-center justify-center cursor-pointer",
+        "w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 hover:ring-2 hover:ring-[#6366F1]/30",
         isLoading && "bg-transparent",
       )}
       onClick={onClick}
@@ -30,7 +30,7 @@ export function UserAvatar({ onClick, avatarUrl, isLoading }: UserAvatarProps) {
           aria-label={t(I18nKey.USER$AVATAR_PLACEHOLDER)}
           width={28}
           height={28}
-          className="text-[#9099AC]"
+          className="text-[#A1A1AA]"
         />
       )}
       {isLoading && <LoadingSpinner size="small" />}

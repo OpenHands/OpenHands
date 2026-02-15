@@ -1,0 +1,13 @@
+<svg width="120" height="32" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wordmarkGrad" x1="0" y1="0" x2="120" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="50%" stop-color="#818CF8"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+  <!-- "neww" text -->
+  <text x="0" y="24" font-family="Inter, -apple-system, SF Pro Display, system-ui, sans-serif" font-size="26" font-weight="800" letter-spacing="-0.5" fill="white">neww</text>
+  <!-- ".ai" suffix -->
+  <text x="72" y="24" font-family="Inter, -apple-system, SF Pro Display, system-ui, sans-serif" font-size="26" font-weight="800" letter-spacing="-0.5" fill="url(#wordmarkGrad)">.ai</text>
+</svg>

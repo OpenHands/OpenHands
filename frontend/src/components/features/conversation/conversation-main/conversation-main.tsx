@@ -51,7 +51,7 @@ export function ConversationMain() {
         {/* Chat Panel - always mounted, styled differently for mobile/desktop */}
         <div
           className={cn(
-            "flex flex-col bg-base overflow-hidden",
+            "flex flex-col bg-[#09090B] overflow-hidden",
             isMobile
               ? getMobileChatPanelClass(isRightPanelShown)
               : "transition-all duration-300 ease-in-out",

@@ -27,14 +27,14 @@ export function ConversationPanelButton({
         aria-label={label}
         onClick={onClick}
         disabled={disabled}
-        className="p-0 bg-transparent border-0"
+        className="p-1.5 bg-transparent border-0 rounded-lg transition-all duration-150 hover:bg-[#18181B] active:scale-95"
       >
         <ListIcon
-          width={24}
-          height={24}
+          width={22}
+          height={22}
           className={cn(
-            "cursor-pointer",
-            isOpen ? "text-white" : "text-[#B1B9D3]",
+            "cursor-pointer transition-colors",
+            isOpen ? "text-white" : "text-[#A1A1AA]",
             disabled && "opacity-50",
           )}
         />

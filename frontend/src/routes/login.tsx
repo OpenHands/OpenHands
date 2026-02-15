@@ -44,8 +44,8 @@ export default function LoginPage() {
 
   if (isAuthLoading || config.isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-base">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
+      <div className="min-h-screen flex items-center justify-center bg-[#09090B]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#6366F1]" />
       </div>
     );
   }
@@ -58,7 +58,7 @@ export default function LoginPage() {
   return (
     <>
       <main
-        className="min-h-screen flex items-center justify-center bg-base p-4"
+        className="min-h-screen flex items-center justify-center bg-[#09090B] p-4 relative overflow-hidden"
         data-testid="login-page"
       >
         <LoginContent

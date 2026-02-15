@@ -1,6 +1,7 @@
 {
-    "name": "",
-    "short_name": "",
+    "name": "neww.ai — AI Coding Agent",
+    "short_name": "neww.ai",
+    "description": "Ship production code 10x faster with the most advanced AI coding agent.",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",
@@ -13,7 +14,9 @@
             "type": "image/png"
         }
     ],
-    "theme_color": "#ffffff",
-    "background_color": "#ffffff",
-    "display": "standalone"
+    "theme_color": "#09090B",
+    "background_color": "#09090B",
+    "display": "standalone",
+    "start_url": "/",
+    "scope": "/"
 }
