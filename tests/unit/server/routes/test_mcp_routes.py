@@ -94,6 +94,38 @@ async def test_get_conversation_link_saas_mode():
 
 
 @pytest.mark.asyncio
+async def test_get_conversation_link_none_conversation_id():
+    """Test get_conversation_link returns body unchanged when conversation_id is None."""
+    mock_service = AsyncMock(spec=GitService)
+
+    with patch('openhands.server.routes.mcp.server_config') as mock_config:
+        mock_config.app_mode = AppMode.SAAS
+
+        result = await get_conversation_link(
+            service=mock_service, conversation_id=None, body='Original body'
+        )
+
+        assert result == 'Original body'
+        mock_service.get_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_link_empty_conversation_id():
+    """Test get_conversation_link returns body unchanged when conversation_id is empty string."""
+    mock_service = AsyncMock(spec=GitService)
+
+    with patch('openhands.server.routes.mcp.server_config') as mock_config:
+        mock_config.app_mode = AppMode.SAAS
+
+        result = await get_conversation_link(
+            service=mock_service, conversation_id='', body='Original body'
+        )
+
+        assert result == 'Original body'
+        mock_service.get_user.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_get_conversation_link_empty_body():
     """Test get_conversation_link with an empty body."""
     # Mock GitService and user
