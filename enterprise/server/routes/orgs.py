@@ -23,6 +23,7 @@ from server.routes.org_models import (
     OrgPage,
     OrgResponse,
     OrgUpdate,
+    OrphanedUserError,
     RoleNotFoundError,
 )
 from server.services.org_member_service import OrgMemberService
@@ -304,7 +305,7 @@ async def get_me(
 @org_router.delete('/{org_id}', status_code=status.HTTP_200_OK)
 async def delete_org(
     org_id: UUID,
-    user_id: str = Depends(get_admin_user_id),
+    user_id: str = Depends(get_user_id),
 ) -> dict:
     """Delete an organization.
 
@@ -374,6 +375,19 @@ async def delete_org(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except OrphanedUserError as e:
+        logger.warning(
+            'Cannot delete organization: users would be orphaned',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org_id),
+                'orphaned_users': e.user_ids,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except OrgDatabaseError as e:
@@ -447,6 +461,11 @@ async def update_org(
         # Organization not found
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except OrgNameExistsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         )
     except PermissionError as e:
@@ -697,12 +716,12 @@ async def update_org_member(
     """Update a member's role in an organization.
 
     Permission rules:
-    - Admins can change roles of regular users to Admin or User
+    - Admins can change roles of regular members to Admin or Member
     - Admins cannot modify other Admins or Owners
-    - Owners can change roles of Admins and Users to any role (Owner, Admin, User)
+    - Owners can change roles of Admins and Members to any role (Owner, Admin, Member)
     - Owners cannot modify other Owners
 
-    Users cannot modify their own role. The last owner cannot be demoted.
+    Members cannot modify their own role. The last owner cannot be demoted.
     """
     try:
         return await OrgMemberService.update_org_member(

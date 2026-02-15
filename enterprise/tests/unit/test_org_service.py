@@ -1536,6 +1536,118 @@ async def test_update_org_with_permissions_database_error(session_maker):
 
 
 @pytest.mark.asyncio
+async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists_error(
+    session_maker,
+):
+    """
+    GIVEN: User updates org name to a name already used by another organization
+    WHEN: update_org_with_permissions is called
+    THEN: OrgNameExistsError is raised with the conflicting name
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    other_org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    duplicate_name = 'Existing Org Name'
+
+    mock_current_org = Org(
+        id=org_id,
+        name='My Org',
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+    )
+    mock_org_with_name = Org(
+        id=other_org_id,
+        name=duplicate_name,
+        contact_name='Jane Doe',
+        contact_email='jane@example.com',
+    )
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(name=duplicate_name)
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            return_value=mock_current_org,
+        ),
+        patch('storage.org_service.OrgService.is_org_member', return_value=True),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_name',
+            return_value=mock_org_with_name,
+        ),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgNameExistsError) as exc_info:
+            await OrgService.update_org_with_permissions(
+                org_id=org_id,
+                update_data=update_data,
+                user_id=user_id,
+            )
+
+        assert duplicate_name in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_update_org_with_permissions_same_name_allowed(session_maker):
+    """
+    GIVEN: User updates org with name unchanged (same as current org name)
+    WHEN: update_org_with_permissions is called
+    THEN: No OrgNameExistsError; update proceeds (name uniqueness allows same org)
+    """
+    # Arrange
+    org_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
+    current_name = 'My Org'
+
+    mock_org = Org(
+        id=org_id,
+        name=current_name,
+        contact_name='John Doe',
+        contact_email='john@example.com',
+        org_version=5,
+    )
+
+    from server.routes.org_models import OrgUpdate
+
+    update_data = OrgUpdate(name=current_name)
+
+    with (
+        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.role_store.session_maker', session_maker),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            return_value=mock_org,
+        ),
+        patch('storage.org_service.OrgService.is_org_member', return_value=True),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_name',
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_service.OrgStore.update_org',
+            return_value=mock_org,
+        ),
+    ):
+        # Act
+        result = await OrgService.update_org_with_permissions(
+            org_id=org_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
+
+        # Assert
+        assert result is not None
+        assert result.name == current_name
+
+
+@pytest.mark.asyncio
 async def test_update_org_with_permissions_only_llm_fields(session_maker):
     """
     GIVEN: Update request contains only LLM fields and user has admin role

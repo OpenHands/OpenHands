@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from server.constants import ROLE_ADMIN, ROLE_OWNER, ROLE_USER
+from server.constants import ROLE_ADMIN, ROLE_MEMBER, ROLE_OWNER
 from server.routes.org_models import (
     CannotModifySelfError,
     InsufficientPermissionError,
@@ -325,8 +325,8 @@ class OrgMemberService:
         if requester_role_name == ROLE_OWNER:
             return True
         elif requester_role_name == ROLE_ADMIN:
-            # Admins can only remove users (not owners or other admins)
-            return target_role_name == ROLE_USER
+            # Admins can only remove members (not owners or other admins)
+            return target_role_name == ROLE_MEMBER
         return False
 
     @staticmethod

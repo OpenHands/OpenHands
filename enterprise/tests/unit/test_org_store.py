@@ -786,3 +786,23 @@ def test_get_user_orgs_paginated_ordering(session_maker, mock_litellm_api):
     assert orgs[0].name == 'Apple Org'
     assert orgs[1].name == 'Banana Org'
     assert orgs[2].name == 'Zebra Org'
+
+
+def test_orphaned_user_error_contains_user_ids():
+    """
+    GIVEN: OrphanedUserError is created with a list of user IDs
+    WHEN: The error message is accessed
+    THEN: Message includes the count and stores user IDs
+    """
+    # Arrange
+    from server.routes.org_models import OrphanedUserError
+
+    user_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+
+    # Act
+    error = OrphanedUserError(user_ids)
+
+    # Assert
+    assert error.user_ids == user_ids
+    assert '2 user(s)' in str(error)
+    assert 'no remaining organization' in str(error)

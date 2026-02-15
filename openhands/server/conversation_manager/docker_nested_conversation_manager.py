@@ -644,6 +644,68 @@ class DockerNestedConversationManager(ConversationManager):
         except docker.errors.NotFound:
             return False
 
+    async def list_files(self, sid: str, path: str | None = None) -> list[str]:
+        """List files in the workspace for a conversation.
+
+        Delegates to the nested container's list-files endpoint.
+
+        Args:
+            sid: The session/conversation ID.
+            path: Optional path to list files from. If None, lists from workspace root.
+
+        Returns:
+            A list of file paths.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        if not await self.is_agent_loop_running(sid):
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url(sid)
+        session_api_key = self._get_session_api_key_for_conversation(sid)
+
+        return await self._fetch_list_files_from_nested(
+            sid, nested_url, session_api_key, path
+        )
+
+    async def select_file(self, sid: str, file: str) -> tuple[str | None, str | None]:
+        """Read a file from the workspace via nested container.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        if not await self.is_agent_loop_running(sid):
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url(sid)
+        session_api_key = self._get_session_api_key_for_conversation(sid)
+
+        return await self._fetch_select_file_from_nested(
+            sid, nested_url, session_api_key, file
+        )
+
+    async def upload_files(
+        self, sid: str, files: list[tuple[str, bytes]]
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        """Upload files to the workspace via nested container.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        if not await self.is_agent_loop_running(sid):
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url(sid)
+        session_api_key = self._get_session_api_key_for_conversation(sid)
+
+        return await self._fetch_upload_files_to_nested(
+            sid, nested_url, session_api_key, files
+        )
+
 
 def _last_updated_at_key(conversation: ConversationMetadata) -> float:
     last_updated_at = conversation.last_updated_at

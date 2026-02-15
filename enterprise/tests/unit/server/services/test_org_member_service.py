@@ -61,11 +61,11 @@ def admin_role():
 
 
 @pytest.fixture
-def user_role():
-    """Create a mock user role."""
+def member_role():
+    """Create a mock member role."""
     role = MagicMock(spec=Role)
     role.id = 3
-    role.name = 'user'
+    role.name = 'member'
     role.rank = 1000
     return role
 
@@ -91,12 +91,12 @@ def requester_membership_admin(org_id, current_user_id, admin_role):
 
 
 @pytest.fixture
-def target_membership_user(org_id, target_user_id, user_role):
+def target_membership_user(org_id, target_user_id, member_role):
     """Create a mock target membership with user role."""
     membership = MagicMock(spec=OrgMember)
     membership.org_id = org_id
     membership.user_id = target_user_id
-    membership.role_id = user_role.id
+    membership.role_id = member_role.id
     return membership
 
 
@@ -535,7 +535,7 @@ class TestOrgMemberServiceRemoveOrgMember:
         requester_membership_owner,
         target_membership_user,
         owner_role,
-        user_role,
+        member_role,
     ):
         """Test that an owner can successfully remove a regular user."""
         # Arrange
@@ -554,7 +554,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 requester_membership_owner,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [owner_role, user_role]
+            mock_get_role.side_effect = [owner_role, member_role]
             mock_remove.return_value = True
 
             # Act
@@ -616,7 +616,7 @@ class TestOrgMemberServiceRemoveOrgMember:
         requester_membership_admin,
         target_membership_user,
         admin_role,
-        user_role,
+        member_role,
     ):
         """Test that an admin can successfully remove a regular user."""
         # Arrange
@@ -635,7 +635,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 requester_membership_admin,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [admin_role, user_role]
+            mock_get_role.side_effect = [admin_role, member_role]
             mock_remove.return_value = True
 
             # Act
@@ -826,14 +826,14 @@ class TestOrgMemberServiceRemoveOrgMember:
         target_user_id,
         requester_membership_admin,
         target_membership_user,
-        user_role,
+        member_role,
     ):
         """Test that a regular user cannot remove anyone."""
         # Arrange
         requester_membership_user = MagicMock(spec=OrgMember)
         requester_membership_user.org_id = org_id
         requester_membership_user.user_id = current_user_id
-        requester_membership_user.role_id = user_role.id
+        requester_membership_user.role_id = member_role.id
 
         with (
             patch(
@@ -847,7 +847,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 requester_membership_user,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [user_role, user_role]
+            mock_get_role.side_effect = [member_role, member_role]
 
             # Act
             success, error = await OrgMemberService.remove_org_member(
@@ -959,7 +959,7 @@ class TestOrgMemberServiceRemoveOrgMember:
         requester_membership_owner,
         target_membership_user,
         owner_role,
-        user_role,
+        member_role,
     ):
         """Test that removing fails when store removal returns False."""
         # Arrange
@@ -978,7 +978,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 requester_membership_owner,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [owner_role, user_role]
+            mock_get_role.side_effect = [owner_role, member_role]
             mock_remove.return_value = False
 
             # Act
@@ -1005,15 +1005,15 @@ class TestOrgMemberServiceCanRemoveMember:
     def test_owner_can_remove_user(self):
         """Test that owner can remove user."""
         # Act
-        result = OrgMemberService._can_remove_member('owner', 'user')
+        result = OrgMemberService._can_remove_member('owner', 'member')
 
         # Assert
         assert result is True
 
-    def test_admin_can_remove_user(self):
-        """Test that admin can remove user."""
+    def test_admin_can_remove_member(self):
+        """Test that admin can remove member."""
         # Act
-        result = OrgMemberService._can_remove_member('admin', 'user')
+        result = OrgMemberService._can_remove_member('admin', 'member')
 
         # Assert
         assert result is True
@@ -1034,10 +1034,10 @@ class TestOrgMemberServiceCanRemoveMember:
         # Assert
         assert result is False
 
-    def test_user_cannot_remove_anyone(self):
-        """Test that user cannot remove anyone."""
+    def test_member_cannot_remove_anyone(self):
+        """Test that member cannot remove anyone."""
         # Act
-        result = OrgMemberService._can_remove_member('user', 'user')
+        result = OrgMemberService._can_remove_member('member', 'member')
 
         # Assert
         assert result is False
@@ -1055,7 +1055,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         requester_membership_owner,
         target_membership_user,
         owner_role,
-        user_role,
+        member_role,
         admin_role,
     ):
         """GIVEN owner and target user WHEN owner sets target role to admin THEN update succeeds and returns OrgMemberResponse."""
@@ -1087,7 +1087,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 requester_membership_owner,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [owner_role, user_role]
+            mock_get_role.side_effect = [owner_role, member_role]
             mock_get_role_by_name.return_value = admin_role
             mock_update.return_value = updated_member
             mock_get_user.return_value = mock_user
@@ -1112,7 +1112,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         requester_membership_admin,
         target_membership_user,
         admin_role,
-        user_role,
+        member_role,
     ):
         """GIVEN admin and target user WHEN admin sets target role to admin THEN update succeeds."""
         # Arrange
@@ -1143,7 +1143,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 requester_membership_admin,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [admin_role, user_role]
+            mock_get_role.side_effect = [admin_role, member_role]
             mock_get_role_by_name.return_value = admin_role
             mock_update.return_value = updated_member
             mock_get_user.return_value = mock_user
@@ -1166,7 +1166,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         requester_membership_admin,
         target_membership_admin,
         admin_role,
-        user_role,
+        member_role,
     ):
         """GIVEN admin and target admin WHEN admin tries to change target role THEN raises InsufficientPermissionError."""
         # Arrange
@@ -1186,7 +1186,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 target_membership_admin,
             ]
             mock_get_role.side_effect = [admin_role, admin_role]
-            mock_get_role_by_name.return_value = user_role
+            mock_get_role_by_name.return_value = member_role
 
             # Act & Assert
             with pytest.raises(InsufficientPermissionError):
@@ -1194,7 +1194,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                     org_id,
                     target_user_id,
                     current_user_id,
-                    OrgMemberUpdate(role='user'),
+                    OrgMemberUpdate(role='member'),
                 )
 
     @pytest.mark.asyncio
@@ -1254,7 +1254,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                     org_id,
                     target_user_id,
                     current_user_id,
-                    OrgMemberUpdate(role='user'),
+                    OrgMemberUpdate(role='member'),
                 )
 
     @pytest.mark.asyncio
@@ -1274,7 +1274,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                     org_id,
                     current_user_id,
                     current_user_id,
-                    OrgMemberUpdate(role='user'),
+                    OrgMemberUpdate(role='member'),
                 )
 
     @pytest.mark.asyncio
@@ -1299,7 +1299,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                     org_id,
                     target_user_id,
                     current_user_id,
-                    OrgMemberUpdate(role='user'),
+                    OrgMemberUpdate(role='member'),
                 )
 
     @pytest.mark.asyncio
@@ -1311,7 +1311,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         requester_membership_owner,
         target_membership_user,
         owner_role,
-        user_role,
+        member_role,
     ):
         """GIVEN unknown role name WHEN update_org_member THEN raises InvalidRoleError."""
         # Arrange
@@ -1330,7 +1330,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 requester_membership_owner,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [owner_role, user_role]
+            mock_get_role.side_effect = [owner_role, member_role]
             mock_get_role_by_name.return_value = None
 
             # Act & Assert
@@ -1399,7 +1399,7 @@ class TestOrgMemberServiceUpdateOrgMember:
         requester_membership_owner,
         target_membership_user,
         owner_role,
-        user_role,
+        member_role,
     ):
         """GIVEN update with no role WHEN update_org_member THEN returns current member without changing role."""
         # Arrange
@@ -1421,7 +1421,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 requester_membership_owner,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [owner_role, user_role]
+            mock_get_role.side_effect = [owner_role, member_role]
             mock_get_user.return_value = mock_user
 
             # Act
@@ -1431,7 +1431,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Assert
             assert data is not None
-            assert data.role_name == 'user'
+            assert data.role_name == 'member'
             assert data.role_rank == 1000
 
 
@@ -1447,7 +1447,7 @@ class TestOrgMemberServiceCanUpdateMemberRole:
             OrgMemberService._can_update_member_role('owner', 'admin', 'admin') is True
         )
         assert (
-            OrgMemberService._can_update_member_role('owner', 'user', 'owner') is True
+            OrgMemberService._can_update_member_role('owner', 'member', 'owner') is True
         )
 
     def test_owner_cannot_modify_owner(self):
@@ -1456,17 +1456,21 @@ class TestOrgMemberServiceCanUpdateMemberRole:
             OrgMemberService._can_update_member_role('owner', 'owner', 'admin') is False
         )
 
-    def test_admin_can_set_admin_or_user_for_user(self):
-        """Admin can set admin or user role for a user target."""
+    def test_admin_can_set_admin_or_member_for_member(self):
+        """Admin can set admin or member role for a member target."""
         assert (
-            OrgMemberService._can_update_member_role('admin', 'user', 'admin') is True
+            OrgMemberService._can_update_member_role('admin', 'member', 'admin') is True
         )
-        assert OrgMemberService._can_update_member_role('admin', 'user', 'user') is True
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'member', 'member')
+            is True
+        )
 
     def test_admin_cannot_modify_admin_or_owner(self):
         """Admin cannot modify admin or owner targets."""
         assert (
-            OrgMemberService._can_update_member_role('admin', 'admin', 'user') is False
+            OrgMemberService._can_update_member_role('admin', 'admin', 'member')
+            is False
         )
         assert (
             OrgMemberService._can_update_member_role('admin', 'owner', 'admin') is False
@@ -1475,13 +1479,15 @@ class TestOrgMemberServiceCanUpdateMemberRole:
     def test_admin_cannot_set_owner_role(self):
         """Admin cannot set role to owner."""
         assert (
-            OrgMemberService._can_update_member_role('admin', 'user', 'owner') is False
+            OrgMemberService._can_update_member_role('admin', 'member', 'owner')
+            is False
         )
 
-    def test_user_cannot_update_anyone(self):
-        """User cannot update any member's role."""
+    def test_member_cannot_update_anyone(self):
+        """Member cannot update any member's role."""
         assert (
-            OrgMemberService._can_update_member_role('user', 'user', 'admin') is False
+            OrgMemberService._can_update_member_role('member', 'member', 'admin')
+            is False
         )
 
 
@@ -1545,13 +1551,13 @@ class TestOrgMemberServiceIsLastOwner:
             assert result is False
 
     def test_is_not_last_owner_when_user_is_not_owner(
-        self, org_id, target_user_id, user_role
+        self, org_id, target_user_id, member_role
     ):
         """Test that returns False when user is not an owner."""
         # Arrange
         target_membership = MagicMock(spec=OrgMember)
         target_membership.user_id = target_user_id
-        target_membership.role_id = user_role.id
+        target_membership.role_id = member_role.id
 
         with (
             patch(
@@ -1562,7 +1568,7 @@ class TestOrgMemberServiceIsLastOwner:
             ) as mock_get_role,
         ):
             mock_get_members.return_value = [target_membership]
-            mock_get_role.return_value = user_role
+            mock_get_role.return_value = member_role
 
             # Act
             result = OrgMemberService._is_last_owner(org_id, target_user_id)
