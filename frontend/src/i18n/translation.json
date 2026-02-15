@@ -10992,7 +10992,7 @@
     "uk": "OpenHands Cloud пропонує хук GitHub, тож ви можете сказати «@openhands виправити конфлікти злиття» або «@openhands виправити відгук про цей PR» прямо в інтерфейсі GitHub."
   },
   "TIPS$BLOG_SIGNUP": {
-    "en": "Sign up for the OpenHands Blog to hear about new features and the latest releases.",
+    "en": "Sign up for the neww.ai Blog to hear about new features and the latest releases.",
     "ja": "OpenHandsブログに登録して、新機能や最新リリースについての情報を入手しましょう。",
     "zh-CN": "注册OpenHands博客，了解新功能和最新版本。",
     "zh-TW": "註冊OpenHands博客，了解新功能和最新版本。",
@@ -11008,7 +11008,7 @@
     "uk": "Підпишіться на блог OpenHands, щоб дізнаватися про нові функції та останні релізи."
   },
   "TIPS$API_USAGE": {
-    "en": "OpenHands has an API! Create OpenHands conversations with simple cURL command.",
+    "en": "neww.ai has an API! Create neww.ai conversations with simple cURL command.",
     "ja": "OpenHandsにはAPIがあります！簡単なcURLコマンドでOpenHands会話を作成できます。",
     "zh-CN": "OpenHands有API！使用简单的cURL命令创建OpenHands对话。",
     "zh-TW": "OpenHands有API！使用簡單的cURL命令創建OpenHands對話。",
@@ -11472,7 +11472,7 @@
     "uk": "Інше"
   },
   "FEEDBACK$THANK_YOU_FOR_FEEDBACK": {
-    "en": "Thank you for your feedback! This will help us improve OpenHands going forward.",
+    "en": "Thank you for your feedback! This will help us improve neww.ai going forward.",
     "ja": "フィードバックをありがとうございます！これにより、今後OpenHandsを改善していくことができます。",
     "zh-CN": "感谢您的反馈！这将帮助我们改进OpenHands。",
     "zh-TW": "感謝您的反饋！這將幫助我們改進OpenHands。",
@@ -11888,7 +11888,7 @@
     "uk": "Підключити провайдера Git для управління секретами"
   },
   "SETTINGS$OPENHANDS_API_KEYS": {
-    "en": "OpenHands API Keys",
+    "en": "neww.ai API Keys",
     "ja": "OpenHands APIキー",
     "zh-CN": "OpenHands API密钥",
     "zh-TW": "OpenHands API密鑰",
@@ -12016,7 +12016,7 @@
     "uk": "Необов'язково"
   },
   "BROWSER$SERVER_MESSAGE": {
-    "en": "No web app running. Ask OpenHands to start your project's dev server (for example: npm run dev) to see your web application here.",
+    "en": "No web app running. Ask neww.ai to start your project's dev server (for example: npm run dev) to see your web application here.",
     "ja": "Webアプリケーションが実行されていません。OpenHands にプロジェクトの開発サーバーを起動するよう指示してください（例: npm run dev）。そうすれば、ここでWebアプリケーションを確認できます。",
     "zh-CN": "未运行任何网页应用。请让 OpenHands 启动您项目的开发服务器（例如：npm run dev），即可在此处查看您的网页应用。",
     "zh-TW": "未執行任何網頁應用程式。請指示 OpenHands 啟動專案的開發伺服器（例如：npm run dev），即可在此處檢視您的網頁應用程式。",
@@ -12080,7 +12080,7 @@
     "uk": "Керування мікроагентами"
   },
   "MICROAGENT_MANAGEMENT$USE_MICROAGENTS": {
-    "en": "Use microagents to customize the behavior of OpenHands, teach it about your repositories, and help it work faster.",
+    "en": "Use microagents to customize the behavior of neww.ai, teach it about your repositories, and help it work faster.",
     "ja": "マイクロエージェントを使ってOpenHandsの動作をカスタマイズし、リポジトリについて教え、より速く作業できるようにしましょう。",
     "zh-CN": "使用微代理自定义OpenHands的行为，让其了解您的仓库，并帮助其更快地工作。",
     "zh-TW": "使用微代理自訂 OpenHands 的行為，讓其了解您的倉庫，並幫助其更快地工作。",
@@ -12368,7 +12368,7 @@
     "uk": "Готові додати мікроагента?"
   },
   "MICROAGENT_MANAGEMENT$OPENHANDS_CAN_LEARN_ABOUT_REPOSITORIES": {
-    "en": "OpenHands can automatically learn about your repositories and store its findings as markdown in a microagent. The microagent will help OpenHands run faster and more accurately in any future conversations.",
+    "en": "neww.ai can automatically learn about your repositories and store its findings as markdown in a microagent. The microagent will help neww.ai run faster and more accurately in any future conversations.",
     "ja": "OpenHandsはあなたのリポジトリについて自動的に学習し、その結果をマイクロエージェント内のMarkdownとして保存できます。マイクロエージェントは今後の会話でOpenHandsがより速く、より正確に動作するのに役立ちます。",
     "zh-CN": "OpenHands 可以自动学习您的仓库，并将其发现以 markdown 形式存储在微代理中。微代理将帮助 OpenHands 在未来的对话中运行得更快、更准确。",
     "zh-TW": "OpenHands 可以自動學習您的儲存庫，並將其發現以 markdown 形式儲存在微代理中。微代理將幫助 OpenHands 在未來的對話中運行得更快、更準確。",
@@ -12432,7 +12432,7 @@
     "uk": "Оновити мікроагента"
   },
   "MICROAGENT_MANAGEMENT$ADD_MICROAGENT_MODAL_DESCRIPTION": {
-    "en": "OpenHands will create a new microagent based on your instructions.",
+    "en": "neww.ai will create a new microagent based on your instructions.",
     "ja": "OpenHandsはあなたの指示に基づいて新しいマイクロエージェントを作成します。",
     "zh-CN": "OpenHands 将根据您的指示创建一个新的微代理。",
     "zh-TW": "OpenHands 將根據您的指示建立新的微代理。",
@@ -12496,7 +12496,7 @@
     "uk": "Визначте тригери для мікроагента"
   },
   "MICROAGENT_MANAGEMENT$HELP_TEXT_DESCRIBING_VALID_TRIGGERS": {
-    "en": "Enter a keyword that OpenHands will use to trigger this microagent (Optional).",
+    "en": "Enter a keyword that neww.ai will use to trigger this microagent (Optional).",
     "ja": "OpenHandsがこのマイクロエージェントを起動するために使用するキーワードを入力してください（任意）。",
     "zh-CN": "输入OpenHands将用于触发此微代理的关键字（可选）。",
     "zh-TW": "輸入OpenHands將用於觸發此微代理的關鍵字（可選）。",
@@ -12736,7 +12736,7 @@
     "uk": "В процесі виконання"
   },
   "MICROAGENT_MANAGEMENT$WE_ARE_WORKING_ON_IT": {
-    "en": "We're working on it! Once OpenHands is done investigating, you'll be able to review its pull request before merging your new microagent.",
+    "en": "We're working on it! Once neww.ai is done investigating, you'll be able to review its pull request before merging your new microagent.",
     "ja": "作業中です！OpenHandsの調査が完了すると、新しいマイクロエージェントをマージする前にプルリクエストを確認できます。",
     "zh-CN": "我们正在处理！OpenHands 调查完成后，您将能够在合并新微代理之前审查其拉取请求。",
     "zh-TW": "我們正在處理！OpenHands 調查完成後，您將能在合併新微代理前審查其拉取請求。",
@@ -12912,7 +12912,7 @@
     "uk": "Вивчити цей репозиторій?"
   },
   "MICROAGENT_MANAGEMENT$LEARN_THIS_REPO_MODAL_DESCRIPTION": {
-    "en": "Do you want OpenHands to launch a new conversation to help you understand this repository?",
+    "en": "Do you want neww.ai to launch a new conversation to help you understand this repository?",
     "ja": "OpenHandsがこのリポジトリを理解するための新しい会話を開始しますか？",
     "zh-CN": "您想让OpenHands启动一个新对话来帮助您了解此存储库吗？",
     "zh-TW": "您想讓OpenHands啟動一個新對話來幫助您了解此存儲庫嗎？",
@@ -12960,7 +12960,7 @@
     "uk": "Опишіть, що ви хотіли б дізнатися про цей репозиторій."
   },
   "MICROAGENT_MANAGEMENT$UPDATE_MICROAGENT_MODAL_DESCRIPTION": {
-    "en": "OpenHands will update the microagent based on your instructions.",
+    "en": "neww.ai will update the microagent based on your instructions.",
     "ja": "OpenHandsはあなたの指示に基づいてマイクロエージェントを更新します。",
     "zh-CN": "OpenHands 将根据您的指示更新微代理。",
     "zh-TW": "OpenHands 將根據您的指示更新微代理。",
@@ -15280,7 +15280,7 @@
     "uk": "Консоль"
   },
   "MICROAGENT$DEFINITION": {
-    "en": "Microagents are specialized prompts that enhance OpenHands with domain-specific knowledge. They provide expert guidance, automate common tasks, and ensure consistent practices across projects.",
+    "en": "Microagents are specialized prompts that enhance neww.ai with domain-specific knowledge. They provide expert guidance, automate common tasks, and ensure consistent practices across projects.",
     "ja": "マイクロエージェントは、OpenHandsにドメイン固有の知識を追加するための専門的なプロンプトです。専門的なガイダンスを提供し、一般的なタスクを自動化し、プロジェクト全体で一貫した実践を保証します。",
     "zh-CN": "微代理是增强 OpenHands 领域知识的专用提示。它们提供专家指导，自动化常见任务，并确保项目中的一致实践。",
     "zh-TW": "微代理是增強 OpenHands 領域知識的專用提示。它們提供專家指導，自動化常見任務，並確保專案中的一致實踐。",
