@@ -160,6 +160,7 @@ class SetAuthCookieMiddleware:
             '/api/billing/customer-setup-success',
             '/api/billing/stripe-webhook',
             '/api/email/resend',
+            '/api/organizations/members/invite/accept',
             '/oauth/device/authorize',
             '/oauth/device/token',
             '/api/v1/web-client/config',
