@@ -377,13 +377,16 @@ export function ConversationWebSocketProvider({
               posthog,
             });
             // Use friendly i18n message for budget/credit errors instead of raw error
-            if (isBudgetOrCreditError(event.error)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
-              trackCreditLimitReached({
-                conversationId: conversationId || "unknown",
-              });
-            } else {
-              setErrorMessage(event.error);
+            // Only show toast for live events, not during history replay
+            if (!isLoadingHistoryMain) {
+              if (isBudgetOrCreditError(event.error)) {
+                setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+                trackCreditLimitReached({
+                  conversationId: conversationId || "unknown",
+                });
+              } else {
+                setErrorMessage(event.error);
+              }
             }
           }
 
@@ -511,10 +514,13 @@ export function ConversationWebSocketProvider({
               posthog,
             });
             // Use friendly i18n message for budget/credit errors instead of raw error
-            if (isBudgetOrCreditError(event.error)) {
-              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
-            } else {
-              setErrorMessage(event.error);
+            // Only show toast for live events, not during history replay
+            if (!isLoadingHistoryPlanning) {
+              if (isBudgetOrCreditError(event.error)) {
+                setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+              } else {
+                setErrorMessage(event.error);
+              }
             }
           }
 
