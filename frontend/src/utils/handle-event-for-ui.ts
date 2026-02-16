@@ -26,6 +26,22 @@ export const handleEventForUI = (
       return newUiEvents;
     }
 
+    // TaskTrackerObservation: replace any previous task tracker observation
+    // so only the latest snapshot displays (prevents stacking/spinning)
+    if (event.observation.kind === "TaskTrackerObservation") {
+      const prevIndex = newUiEvents.findIndex(
+        (uiEvent) =>
+          isObservationEvent(uiEvent) &&
+          uiEvent.observation.kind === "TaskTrackerObservation",
+      );
+      if (prevIndex !== -1) {
+        newUiEvents[prevIndex] = event;
+        return newUiEvents;
+      }
+      newUiEvents.push(event);
+      return newUiEvents;
+    }
+
     // Find and replace the corresponding action from uiEvents
     const actionIndex = newUiEvents.findIndex(
       (uiEvent) => uiEvent.id === event.action_id,

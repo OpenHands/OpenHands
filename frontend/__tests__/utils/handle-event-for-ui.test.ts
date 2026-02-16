@@ -185,6 +185,67 @@ describe("handleEventForUI", () => {
     expect(result).not.toBe(initialUiEvents);
   });
 
+  it("should replace previous TaskTrackerObservation with new one", () => {
+    const mockTaskTracker1: ObservationEvent = {
+      id: "test-task-tracker-1",
+      timestamp: Date.now().toString(),
+      source: "environment",
+      tool_name: "task_tracker",
+      tool_call_id: "call_tt_1",
+      observation: {
+        kind: "TaskTrackerObservation",
+        content: "plan updated",
+        command: "plan",
+        task_list: [{ title: "Task 1", status: "in_progress", notes: "" }],
+      },
+      action_id: "test-tt-action-1",
+    };
+
+    const mockTaskTracker2: ObservationEvent = {
+      id: "test-task-tracker-2",
+      timestamp: Date.now().toString(),
+      source: "environment",
+      tool_name: "task_tracker",
+      tool_call_id: "call_tt_2",
+      observation: {
+        kind: "TaskTrackerObservation",
+        content: "plan updated",
+        command: "plan",
+        task_list: [{ title: "Task 1", status: "done", notes: "" }],
+      },
+      action_id: "test-tt-action-2",
+    };
+
+    // First task tracker gets added
+    const afterFirst = handleEventForUI(mockTaskTracker1, [mockMessageEvent]);
+    expect(afterFirst).toEqual([mockMessageEvent, mockTaskTracker1]);
+
+    // Second task tracker replaces the first
+    const afterSecond = handleEventForUI(mockTaskTracker2, afterFirst);
+    expect(afterSecond).toEqual([mockMessageEvent, mockTaskTracker2]);
+    expect(afterSecond).toHaveLength(2);
+  });
+
+  it("should add first TaskTrackerObservation normally", () => {
+    const mockTaskTracker: ObservationEvent = {
+      id: "test-task-tracker-1",
+      timestamp: Date.now().toString(),
+      source: "environment",
+      tool_name: "task_tracker",
+      tool_call_id: "call_tt_1",
+      observation: {
+        kind: "TaskTrackerObservation",
+        content: "plan updated",
+        command: "plan",
+        task_list: [{ title: "Task 1", status: "todo", notes: "" }],
+      },
+      action_id: "test-tt-action-1",
+    };
+
+    const result = handleEventForUI(mockTaskTracker, [mockMessageEvent]);
+    expect(result).toEqual([mockMessageEvent, mockTaskTracker]);
+  });
+
   it("should NOT add ThinkObservation even when ThinkAction is not found", () => {
     const mockThinkObservation: ObservationEvent = {
       id: "test-think-observation-1",
