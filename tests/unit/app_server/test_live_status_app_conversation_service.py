@@ -142,7 +142,6 @@ class TestLiveStatusAppConversationService:
             repo='foo/bar',
             git_provider=ProviderType.GITHUB,
             title='Some title',
-            query='Some query',
             task_type=TaskType.OPEN_ISSUE,
             issue_number=123,
         )
