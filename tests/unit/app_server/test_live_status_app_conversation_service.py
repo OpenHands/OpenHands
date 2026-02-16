@@ -157,6 +157,20 @@ class TestLiveStatusAppConversationService:
         with pytest.raises(ValueError, match='initial_message cannot be provided'):
             self.service._apply_suggested_task(request)
 
+    def test_apply_suggested_task_raises_if_prompt_empty(self):
+        suggested_task = SuggestedTask(
+            repo='foo/bar',
+            git_provider=ProviderType.GITHUB,
+            title='Some title',
+            task_type=TaskType.OPEN_ISSUE,
+            issue_number=123,
+        )
+        request = AppConversationStartRequest(suggested_task=suggested_task)
+
+        with patch.object(SuggestedTask, 'get_prompt_for_task', return_value=''):
+            with pytest.raises(ValueError, match='empty prompt'):
+                self.service._apply_suggested_task(request)
+
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
