@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - main
-      - "saas-rel*"
+      - "saas-rel-*"
     tags:
       - "*"
   pull_request:
