@@ -58,7 +58,7 @@ export function ConversationTabContent() {
   const conversationTabTitle = t(activeTab.titleKey);
 
   if (shouldShownAgentLoading) {
-    return <ConversationLoading />;
+    return <ConversationLoading className="rounded-xl" />;
   }
 
   return (

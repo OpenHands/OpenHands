@@ -163,12 +163,19 @@ class ProviderHandler:
 
     async def get_user(self) -> User:
         """Get user information from the first available provider"""
+        exceptions: list[tuple[ProviderType, Exception]] = []
         for provider in self.provider_tokens:
             try:
                 service = self.get_service(provider)
                 return await service.get_user()
-            except Exception:
+            except Exception as e:
+                exceptions.append((provider, e))
                 continue
+        for provider, exc in exceptions:
+            logger.error(
+                f'Failed to get user from provider {provider}: {exc}',
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
         raise AuthenticationError('Need valid provider token')
 
     async def _get_latest_provider_token(

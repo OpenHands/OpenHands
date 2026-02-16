@@ -4,9 +4,22 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
+from server.routes.org_models import (
+    CannotModifySelfError,
+    InsufficientPermissionError,
+    InvalidRoleError,
+    LastOwnerError,
+    MeResponse,
+    OrgMemberNotFoundError,
+    OrgMemberResponse,
+    OrgMemberUpdate,
+    RoleNotFoundError,
+)
 from server.services.org_member_service import OrgMemberService
 from storage.org_member import OrgMember
 from storage.role import Role
+from storage.user import User
 
 
 @pytest.fixture
@@ -48,11 +61,11 @@ def admin_role():
 
 
 @pytest.fixture
-def user_role():
-    """Create a mock user role."""
+def member_role():
+    """Create a mock member role."""
     role = MagicMock(spec=Role)
     role.id = 3
-    role.name = 'user'
+    role.name = 'member'
     role.rank = 1000
     return role
 
@@ -78,12 +91,12 @@ def requester_membership_admin(org_id, current_user_id, admin_role):
 
 
 @pytest.fixture
-def target_membership_user(org_id, target_user_id, user_role):
+def target_membership_user(org_id, target_user_id, member_role):
     """Create a mock target membership with user role."""
     membership = MagicMock(spec=OrgMember)
     membership.org_id = org_id
     membership.user_id = target_user_id
-    membership.role_id = user_role.id
+    membership.role_id = member_role.id
     return membership
 
 
@@ -522,7 +535,7 @@ class TestOrgMemberServiceRemoveOrgMember:
         requester_membership_owner,
         target_membership_user,
         owner_role,
-        user_role,
+        member_role,
     ):
         """Test that an owner can successfully remove a regular user."""
         # Arrange
@@ -541,7 +554,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 requester_membership_owner,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [owner_role, user_role]
+            mock_get_role.side_effect = [owner_role, member_role]
             mock_remove.return_value = True
 
             # Act
@@ -603,7 +616,7 @@ class TestOrgMemberServiceRemoveOrgMember:
         requester_membership_admin,
         target_membership_user,
         admin_role,
-        user_role,
+        member_role,
     ):
         """Test that an admin can successfully remove a regular user."""
         # Arrange
@@ -622,7 +635,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 requester_membership_admin,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [admin_role, user_role]
+            mock_get_role.side_effect = [admin_role, member_role]
             mock_remove.return_value = True
 
             # Act
@@ -813,14 +826,14 @@ class TestOrgMemberServiceRemoveOrgMember:
         target_user_id,
         requester_membership_admin,
         target_membership_user,
-        user_role,
+        member_role,
     ):
         """Test that a regular user cannot remove anyone."""
         # Arrange
         requester_membership_user = MagicMock(spec=OrgMember)
         requester_membership_user.org_id = org_id
         requester_membership_user.user_id = current_user_id
-        requester_membership_user.role_id = user_role.id
+        requester_membership_user.role_id = member_role.id
 
         with (
             patch(
@@ -834,7 +847,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 requester_membership_user,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [user_role, user_role]
+            mock_get_role.side_effect = [member_role, member_role]
 
             # Act
             success, error = await OrgMemberService.remove_org_member(
@@ -946,7 +959,7 @@ class TestOrgMemberServiceRemoveOrgMember:
         requester_membership_owner,
         target_membership_user,
         owner_role,
-        user_role,
+        member_role,
     ):
         """Test that removing fails when store removal returns False."""
         # Arrange
@@ -965,7 +978,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 requester_membership_owner,
                 target_membership_user,
             ]
-            mock_get_role.side_effect = [owner_role, user_role]
+            mock_get_role.side_effect = [owner_role, member_role]
             mock_remove.return_value = False
 
             # Act
@@ -982,76 +995,500 @@ class TestOrgMemberServiceCanRemoveMember:
     """Test cases for OrgMemberService._can_remove_member."""
 
     def test_owner_can_remove_admin(self):
-        """Test that owner (rank 10) can remove admin (rank 20)."""
-        # Arrange
-        requester_rank = 10
-        target_rank = 20
-
+        """Test that owner can remove admin."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('owner', 'admin')
 
         # Assert
         assert result is True
 
     def test_owner_can_remove_user(self):
-        """Test that owner (rank 10) can remove user (rank 1000)."""
-        # Arrange
-        requester_rank = 10
-        target_rank = 1000
-
+        """Test that owner can remove user."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('owner', 'member')
 
         # Assert
         assert result is True
 
-    def test_admin_can_remove_user(self):
-        """Test that admin (rank 20) can remove user (rank 1000)."""
-        # Arrange
-        requester_rank = 20
-        target_rank = 1000
-
+    def test_admin_can_remove_member(self):
+        """Test that admin can remove member."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('admin', 'member')
 
         # Assert
         assert result is True
 
     def test_admin_cannot_remove_admin(self):
-        """Test that admin (rank 20) cannot remove another admin (rank 20)."""
-        # Arrange
-        requester_rank = 20
-        target_rank = 20
-
+        """Test that admin cannot remove another admin."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('admin', 'admin')
 
         # Assert
         assert result is False
 
     def test_admin_cannot_remove_owner(self):
-        """Test that admin (rank 20) cannot remove owner (rank 10)."""
-        # Arrange
-        requester_rank = 20
-        target_rank = 10
-
+        """Test that admin cannot remove owner."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('admin', 'owner')
 
         # Assert
         assert result is False
 
-    def test_user_cannot_remove_anyone(self):
-        """Test that user (rank 1000) cannot remove anyone."""
-        # Arrange
-        requester_rank = 1000
-        target_rank = 1000
-
+    def test_member_cannot_remove_anyone(self):
+        """Test that member cannot remove anyone."""
         # Act
-        result = OrgMemberService._can_remove_member(requester_rank, target_rank)
+        result = OrgMemberService._can_remove_member('member', 'member')
 
         # Assert
         assert result is False
+
+
+class TestOrgMemberServiceUpdateOrgMember:
+    """Test cases for OrgMemberService.update_org_member."""
+
+    @pytest.mark.asyncio
+    async def test_owner_updates_user_to_admin_succeeds(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+        admin_role,
+    ):
+        """GIVEN owner and target user WHEN owner sets target role to admin THEN update succeeds and returns OrgMemberResponse."""
+        # Arrange
+        updated_member = MagicMock(spec=OrgMember)
+        updated_member.user_id = target_user_id
+        updated_member.role_id = admin_role.id
+        updated_member.status = 'active'
+        mock_user = MagicMock()
+        mock_user.email = 'target@example.com'
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_name'
+            ) as mock_get_role_by_name,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.update_user_role_in_org'
+            ) as mock_update,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_get_role_by_name.return_value = admin_role
+            mock_update.return_value = updated_member
+            mock_get_user.return_value = mock_user
+
+            # Act
+            data = await OrgMemberService.update_org_member(
+                org_id, target_user_id, current_user_id, OrgMemberUpdate(role='admin')
+            )
+
+            # Assert
+            assert isinstance(data, OrgMemberResponse)
+            assert data.role_name == 'admin'
+            assert data.role_rank == 20
+            mock_update.assert_called_once_with(org_id, target_user_id, admin_role.id)
+
+    @pytest.mark.asyncio
+    async def test_admin_updates_user_to_admin_succeeds(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_admin,
+        target_membership_user,
+        admin_role,
+        member_role,
+    ):
+        """GIVEN admin and target user WHEN admin sets target role to admin THEN update succeeds."""
+        # Arrange
+        updated_member = MagicMock(spec=OrgMember)
+        updated_member.user_id = target_user_id
+        updated_member.role_id = admin_role.id
+        updated_member.status = 'active'
+        mock_user = MagicMock()
+        mock_user.email = 'target@example.com'
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_name'
+            ) as mock_get_role_by_name,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.update_user_role_in_org'
+            ) as mock_update,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_admin,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [admin_role, member_role]
+            mock_get_role_by_name.return_value = admin_role
+            mock_update.return_value = updated_member
+            mock_get_user.return_value = mock_user
+
+            # Act
+            data = await OrgMemberService.update_org_member(
+                org_id, target_user_id, current_user_id, OrgMemberUpdate(role='admin')
+            )
+
+            # Assert
+            assert data is not None
+            mock_update.assert_called_once_with(org_id, target_user_id, admin_role.id)
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_update_admin_raises_insufficient_permission(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_admin,
+        target_membership_admin,
+        admin_role,
+        member_role,
+    ):
+        """GIVEN admin and target admin WHEN admin tries to change target role THEN raises InsufficientPermissionError."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_name'
+            ) as mock_get_role_by_name,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_admin,
+                target_membership_admin,
+            ]
+            mock_get_role.side_effect = [admin_role, admin_role]
+            mock_get_role_by_name.return_value = member_role
+
+            # Act & Assert
+            with pytest.raises(InsufficientPermissionError):
+                await OrgMemberService.update_org_member(
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='member'),
+                )
+
+    @pytest.mark.asyncio
+    async def test_owner_cannot_update_owner_raises_insufficient_permission(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_owner,
+        owner_role,
+        admin_role,
+    ):
+        """GIVEN owner and target owner WHEN owner tries to change target role THEN raises InsufficientPermissionError."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_name'
+            ) as mock_get_role_by_name,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_owner,
+            ]
+            mock_get_role.side_effect = [owner_role, owner_role]
+            mock_get_role_by_name.return_value = admin_role
+
+            # Act & Assert
+            with pytest.raises(InsufficientPermissionError):
+                await OrgMemberService.update_org_member(
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='admin'),
+                )
+
+    @pytest.mark.asyncio
+    async def test_requester_not_a_member_raises_error(
+        self, org_id, current_user_id, target_user_id
+    ):
+        """GIVEN requester not in org WHEN update_org_member THEN raises OrgMemberNotFoundError."""
+        # Arrange
+        with patch(
+            'server.services.org_member_service.OrgMemberStore.get_org_member'
+        ) as mock_get_member:
+            mock_get_member.return_value = None
+
+            # Act & Assert
+            with pytest.raises(OrgMemberNotFoundError):
+                await OrgMemberService.update_org_member(
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='member'),
+                )
+
+    @pytest.mark.asyncio
+    async def test_cannot_modify_self_raises_error(
+        self, org_id, current_user_id, requester_membership_owner, owner_role
+    ):
+        """GIVEN requester updates self WHEN update_org_member THEN raises CannotModifySelfError."""
+        # Arrange
+        with patch(
+            'server.services.org_member_service.OrgMemberStore.get_org_member'
+        ) as mock_get_member:
+            mock_get_member.return_value = requester_membership_owner
+
+            # Act & Assert
+            with pytest.raises(CannotModifySelfError):
+                await OrgMemberService.update_org_member(
+                    org_id,
+                    current_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='member'),
+                )
+
+    @pytest.mark.asyncio
+    async def test_target_member_not_found_raises_error(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        owner_role,
+    ):
+        """GIVEN target not in org WHEN update_org_member THEN raises OrgMemberNotFoundError."""
+        # Arrange
+        with patch(
+            'server.services.org_member_service.OrgMemberStore.get_org_member'
+        ) as mock_get_member:
+            mock_get_member.side_effect = [requester_membership_owner, None]
+
+            # Act & Assert
+            with pytest.raises(OrgMemberNotFoundError):
+                await OrgMemberService.update_org_member(
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='member'),
+                )
+
+    @pytest.mark.asyncio
+    async def test_invalid_role_name_raises_error(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """GIVEN unknown role name WHEN update_org_member THEN raises InvalidRoleError."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_name'
+            ) as mock_get_role_by_name,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_get_role_by_name.return_value = None
+
+            # Act & Assert
+            with pytest.raises(InvalidRoleError):
+                await OrgMemberService.update_org_member(
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='superuser'),
+                )
+
+    @pytest.mark.asyncio
+    async def test_cannot_demote_last_owner_raises_error(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_owner,
+        owner_role,
+        admin_role,
+    ):
+        """GIVEN last owner would be demoted WHEN update_org_member THEN raises LastOwnerError."""
+        # Arrange: patch _can_update_member_role so we reach the last-owner check (owner cannot normally modify owner)
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_name'
+            ) as mock_get_role_by_name,
+            patch(
+                'server.services.org_member_service.OrgMemberService._can_update_member_role'
+            ) as mock_can_update,
+            patch(
+                'server.services.org_member_service.OrgMemberService._is_last_owner'
+            ) as mock_is_last_owner,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_owner,
+            ]
+            mock_get_role.side_effect = [owner_role, owner_role]
+            mock_get_role_by_name.return_value = admin_role
+            mock_can_update.return_value = True
+            mock_is_last_owner.return_value = True
+
+            # Act & Assert
+            with pytest.raises(LastOwnerError):
+                await OrgMemberService.update_org_member(
+                    org_id,
+                    target_user_id,
+                    current_user_id,
+                    OrgMemberUpdate(role='admin'),
+                )
+
+    @pytest.mark.asyncio
+    async def test_no_role_in_body_returns_current_member_state(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """GIVEN update with no role WHEN update_org_member THEN returns current member without changing role."""
+        # Arrange
+        mock_user = MagicMock()
+        mock_user.email = 'target@example.com'
+        target_membership_user.status = 'active'
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_get_user.return_value = mock_user
+
+            # Act
+            data = await OrgMemberService.update_org_member(
+                org_id, target_user_id, current_user_id, OrgMemberUpdate(role=None)
+            )
+
+            # Assert
+            assert data is not None
+            assert data.role_name == 'member'
+            assert data.role_rank == 1000
+
+
+class TestOrgMemberServiceCanUpdateMemberRole:
+    """Test cases for OrgMemberService._can_update_member_role."""
+
+    def test_owner_can_set_any_role_for_non_owner(self):
+        """Owner can change admin/user target to any role."""
+        assert (
+            OrgMemberService._can_update_member_role('owner', 'admin', 'owner') is True
+        )
+        assert (
+            OrgMemberService._can_update_member_role('owner', 'admin', 'admin') is True
+        )
+        assert (
+            OrgMemberService._can_update_member_role('owner', 'member', 'owner') is True
+        )
+
+    def test_owner_cannot_modify_owner(self):
+        """Owner cannot change another owner's role."""
+        assert (
+            OrgMemberService._can_update_member_role('owner', 'owner', 'admin') is False
+        )
+
+    def test_admin_can_set_admin_or_member_for_member(self):
+        """Admin can set admin or member role for a member target."""
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'member', 'admin') is True
+        )
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'member', 'member')
+            is True
+        )
+
+    def test_admin_cannot_modify_admin_or_owner(self):
+        """Admin cannot modify admin or owner targets."""
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'admin', 'member')
+            is False
+        )
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'owner', 'admin') is False
+        )
+
+    def test_admin_cannot_set_owner_role(self):
+        """Admin cannot set role to owner."""
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'member', 'owner')
+            is False
+        )
+
+    def test_member_cannot_update_anyone(self):
+        """Member cannot update any member's role."""
+        assert (
+            OrgMemberService._can_update_member_role('member', 'member', 'admin')
+            is False
+        )
 
 
 class TestOrgMemberServiceIsLastOwner:
@@ -1114,13 +1551,13 @@ class TestOrgMemberServiceIsLastOwner:
             assert result is False
 
     def test_is_not_last_owner_when_user_is_not_owner(
-        self, org_id, target_user_id, user_role
+        self, org_id, target_user_id, member_role
     ):
         """Test that returns False when user is not an owner."""
         # Arrange
         target_membership = MagicMock(spec=OrgMember)
         target_membership.user_id = target_user_id
-        target_membership.role_id = user_role.id
+        target_membership.role_id = member_role.id
 
         with (
             patch(
@@ -1131,10 +1568,144 @@ class TestOrgMemberServiceIsLastOwner:
             ) as mock_get_role,
         ):
             mock_get_members.return_value = [target_membership]
-            mock_get_role.return_value = user_role
+            mock_get_role.return_value = member_role
 
             # Act
             result = OrgMemberService._is_last_owner(org_id, target_user_id)
 
             # Assert
             assert result is False
+
+
+class TestOrgMemberServiceGetMe:
+    """Test cases for OrgMemberService.get_me."""
+
+    @pytest.fixture
+    def mock_org_member(self, org_id, current_user_id):
+        """Create a mock OrgMember with LLM fields."""
+        member = MagicMock(spec=OrgMember)
+        member.org_id = org_id
+        member.user_id = current_user_id
+        member.role_id = 1
+        member.llm_api_key = SecretStr('sk-test-key-12345')
+        member.llm_api_key_for_byor = None
+        member.llm_model = 'gpt-4'
+        member.llm_base_url = 'https://api.example.com'
+        member.max_iterations = 50
+        member.status = 'active'
+        return member
+
+    @pytest.fixture
+    def mock_user(self, current_user_id):
+        """Create a mock User."""
+        user = MagicMock(spec=User)
+        user.id = current_user_id
+        user.email = 'test@example.com'
+        return user
+
+    def test_get_me_success_returns_me_response(
+        self, org_id, current_user_id, mock_org_member, mock_user, owner_role
+    ):
+        """GIVEN: User is a member of the organization
+        WHEN: get_me is called
+        THEN: Returns MeResponse with user's membership data
+        """
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+        ):
+            mock_get_member.return_value = mock_org_member
+            mock_get_role.return_value = owner_role
+            mock_get_user.return_value = mock_user
+
+            # Act
+            result = OrgMemberService.get_me(org_id, current_user_id)
+
+            # Assert
+            assert isinstance(result, MeResponse)
+            assert result.org_id == str(org_id)
+            assert result.user_id == str(current_user_id)
+            assert result.email == 'test@example.com'
+            assert result.role == 'owner'
+            assert result.llm_model == 'gpt-4'
+            assert result.max_iterations == 50
+            assert result.status == 'active'
+
+    def test_get_me_member_not_found_raises_error(self, org_id, current_user_id):
+        """GIVEN: User is not a member of the organization
+        WHEN: get_me is called
+        THEN: Raises OrgMemberNotFoundError
+        """
+        # Arrange
+        with patch(
+            'server.services.org_member_service.OrgMemberStore.get_org_member'
+        ) as mock_get_member:
+            mock_get_member.return_value = None
+
+            # Act & Assert
+            with pytest.raises(OrgMemberNotFoundError) as exc_info:
+                OrgMemberService.get_me(org_id, current_user_id)
+
+            assert str(org_id) in str(exc_info.value)
+
+    def test_get_me_role_not_found_raises_error(
+        self, org_id, current_user_id, mock_org_member
+    ):
+        """GIVEN: Member exists but role lookup fails
+        WHEN: get_me is called
+        THEN: Raises RoleNotFoundError
+        """
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+        ):
+            mock_get_member.return_value = mock_org_member
+            mock_get_role.return_value = None
+
+            # Act & Assert
+            with pytest.raises(RoleNotFoundError) as exc_info:
+                OrgMemberService.get_me(org_id, current_user_id)
+
+            assert exc_info.value.role_id == mock_org_member.role_id
+
+    def test_get_me_user_not_found_returns_empty_email(
+        self, org_id, current_user_id, mock_org_member, owner_role
+    ):
+        """GIVEN: Member exists but user lookup returns None
+        WHEN: get_me is called
+        THEN: Returns MeResponse with empty email
+        """
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+        ):
+            mock_get_member.return_value = mock_org_member
+            mock_get_role.return_value = owner_role
+            mock_get_user.return_value = None
+
+            # Act
+            result = OrgMemberService.get_me(org_id, current_user_id)
+
+            # Assert
+            assert result.email == ''
