@@ -9,11 +9,6 @@ import {
   createPlanningObservationEvent,
 } from "test-utils";
 
-// Mock the feature flag
-vi.mock("#/utils/feature-flags", () => ({
-  USE_PLANNING_AGENT: vi.fn(() => true),
-}));
-
 // Mock useConfig
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({

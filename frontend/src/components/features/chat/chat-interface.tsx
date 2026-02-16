@@ -19,7 +19,6 @@ import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 
 import { ScrollToBottomButton } from "#/components/shared/buttons/scroll-to-bottom-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -84,7 +83,6 @@ export function ChatInterface() {
 
   const { curAgentState } = useAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   // Disable Build button while agent is running (streaming)
   const isAgentRunning =
@@ -95,7 +93,7 @@ export function ChatInterface() {
   // This is placed here instead of PlanPreview to avoid duplicate listeners
   // when multiple PlanPreview components exist in the chat
   React.useEffect(() => {
-    if (!shouldUsePlanningAgent || isAgentRunning) {
+    if (isAgentRunning) {
       return undefined;
     }
 
@@ -114,12 +112,7 @@ export function ChatInterface() {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [
-    shouldUsePlanningAgent,
-    isAgentRunning,
-    handleBuildPlanClick,
-    scrollDomToBottom,
-  ]);
+  }, [isAgentRunning, handleBuildPlanClick, scrollDomToBottom]);
 
   const [feedbackPolarity, setFeedbackPolarity] = React.useState<
     "positive" | "negative"
