@@ -44,12 +44,6 @@ export function SettingsNavigation({
           "md:relative md:translate-x-0 md:w-64 md:p-0 md:bg-transparent",
         )}
       >
-        {!shouldHideSelector && (
-          <div className="py-2">
-            <OrgSelector />
-          </div>
-        )}
-
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 ml-1 sm:ml-4.5">
             <SettingsIcon width={16} height={16} />
@@ -65,6 +59,8 @@ export function SettingsNavigation({
             <CloseIcon width={32} height={32} />
           </button>
         </div>
+
+        {!shouldHideSelector && <OrgSelector />}
 
         <div className="flex flex-col gap-2">
           {navigationItems.map(({ to, icon, text }) => (
