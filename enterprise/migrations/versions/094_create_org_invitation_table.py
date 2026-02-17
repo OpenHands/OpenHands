@@ -1,8 +1,8 @@
 """create org_invitation table
 
-Revision ID: 093
-Revises: 092
-Create Date: 2026-02-14 00:00:00.000000
+Revision ID: 094
+Revises: 093
+Create Date: 2026-02-18 00:00:00.000000
 
 """
 
@@ -13,8 +13,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '093'
-down_revision: Union[str, None] = '092'
+revision: str = '094'
+down_revision: Union[str, None] = '093'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
