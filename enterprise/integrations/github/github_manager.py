@@ -26,12 +26,14 @@ from integrations.utils import (
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
+from server.auth.auth_error import ExpiredError
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from server.utils.conversation_callback_utils import register_callback_processor
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderToken, ProviderType
+from openhands.integrations.service_types import AuthenticationError
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -143,11 +145,7 @@ class GithubManager(Manager):
         ).get('body', ''):
             return False
 
-        if GithubFactory.is_eligible_for_conversation_starter(
-            message
-        ) and self._user_has_write_access_to_repo(installation_id, repo_name, username):
-            await GithubFactory.trigger_conversation_starter(message)
-
+        # Check event types before making expensive API calls (e.g., _user_has_write_access_to_repo)
         if not (
             GithubFactory.is_labeled_issue(message)
             or GithubFactory.is_issue_comment(message)
@@ -157,8 +155,17 @@ class GithubManager(Manager):
             return False
 
         logger.info(f'[GitHub] Checking permissions for {username} in {repo_name}')
+        user_has_write_access = self._user_has_write_access_to_repo(
+            installation_id, repo_name, username
+        )
 
-        return self._user_has_write_access_to_repo(installation_id, repo_name, username)
+        if (
+            GithubFactory.is_eligible_for_conversation_starter(message)
+            and user_has_write_access
+        ):
+            await GithubFactory.trigger_conversation_starter(message)
+
+        return user_has_write_access
 
     async def receive_message(self, message: Message):
         self._confirm_incoming_source_type(message)
@@ -347,7 +354,7 @@ class GithubManager(Manager):
 
                 msg_info = f'@{user_info.username} please set a valid LLM API key in [OpenHands Cloud]({HOST_URL}) before starting a job.'
 
-            except SessionExpiredError as e:
+            except (AuthenticationError, ExpiredError, SessionExpiredError) as e:
                 logger.warning(
                     f'[GitHub] Session expired for user {user_info.username}: {str(e)}'
                 )

@@ -14,7 +14,7 @@ export const useTracking = () => {
 
   // Common properties included in all tracking events
   const commonProperties = {
-    app_surface: config?.APP_MODE || "unknown",
+    app_surface: config?.app_mode || "unknown",
     plan_tier: null,
     current_url: window.location.href,
     user_email: settings?.email || settings?.git_user_email || null,

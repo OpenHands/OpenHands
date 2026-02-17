@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Ensure SAAS configuration is used
+if not os.getenv('OPENHANDS_CONFIG_CLS'):
+    os.environ['OPENHANDS_CONFIG_CLS'] = 'server.config.SaaSServerConfig'
+
 import socketio  # noqa: E402
 from fastapi import Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
@@ -34,6 +38,7 @@ from server.routes.integration.linear import linear_integration_router  # noqa: 
 from server.routes.integration.slack import slack_router  # noqa: E402
 from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
+from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
 from server.sharing.shared_conversation_router import (  # noqa: E402
@@ -73,7 +78,14 @@ base_app.include_router(shared_event_router)
 
 # Add GitHub integration router only if GITHUB_APP_CLIENT_ID is set
 if GITHUB_APP_CLIENT_ID:
+    # Make sure that the callback processor is loaded here so we don't get an error when deserializing
+    from integrations.github.github_v1_callback_processor import (  # noqa: E402
+        GithubV1CallbackProcessor,
+    )
     from server.routes.integration.github import github_integration_router  # noqa: E402
+
+    # Bludgeon mypy into not deleting my import
+    logger.debug(f'Loaded {GithubV1CallbackProcessor.__name__}')
 
     base_app.include_router(
         github_integration_router
@@ -86,6 +98,7 @@ if GITLAB_APP_CLIENT_ID:
     base_app.include_router(gitlab_integration_router)
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
+base_app.include_router(org_router)  # Add routes for organization management
 add_github_proxy_routes(base_app)
 add_debugging_routes(
     base_app

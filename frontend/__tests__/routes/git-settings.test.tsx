@@ -10,35 +10,49 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import AuthService from "#/api/auth-service/auth-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
-import { GetConfigResponse } from "#/api/option-service/option.types";
+import { WebClientConfig } from "#/api/option-service/option.types";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import { SecretsService } from "#/api/secrets-service";
 import { integrationService } from "#/api/integration-service/integration-service.api";
 
-const VALID_OSS_CONFIG: GetConfigResponse = {
-  APP_MODE: "oss",
-  GITHUB_CLIENT_ID: "123",
-  POSTHOG_CLIENT_KEY: "456",
-  FEATURE_FLAGS: {
-    ENABLE_BILLING: false,
-    HIDE_LLM_SETTINGS: false,
-    ENABLE_JIRA: false,
-    ENABLE_JIRA_DC: false,
-    ENABLE_LINEAR: false,
+const VALID_OSS_CONFIG: WebClientConfig = {
+  app_mode: "oss",
+  posthog_client_key: "456",
+  feature_flags: {
+    enable_billing: false,
+    hide_llm_settings: false,
+    enable_jira: false,
+    enable_jira_dc: false,
+    enable_linear: false,
   },
+  providers_configured: [],
+  maintenance_start_time: null,
+  auth_url: null,
+  recaptcha_site_key: null,
+  faulty_models: [],
+  error_message: null,
+  updated_at: "2024-01-14T10:00:00Z",
+  github_app_slug: null,
 };
 
-const VALID_SAAS_CONFIG: GetConfigResponse = {
-  APP_MODE: "saas",
-  GITHUB_CLIENT_ID: "123",
-  POSTHOG_CLIENT_KEY: "456",
-  FEATURE_FLAGS: {
-    ENABLE_BILLING: false,
-    HIDE_LLM_SETTINGS: false,
-    ENABLE_JIRA: false,
-    ENABLE_JIRA_DC: false,
-    ENABLE_LINEAR: false,
+const VALID_SAAS_CONFIG: WebClientConfig = {
+  app_mode: "saas",
+  posthog_client_key: "456",
+  feature_flags: {
+    enable_billing: false,
+    hide_llm_settings: false,
+    enable_jira: false,
+    enable_jira_dc: false,
+    enable_linear: false,
   },
+  providers_configured: [],
+  maintenance_start_time: null,
+  auth_url: null,
+  recaptcha_site_key: null,
+  faulty_models: [],
+  error_message: null,
+  updated_at: "2024-01-14T10:00:00Z",
+  github_app_slug: null,
 };
 
 const queryClient = new QueryClient();
@@ -247,7 +261,7 @@ describe("Content", () => {
     });
   });
 
-  it("should render the 'Configure GitHub Repositories' button if SaaS mode and app slug exists", async () => {
+  it("should render the 'Configure GitHub Repositories' button if SaaS mode and github_app_slug exists", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     getConfigSpy.mockResolvedValue(VALID_OSS_CONFIG);
 
@@ -272,7 +286,7 @@ describe("Content", () => {
 
     getConfigSpy.mockResolvedValue({
       ...VALID_SAAS_CONFIG,
-      APP_SLUG: "test-slug",
+      github_app_slug: "test-slug",
     });
     queryClient.invalidateQueries();
     rerender();
@@ -615,7 +629,6 @@ describe("GitLab Webhook Manager Integration", () => {
 
     getConfigSpy.mockResolvedValue({
       ...VALID_SAAS_CONFIG,
-      APP_SLUG: "test-slug",
     });
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
@@ -631,42 +644,6 @@ describe("GitLab Webhook Manager Integration", () => {
       expect(
         screen.queryByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
       ).not.toBeInTheDocument();
-    });
-  });
-
-  it("should render GitLab webhook manager when token is set", async () => {
-    // Arrange
-    const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    const getResourcesSpy = vi.spyOn(
-      integrationService,
-      "getGitLabResources",
-    );
-
-    getConfigSpy.mockResolvedValue({
-      ...VALID_SAAS_CONFIG,
-      APP_SLUG: "test-slug",
-    });
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      provider_tokens_set: {
-        gitlab: null,
-      },
-    });
-    getResourcesSpy.mockResolvedValue({
-      resources: [],
-    });
-
-    // Act
-    renderGitSettingsScreen();
-    await screen.findByTestId("git-settings-screen");
-
-    // Assert
-    await waitFor(() => {
-      expect(
-        screen.getByText("GITLAB$WEBHOOK_MANAGER_TITLE"),
-      ).toBeInTheDocument();
-      expect(getResourcesSpy).toHaveBeenCalled();
     });
   });
 });

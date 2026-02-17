@@ -1,6 +1,6 @@
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
-from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
+from openhands.integrations.provider import PROVIDER_TOKEN_TYPE, ProviderHandler
 from openhands.integrations.service_types import ProviderType
 from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth
@@ -14,6 +14,7 @@ class ResolverUserContext(UserContext):
         saas_user_auth: UserAuth,
     ):
         self.saas_user_auth = saas_user_auth
+        self._provider_handler: ProviderHandler | None = None
 
     async def get_user_id(self) -> str | None:
         return await self.saas_user_auth.get_user_id()
@@ -29,17 +30,34 @@ class ResolverUserContext(UserContext):
 
         return UserInfo(id=user_id)
 
-    async def get_authenticated_git_url(self, repository: str) -> str:
-        # This would need to be implemented based on the git provider tokens
-        # For now, return a basic HTTPS URL
-        return f'https://github.com/{repository}.git'
+    async def _get_provider_handler(self) -> ProviderHandler:
+        """Get or create a ProviderHandler for git operations."""
+        if self._provider_handler is None:
+            provider_tokens = await self.saas_user_auth.get_provider_tokens()
+            if provider_tokens is None:
+                raise ValueError('No provider tokens available')
+            user_id = await self.saas_user_auth.get_user_id()
+            self._provider_handler = ProviderHandler(
+                provider_tokens=provider_tokens, external_auth_id=user_id
+            )
+        return self._provider_handler
+
+    async def get_authenticated_git_url(
+        self, repository: str, is_optional: bool = False
+    ) -> str:
+        provider_handler = await self._get_provider_handler()
+        url = await provider_handler.get_authenticated_git_url(
+            repository, is_optional=is_optional
+        )
+        return url
 
     async def get_latest_token(self, provider_type: ProviderType) -> str | None:
-        # Return the appropriate token from git_provider_tokens
-
+        # Return the appropriate token string from git_provider_tokens
         provider_tokens = await self.saas_user_auth.get_provider_tokens()
         if provider_tokens:
-            return provider_tokens.get(provider_type)
+            provider_token = provider_tokens.get(provider_type)
+            if provider_token and provider_token.token:
+                return provider_token.token.get_secret_value()
         return None
 
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:

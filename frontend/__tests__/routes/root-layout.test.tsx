@@ -48,6 +48,7 @@ function LoginStub() {
     searchParams.get("email_verification_required") === "true";
   const emailVerified = searchParams.get("email_verified") === "true";
   const emailVerificationText = "AUTH$PLEASE_CHECK_EMAIL_TO_VERIFY";
+  const returnTo = searchParams.get("returnTo");
 
   return (
     <div data-testid="login-page">
@@ -58,6 +59,7 @@ function LoginStub() {
             {emailVerificationText}
           </div>
         )}
+        {returnTo && <div data-testid="return-to-param">{returnTo}</div>}
       </div>
     </div>
   );
@@ -100,6 +102,27 @@ const RouterStubWithLogin = createRoutesStub([
   },
 ]);
 
+const RouterStubWithDeviceVerify = createRoutesStub([
+  {
+    Component: MainApp,
+    path: "/",
+    children: [
+      {
+        Component: () => <div data-testid="outlet-content" />,
+        path: "/",
+      },
+      {
+        Component: () => <div data-testid="device-verify-page" />,
+        path: "/oauth/device/verify",
+      },
+    ],
+  },
+  {
+    Component: LoginStub,
+    path: "/login",
+  },
+]);
+
 const renderMainApp = (initialEntries: string[] = ["/"]) =>
   render(<RouterStub initialEntries={initialEntries} />, {
     wrapper: ({ children }) => (
@@ -137,18 +160,18 @@ describe("MainApp", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test-client-id",
-      POSTHOG_CLIENT_KEY: "test-posthog-key",
-      PROVIDERS_CONFIGURED: ["github"],
-      AUTH_URL: "https://auth.example.com",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github"],
+      auth_url: "https://auth.example.com",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
 
@@ -307,6 +330,24 @@ describe("MainApp", () => {
       await waitFor(
         () => {
           expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should preserve query parameters in returnTo when redirecting to login", async () => {
+      renderWithLoginStub(RouterStubWithDeviceVerify, [
+        "/oauth/device/verify?user_code=F9XN6BKU",
+      ]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+          const returnToElement = screen.getByTestId("return-to-param");
+          expect(returnToElement).toBeInTheDocument();
+          expect(returnToElement.textContent).toBe(
+            "/oauth/device/verify?user_code=F9XN6BKU",
+          );
         },
         { timeout: 2000 },
       );

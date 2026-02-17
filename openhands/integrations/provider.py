@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 import httpx
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -46,7 +47,9 @@ from openhands.utils.http_session import httpx_verify_option
 
 class ProviderToken(BaseModel):
     token: SecretStr | None = Field(default=None)
-    user_id: str | None = Field(default=None)
+    user_id: str | None = Field(
+        default=None, validation_alias=AliasChoices('user_id', 'username')
+    )
     host: str | None = Field(default=None)
 
     model_config = ConfigDict(
@@ -65,7 +68,7 @@ class ProviderToken(BaseModel):
             # Cannot pass None to SecretStr
             if token_str is None:
                 token_str = ''  # type: ignore[unreachable]
-            user_id = token_value.get('user_id')
+            user_id = token_value.get('user_id') or token_value.get('username')
             host = token_value.get('host')
             return cls(token=SecretStr(token_str), user_id=user_id, host=host)
 
@@ -163,12 +166,19 @@ class ProviderHandler:
 
     async def get_user(self) -> User:
         """Get user information from the first available provider"""
+        exceptions: list[tuple[ProviderType, Exception]] = []
         for provider in self.provider_tokens:
             try:
                 service = self.get_service(provider)
                 return await service.get_user()
-            except Exception:
+            except Exception as e:
+                exceptions.append((provider, e))
                 continue
+        for provider, exc in exceptions:
+            logger.error(
+                f'Failed to get user from provider {provider}: {exc}',
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
         raise AuthenticationError('Need valid provider token')
 
     async def _get_latest_provider_token(
@@ -675,6 +685,22 @@ class ProviderHandler:
             if provider != ProviderType.AZURE_DEVOPS:
                 domain = self.provider_tokens[provider].host or domain
 
+        # Detect protocol before normalizing domain
+        # Default to https, but preserve http if explicitly specified
+        protocol = 'https'
+        if domain and domain.strip().startswith('http://'):
+            # Check if insecure HTTP access is allowed
+            allow_insecure = os.environ.get(
+                'ALLOW_INSECURE_GIT_ACCESS', 'false'
+            ).lower() in ('true', '1', 'yes')
+            if not allow_insecure:
+                raise ValueError(
+                    'Attempting to connect to an insecure git repository over HTTP. '
+                    "If you'd like to allow this nonetheless, set "
+                    'ALLOW_INSECURE_GIT_ACCESS=true as an environment variable.'
+                )
+            protocol = 'http'
+
         # Normalize domain to prevent double protocols or path segments
         if domain:
             domain = domain.strip()
@@ -690,26 +716,33 @@ class ProviderHandler:
                 token_value = git_token.get_secret_value()
                 if provider == ProviderType.GITLAB:
                     remote_url = (
-                        f'https://oauth2:{token_value}@{domain}/{repo_name}.git'
+                        f'{protocol}://oauth2:{token_value}@{domain}/{repo_name}.git'
                     )
                 elif provider == ProviderType.BITBUCKET:
-                    # Bitbucket API tokens require username:token for git operations
-                    # Get stored username from ProviderToken.user_id
+                    # Bitbucket API tokens are provided as "email:api_token" for Basic auth API calls.
+                    # Git operations use "username:token" format.
                     bitbucket_username = self.provider_tokens[provider].user_id
+
                     if ':' in token_value:
-                        # email:token format - extract just the token
-                        _, token = token_value.split(':', 1)
+                        login, token = token_value.split(':', 1)
                         encoded_token = quote(token, safe='')
+
                         if bitbucket_username:
-                            # Use the stored Bitbucket username
                             encoded_username = quote(bitbucket_username, safe='')
-                            remote_url = f'https://{encoded_username}:{encoded_token}@{domain}/{repo_name}.git'
+                            remote_url = f'{protocol}://{encoded_username}:{encoded_token}@{domain}/{repo_name}.git'
+                        elif login and '@' not in login:
+                            encoded_username = quote(login, safe='')
+                            remote_url = f'{protocol}://{encoded_username}:{encoded_token}@{domain}/{repo_name}.git'
                         else:
-                            # Fallback to static username if no username configured
-                            remote_url = f'https://x-bitbucket-api-token-auth:{encoded_token}@{domain}/{repo_name}.git'
+                            remote_url = f'{protocol}://x-bitbucket-api-token-auth:{encoded_token}@{domain}/{repo_name}.git'
+
                     else:
-                        # Legacy access token format: use x-token-auth
-                        remote_url = f'https://x-token-auth:{token_value}@{domain}/{repo_name}.git'
+                        encoded_token = quote(token_value, safe='')
+                        if bitbucket_username:
+                            encoded_username = quote(bitbucket_username, safe='')
+                            remote_url = f'{protocol}://{encoded_username}:{encoded_token}@{domain}/{repo_name}.git'
+                        else:
+                            remote_url = f'{protocol}://x-token-auth:{encoded_token}@{domain}/{repo_name}.git'
                 elif provider == ProviderType.AZURE_DEVOPS:
                     # Azure DevOps uses PAT with Basic auth
                     # Format: https://{anything}:{PAT}@dev.azure.com/{org}/{project}/_git/{repo}
@@ -769,11 +802,11 @@ class ProviderHandler:
                         )
                 else:
                     # GitHub, Forgejo
-                    remote_url = f'https://{token_value}@{domain}/{repo_name}.git'
+                    remote_url = f'{protocol}://{token_value}@{domain}/{repo_name}.git'
             else:
-                remote_url = f'https://{domain}/{repo_name}.git'
+                remote_url = f'{protocol}://{domain}/{repo_name}.git'
         else:
-            remote_url = f'https://{domain}/{repo_name}.git'
+            remote_url = f'{protocol}://{domain}/{repo_name}.git'
 
         return remote_url
 

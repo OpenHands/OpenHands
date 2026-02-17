@@ -21,7 +21,9 @@ class SpecifyUserContext(UserContext):
     async def get_user_info(self) -> UserInfo:
         raise NotImplementedError()
 
-    async def get_authenticated_git_url(self, repository: str) -> str:
+    async def get_authenticated_git_url(
+        self, repository: str, is_optional: bool = False
+    ) -> str:
         raise NotImplementedError()
 
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:

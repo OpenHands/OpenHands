@@ -113,7 +113,7 @@ function LlmSettingsScreen() {
   // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
   const currentModel = currentSelectedModel || settings?.llm_model;
 
-  const isSaasMode = config?.APP_MODE === "saas";
+  const isSaasMode = config?.app_mode === "saas";
 
   const isOpenHandsProvider = () => {
     if (view === "basic") {
@@ -608,7 +608,7 @@ function LlmSettingsScreen() {
                 </>
               )}
 
-              {config?.APP_MODE !== "saas" && (
+              {config?.app_mode !== "saas" && (
                 <>
                   <SettingsInput
                     testId="search-api-key-input"

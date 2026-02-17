@@ -5,7 +5,7 @@ import GitHubLogo from "#/assets/branding/github-logo.svg?react";
 import GitLabLogo from "#/assets/branding/gitlab-logo.svg?react";
 import BitbucketLogo from "#/assets/branding/bitbucket-logo.svg?react";
 import { useAuthUrl } from "#/hooks/use-auth-url";
-import { GetConfigResponse } from "#/api/option-service/option.types";
+import { WebClientConfig } from "#/api/option-service/option.types";
 import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { TermsAndPrivacyNotice } from "#/components/shared/terms-and-privacy-notice";
@@ -15,8 +15,8 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 export interface LoginContentProps {
   githubAuthUrl: string | null;
-  appMode?: GetConfigResponse["APP_MODE"] | null;
-  authUrl?: GetConfigResponse["AUTH_URL"];
+  appMode?: WebClientConfig["app_mode"] | null;
+  authUrl?: WebClientConfig["auth_url"];
   providersConfigured?: Provider[];
   emailVerified?: boolean;
   hasDuplicatedEmail?: boolean;
@@ -38,7 +38,7 @@ export function LoginContent({
 
   // reCAPTCHA - only need token generation, verification happens at backend callback
   const { isReady: recaptchaReady, executeRecaptcha } = useRecaptcha({
-    siteKey: config?.RECAPTCHA_SITE_KEY,
+    siteKey: config?.recaptcha_site_key ?? undefined,
   });
 
   const gitlabAuthUrl = useAuthUrl({
@@ -59,7 +59,7 @@ export function LoginContent({
   ) => {
     trackLoginButtonClick({ provider });
 
-    if (!config?.RECAPTCHA_SITE_KEY || !recaptchaReady) {
+    if (!config?.recaptcha_site_key || !recaptchaReady) {
       // No reCAPTCHA or token generation failed - redirect normally
       window.location.href = redirectUrl;
       return;

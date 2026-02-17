@@ -22,7 +22,7 @@ from openhands.events.action import (
 )
 from openhands.events.action.mcp import MCPAction
 from openhands.events.action.message import SystemMessageAction
-from openhands.events.event import Event, RecallType
+from openhands.events.event import Event
 from openhands.events.observation import (
     AgentCondensationObservation,
     AgentDelegateObservation,
@@ -44,6 +44,7 @@ from openhands.events.observation.agent import (
 from openhands.events.observation.error import ErrorObservation
 from openhands.events.observation.mcp import MCPObservation
 from openhands.events.observation.observation import Observation
+from openhands.events.recall_type import RecallType
 from openhands.events.serialization.event import truncate_content
 from openhands.utils.prompt import (
     ConversationInstructions,

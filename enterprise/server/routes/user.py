@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
+from utils.identity import resolve_display_name
 
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
@@ -121,6 +122,8 @@ async def saas_get_user(
                 login=(user_info.get('preferred_username') if user_info else '') or '',
                 avatar_url='',
                 email=user_info.get('email') if user_info else None,
+                name=resolve_display_name(user_info) if user_info else None,
+                company=user_info.get('company') if user_info else None,
             ),
             user_info=user_info,
         )
