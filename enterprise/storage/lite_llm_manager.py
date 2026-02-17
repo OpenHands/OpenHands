@@ -10,7 +10,6 @@ import httpx
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import (
-    DEFAULT_INITIAL_BUDGET,
     LITE_LLM_API_KEY,
     LITE_LLM_API_URL,
     LITE_LLM_TEAM_ID,
@@ -72,9 +71,8 @@ class LiteLlmManager:
                     'x-goog-api-key': LITE_LLM_API_KEY,
                 }
             ) as client:
-                await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
-                )
+                # New users start with $0 budget - they must purchase credits
+                await LiteLlmManager._create_team(client, keycloak_user_id, org_id, 0)
 
                 if create_user:
                     await LiteLlmManager._create_user(
@@ -82,7 +80,7 @@ class LiteLlmManager:
                     )
 
                 await LiteLlmManager._add_user_to_team(
-                    client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
+                    client, keycloak_user_id, org_id, 0
                 )
 
                 key = await LiteLlmManager._generate_key(

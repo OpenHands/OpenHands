@@ -291,7 +291,7 @@ async def test_success_callback_stripe_incomplete():
 
 @pytest.mark.asyncio
 async def test_success_callback_success():
-    """Test successful payment completion and credit update."""
+    """Test successful payment completion and credit update (bonus already granted)."""
     mock_request = Request(scope={'type': 'http'})
     mock_request._base_url = URL('http://test.com/')
 
@@ -300,6 +300,7 @@ async def test_success_callback_success():
     mock_billing_session.user_id = 'mock_user'
 
     mock_org = MagicMock()
+    mock_org.free_credits_granted = True  # Bonus already granted
 
     with (
         patch('server.routes.billing.session_maker') as mock_session_maker,
@@ -346,10 +347,10 @@ async def test_success_callback_success():
             == 'https://test.com/settings/billing?checkout=success'
         )
 
-        # Verify LiteLLM API calls
+        # Verify LiteLLM API calls - no bonus since already granted
         mock_update_budget.assert_called_once_with(
             'mock_org_id',
-            125.0,  # 100 + (25.00 from Stripe)
+            125.0,  # 100 + 25.00 (no bonus)
         )
 
         # Verify BYOR export is enabled for the org (updated in same session)
@@ -360,6 +361,90 @@ async def test_success_callback_success():
         assert mock_billing_session.price == 25.0
         mock_db_session.merge.assert_called_once()
         mock_db_session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'initial_budget,purchase_cents,already_granted,expected_final_budget,expected_granted',
+    [
+        # New user buys $10 -> gets free credits
+        (0, 1000, False, 20.0, True),
+        # New user buys $5 -> below threshold, no free credits
+        (0, 500, False, 5.0, False),
+        # User with $5 buys $5 more -> reaches threshold, gets free credits
+        (5.0, 500, False, 20.0, True),
+        # User with $5 buys $3 -> below threshold, no free credits
+        (5.0, 300, False, 8.0, False),
+        # User (already granted) buys $25 -> no free credits
+        (20.0, 2500, True, 45.0, True),
+    ],
+    ids=[
+        'new_user_buys_10_gets_free_credits',
+        'new_user_buys_5_below_threshold',
+        'user_with_5_buys_5_reaches_threshold',
+        'user_with_5_buys_3_below_threshold',
+        'user_already_granted_no_additional_credits',
+    ],
+)
+async def test_success_callback_free_credits(
+    initial_budget,
+    purchase_cents,
+    already_granted,
+    expected_final_budget,
+    expected_granted,
+):
+    """Test free credits are granted only when threshold is met and not already granted."""
+    mock_request = Request(scope={'type': 'http'})
+    mock_request._base_url = URL('http://test.com/')
+
+    mock_billing_session = MagicMock()
+    mock_billing_session.status = 'in_progress'
+    mock_billing_session.user_id = 'mock_user'
+
+    mock_org = MagicMock()
+    mock_org.free_credits_granted = already_granted
+
+    with (
+        patch('server.routes.billing.session_maker') as mock_session_maker,
+        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
+        patch(
+            'storage.user_store.UserStore.get_user_by_id_async',
+            new_callable=AsyncMock,
+            return_value=MagicMock(current_org_id='mock_org_id'),
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
+            return_value={
+                'spend': 0,
+                'litellm_budget_table': {'max_budget': initial_budget},
+            },
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'
+        ) as mock_update_budget,
+        patch('server.routes.billing.FREE_CREDIT_THRESHOLD', 10.0),
+        patch('server.routes.billing.FREE_CREDIT_AMOUNT', 10.0),
+    ):
+        mock_db_session = MagicMock()
+        mock_query_chain_billing = MagicMock()
+        mock_query_chain_billing.filter.return_value.filter.return_value.first.return_value = mock_billing_session
+        mock_query_chain_org = MagicMock()
+        mock_query_chain_org.filter.return_value.first.return_value = mock_org
+        mock_db_session.query.side_effect = [
+            mock_query_chain_billing,
+            mock_query_chain_org,
+        ]
+        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+
+        mock_stripe_retrieve.return_value = MagicMock(
+            status='complete', amount_subtotal=purchase_cents, customer='mock_customer_id'
+        )
+
+        response = await success_callback('test_session_id', mock_request)
+
+        assert response.status_code == 302
+        mock_update_budget.assert_called_once_with('mock_org_id', expected_final_budget)
+        assert mock_org.free_credits_granted is expected_granted
 
 
 @pytest.mark.asyncio
