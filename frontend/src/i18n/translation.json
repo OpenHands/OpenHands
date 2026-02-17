@@ -16303,6 +16303,22 @@
     "de": "Einladungen konnten nicht gesendet werden. Bitte versuchen Sie es erneut.",
     "uk": "Не вдалося надіслати запрошення. Будь ласка, спробуйте ще раз."
   },
+  "ORG$DUPLICATE_EMAILS_ERROR": {
+    "en": "Duplicate email addresses are not allowed",
+    "ja": "重複するメールアドレスは許可されていません",
+    "zh-CN": "不允许重复的电子邮件地址",
+    "zh-TW": "不允許重複的電子郵件地址",
+    "ko-KR": "중복된 이메일 주소는 허용되지 않습니다",
+    "no": "Dupliserte e-postadresser er ikke tillatt",
+    "it": "Gli indirizzi email duplicati non sono consentiti",
+    "pt": "Endereços de e-mail duplicados não são permitidos",
+    "es": "No se permiten direcciones de correo electrónico duplicadas",
+    "ar": "لا يُسمح بعناوين البريد الإلكتروني المكررة",
+    "fr": "Les adresses e-mail en double ne sont pas autorisées",
+    "tr": "Yinelenen e-posta adreslerine izin verilmiyor",
+    "de": "Doppelte E-Mail-Adressen sind nicht erlaubt",
+    "uk": "Дублікати електронних адрес не допускаються"
+  },
   "ORG$ACCOUNT": {
     "en": "Account",
     "ja": "アカウント",

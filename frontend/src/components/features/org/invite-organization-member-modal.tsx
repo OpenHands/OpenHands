@@ -7,7 +7,7 @@ import { BadgeInput } from "#/components/shared/inputs/badge-input";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { I18nKey } from "#/i18n/declaration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { areAllEmailsValid } from "#/utils/input-validation";
+import { areAllEmailsValid, hasDuplicates } from "#/utils/input-validation";
 
 interface InviteOrganizationMemberModalProps {
   onClose: (event?: React.MouseEvent<HTMLButtonElement>) => void;
@@ -20,6 +20,12 @@ export function InviteOrganizationMemberModal({
   const { mutate: inviteMembers, isPending } = useInviteMembersBatch();
   const [emails, setEmails] = React.useState<string[]>([]);
 
+  const handleEmailsChange = (newEmails: string[]) => {
+    // Trim emails to avoid whitespace issues from copy-paste
+    const trimmedEmails = newEmails.map((email) => email.trim());
+    setEmails(trimmedEmails);
+  };
+
   const formAction = () => {
     if (emails.length === 0) {
       return;
@@ -27,6 +33,11 @@ export function InviteOrganizationMemberModal({
 
     if (!areAllEmailsValid(emails)) {
       displayErrorToast(t(I18nKey.SETTINGS$INVALID_EMAIL_FORMAT));
+      return;
+    }
+
+    if (hasDuplicates(emails)) {
+      displayErrorToast(t(I18nKey.ORG$DUPLICATE_EMAILS_ERROR));
       return;
     }
 
@@ -58,7 +69,7 @@ export function InviteOrganizationMemberModal({
               name="emails-badge-input"
               value={emails}
               placeholder="Type email and press space"
-              onChange={setEmails}
+              onChange={handleEmailsChange}
             />
           </div>
 

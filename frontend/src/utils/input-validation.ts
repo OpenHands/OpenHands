@@ -23,3 +23,13 @@ export const getInvalidEmails = (emails: string[]): string[] =>
  */
 export const areAllEmailsValid = (emails: string[]): boolean =>
   emails.every((email) => isValidEmail(email));
+
+/**
+ * Checks if an array contains duplicate values (case-insensitive for emails)
+ * @param values Array of strings to check
+ * @returns true if duplicates exist, false otherwise
+ */
+export const hasDuplicates = (values: string[]): boolean => {
+  const lowercased = values.map((v) => v.toLowerCase());
+  return new Set(lowercased).size !== lowercased.length;
+};
