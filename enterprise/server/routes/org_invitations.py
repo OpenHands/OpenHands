@@ -5,10 +5,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from server.routes.org_invitation_models import (
+    BatchInvitationResponse,
     EmailMismatchError,
     InsufficientPermissionError,
     InvitationCreate,
     InvitationExpiredError,
+    InvitationFailure,
     InvitationInvalidError,
     InvitationResponse,
     UserAlreadyMemberError,
@@ -28,7 +30,9 @@ accept_router = APIRouter(prefix='/api/organizations/members/invite')
 
 
 @invitation_router.post(
-    '/invite', response_model=InvitationResponse, status_code=status.HTTP_201_CREATED
+    '/invite',
+    response_model=BatchInvitationResponse,
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_invitation(
     org_id: UUID,
@@ -36,9 +40,10 @@ async def create_invitation(
     request: Request,
     user_id: str = Depends(get_user_id),
 ):
-    """Create a new organization invitation.
+    """Create organization invitations for multiple email addresses.
 
-    Sends an email to the invitee with a secure link to join the organization.
+    Sends emails to invitees with secure links to join the organization.
+    Supports batch invitations - some may succeed while others fail.
 
     Permission rules:
     - Only owners and admins can create invitations
@@ -47,15 +52,15 @@ async def create_invitation(
 
     Args:
         org_id: Organization UUID
-        invitation_data: Invitation details (email, role)
+        invitation_data: Invitation details (emails array, role)
         request: FastAPI request
         user_id: Authenticated user ID (from dependency)
 
     Returns:
-        InvitationResponse: The created invitation details
+        BatchInvitationResponse: Lists of successful and failed invitations
 
     Raises:
-        HTTPException 400: Invalid email or role, user already member, pending invitation exists
+        HTTPException 400: Invalid role or organization not found
         HTTPException 403: User lacks permission to invite
         HTTPException 429: Rate limit exceeded
     """
@@ -68,34 +73,34 @@ async def create_invitation(
     )
 
     try:
-        invitation = await OrgInvitationService.create_invitation(
+        successful, failed = await OrgInvitationService.create_invitations_batch(
             org_id=org_id,
-            email=invitation_data.email,
+            emails=[str(email) for email in invitation_data.emails],
             role_name=invitation_data.role,
             inviter_id=UUID(user_id),
         )
 
         logger.info(
-            'Organization invitation created',
+            'Batch organization invitations created',
             extra={
                 'org_id': str(org_id),
-                'invitation_id': invitation.id,
-                'email': invitation_data.email,
-                'role': invitation_data.role,
+                'total_emails': len(invitation_data.emails),
+                'successful': len(successful),
+                'failed': len(failed),
                 'inviter_id': user_id,
             },
         )
 
-        return InvitationResponse.from_invitation(invitation)
+        return BatchInvitationResponse(
+            successful=[InvitationResponse.from_invitation(inv) for inv in successful],
+            failed=[
+                InvitationFailure(email=email, error=error) for email, error in failed
+            ],
+        )
 
     except InsufficientPermissionError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except UserAlreadyMemberError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except ValueError as e:
@@ -105,7 +110,7 @@ async def create_invitation(
         )
     except Exception as e:
         logger.exception(
-            'Unexpected error creating invitation',
+            'Unexpected error creating batch invitations',
             extra={'org_id': str(org_id), 'error': str(e)},
         )
         raise HTTPException(

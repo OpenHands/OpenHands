@@ -248,3 +248,217 @@ class TestAcceptInvitationEmailValidation:
 
             # Assert - invitation was accepted (update_invitation_status was called)
             mock_update_status.assert_called_once()
+
+
+class TestCreateInvitationsBatch:
+    """Test cases for batch invitation creation."""
+
+    @pytest.fixture
+    def org_id(self):
+        """Organization UUID for testing."""
+        return UUID('12345678-1234-5678-1234-567812345678')
+
+    @pytest.fixture
+    def inviter_id(self):
+        """Inviter UUID for testing."""
+        return UUID('87654321-4321-8765-4321-876543218765')
+
+    @pytest.fixture
+    def mock_org(self):
+        """Create a mock organization."""
+        org = MagicMock()
+        org.id = UUID('12345678-1234-5678-1234-567812345678')
+        org.name = 'Test Org'
+        return org
+
+    @pytest.fixture
+    def mock_inviter_member(self):
+        """Create a mock inviter member with owner role."""
+        member = MagicMock()
+        member.user_id = UUID('87654321-4321-8765-4321-876543218765')
+        member.role_id = 1
+        return member
+
+    @pytest.fixture
+    def mock_owner_role(self):
+        """Create a mock owner role."""
+        role = MagicMock()
+        role.id = 1
+        role.name = 'owner'
+        return role
+
+    @pytest.fixture
+    def mock_member_role(self):
+        """Create a mock member role."""
+        role = MagicMock()
+        role.id = 3
+        role.name = 'member'
+        return role
+
+    @pytest.mark.asyncio
+    async def test_batch_creates_all_invitations_successfully(
+        self,
+        org_id,
+        inviter_id,
+        mock_org,
+        mock_inviter_member,
+        mock_owner_role,
+        mock_member_role,
+    ):
+        """Test that batch creation succeeds for all valid emails."""
+        # Arrange
+        emails = ['alice@example.com', 'bob@example.com']
+        mock_invitation_1 = MagicMock(spec=OrgInvitation)
+        mock_invitation_1.id = 1
+        mock_invitation_2 = MagicMock(spec=OrgInvitation)
+        mock_invitation_2.id = 2
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgStore.get_org_by_id',
+                return_value=mock_org,
+            ),
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                return_value=mock_inviter_member,
+            ),
+            patch(
+                'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                return_value=mock_owner_role,
+            ),
+            patch(
+                'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                return_value=mock_member_role,
+            ),
+            patch.object(
+                OrgInvitationService,
+                'create_invitation',
+                new_callable=AsyncMock,
+                side_effect=[mock_invitation_1, mock_invitation_2],
+            ),
+        ):
+            # Act
+            successful, failed = await OrgInvitationService.create_invitations_batch(
+                org_id=org_id,
+                emails=emails,
+                role_name='member',
+                inviter_id=inviter_id,
+            )
+
+            # Assert
+            assert len(successful) == 2
+            assert len(failed) == 0
+
+    @pytest.mark.asyncio
+    async def test_batch_handles_partial_success(
+        self,
+        org_id,
+        inviter_id,
+        mock_org,
+        mock_inviter_member,
+        mock_owner_role,
+        mock_member_role,
+    ):
+        """Test that batch returns partial results when some emails fail."""
+        # Arrange
+        from server.routes.org_invitation_models import UserAlreadyMemberError
+
+        emails = ['alice@example.com', 'existing@example.com']
+        mock_invitation = MagicMock(spec=OrgInvitation)
+        mock_invitation.id = 1
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgStore.get_org_by_id',
+                return_value=mock_org,
+            ),
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                return_value=mock_inviter_member,
+            ),
+            patch(
+                'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                return_value=mock_owner_role,
+            ),
+            patch(
+                'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                return_value=mock_member_role,
+            ),
+            patch.object(
+                OrgInvitationService,
+                'create_invitation',
+                new_callable=AsyncMock,
+                side_effect=[mock_invitation, UserAlreadyMemberError()],
+            ),
+        ):
+            # Act
+            successful, failed = await OrgInvitationService.create_invitations_batch(
+                org_id=org_id,
+                emails=emails,
+                role_name='member',
+                inviter_id=inviter_id,
+            )
+
+            # Assert
+            assert len(successful) == 1
+            assert len(failed) == 1
+            assert failed[0][0] == 'existing@example.com'
+
+    @pytest.mark.asyncio
+    async def test_batch_fails_entirely_on_permission_error(self, org_id, inviter_id):
+        """Test that permission error fails the entire batch upfront."""
+        # Arrange
+
+        emails = ['alice@example.com', 'bob@example.com']
+
+        with patch(
+            'server.services.org_invitation_service.OrgStore.get_org_by_id',
+            return_value=None,  # Organization not found
+        ):
+            # Act & Assert
+            with pytest.raises(ValueError) as exc_info:
+                await OrgInvitationService.create_invitations_batch(
+                    org_id=org_id,
+                    emails=emails,
+                    role_name='member',
+                    inviter_id=inviter_id,
+                )
+
+            assert 'not found' in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_batch_fails_on_invalid_role(
+        self, org_id, inviter_id, mock_org, mock_inviter_member, mock_owner_role
+    ):
+        """Test that invalid role fails the entire batch."""
+        # Arrange
+        emails = ['alice@example.com']
+
+        with (
+            patch(
+                'server.services.org_invitation_service.OrgStore.get_org_by_id',
+                return_value=mock_org,
+            ),
+            patch(
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                return_value=mock_inviter_member,
+            ),
+            patch(
+                'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                return_value=mock_owner_role,
+            ),
+            patch(
+                'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                return_value=None,  # Invalid role
+            ),
+        ):
+            # Act & Assert
+            with pytest.raises(ValueError) as exc_info:
+                await OrgInvitationService.create_invitations_batch(
+                    org_id=org_id,
+                    emails=emails,
+                    role_name='invalid_role',
+                    inviter_id=inviter_id,
+                )
+
+            assert 'Invalid role' in str(exc_info.value)

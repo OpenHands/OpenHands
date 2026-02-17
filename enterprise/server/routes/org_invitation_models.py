@@ -58,9 +58,9 @@ class EmailMismatchError(InvitationError):
 
 
 class InvitationCreate(BaseModel):
-    """Request model for creating an invitation."""
+    """Request model for creating invitation(s)."""
 
-    email: EmailStr
+    emails: list[EmailStr]
     role: str = 'member'  # Default to member role
 
 
@@ -106,3 +106,17 @@ class InvitationResponse(BaseModel):
             expires_at=invitation.expires_at.isoformat(),
             inviter_email=inviter_email,
         )
+
+
+class InvitationFailure(BaseModel):
+    """Response model for a failed invitation."""
+
+    email: str
+    error: str
+
+
+class BatchInvitationResponse(BaseModel):
+    """Response model for batch invitation creation."""
+
+    successful: list[InvitationResponse]
+    failed: list[InvitationFailure]
