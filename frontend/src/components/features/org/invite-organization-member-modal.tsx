@@ -4,7 +4,10 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { useInviteMembersBatch } from "#/hooks/mutation/use-invite-members-batch";
 import { BrandButton } from "../settings/brand-button";
 import { BadgeInput } from "#/components/shared/inputs/badge-input";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { I18nKey } from "#/i18n/declaration";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { areAllEmailsValid } from "#/utils/input-validation";
 
 interface InviteOrganizationMemberModalProps {
   onClose: (event?: React.MouseEvent<HTMLButtonElement>) => void;
@@ -14,18 +17,29 @@ export function InviteOrganizationMemberModal({
   onClose,
 }: InviteOrganizationMemberModalProps) {
   const { t } = useTranslation();
-  const { mutate: inviteMembers } = useInviteMembersBatch();
+  const { mutate: inviteMembers, isPending } = useInviteMembersBatch();
   const [emails, setEmails] = React.useState<string[]>([]);
 
   const formAction = () => {
-    if (emails.length > 0) {
-      inviteMembers({ emails });
-      onClose();
+    if (emails.length === 0) {
+      return;
     }
+
+    if (!areAllEmailsValid(emails)) {
+      displayErrorToast(t(I18nKey.SETTINGS$INVALID_EMAIL_FORMAT));
+      return;
+    }
+
+    inviteMembers(
+      { emails },
+      {
+        onSuccess: () => onClose(),
+      },
+    );
   };
 
   return (
-    <ModalBackdrop onClose={onClose}>
+    <ModalBackdrop onClose={isPending ? undefined : onClose}>
       <div
         data-testid="invite-modal"
         className="bg-base rounded-xl p-4 border w-sm border-tertiary items-start"
@@ -52,16 +66,22 @@ export function InviteOrganizationMemberModal({
             <BrandButton
               type="button"
               variant="primary"
-              className="flex-1"
+              className="flex-1 flex items-center justify-center"
               onClick={formAction}
+              isDisabled={isPending}
             >
-              {t(I18nKey.BUTTON$ADD)}
+              {isPending ? (
+                <LoadingSpinner size="small" />
+              ) : (
+                t(I18nKey.BUTTON$ADD)
+              )}
             </BrandButton>
             <BrandButton
               type="button"
               variant="secondary"
               onClick={onClose}
               className="flex-1"
+              isDisabled={isPending}
             >
               {t(I18nKey.BUTTON$CANCEL)}
             </BrandButton>

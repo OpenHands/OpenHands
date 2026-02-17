@@ -16271,6 +16271,38 @@
     "de": "Rolle konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
     "uk": "Не вдалося оновити роль. Будь ласка, спробуйте ще раз."
   },
+  "ORG$INVITE_MEMBERS_SUCCESS": {
+    "en": "Invitations sent successfully",
+    "ja": "招待を送信しました",
+    "zh-CN": "邀请发送成功",
+    "zh-TW": "邀請發送成功",
+    "ko-KR": "초대가 성공적으로 전송되었습니다",
+    "no": "Invitasjoner sendt",
+    "it": "Inviti inviati con successo",
+    "pt": "Convites enviados com sucesso",
+    "es": "Invitaciones enviadas correctamente",
+    "ar": "تم إرسال الدعوات بنجاح",
+    "fr": "Invitations envoyées avec succès",
+    "tr": "Davetler başarıyla gönderildi",
+    "de": "Einladungen erfolgreich gesendet",
+    "uk": "Запрошення успішно надіслано"
+  },
+  "ORG$INVITE_MEMBERS_ERROR": {
+    "en": "Failed to send invitations. Please try again.",
+    "ja": "招待の送信に失敗しました。もう一度お試しください。",
+    "zh-CN": "发送邀请失败。请重试。",
+    "zh-TW": "發送邀請失敗。請重試。",
+    "ko-KR": "초대 전송에 실패했습니다. 다시 시도해 주세요.",
+    "no": "Kunne ikke sende invitasjoner. Vennligst prøv igjen.",
+    "it": "Impossibile inviare gli inviti. Riprova.",
+    "pt": "Falha ao enviar convites. Por favor, tente novamente.",
+    "es": "No se pudieron enviar las invitaciones. Por favor, inténtelo de nuevo.",
+    "ar": "فشل في إرسال الدعوات. يرجى المحاولة مرة أخرى.",
+    "fr": "Échec de l'envoi des invitations. Veuillez réessayer.",
+    "tr": "Davetler gönderilemedi. Lütfen tekrar deneyin.",
+    "de": "Einladungen konnten nicht gesendet werden. Bitte versuchen Sie es erneut.",
+    "uk": "Не вдалося надіслати запрошення. Будь ласка, спробуйте ще раз."
+  },
   "ORG$ACCOUNT": {
     "en": "Account",
     "ja": "アカウント",
