@@ -14,6 +14,7 @@ from pydantic import SecretStr
 from openhands.agent_server.models import (
     SendMessageRequest,
     StartConversationRequest,
+    TextContent,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
@@ -32,12 +33,14 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderToken, ProviderType
+from openhands.integrations.service_types import SuggestedTask, TaskType
 from openhands.sdk import Agent, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
+from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 # Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
 _ALLOW_SHORT_CONTEXT_WINDOWS = 'ALLOW_SHORT_CONTEXT_WINDOWS'
@@ -112,7 +115,62 @@ class TestLiveStatusAppConversationService:
         self.mock_sandbox.id = uuid4()
         self.mock_sandbox.status = SandboxStatus.RUNNING
 
-    @pytest.mark.asyncio
+    def test_apply_suggested_task_sets_prompt_and_trigger(self):
+        """Test suggested task prompts populate initial message and trigger."""
+        suggested_task = SuggestedTask(
+            git_provider=ProviderType.GITHUB,
+            task_type=TaskType.UNRESOLVED_COMMENTS,
+            repo='owner/repo',
+            issue_number=42,
+            title='Handle review comments',
+        )
+        request = AppConversationStartRequest(suggested_task=suggested_task)
+
+        self.service._apply_suggested_task(request)
+
+        assert request.initial_message is not None
+        assert (
+            request.initial_message.content[0].text
+            == suggested_task.get_prompt_for_task()
+        )
+        assert request.trigger == ConversationTrigger.SUGGESTED_TASK
+        assert request.selected_repository == suggested_task.repo
+        assert request.git_provider == suggested_task.git_provider
+
+    def test_apply_suggested_task_raises_if_initial_message_present(self):
+        suggested_task = SuggestedTask(
+            repo='foo/bar',
+            git_provider=ProviderType.GITHUB,
+            title='Some title',
+            task_type=TaskType.OPEN_ISSUE,
+            issue_number=123,
+        )
+
+        request = AppConversationStartRequest(
+            suggested_task=suggested_task,
+            initial_message=SendMessageRequest(
+                role='user',
+                content=[TextContent(text='User provided message')],
+            ),
+        )
+
+        with pytest.raises(ValueError, match='initial_message cannot be provided'):
+            self.service._apply_suggested_task(request)
+
+    def test_apply_suggested_task_raises_if_prompt_empty(self):
+        suggested_task = SuggestedTask(
+            repo='foo/bar',
+            git_provider=ProviderType.GITHUB,
+            title='Some title',
+            task_type=TaskType.OPEN_ISSUE,
+            issue_number=123,
+        )
+        request = AppConversationStartRequest(suggested_task=suggested_task)
+
+        with patch.object(SuggestedTask, 'get_prompt_for_task', return_value=''):
+            with pytest.raises(ValueError, match='empty prompt'):
+                self.service._apply_suggested_task(request)
+
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange

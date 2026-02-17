@@ -209,6 +209,21 @@ export function ChatInterface() {
     setFeedbackPolarity(polarity);
   };
 
+  // Auto-scroll to bottom when new messages arrive
+  React.useEffect(() => {
+    if (autoScroll) {
+      scrollDomToBottom();
+    }
+    // Note: We intentionally exclude autoScroll from deps because we only want
+    // to scroll when message content changes, not when autoScroll state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    v1UiEvents.length,
+    v0Events.length,
+    optimisticUserMessage,
+    scrollDomToBottom,
+  ]);
+
   // Create a ScrollProvider with the scroll hook values
   const scrollProviderValue = {
     scrollRef,
