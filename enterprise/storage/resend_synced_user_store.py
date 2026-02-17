@@ -1,0 +1,83 @@
+"""Store class for managing Resend synced users."""
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Optional
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import sessionmaker
+from storage.resend_synced_user import ResendSyncedUser
+
+
+@dataclass
+class ResendSyncedUserStore:
+    """Store for tracking users synced to Resend audiences."""
+
+    session_maker: sessionmaker
+
+    def is_user_synced(self, email: str, audience_id: str) -> bool:
+        """Check if a user has been synced to a specific audience.
+
+        Args:
+            email: The email address to check.
+            audience_id: The Resend audience ID.
+
+        Returns:
+            True if the user has been synced, False otherwise.
+        """
+        with self.session_maker() as session:
+            stmt = select(ResendSyncedUser).where(
+                ResendSyncedUser.email == email.lower(),
+                ResendSyncedUser.audience_id == audience_id,
+            )
+            result = session.execute(stmt).first()
+            return result is not None
+
+    def mark_user_synced(
+        self,
+        email: str,
+        audience_id: str,
+        keycloak_user_id: Optional[str] = None,
+    ) -> ResendSyncedUser:
+        """Mark a user as synced to a specific audience.
+
+        Uses upsert to handle race conditions - if the user is already
+        marked as synced, this is a no-op.
+
+        Args:
+            email: The email address of the user.
+            audience_id: The Resend audience ID.
+            keycloak_user_id: Optional Keycloak user ID.
+
+        Returns:
+            The ResendSyncedUser record.
+        """
+        with self.session_maker() as session:
+            stmt = (
+                insert(ResendSyncedUser)
+                .values(
+                    email=email.lower(),
+                    audience_id=audience_id,
+                    keycloak_user_id=keycloak_user_id,
+                    synced_at=datetime.now(UTC),
+                )
+                .on_conflict_do_nothing(constraint="uq_resend_synced_email_audience")
+                .returning(ResendSyncedUser)
+            )
+            result = session.execute(stmt)
+            session.commit()
+
+            # If on_conflict_do_nothing triggered, fetch the existing record
+            row = result.first()
+            if row:
+                return row[0]
+
+            # Record already exists, fetch it
+            existing = session.execute(
+                select(ResendSyncedUser).where(
+                    ResendSyncedUser.email == email.lower(),
+                    ResendSyncedUser.audience_id == audience_id,
+                )
+            ).first()
+            return existing[0] if existing else None
