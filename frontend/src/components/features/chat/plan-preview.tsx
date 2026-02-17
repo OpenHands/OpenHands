@@ -62,6 +62,10 @@ export function PlanPreview({
     return `${planContent.slice(0, MAX_CONTENT_LENGTH)}...`;
   }, [planContent]);
 
+  if (!planContent) {
+    return null;
+  }
+
   return (
     <div className="bg-[#25272d] border border-[#597FF4] rounded-[12px] w-full mt-2">
       {/* Header */}
