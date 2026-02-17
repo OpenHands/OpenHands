@@ -1,8 +1,8 @@
 import asyncio
 
-from openhands.core.logger import openhands_logger
-
 from storage.proactive_conversation_store import ProactiveConversationStore
+
+from openhands.core.logger import openhands_logger
 
 OLDER_THAN = 30  # 30 minutes
 
