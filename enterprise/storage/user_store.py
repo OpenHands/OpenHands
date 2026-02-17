@@ -84,7 +84,7 @@ class UserStore:
                 **user_kwargs,
             )
             user.email = user_info.get('email')
-            user.email_verified = user_info.get('email_verified')
+            user.email_verified = user_info.get('email_verified', False)
             session.add(user)
 
             role = RoleStore.get_role_by_name('owner')
@@ -867,6 +867,46 @@ class UserStore:
                     },
                 )
                 org.contact_name = real_name
+                await session.commit()
+
+    @staticmethod
+    async def backfill_user_email(user_id: str, user_info: dict) -> None:
+        """Set User.email and email_verified from IDP if they are still NULL.
+
+        Called during login to gradually fix existing users whose email
+        was never persisted on the User record. Preserves non-NULL values
+        (e.g. if a user manually changed their email).
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User).filter(User.id == uuid.UUID(user_id))
+            )
+            user = result.scalars().first()
+            if not user:
+                logger.debug(
+                    'backfill_user_email:user_not_found',
+                    extra={'user_id': user_id},
+                )
+                return
+
+            updated = False
+            if user.email is None:
+                user.email = user_info.get('email')
+                updated = True
+
+            if user.email_verified is None:
+                user.email_verified = user_info.get('email_verified', False)
+                updated = True
+
+            if updated:
+                logger.info(
+                    'backfill_user_email:updated',
+                    extra={
+                        'user_id': user_id,
+                        'email_set': user.email is not None,
+                        'email_verified_set': user.email_verified is not None,
+                    },
+                )
                 await session.commit()
 
     # Prevent circular imports
