@@ -490,6 +490,73 @@ async def test_success_callback_lite_llm_error():
 
 
 @pytest.mark.asyncio
+async def test_success_callback_lite_llm_update_budget_error_rollback():
+    """Test that pending_free_credits change is not committed when update_team_and_users_budget fails.
+
+    This test verifies that if LiteLlmManager.update_team_and_users_budget raises an exception
+    after pending_free_credits has been set to False, the database transaction rolls back and
+    pending_free_credits remains True.
+    """
+    mock_request = Request(scope={'type': 'http'})
+    mock_request._base_url = URL('http://test.com/')
+
+    mock_billing_session = MagicMock()
+    mock_billing_session.status = 'in_progress'
+    mock_billing_session.user_id = 'mock_user'
+
+    mock_org = MagicMock()
+    mock_org.pending_free_credits = True
+
+    with (
+        patch('server.routes.billing.session_maker') as mock_session_maker,
+        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
+        patch(
+            'storage.user_store.UserStore.get_user_by_id_async',
+            new_callable=AsyncMock,
+            return_value=MagicMock(current_org_id='mock_org_id'),
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
+            return_value={
+                'spend': 0,
+                'litellm_budget_table': {'max_budget': 0},
+            },
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget',
+            side_effect=Exception('LiteLLM API Error'),
+        ),
+        patch('server.routes.billing.FREE_CREDIT_THRESHOLD', 10.0),
+        patch('server.routes.billing.FREE_CREDIT_AMOUNT', 10.0),
+    ):
+        mock_db_session = MagicMock()
+        mock_query_chain_billing = MagicMock()
+        mock_query_chain_billing.filter.return_value.filter.return_value.first.return_value = mock_billing_session
+        mock_query_chain_org = MagicMock()
+        mock_query_chain_org.filter.return_value.first.return_value = mock_org
+        mock_db_session.query.side_effect = [
+            mock_query_chain_billing,
+            mock_query_chain_org,
+        ]
+        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+
+        # Purchase $10 to reach threshold
+        mock_stripe_retrieve.return_value = MagicMock(
+            status='complete',
+            amount_subtotal=1000,  # $10
+            customer='mock_customer_id',
+        )
+
+        with pytest.raises(Exception, match='LiteLLM API Error'):
+            await success_callback('test_session_id', mock_request)
+
+        # Verify no database commit occurred - the transaction should roll back
+        assert mock_billing_session.status == 'in_progress'
+        mock_db_session.merge.assert_not_called()
+        mock_db_session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_cancel_callback_session_not_found():
     """Test cancel callback when billing session is not found."""
     mock_request = Request(scope={'type': 'http'})
