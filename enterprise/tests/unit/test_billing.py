@@ -300,7 +300,7 @@ async def test_success_callback_success():
     mock_billing_session.user_id = 'mock_user'
 
     mock_org = MagicMock()
-    mock_org.pending_free_credits = True  # Bonus already granted
+    mock_org.pending_free_credits = False  # Not eligible (old org or already granted)
 
     with (
         patch('server.routes.billing.session_maker') as mock_session_maker,
@@ -347,7 +347,7 @@ async def test_success_callback_success():
             == 'https://test.com/settings/billing?checkout=success'
         )
 
-        # Verify LiteLLM API calls - no bonus since already granted
+        # Verify LiteLLM API calls - no bonus since not eligible
         mock_update_budget.assert_called_once_with(
             'mock_org_id',
             125.0,  # 100 + 25.00 (no bonus)
