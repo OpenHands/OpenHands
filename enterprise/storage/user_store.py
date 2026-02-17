@@ -59,6 +59,7 @@ class UserStore:
                 or user_info.get('preferred_username', ''),
                 contact_email=user_info['email'],
                 v1_enabled=True,
+                pending_free_credits=True,
             )
             session.add(org)
 
@@ -195,6 +196,7 @@ class UserStore:
                 or user_info.get('username', ''),
                 contact_email=user_info['email'],
                 byor_export_enabled=has_completed_billing,
+                pending_free_credits=not has_completed_billing,
             )
             session.add(org)
 
