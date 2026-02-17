@@ -437,7 +437,9 @@ async def test_success_callback_free_credits(
         mock_session_maker.return_value.__enter__.return_value = mock_db_session
 
         mock_stripe_retrieve.return_value = MagicMock(
-            status='complete', amount_subtotal=purchase_cents, customer='mock_customer_id'
+            status='complete',
+            amount_subtotal=purchase_cents,
+            customer='mock_customer_id',
         )
 
         response = await success_callback('test_session_id', mock_request)
