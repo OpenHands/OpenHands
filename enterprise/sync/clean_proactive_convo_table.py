@@ -2,7 +2,7 @@ import asyncio  # noqa: I001
 
 # This must be before the import of storage
 # to set up logging and prevent alembic from
-# running it's mouth.
+# running its mouth.
 from openhands.core.logger import openhands_logger
 
 from storage.proactive_conversation_store import (
