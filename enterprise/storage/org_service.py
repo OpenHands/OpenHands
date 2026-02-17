@@ -112,6 +112,7 @@ class OrgService:
             contact_email=contact_email,
             org_version=ORG_SETTINGS_VERSION,
             default_llm_model=get_default_litellm_model(),
+            pending_free_credits=True,
         )
 
     @staticmethod

@@ -261,16 +261,14 @@ async def success_callback(session_id: str, request: Request):
         new_max_budget = max_budget + add_credits
 
         # Grant free credits if:
-        # 1. The org hasn't received free credits yet
+        # 1. The org has pending free credits (new org, eligible)
         # 2. The budget after this purchase meets the threshold
         should_grant_free_credits = (
-            org
-            and not org.free_credits_granted
-            and new_max_budget >= FREE_CREDIT_THRESHOLD
+            org and org.pending_free_credits and new_max_budget >= FREE_CREDIT_THRESHOLD
         )
         if should_grant_free_credits:
             new_max_budget += FREE_CREDIT_AMOUNT
-            org.free_credits_granted = True
+            org.pending_free_credits = False
             logger.info(
                 'free_credits_granted',
                 extra={

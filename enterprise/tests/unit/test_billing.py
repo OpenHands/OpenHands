@@ -300,7 +300,7 @@ async def test_success_callback_success():
     mock_billing_session.user_id = 'mock_user'
 
     mock_org = MagicMock()
-    mock_org.free_credits_granted = True  # Bonus already granted
+    mock_org.pending_free_credits = True  # Bonus already granted
 
     with (
         patch('server.routes.billing.session_maker') as mock_session_maker,
@@ -365,35 +365,35 @@ async def test_success_callback_success():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'initial_budget,purchase_cents,already_granted,expected_final_budget,expected_granted',
+    'initial_budget,purchase_cents,pending_credits,expected_final_budget,expected_pending_after',
     [
-        # New user buys $10 -> gets free credits
-        (0, 1000, False, 20.0, True),
-        # New user buys $5 -> below threshold, no free credits
-        (0, 500, False, 5.0, False),
+        # New user buys $10 -> gets free credits, pending becomes False
+        (0, 1000, True, 20.0, False),
+        # New user buys $5 -> below threshold, no free credits yet, pending stays True
+        (0, 500, True, 5.0, True),
         # User with $5 buys $5 more -> reaches threshold, gets free credits
-        (5.0, 500, False, 20.0, True),
-        # User with $5 buys $3 -> below threshold, no free credits
-        (5.0, 300, False, 8.0, False),
-        # User (already granted) buys $25 -> no free credits
-        (20.0, 2500, True, 45.0, True),
+        (5.0, 500, True, 20.0, False),
+        # User with $5 buys $3 -> below threshold, no free credits yet
+        (5.0, 300, True, 8.0, True),
+        # Old user (not pending) buys $25 -> no free credits, stays False
+        (20.0, 2500, False, 45.0, False),
     ],
     ids=[
         'new_user_buys_10_gets_free_credits',
         'new_user_buys_5_below_threshold',
         'user_with_5_buys_5_reaches_threshold',
         'user_with_5_buys_3_below_threshold',
-        'user_already_granted_no_additional_credits',
+        'old_user_not_eligible',
     ],
 )
 async def test_success_callback_free_credits(
     initial_budget,
     purchase_cents,
-    already_granted,
+    pending_credits,
     expected_final_budget,
-    expected_granted,
+    expected_pending_after,
 ):
-    """Test free credits are granted only when threshold is met and not already granted."""
+    """Test free credits are granted only when pending and threshold is met."""
     mock_request = Request(scope={'type': 'http'})
     mock_request._base_url = URL('http://test.com/')
 
@@ -402,7 +402,7 @@ async def test_success_callback_free_credits(
     mock_billing_session.user_id = 'mock_user'
 
     mock_org = MagicMock()
-    mock_org.free_credits_granted = already_granted
+    mock_org.pending_free_credits = pending_credits
 
     with (
         patch('server.routes.billing.session_maker') as mock_session_maker,
@@ -446,7 +446,7 @@ async def test_success_callback_free_credits(
 
         assert response.status_code == 302
         mock_update_budget.assert_called_once_with('mock_org_id', expected_final_budget)
-        assert mock_org.free_credits_granted is expected_granted
+        assert mock_org.pending_free_credits is expected_pending_after
 
 
 @pytest.mark.asyncio
