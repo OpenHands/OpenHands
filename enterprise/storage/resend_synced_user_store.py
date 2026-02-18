@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Optional, Set
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 from storage.resend_synced_user import ResendSyncedUser
@@ -104,3 +104,22 @@ class ResendSyncedUserStore:
             raise RuntimeError(
                 f'Failed to create or retrieve synced user record for {email}'
             )
+
+    def remove_synced_user(self, email: str, audience_id: str) -> bool:
+        """Remove a user's synced status for a specific audience.
+
+        Args:
+            email: The email address of the user.
+            audience_id: The Resend audience ID.
+
+        Returns:
+            True if a record was deleted, False if no record existed.
+        """
+        with self.session_maker() as session:
+            stmt = delete(ResendSyncedUser).where(
+                ResendSyncedUser.email == email.lower(),
+                ResendSyncedUser.audience_id == audience_id,
+            )
+            result = session.execute(stmt)
+            session.commit()
+            return result.rowcount > 0

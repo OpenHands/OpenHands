@@ -472,47 +472,51 @@ def sync_users_to_resend():
                     stats['skipped_invalid_emails'] += 1
                     continue
 
+                first_name = user.get('first_name')
+                last_name = user.get('last_name')
+                keycloak_user_id = user.get('id')
+
+                # Mark as synced first (optimistic) to ensure consistency.
+                # If Resend API fails, we remove the record.
                 try:
-                    first_name = user.get('first_name')
-                    last_name = user.get('last_name')
-                    keycloak_user_id = user.get('id')
-
-                    # Add the contact to the Resend audience
-                    add_contact_to_resend(
-                        RESEND_AUDIENCE_ID, email, first_name, last_name
-                    )
-                    logger.info(f'Added user {email} to Resend')
-
-                    # Mark user as synced in our database
-                    # This must happen after successful addition to Resend
                     synced_user_store.mark_user_synced(
                         email=email,
                         audience_id=RESEND_AUDIENCE_ID,
                         keycloak_user_id=keycloak_user_id,
                     )
+                except Exception:
+                    logger.exception(f'Failed to mark user {email} as synced')
+                    stats['errors'] += 1
+                    continue
 
-                    synced_emails.add(email)
-
-                    stats['added_contacts'] += 1
-
-                    # Sleep to respect rate limit after first API call
-                    time.sleep(1 / RATE_LIMIT)
-
-                    # Send a welcome email to the newly added contact
-                    try:
-                        send_welcome_email(email, first_name, last_name)
-                        logger.info(f'Sent welcome email to {email}')
-                    except Exception:
-                        logger.exception(
-                            f'Failed to send welcome email to {email}, but contact was added to audience'
-                        )
-                        # Continue with the sync process even if sending the welcome email fails
-
-                    # Sleep to respect rate limit after second API call
-                    time.sleep(1 / RATE_LIMIT)
+                try:
+                    add_contact_to_resend(
+                        RESEND_AUDIENCE_ID, email, first_name, last_name
+                    )
+                    logger.info(f'Added user {email} to Resend')
                 except Exception:
                     logger.exception(f'Error adding user {email} to Resend')
+                    synced_user_store.remove_synced_user(email, RESEND_AUDIENCE_ID)
                     stats['errors'] += 1
+                    continue
+
+                synced_emails.add(email)
+                stats['added_contacts'] += 1
+
+                # Sleep to respect rate limit after first API call
+                time.sleep(1 / RATE_LIMIT)
+
+                # Send a welcome email to the newly added contact
+                try:
+                    send_welcome_email(email, first_name, last_name)
+                    logger.info(f'Sent welcome email to {email}')
+                except Exception:
+                    logger.exception(
+                        f'Failed to send welcome email to {email}, but contact was added to audience'
+                    )
+
+                # Sleep to respect rate limit after second API call
+                time.sleep(1 / RATE_LIMIT)
 
             offset += BATCH_SIZE
 
