@@ -198,7 +198,9 @@ async def get_user_org_role_async(user_id: str, org_id: UUID | None) -> Role | N
             parse_uuid(user_id)
         )
     else:
-        org_member = await OrgMemberStore.get_org_member_async(org_id, parse_uuid(user_id))
+        org_member = await OrgMemberStore.get_org_member_async(
+            org_id, parse_uuid(user_id)
+        )
     if not org_member:
         return None
 

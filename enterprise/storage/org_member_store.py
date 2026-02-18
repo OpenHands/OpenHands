@@ -84,7 +84,9 @@ class OrgMemberStore:
             return result
 
     @staticmethod
-    async def get_org_member_for_current_org_async(user_id: UUID) -> Optional[OrgMember]:
+    async def get_org_member_for_current_org_async(
+        user_id: UUID,
+    ) -> Optional[OrgMember]:
         """Get the org member for a user's current organization (async version).
 
         Args:
