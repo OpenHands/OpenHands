@@ -284,7 +284,7 @@ describe("Settings Screen", () => {
       mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
       // Pre-select the team org in the query client and Zustand store
       mockQueryClient.setQueryData(["organizations"], {
-        organizations: [MOCK_TEAM_ORG_ACME],
+        items: [MOCK_TEAM_ORG_ACME],
         currentOrgId: MOCK_TEAM_ORG_ACME.id,
       });
       useSelectedOrganizationStore.setState({ organizationId: "2" });
@@ -321,7 +321,7 @@ describe("Settings Screen", () => {
     it("should not allow direct URL access to /settings/org when personal org is selected", async () => {
       // Set up orgs in query client so clientLoader can access them
       mockQueryClient.setQueryData(["organizations"], {
-        organizations: [MOCK_PERSONAL_ORG],
+        items: [MOCK_PERSONAL_ORG],
         currentOrgId: MOCK_PERSONAL_ORG.id,
       });
       // Use Zustand store instead of query client for selected org ID
@@ -359,7 +359,7 @@ describe("Settings Screen", () => {
       // Set up config and organizations in query client so clientLoader can access them
       mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
       mockQueryClient.setQueryData(["organizations"], {
-        organizations: [MOCK_PERSONAL_ORG],
+        items: [MOCK_PERSONAL_ORG],
         currentOrgId: MOCK_PERSONAL_ORG.id,
       });
       // Use Zustand store for selected org ID
@@ -386,7 +386,7 @@ describe("Settings Screen", () => {
     it("should not allow direct URL access to /settings/billing when team org is selected", async () => {
       // Set up orgs in query client so clientLoader can access them
       mockQueryClient.setQueryData(["organizations"], {
-        organizations: [MOCK_TEAM_ORG_ACME],
+        items: [MOCK_TEAM_ORG_ACME],
         currentOrgId: MOCK_TEAM_ORG_ACME.id,
       });
       // Use Zustand store instead of query client for selected org ID
@@ -440,7 +440,7 @@ describe("Settings Screen", () => {
       mockQueryClient.clear();
       // Set up personal org (billing is only shown for personal orgs, not team orgs)
       mockQueryClient.setQueryData(["organizations"], {
-        organizations: [MOCK_PERSONAL_ORG],
+        items: [MOCK_PERSONAL_ORG],
         currentOrgId: MOCK_PERSONAL_ORG.id,
       });
       useSelectedOrganizationStore.setState({ organizationId: "1" });
@@ -517,7 +517,7 @@ describe("Settings Screen", () => {
       // Arrange: Set up config and organizations in query client
       mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
       mockQueryClient.setQueryData(["organizations"], {
-        organizations: [MOCK_PERSONAL_ORG],
+        items: [MOCK_PERSONAL_ORG],
         currentOrgId: MOCK_PERSONAL_ORG.id,
       });
 
@@ -548,7 +548,7 @@ describe("Settings Screen", () => {
       // Arrange: Set up config and organizations in query client
       mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
       mockQueryClient.setQueryData(["organizations"], {
-        organizations: [MOCK_TEAM_ORG_ACME],
+        items: [MOCK_TEAM_ORG_ACME],
         currentOrgId: MOCK_TEAM_ORG_ACME.id,
       });
 
