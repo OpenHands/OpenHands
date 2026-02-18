@@ -70,8 +70,6 @@ RATE_LIMIT = float(os.environ.get('RATE_LIMIT', '2'))  # Requests per second
 # Set up Resend API
 resend.api_key = RESEND_API_KEY
 
-print('resend module', resend)
-print('has contacts', hasattr(resend, 'Contacts'))
 
 
 class ResendSyncError(Exception):
@@ -200,8 +198,6 @@ def get_resend_contacts(audience_id: str) -> Dict[str, Dict[str, Any]]:
     Raises:
         ResendAPIError: If the API call fails.
     """
-    print('getting resend contacts')
-    print('has resend contacts', hasattr(resend, 'Contacts'))
     try:
         contacts = resend.Contacts.list(audience_id).get('data', [])
         # Create a dictionary mapping email addresses to contact data for
