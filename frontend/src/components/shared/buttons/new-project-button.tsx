@@ -12,14 +12,14 @@ interface NewProjectButtonProps {
 export function NewProjectButton({ disabled = false }: NewProjectButtonProps) {
   const { t } = useTranslation();
 
-  const startNewProject = t(I18nKey.CONVERSATION$START_NEW);
+  const homeLabel = t(I18nKey.BUTTON$HOME);
 
   return (
-    <StyledTooltip content={startNewProject} placement="right">
+    <StyledTooltip content={homeLabel} placement="right">
       <NavLink
         to="/"
         data-testid="new-project-button"
-        aria-label={startNewProject}
+        aria-label={homeLabel}
         tabIndex={disabled ? -1 : 0}
         onClick={(e) => {
           if (disabled) {
