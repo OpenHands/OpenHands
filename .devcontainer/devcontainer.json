@@ -1,19 +1,37 @@
 // For format details, see: https://aka.ms/devcontainer.json
 {
-	"name": "Python 3",
-	// Documentation for this image:
-	// - https://github.com/devcontainers/templates/tree/main/src/python
-	// - https://github.com/microsoft/vscode-remote-try-python
-	// - https://hub.docker.com/r/microsoft/devcontainers-python
-	"image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye",
+	"name": "OpenHands",
+	"hostRequirements": {
+		"cpus": 4,
+		"memory": "16gb",
+		"storage": "32gb"
+	},
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
 	"features": {
-		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
-		"ghcr.io/devcontainers-extra/features/poetry:2": {},
-		"ghcr.io/devcontainers/features/node:1": {},
+		"ghcr.io/devcontainers-extra/features/poetry:2": {}
 	},
+	"forwardPorts": [3000, 3001],
+	"portsAttributes": {
+		"3000": {
+			"visibility": "public",
+			"label": "Backend"
+		},
+		"3001": {
+			"visibility": "public",
+			"label": "Frontend"
+		},
+		"30000-59999": {
+			"onAutoForward": "silent",
+			"visibility": "public",
+			"label": "Agent Container"
+		}
+	},
+	"onCreateCommand": ".devcontainer/prebuild.sh",
 	"postCreateCommand": ".devcontainer/setup.sh",
-	"runArgs": ["--add-host=host.docker.internal:host-gateway"],
-	"containerEnv": {
-		"DOCKER_HOST_ADDR": "host.docker.internal"
-	},
+	"postAttachCommand": {
+		"openhands": "docker compose -f docker-compose.dev.yml up",
+		"claude": "npm install -g @anthropic-ai/claude-code && claude --dangerously-skip-permissions"
+	}
 }

@@ -173,14 +173,15 @@ export default function MainApp() {
     setLoginMethodExists(checkLoginMethodExists());
   }, [isAuthed, checkLoginMethodExists]);
 
+  const isB1 = config.data?.APP_MODE === "b1";
+
   const shouldRedirectToLogin =
     config.isLoading ||
     isAuthLoading ||
     (!isAuthed &&
       !isAuthError &&
       !isOnTosPage &&
-      config.data?.APP_MODE === "saas" &&
-      !loginMethodExists);
+      ((config.data?.APP_MODE === "saas" && !loginMethodExists) || isB1));
 
   React.useEffect(() => {
     if (shouldRedirectToLogin) {
@@ -240,13 +241,14 @@ export default function MainApp() {
       </div>
 
       {renderReAuthModal && <ReauthModal />}
-      {config.data?.APP_MODE === "oss" && consentFormIsOpen && (
-        <AnalyticsConsentFormModal
-          onClose={() => {
-            setConsentFormIsOpen(false);
-          }}
-        />
-      )}
+      {(config.data?.APP_MODE === "oss" || config.data?.APP_MODE === "b1") &&
+        consentFormIsOpen && (
+          <AnalyticsConsentFormModal
+            onClose={() => {
+              setConsentFormIsOpen(false);
+            }}
+          />
+        )}
 
       {config.data?.FEATURE_FLAGS.ENABLE_BILLING &&
         config.data?.APP_MODE === "saas" &&

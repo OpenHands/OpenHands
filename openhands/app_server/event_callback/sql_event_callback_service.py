@@ -30,6 +30,7 @@ from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
     EventCallbackServiceInjector,
 )
+from openhands.app_server.services.db_session_injector import commit_with_sqlite_retry
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.sql_utils import (
     Base,
@@ -88,7 +89,7 @@ class SQLEventCallbackService(EventCallbackService):
         # Create stored version and add to db_session
         stored_callback = StoredEventCallback(**event_callback.model_dump())
         self.db_session.add(stored_callback)
-        await self.db_session.commit()
+        await commit_with_sqlite_retry(self.db_session)
         await self.db_session.refresh(stored_callback)
         return EventCallback.model_validate(row2dict(stored_callback))
 
@@ -111,7 +112,7 @@ class SQLEventCallbackService(EventCallbackService):
             return False
 
         await self.db_session.delete(stored_callback)
-        await self.db_session.commit()
+        await commit_with_sqlite_retry(self.db_session)
         return True
 
     async def search_event_callbacks(
@@ -217,7 +218,7 @@ class SQLEventCallbackService(EventCallbackService):
             # Persist any new changes callbacks may have made to itself
             for callback in callbacks:
                 await self.save_event_callback(callback)
-            await self.db_session.commit()
+            await commit_with_sqlite_retry(self.db_session)
 
     async def execute_callback(
         self, conversation_id: UUID, callback: EventCallback, event: Event

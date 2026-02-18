@@ -527,7 +527,7 @@ def test_get_system_message(create_llm_registry):
 
     # Check that the system message was created correctly
     assert isinstance(result, SystemMessageAction)
-    assert 'You are OpenHands agent' in result.content
+    assert 'You are Build.One agent' in result.content
     assert len(result.tools) > 0
     assert any(tool['function']['name'] == 'execute_bash' for tool in result.tools)
     assert result._source == EventSource.AGENT

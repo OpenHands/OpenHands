@@ -30,6 +30,8 @@ def get_default_sandbox_specs():
                 'OH_CONVERSATIONS_PATH': '/workspace/conversations',
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
                 'OH_VSCODE_PORT': '60001',
+                'WORKSPACE_ROOT': '/workspace/project',
+                'EXTRA_PATH_PREFIX': '/workspace/project/node_modules/.bin',
                 **get_agent_server_env(),
             },
             working_dir='/workspace/project',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import GlobeIcon from "#/icons/globe.svg?react";
@@ -18,7 +18,7 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
+import { ENABLE_VSCODE_TAB, USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useConversationId } from "#/hooks/use-conversation-id";
 
 export function ConversationTabs() {
@@ -39,6 +39,7 @@ export function ConversationTabs() {
   } = useConversationLocalStorageState(conversationId);
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
+  const shouldShowVSCodeTab = ENABLE_VSCODE_TAB();
 
   const onTabChange = (value: ConversationTab | null) => {
     setSelectedTab(value);
@@ -91,7 +92,16 @@ export function ConversationTabs() {
   const isTabActive = (tab: ConversationTab) =>
     isRightPanelShown && selectedTab === tab;
 
-  const tabs = [
+  const tabs: {
+    tabValue: string;
+    isActive: boolean;
+    icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
+    onClick: () => void;
+    tooltipContent: string | React.ReactNode;
+    tooltipAriaLabel: string;
+    label: string;
+    className?: string;
+  }[] = [
     {
       tabValue: "editor",
       isActive: isTabActive("editor"),
@@ -100,15 +110,6 @@ export function ConversationTabs() {
       tooltipContent: t(I18nKey.COMMON$CHANGES),
       tooltipAriaLabel: t(I18nKey.COMMON$CHANGES),
       label: t(I18nKey.COMMON$CHANGES),
-    },
-    {
-      tabValue: "vscode",
-      isActive: isTabActive("vscode"),
-      icon: VSCodeIcon,
-      onClick: () => onTabSelected("vscode"),
-      tooltipContent: <VSCodeTooltipContent />,
-      tooltipAriaLabel: t(I18nKey.COMMON$CODE),
-      label: t(I18nKey.COMMON$CODE),
     },
     {
       tabValue: "terminal",
@@ -139,6 +140,19 @@ export function ConversationTabs() {
       label: t(I18nKey.COMMON$BROWSER),
     },
   ];
+
+  if (shouldShowVSCodeTab) {
+    // Insert after "editor" tab (index 0)
+    tabs.splice(1, 0, {
+      tabValue: "vscode",
+      isActive: isTabActive("vscode"),
+      icon: VSCodeIcon,
+      onClick: () => onTabSelected("vscode"),
+      tooltipContent: <VSCodeTooltipContent />,
+      tooltipAriaLabel: t(I18nKey.COMMON$CODE),
+      label: t(I18nKey.COMMON$CODE),
+    });
+  }
 
   if (shouldUsePlanningAgent) {
     tabs.unshift({

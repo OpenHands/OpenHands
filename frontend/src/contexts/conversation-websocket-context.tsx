@@ -34,7 +34,10 @@ import {
 } from "#/types/v1/type-guards";
 import { ConversationStateUpdateEventStats } from "#/types/v1/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
-import { buildWebSocketUrl } from "#/utils/websocket-url";
+import {
+  buildWebSocketUrl,
+  buildBashEventsWebSocketUrl,
+} from "#/utils/websocket-url";
 import type {
   V1AppConversation,
   V1SendMessageRequest,
@@ -740,6 +743,40 @@ export function ConversationWebSocketProvider({
     planningAgentWsUrl || "",
     planningWebsocketOptions,
   );
+
+  // Connect to the bash events WebSocket to display setup script output
+  // in the terminal. The bash events stream is separate from the conversation
+  // event stream and carries output from workspace.execute_command() calls.
+  const bashEventsWsUrl = useMemo(
+    () => buildBashEventsWebSocketUrl(conversationId, conversationUrl),
+    [conversationId, conversationUrl],
+  );
+
+  const bashEventsOptions = useMemo<WebSocketHookOptions>(
+    () => ({
+      queryParams: sessionApiKey
+        ? { session_api_key: sessionApiKey }
+        : undefined,
+      onMessage: (messageEvent: MessageEvent) => {
+        try {
+          const event = JSON.parse(messageEvent.data);
+          if (event.kind === "BashCommand" && event.command) {
+            appendInput(event.command);
+          } else if (event.kind === "BashOutput") {
+            const output = event.stdout || event.stderr || "";
+            if (output) {
+              appendOutput(output);
+            }
+          }
+        } catch {
+          // Ignore parse errors from bash events
+        }
+      },
+    }),
+    [sessionApiKey, appendInput, appendOutput],
+  );
+
+  useWebSocket(bashEventsWsUrl || "", bashEventsOptions);
 
   const socket = useMemo(
     () => (conversationMode === "plan" ? planningAgentSocket : mainSocket),

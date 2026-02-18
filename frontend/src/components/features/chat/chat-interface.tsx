@@ -27,6 +27,7 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useEventStore } from "#/stores/use-event-store";
 import { ErrorMessageBanner } from "./error-message-banner";
+import { IdleTimeoutWarning } from "./idle-timeout-warning";
 import {
   hasUserEvent,
   shouldRenderEvent,
@@ -341,6 +342,8 @@ export function ChatInterface() {
 
             {!hitBottom && <ScrollToBottomButton onClick={scrollDomToBottom} />}
           </div>
+
+          <IdleTimeoutWarning />
 
           {errorMessage && (
             <ErrorMessageBanner

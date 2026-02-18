@@ -25,16 +25,14 @@ export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
   const isV1Conversation = conversation?.conversation_version === "V1";
   const conversationUrl = conversation?.url;
   const sessionApiKey = conversation?.session_api_key;
-  const selectedRepository = conversation?.selected_repository;
-
   // For V1, we need to convert the relative file path to an absolute path
-  // The diff endpoint expects: /workspace/project/RepoName/relative/path
+  // The diff endpoint expects: /workspace/project/relative/path
   const absoluteFilePath = React.useMemo(() => {
     if (!isV1Conversation) return config.filePath;
 
-    const gitPath = getGitPath(selectedRepository);
+    const gitPath = getGitPath();
     return `${gitPath}/${config.filePath}`;
-  }, [isV1Conversation, selectedRepository, config.filePath]);
+  }, [isV1Conversation, config.filePath]);
 
   return useQuery({
     queryKey: [

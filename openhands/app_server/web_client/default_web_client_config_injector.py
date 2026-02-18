@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from pydantic import Field
@@ -17,7 +18,7 @@ class DefaultWebClientConfigInjector(WebClientConfigInjector):
     feature_flags: WebClientFeatureFlags = Field(default_factory=WebClientFeatureFlags)
     providers_configured: list[ProviderType] = Field(default_factory=list)
     maintenance_start_time: datetime | None = None
-    auth_url: str | None = None
+    auth_url: str | None = os.environ.get('BETTER_AUTH_URL') or None
     recaptcha_site_key: str | None = None
     faulty_models: list[str] = Field(default_factory=list)
     error_message: str | None = None

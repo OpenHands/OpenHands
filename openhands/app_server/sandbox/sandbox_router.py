@@ -89,3 +89,38 @@ async def delete_sandbox(
     if not exists:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     return Success()
+
+
+@router.get('/{sandbox_id}/idle-status')
+async def get_sandbox_idle_status(sandbox_id: str) -> dict:
+    """Get the idle timeout status for a sandbox.
+
+    Returns idle_seconds, timeout_seconds, warning_seconds,
+    is_warning, and remaining_seconds.
+    Returns timeout_seconds=0 if idle timeout is disabled.
+    """
+    from openhands.app_server.idle_timeout_manager import get_idle_timeout_manager
+
+    manager = get_idle_timeout_manager()
+    if manager is None:
+        # Idle timeout is not enabled
+        return {
+            'idle_seconds': 0,
+            'timeout_seconds': 0,
+            'warning_seconds': 0,
+            'is_warning': False,
+            'remaining_seconds': 0,
+        }
+
+    status_info = manager.get_idle_status(sandbox_id)
+    if status_info is None:
+        # Sandbox is not being tracked (e.g. not started through this app server)
+        return {
+            'idle_seconds': 0,
+            'timeout_seconds': manager.timeout_seconds,
+            'warning_seconds': manager.warning_seconds,
+            'is_warning': False,
+            'remaining_seconds': manager.timeout_seconds,
+        }
+
+    return status_info

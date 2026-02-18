@@ -7,7 +7,6 @@ NOTE: this will be executed inside the docker sandbox.
 import argparse
 import asyncio
 import base64
-import json
 import mimetypes
 import os
 import shutil
@@ -33,7 +32,7 @@ from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from uvicorn import run
 
-from openhands.core.config.mcp_config import MCPStdioServerConfig
+from openhands.core.config.mcp_config import MCPSHTTPServerConfig, MCPStdioServerConfig
 from openhands.core.exceptions import BrowserUnavailableException
 from openhands.core.logger import get_uvicorn_json_log_config
 from openhands.core.logger import openhands_logger as logger
@@ -859,16 +858,36 @@ if __name__ == '__main__':
 
         # Get the request body
         mcp_tools_to_sync = await request.json()
-        if not isinstance(mcp_tools_to_sync, list):
+
+        # Support both dict format (with stdio_servers and shttp_servers)
+        # and legacy list format (stdio only)
+        if isinstance(mcp_tools_to_sync, dict):
+            stdio_configs = [
+                MCPStdioServerConfig(**t)
+                for t in mcp_tools_to_sync.get('stdio_servers', [])
+            ]
+            shttp_configs = [
+                MCPSHTTPServerConfig(**t)
+                for t in mcp_tools_to_sync.get('shttp_servers', [])
+            ]
+        elif isinstance(mcp_tools_to_sync, list):
+            # Backward compatibility: plain list = stdio only
+            stdio_configs = [MCPStdioServerConfig(**tool) for tool in mcp_tools_to_sync]
+            shttp_configs = []
+        else:
             raise HTTPException(
-                status_code=400, detail='Request must be a list of MCP tools to sync'
+                status_code=400,
+                detail='Request must be a list or dict of MCP tools to sync',
             )
+
         logger.info(
-            f'Updating MCP server with tools: {json.dumps(mcp_tools_to_sync, indent=2)}'
+            f'Updating MCP server with {len(stdio_configs)} stdio servers '
+            f'and {len(shttp_configs)} shttp servers'
         )
-        mcp_tools_to_sync = [MCPStdioServerConfig(**tool) for tool in mcp_tools_to_sync]
         try:
-            await mcp_proxy_manager.update_and_remount(app, mcp_tools_to_sync, ['*'])
+            await mcp_proxy_manager.update_and_remount(
+                app, stdio_configs, shttp_configs, ['*']
+            )
             logger.info('MCP Proxy Manager updated and remounted successfully')
             router_error_log = ''
         except Exception as e:

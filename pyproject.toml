@@ -99,6 +99,7 @@ dependencies = [
   "types-toml",
   "urllib3>=2.6.3",
   "uvicorn",
+  "websockets>=13",
   "whatthepatch>=1.0.6",
   "zope-interface==7.2",
 ]
@@ -207,6 +208,7 @@ fastapi = "*"
 toml = "*"
 types-toml = "*"
 uvicorn = "*"
+websockets = ">=13.0"
 numpy = "*"
 json-repair = "*"
 browsergym-core = "0.13.3"                         # integrate browsergym-core as the browsing interface

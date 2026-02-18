@@ -93,19 +93,19 @@ class VSCodePlugin(Plugin):
                 if path_mode:
                     base_path_flag = f' --server-base-path /{runtime_id}/vscode'
 
-            cmd = (
-                (
-                    f"su - {username} -s /bin/bash << 'EOF'\n"
-                    if SU_TO_USER
-                    else "/bin/bash << 'EOF'\n"
-                )
-                + f'sudo chown -R {username}:{username} /openhands/.openvscode-server\n'
-                + f'cd {workspace_path}\n'
-                + 'exec /openhands/.openvscode-server/bin/openvscode-server '
-                + f'--host 0.0.0.0 --connection-token {self.vscode_connection_token} '
-                + f'--port {self.vscode_port} --disable-workspace-trust{base_path_flag}\n'
-                + 'EOF'
+        cmd = (
+            (
+                f"su - {username} -s /bin/bash << 'EOF'\n"
+                if SU_TO_USER
+                else "/bin/bash << 'EOF'\n"
             )
+            + f'sudo chown -R {username}:{username} /openhands/.openvscode-server\n'
+            + f'cd {workspace_path}\n'
+            + 'exec /openhands/.openvscode-server/bin/openvscode-server '
+            + f'--host 0.0.0.0 --connection-token {self.vscode_connection_token} '
+            + f'--port {self.vscode_port} --disable-workspace-trust{base_path_flag}\n'
+            + 'EOF'
+        )
 
         # Using asyncio.create_subprocess_shell instead of subprocess.Popen
         # to avoid ASYNC101 linting error

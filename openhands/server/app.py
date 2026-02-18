@@ -23,9 +23,15 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 
 import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
-from openhands.app_server import v1_router
+from openhands.app_server import (
+    http_proxy_router,
+    v1_router,
+    vscode_proxy_router,
+    ws_proxy_router,
+)
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.integrations.service_types import AuthenticationError
+from openhands.server.routes.auth import app as auth_api_router
 from openhands.server.routes.conversation import app as conversation_api_router
 from openhands.server.routes.feedback import app as feedback_api_router
 from openhands.server.routes.files import app as files_api_router
@@ -88,6 +94,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
     )
 
 
+app.include_router(auth_api_router)
 app.include_router(public_api_router)
 app.include_router(files_api_router)
 app.include_router(security_api_router)
@@ -96,9 +103,15 @@ app.include_router(conversation_api_router)
 app.include_router(manage_conversation_api_router)
 app.include_router(settings_router)
 app.include_router(secrets_router)
-if server_config.app_mode == AppMode.OPENHANDS:
+if server_config.app_mode in (AppMode.OPENHANDS, AppMode.B1):
     app.include_router(git_api_router)
 if server_config.enable_v1:
     app.include_router(v1_router.router)
+    app.include_router(ws_proxy_router.router)
+    app.include_router(vscode_proxy_router.router)
 app.include_router(trajectory_router)
+# HTTP proxy for sandbox API calls — registered LAST so all specific routes
+# (V0 and V1) take priority over the catch-all /api/conversations/{id}/{path}
+if server_config.enable_v1:
+    app.include_router(http_proxy_router.router)
 add_health_endpoints(app)

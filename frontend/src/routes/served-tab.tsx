@@ -45,8 +45,6 @@ function ServedApp() {
     resetUrl();
   }, [activeHost]);
 
-  const fullUrl = `${currentActiveHost}/${path}`;
-
   if (!currentActiveHost) {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-10">
@@ -58,8 +56,12 @@ function ServedApp() {
     );
   }
 
+  const fullUrl = path
+    ? `${currentActiveHost.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+    : currentActiveHost;
+
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full flex flex-col">
       <div className="w-full p-2 flex items-center gap-4 border-b border-neutral-600">
         <button
           type="button"

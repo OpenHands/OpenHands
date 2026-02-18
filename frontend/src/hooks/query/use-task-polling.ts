@@ -50,10 +50,11 @@ export const useTaskPolling = () => {
     retry: false,
   });
 
-  // Navigate to conversation ID when task is ready
+  // Navigate to conversation as soon as the conversation ID is available,
+  // so the user can see the terminal output during setup script execution.
   useEffect(() => {
     const task = taskQuery.data;
-    if (task?.status === "READY" && task.app_conversation_id) {
+    if (task?.app_conversation_id && task.status !== "ERROR") {
       // Replace the URL with the actual conversation ID
       navigate(`/conversations/${task.app_conversation_id}`, { replace: true });
     }

@@ -1287,7 +1287,7 @@ class TestLiveStatusAppConversationService:
         assert self.mock_event_service.search_events.call_count == total_pages
 
     @patch(
-        'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.NonBlockingAsyncRemoteWorkspace'
     )
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.ConversationInfo'
@@ -1304,6 +1304,7 @@ class TestLiveStatusAppConversationService:
         # Mock user context
         self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
         self.mock_user_context.get_user_info = AsyncMock(return_value=self.mock_user)
+        self.mock_user_context.get_secrets = AsyncMock(return_value=None)
 
         # Mock sandbox and sandbox spec
         mock_sandbox_spec = Mock(spec=SandboxSpecInfo)
@@ -1328,7 +1329,7 @@ class TestLiveStatusAppConversationService:
         mock_remote_workspace_class.return_value = mock_remote_workspace
 
         # Mock the wait for sandbox and setup scripts
-        async def mock_wait_for_sandbox(task):
+        async def mock_wait_for_sandbox(task, extra_env=None):
             task.sandbox_id = self.mock_sandbox.id
             yield task
 
@@ -1364,7 +1365,7 @@ class TestLiveStatusAppConversationService:
         self.mock_httpx_client.post = AsyncMock(return_value=mock_response)
 
         # Mock event callback service
-        self.mock_event_callback_service.save_event_callback = AsyncMock()
+        self.mock_event_callback_service.create_event_callback = AsyncMock()
 
         # Create request
         request = AppConversationStartRequest()

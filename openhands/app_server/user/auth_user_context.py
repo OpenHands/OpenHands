@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, AsyncGenerator
 
 from fastapi import Request
@@ -12,10 +13,15 @@ from openhands.app_server.user.user_models import UserInfo
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
+    ProviderToken,
     ProviderType,
 )
 from openhands.sdk.secret import SecretSource, StaticSecret
 from openhands.server.user_auth.user_auth import UserAuth, get_user_auth
+from openhands.storage.data_models.secrets import (
+    _SANDBOX_ENV_ALIASES,
+    WELL_KNOWN_SECRET_GITHUB_TOKEN,
+)
 
 USER_AUTH_ATTR = 'user_auth'
 
@@ -49,7 +55,22 @@ class AuthUserContext(UserContext):
         return user_info
 
     async def get_provider_tokens(self) -> PROVIDER_TOKEN_TYPE | None:
-        return await self.user_auth.get_provider_tokens()
+        tokens = await self.user_auth.get_provider_tokens()
+
+        # Auto-populate GitHub provider token from well-known custom secret
+        github_provider = tokens.get(ProviderType.GITHUB) if tokens else None
+        github_token = github_provider.token if github_provider else None
+        has_github_token = bool(github_token and github_token.get_secret_value())
+        if not has_github_token:
+            secrets = await self.user_auth.get_secrets()
+            if secrets and WELL_KNOWN_SECRET_GITHUB_TOKEN in secrets.custom_secrets:
+                custom = secrets.custom_secrets[WELL_KNOWN_SECRET_GITHUB_TOKEN]
+                new_token = ProviderToken(token=custom.secret)
+                updated = dict(tokens) if tokens else {}
+                updated[ProviderType.GITHUB] = new_token
+                tokens = MappingProxyType(updated)
+
+        return tokens
 
     async def get_provider_handler(self):
         provider_handler = self._provider_handler
@@ -85,12 +106,18 @@ class AuthUserContext(UserContext):
         secrets = await self.user_auth.get_secrets()
         if secrets:
             for name, custom_secret in secrets.custom_secrets.items():
-                results[name] = StaticSecret(
+                static = StaticSecret(
                     value=custom_secret.secret,
                     description=custom_secret.description
                     if custom_secret.description
                     else None,
                 )
+                results[name] = static
+                # Also register under the sandbox env-var alias so the SDK
+                # exports the secret with the expected variable name.
+                alias = _SANDBOX_ENV_ALIASES.get(name)
+                if alias:
+                    results[alias] = static
 
         return results
 

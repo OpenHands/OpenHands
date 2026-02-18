@@ -7,11 +7,14 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import asyncio
+import logging
 import os
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
+import httpx
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -137,3 +140,116 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return False
         # Put Other non rate limited checks here
         return True
+
+
+class BetterAuthMiddleware(BaseHTTPMiddleware):
+    """Middleware that validates sessions via a remote Better Auth server."""
+
+    SKIP_PATHS = {
+        '/api/auth/sign-in',
+        '/api/auth/sign-up',
+        '/api/auth/sign-in/social',
+        '/api/auth/oauth-proxy-callback',
+        '/api/auth/providers',
+        '/api/authenticate',
+        '/api/login',
+        '/api/logout',
+        '/api/options/config',
+        '/api/health',
+        '/api/v1/web-client/config',
+    }
+
+    SESSION_COOKIES = ('__Secure-b1.session_token', 'b1.session_token')
+    CACHE_TTL_SECONDS = 60
+
+    def __init__(self, app: ASGIApp, better_auth_url: str):
+        super().__init__(app)
+        self.better_auth_url = better_auth_url.rstrip('/')
+        # In-memory session cache: token -> (expiry_time, user_data)
+        self._session_cache: dict[str, tuple[float, dict]] = {}
+
+    def _get_cached_user(self, token: str) -> dict | None:
+        entry = self._session_cache.get(token)
+        if entry and entry[0] > time.monotonic():
+            return entry[1]
+        if entry:
+            del self._session_cache[token]
+        return None
+
+    def _cache_user(self, token: str, user_data: dict) -> None:
+        self._session_cache[token] = (
+            time.monotonic() + self.CACHE_TTL_SECONDS,
+            user_data,
+        )
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        logger = logging.getLogger(__name__)
+        path = request.url.path
+
+        # Only gate /api/ paths
+        if not path.startswith('/api/'):
+            return await call_next(request)
+
+        # Skip public endpoints
+        if path in self.SKIP_PATHS:
+            return await call_next(request)
+
+        # Skip webhook callbacks from agent containers
+        # (authenticated via X-Session-API-Key header in the endpoint)
+        if path.startswith('/api/v1/webhooks/'):
+            return await call_next(request)
+
+        # Extract session cookie (check both __Secure- and plain variants)
+        cookie_name = None
+        session_token = None
+        for name in self.SESSION_COOKIES:
+            session_token = request.cookies.get(name)
+            if session_token:
+                cookie_name = name
+                break
+
+        if not session_token or not cookie_name:
+            logger.info(
+                'BetterAuth: no session cookie for %s (cookies: %s)',
+                path,
+                list(request.cookies.keys()),
+            )
+            return JSONResponse(
+                status_code=401,
+                content={'error': 'Not authenticated'},
+            )
+
+        # Check cache first
+        cached_user = self._get_cached_user(session_token)
+        if cached_user:
+            request.state.better_auth_user = cached_user
+            return await call_next(request)
+
+        # Validate session with remote Better Auth server
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f'{self.better_auth_url}/api/auth/get-session',
+                    cookies={cookie_name: session_token},
+                    timeout=10.0,
+                )
+        except Exception:
+            return JSONResponse(
+                status_code=401,
+                content={'error': 'Auth service unavailable'},
+            )
+
+        if resp.status_code == 200:
+            data = resp.json()
+            user = data.get('user')
+            if user:
+                self._cache_user(session_token, user)
+                request.state.better_auth_user = user
+                return await call_next(request)
+
+        return JSONResponse(
+            status_code=401,
+            content={'error': 'Invalid or expired session'},
+        )

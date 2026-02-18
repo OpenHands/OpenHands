@@ -303,6 +303,7 @@ async def add_mcp_tools_to_agent(
     )
 
     extra_stdio_servers = []
+    extra_shttp_servers = []
 
     # Add microagent MCP tools if available
     microagent_mcp_configs = memory.get_microagent_mcp_tools()
@@ -321,8 +322,16 @@ async def add_mcp_tools_to_agent(
                         f'Added microagent stdio server: {stdio_server.name}'
                     )
 
+        if mcp_config.shttp_servers:
+            for shttp_server in mcp_config.shttp_servers:
+                if shttp_server not in extra_shttp_servers:
+                    extra_shttp_servers.append(shttp_server)
+                    logger.info(f'Added microagent shttp server: {shttp_server.url}')
+
     # Add the runtime as another MCP server
-    updated_mcp_config = runtime.get_mcp_config(extra_stdio_servers)
+    updated_mcp_config = runtime.get_mcp_config(
+        extra_stdio_servers, extra_shttp_servers
+    )
 
     # Fetch the MCP tools
     # Only use stdio if run from a CLI runtime

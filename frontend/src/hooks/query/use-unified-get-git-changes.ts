@@ -23,13 +23,8 @@ export const useUnifiedGetGitChanges = () => {
   const isV1Conversation = conversation?.conversation_version === "V1";
   const conversationUrl = conversation?.url;
   const sessionApiKey = conversation?.session_api_key;
-  const selectedRepository = conversation?.selected_repository;
-
-  // Calculate git path based on selected repository
-  const gitPath = React.useMemo(
-    () => getGitPath(selectedRepository),
-    [selectedRepository],
-  );
+  // Git path is always /workspace/project
+  const gitPath = React.useMemo(() => getGitPath(), []);
 
   const result = useQuery({
     queryKey: [

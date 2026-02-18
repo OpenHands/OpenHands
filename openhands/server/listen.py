@@ -13,6 +13,7 @@ import socketio
 from openhands.server.app import app as base_app
 from openhands.server.listen_socket import sio
 from openhands.server.middleware import (
+    BetterAuthMiddleware,
     CacheControlMiddleware,
     InMemoryRateLimiter,
     LocalhostCORSMiddleware,
@@ -31,5 +32,12 @@ base_app.add_middleware(
     RateLimitMiddleware,
     rate_limiter=InMemoryRateLimiter(requests=10, seconds=1),
 )
+
+_better_auth_url = os.environ.get('BETTER_AUTH_URL', '')
+if _better_auth_url:
+    base_app.add_middleware(
+        BetterAuthMiddleware,
+        better_auth_url=_better_auth_url,
+    )
 
 app = socketio.ASGIApp(sio, other_asgi_app=base_app)

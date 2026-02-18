@@ -38,6 +38,10 @@ export class SecretsService {
     return status === 200;
   }
 
+  static async deleteProviderToken(provider: string): Promise<void> {
+    await openHands.delete(`/api/unset-provider-tokens/${provider}`);
+  }
+
   static async addGitProvider(providers: Record<Provider, ProviderToken>) {
     const tokens: POSTProviderTokens = {
       provider_tokens: providers,

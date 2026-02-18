@@ -244,6 +244,11 @@ class TestDockerSandboxSpecEnvironmentOverride:
                 'OH_BASH_EVENTS_DIR',
                 'PYTHONUNBUFFERED',
                 'ENV_LOG_LEVEL',
+                'WORKSPACE_ROOT',
+                'EXTRA_PATH_PREFIX',
+                'COREPACK_ENABLE_DOWNLOAD_PROMPT',
+                'AUTHENTICATION_SERVER_TYPE',
+                'DATABASE_SERVER_TYPE',
             }
 
             # All defaults should be present
@@ -252,6 +257,52 @@ class TestDockerSandboxSpecEnvironmentOverride:
 
             # No additional variables should be present
             assert set(spec.initial_env.keys()) == expected_defaults
+
+
+class TestSandboxEnvVars:
+    """Test _get_sandbox_env() behavior for static vars and secrets."""
+
+    def test_secrets_included_when_set(self):
+        """Test that secrets are forwarded into sandbox env when present."""
+        env_vars = {
+            'BETTER_AUTH_SECRET': 'secret123',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            specs = get_default_docker_sandbox_specs()
+            spec = specs[0]
+
+            assert spec.initial_env['BETTER_AUTH_SECRET'] == 'secret123'
+
+    def test_secrets_excluded_when_absent(self):
+        """Test that secrets are omitted when not set in the environment."""
+        with patch.dict(os.environ, {}, clear=True):
+            specs = get_default_docker_sandbox_specs()
+            spec = specs[0]
+
+            assert 'BETTER_AUTH_SECRET' not in spec.initial_env
+
+    def test_static_values_always_present(self):
+        """Test that static config values are always set."""
+        with patch.dict(os.environ, {}, clear=True):
+            specs = get_default_docker_sandbox_specs()
+            spec = specs[0]
+
+            assert spec.initial_env['COREPACK_ENABLE_DOWNLOAD_PROMPT'] == '0'
+            assert spec.initial_env['AUTHENTICATION_SERVER_TYPE'] == 'remote'
+            assert spec.initial_env['DATABASE_SERVER_TYPE'] == 'neon'
+
+    def test_workspace_root_in_initial_env(self):
+        """Test that WORKSPACE_ROOT is set in initial_env."""
+        with patch.dict(os.environ, {}, clear=True):
+            specs = get_default_docker_sandbox_specs()
+            spec = specs[0]
+
+            assert spec.initial_env['WORKSPACE_ROOT'] == '/workspace/project'
+            assert (
+                spec.initial_env['EXTRA_PATH_PREFIX']
+                == '/workspace/project/node_modules/.bin'
+            )
 
 
 class TestProcessSandboxSpecEnvironmentOverride:
@@ -372,6 +423,8 @@ class TestRemoteSandboxSpecEnvironmentOverride:
                 'LOG_JSON',
                 'OH_ENABLE_VNC',
                 'OPENVSCODE_SERVER_ROOT',
+                'WORKSPACE_ROOT',
+                'EXTRA_PATH_PREFIX',
             }
 
             # All defaults should be present

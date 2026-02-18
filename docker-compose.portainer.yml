@@ -1,0 +1,62 @@
+# OpenHands deployment for Portainer (Traefik-based routing)
+volumes:
+  openhands_state:
+  openhands_workspace:
+
+networks:
+  openhands-net:
+    name: ${STACK}-openhands-net
+    driver: bridge
+  traefik:
+    external: true
+
+services:
+  openhands:
+    image: docker.cloudsmith.io/buildone/repository/openhands:${VERSION}
+    restart: unless-stopped
+    hostname: openhands-app
+    environment:
+      # --- LLM Configuration ---
+      - LLM_MODEL=${LLM_MODEL:-anthropic/claude-opus-4-5-20251101}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+
+      # --- Auth ---
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one/}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
+
+      # --- Sandbox / Runtime ---
+      - SANDBOX_USER_ID=${SANDBOX_USER_ID:-0}
+      - WORKSPACE_MOUNT_PATH=/opt/workspace_base
+      - OH_SANDBOX__NETWORK=${STACK}-openhands-net
+      - OH_SANDBOX__APP_HOSTNAME=openhands-app
+      - OH_SANDBOX__PRIVILEGED=true
+      - AGENT_SERVER_IMAGE_REPOSITORY=${AGENT_SERVER_IMAGE_REPOSITORY:-ghcr.io/openhands/agent-server}
+      - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-}
+      - B1_AUTOMATION_HUB_EMAIL=${B1_AUTOMATION_HUB_EMAIL:-}
+      - B1_AUTOMATION_HUB_PASSWORD=${B1_AUTOMATION_HUB_PASSWORD:-}
+
+      # --- Make sandbox containers visible in Portainer ---
+      - 'OH_SANDBOX_CONTAINER_LABELS={"com.docker.compose.project": "${STACK}", "com.docker.compose.service": "agent-server"}'
+      # --- Traefik routing for agent sandbox containers ---
+      - OH_SANDBOX__TRAEFIK_NETWORK=traefik
+      - OH_SANDBOX__TRAEFIK_DOMAIN=${DOMAIN}
+      - OH_SANDBOX__TRAEFIK_ENTRYPOINTS=${ENTRYPOINTS:-web}
+      - OH_SANDBOX__TRAEFIK_WORKER_PORTS=WORKER_2
+      - OH_SANDBOX__TRAEFIK_SUBDOMAIN_PREFIX=${STACK}
+    networks:
+      openhands-net:
+      traefik:
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.${STACK}-openhands.rule=Host(`${STACK}.${DOMAIN}`)
+      - traefik.http.routers.${STACK}-openhands.entrypoints=${ENTRYPOINTS:-web}
+      - traefik.http.services.${STACK}-openhands.loadbalancer.server.port=3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - openhands_state:/.openhands
+      - openhands_workspace:/opt/workspace_base
+    stdin_open: true
+    tty: true

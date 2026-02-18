@@ -8,7 +8,6 @@ import { I18nextProvider } from "react-i18next";
 import GitSettingsScreen from "#/routes/git-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
-import AuthService from "#/api/auth-service/auth-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { GetConfigResponse } from "#/api/option-service/option.types";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
@@ -257,7 +256,6 @@ describe("Content", () => {
     expect(button).not.toBeInTheDocument();
 
     expect(screen.getByTestId("submit-button")).toBeInTheDocument();
-    expect(screen.getByTestId("disconnect-tokens-button")).toBeInTheDocument();
 
     getConfigSpy.mockResolvedValue(VALID_SAAS_CONFIG);
     queryClient.invalidateQueries();
@@ -281,9 +279,6 @@ describe("Content", () => {
       button = screen.getByTestId("configure-github-repositories-button");
       expect(button).toBeInTheDocument();
       expect(screen.queryByTestId("submit-button")).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId("disconnect-tokens-button"),
-      ).not.toBeInTheDocument();
     });
   });
 });
@@ -409,7 +404,7 @@ describe("Form submission", () => {
     expect(submit).toBeDisabled();
   });
 
-  it("should enable a disconnect tokens button if there is at least one token set", async () => {
+  it("should show per-token clear buttons when tokens are set", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
 
@@ -425,47 +420,41 @@ describe("Form submission", () => {
     renderGitSettingsScreen();
     await screen.findByTestId("git-settings-screen");
 
-    let disconnectButton = await screen.findByTestId(
-      "disconnect-tokens-button",
-    );
-    // When tokens are set (github and gitlab are not null), the button should be enabled
-    await waitFor(() => expect(disconnectButton).not.toBeDisabled());
-
-    // Mock settings with no tokens set
-    getSettingsSpy.mockResolvedValue({
-      ...MOCK_DEFAULT_USER_SETTINGS,
-      provider_tokens_set: {},
+    // Clear buttons should appear for set tokens
+    await waitFor(() => {
+      expect(screen.getByTestId("gh-clear-token-button")).toBeInTheDocument();
+      expect(screen.getByTestId("gl-clear-token-button")).toBeInTheDocument();
     });
-    queryClient.invalidateQueries();
 
-    disconnectButton = await screen.findByTestId("disconnect-tokens-button");
-    // When no tokens are set, the button should be disabled
-    await waitFor(() => expect(disconnectButton).toBeDisabled());
+    // Clear buttons should not appear for unset tokens
+    expect(
+      screen.queryByTestId("bb-clear-token-button"),
+    ).not.toBeInTheDocument();
   });
 
-  it("should call logout when pressing the disconnect tokens button", async () => {
+  it("should call deleteProviderToken when pressing a clear token button", async () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-    const logoutSpy = vi.spyOn(AuthService, "logout");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
+    const deleteProviderTokenSpy = vi.spyOn(
+      SecretsService,
+      "deleteProviderToken",
+    );
+    deleteProviderTokenSpy.mockResolvedValue();
 
     getConfigSpy.mockResolvedValue(VALID_OSS_CONFIG);
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
       provider_tokens_set: {
         github: null,
-        gitlab: null,
       },
     });
 
     renderGitSettingsScreen();
 
-    const disconnectButton = await screen.findByTestId(
-      "disconnect-tokens-button",
-    );
-    await waitFor(() => expect(disconnectButton).not.toBeDisabled());
-    await userEvent.click(disconnectButton);
+    const clearButton = await screen.findByTestId("gh-clear-token-button");
+    await userEvent.click(clearButton);
 
-    expect(logoutSpy).toHaveBeenCalled();
+    expect(deleteProviderTokenSpy).toHaveBeenCalledWith("github");
   });
 
   // flaky test

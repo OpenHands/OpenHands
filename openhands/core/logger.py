@@ -531,9 +531,18 @@ def get_uvicorn_json_log_config() -> dict:
     as single-line JSON when LOG_JSON=1, avoiding multi-line plain-text
     tracebacks in log aggregators like Datadog.
 
+    The ``ENV_LOG_LEVEL`` environment variable (a Python numeric log level,
+    e.g. 30 for WARNING) controls the verbosity of *all* loggers including
+    ``uvicorn.access``.
+
     Returns:
         A dict suitable for passing to uvicorn.run(..., log_config=...).
     """
+    import logging as _logging
+
+    env_level = int(os.getenv('ENV_LOG_LEVEL', str(_logging.INFO)))
+    level_name = _logging.getLevelName(env_level)  # e.g. 30 -> "WARNING"
+
     return {
         'version': 1,
         'disable_existing_loggers': False,
@@ -563,13 +572,13 @@ def get_uvicorn_json_log_config() -> dict:
         'handlers': {
             'default': {
                 'class': 'logging.StreamHandler',
-                'level': 'INFO',
+                'level': level_name,
                 'formatter': 'json',
                 'stream': 'ext://sys.stdout',
             },
             'access': {
                 'class': 'logging.StreamHandler',
-                'level': 'INFO',
+                'level': level_name,
                 'formatter': 'json_access',
                 'stream': 'ext://sys.stdout',
             },
@@ -577,17 +586,17 @@ def get_uvicorn_json_log_config() -> dict:
         'loggers': {
             'uvicorn': {
                 'handlers': ['default'],
-                'level': 'INFO',
+                'level': level_name,
                 'propagate': False,
             },
             'uvicorn.error': {
                 'handlers': ['default'],
-                'level': 'INFO',
+                'level': level_name,
                 'propagate': False,
             },
             'uvicorn.access': {
                 'handlers': ['access'],
-                'level': 'INFO',
+                'level': level_name,
                 'propagate': False,
             },
             # Suppress LiteLLM loggers to prevent them from leaking through root logger
@@ -608,5 +617,5 @@ def get_uvicorn_json_log_config() -> dict:
                 'propagate': False,
             },
         },
-        'root': {'level': 'INFO', 'handlers': ['default']},
+        'root': {'level': level_name, 'handlers': ['default']},
     }

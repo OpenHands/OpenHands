@@ -23,11 +23,18 @@ def main():
     if os.getenv('LOG_JSON', '0') in ('1', 'true', 'True'):
         log_config = get_uvicorn_json_log_config()
 
+    # Determine uvicorn log level: DEBUG if DEBUG env is set, otherwise
+    # respect LOG_LEVEL env var (defaults to 'info').
+    if os.environ.get('DEBUG'):
+        uv_log_level = 'debug'
+    else:
+        uv_log_level = os.getenv('LOG_LEVEL', 'info').lower()
+
     uvicorn.run(
         'openhands.server.listen:app',
         host='0.0.0.0',
         port=int(os.environ.get('port') or '3000'),
-        log_level='debug' if os.environ.get('DEBUG') else 'info',
+        log_level=uv_log_level,
         log_config=log_config,
         # If LOG_JSON enabled, force colors off; otherwise let uvicorn default
         use_colors=False if log_config else None,

@@ -16,6 +16,7 @@ Key components:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,6 +26,7 @@ from uuid import UUID
 from fastapi import Request
 from sqlalchemy import UUID as SQLUUID
 from sqlalchemy import Column, Enum, String, func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.models import utc_now
@@ -232,8 +234,25 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
             existing = result.scalar_one_or_none()
             assert existing is None or existing.created_by_user_id == self.user_id
         task.updated_at = utc_now()
-        await self.session.merge(StoredAppConversationStartTask(**task.model_dump()))
-        await self.session.commit()
+        stored = StoredAppConversationStartTask(**task.model_dump())
+        max_attempts = 5
+        base_delay = 0.1
+        for attempt in range(max_attempts):
+            try:
+                await self.session.merge(stored)
+                await self.session.commit()
+                return task
+            except OperationalError as e:
+                if 'database is locked' not in str(e) or attempt == max_attempts - 1:
+                    raise
+                logger.warning(
+                    'SQLite database locked on save_app_conversation_start_task, '
+                    'retrying (attempt %d/%d)',
+                    attempt + 1,
+                    max_attempts,
+                )
+                await self.session.rollback()
+                await asyncio.sleep(base_delay * (2**attempt))
         return task
 
     async def delete_app_conversation_start_tasks(self, conversation_id: UUID) -> bool:

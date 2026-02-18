@@ -18,3 +18,5 @@ export const VSCODE_IN_NEW_TAB = () => loadFeatureFlag("VSCODE_IN_NEW_TAB");
 export const ENABLE_TRAJECTORY_REPLAY = () =>
   loadFeatureFlag("TRAJECTORY_REPLAY");
 export const USE_PLANNING_AGENT = () => loadFeatureFlag("USE_PLANNING_AGENT");
+export const ENABLE_VSCODE_TAB = () =>
+  import.meta.env.VITE_ENABLE_VSCODE_TAB === "true";

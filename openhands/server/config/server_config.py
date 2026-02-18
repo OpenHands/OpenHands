@@ -15,7 +15,7 @@ from openhands.utils.import_utils import get_impl
 
 class ServerConfig(ServerConfigInterface):
     config_cls = os.environ.get('OPENHANDS_CONFIG_CLS', None)
-    app_mode = AppMode.OPENHANDS
+    app_mode = AppMode.B1
     posthog_client_key = 'phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA'
     github_client_id = os.environ.get('GITHUB_APP_CLIENT_ID', '')
     enable_billing = os.environ.get('ENABLE_BILLING', 'false') == 'true'
@@ -45,6 +45,7 @@ class ServerConfig(ServerConfigInterface):
             raise ValueError('Unexpected config path provided')
 
     def get_config(self):
+        better_auth_url = os.environ.get('BETTER_AUTH_URL', '')
         config = {
             'APP_MODE': self.app_mode,
             'GITHUB_CLIENT_ID': self.github_client_id,
@@ -54,6 +55,8 @@ class ServerConfig(ServerConfigInterface):
                 'HIDE_LLM_SETTINGS': self.hide_llm_settings,
             },
         }
+        if better_auth_url:
+            config['AUTH_URL'] = better_auth_url
 
         return config
 

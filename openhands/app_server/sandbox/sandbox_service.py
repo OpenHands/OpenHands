@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from abc import ABC, abstractmethod
 
@@ -17,6 +18,8 @@ from openhands.app_server.utils.docker_utils import (
 )
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 from openhands.sdk.utils.paging import page_iterator
+
+_logger = logging.getLogger(__name__)
 
 SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
@@ -55,13 +58,18 @@ class SandboxService(ABC):
 
     @abstractmethod
     async def start_sandbox(
-        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+        self,
+        sandbox_spec_id: str | None = None,
+        sandbox_id: str | None = None,
+        extra_env: dict[str, str] | None = None,
     ) -> SandboxInfo:
         """Begin the process of starting a sandbox.
 
         Return the info on the new sandbox. If no spec is selected, use the default.
         If sandbox_id is provided, it will be used as the sandbox identifier instead
         of generating a random one.
+        If extra_env is provided, the key-value pairs are merged into the container
+        environment (they take precedence over spec defaults).
         """
 
     @abstractmethod
@@ -105,6 +113,7 @@ class SandboxService(ABC):
                 raise SandboxError(f'Sandbox not found: {sandbox_id}')
 
             if sandbox.status == SandboxStatus.ERROR:
+                _logger.warning(f'Sandbox entered error state: {sandbox_id}')
                 raise SandboxError(f'Sandbox entered error state: {sandbox_id}')
 
             if sandbox.status == SandboxStatus.RUNNING:
@@ -114,11 +123,19 @@ class SandboxService(ABC):
                     if await self._check_agent_server_alive(sandbox, httpx_client):
                         return sandbox
                     # Agent server not ready yet, continue polling
+                    _logger.info(
+                        f'Sandbox running but agent server not ready yet: {sandbox_id}'
+                    )
                 else:
                     return sandbox
+            else:
+                _logger.info(
+                    f'Sandbox status: {sandbox.status} for {sandbox_id}, waiting...'
+                )
 
             await asyncio.sleep(poll_interval)
 
+        _logger.warning(f'Sandbox failed to start within {timeout}s: {sandbox_id}')
         raise SandboxError(f'Sandbox failed to start within {timeout}s: {sandbox_id}')
 
     async def _check_agent_server_alive(
@@ -138,7 +155,8 @@ class SandboxService(ABC):
             url = f'{agent_server_url.rstrip("/")}/alive'
             response = await httpx_client.get(url, timeout=5.0)
             return response.is_success
-        except Exception:
+        except Exception as exc:
+            _logger.info(f'Agent server health check failed for {sandbox.id}: {exc}')
             return False
 
     def _get_agent_server_url(self, sandbox: SandboxInfo) -> str:
@@ -158,7 +176,10 @@ class SandboxService(ABC):
 
         for exposed_url in sandbox.exposed_urls:
             if exposed_url.name == AGENT_SERVER:
-                return replace_localhost_hostname_for_docker(exposed_url.url)
+                url = exposed_url.internal_url or exposed_url.url
+                if not exposed_url.internal_url:
+                    url = replace_localhost_hostname_for_docker(url)
+                return url
 
         raise SandboxError(f'No agent server URL found for sandbox: {sandbox.id}')
 

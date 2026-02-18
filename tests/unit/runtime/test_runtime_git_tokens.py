@@ -116,7 +116,9 @@ class MockRuntime(Runtime):
         return NullObservation(content='')
 
     def get_mcp_config(
-        self, extra_stdio_servers: list[MCPStdioServerConfig] | None = None
+        self,
+        extra_stdio_servers: list[MCPStdioServerConfig] | None = None,
+        extra_shttp_servers=None,
     ):
         return MCPConfig()
 

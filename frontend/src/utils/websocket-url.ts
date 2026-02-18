@@ -76,3 +76,31 @@ export function buildWebSocketUrl(
 
   return `${protocol}//${baseHost}${pathPrefix}/sockets/events/${conversationId}`;
 }
+
+/**
+ * Builds the WebSocket URL for the bash events stream
+ * @param conversationId The conversation ID (needed for proxy routing in Docker network mode)
+ * @param conversationUrl The conversation URL containing host/port
+ * @returns WebSocket URL for bash events or null if inputs are invalid
+ */
+export function buildBashEventsWebSocketUrl(
+  conversationId: string | undefined,
+  conversationUrl: string | null | undefined,
+): string | null {
+  if (!conversationId || !conversationUrl) {
+    return null;
+  }
+
+  const baseHost = extractBaseHost(conversationUrl);
+  const pathPrefix = extractPathPrefix(conversationUrl);
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+
+  // When using Docker networking, conversationUrl is a relative path (starts with "/")
+  // and WebSocket connections go through the app server proxy. The proxy needs
+  // the conversationId to resolve which sandbox to forward to.
+  // For direct access (absolute URL), the agent server endpoint is just /sockets/bash-events.
+  const isProxied = conversationUrl.startsWith("/");
+  const suffix = isProxied ? `/${conversationId}` : "";
+
+  return `${protocol}//${baseHost}${pathPrefix}/sockets/bash-events${suffix}`;
+}

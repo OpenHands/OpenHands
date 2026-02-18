@@ -4,11 +4,15 @@
 # which can occur in containerized environments when directory ownership doesn't match the current user.
 git config --global --add safe.directory "$(realpath .)"
 
-# Install `nc`
-sudo apt update && sudo apt install netcat -y
+# Update repo from remote if running on a stale prebuild (no local changes)
+if git diff --quiet && git diff --cached --quiet; then
+    git fetch origin
+    git pull --ff-only origin "$(git branch --show-current)" || true
+    # Unshallow if the prebuild used a shallow clone
+    if git rev-parse --is-shallow-repository | grep -q true; then
+        git fetch --unshallow || true
+    fi
+fi
 
-# Install `uv` and `uvx`
-wget -qO- https://astral.sh/uv/install.sh | sh
-
-# Do common setup tasks
+# Do common setup tasks (pre-commit hooks, etc.)
 source .openhands/setup.sh

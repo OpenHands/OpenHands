@@ -7,7 +7,7 @@ import { useSharedConversationEvents } from "#/hooks/query/use-shared-conversati
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
-import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
+import b1Logo from "#/assets/branding/b1-logo.png";
 
 export default function SharedConversation() {
   const { t } = useTranslation();
@@ -62,7 +62,7 @@ export default function SharedConversation() {
             className="flex-shrink-0"
             aria-label={t(I18nKey.BRANDING$OPENHANDS_LOGO)}
           >
-            <OpenHandsLogo width={46} height={30} />
+            <img src={b1Logo} alt="Build.One" width={46} height={30} />
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-semibold mb-2">

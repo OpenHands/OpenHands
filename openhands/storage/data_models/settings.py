@@ -161,31 +161,36 @@ class Settings(BaseModel):
         return settings
 
     def merge_with_config_settings(self) -> 'Settings':
-        """Merge config.toml settings with stored settings.
+        """Merge config.toml / env var settings with stored settings.
 
-        Config.toml takes priority for MCP settings, but they are merged rather than replaced.
-        This method can be used by both server mode and CLI mode.
+        Config.toml / env vars serve as defaults: stored settings take priority,
+        but missing LLM and MCP values are filled in from config.
         """
-        # Get config.toml settings
         config_settings = Settings.from_config()
-        if not config_settings or not config_settings.mcp_config:
+        if not config_settings:
             return self
 
-        # If stored settings don't have MCP config, use config.toml MCP config
-        if not self.mcp_config:
-            self.mcp_config = config_settings.mcp_config
-            return self
+        # Fill in missing LLM settings from config / env vars
+        if not self.llm_model and config_settings.llm_model:
+            self.llm_model = config_settings.llm_model
+        if not self.llm_api_key and config_settings.llm_api_key:
+            self.llm_api_key = config_settings.llm_api_key
+        if not self.llm_base_url and config_settings.llm_base_url:
+            self.llm_base_url = config_settings.llm_base_url
 
-        # Both have MCP config - merge them with config.toml taking priority
-        merged_mcp = MCPConfig(
-            sse_servers=list(config_settings.mcp_config.sse_servers)
-            + list(self.mcp_config.sse_servers),
-            stdio_servers=list(config_settings.mcp_config.stdio_servers)
-            + list(self.mcp_config.stdio_servers),
-            shttp_servers=list(config_settings.mcp_config.shttp_servers)
-            + list(self.mcp_config.shttp_servers),
-        )
+        # Merge MCP config (config.toml entries are added alongside stored entries)
+        if config_settings.mcp_config:
+            if not self.mcp_config:
+                self.mcp_config = config_settings.mcp_config
+            else:
+                merged_mcp = MCPConfig(
+                    sse_servers=list(config_settings.mcp_config.sse_servers)
+                    + list(self.mcp_config.sse_servers),
+                    stdio_servers=list(config_settings.mcp_config.stdio_servers)
+                    + list(self.mcp_config.stdio_servers),
+                    shttp_servers=list(config_settings.mcp_config.shttp_servers)
+                    + list(self.mcp_config.shttp_servers),
+                )
+                self.mcp_config = merged_mcp
 
-        # Create new settings with merged MCP config
-        self.mcp_config = merged_mcp
         return self

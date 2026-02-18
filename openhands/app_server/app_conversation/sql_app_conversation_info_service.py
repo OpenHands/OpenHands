@@ -48,6 +48,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfoPage,
     AppConversationSortOrder,
 )
+from openhands.app_server.services.db_session_injector import commit_with_sqlite_retry
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import (
@@ -351,7 +352,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         )
 
         await self.db_session.merge(stored)
-        await self.db_session.commit()
+        await commit_with_sqlite_retry(self.db_session)
         return info
 
     async def update_conversation_statistics(
@@ -434,7 +435,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         # Update last_updated_at timestamp
         stored.last_updated_at = utc_now()
 
-        await self.db_session.commit()
+        await commit_with_sqlite_retry(self.db_session)
 
     async def process_stats_event(
         self,

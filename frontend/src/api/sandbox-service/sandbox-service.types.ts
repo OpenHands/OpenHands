@@ -22,3 +22,11 @@ export interface V1SandboxInfo {
   exposed_urls: V1ExposedUrl[] | null;
   created_at: string;
 }
+
+export interface V1SandboxIdleStatus {
+  idle_seconds: number;
+  timeout_seconds: number;
+  warning_seconds: number;
+  is_warning: boolean;
+  remaining_seconds: number;
+}

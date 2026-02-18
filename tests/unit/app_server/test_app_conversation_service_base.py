@@ -1046,7 +1046,7 @@ class TestLoadAndMergeAllSkills:
             call_kwargs = mock_load_skills.call_args[1]
             assert call_kwargs['agent_server_url'] == 'http://localhost:8000'
             assert call_kwargs['session_api_key'] == 'test-api-key'
-            assert call_kwargs['project_dir'] == '/workspace/repo'
+            assert call_kwargs['project_dir'] == '/workspace'
 
     @pytest.mark.asyncio
     @patch(

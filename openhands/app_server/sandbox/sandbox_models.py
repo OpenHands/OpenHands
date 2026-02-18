@@ -21,6 +21,7 @@ class ExposedUrl(BaseModel):
     name: str
     url: str
     port: int
+    internal_url: str | None = None
 
 
 # Standard names
@@ -28,6 +29,7 @@ AGENT_SERVER = 'AGENT_SERVER'
 VSCODE = 'VSCODE'
 WORKER_1 = 'WORKER_1'
 WORKER_2 = 'WORKER_2'
+WORKER_3 = 'WORKER_3'
 
 
 class SandboxInfo(BaseModel):

@@ -1,7 +1,7 @@
 import { Provider } from "#/types/settings";
 
 export interface GetConfigResponse {
-  APP_MODE: "saas" | "oss";
+  APP_MODE: "saas" | "oss" | "b1";
   APP_SLUG?: string;
   GITHUB_CLIENT_ID: string;
   POSTHOG_CLIENT_KEY: string;

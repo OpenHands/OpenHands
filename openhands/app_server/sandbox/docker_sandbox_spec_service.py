@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import AsyncGenerator
 
 import docker
@@ -32,6 +33,34 @@ def get_docker_client() -> docker.DockerClient:
     return _global_docker_client
 
 
+_SANDBOX_WORKING_DIR = '/workspace/project'
+
+
+def _get_sandbox_env() -> dict[str, str]:
+    """Build environment variables for sandbox containers.
+
+    Returns a dict containing static config values plus any secrets that are
+    set in the host environment.
+    """
+    env: dict[str, str] = {
+        'COREPACK_ENABLE_DOWNLOAD_PROMPT': '0',
+        'AUTHENTICATION_SERVER_TYPE': 'remote',
+        'DATABASE_SERVER_TYPE': 'neon',
+    }
+
+    # Secrets — only forwarded when set in the host environment.
+    for key in (
+        'BETTER_AUTH_SECRET',
+        'B1_AUTOMATION_HUB_EMAIL',
+        'B1_AUTOMATION_HUB_PASSWORD',
+    ):
+        value = os.getenv(key)
+        if value:
+            env[key] = value
+
+    return env
+
+
 def get_default_sandbox_specs():
     return [
         SandboxSpecInfo(
@@ -40,14 +69,22 @@ def get_default_sandbox_specs():
             initial_env={
                 'OPENVSCODE_SERVER_ROOT': '/openhands/.openvscode-server',
                 'OH_ENABLE_VNC': '0',
-                'LOG_JSON': 'true',
+                'LOG_JSON': 'false',
                 'OH_CONVERSATIONS_PATH': '/workspace/conversations',
                 'OH_BASH_EVENTS_DIR': '/workspace/bash_events',
                 'PYTHONUNBUFFERED': '1',
-                'ENV_LOG_LEVEL': '20',
+                'LOG_LEVEL': 'WARNING',
+                'ENV_LOG_LEVEL': os.getenv('OH_SANDBOX_LOG_LEVEL', '30'),
+                'USER': 'openhands',
+                'WORKSPACE_ROOT': _SANDBOX_WORKING_DIR,
+                'EXTRA_PATH_PREFIX': f'{_SANDBOX_WORKING_DIR}/node_modules/.bin',
+                'YARN_CACHE_FOLDER': '/opt/package-cache/yarn',
+                'NPM_CONFIG_CACHE': '/opt/package-cache/npm',
+                'PIP_CACHE_DIR': '/opt/package-cache/pip',
+                **_get_sandbox_env(),
                 **get_agent_server_env(),
             },
-            working_dir='/workspace/project',
+            working_dir=_SANDBOX_WORKING_DIR,
         )
     ]
 
@@ -64,12 +101,43 @@ class DockerSandboxSpecServiceInjector(SandboxSpecServiceInjector):
             'remote repositories.'
         ),
     )
+    _pull_task: asyncio.Task | None = None
+
+    model_config = {'arbitrary_types_allowed': True}
+
+    def start_background_pull(self) -> asyncio.Task:
+        """Start pulling sandbox images in the background.
+
+        Returns the created asyncio.Task so callers can optionally await it.
+        """
+        _logger.info('Starting background pull of sandbox images...')
+        self._pull_task = asyncio.create_task(self._background_pull())
+        return self._pull_task
+
+    async def _background_pull(self):
+        """Background pull wrapper that logs completion and errors."""
+        try:
+            await self.pull_missing_specs()
+            _logger.info('Background pull of sandbox images completed successfully')
+        except Exception:
+            _logger.warning('Background pull of sandbox images failed', exc_info=True)
+            raise
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[SandboxSpecService, None]:
         if self.pull_if_missing:
-            await self.pull_missing_specs()
+            if self._pull_task is not None:
+                # A background pull was started — wait for it instead of
+                # starting a duplicate pull.
+                if not self._pull_task.done():
+                    _logger.info(
+                        'Waiting for background sandbox image pull to complete...'
+                    )
+                await self._pull_task  # re-raises if the task failed
+            else:
+                # No background pull was started — pull inline (original behavior)
+                await self.pull_missing_specs()
             # Prevent repeated checks - more efficient but it does mean if you
             # delete a docker image outside the app you need to restart
             self.pull_if_missing = False

@@ -30,6 +30,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     VSCODE,
     WORKER_1,
     WORKER_2,
+    WORKER_3,
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
@@ -70,6 +71,7 @@ AGENT_SERVER_PORT = 60000
 VSCODE_PORT = 60001
 WORKER_1_PORT = 12000
 WORKER_2_PORT = 12001
+WORKER_3_PORT = 12002
 
 
 class StoredRemoteSandbox(Base):  # type: ignore
@@ -157,6 +159,13 @@ class RemoteSandboxService(SandboxService):
                             name=WORKER_2,
                             url=_build_service_url(url, 'work-2'),
                             port=WORKER_2_PORT,
+                        )
+                    )
+                    exposed_urls.append(
+                        ExposedUrl(
+                            name=WORKER_3,
+                            url=_build_service_url(url, 'work-3'),
+                            port=WORKER_3_PORT,
                         )
                     )
             else:
@@ -277,6 +286,7 @@ class RemoteSandboxService(SandboxService):
         # WORKER_2 URLs.
         environment[WORKER_1] = str(WORKER_1_PORT)
         environment[WORKER_2] = str(WORKER_2_PORT)
+        environment[WORKER_3] = str(WORKER_3_PORT)
 
         return environment
 
@@ -390,7 +400,10 @@ class RemoteSandboxService(SandboxService):
         return None
 
     async def start_sandbox(
-        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+        self,
+        sandbox_spec_id: str | None = None,
+        sandbox_id: str | None = None,
+        extra_env: dict[str, str] | None = None,
     ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:

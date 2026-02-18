@@ -72,6 +72,7 @@ class SkillInfo(BaseModel):
     source: str | None = None
     description: str | None = None
     is_agentskills_format: bool = False
+    mcp_tools: dict | None = None
 
 
 async def _is_gitlab_repository(repo_name: str, user_context: UserContext) -> bool:
@@ -399,4 +400,5 @@ def _convert_skill_info_to_skill(skill_info: SkillInfo) -> Skill:
         source=skill_info.source,
         description=skill_info.description,
         is_agentskills_format=skill_info.is_agentskills_format,
+        mcp_tools=skill_info.mcp_tools,
     )

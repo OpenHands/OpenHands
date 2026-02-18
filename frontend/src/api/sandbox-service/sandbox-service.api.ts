@@ -2,7 +2,10 @@
 // This file contains API methods for /api/v1/sandboxes endpoints.
 
 import { openHands } from "../open-hands-axios";
-import type { V1SandboxInfo } from "./sandbox-service.types";
+import type {
+  V1SandboxIdleStatus,
+  V1SandboxInfo,
+} from "./sandbox-service.types";
 
 export class SandboxService {
   /**
@@ -46,6 +49,16 @@ export class SandboxService {
     ids.forEach((id) => params.append("id", id));
     const { data } = await openHands.get<(V1SandboxInfo | null)[]>(
       `/api/v1/sandboxes?${params.toString()}`,
+    );
+    return data;
+  }
+
+  /**
+   * Get the idle timeout status for a sandbox
+   */
+  static async getIdleStatus(sandboxId: string): Promise<V1SandboxIdleStatus> {
+    const { data } = await openHands.get<V1SandboxIdleStatus>(
+      `/api/v1/sandboxes/${sandboxId}/idle-status`,
     );
     return data;
   }

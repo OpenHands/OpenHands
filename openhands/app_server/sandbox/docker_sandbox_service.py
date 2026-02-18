@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import socket
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -21,6 +22,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     VSCODE,
     WORKER_1,
     WORKER_2,
+    WORKER_3,
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
@@ -40,7 +42,31 @@ from openhands.app_server.utils.docker_utils import (
 )
 
 _logger = logging.getLogger(__name__)
-STARTUP_GRACE_SECONDS = 15
+STARTUP_GRACE_SECONDS = 60
+
+_DOCKER_SOCKET = '/var/run/docker.sock'
+_PACKAGE_CACHE_VOLUME = 'openhands-package-cache'
+_PACKAGE_CACHE_PATH = '/opt/package-cache'
+
+
+def _docker_socket_group(volumes: dict) -> list[int]:
+    """Return group IDs to add when /var/run/docker.sock is mounted.
+
+    If the Docker socket is among the mounted volumes, return its owning
+    group so the non-root container user can access it.
+    """
+    for host_path, bind_info in volumes.items():
+        container_path = (
+            bind_info.get('bind', '') if isinstance(bind_info, dict) else ''
+        )
+        if container_path == _DOCKER_SOCKET or host_path == _DOCKER_SOCKET:
+            try:
+                gid = os.stat(_DOCKER_SOCKET).st_gid
+                if gid != 0:
+                    return [gid]
+            except OSError:
+                pass
+    return []
 
 
 class VolumeMount(BaseModel):
@@ -82,8 +108,203 @@ class DockerSandboxService(SandboxService):
     max_num_sandboxes: int
     web_url: str | None = None
     extra_hosts: dict[str, str] = field(default_factory=dict)
+    network: str | None = None
+    app_hostname: str | None = None
+    container_labels: dict[str, str] = field(default_factory=dict)
+    privileged: bool = False
+    traefik_network: str | None = None
+    traefik_domain: str | None = None
+    traefik_entrypoints: str = 'web'
+    traefik_certresolver: str | None = None
+    traefik_worker_ports: list[str] | None = None
+    traefik_subdomain_prefix: str | None = None
+    traefik_scheme: str = 'https'
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
+
+    def _build_traefik_labels(
+        self,
+        container_name: str,
+        sandbox_id: str,
+        exposed_ports: list[ExposedPort],
+    ) -> dict[str, str]:
+        """Build Traefik labels for automatic subdomain routing of worker ports.
+
+        Only generates labels for WORKER_* ports. Returns an empty dict when
+        Traefik integration is not configured.
+
+        When ``traefik_subdomain_prefix`` is set the subdomain is
+        ``{prefix}-{sandbox_id}.{domain}`` (e.g. ``mystack-abc123.example.com``).
+        Otherwise it falls back to ``{container_name}-{worker_name}.{domain}``.
+        """
+        if not self.traefik_network or not self.traefik_domain:
+            return {}
+
+        labels: dict[str, str] = {
+            'traefik.enable': 'true',
+            'traefik.docker.network': self.traefik_network,
+        }
+        allowed = self.traefik_worker_ports
+        for ep in exposed_ports:
+            if not ep.name.startswith('WORKER_'):
+                continue
+            if allowed and ep.name not in allowed:
+                continue
+            if self.traefik_subdomain_prefix:
+                subdomain = f'{self.traefik_subdomain_prefix}-{sandbox_id}'
+            else:
+                worker_name = ep.name.lower().replace('_', '-')
+                subdomain = f'{container_name}-{worker_name}'
+            router_name = subdomain
+            labels[f'traefik.http.routers.{router_name}.rule'] = (
+                f'Host(`{subdomain}.{self.traefik_domain}`)'
+            )
+            labels[f'traefik.http.routers.{router_name}.entrypoints'] = (
+                self.traefik_entrypoints
+            )
+            labels[f'traefik.http.services.{router_name}.loadbalancer.server.port'] = (
+                str(ep.container_port)
+            )
+            if self.traefik_certresolver:
+                labels[f'traefik.http.routers.{router_name}.tls'] = 'true'
+                labels[f'traefik.http.routers.{router_name}.tls.certresolver'] = (
+                    self.traefik_certresolver
+                )
+        return labels
+
+    async def _start_dockerd(self, container) -> None:
+        """Start dockerd inside a privileged container for DinD support."""
+        _logger.info(f'Starting dockerd in container {container.name}...')
+        container.exec_run(
+            'bash -c "dockerd --storage-driver=vfs > /tmp/dockerd.log 2>&1 &"',
+            user='root',
+            detach=True,
+        )
+        # Wait for dockerd to become ready
+        loop = asyncio.get_running_loop()
+        for i in range(30):
+            result = await loop.run_in_executor(
+                None,
+                lambda: container.exec_run('docker info', user='root'),
+            )
+            if result.exit_code == 0:
+                _logger.info(
+                    f'dockerd ready in container {container.name} after {i + 1}s'
+                )
+                # Make the socket accessible to non-root users
+                await loop.run_in_executor(
+                    None,
+                    lambda: container.exec_run(
+                        'chmod 666 /var/run/docker.sock', user='root'
+                    ),
+                )
+                return
+            await asyncio.sleep(1)
+        _logger.warning(f'dockerd failed to start in container {container.name}')
+
+    def _schedule_codespace_port_visibility(
+        self, port_mappings: dict[int, int]
+    ) -> None:
+        """Fire-and-forget background task to make sandbox ports public.
+
+        Codespaces auto-forwards docker-proxy ports but defaults them to
+        ``private``.  Auto-detection can take up to ~60 s to register a new
+        port with the tunnel service, so this runs in the background with
+        retries — it never blocks sandbox startup.
+        """
+        codespace_name = os.getenv('CODESPACE_NAME')
+        if not codespace_name:
+            return
+
+        gh = shutil.which('gh')
+        if not gh:
+            _logger.debug('gh CLI not found — skipping Codespace port visibility')
+            return
+
+        github_token = os.getenv('CODESPACE_GITHUB_TOKEN')
+        if not github_token:
+            _logger.debug(
+                'CODESPACE_GITHUB_TOKEN not set — skipping Codespace port visibility'
+            )
+            return
+
+        worker_container_ports = {
+            ep.container_port
+            for ep in self.exposed_ports
+            if ep.name.startswith('WORKER_')
+        }
+
+        ports_to_set = [
+            host_port
+            for container_port, host_port in port_mappings.items()
+            if container_port in worker_container_ports
+        ]
+        if not ports_to_set:
+            return
+
+        async def _set_visibility(ports: list[int]) -> None:
+            env = {**os.environ, 'GITHUB_TOKEN': github_token}
+            max_attempts = 20  # ~60 s total (20 × 3 s)
+            for attempt in range(max_attempts):
+                if attempt > 0:
+                    await asyncio.sleep(3)
+
+                remaining: list[int] = []
+                for host_port in ports:
+                    try:
+                        proc = await asyncio.create_subprocess_exec(
+                            gh,
+                            'codespace',
+                            'ports',
+                            'visibility',
+                            f'{host_port}:public',
+                            '-c',
+                            codespace_name,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.PIPE,
+                            env=env,
+                        )
+                        _, stderr_bytes = await asyncio.wait_for(
+                            proc.communicate(), timeout=10
+                        )
+                        if proc.returncode != 0:
+                            err_msg = stderr_bytes.decode().strip()
+                            if '404' in err_msg and attempt < max_attempts - 1:
+                                remaining.append(host_port)
+                            elif '404' in err_msg:
+                                # Port never registered in the Codespace tunnel
+                                # service. This is expected when devcontainer.json
+                                # configures auto-forwarding (portsAttributes) for
+                                # the port range — Codespaces will handle visibility
+                                # once it detects the listener.
+                                _logger.info(
+                                    f'Codespace tunnel did not register port {host_port} '
+                                    f'after {max_attempts} attempts — relying on '
+                                    f'devcontainer.json auto-forward settings'
+                                )
+                            else:
+                                _logger.warning(
+                                    f'Failed to set port {host_port} public: {err_msg}'
+                                )
+                        else:
+                            _logger.info(f'Codespace port {host_port} set to public')
+                    except asyncio.TimeoutError:
+                        if attempt < max_attempts - 1:
+                            remaining.append(host_port)
+                        else:
+                            _logger.warning(
+                                f'Timed out setting Codespace port {host_port} visibility'
+                            )
+                    except Exception as exc:
+                        _logger.warning(
+                            f'Error setting Codespace port {host_port} visibility: {exc}'
+                        )
+
+                ports = remaining
+                if not ports:
+                    break
+
+        asyncio.create_task(_set_visibility(ports_to_set))
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -157,17 +378,46 @@ class DockerSandboxService(SandboxService):
                             None,
                         )
                         if exposed_port:
-                            url = self.container_url_pattern.format(port=host_port)
+                            traefik_allowed = self.traefik_worker_ports
+                            if (
+                                self.traefik_domain
+                                and self.traefik_network
+                                and exposed_port.name.startswith('WORKER_')
+                                and (
+                                    not traefik_allowed
+                                    or exposed_port.name in traefik_allowed
+                                )
+                            ):
+                                if self.traefik_subdomain_prefix:
+                                    sid = container.labels.get(
+                                        'sandbox_id', container.name
+                                    )
+                                    subdomain = f'{self.traefik_subdomain_prefix}-{sid}'
+                                else:
+                                    worker_name = exposed_port.name.lower().replace(
+                                        '_', '-'
+                                    )
+                                    subdomain = f'{container.name}-{worker_name}'
+                                scheme = self.traefik_scheme
+                                url = f'{scheme}://{subdomain}.{self.traefik_domain}'
+                            else:
+                                url = self.container_url_pattern.format(port=host_port)
 
                             # VSCode URLs require the api_key and working dir
                             if exposed_port.name == VSCODE:
                                 url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+
+                            # Compute internal URL for container-to-container communication
+                            internal_url = None
+                            if self.network:
+                                internal_url = f'http://{container.name}:{exposed_port.container_port}'
 
                             exposed_urls.append(
                                 ExposedUrl(
                                     name=exposed_port.name,
                                     url=url,
                                     port=host_port,
+                                    internal_url=internal_url,
                                 )
                             )
 
@@ -182,20 +432,25 @@ class DockerSandboxService(SandboxService):
         )
 
     async def _container_to_checked_sandbox_info(self, container) -> SandboxInfo | None:
+        """Convert container to SandboxInfo with health check validation."""
         sandbox_info = await self._container_to_sandbox_info(container)
         if (
             sandbox_info
             and self.health_check_path is not None
             and sandbox_info.exposed_urls
         ):
-            app_server_url = next(
-                exposed_url.url
+            agent_server_eu = next(
+                exposed_url
                 for exposed_url in sandbox_info.exposed_urls
                 if exposed_url.name == AGENT_SERVER
             )
+            app_server_url = agent_server_eu.internal_url or agent_server_eu.url
             try:
                 # When running in Docker, replace localhost hostname with host.docker.internal for internal requests
-                app_server_url = replace_localhost_hostname_for_docker(app_server_url)
+                if not agent_server_eu.internal_url:
+                    app_server_url = replace_localhost_hostname_for_docker(
+                        app_server_url
+                    )
 
                 response = await self.httpx_client.get(
                     f'{app_server_url}{self.health_check_path}'
@@ -297,9 +552,15 @@ class DockerSandboxService(SandboxService):
             return None
 
     async def start_sandbox(
-        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+        self,
+        sandbox_spec_id: str | None = None,
+        sandbox_id: str | None = None,
+        extra_env: dict[str, str] | None = None,
     ) -> SandboxInfo:
         """Start a new sandbox."""
+        _logger.info(
+            f'Starting sandbox: sandbox_id={sandbox_id}, spec_id={sandbox_spec_id}'
+        )
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
@@ -323,9 +584,12 @@ class DockerSandboxService(SandboxService):
 
         # Prepare environment variables
         env_vars = sandbox_spec.initial_env.copy()
+        if extra_env:
+            env_vars.update(extra_env)
         env_vars[SESSION_API_KEY_VARIABLE] = session_api_key
+        webhook_host = self.app_hostname or 'host.docker.internal'
         env_vars[WEBHOOK_CALLBACK_VARIABLE] = (
-            f'http://host.docker.internal:{self.host_port}/api/v1/webhooks'
+            f'http://{webhook_host}:{self.host_port}/api/v1/webhooks'
         )
 
         # Set CORS origins for remote browser access when web_url is configured.
@@ -333,6 +597,11 @@ class DockerSandboxService(SandboxService):
         # frontend when running OpenHands on a remote machine.
         if self.web_url:
             env_vars[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
+
+        # Set the base path for openvscode-server so it generates correct URLs
+        # when proxied through the app server's /vscode-proxy/ route.
+        if self.network:
+            env_vars['OPENVSCODE_SERVER_BASE_PATH'] = f'/vscode-proxy/{container_name}'
 
         # Prepare port mappings and add port environment variables
         port_mappings = {}
@@ -342,10 +611,49 @@ class DockerSandboxService(SandboxService):
             # Add port as environment variable
             env_vars[exposed_port.name] = str(host_port)
 
+        # Compute APP_URL from a WORKER port using the same URL logic
+        # as _container_to_sandbox_info so sandbox scripts can reference the app URL.
+        # Prefer a Traefik-routed WORKER port when Traefik is configured;
+        # fall back to the first WORKER port otherwise.
+        traefik_allowed = self.traefik_worker_ports
+        app_url_fallback: str | None = None
+        for ep in self.exposed_ports:
+            if not ep.name.startswith('WORKER_'):
+                continue
+            worker_host_port = port_mappings.get(ep.container_port)
+            if worker_host_port is None:
+                continue
+            if (
+                self.traefik_domain
+                and self.traefik_network
+                and (not traefik_allowed or ep.name in traefik_allowed)
+            ):
+                if self.traefik_subdomain_prefix:
+                    subdomain = f'{self.traefik_subdomain_prefix}-{sandbox_id}'
+                else:
+                    worker_name = ep.name.lower().replace('_', '-')
+                    subdomain = f'{container_name}-{worker_name}'
+                env_vars['APP_URL'] = (
+                    f'{self.traefik_scheme}://{subdomain}.{self.traefik_domain}'
+                )
+                break
+            else:
+                if app_url_fallback is None:
+                    app_url_fallback = self.container_url_pattern.format(
+                        port=worker_host_port
+                    )
+        if 'APP_URL' not in env_vars and app_url_fallback:
+            env_vars['APP_URL'] = app_url_fallback
+
         # Prepare labels
         labels = {
             'sandbox_spec_id': sandbox_spec.id,
+            'sandbox_id': sandbox_id,
+            **self.container_labels,
         }
+        labels.update(
+            self._build_traefik_labels(container_name, sandbox_id, self.exposed_ports)
+        )
 
         # Prepare volumes
         volumes = {
@@ -356,9 +664,22 @@ class DockerSandboxService(SandboxService):
             for mount in self.mounts
         }
 
+        # Add shared package cache volume
+        volumes[_PACKAGE_CACHE_VOLUME] = {
+            'bind': _PACKAGE_CACHE_PATH,
+            'mode': 'rw',
+        }
+
         try:
+            # If /var/run/docker.sock is mounted, grant the container user
+            # access to the socket by adding its owning group.
+            group_add = _docker_socket_group(volumes)
+
             # Create and start the container
-            container = self.docker_client.containers.run(  # type: ignore[call-overload]
+            _logger.info(
+                f'Creating container: name={container_name}, image={sandbox_spec.id}, ports={port_mappings}'
+            )
+            container = self.docker_client.containers.run(  # type: ignore[call-overload, misc]
                 image=sandbox_spec.id,
                 command=sandbox_spec.command,  # Use default command from image
                 remove=False,
@@ -375,13 +696,80 @@ class DockerSandboxService(SandboxService):
                 # Allow agent-server containers to resolve host.docker.internal
                 # and other custom hostnames for LAN deployments
                 extra_hosts=self.extra_hosts if self.extra_hosts else None,
+                # Join shared network for container-to-container communication
+                network=self.network if self.network else None,
+                group_add=group_add if group_add else None,
+                privileged=self.privileged if self.privileged else None,
             )
+
+            # Ensure the shared package cache volume is writable by the
+            # non-root container user (named volumes start root-owned).
+            container.exec_run(
+                f'chown openhands:openhands {_PACKAGE_CACHE_PATH}', user='root'
+            )
+
+            # Connect to the Traefik network so Traefik can discover
+            # and route to this container's worker ports.
+            if self.traefik_network:
+                try:
+                    traefik_net = self.docker_client.networks.get(self.traefik_network)
+                    traefik_net.connect(container)
+                except Exception as e:
+                    _logger.error(
+                        f'Failed to connect {container_name} to Traefik network: {e}'
+                    )
+
+            # When running in privileged mode, start dockerd inside the
+            # container so that Docker-in-Docker works out of the box.
+            if self.privileged:
+                await self._start_dockerd(container)
 
             sandbox_info = await self._container_to_sandbox_info(container)
             assert sandbox_info is not None
+            _logger.info(
+                f'Container started: name={container_name}, status={sandbox_info.status}'
+            )
+
+            # In GitHub Codespaces, make WORKER ports publicly accessible
+            # so that Codespace URLs work without authentication.
+            self._schedule_codespace_port_visibility(port_mappings)
+
+            # In GitHub Codespaces with a shared Docker network, start TCP
+            # forwarders inside the devcontainer so the Codespace agent
+            # detects the worker ports and auto-forwards them.
+            if self.network and os.getenv('CODESPACE_NAME'):
+                from openhands.app_server.sandbox.tcp_port_forwarder import (
+                    get_tcp_port_forwarder_manager,
+                )
+
+                fwd_manager = get_tcp_port_forwarder_manager()
+                if fwd_manager:
+                    fwd_mappings = [
+                        (
+                            port_mappings[ep.container_port],
+                            container_name,
+                            ep.container_port,
+                        )
+                        for ep in self.exposed_ports
+                        if ep.name.startswith('WORKER_')
+                        and ep.container_port in port_mappings
+                    ]
+                    if fwd_mappings:
+                        await fwd_manager.start_forwarders(container_name, fwd_mappings)
+
+            # Record initial activity for idle-timeout tracking
+            from openhands.app_server.idle_timeout_manager import (
+                get_idle_timeout_manager,
+            )
+
+            manager = get_idle_timeout_manager()
+            if manager:
+                manager.touch(sandbox_info.id)
+
             return sandbox_info
 
         except APIError as e:
+            _logger.error(f'Failed to start container {container_name}: {e}')
             raise SandboxError(f'Failed to start container: {e}')
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
@@ -399,6 +787,42 @@ class DockerSandboxService(SandboxService):
             elif container.status == 'exited':
                 container.start()
 
+            # Restart TCP port forwarders for resumed sandboxes
+            if self.network and os.getenv('CODESPACE_NAME'):
+                from openhands.app_server.sandbox.tcp_port_forwarder import (
+                    get_tcp_port_forwarder_manager,
+                )
+
+                fwd_manager = get_tcp_port_forwarder_manager()
+                if fwd_manager:
+                    # Reload container attrs to get current port mappings
+                    container.reload()
+                    port_bindings = container.attrs.get('NetworkSettings', {}).get(
+                        'Ports', {}
+                    )
+                    fwd_mappings = []
+                    for ep in self.exposed_ports:
+                        if not ep.name.startswith('WORKER_'):
+                            continue
+                        key = f'{ep.container_port}/tcp'
+                        bindings = port_bindings.get(key)
+                        if bindings:
+                            host_port = int(bindings[0]['HostPort'])
+                            fwd_mappings.append(
+                                (host_port, sandbox_id, ep.container_port)
+                            )
+                    if fwd_mappings:
+                        await fwd_manager.start_forwarders(sandbox_id, fwd_mappings)
+
+            # Record activity for idle-timeout tracking on resume
+            from openhands.app_server.idle_timeout_manager import (
+                get_idle_timeout_manager,
+            )
+
+            manager = get_idle_timeout_manager()
+            if manager:
+                manager.touch(sandbox_id)
+
             return True
         except (NotFound, APIError):
             return False
@@ -413,6 +837,24 @@ class DockerSandboxService(SandboxService):
             if container.status == 'running':
                 container.pause()
 
+            # Stop TCP port forwarders for paused sandboxes
+            from openhands.app_server.sandbox.tcp_port_forwarder import (
+                get_tcp_port_forwarder_manager,
+            )
+
+            fwd_manager = get_tcp_port_forwarder_manager()
+            if fwd_manager:
+                await fwd_manager.stop_forwarders(sandbox_id)
+
+            # Stop idle-timeout tracking for paused sandboxes
+            from openhands.app_server.idle_timeout_manager import (
+                get_idle_timeout_manager,
+            )
+
+            manager = get_idle_timeout_manager()
+            if manager:
+                manager.remove(sandbox_id)
+
             return True
         except (NotFound, APIError):
             return False
@@ -423,6 +865,15 @@ class DockerSandboxService(SandboxService):
             if not sandbox_id.startswith(self.container_name_prefix):
                 return False
             container = self.docker_client.containers.get(sandbox_id)
+
+            # Stop TCP port forwarders before removing the container
+            from openhands.app_server.sandbox.tcp_port_forwarder import (
+                get_tcp_port_forwarder_manager,
+            )
+
+            fwd_manager = get_tcp_port_forwarder_manager()
+            if fwd_manager:
+                await fwd_manager.stop_forwarders(sandbox_id)
 
             # Stop the container if it's running
             if container.status in ['running', 'paused']:
@@ -492,12 +943,19 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 description=(
                     'The first port on which the agent should start application servers.'
                 ),
-                container_port=8011,
+                container_port=8080,
             ),
             ExposedPort(
                 name=WORKER_2,
                 description=(
-                    'The first port on which the agent should start application servers.'
+                    'The second port on which the agent should start application servers.'
+                ),
+                container_port=8011,
+            ),
+            ExposedPort(
+                name=WORKER_3,
+                description=(
+                    'The third port on which the agent should start application servers.'
                 ),
                 container_port=8012,
             ),
@@ -519,11 +977,120 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Format: {"hostname": "ip_or_gateway"}'
         ),
     )
+    network: str | None = Field(
+        default=None,
+        description=(
+            'Docker network to attach sandbox containers to for container-to-container '
+            'communication. When set, sandbox containers join this network and internal '
+            'URLs are computed for server-to-server communication. '
+            'Configure via OH_SANDBOX__NETWORK environment variable.'
+        ),
+    )
+    app_hostname: str | None = Field(
+        default=None,
+        description=(
+            'Hostname of the app server on the shared Docker network. '
+            'Used for webhook callbacks from sandbox containers instead of host.docker.internal. '
+            'Configure via OH_SANDBOX__APP_HOSTNAME environment variable.'
+        ),
+    )
+    container_labels: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            'Additional labels to apply to sandbox containers. '
+            'Useful for grouping containers in tools like Portainer or VS Code Docker extension. '
+            'Configure via OH_SANDBOX_CONTAINER_LABELS environment variable. '
+            'Format: {"com.docker.compose.project": "openhands"}'
+        ),
+    )
     startup_grace_seconds: int = Field(
         default=STARTUP_GRACE_SECONDS,
         description=(
             'Number of seconds were no response from the agent server is acceptable'
             'before it is considered an error'
+        ),
+    )
+    idle_timeout_seconds: int = Field(
+        default=1800,
+        description=(
+            'Seconds of inactivity before a sandbox is automatically paused. '
+            'Set to 0 to disable idle timeout. Default is 1800 (30 minutes). '
+            'Configure via OH_SANDBOX__IDLE_TIMEOUT_SECONDS environment variable.'
+        ),
+    )
+    idle_warning_seconds: int = Field(
+        default=300,
+        description=(
+            'Seconds before the idle timeout to send a warning to the frontend. '
+            'Default is 300 (5 minutes). '
+            'Configure via OH_SANDBOX__IDLE_WARNING_SECONDS environment variable.'
+        ),
+    )
+    privileged: bool = Field(
+        default=False,
+        description=(
+            'Run sandbox containers in privileged mode. '
+            'Required for Docker-in-Docker (DinD) so that the sandbox can '
+            'run its own Docker daemon and use volume mounts that reference '
+            'the sandbox filesystem. '
+            'Configure via OH_SANDBOX__PRIVILEGED environment variable.'
+        ),
+    )
+    traefik_network: str | None = Field(
+        default=None,
+        description=(
+            'Traefik Docker network name to attach sandbox containers to for '
+            'automatic Traefik discovery and subdomain routing. '
+            'Configure via OH_SANDBOX__TRAEFIK_NETWORK environment variable.'
+        ),
+    )
+    traefik_domain: str | None = Field(
+        default=None,
+        description=(
+            'Base domain for Traefik subdomain routing of sandbox worker ports. '
+            'Each worker gets a subdomain like {container}-worker-2.{domain}. '
+            'Requires a wildcard DNS record pointing to the Traefik host. '
+            'Configure via OH_SANDBOX__TRAEFIK_DOMAIN environment variable.'
+        ),
+    )
+    traefik_entrypoints: str = Field(
+        default='web',
+        description=(
+            'Traefik entrypoints for sandbox container routers. '
+            'Configure via OH_SANDBOX__TRAEFIK_ENTRYPOINTS environment variable.'
+        ),
+    )
+    traefik_certresolver: str | None = Field(
+        default=None,
+        description=(
+            'Traefik certificate resolver for TLS on sandbox container routers. '
+            'When set, TLS is enabled and certificates are automatically provisioned. '
+            'Configure via OH_SANDBOX__TRAEFIK_CERTRESOLVER environment variable.'
+        ),
+    )
+    traefik_worker_ports: list[str] | None = Field(
+        default=None,
+        description=(
+            'List of WORKER port names to route via Traefik '
+            '(e.g. WORKER_2). When not set, all WORKER_* ports get Traefik routes. '
+            'Configure via OH_SANDBOX__TRAEFIK_WORKER_PORTS environment variable.'
+        ),
+    )
+    traefik_subdomain_prefix: str | None = Field(
+        default=None,
+        description=(
+            'Prefix for Traefik subdomain routing. When set, sandbox URLs use '
+            'the pattern {prefix}-{sandbox_id}.{domain} instead of '
+            '{container_name}-{worker_name}.{domain}. '
+            'Configure via OH_SANDBOX__TRAEFIK_SUBDOMAIN_PREFIX environment variable.'
+        ),
+    )
+    traefik_scheme: str = Field(
+        default='https',
+        description=(
+            'URL scheme for Traefik-routed sandbox URLs (http or https). '
+            'Defaults to https. '
+            'Configure via OH_SANDBOX__TRAEFIK_SCHEME environment variable.'
         ),
     )
 
@@ -557,5 +1124,16 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 max_num_sandboxes=self.max_num_sandboxes,
                 web_url=web_url,
                 extra_hosts=self.extra_hosts,
+                network=self.network,
+                app_hostname=self.app_hostname,
+                container_labels=self.container_labels,
                 startup_grace_seconds=self.startup_grace_seconds,
+                privileged=self.privileged,
+                traefik_network=self.traefik_network,
+                traefik_domain=self.traefik_domain,
+                traefik_entrypoints=self.traefik_entrypoints,
+                traefik_certresolver=self.traefik_certresolver,
+                traefik_worker_ports=self.traefik_worker_ports,
+                traefik_subdomain_prefix=self.traefik_subdomain_prefix,
+                traefik_scheme=self.traefik_scheme,
             )

@@ -256,7 +256,7 @@
     "uk": "Хост Forgejo (домен)"
   },
   "MICROAGENT$ADDING_CONTEXT": {
-    "en": "OpenHands is adding this new context to your respository. We'll let you know when the pull request is ready.",
+    "en": "Build.One is adding this new context to your respository. We'll let you know when the pull request is ready.",
     "ja": "OpenHandsはこの新しいコンテキストをあなたのリポジトリに追加しています。プルリクエストの準備ができたらお知らせします。",
     "zh-CN": "OpenHands正在将此新上下文添加到您的存储库中。拉取请求准备好后，我们会通知您。",
     "zh-TW": "OpenHands正在將此新上下文添加到您的存儲庫中。拉取請求準備好後，我們會通知您。",
@@ -528,7 +528,7 @@
     "uk": "Прочитайте це"
   },
   "AUTH$LOGGING_BACK_IN": {
-    "en": "Logging back into OpenHands...",
+    "en": "Logging back into Build.One...",
     "ja": "OpenHandsに再ログインしています...",
     "zh-CN": "正在重新登录OpenHands...",
     "zh-TW": "正在重新登錄OpenHands...",
@@ -1376,7 +1376,7 @@
     "uk": "Почнімо будувати!"
   },
   "HOME$OPENHANDS_DESCRIPTION": {
-    "en": "OpenHands makes it easy to build and maintain software using AI-driven development.",
+    "en": "Build.One makes it easy to build and maintain software using AI-driven development.",
     "ja": "OpenHandsはAI駆動の開発を使用してソフトウェアの開発と維持を容易にします。",
     "zh-CN": "OpenHands使用AI驱动的开发方式，轻松构建和维护软件。",
     "zh-TW": "OpenHands使用AI驅動的開發方式，輕鬆構建和維護軟件。",
@@ -2240,7 +2240,7 @@
     "uk": "Браузер"
   },
   "BROWSER$EMPTY_MESSAGE": {
-    "en": "If you tell OpenHands to start a web server, the app will appear here.",
+    "en": "If you tell Build.One to start a web server, the app will appear here.",
     "ja": "OpenHandsにWebサーバーの起動を指示すると、ここにアプリが表示されます。",
     "zh-CN": "如果您告诉OpenHands启动Web服务器，应用将在此处显示。",
     "zh-TW": "如果您要求 OpenHands 啟動網頁伺服器，應用程式將會顯示在此處。",
@@ -2688,7 +2688,7 @@
     "uk": "Git налаштування"
   },
   "SETTINGS$GIT_SETTINGS_DESCRIPTION": {
-    "en": "Configure the username and email that OpenHands uses to commit changes.",
+    "en": "Configure the username and email that Build.One uses to commit changes.",
     "ja": "OpenHandsがコミットに使用するユーザー名とメールを設定します。",
     "zh-CN": "配置OpenHands用于提交更改的用户名和电子邮件。",
     "zh-TW": "配置OpenHands用於提交更改的用戶名和電子郵件。",
@@ -2896,7 +2896,7 @@
     "uk": "аватар користувача"
   },
   "BRANDING$OPENHANDS": {
-    "en": "OpenHands",
+    "en": "Build.One",
     "ja": "OpenHands",
     "zh-CN": "OpenHands",
     "zh-TW": "OpenHands",
@@ -2912,7 +2912,7 @@
     "uk": "OpenHands"
   },
   "BRANDING$OPENHANDS_LOGO": {
-    "en": "OpenHands Logo",
+    "en": "Build.One Logo",
     "ja": "OpenHandsロゴ",
     "zh-CN": "OpenHands标志",
     "zh-TW": "OpenHands標誌",
@@ -3168,7 +3168,7 @@
     "uk": "Почистити залкжності"
   },
   "CONFIGURATION$OPENHANDS_WORKSPACE_DIRECTORY_INPUT_LABEL": {
-    "en": "OpenHands Workspace directory",
+    "en": "Build.One Workspace directory",
     "zh-CN": "OpenHands工作区目录",
     "de": "OpenHands Arbeitsverzeichnis",
     "ko-KR": "OpenHands 워크스페이스 디렉토리",
@@ -3600,7 +3600,7 @@
     "uk": "Налаштування репозиторіїв Github"
   },
   "SLACK$INSTALL_APP": {
-    "en": "Install OpenHands Slack App",
+    "en": "Install Build.One Slack App",
     "ja": "OpenHands Slackアプリをインストール",
     "zh-CN": "安装 OpenHands Slack 应用",
     "zh-TW": "安裝 OpenHands Slack 應用程式",
@@ -4688,7 +4688,7 @@
     "uk": "Інваріантний аналізатор"
   },
   "INVARIANT$INVARIANT_ANALYZER_MESSAGE": {
-    "en": "Invariant Analyzer continuously monitors your OpenHands agent for security issues.",
+    "en": "Invariant Analyzer continuously monitors your Build.One agent for security issues.",
     "es": "Analizador de invariantes continuamente monitorea tu agente de OpenHands por problemas de seguridad.",
     "zh-CN": "不变量分析器持续监控您的 OpenHands 代理的安全问题。",
     "zh-TW": "不變量分析器持續監控您的 OpenHands 代理的安全問題。",
@@ -4848,20 +4848,20 @@
     "uk": "Від'єднано"
   },
   "CHAT_INTERFACE$CONNECTING": {
-    "en": "Connecting... (this may take 1-2 minutes)",
-    "ja": "接続中...（1-2分かかる場合があります）",
-    "zh-CN": "正在连接...（这可能需要1-2分钟）",
-    "zh-TW": "正在連接...（這可能需要1-2分鐘）",
-    "ko-KR": "연결 중... (1-2분 정도 걸릴 수 있습니다)",
-    "no": "Kobler til... (dette kan ta 1-2 minutter)",
-    "it": "Connessione in corso... (potrebbe richiedere 1-2 minuti)",
-    "pt": "Conectando... (isso pode levar 1-2 minutos)",
-    "es": "Conectando... (esto puede tomar 1-2 minutos)",
-    "ar": "جاري الاتصال... (قد يستغرق هذا 1-2 دقيقة)",
-    "fr": "Connexion en cours... (cela peut prendre 1-2 minutes)",
-    "tr": "Bağlanıyor... (bu 1-2 dakika sürebilir)",
-    "de": "Verbindung wird hergestellt... (dies kann 1-2 Minuten dauern)",
-    "uk": "З'єднання... (це може зайняти 1-2 хвилини)"
+    "en": "Connecting... (this may take a couple of minutes)",
+    "ja": "接続中...（数分かかる場合があります）",
+    "zh-CN": "正在连接...（这可能需要几分钟）",
+    "zh-TW": "正在連接...（這可能需要幾分鐘）",
+    "ko-KR": "연결 중... (몇 분 정도 걸릴 수 있습니다)",
+    "no": "Kobler til... (dette kan ta et par minutter)",
+    "it": "Connessione in corso... (potrebbe richiedere un paio di minuti)",
+    "pt": "Conectando... (isso pode levar alguns minutos)",
+    "es": "Conectando... (esto puede tomar un par de minutos)",
+    "ar": "جاري الاتصال... (قد يستغرق هذا بضع دقائق)",
+    "fr": "Connexion en cours... (cela peut prendre quelques minutes)",
+    "tr": "Bağlanıyor... (bu birkaç dakika sürebilir)",
+    "de": "Verbindung wird hergestellt... (dies kann einige Minuten dauern)",
+    "uk": "З'єднання... (це може зайняти кілька хвилин)"
   },
   "CHAT_INTERFACE$STOPPED": {
     "en": "Stopped",
@@ -5008,7 +5008,7 @@
     "uk": "Почнімо будувати!"
   },
   "LANDING$SUBTITLE": {
-    "en": "OpenHands makes it easy to build and maintain software using a simple prompt.",
+    "en": "Build.One makes it easy to build and maintain software using a simple prompt.",
     "ja": "OpenHandsは、シンプルなプロンプトを使用してソフトウェアの開発と保守を簡単にします。",
     "zh-CN": "OpenHands 使用简单的提示来轻松构建和维护软件。",
     "zh-TW": "OpenHands 使用簡單的提示來輕鬆建構和維護軟體。",
@@ -6192,7 +6192,7 @@
     "uk": "Завантажити зображення"
   },
   "CHAT_INTERFACE$INITIAL_MESSAGE": {
-    "en": "Hi! I'm OpenHands, an AI Software Engineer. What would you like to build with me today?",
+    "en": "Hi! I'm Build.One, an AI Software Engineer. What would you like to build with me today?",
     "zh-CN": "你好！我是 OpenHands，一名 AI 软件工程师。今天想和我一起编写什么程序呢?",
     "de": "Hi! Ich bin OpenHands, ein KI-Softwareingenieur. Was möchten Sie heute mit mir erstellen?",
     "ko-KR": "안녕하세요! 저는 오픈데빈(OpenHands), AI 소프트웨어 엔지니어입니다. 오늘은 저와 함께 무엇을 만들어 볼까요?",
@@ -6368,7 +6368,7 @@
     "uk": "Введіть свій ключ API."
   },
   "SETTINGS$LLM_API_KEY": {
-    "en": "OpenHands LLM Key",
+    "en": "Build.One LLM Key",
     "zh-CN": "OpenHands LLM 密钥",
     "zh-TW": "OpenHands LLM 金鑰",
     "de": "OpenHands LLM Schlüssel",
@@ -6384,7 +6384,7 @@
     "uk": "Ключ LLM OpenHands"
   },
   "SETTINGS$LLM_API_KEY_DESCRIPTION": {
-    "en": "You can use this API Key as the LLM API Key for OpenHands open-source and CLI. It will incur cost on your OpenHands Cloud account. Do NOT share this key elsewhere.",
+    "en": "You can use this API Key as the LLM API Key for Build.One open-source and CLI. It will incur cost on your Build.One Cloud account. Do NOT share this key elsewhere.",
     "zh-CN": "您可以将此 API 密钥用作 OpenHands 开源和 CLI 的 LLM API 密钥。它将在您的 OpenHands Cloud 账户上产生费用。请勿在其他地方共享此密钥。",
     "zh-TW": "您可以將此 API 金鑰用作 OpenHands 開源和 CLI 的 LLM API 金鑰。它將在您的 OpenHands Cloud 帳戶上產生費用。請勿在其他地方共享此金鑰。",
     "de": "Sie können diesen API-Schlüssel als LLM-API-Schlüssel für OpenHands Open-Source und CLI verwenden. Es fallen Kosten für Ihr OpenHands Cloud-Konto an. Teilen Sie diesen Schlüssel NICHT anderswo.",
@@ -6576,7 +6576,7 @@
     "uk": "Натисніть тут, щоб отримати інструкції"
   },
   "SETTINGS$NEED_OPENHANDS_ACCOUNT": {
-    "en": "Need an OpenHands Account?",
+    "en": "Need an Build.One Account?",
     "ja": "OpenHandsアカウントが必要ですか？",
     "zh-CN": "需要OpenHands账户？",
     "zh-TW": "需要OpenHands帳戶？",
@@ -6672,7 +6672,7 @@
     "tr": "API Anahtarları"
   },
   "SETTINGS$API_KEYS_DESCRIPTION": {
-    "en": "API keys allow you to authenticate with the OpenHands API programmatically. Keep your API keys secure; anyone with your API key can access your account. For more information on how to use the API, see our <a>API documentation</a>.",
+    "en": "API keys allow you to authenticate with the Build.One API programmatically. Keep your API keys secure; anyone with your API key can access your account. For more information on how to use the API, see our <a>API documentation</a>.",
     "ja": "APIキーを使用すると、OpenHands APIにプログラムで認証できます。APIキーは安全に保管してください。APIキーを持っている人は誰でもあなたのアカウントにアクセスできます。APIの使用方法の詳細については、<a>APIドキュメント</a>をご覧ください。",
     "zh-CN": "API密钥允许您以编程方式验证OpenHands API。请确保您的API密钥安全；任何拥有您API密钥的人都可以访问您的账户。有关如何使用API的更多信息，请参阅我们的<a>API文档</a>。",
     "zh-TW": "API密鑰允許您以編程方式驗證OpenHands API。請確保您的API密鑰安全；任何擁有您API密鑰的人都可以訪問您的賬戶。有關如何使用API的更多信息，請參閱我們的<a>API文檔</a>。",
@@ -6688,7 +6688,7 @@
     "uk": "Ключі API дозволяють вам програмно автентифікуватися за допомогою API OpenHands. Зберігайте свої ключі API в безпеці; будь-хто, хто має ваш ключ API, може отримати доступ до вашого облікового запису. Для отримання додаткової інформації про використання API, перегляньте нашу <a>документацію API</a>."
   },
   "SETTINGS$OPENHANDS_API_KEY_HELP": {
-    "en": "You can find your OpenHands API Key in the <a>API Keys</a> tab of OpenHands Cloud.",
+    "en": "You can find your Build.One API Key in the <a>API Keys</a> tab of Build.One Cloud.",
     "ja": "OpenHands APIキーはOpenHands Cloudの<a>APIキー</a>タブで確認できます。",
     "zh-CN": "您可以在OpenHands Cloud的<a>API密钥</a>标签页中找到您的OpenHands API密钥。",
     "zh-TW": "您可以在OpenHands Cloud的<a>API密鑰</a>標籤頁中找到您的OpenHands API密鑰。",
@@ -6704,7 +6704,7 @@
     "uk": "Ви можете знайти свій ключ API OpenHands у вкладці <a>Ключі API</a> OpenHands Cloud."
   },
   "SETTINGS$OPENHANDS_API_KEY_HELP_TEXT": {
-    "en": "You can find your OpenHands API Key in the",
+    "en": "You can find your Build.One API Key in the",
     "ja": "OpenHands APIキーは",
     "zh-CN": "您可以在",
     "zh-TW": "您可以在",
@@ -6720,7 +6720,7 @@
     "uk": "Ви можете знайти свій ключ API OpenHands у"
   },
   "SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX": {
-    "en": "tab of OpenHands Cloud.",
+    "en": "tab of Build.One Cloud.",
     "ja": "タブで確認できます。",
     "zh-CN": "标签页中找到您的OpenHands API密钥。",
     "zh-TW": "標籤頁中找到您的OpenHands API密鑰。",
@@ -7840,7 +7840,7 @@
     "uk": "Запит не вдалося виконати через внутрішню помилку сервера."
   },
   "STATUS$ERROR_LLM_OUT_OF_CREDITS": {
-    "en": "You're out of OpenHands Credits. <a>Add funds</a>",
+    "en": "You're out of Build.One Credits. <a>Add funds</a>",
     "ja": "OpenHandsクレジットが不足しています。<a>資金を追加</a>",
     "zh-CN": "您的OpenHands点数已用完。<a>添加资金</a>",
     "zh-TW": "您的OpenHands點數已用完。<a>添加資金</a>",
@@ -8688,7 +8688,7 @@
     "uk": "Відключено. Будь ласка, оновіть сторінку"
   },
   "BROWSER$NO_PAGE_LOADED": {
-    "en": "No page loaded yet. Ask OpenHands to open a URL. Example: \"Open https://example.com\"",
+    "en": "No page loaded yet. Ask Build.One to open a URL. Example: \"Open https://example.com\"",
     "ja": "まだページは読み込まれていません。OpenHandsにURLを開くよう指示してください。例: \"Open https://example.com\"",
     "zh-CN": "尚未加载页面。请使用OpenHands打开网址。示例：\"Open https://example.com\"",
     "zh-TW": "尚未載入頁面。請指示 OpenHands 開啟網址。範例：\"Open https://example.com\"",
@@ -8912,7 +8912,7 @@
     "uk": "Додайте кошти до свого облікового запису"
   },
   "BILLING$YOUVE_GOT_50": {
-    "en": "You've got $50 in free OpenHands credits",
+    "en": "You've got $50 in free Build.One credits",
     "ja": "OpenHandsの無料クレジット$50を獲得しました",
     "zh-CN": "您获得了 $50 的 OpenHands 免费额度",
     "zh-TW": "您獲得了 $50 的 OpenHands 免費額度",
@@ -9728,7 +9728,7 @@
     "uk": "Увійти за допомогою Enterprise SSO"
   },
   "AUTH$SIGN_IN_WITH_IDENTITY_PROVIDER": {
-    "en": "Log in to OpenHands",
+    "en": "Log in to Build.One",
     "ja": "IDプロバイダーでサインイン",
     "zh-CN": "使用您的身份提供商登录",
     "zh-TW": "使用您的身份提供商登入",
@@ -9984,7 +9984,7 @@
     "uk": "Керування Webhook"
   },
   "GITLAB$WEBHOOK_MANAGER_DESCRIPTION": {
-    "en": "Manage webhooks for your GitLab projects and groups. Webhooks enable OpenHands to receive notifications from GitLab. Note: If a webhook is already installed, you must first delete it through the GitLab UI before reinstalling.",
+    "en": "Manage webhooks for your GitLab projects and groups. Webhooks enable Build.One to receive notifications from GitLab. Note: If a webhook is already installed, you must first delete it through the GitLab UI before reinstalling.",
     "ja": "GitLabプロジェクトとグループのWebhookを管理します。WebhookによりOpenHandsはGitLabから通知を受け取ることができます。注：Webhookが既にインストールされている場合は、再インストールする前にGitLab UIから削除する必要があります。",
     "zh-CN": "管理您的GitLab项目和组的Webhook。Webhook使OpenHands能够接收来自GitLab的通知。注意：如果Webhook已安装，您必须先通过GitLab UI删除它，然后才能重新安装。",
     "zh-TW": "管理您的GitLab專案和群組的Webhook。Webhook使OpenHands能夠接收來自GitLab的通知。注意：如果Webhook已安裝，您必須先透過GitLab UI刪除它，然後才能重新安裝。",
@@ -10416,7 +10416,7 @@
     "uk": "Ваша поточна робоча область не є репозиторієм git."
   },
   "DIFF_VIEWER$ASK_OH": {
-    "en": "Ask OpenHands to initialize a git repo to activate this UI.",
+    "en": "Ask Build.One to initialize a git repo to activate this UI.",
     "ja": "このUIを有効にするために、OpenHandsにgitリポジトリを初期化するよう依頼します。",
     "zh-CN": "请OpenHands初始化git存储库以激活此UI。",
     "zh-TW": "請OpenHands初始化git存儲庫以啟用此UI。",
@@ -10432,7 +10432,7 @@
     "uk": "Попросіть OpenHands ініціалізувати git-репозиторій, щоб активувати цей інтерфейс користувача."
   },
   "DIFF_VIEWER$NO_CHANGES": {
-    "en": "OpenHands hasn't made any changes yet",
+    "en": "Build.One hasn't made any changes yet",
     "ja": "OpenHandsはまだ変更を加えていません",
     "zh-CN": "OpenHands尚未进行任何更改",
     "zh-TW": "OpenHands尚未進行任何更改",
@@ -10496,7 +10496,7 @@
     "uk": "Клас агента:"
   },
   "SYSTEM_MESSAGE_MODAL$OPENHANDS_VERSION": {
-    "en": "OpenHands Version:",
+    "en": "Build.One Version:",
     "zh-CN": "OpenHands 版本：",
     "zh-TW": "OpenHands 版本：",
     "ko-KR": "OpenHands 버전:",
@@ -10640,7 +10640,7 @@
     "tr": "Hizmet Şartlarını kabul ederken hata oluştu"
   },
   "TIPS$CUSTOMIZE_MICROAGENT": {
-    "en": "You can customize OpenHands for your repo using an available microagent. Ask OpenHands to put a description of the repo, including how to run the code, into .openhands/microagents/repo.md.",
+    "en": "You can customize Build.One for your repo using an available microagent. Ask Build.One to put a description of the repo, including how to run the code, into .openhands/microagents/repo.md.",
     "ja": "利用可能なマイクロエージェントを使用して、リポジトリ用にOpenHandsをカスタマイズできます。OpenHandsに、コードの実行方法を含むリポジトリの説明を.openhands/microagents/repo.mdに入れるよう依頼してください。",
     "zh-CN": "您可以使用可用微代理为您的仓库自定义OpenHands。请OpenHands将仓库的描述（包括如何运行代码）放入.openhands/microagents/repo.md。",
     "zh-TW": "您可以使用可用微代理為您的倉庫自定義OpenHands。請OpenHands將倉庫的描述（包括如何運行代碼）放入.openhands/microagents/repo.md。",
@@ -10816,7 +10816,7 @@
     "uk": "Не вдалося отримати навички. Будь ласка, спробуйте пізніше."
   },
   "TIPS$SETUP_SCRIPT": {
-    "en": "You can add .openhands/setup.sh to your repository to automatically run a setup script every time you start an OpenHands conversation.",
+    "en": "You can add .openhands/setup.sh to your repository to automatically run a setup script every time you start an Build.One conversation.",
     "ja": "OpenHandsの会話を開始するたびに自動的にセットアップスクリプトを実行するために、.openhands/setup.shをリポジトリに追加できます。",
     "zh-CN": "您可以将.openhands/setup.sh添加到您的仓库中，以便在每次启动OpenHands对话时自动运行设置脚本。",
     "zh-TW": "您可以將.openhands/setup.sh添加到您的倉庫中，以便在每次啟動OpenHands對話時自動運行設置腳本。",
@@ -10832,7 +10832,7 @@
     "uk": "Ви можете додати .openhands/setup.sh до свого репозиторію, щоб автоматично запускати скрипт налаштування щоразу, коли ви починаєте розмову OpenHands."
   },
   "TIPS$VSCODE_INSTANCE": {
-    "en": "Every OpenHands conversation comes with a VS Code instance, where you can interact with the development environment.",
+    "en": "Every Build.One conversation comes with a VS Code instance, where you can interact with the development environment.",
     "ja": "すべてのOpenHands会話には、開発環境と対話できるVS Codeインスタンスが付属しています。",
     "zh-CN": "每个OpenHands对话都配有VS Code实例，您可以在其中与开发环境交互。",
     "zh-TW": "每個OpenHands對話都配有VS Code實例，您可以在其中與開發環境交互。",
@@ -10864,7 +10864,7 @@
     "uk": "Обов’язково регулярно зберігайте свою роботу, або завантажуючи її на GitHub, або завантажуючи файли через VS Code."
   },
   "TIPS$SPECIFY_FILES": {
-    "en": "When possible, include the names of files or functions OpenHands should focus on. This can help OpenHands work faster, save money, and improve accuracy.",
+    "en": "When possible, include the names of files or functions Build.One should focus on. This can help Build.One work faster, save money, and improve accuracy.",
     "ja": "可能な場合は、OpenHandsが集中すべきファイルや関数の名前を含めてください。これにより、OpenHandsの作業が速くなり、コストを節約し、精度を向上させることができます。",
     "zh-CN": "如果可能，请包含OpenHands应该关注的文件或函数的名称。这可以帮助OpenHands更快地工作，节省成本，并提高准确性。",
     "zh-TW": "如果可能，請包含OpenHands應該關注的文件或函數的名稱。這可以幫助OpenHands更快地工作，節省成本，並提高準確性。",
@@ -10880,7 +10880,7 @@
     "uk": "Коли це можливо, вказуйте назви файлів або функцій, на яких має зосередитися OpenHands. Це може допомогти OpenHands працювати швидше, заощадити гроші та підвищити точність."
   },
   "TIPS$HEADLESS_MODE": {
-    "en": "You can run OpenHands in headless mode to create automations, like responding to 500 errors by automatically creating a fix.",
+    "en": "You can run Build.One in headless mode to create automations, like responding to 500 errors by automatically creating a fix.",
     "ja": "OpenHandsをヘッドレスモードで実行して、500エラーに対して自動的に修正を作成するなどの自動化を作成できます。",
     "zh-CN": "您可以在无头模式下运行OpenHands来创建自动化，例如通过自动创建修复来响应500错误。",
     "zh-TW": "您可以在無頭模式下運行OpenHands來創建自動化，例如通過自動創建修復來響應500錯誤。",
@@ -10896,7 +10896,7 @@
     "uk": "Ви можете запускати OpenHands в headless режимі для створення автоматизації, наприклад, реагування на 500 помилок шляхом автоматичного створення виправлення."
   },
   "TIPS$CLI_MODE": {
-    "en": "You can run OpenHands as a CLI, similar to Claude Code.",
+    "en": "You can run Build.One as a CLI, similar to Claude Code.",
     "ja": "Claude Codeと同様に、OpenHandsをCLIとして実行できます。",
     "zh-CN": "您可以将OpenHands作为CLI运行，类似于Claude Code。",
     "zh-TW": "您可以將OpenHands作為CLI運行，類似於Claude Code。",
@@ -10912,7 +10912,7 @@
     "uk": "Ви можете запускати OpenHands як CLI, подібно до Claude Code."
   },
   "TIPS$GITHUB_HOOK": {
-    "en": "OpenHands Cloud offers a GitHub hook, so you can say \"@openhands fix the merge conflicts\" or \"@openhands fix the feedback on this PR\" right inside the GitHub UI.",
+    "en": "Build.One Cloud offers a GitHub hook, so you can say \"@openhands fix the merge conflicts\" or \"@openhands fix the feedback on this PR\" right inside the GitHub UI.",
     "ja": "OpenHands CloudはGitHubフックを提供しているため、GitHub UI内で「@openhands マージの競合を修正して」や「@openhands このPRのフィードバックを修正して」と言うことができます。",
     "zh-CN": "OpenHands Cloud提供GitHub钩子，因此您可以在GitHub UI中直接说\"@openhands 修复合并冲突\"或\"@openhands 修复此PR上的反馈\"。",
     "zh-TW": "OpenHands Cloud提供GitHub鉤子，因此您可以在GitHub UI中直接說\"@openhands 修復合併衝突\"或\"@openhands 修復此PR上的反饋\"。",
@@ -10928,7 +10928,7 @@
     "uk": "OpenHands Cloud пропонує хук GitHub, тож ви можете сказати «@openhands виправити конфлікти злиття» або «@openhands виправити відгук про цей PR» прямо в інтерфейсі GitHub."
   },
   "TIPS$BLOG_SIGNUP": {
-    "en": "Sign up for the OpenHands Blog to hear about new features and the latest releases.",
+    "en": "Sign up for the Build.One Blog to hear about new features and the latest releases.",
     "ja": "OpenHandsブログに登録して、新機能や最新リリースについての情報を入手しましょう。",
     "zh-CN": "注册OpenHands博客，了解新功能和最新版本。",
     "zh-TW": "註冊OpenHands博客，了解新功能和最新版本。",
@@ -10944,7 +10944,7 @@
     "uk": "Підпишіться на блог OpenHands, щоб дізнаватися про нові функції та останні релізи."
   },
   "TIPS$API_USAGE": {
-    "en": "OpenHands has an API! Create OpenHands conversations with simple cURL command.",
+    "en": "Build.One has an API! Create Build.One conversations with simple cURL command.",
     "ja": "OpenHandsにはAPIがあります！簡単なcURLコマンドでOpenHands会話を作成できます。",
     "zh-CN": "OpenHands有API！使用简单的cURL命令创建OpenHands对话。",
     "zh-TW": "OpenHands有API！使用簡單的cURL命令創建OpenHands對話。",
@@ -11408,7 +11408,7 @@
     "uk": "Інше"
   },
   "FEEDBACK$THANK_YOU_FOR_FEEDBACK": {
-    "en": "Thank you for your feedback! This will help us improve OpenHands going forward.",
+    "en": "Thank you for your feedback! This will help us improve Build.One going forward.",
     "ja": "フィードバックをありがとうございます！これにより、今後OpenHandsを改善していくことができます。",
     "zh-CN": "感谢您的反馈！这将帮助我们改进OpenHands。",
     "zh-TW": "感謝您的反饋！這將幫助我們改進OpenHands。",
@@ -11775,6 +11775,22 @@
     "de": "Token trennen",
     "uk": "Відключити токени"
   },
+  "GIT$CLEAR_TOKEN": {
+    "en": "Clear Token",
+    "ja": "トークンをクリア",
+    "zh-CN": "清除令牌",
+    "zh-TW": "清除令牌",
+    "ko-KR": "토큰 지우기",
+    "no": "Fjern token",
+    "it": "Cancella token",
+    "pt": "Limpar token",
+    "es": "Borrar token",
+    "ar": "مسح الرمز",
+    "fr": "Effacer le jeton",
+    "tr": "Token'ı temizle",
+    "de": "Token löschen",
+    "uk": "Очистити токен"
+  },
   "API$TAVILY_KEY_EXAMPLE": {
     "en": "tvly-dev-...",
     "ja": "tvly-dev-...",
@@ -11824,7 +11840,7 @@
     "uk": "Підключити провайдера Git для управління секретами"
   },
   "SETTINGS$OPENHANDS_API_KEYS": {
-    "en": "OpenHands API Keys",
+    "en": "Build.One API Keys",
     "ja": "OpenHands APIキー",
     "zh-CN": "OpenHands API密钥",
     "zh-TW": "OpenHands API密鑰",
@@ -11952,7 +11968,7 @@
     "uk": "Необов'язково"
   },
   "BROWSER$SERVER_MESSAGE": {
-    "en": "No web app running. Ask OpenHands to start your project's dev server (for example: npm run dev) to see your web application here.",
+    "en": "No web app running. Ask Build.One to start your project's dev server (for example: npm run dev) to see your web application here.",
     "ja": "Webアプリケーションが実行されていません。OpenHands にプロジェクトの開発サーバーを起動するよう指示してください（例: npm run dev）。そうすれば、ここでWebアプリケーションを確認できます。",
     "zh-CN": "未运行任何网页应用。请让 OpenHands 启动您项目的开发服务器（例如：npm run dev），即可在此处查看您的网页应用。",
     "zh-TW": "未執行任何網頁應用程式。請指示 OpenHands 啟動專案的開發伺服器（例如：npm run dev），即可在此處檢視您的網頁應用程式。",
@@ -12016,7 +12032,7 @@
     "uk": "Керування мікроагентами"
   },
   "MICROAGENT_MANAGEMENT$USE_MICROAGENTS": {
-    "en": "Use microagents to customize the behavior of OpenHands, teach it about your repositories, and help it work faster.",
+    "en": "Use microagents to customize the behavior of Build.One, teach it about your repositories, and help it work faster.",
     "ja": "マイクロエージェントを使ってOpenHandsの動作をカスタマイズし、リポジトリについて教え、より速く作業できるようにしましょう。",
     "zh-CN": "使用微代理自定义OpenHands的行为，让其了解您的仓库，并帮助其更快地工作。",
     "zh-TW": "使用微代理自訂 OpenHands 的行為，讓其了解您的倉庫，並幫助其更快地工作。",
@@ -12304,7 +12320,7 @@
     "uk": "Готові додати мікроагента?"
   },
   "MICROAGENT_MANAGEMENT$OPENHANDS_CAN_LEARN_ABOUT_REPOSITORIES": {
-    "en": "OpenHands can automatically learn about your repositories and store its findings as markdown in a microagent. The microagent will help OpenHands run faster and more accurately in any future conversations.",
+    "en": "Build.One can automatically learn about your repositories and store its findings as markdown in a microagent. The microagent will help Build.One run faster and more accurately in any future conversations.",
     "ja": "OpenHandsはあなたのリポジトリについて自動的に学習し、その結果をマイクロエージェント内のMarkdownとして保存できます。マイクロエージェントは今後の会話でOpenHandsがより速く、より正確に動作するのに役立ちます。",
     "zh-CN": "OpenHands 可以自动学习您的仓库，并将其发现以 markdown 形式存储在微代理中。微代理将帮助 OpenHands 在未来的对话中运行得更快、更准确。",
     "zh-TW": "OpenHands 可以自動學習您的儲存庫，並將其發現以 markdown 形式儲存在微代理中。微代理將幫助 OpenHands 在未來的對話中運行得更快、更準確。",
@@ -12368,7 +12384,7 @@
     "uk": "Оновити мікроагента"
   },
   "MICROAGENT_MANAGEMENT$ADD_MICROAGENT_MODAL_DESCRIPTION": {
-    "en": "OpenHands will create a new microagent based on your instructions.",
+    "en": "Build.One will create a new microagent based on your instructions.",
     "ja": "OpenHandsはあなたの指示に基づいて新しいマイクロエージェントを作成します。",
     "zh-CN": "OpenHands 将根据您的指示创建一个新的微代理。",
     "zh-TW": "OpenHands 將根據您的指示建立新的微代理。",
@@ -12432,7 +12448,7 @@
     "uk": "Визначте тригери для мікроагента"
   },
   "MICROAGENT_MANAGEMENT$HELP_TEXT_DESCRIBING_VALID_TRIGGERS": {
-    "en": "Enter a keyword that OpenHands will use to trigger this microagent (Optional).",
+    "en": "Enter a keyword that Build.One will use to trigger this microagent (Optional).",
     "ja": "OpenHandsがこのマイクロエージェントを起動するために使用するキーワードを入力してください（任意）。",
     "zh-CN": "输入OpenHands将用于触发此微代理的关键字（可选）。",
     "zh-TW": "輸入OpenHands將用於觸發此微代理的關鍵字（可選）。",
@@ -12672,7 +12688,7 @@
     "uk": "В процесі виконання"
   },
   "MICROAGENT_MANAGEMENT$WE_ARE_WORKING_ON_IT": {
-    "en": "We're working on it! Once OpenHands is done investigating, you'll be able to review its pull request before merging your new microagent.",
+    "en": "We're working on it! Once Build.One is done investigating, you'll be able to review its pull request before merging your new microagent.",
     "ja": "作業中です！OpenHandsの調査が完了すると、新しいマイクロエージェントをマージする前にプルリクエストを確認できます。",
     "zh-CN": "我们正在处理！OpenHands 调查完成后，您将能够在合并新微代理之前审查其拉取请求。",
     "zh-TW": "我們正在處理！OpenHands 調查完成後，您將能在合併新微代理前審查其拉取請求。",
@@ -12848,7 +12864,7 @@
     "uk": "Вивчити цей репозиторій?"
   },
   "MICROAGENT_MANAGEMENT$LEARN_THIS_REPO_MODAL_DESCRIPTION": {
-    "en": "Do you want OpenHands to launch a new conversation to help you understand this repository?",
+    "en": "Do you want Build.One to launch a new conversation to help you understand this repository?",
     "ja": "OpenHandsがこのリポジトリを理解するための新しい会話を開始しますか？",
     "zh-CN": "您想让OpenHands启动一个新对话来帮助您了解此存储库吗？",
     "zh-TW": "您想讓OpenHands啟動一個新對話來幫助您了解此存儲庫嗎？",
@@ -12896,7 +12912,7 @@
     "uk": "Опишіть, що ви хотіли б дізнатися про цей репозиторій."
   },
   "MICROAGENT_MANAGEMENT$UPDATE_MICROAGENT_MODAL_DESCRIPTION": {
-    "en": "OpenHands will update the microagent based on your instructions.",
+    "en": "Build.One will update the microagent based on your instructions.",
     "ja": "OpenHandsはあなたの指示に基づいてマイクロエージェントを更新します。",
     "zh-CN": "OpenHands 将根据您的指示更新微代理。",
     "zh-TW": "OpenHands 將根據您的指示更新微代理。",
@@ -15216,7 +15232,7 @@
     "uk": "Консоль"
   },
   "MICROAGENT$DEFINITION": {
-    "en": "Microagents are specialized prompts that enhance OpenHands with domain-specific knowledge. They provide expert guidance, automate common tasks, and ensure consistent practices across projects.",
+    "en": "Microagents are specialized prompts that enhance Build.One with domain-specific knowledge. They provide expert guidance, automate common tasks, and ensure consistent practices across projects.",
     "ja": "マイクロエージェントは、OpenHandsにドメイン固有の知識を追加するための専門的なプロンプトです。専門的なガイダンスを提供し、一般的なタスクを自動化し、プロジェクト全体で一貫した実践を保証します。",
     "zh-CN": "微代理是增强 OpenHands 领域知识的专用提示。它们提供专家指导，自动化常见任务，并确保项目中的一致实践。",
     "zh-TW": "微代理是增強 OpenHands 領域知識的專用提示。它們提供專家指導，自動化常見任務，並確保專案中的一致實踐。",
@@ -15950,5 +15966,264 @@
     "tr": "Bağlantı panoya kopyalandı",
     "de": "Link in die Zwischenablage kopiert",
     "uk": "Посилання скопійовано в буфер обміну"
+  },
+  "AUTH$ENTER_PASSWORD_TO_CONTINUE": {
+    "en": "Enter your password to continue",
+    "ja": "続行するにはパスワードを入力してください",
+    "zh-CN": "请输入密码以继续",
+    "zh-TW": "請輸入密碼以繼續",
+    "ko-KR": "계속하려면 비밀번호를 입력하세요",
+    "no": "Skriv inn passordet ditt for å fortsette",
+    "ar": "أدخل كلمة المرور للمتابعة",
+    "de": "Geben Sie Ihr Passwort ein, um fortzufahren",
+    "fr": "Entrez votre mot de passe pour continuer",
+    "it": "Inserisci la tua password per continuare",
+    "pt": "Digite sua senha para continuar",
+    "es": "Ingrese su contraseña para continuar",
+    "tr": "Devam etmek için şifrenizi girin",
+    "uk": "Введіть пароль, щоб продовжити"
+  },
+  "AUTH$INVALID_PASSWORD": {
+    "en": "Invalid password",
+    "ja": "無効なパスワード",
+    "zh-CN": "密码无效",
+    "zh-TW": "密碼無效",
+    "ko-KR": "잘못된 비밀번호",
+    "no": "Ugyldig passord",
+    "ar": "كلمة مرور غير صالحة",
+    "de": "Ungültiges Passwort",
+    "fr": "Mot de passe invalide",
+    "it": "Password non valida",
+    "pt": "Senha inválida",
+    "es": "Contraseña inválida",
+    "tr": "Geçersiz şifre",
+    "uk": "Невірний пароль"
+  },
+  "AUTH$SIGN_IN": {
+    "en": "Sign in",
+    "ja": "サインイン",
+    "zh-CN": "登录",
+    "zh-TW": "登入",
+    "ko-KR": "로그인",
+    "no": "Logg inn",
+    "ar": "تسجيل الدخول",
+    "de": "Anmelden",
+    "fr": "Se connecter",
+    "it": "Accedi",
+    "pt": "Entrar",
+    "es": "Iniciar sesión",
+    "tr": "Giriş yap",
+    "uk": "Увійти"
+  },
+  "AUTH$SIGNING_IN": {
+    "en": "Signing in...",
+    "ja": "サインイン中...",
+    "zh-CN": "登录中...",
+    "zh-TW": "登入中...",
+    "ko-KR": "로그인 중...",
+    "no": "Logger inn...",
+    "ar": "جارٍ تسجيل الدخول...",
+    "de": "Anmeldung...",
+    "fr": "Connexion...",
+    "it": "Accesso in corso...",
+    "pt": "Entrando...",
+    "es": "Iniciando sesión...",
+    "tr": "Giriş yapılıyor...",
+    "uk": "Вхід..."
+  },
+  "AUTH$SIGN_UP": {
+    "en": "Sign up",
+    "ja": "サインアップ",
+    "zh-CN": "注册",
+    "zh-TW": "註冊",
+    "ko-KR": "회원가입",
+    "no": "Registrer deg",
+    "ar": "إنشاء حساب",
+    "de": "Registrieren",
+    "fr": "S'inscrire",
+    "it": "Registrati",
+    "pt": "Cadastrar",
+    "es": "Registrarse",
+    "tr": "Kaydol",
+    "uk": "Зареєструватися"
+  },
+  "AUTH$SIGN_IN_TO_CONTINUE": {
+    "en": "Sign in to continue",
+    "ja": "続行するにはサインインしてください",
+    "zh-CN": "登录以继续",
+    "zh-TW": "登入以繼續",
+    "ko-KR": "계속하려면 로그인하세요",
+    "no": "Logg inn for å fortsette",
+    "ar": "سجّل الدخول للمتابعة",
+    "de": "Anmelden, um fortzufahren",
+    "fr": "Connectez-vous pour continuer",
+    "it": "Accedi per continuare",
+    "pt": "Entre para continuar",
+    "es": "Inicia sesión para continuar",
+    "tr": "Devam etmek için giriş yapın",
+    "uk": "Увійдіть, щоб продовжити"
+  },
+  "AUTH$CREATE_ACCOUNT": {
+    "en": "Create an account",
+    "ja": "アカウントを作成",
+    "zh-CN": "创建账户",
+    "zh-TW": "建立帳戶",
+    "ko-KR": "계정 만들기",
+    "no": "Opprett en konto",
+    "ar": "إنشاء حساب",
+    "de": "Konto erstellen",
+    "fr": "Créer un compte",
+    "it": "Crea un account",
+    "pt": "Criar uma conta",
+    "es": "Crear una cuenta",
+    "tr": "Hesap oluştur",
+    "uk": "Створити обліковий запис"
+  },
+  "AUTH$EMAIL_PLACEHOLDER": {
+    "en": "Email address",
+    "ja": "メールアドレス",
+    "zh-CN": "电子邮箱",
+    "zh-TW": "電子郵件地址",
+    "ko-KR": "이메일 주소",
+    "no": "E-postadresse",
+    "ar": "عنوان البريد الإلكتروني",
+    "de": "E-Mail-Adresse",
+    "fr": "Adresse e-mail",
+    "it": "Indirizzo email",
+    "pt": "Endereço de e-mail",
+    "es": "Dirección de correo electrónico",
+    "tr": "E-posta adresi",
+    "uk": "Електронна адреса"
+  },
+  "AUTH$NAME_PLACEHOLDER": {
+    "en": "Your name",
+    "ja": "お名前",
+    "zh-CN": "您的姓名",
+    "zh-TW": "您的姓名",
+    "ko-KR": "이름",
+    "no": "Ditt navn",
+    "ar": "اسمك",
+    "de": "Ihr Name",
+    "fr": "Votre nom",
+    "it": "Il tuo nome",
+    "pt": "Seu nome",
+    "es": "Tu nombre",
+    "tr": "Adınız",
+    "uk": "Ваше ім'я"
+  },
+  "AUTH$INVALID_CREDENTIALS": {
+    "en": "Invalid email or password",
+    "ja": "メールアドレスまたはパスワードが正しくありません",
+    "zh-CN": "邮箱或密码无效",
+    "zh-TW": "電子郵件或密碼無效",
+    "ko-KR": "이메일 또는 비밀번호가 올바르지 않습니다",
+    "no": "Ugyldig e-post eller passord",
+    "ar": "البريد الإلكتروني أو كلمة المرور غير صالحة",
+    "de": "Ungültige E-Mail oder Passwort",
+    "fr": "Adresse e-mail ou mot de passe invalide",
+    "it": "Email o password non validi",
+    "pt": "E-mail ou senha inválidos",
+    "es": "Correo electrónico o contraseña inválidos",
+    "tr": "Geçersiz e-posta veya şifre",
+    "uk": "Невірна електронна адреса або пароль"
+  },
+  "AUTH$SIGN_UP_FAILED": {
+    "en": "Sign up failed. Please try again.",
+    "ja": "サインアップに失敗しました。もう一度お試しください。",
+    "zh-CN": "注册失败，请重试。",
+    "zh-TW": "註冊失敗，請重試。",
+    "ko-KR": "회원가입에 실패했습니다. 다시 시도해 주세요.",
+    "no": "Registrering mislyktes. Vennligst prøv igjen.",
+    "ar": "فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.",
+    "de": "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "fr": "L'inscription a échoué. Veuillez réessayer.",
+    "it": "Registrazione fallita. Riprova.",
+    "pt": "Cadastro falhou. Por favor, tente novamente.",
+    "es": "El registro falló. Por favor, inténtalo de nuevo.",
+    "tr": "Kayıt başarısız oldu. Lütfen tekrar deneyin.",
+    "uk": "Реєстрація не вдалася. Будь ласка, спробуйте ще раз."
+  },
+  "AUTH$OAUTH_FAILED": {
+    "en": "OAuth sign-in failed. Please try again.",
+    "ja": "OAuthサインインに失敗しました。もう一度お試しください。",
+    "zh-CN": "OAuth 登录失败，请重试。",
+    "zh-TW": "OAuth 登入失敗，請重試。",
+    "ko-KR": "OAuth 로그인에 실패했습니다. 다시 시도해 주세요.",
+    "no": "OAuth-innlogging mislyktes. Vennligst prøv igjen.",
+    "ar": "فشل تسجيل الدخول عبر OAuth. يرجى المحاولة مرة أخرى.",
+    "de": "OAuth-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "fr": "La connexion OAuth a échoué. Veuillez réessayer.",
+    "it": "Accesso OAuth fallito. Riprova.",
+    "pt": "Login OAuth falhou. Por favor, tente novamente.",
+    "es": "El inicio de sesión OAuth falló. Por favor, inténtalo de nuevo.",
+    "tr": "OAuth girişi başarısız oldu. Lütfen tekrar deneyin.",
+    "uk": "Вхід через OAuth не вдався. Будь ласка, спробуйте ще раз."
+  },
+  "AUTH$ALREADY_HAVE_ACCOUNT": {
+    "en": "Already have an account? Sign in",
+    "ja": "すでにアカウントをお持ちですか？サインイン",
+    "zh-CN": "已有账户？登录",
+    "zh-TW": "已有帳戶？登入",
+    "ko-KR": "이미 계정이 있으신가요? 로그인",
+    "no": "Har du allerede en konto? Logg inn",
+    "ar": "لديك حساب بالفعل؟ سجّل الدخول",
+    "de": "Bereits ein Konto? Anmelden",
+    "fr": "Vous avez déjà un compte ? Connectez-vous",
+    "it": "Hai già un account? Accedi",
+    "pt": "Já tem uma conta? Entrar",
+    "es": "¿Ya tienes una cuenta? Inicia sesión",
+    "tr": "Zaten hesabınız var mı? Giriş yapın",
+    "uk": "Вже маєте обліковий запис? Увійти"
+  },
+  "AUTH$DONT_HAVE_ACCOUNT": {
+    "en": "Don't have an account? Sign up",
+    "ja": "アカウントをお持ちでないですか？サインアップ",
+    "zh-CN": "没有账户？注册",
+    "zh-TW": "沒有帳戶？註冊",
+    "ko-KR": "계정이 없으신가요? 회원가입",
+    "no": "Har du ikke en konto? Registrer deg",
+    "ar": "ليس لديك حساب؟ أنشئ حسابًا",
+    "de": "Noch kein Konto? Registrieren",
+    "fr": "Vous n'avez pas de compte ? Inscrivez-vous",
+    "it": "Non hai un account? Registrati",
+    "pt": "Não tem uma conta? Cadastrar",
+    "es": "¿No tienes una cuenta? Regístrate",
+    "tr": "Hesabınız yok mu? Kaydolun",
+    "uk": "Немає облікового запису? Зареєструватися"
+  },
+  "AUTH$OR_CONTINUE_WITH": {
+    "en": "or continue with",
+    "ja": "または次で続行",
+    "zh-CN": "或使用以下方式继续",
+    "zh-TW": "或使用以下方式繼續",
+    "ko-KR": "또는 다음으로 계속",
+    "no": "eller fortsett med",
+    "ar": "أو تابع باستخدام",
+    "de": "oder weiter mit",
+    "fr": "ou continuer avec",
+    "it": "o continua con",
+    "pt": "ou continuar com",
+    "es": "o continuar con",
+    "tr": "veya şununla devam edin",
+    "uk": "або продовжити з"
+  },
+  "SANDBOX$IDLE_TIMEOUT_WARNING": {
+    "en": "This sandbox will be paused in {{time}} due to inactivity. Send a message or interact with the workspace to keep it running.",
+    "ja": "非アクティブのため、サンドボックスは{{time}}後に一時停止されます。メッセージを送信するかワークスペースを操作して、実行を継続してください。",
+    "zh-CN": "由于不活动，此沙箱将在 {{time}} 后暂停。发送消息或与工作区交互以保持运行。",
+    "zh-TW": "由於不活動，此沙箱將在 {{time}} 後暫停。發送訊息或與工作區互動以保持運行。",
+    "ko-KR": "비활성으로 인해 이 샌드박스가 {{time}} 후에 일시중지됩니다. 메시지를 보내거나 워크스페이스와 상호작용하여 계속 실행하세요.",
+    "no": "Denne sandkassen vil bli satt på pause om {{time}} på grunn av inaktivitet. Send en melding eller samhandle med arbeidsområdet for å holde den i gang.",
+    "ar": "سيتم إيقاف بيئة الاختبار مؤقتًا خلال {{time}} بسبب عدم النشاط. أرسل رسالة أو تفاعل مع مساحة العمل للإبقاء عليها قيد التشغيل.",
+    "de": "Diese Sandbox wird in {{time}} wegen Inaktivität pausiert. Senden Sie eine Nachricht oder interagieren Sie mit dem Arbeitsbereich, um sie am Laufen zu halten.",
+    "fr": "Ce bac à sable sera mis en pause dans {{time}} en raison d'inactivité. Envoyez un message ou interagissez avec l'espace de travail pour le maintenir en fonctionnement.",
+    "it": "Questa sandbox verrà messa in pausa tra {{time}} a causa dell'inattività. Invia un messaggio o interagisci con l'area di lavoro per mantenerla in esecuzione.",
+    "pt": "Esta sandbox será pausada em {{time}} devido à inatividade. Envie uma mensagem ou interaja com o espaço de trabalho para mantê-la em execução.",
+    "es": "Este sandbox se pausará en {{time}} debido a inactividad. Envía un mensaje o interactúa con el espacio de trabajo para mantenerlo en ejecución.",
+    "tr": "Bu sandbox {{time}} sonra etkinlik olmaması nedeniyle duraklatılacaktır. Çalışmaya devam etmesi için bir mesaj gönderin veya çalışma alanıyla etkileşimde bulunun.",
+    "uk": "Цю пісочницю буде призупинено через {{time}} через неактивність. Надішліть повідомлення або взаємодійте з робочим простором, щоб підтримувати її роботу."
+  },
+  "NEON$API_KEY_LABEL": {
+    "en": "Neon Database API Key"
   }
 }

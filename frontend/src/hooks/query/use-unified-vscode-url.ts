@@ -73,10 +73,17 @@ export const useUnifiedVSCodeUrl = () => {
           };
         }
 
-        return {
-          url: transformVSCodeUrl(vscodeUrl.url),
-          error: null,
-        };
+        // Build a same-origin proxied URL through the app server.
+        // Extract tkn and folder params from the original direct URL.
+        const originalUrl = new URL(vscodeUrl.url, window.location.origin);
+        const params = new URLSearchParams();
+        const tkn = originalUrl.searchParams.get("tkn");
+        const folder = originalUrl.searchParams.get("folder");
+        if (tkn) params.set("tkn", tkn);
+        if (folder) params.set("folder", folder);
+
+        const proxyUrl = `${window.location.origin}/vscode-proxy/${sandbox.id}/?${params.toString()}`;
+        return { url: proxyUrl, error: null };
       }
 
       // V0 (Legacy): Use the legacy API endpoint

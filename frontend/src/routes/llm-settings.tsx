@@ -435,6 +435,16 @@ function LlmSettingsScreen() {
 
   const formIsDirty = Object.values(dirtyInputs).some((isDirty) => isDirty);
 
+  const handleClearApiKey = () => {
+    saveSettings(
+      { llm_api_key: "" },
+      {
+        onSuccess: handleSuccessfulMutation,
+        onError: handleErrorMutation,
+      },
+    );
+  };
+
   const getSecurityAnalyzerOptions = () => {
     const analyzers = resources?.securityAnalyzers || [];
     const orderedItems = [];
@@ -526,20 +536,32 @@ function LlmSettingsScreen() {
 
               {!shouldUseOpenHandsKey && (
                 <>
-                  <SettingsInput
-                    testId="llm-api-key-input"
-                    name="llm-api-key-input"
-                    label={t(I18nKey.SETTINGS_FORM$API_KEY)}
-                    type="password"
-                    className="w-full max-w-[680px]"
-                    placeholder={settings.llm_api_key_set ? "<hidden>" : ""}
-                    onChange={handleApiKeyIsDirty}
-                    startContent={
-                      settings.llm_api_key_set && (
-                        <KeyStatusIcon isSet={settings.llm_api_key_set} />
-                      )
-                    }
-                  />
+                  <div className="flex items-end gap-2">
+                    <SettingsInput
+                      testId="llm-api-key-input"
+                      name="llm-api-key-input"
+                      label={t(I18nKey.SETTINGS_FORM$API_KEY)}
+                      type="password"
+                      className="w-full max-w-[680px]"
+                      placeholder={settings.llm_api_key_set ? "<hidden>" : ""}
+                      onChange={handleApiKeyIsDirty}
+                      startContent={
+                        settings.llm_api_key_set && (
+                          <KeyStatusIcon isSet={settings.llm_api_key_set} />
+                        )
+                      }
+                    />
+                    {settings.llm_api_key_set && (
+                      <BrandButton
+                        testId="llm-clear-api-key-button"
+                        type="button"
+                        variant="secondary"
+                        onClick={handleClearApiKey}
+                      >
+                        {t(I18nKey.GIT$CLEAR_TOKEN)}
+                      </BrandButton>
+                    )}
+                  </div>
 
                   <HelpLink
                     testId="llm-api-key-help-anchor"
@@ -585,20 +607,32 @@ function LlmSettingsScreen() {
 
               {!shouldUseOpenHandsKey && (
                 <>
-                  <SettingsInput
-                    testId="llm-api-key-input"
-                    name="llm-api-key-input"
-                    label={t(I18nKey.SETTINGS_FORM$API_KEY)}
-                    type="password"
-                    className="w-full max-w-[680px]"
-                    placeholder={settings.llm_api_key_set ? "<hidden>" : ""}
-                    onChange={handleApiKeyIsDirty}
-                    startContent={
-                      settings.llm_api_key_set && (
-                        <KeyStatusIcon isSet={settings.llm_api_key_set} />
-                      )
-                    }
-                  />
+                  <div className="flex items-end gap-2">
+                    <SettingsInput
+                      testId="llm-api-key-input"
+                      name="llm-api-key-input"
+                      label={t(I18nKey.SETTINGS_FORM$API_KEY)}
+                      type="password"
+                      className="w-full max-w-[680px]"
+                      placeholder={settings.llm_api_key_set ? "<hidden>" : ""}
+                      onChange={handleApiKeyIsDirty}
+                      startContent={
+                        settings.llm_api_key_set && (
+                          <KeyStatusIcon isSet={settings.llm_api_key_set} />
+                        )
+                      }
+                    />
+                    {settings.llm_api_key_set && (
+                      <BrandButton
+                        testId="llm-clear-api-key-button"
+                        type="button"
+                        variant="secondary"
+                        onClick={handleClearApiKey}
+                      >
+                        {t(I18nKey.GIT$CLEAR_TOKEN)}
+                      </BrandButton>
+                    )}
+                  </div>
                   <HelpLink
                     testId="llm-api-key-help-anchor-advanced"
                     text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}

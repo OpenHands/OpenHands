@@ -1,0 +1,53 @@
+services:
+  openhands:
+    build:
+      context: ./
+      dockerfile: ./containers/app/Dockerfile.dev
+    image: openhands:dev
+    container_name: openhands-dev
+    hostname: openhands-app
+    environment:
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one/}
+      - CODESPACE_NAME=${CODESPACE_NAME:-}
+      - GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN=${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}
+      - CODESPACE_GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - AGENT_SERVER_IMAGE_REPOSITORY=${AGENT_SERVER_IMAGE_REPOSITORY:-ghcr.io/openhands/agent-server}
+      - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-31536c8-python}
+      - SANDBOX_USER_ID=0
+      - WORKSPACE_MOUNT_PATH=${WORKSPACE_BASE:-$PWD/workspace}
+      - OH_SANDBOX__NETWORK=openhands-net
+      - OH_SANDBOX__APP_HOSTNAME=openhands-app
+      - 'OH_SANDBOX_CONTAINER_LABELS={"com.docker.compose.project": "openhands"}'
+      - OH_SANDBOX__PRIVILEGED=true
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
+      - LLM_MODEL=${LLM_MODEL:-anthropic/claude-opus-4-5-20251101}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LOG_LEVEL=${LOG_LEVEL:-WARNING}
+      - B1_AUTOMATION_HUB_EMAIL=${B1_AUTOMATION_HUB_EMAIL:-}
+      - B1_AUTOMATION_HUB_PASSWORD=${B1_AUTOMATION_HUB_PASSWORD:-}
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Source code bind mounts (hot-reload)
+      - ./openhands:/app/openhands
+      - ./skills:/app/skills
+      - ./frontend:/app/frontend
+      # Preserve node_modules from image (anonymous volume)
+      - /app/frontend/node_modules
+      # Infrastructure
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.openhands:/.openhands
+      - ${WORKSPACE_BASE:-$PWD/workspace}:/opt/workspace_base
+    networks:
+      - openhands-net
+    pull_policy: build
+    stdin_open: true
+    tty: true
+
+networks:
+  openhands-net:
+    name: openhands-net
+    driver: bridge

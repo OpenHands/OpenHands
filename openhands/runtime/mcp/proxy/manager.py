@@ -13,7 +13,7 @@ from fastmcp import FastMCP
 from fastmcp.server.auth import StaticTokenVerifier
 from fastmcp.utilities.logging import get_logger as fastmcp_get_logger
 
-from openhands.core.config.mcp_config import MCPStdioServerConfig
+from openhands.core.config.mcp_config import MCPSHTTPServerConfig, MCPStdioServerConfig
 
 logger = logging.getLogger(__name__)
 fastmcp_logger = fastmcp_get_logger('fastmcp')
@@ -131,6 +131,7 @@ class MCPProxyManager:
         self,
         app: FastAPI,
         stdio_servers: list[MCPStdioServerConfig],
+        shttp_servers: list[MCPSHTTPServerConfig] | None = None,
         allow_origins: Optional[list[str]] = None,
     ) -> None:
         """Update the tools configuration and remount the proxy to the app.
@@ -141,10 +142,27 @@ class MCPProxyManager:
 
         Args:
             app: FastAPI application to mount to
-            tools: List of tool configurations
+            stdio_servers: List of stdio server configurations
+            shttp_servers: List of SHTTP server configurations
             allow_origins: List of allowed origins for CORS
         """
+        from urllib.parse import urlparse
+
         tools = {t.name: t.model_dump() for t in stdio_servers}
+
+        # Add shttp servers to the config
+        if shttp_servers:
+            for server in shttp_servers:
+                parsed = urlparse(server.url)
+                name = parsed.path.strip('/').replace('/', '-') or 'shttp-server'
+                entry: dict[str, Any] = {
+                    'url': server.url,
+                    'transport': 'http',
+                }
+                if server.api_key:
+                    entry['headers'] = {'Authorization': f'Bearer {server.api_key}'}
+                tools[name] = entry
+
         self.config['mcpServers'] = tools
 
         del self.proxy

@@ -46,7 +46,7 @@ export function Sidebar() {
         "Something went wrong while fetching settings. Please reload the page.",
       );
     } else if (
-      config?.APP_MODE === "oss" &&
+      (config?.APP_MODE === "oss" || config?.APP_MODE === "b1") &&
       settingsError?.status === 404 &&
       !config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS
     ) {

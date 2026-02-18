@@ -21,6 +21,22 @@ from openhands.integrations.provider import (
 )
 from openhands.integrations.service_types import ProviderType
 
+# Well-known custom secret names that map to system settings
+WELL_KNOWN_SECRET_LLM_API_KEY = 'anthropic-api-key'
+WELL_KNOWN_SECRET_GITHUB_TOKEN = 'github-token'
+WELL_KNOWN_SECRET_NEON_API_KEY = 'neon-api-key'
+WELL_KNOWN_SECRET_BUILDONE_USER = 'buildone-user'
+WELL_KNOWN_SECRET_BUILDONE_TOKEN = 'buildone-token'
+
+# Custom secret names that must be forwarded to the sandbox under a
+# different environment variable name.  The original name is always
+# included as well.
+_SANDBOX_ENV_ALIASES: dict[str, str] = {
+    WELL_KNOWN_SECRET_NEON_API_KEY: 'NEON_API_KEY',
+    WELL_KNOWN_SECRET_BUILDONE_USER: 'BUILDONE_USER',
+    WELL_KNOWN_SECRET_BUILDONE_TOKEN: 'BUILDONE_TOKEN',
+}
+
 
 class Secrets(BaseModel):
     provider_tokens: PROVIDER_TOKEN_TYPE = Field(
@@ -149,6 +165,9 @@ class Secrets(BaseModel):
         secrets = {}
         for secret_name, value in custom_secrets.items():
             secrets[secret_name] = value['secret']
+            alias = _SANDBOX_ENV_ALIASES.get(secret_name)
+            if alias:
+                secrets[alias] = value['secret']
 
         return secrets
 

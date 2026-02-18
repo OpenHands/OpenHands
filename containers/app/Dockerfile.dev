@@ -1,0 +1,69 @@
+ARG OPENHANDS_BUILD_VERSION=dev
+FROM python:3.13.7-slim-trixie AS backend-builder
+
+WORKDIR /app
+ENV PYTHONPATH='/app'
+
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_VIRTUALENVS_CREATE=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
+RUN apt-get update -y \
+    && apt-get install -y curl make git build-essential jq gettext \
+    && python3 -m pip install poetry --break-system-packages
+
+COPY pyproject.toml poetry.lock ./
+RUN touch README.md
+RUN export POETRY_CACHE_DIR && poetry install --no-root && rm -rf $POETRY_CACHE_DIR
+
+FROM python:3.13.7-slim-trixie
+
+WORKDIR /app
+
+ARG OPENHANDS_BUILD_VERSION
+
+ENV RUN_AS_OPENHANDS=false
+ENV SANDBOX_LOCAL_RUNTIME_URL=http://host.docker.internal
+ENV USE_HOST_NETWORK=false
+ENV WORKSPACE_BASE=/opt/workspace_base
+ENV OPENHANDS_BUILD_VERSION=$OPENHANDS_BUILD_VERSION
+ENV SANDBOX_USER_ID=0
+ENV FILE_STORE=local
+ENV FILE_STORE_PATH=/.openhands
+ENV SERVE_FRONTEND=false
+ENV INIT_GIT_IN_EMPTY_WORKSPACE=1
+
+RUN mkdir -p $FILE_STORE_PATH
+RUN mkdir -p $WORKSPACE_BASE
+
+# Install system deps + Node.js 22 + GitHub CLI
+RUN apt-get update -y \
+    && apt-get install -y curl ssh sudo \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && (curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && apt-get update) \
+    && apt-get install -y nodejs gh \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH='/app'
+
+COPY --from=backend-builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
+
+# Copy backend source (layer cache; bind mount overrides at runtime)
+COPY ./skills ./skills
+COPY ./openhands ./openhands
+COPY pyproject.toml poetry.lock README.md MANIFEST.in LICENSE ./
+
+# Install frontend deps (node_modules lives in the image, preserved via anonymous volume)
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN cd frontend && npm ci
+
+EXPOSE 3000 3001
+
+CMD ["bash", "-c", "trap 'kill 0' EXIT; uvicorn openhands.server.listen:app --host 0.0.0.0 --port 3000 --log-level $(echo ${LOG_LEVEL:-warning} | tr '[:upper:]' '[:lower:]') --reload --reload-exclude './workspace' & cd /app/frontend && npm run dev & wait"]

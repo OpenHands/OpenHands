@@ -9,8 +9,9 @@ from typing import Any, AsyncGenerator
 import asyncpg
 from fastapi import Request
 from pydantic import BaseModel, PrivateAttr, SecretStr, model_validator
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine import URL
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 from sqlalchemy.orm import sessionmaker
@@ -20,6 +21,52 @@ from sqlalchemy.util import await_only
 from openhands.app_server.services.injector import Injector, InjectorState
 
 _logger = logging.getLogger(__name__)
+
+
+def _configure_sqlite_pragmas(engine):
+    """Set SQLite PRAGMAs on new connections for better concurrency.
+
+    - journal_mode=WAL: Allows concurrent reads during writes
+    - busy_timeout=30000: Wait up to 30s for locks instead of failing immediately
+    """
+    sync_engine = getattr(engine, 'sync_engine', engine)
+
+    @event.listens_for(sync_engine, 'connect')
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute('PRAGMA journal_mode=WAL')
+        cursor.execute('PRAGMA busy_timeout=30000')
+        cursor.close()
+
+
+async def commit_with_sqlite_retry(
+    session: AsyncSession,
+    max_attempts: int = 5,
+    base_delay: float = 0.1,
+):
+    """Commit with retry for SQLite 'database is locked' errors.
+
+    After a failed commit, rolls back the session before retrying.
+    Uses exponential backoff: 0.1s, 0.2s, 0.4s, 0.8s, 1.6s.
+    """
+    for attempt in range(max_attempts):
+        try:
+            await session.commit()
+            return
+        except OperationalError as e:
+            if 'database is locked' not in str(e):
+                raise
+            if attempt == max_attempts - 1:
+                raise
+            _logger.warning(
+                'SQLite database locked, retrying commit (attempt %d/%d)',
+                attempt + 1,
+                max_attempts,
+            )
+            await session.rollback()
+            await asyncio.sleep(base_delay * (2**attempt))
+
+
 DB_SESSION_ATTR = 'db_session'
 DB_SESSION_KEEP_OPEN_ATTR = 'db_session_keep_open'
 
@@ -195,6 +242,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                     poolclass=NullPool,
                     pool_pre_ping=True,
                 )
+                _configure_sqlite_pragmas(async_engine)
         self._async_engine = async_engine
         return async_engine
 
@@ -223,13 +271,21 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                 )
             else:
                 url = f'sqlite:///{self.persistence_dir}/openhands.db'
-            engine = create_engine(
-                url,
-                pool_size=self.pool_size,
-                max_overflow=self.max_overflow,
-                pool_recycle=self.pool_recycle,
-                pool_pre_ping=True,
-            )
+            if self.host:
+                engine = create_engine(
+                    url,
+                    pool_size=self.pool_size,
+                    max_overflow=self.max_overflow,
+                    pool_recycle=self.pool_recycle,
+                    pool_pre_ping=True,
+                )
+            else:
+                engine = create_engine(
+                    url,
+                    poolclass=NullPool,
+                    pool_pre_ping=True,
+                )
+                _configure_sqlite_pragmas(engine)
         self._engine = engine
         return engine
 
@@ -295,7 +351,7 @@ class DbSessionInjector(BaseModel, Injector[async_sessionmaker]):
                 setattr(state, DB_SESSION_ATTR, db_session)
                 yield db_session
                 if not getattr(state, DB_SESSION_KEEP_OPEN_ATTR, False):
-                    await db_session.commit()
+                    await commit_with_sqlite_retry(db_session)
             except Exception:
                 _logger.exception('Rolling back SQL due to error', stack_info=True)
                 await db_session.rollback()

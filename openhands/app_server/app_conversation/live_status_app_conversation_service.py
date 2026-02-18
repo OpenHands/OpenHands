@@ -49,7 +49,9 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 from openhands.app_server.config import get_event_callback_service
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.event.event_service import EventService
-from openhands.app_server.event_callback.event_callback_models import EventCallback
+from openhands.app_server.event_callback.event_callback_models import (
+    CreateEventCallbackRequest,
+)
 from openhands.app_server.event_callback.event_callback_service import (
     EventCallbackService,
 )
@@ -93,6 +95,51 @@ from openhands.tools.preset.planning import (
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
+
+# Sentinel for detecting StopIteration from thread pool executor
+_GENERATOR_STOP = object()
+
+
+def _safe_generator_send(generator, response):
+    """Send a value to a generator, converting StopIteration to a sentinel.
+
+    This is needed because StopIteration raised inside an async function
+    is converted to RuntimeError (PEP 479). By catching it in a regular
+    function run in a thread, we avoid this issue.
+    """
+    try:
+        return generator.send(response)
+    except StopIteration as e:
+        return (_GENERATOR_STOP, e.value)
+
+
+class NonBlockingAsyncRemoteWorkspace(AsyncRemoteWorkspace):
+    """AsyncRemoteWorkspace that avoids blocking the event loop during polling.
+
+    The SDK's execute_command uses time.sleep(0.1) in its generator-based
+    polling loop, which blocks the event loop and degrades the app server's
+    ability to handle WebSocket proxying and other concurrent requests.
+
+    This subclass runs the blocking generator steps in a thread pool executor
+    so the event loop remains responsive.
+    """
+
+    async def _execute(self, generator):
+        loop = asyncio.get_running_loop()
+        try:
+            kwargs = next(generator)
+            while True:
+                response = await self.client.request(**kwargs)
+                # Run generator.send() in a thread pool to avoid blocking
+                # the event loop with time.sleep(0.1) in the polling loop
+                result = await loop.run_in_executor(
+                    None, _safe_generator_send, generator, response
+                )
+                if isinstance(result, tuple) and result[0] is _GENERATOR_STOP:
+                    return result[1]
+                kwargs = result
+        except StopIteration as e:
+            return e.value
 
 
 @dataclass
@@ -191,6 +238,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     async def _start_app_conversation(
         self, request: AppConversationStartRequest
     ) -> AsyncGenerator[AppConversationStartTask, None]:
+        # Pre-generate conversation_id so it can be used as the sandbox
+        # container name, making containers easily identifiable.
+        if request.conversation_id is None:
+            request.conversation_id = uuid4()
+        _logger.info(
+            f'Starting conversation: id={request.conversation_id.hex}, repo={request.selected_repository}'
+        )
+
         # Create and yield the start task
         user_id = await self.user_context.get_user_id()
 
@@ -214,7 +269,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         yield task
 
         try:
-            async for updated_task in self._wait_for_sandbox_start(task):
+            # Fetch user secrets as env vars for the sandbox container
+            secrets_env = await self._get_secrets_env_vars()
+
+            async for updated_task in self._wait_for_sandbox_start(
+                task, extra_env=secrets_env
+            ):
                 yield updated_task
 
             # Get the sandbox
@@ -231,7 +291,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             assert sandbox_spec is not None
 
             # Run setup scripts
-            remote_workspace = AsyncRemoteWorkspace(
+            # Use NonBlockingAsyncRemoteWorkspace to avoid blocking the event loop
+            # during execute_command polling (SDK uses time.sleep which blocks)
+            remote_workspace = NonBlockingAsyncRemoteWorkspace(
                 host=agent_server_url,
                 api_key=sandbox.session_api_key,
                 working_dir=sandbox_spec.working_dir,
@@ -240,6 +302,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 task, sandbox, remote_workspace, agent_server_url
             ):
                 yield updated_task
+            if task.status == AppConversationStartTaskStatus.ERROR:
+                return
 
             # Build the start request
             start_conversation_request = (
@@ -309,8 +373,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Save processors
             for processor in processors:
-                await self.event_callback_service.save_event_callback(
-                    EventCallback(
+                await self.event_callback_service.create_event_callback(
+                    CreateEventCallbackRequest(
                         conversation_id=info.id,
                         processor=processor,
                     )
@@ -442,16 +506,22 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_url = None
         session_api_key = None
         if sandbox and sandbox.exposed_urls:
-            conversation_url = next(
+            agent_server_eu = next(
                 (
-                    exposed_url.url
+                    exposed_url
                     for exposed_url in sandbox.exposed_urls
                     if exposed_url.name == AGENT_SERVER
                 ),
                 None,
             )
-            if conversation_url:
-                conversation_url += f'/api/conversations/{app_conversation_info.id.hex}'
+            if agent_server_eu:
+                if agent_server_eu.internal_url:
+                    # Use relative URL so the frontend routes through the app server proxy
+                    conversation_url = (
+                        f'/api/conversations/{app_conversation_info.id.hex}'
+                    )
+                else:
+                    conversation_url = f'{agent_server_eu.url}/api/conversations/{app_conversation_info.id.hex}'
             session_api_key = sandbox.session_api_key
 
         return AppConversation(
@@ -472,19 +542,21 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         return result
 
     async def _wait_for_sandbox_start(
-        self, task: AppConversationStartTask
+        self,
+        task: AppConversationStartTask,
+        extra_env: dict[str, str] | None = None,
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Wait for sandbox to start and return info."""
         # Get or create the sandbox
         if not task.request.sandbox_id:
-            # Convert conversation_id to hex string if present
             sandbox_id_str = (
                 task.request.conversation_id.hex
                 if task.request.conversation_id is not None
                 else None
             )
             sandbox = await self.sandbox_service.start_sandbox(
-                sandbox_id=sandbox_id_str
+                sandbox_id=sandbox_id_str,
+                extra_env=extra_env,
             )
             task.sandbox_id = sandbox.id
         else:
@@ -517,23 +589,27 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             raise SandboxError(f'Sandbox not startable: {sandbox.id}')
 
         # Use shared wait_for_sandbox_running utility to poll for ready state
+        _logger.info(f'Waiting for sandbox to be ready: {sandbox.id}')
         await self.sandbox_service.wait_for_sandbox_running(
             sandbox.id,
             timeout=self.sandbox_startup_timeout,
             poll_interval=self.sandbox_startup_poll_frequency,
             httpx_client=self.httpx_client,
         )
+        _logger.info(f'Sandbox ready: {sandbox.id}')
 
     def _get_agent_server_url(self, sandbox: SandboxInfo) -> str:
         """Get agent server url for running sandbox."""
         exposed_urls = sandbox.exposed_urls
         assert exposed_urls is not None
-        agent_server_url = next(
-            exposed_url.url
+        agent_server_eu = next(
+            exposed_url
             for exposed_url in exposed_urls
             if exposed_url.name == AGENT_SERVER
         )
-        agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
+        agent_server_url = agent_server_eu.internal_url or agent_server_eu.url
+        if not agent_server_eu.internal_url:
+            agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
         return agent_server_url
 
     def _inherit_configuration_from_parent(
@@ -565,6 +641,61 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Inherit LLM model from parent if not provided
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
+
+    async def _get_secrets_env_vars(self) -> dict[str, str] | None:
+        """Collect user secrets as plain env-var key/value pairs.
+
+        Returns a dict suitable for injecting into the sandbox container
+        environment, or ``None`` if there are no secrets.  Also resolves
+        ``GITHUB_USER`` from the GitHub token when available.
+        """
+        secrets = await self.user_context.get_secrets()
+        if not secrets:
+            return None
+        env: dict[str, str] = {}
+        for name, source in secrets.items():
+            try:
+                value = source.get_value()
+                if value:
+                    env[name] = value
+            except Exception:
+                pass
+
+        # Resolve GITHUB_USER from the GitHub token so sandbox scripts can
+        # reference it without an extra API call.
+        if 'GITHUB_USER' not in env:
+            github_user = await self._resolve_github_user(env)
+            if github_user:
+                env['GITHUB_USER'] = github_user
+
+        return env or None
+
+    async def _resolve_github_user(self, env: dict[str, str]) -> str | None:
+        """Look up the GitHub username for the current token."""
+        # Try provider tokens first (they may carry user_id already)
+        provider_tokens = await self.user_context.get_provider_tokens()
+        if provider_tokens:
+            from openhands.integrations.provider import ProviderType
+
+            gh = provider_tokens.get(ProviderType.GITHUB)
+            if gh and gh.user_id:
+                return gh.user_id
+
+        # Fall back to the GitHub API using the token from env
+        token = env.get('GITHUB_TOKEN') or env.get('github-token')
+        if not token:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    'https://api.github.com/user',
+                    headers={'Authorization': f'token {token}'},
+                )
+                if resp.status_code == 200:
+                    return resp.json().get('login')
+        except Exception:
+            pass
+        return None
 
     async def _setup_secrets_for_git_providers(self, user: UserInfo) -> dict:
         """Set up secrets for all git provider authentication.
@@ -1389,11 +1520,16 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 )
             config = get_global_config()
 
-            # If no web url has been set and we are using docker, we can use host.docker.internal
+            # If no web url has been set and we are using docker, derive one
+            # that the sandbox container can reach.  Prefer the app_hostname
+            # (container-to-container on a shared Docker network) over
+            # host.docker.internal (which may be unreachable depending on
+            # network topology).
             web_url = config.web_url
             if web_url is None:
                 if isinstance(sandbox_service, DockerSandboxService):
-                    web_url = f'http://host.docker.internal:{sandbox_service.host_port}'
+                    hostname = sandbox_service.app_hostname or 'host.docker.internal'
+                    web_url = f'http://{hostname}:{sandbox_service.host_port}'
 
             # Get app_mode for SaaS mode
             app_mode = None

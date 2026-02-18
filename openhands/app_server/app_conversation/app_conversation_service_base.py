@@ -1,11 +1,15 @@
+import json
 import logging
 import os
 import tempfile
+import time
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 from uuid import UUID
+
+import yaml
 
 if TYPE_CHECKING:
     import httpx
@@ -95,11 +99,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
             # Build sandbox config (exposed URLs)
             sandbox_config = build_sandbox_config(sandbox)
 
-            # Determine project directory for project skills
+            # Project directory is always the working directory
             project_dir = working_dir
-            if selected_repository:
-                repo_name = selected_repository.split('/')[-1]
-                project_dir = f'{working_dir}/{repo_name}'
 
             # Single API call to agent-server for ALL skills
             all_skills = await load_skills_from_agent_server(
@@ -114,7 +115,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 load_org=True,
             )
 
-            _logger.info(
+            _logger.debug(
                 f'Loaded {len(all_skills)} total skills from agent-server: '
                 f'{[s.name for s in all_skills]}'
             )
@@ -199,10 +200,219 @@ class AppConversationServiceBase(AppConversationService, ABC):
             sandbox, selected_repository, working_dir, agent_server_url
         )
 
+        # Load MCP config directly from workspace files (bypasses agent-server
+        # SkillInfo serialization which drops mcp_tools)
+        _logger.warning(f'Agent mcp_config BEFORE workspace merge: {agent.mcp_config}')
+        agent = await self._load_mcp_config_from_workspace(
+            agent, remote_workspace, working_dir
+        )
+        _logger.warning(f'Agent mcp_config AFTER workspace merge: {agent.mcp_config}')
+
         # Update agent with skills
         agent = self._create_agent_with_skills(agent, all_skills)
 
         return agent
+
+    async def _load_mcp_config_from_workspace(
+        self,
+        agent: Agent,
+        remote_workspace: AsyncRemoteWorkspace,
+        working_dir: str,
+    ) -> Agent:
+        """Load MCP config directly from workspace skill/microagent files.
+
+        The agent-server's SkillInfo serialization drops mcp_tools, so we read
+        the raw YAML frontmatter from microagent/skill files in the workspace
+        to extract mcp_tools configurations.
+
+        Supports FastMCP MCPConfig format in frontmatter:
+            mcp_tools:
+              mcpServers:
+                server-name:
+                  url: "http://localhost:3000/mcp/endpoint"
+                  transport: "http"
+
+        Also supports .mcp.json files in AgentSkills-format skill directories.
+
+        Args:
+            agent: The agent to update
+            remote_workspace: AsyncRemoteWorkspace for executing commands
+            working_dir: Working directory path
+
+        Returns:
+            Updated agent with merged MCP config, or unchanged agent on error
+        """
+        try:
+            _logger.warning(f'Loading MCP config from workspace files in {working_dir}')
+            mcp_servers = await self._extract_mcp_from_workspace_files(
+                remote_workspace, working_dir
+            )
+            if not mcp_servers:
+                _logger.warning('No MCP servers found in workspace files')
+                return agent
+
+            # Merge into existing mcp_config
+            current_config: dict[str, Any] = (
+                dict(agent.mcp_config) if agent.mcp_config else {}
+            )
+            current_servers: dict[str, Any] = dict(current_config.get('mcpServers', {}))
+            current_servers.update(mcp_servers)
+            current_config['mcpServers'] = current_servers
+
+            _logger.info(
+                f'Merged {len(mcp_servers)} MCP servers from workspace files '
+                f'into agent config: {list(mcp_servers.keys())}'
+            )
+
+            return agent.model_copy(update={'mcp_config': current_config})
+
+        except Exception as e:
+            _logger.warning(
+                f'Failed to load MCP config from workspace: {e}', exc_info=True
+            )
+            return agent
+
+    async def _extract_mcp_from_workspace_files(
+        self,
+        remote_workspace: AsyncRemoteWorkspace,
+        working_dir: str,
+    ) -> dict[str, Any]:
+        """Read workspace files and extract mcp_tools from YAML frontmatter.
+
+        Returns:
+            Dict of MCP server configs (mcpServers entries) to merge.
+        """
+        all_mcp_servers: dict[str, Any] = {}
+
+        # Find all skill/microagent markdown files
+        # Use a shell that handles missing directories gracefully
+        find_cmd = (
+            f'{{ find {working_dir}/.openhands/microagents -name "*.md" -type f 2>/dev/null; '
+            f'find {working_dir}/.openhands/skills -name "*.md" -type f 2>/dev/null; }} || true'
+        )
+        result = await remote_workspace.execute_command(
+            find_cmd, working_dir, timeout=10
+        )
+        if not result.stdout or not result.stdout.strip():
+            _logger.warning(
+                f'No skill/microagent files found in workspace '
+                f'(exit_code={result.exit_code}, stdout={result.stdout!r})'
+            )
+            return all_mcp_servers
+
+        md_files = [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
+        _logger.warning(f'Found {len(md_files)} skill/microagent files: {md_files}')
+
+        for md_file in md_files:
+            mcp_tools = await self._parse_mcp_tools_from_file(
+                remote_workspace, md_file, working_dir
+            )
+            if mcp_tools and isinstance(mcp_tools, dict):
+                mcp_servers = mcp_tools.get('mcpServers', {})
+                if mcp_servers:
+                    _logger.info(
+                        f'Found MCP servers in {md_file}: {list(mcp_servers.keys())}'
+                    )
+                    all_mcp_servers.update(mcp_servers)
+
+        # Also check for .mcp.json files in skill directories
+        find_mcp_json_cmd = (
+            f'find {working_dir}/.openhands/skills '
+            f'-name ".mcp.json" -type f 2>/dev/null || true'
+        )
+        result = await remote_workspace.execute_command(
+            find_mcp_json_cmd, working_dir, timeout=10
+        )
+        if result.stdout and result.stdout.strip():
+            json_files = [
+                f.strip() for f in result.stdout.strip().split('\n') if f.strip()
+            ]
+            for json_file in json_files:
+                mcp_config = await self._parse_mcp_json_file(
+                    remote_workspace, json_file, working_dir
+                )
+                if mcp_config:
+                    mcp_servers = mcp_config.get('mcpServers', {})
+                    if mcp_servers:
+                        _logger.info(
+                            f'Found MCP servers in {json_file}: '
+                            f'{list(mcp_servers.keys())}'
+                        )
+                        all_mcp_servers.update(mcp_servers)
+
+        return all_mcp_servers
+
+    async def _parse_mcp_tools_from_file(
+        self,
+        remote_workspace: AsyncRemoteWorkspace,
+        file_path: str,
+        working_dir: str,
+    ) -> dict | None:
+        """Parse mcp_tools from a markdown file's YAML frontmatter.
+
+        Returns:
+            The mcp_tools dict if found, None otherwise.
+        """
+        try:
+            result = await remote_workspace.execute_command(
+                f'cat {file_path}', working_dir, timeout=10
+            )
+            if result.exit_code != 0 or not result.stdout:
+                return None
+
+            content = result.stdout
+            # Extract YAML frontmatter between --- markers
+            if not content.startswith('---'):
+                return None
+
+            end_marker = content.find('---', 3)
+            if end_marker == -1:
+                return None
+
+            frontmatter_str = content[3:end_marker].strip()
+            if not frontmatter_str:
+                return None
+
+            metadata = yaml.safe_load(frontmatter_str)
+            if not isinstance(metadata, dict):
+                return None
+
+            mcp_tools = metadata.get('mcp_tools')
+            if mcp_tools and isinstance(mcp_tools, dict):
+                _logger.warning(f'Parsed mcp_tools from {file_path}: {mcp_tools}')
+                return mcp_tools
+
+            return None
+        except Exception as e:
+            _logger.warning(f'Failed to parse frontmatter from {file_path}: {e}')
+            return None
+
+    async def _parse_mcp_json_file(
+        self,
+        remote_workspace: AsyncRemoteWorkspace,
+        file_path: str,
+        working_dir: str,
+    ) -> dict | None:
+        """Parse a .mcp.json file for MCP configuration.
+
+        Returns:
+            The MCP config dict if valid, None otherwise.
+        """
+        try:
+            result = await remote_workspace.execute_command(
+                f'cat {file_path}', working_dir, timeout=10
+            )
+            if result.exit_code != 0 or not result.stdout:
+                return None
+
+            mcp_config = json.loads(result.stdout)
+            if isinstance(mcp_config, dict):
+                return mcp_config
+
+            return None
+        except Exception as e:
+            _logger.debug(f'Failed to parse .mcp.json from {file_path}: {e}')
+            return None
 
     async def run_setup_scripts(
         self,
@@ -217,7 +427,10 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         task.status = AppConversationStartTaskStatus.RUNNING_SETUP_SCRIPT
         yield task
-        await self.maybe_run_setup_script(workspace)
+        async for updated_task in self.maybe_run_setup_script(workspace, task):
+            yield updated_task
+        if task.status == AppConversationStartTaskStatus.ERROR:
+            return
 
         task.status = AppConversationStartTaskStatus.SETTING_UP_GIT_HOOKS
         yield task
@@ -253,7 +466,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 if result.exit_code:
                     _logger.warning(f'Git config user.name failed: {result.stderr}')
                 else:
-                    _logger.info(
+                    _logger.debug(
                         f'Git configured with user.name={user_info.git_user_name}'
                     )
 
@@ -263,7 +476,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 if result.exit_code:
                     _logger.warning(f'Git config user.email failed: {result.stderr}')
                 else:
-                    _logger.info(
+                    _logger.debug(
                         f'Git configured with user.email={user_info.git_user_email}'
                     )
         except Exception as e:
@@ -284,6 +497,15 @@ class AppConversationServiceBase(AppConversationService, ABC):
         if result.exit_code:
             _logger.warning(f'mkdir failed: {result.stderr}')
 
+        # Let the sandbox user install global npm packages without sudo
+        # (sudo resets PATH/NODE_PATH and picks up the wrong node).
+        await workspace.execute_command(
+            'sudo chown -R $(id -u):$(id -g)'
+            ' /usr/local/lib/node_modules /usr/local/bin'
+            ' 2>/dev/null; true',
+            workspace.working_dir,
+        )
+
         # Configure git user settings from user preferences
         await self._configure_git_user_settings(workspace)
 
@@ -298,7 +520,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 if result.exit_code:
                     _logger.warning(f'Git init failed: {result.stderr}')
             else:
-                _logger.info('Not initializing a new git repository.')
+                _logger.debug('Not initializing a new git repository.')
+            await self._set_workspace_root(workspace, workspace.working_dir)
             return
 
         remote_repo_url: str = await self.user_context.get_authenticated_git_url(
@@ -307,10 +530,16 @@ class AppConversationServiceBase(AppConversationService, ABC):
         if not remote_repo_url:
             raise ValueError('Missing either Git token or valid repository')
 
-        dir_name = request.selected_repository.split('/')[-1]
+        # Ensure the working directory is empty for a clean clone.
+        # Use find -delete to remove contents without removing the directory
+        # itself, which is the agent-server's CWD.
+        await workspace.execute_command(
+            f'find {workspace.working_dir} -mindepth 1 -delete 2>/dev/null; true',
+            parent,
+        )
 
-        # Clone the repo - this is the slow part!
-        clone_command = f'git clone {remote_repo_url} {dir_name}'
+        # Clone the repo directly into the working directory
+        clone_command = f'git clone {remote_repo_url} .'
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
         )
@@ -325,26 +554,153 @@ class AppConversationServiceBase(AppConversationService, ABC):
             random_str = base62.encodebytes(os.urandom(16))
             openhands_workspace_branch = f'openhands-workspace-{random_str}'
             checkout_command = f'git checkout -b {openhands_workspace_branch}'
-        git_dir = Path(workspace.working_dir) / dir_name
-        result = await workspace.execute_command(checkout_command, git_dir)
+        result = await workspace.execute_command(
+            checkout_command, workspace.working_dir
+        )
         if result.exit_code:
             _logger.warning(f'Git checkout failed: {result.stderr}')
+
+        await self._set_workspace_root(workspace, workspace.working_dir)
+
+    async def _set_workspace_root(
+        self,
+        workspace: AsyncRemoteWorkspace,
+        project_dir: str,
+    ):
+        """Persist WORKSPACE_ROOT and EXTRA_PATH_PREFIX in the sandbox.
+
+        Writes to /etc/profile.d/ so the variables are available in all
+        subsequent shell sessions (setup scripts, agent commands, etc.).
+        """
+        extra_path = f'{project_dir}/node_modules/.bin'
+        script = (
+            f'export WORKSPACE_ROOT={project_dir}\n'
+            f'export EXTRA_PATH_PREFIX={extra_path}\n'
+        )
+        cmd = (
+            f"sudo sh -c \"printf '%s' '{script}' > /etc/profile.d/workspace_root.sh\""
+        )
+        result = await workspace.execute_command(cmd, project_dir)
+        if result.exit_code:
+            _logger.warning(f'Failed to set WORKSPACE_ROOT: {result.stderr}')
 
     async def maybe_run_setup_script(
         self,
         workspace: AsyncRemoteWorkspace,
-    ):
-        """Run .openhands/setup.sh if it exists in the workspace or repository."""
-        setup_script = workspace.working_dir + '/.openhands/setup.sh'
+        task: AppConversationStartTask,
+    ) -> AsyncGenerator[AppConversationStartTask, None]:
+        """Run setup steps from .openhands/setup/setup.json or .openhands/setup.sh.
 
-        await workspace.execute_command(
-            f'chmod +x {setup_script} && source {setup_script}', timeout=600
+        Checks for setup.json first (step-by-step format with progress reporting),
+        then falls back to setup.sh. Yields task updates with step progress.
+        """
+        working_dir = workspace.working_dir
+        setup_json_path = f'{working_dir}/.openhands/setup/setup.json'
+
+        # 1. Check for .openhands/setup/setup.json
+        check = await workspace.execute_command(f'cat {setup_json_path}', timeout=10)
+        if check.exit_code == 0 and check.stdout:
+            try:
+                steps = json.loads(check.stdout)
+                setup_dir = f'{working_dir}/.openhands/setup'
+                _logger.warning(
+                    f'[{task.sandbox_id}] Found setup.json with {len(steps)} steps'
+                )
+                async for updated_task in self._run_setup_steps(
+                    workspace, task, steps, setup_dir
+                ):
+                    yield updated_task
+                return
+            except (json.JSONDecodeError, TypeError) as e:
+                _logger.warning(f'[{task.sandbox_id}] Failed to parse setup.json: {e}')
+
+        # 2. Fall back to .openhands/setup.sh
+        setup_script = f'{working_dir}/.openhands/setup.sh'
+        check = await workspace.execute_command(
+            f'test -f {setup_script} && echo exists', timeout=10
         )
+        if check.exit_code != 0 or 'exists' not in (check.stdout or ''):
+            _logger.info('No setup script or setup.json found')
+            return
 
-        # TODO: Does this need to be done?
-        # Add the action to the event stream as an ENVIRONMENT event
-        # source = EventSource.ENVIRONMENT
-        # self.event_stream.add_event(action, source)
+        _logger.warning(f'[{task.sandbox_id}] Running setup script: {setup_script}')
+        result = await workspace.execute_command(
+            f'chmod +x {setup_script} && bash {setup_script}', timeout=600
+        )
+        if result.exit_code != 0:
+            error_output = result.stderr or result.stdout or ''
+            _logger.warning(
+                f'[{task.sandbox_id}] Setup script failed (exit {result.exit_code}): '
+                f'{error_output}'
+            )
+            task.status = AppConversationStartTaskStatus.ERROR
+            first_line = (
+                error_output.strip().split('\n')[0] if error_output.strip() else ''
+            )
+            task.detail = 'Setup script failed' + (
+                f' — {first_line}' if first_line else ''
+            )
+            yield task
+        else:
+            _logger.warning(f'[{task.sandbox_id}] Setup script completed successfully')
+
+    async def _run_setup_steps(
+        self,
+        workspace: AsyncRemoteWorkspace,
+        task: AppConversationStartTask,
+        steps: list[dict],
+        setup_dir: str,
+    ) -> AsyncGenerator[AppConversationStartTask, None]:
+        """Run discrete setup steps with progress reporting.
+
+        Each step updates task.detail with "Step X of Y: description" before
+        executing. Scripts run relative to the setup directory (.openhands/setup/).
+        Stops immediately if a step fails.
+        """
+        total = len(steps)
+        for i, step in enumerate(steps):
+            description = step.get('description', step.get('script', ''))
+            task.detail = f'Step {i + 1} of {total}: {description}'
+            yield task
+
+            script = step.get('script', '')
+            if not script:
+                _logger.warning(
+                    f'[{task.sandbox_id}] Setup step {i + 1} has no script, skipping'
+                )
+                continue
+
+            _logger.warning(
+                f'[{task.sandbox_id}] Setup step {i + 1} of {total}: {description}'
+            )
+            step_start = time.monotonic()
+            result = await workspace.execute_command(script, setup_dir, timeout=600)
+            elapsed = time.monotonic() - step_start
+            if result.exit_code != 0:
+                error_output = result.stderr or result.stdout or ''
+                _logger.warning(
+                    f'[{task.sandbox_id}] Setup step {i + 1} of {total} failed after {elapsed:.1f}s '
+                    f'("{description}", exit {result.exit_code}): '
+                    f'{error_output}'
+                )
+                task.status = AppConversationStartTaskStatus.ERROR
+                # Show first line of error output to the user
+                first_line = (
+                    error_output.strip().split('\n')[0] if error_output.strip() else ''
+                )
+                task.detail = f'Setup step {i + 1} of {total} failed: {description}' + (
+                    f' — {first_line}' if first_line else ''
+                )
+                yield task
+                return
+            output = result.stdout or result.stderr or ''
+            _logger.warning(
+                f'[{task.sandbox_id}] Setup step {i + 1} of {total} completed in {elapsed:.1f}s'
+                + (f'\n{output}' if output else '')
+            )
+
+        task.detail = None
+        yield task
 
     async def maybe_setup_git_hooks(
         self,
@@ -360,7 +716,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         with tempfile.TemporaryFile(mode='w+t') as temp_file:
             result = workspace.file_download(PRE_COMMIT_HOOK, str(temp_file))
             if result.get('success'):
-                _logger.info('Preserving existing pre-commit hook')
+                _logger.debug('Preserving existing pre-commit hook')
                 # an existing pre-commit hook exists
                 if 'This hook was installed by OpenHands' not in temp_file.read():
                     # Move the existing hook to pre-commit.local
@@ -389,7 +745,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             _logger.error(f'Failed to make pre-commit hook executable: {result.stderr}')
             return
 
-        _logger.info('Git pre-commit hook installed successfully')
+        _logger.debug('Git pre-commit hook installed successfully')
 
     def _create_condenser(
         self,
@@ -509,7 +865,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 timeout=30.0,
             )
             response.raise_for_status()
-            _logger.info(
+            _logger.debug(
                 f'Successfully set security analyzer for conversation {conversation_id}'
             )
         except Exception as e:

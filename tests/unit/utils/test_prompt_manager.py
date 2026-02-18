@@ -321,7 +321,7 @@ def test_jinja2_template_inheritance(prompt_dir):
     """
     # Create base system prompt template (no blocks defined here)
     with open(os.path.join(prompt_dir, 'system_prompt.j2'), 'w') as f:
-        f.write("""You are OpenHands agent, a helpful AI assistant that can interact with a computer to solve tasks.
+        f.write("""You are Build.One agent, a helpful AI assistant that can interact with a computer to solve tasks.
 
 <ROLE>
 Your primary role is to assist users by executing commands, modifying code, and solving technical problems effectively.
@@ -354,7 +354,7 @@ Your primary role is to assist users by executing commands, modifying code, and 
     base_manager = PromptManager(prompt_dir=prompt_dir)
     base_template = base_manager._load_template('system_prompt.j2')
     base_msg = base_template.render().strip()
-    assert 'You are OpenHands agent' in base_msg
+    assert 'You are Build.One agent' in base_msg
     assert '<ROLE>' in base_msg
     assert '<INTERACTION_RULES>' not in base_msg
     assert '<TASK_MANAGEMENT>' not in base_msg
@@ -367,7 +367,7 @@ Your primary role is to assist users by executing commands, modifying code, and 
         'system_prompt_interactive.j2'
     )
     interactive_msg = interactive_template.render().strip()
-    assert 'You are OpenHands agent' in interactive_msg
+    assert 'You are Build.One agent' in interactive_msg
     assert '<ROLE>' in interactive_msg
     assert '<INTERACTION_RULES>' in interactive_msg
     assert 'Ask clarifying questions when needed' in interactive_msg
@@ -381,7 +381,7 @@ Your primary role is to assist users by executing commands, modifying code, and 
         'system_prompt_long_horizon.j2'
     )
     long_horizon_msg = long_horizon_template.render().strip()
-    assert 'You are OpenHands agent' in long_horizon_msg
+    assert 'You are Build.One agent' in long_horizon_msg
     assert '<ROLE>' in long_horizon_msg
     assert '<INTERACTION_RULES>' not in long_horizon_msg
     assert '<TASK_MANAGEMENT>' in long_horizon_msg
@@ -397,7 +397,7 @@ def test_prompt_manager_cli_mode_context(prompt_dir):
     """Test that PromptManager.get_system_message() supports cli_mode context parameter."""
     # Create a system prompt template that uses cli_mode conditional
     with open(os.path.join(prompt_dir, 'system_prompt.j2'), 'w') as f:
-        f.write("""You are OpenHands agent.
+        f.write("""You are Build.One agent.
 
 {% if cli_mode %}
 <CLI_MODE>
@@ -417,7 +417,7 @@ Always be helpful and follow user instructions.
 
     # Test with cli_mode=True
     cli_message = manager.get_system_message(cli_mode=True)
-    assert 'You are OpenHands agent' in cli_message
+    assert 'You are Build.One agent' in cli_message
     assert '<CLI_MODE>' in cli_message
     assert 'CLI mode' in cli_message
     assert 'Direct file system access' in cli_message
@@ -427,7 +427,7 @@ Always be helpful and follow user instructions.
 
     # Test with cli_mode=False
     sandbox_message = manager.get_system_message(cli_mode=False)
-    assert 'You are OpenHands agent' in sandbox_message
+    assert 'You are Build.One agent' in sandbox_message
     assert '<SANDBOX_MODE>' in sandbox_message
     assert 'inside sandbox' in sandbox_message
     assert 'Container-scoped operations' in sandbox_message
@@ -437,7 +437,7 @@ Always be helpful and follow user instructions.
 
     # Test without cli_mode parameter (backward compatibility)
     default_message = manager.get_system_message()
-    assert 'You are OpenHands agent' in default_message
+    assert 'You are Build.One agent' in default_message
     assert '<COMMON_INSTRUCTIONS>' in default_message
     # Without cli_mode, the conditional should evaluate to False
     assert '<SANDBOX_MODE>' in default_message

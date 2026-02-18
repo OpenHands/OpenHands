@@ -367,10 +367,11 @@ class E2BRuntime(ActionExecutionClient):
             pass
         return self.config.workspace_mount_path_in_sandbox or '/workspace'
     
-    def get_mcp_config(self, extra_stdio_servers: list | None = None) -> dict:
+    def get_mcp_config(self, extra_stdio_servers: list | None = None, extra_shttp_servers: list | None = None) -> dict:
         """Get MCP configuration for E2B runtime."""
         return {
-            'stdio_servers': extra_stdio_servers or []
+            'stdio_servers': extra_stdio_servers or [],
+            'shttp_servers': extra_shttp_servers or [],
         }
     
     def check_if_alive(self) -> None:

@@ -188,7 +188,7 @@ export const formatTimestamp = (timestamp: string) =>
 
 export const shouldUseInstallationRepos = (
   provider: Provider,
-  app_mode: "saas" | "oss" | undefined,
+  app_mode: "saas" | "oss" | "b1" | undefined,
 ) => {
   if (!provider) return false;
 

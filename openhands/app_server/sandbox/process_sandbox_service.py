@@ -112,12 +112,15 @@ class ProcessSandboxService(SandboxService):
         working_dir: str,
         session_api_key: str,
         sandbox_spec: SandboxSpecInfo,
+        extra_env: dict[str, str] | None = None,
     ) -> subprocess.Popen:
         """Start the agent server process."""
 
         # Prepare environment variables
         env = os.environ.copy()
         env.update(sandbox_spec.initial_env)
+        if extra_env:
+            env.update(extra_env)
         env['SESSION_API_KEY'] = session_api_key
 
         # Prepare command arguments
@@ -287,7 +290,10 @@ class ProcessSandboxService(SandboxService):
         return None
 
     async def start_sandbox(
-        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+        self,
+        sandbox_spec_id: str | None = None,
+        sandbox_id: str | None = None,
+        extra_env: dict[str, str] | None = None,
     ) -> SandboxInfo:
         """Start a new sandbox."""
         # Get sandbox spec
@@ -320,6 +326,7 @@ class ProcessSandboxService(SandboxService):
             working_dir=working_dir,
             session_api_key=session_api_key,
             sandbox_spec=sandbox_spec,
+            extra_env=extra_env,
         )
 
         # Store process info

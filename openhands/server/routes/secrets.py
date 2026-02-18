@@ -182,6 +182,41 @@ async def unset_provider_tokens(
         )
 
 
+@app.delete('/unset-provider-tokens/{provider}')
+async def unset_single_provider_token(
+    provider: str,
+    secrets_store: SecretsStore = Depends(get_secrets_store),
+) -> JSONResponse:
+    try:
+        provider_type = ProviderType(provider)
+    except ValueError:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={'error': f'Provider {provider} not found'},
+        )
+
+    try:
+        user_secrets = await secrets_store.load()
+        if user_secrets:
+            tokens = dict(user_secrets.provider_tokens)
+            if provider_type in tokens:
+                del tokens[provider_type]
+                updated = user_secrets.model_copy(update={'provider_tokens': tokens})
+                await secrets_store.store(updated)
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={'message': f'Unset {provider} token'},
+        )
+
+    except Exception as e:
+        logger.warning(f'Something went wrong unsetting {provider} token: {e}')
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={'error': f'Something went wrong unsetting {provider} token'},
+        )
+
+
 # =================================================
 # SECTION: Handle custom secrets
 # =================================================

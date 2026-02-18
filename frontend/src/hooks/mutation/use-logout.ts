@@ -24,8 +24,12 @@ export const useLogout = () => {
 
       posthog.reset();
 
-      // Refresh the page after all logout logic is completed
-      window.location.reload();
+      // For B1 mode, redirect to login page; otherwise reload
+      if (config?.APP_MODE === "b1") {
+        window.location.href = "/login";
+      } else {
+        window.location.reload();
+      }
     },
   });
 };

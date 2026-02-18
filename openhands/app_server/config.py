@@ -1,5 +1,6 @@
 """Configuration for the OpenHands App Server."""
 
+import json
 import os
 from pathlib import Path
 from typing import AsyncContextManager
@@ -123,7 +124,7 @@ class AppServerConfig(OpenHandsModel):
     )
     # Services
     lifespan: AppLifespanService | None = Field(default_factory=_get_default_lifespan)
-    app_mode: AppMode = AppMode.OPENHANDS
+    app_mode: AppMode = AppMode.B1
     web_client: WebClientConfigInjector = Field(
         default_factory=DefaultWebClientConfigInjector
     )
@@ -232,6 +233,55 @@ def config_from_env() -> AppServerConfig:
                         )
                 if mounts:
                     docker_sandbox_kwargs['mounts'] = mounts
+            # Docker network mode for container-to-container communication
+            sandbox_network = os.getenv('OH_SANDBOX__NETWORK')
+            if sandbox_network:
+                docker_sandbox_kwargs['network'] = sandbox_network
+            sandbox_app_hostname = os.getenv('OH_SANDBOX__APP_HOSTNAME')
+            if sandbox_app_hostname:
+                docker_sandbox_kwargs['app_hostname'] = sandbox_app_hostname
+            # Custom container labels (e.g., for Portainer grouping)
+            container_labels_str = os.getenv('OH_SANDBOX_CONTAINER_LABELS')
+            if container_labels_str:
+                docker_sandbox_kwargs['container_labels'] = json.loads(
+                    container_labels_str
+                )
+            # Privileged mode for Docker-in-Docker support
+            if os.getenv('OH_SANDBOX__PRIVILEGED', '').lower() in ('true', '1', 'yes'):
+                docker_sandbox_kwargs['privileged'] = True
+            # Traefik integration for subdomain routing of sandbox worker ports
+            traefik_network = os.getenv('OH_SANDBOX__TRAEFIK_NETWORK')
+            if traefik_network:
+                docker_sandbox_kwargs['traefik_network'] = traefik_network
+            traefik_domain = os.getenv('OH_SANDBOX__TRAEFIK_DOMAIN')
+            if traefik_domain:
+                docker_sandbox_kwargs['traefik_domain'] = traefik_domain
+            traefik_entrypoints = os.getenv('OH_SANDBOX__TRAEFIK_ENTRYPOINTS')
+            if traefik_entrypoints:
+                docker_sandbox_kwargs['traefik_entrypoints'] = traefik_entrypoints
+            traefik_certresolver = os.getenv('OH_SANDBOX__TRAEFIK_CERTRESOLVER')
+            if traefik_certresolver:
+                docker_sandbox_kwargs['traefik_certresolver'] = traefik_certresolver
+            traefik_worker_ports = os.getenv('OH_SANDBOX__TRAEFIK_WORKER_PORTS')
+            if traefik_worker_ports:
+                docker_sandbox_kwargs['traefik_worker_ports'] = [
+                    p.strip() for p in traefik_worker_ports.split(',')
+                ]
+            traefik_subdomain_prefix = os.getenv('OH_SANDBOX__TRAEFIK_SUBDOMAIN_PREFIX')
+            if traefik_subdomain_prefix:
+                docker_sandbox_kwargs['traefik_subdomain_prefix'] = (
+                    traefik_subdomain_prefix
+                )
+            traefik_scheme = os.getenv('OH_SANDBOX__TRAEFIK_SCHEME')
+            if traefik_scheme:
+                docker_sandbox_kwargs['traefik_scheme'] = traefik_scheme
+            # Codespaces port forwarding: build URL pattern from env vars
+            codespace_name = os.getenv('CODESPACE_NAME')
+            codespace_domain = os.getenv('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN')
+            if codespace_name and codespace_domain:
+                docker_sandbox_kwargs['container_url_pattern'] = (
+                    f'https://{codespace_name}-{{port}}.{codespace_domain}'
+                )
             config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
 
     if config.sandbox_spec is None:

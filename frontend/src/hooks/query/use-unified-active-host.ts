@@ -69,6 +69,17 @@ export const useUnifiedActiveHost = () => {
     queries: data.hosts.map((host) => ({
       queryKey: [conversationId, "unified", "hosts", host],
       queryFn: async () => {
+        // Skip XHR health check for cross-origin URLs (e.g., Codespaces port
+        // forwarding) since CORS will block the request.  The URL will be
+        // loaded in an iframe which doesn't have CORS restrictions.
+        try {
+          const hostOrigin = new URL(host).origin;
+          if (hostOrigin !== window.location.origin) {
+            return host;
+          }
+        } catch {
+          // invalid URL — fall through to the normal check
+        }
         try {
           await axios.get(host);
           return host;

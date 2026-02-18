@@ -23,7 +23,11 @@ from openhands_aci.utils.diff import get_diff
 from pydantic import SecretStr
 
 from openhands.core.config import OpenHandsConfig
-from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
+from openhands.core.config.mcp_config import (
+    MCPConfig,
+    MCPSHTTPServerConfig,
+    MCPStdioServerConfig,
+)
 from openhands.core.logger import openhands_logger as logger
 from openhands.events import EventStream
 from openhands.events.action import (
@@ -924,12 +928,15 @@ class CLIRuntime(Runtime):
         )
 
     def get_mcp_config(
-        self, extra_stdio_servers: list[MCPStdioServerConfig] | None = None
+        self,
+        extra_stdio_servers: list[MCPStdioServerConfig] | None = None,
+        extra_shttp_servers: list[MCPSHTTPServerConfig] | None = None,
     ) -> MCPConfig:
         """Get MCP configuration for CLI runtime.
 
         Args:
             extra_stdio_servers: Additional stdio servers to include in the config
+            extra_shttp_servers: Additional shttp servers to include in the config
 
         Returns:
             MCPConfig: The MCP configuration with stdio servers and any configured SSE/SHTTP servers
@@ -951,6 +958,15 @@ class CLIRuntime(Runtime):
                     current_stdio_servers.append(extra_server)
                     self.log('info', f'Added extra stdio server: {extra_server.name}')
             mcp_config.stdio_servers = current_stdio_servers
+
+        # Add any extra shttp servers
+        if extra_shttp_servers:
+            current_shttp_servers = list(mcp_config.shttp_servers)
+            for extra_shttp in extra_shttp_servers:
+                if extra_shttp not in current_shttp_servers:
+                    current_shttp_servers.append(extra_shttp)
+                    self.log('info', f'Added extra shttp server: {extra_shttp.url}')
+            mcp_config.shttp_servers = current_shttp_servers
 
         self.log(
             'debug',

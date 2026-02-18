@@ -12,6 +12,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from openhands.core.config import OpenHandsConfig
 from openhands.core.config.mcp_config import (
     MCPConfig,
+    MCPSHTTPServerConfig,
     MCPSSEServerConfig,
     MCPStdioServerConfig,
 )
@@ -363,7 +364,9 @@ class ActionExecutionClient(Runtime):
         return self.send_action_for_execution(action)
 
     def get_mcp_config(
-        self, extra_stdio_servers: list[MCPStdioServerConfig] | None = None
+        self,
+        extra_stdio_servers: list[MCPStdioServerConfig] | None = None,
+        extra_shttp_servers: list[MCPSHTTPServerConfig] | None = None,
     ) -> MCPConfig:
         import sys
 
@@ -383,6 +386,11 @@ class ActionExecutionClient(Runtime):
         if extra_stdio_servers:
             current_stdio_servers.extend(extra_stdio_servers)
 
+        # Get current shttp servers for sandbox
+        current_shttp_servers: list[MCPSHTTPServerConfig] = []
+        if extra_shttp_servers:
+            current_shttp_servers.extend(extra_shttp_servers)
+
         # Check if there are any new servers using the __eq__ operator
         new_servers = [
             server
@@ -390,13 +398,16 @@ class ActionExecutionClient(Runtime):
             if server not in self._last_updated_mcp_stdio_servers
         ]
 
+        # Check if there are new shttp servers
+        has_new_shttp = len(current_shttp_servers) > 0
+
         self.log(
             'debug',
             f'adding {len(new_servers)} new stdio servers to MCP config: {new_servers}',
         )
 
-        # Only send update request if there are new servers
-        if new_servers:
+        # Only send update request if there are new servers (stdio or shttp)
+        if new_servers or has_new_shttp:
             # Use a union of current servers and last updated servers for the update
             # This ensures we don't lose any servers that might be missing from either list
             combined_servers = current_stdio_servers.copy()
@@ -409,14 +420,26 @@ class ActionExecutionClient(Runtime):
             ]
             stdio_tools.sort(key=lambda x: x.get('name', ''))  # Sort by server name
 
+            shttp_tools = [
+                server.model_dump(mode='json') for server in current_shttp_servers
+            ]
+
             self.log(
                 'debug',
-                f'Updating MCP server with {len(new_servers)} new stdio servers (total: {len(combined_servers)})',
+                f'Updating MCP server with {len(new_servers)} new stdio servers (total: {len(combined_servers)}) '
+                f'and {len(shttp_tools)} shttp servers',
             )
+
+            # Send dict payload with both server types
+            payload: dict | list = {
+                'stdio_servers': stdio_tools,
+                'shttp_servers': shttp_tools,
+            }
+
             response = self._send_action_server_request(
                 'POST',
                 f'{self.action_execution_server_url}/update_mcp_server',
-                json=stdio_tools,
+                json=payload,
                 timeout=60,
             )
             result = response.json()
@@ -442,8 +465,8 @@ class ActionExecutionClient(Runtime):
         else:
             self.log('debug', 'No new stdio servers to update')
 
-        if len(self._last_updated_mcp_stdio_servers) > 0:
-            # We should always include the runtime as an MCP server whenever there's > 0 stdio servers
+        if len(self._last_updated_mcp_stdio_servers) > 0 or has_new_shttp:
+            # We should always include the runtime as an MCP server whenever there are servers proxied in the sandbox
             updated_mcp_config.sse_servers.append(
                 MCPSSEServerConfig(
                     url=self.action_execution_server_url.rstrip('/') + '/mcp/sse',

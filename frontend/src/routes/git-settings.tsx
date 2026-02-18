@@ -3,13 +3,14 @@ import { useTranslation } from "react-i18next";
 import { useConfig } from "#/hooks/query/use-config";
 import { useSettings } from "#/hooks/query/use-settings";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useLogout } from "#/hooks/mutation/use-logout";
+import { useDeleteProviderToken } from "#/hooks/mutation/use-delete-provider-token";
 import { GitHubTokenInput } from "#/components/features/settings/git-settings/github-token-input";
 import { GitLabTokenInput } from "#/components/features/settings/git-settings/gitlab-token-input";
 import { GitLabWebhookManager } from "#/components/features/settings/git-settings/gitlab-webhook-manager";
 import { BitbucketTokenInput } from "#/components/features/settings/git-settings/bitbucket-token-input";
 import { AzureDevOpsTokenInput } from "#/components/features/settings/git-settings/azure-devops-token-input";
 import { ForgejoTokenInput } from "#/components/features/settings/git-settings/forgejo-token-input";
+import { NeonApiKeyInput } from "#/components/features/settings/git-settings/neon-api-key-input";
 import { ConfigureGitHubRepositoriesAnchor } from "#/components/features/settings/git-settings/configure-github-repositories-anchor";
 import { InstallSlackAppAnchor } from "#/components/features/settings/git-settings/install-slack-app-anchor";
 import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
@@ -22,6 +23,8 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { GitSettingInputsSkeleton } from "#/components/features/settings/git-settings/github-settings-inputs-skeleton";
 import { useAddGitProviders } from "#/hooks/mutation/use-add-git-providers";
 import { useUserProviders } from "#/hooks/use-user-providers";
+import { useGetSecrets } from "#/hooks/query/use-get-secrets";
+import { SecretsService } from "#/api/secrets-service";
 import { ProjectManagementIntegration } from "#/components/features/settings/project-management/project-management-integration";
 import { Typography } from "#/ui/typography";
 
@@ -29,12 +32,13 @@ function GitSettingsScreen() {
   const { t } = useTranslation();
 
   const { mutate: saveGitProviders, isPending } = useAddGitProviders();
-  const { mutate: disconnectGitTokens } = useLogout();
+  const { mutate: deleteProviderToken } = useDeleteProviderToken();
 
   const { data: settings, isLoading } = useSettings();
   const { providers } = useUserProviders();
 
   const { data: config } = useConfig();
+  const { data: secrets } = useGetSecrets();
 
   const [githubTokenInputHasValue, setGithubTokenInputHasValue] =
     React.useState(false);
@@ -57,6 +61,8 @@ function GitSettingsScreen() {
     React.useState(false);
   const [forgejoHostInputHasValue, setForgejoHostInputHasValue] =
     React.useState(false);
+  const [neonApiKeyInputHasValue, setNeonApiKeyInputHasValue] =
+    React.useState(false);
 
   const existingGithubHost = settings?.provider_tokens_set.github;
   const existingGitlabHost = settings?.provider_tokens_set.gitlab;
@@ -70,16 +76,10 @@ function GitSettingsScreen() {
   const isBitbucketTokenSet = providers.includes("bitbucket");
   const isAzureDevOpsTokenSet = providers.includes("azure_devops");
   const isForgejoTokenSet = providers.includes("forgejo");
+  const isNeonKeySet =
+    secrets?.some((s) => s.name === "neon-api-key") ?? false;
 
   const formAction = async (formData: FormData) => {
-    const disconnectButtonClicked =
-      formData.get("disconnect-tokens-button") !== null;
-
-    if (disconnectButtonClicked) {
-      disconnectGitTokens();
-      return;
-    }
-
     const githubToken = (
       formData.get("github-token-input")?.toString() || ""
     ).trim();
@@ -110,6 +110,22 @@ function GitSettingsScreen() {
     const forgejoHost = (
       formData.get("forgejo-host-input")?.toString() || ""
     ).trim();
+    const neonApiKey = (
+      formData.get("neon-api-key-input")?.toString() || ""
+    ).trim();
+
+    // Save Neon API key if provided
+    if (neonApiKey) {
+      try {
+        await SecretsService.createSecret(
+          "neon-api-key",
+          neonApiKey,
+          "Neon Database API key",
+        );
+      } catch {
+        // ignore — will be reported alongside git providers below
+      }
+    }
 
     // Create providers object with all tokens
     const providerTokens: Record<string, { token: string; host: string }> = {
@@ -143,6 +159,7 @@ function GitSettingsScreen() {
           setBitbucketHostInputHasValue(false);
           setAzureDevOpsHostInputHasValue(false);
           setForgejoHostInputHasValue(false);
+          setNeonApiKeyInputHasValue(false);
         },
       },
     );
@@ -158,7 +175,8 @@ function GitSettingsScreen() {
     !gitlabHostInputHasValue &&
     !bitbucketHostInputHasValue &&
     !azureDevOpsHostInputHasValue &&
-    !forgejoHostInputHasValue;
+    !forgejoHostInputHasValue &&
+    !neonApiKeyInputHasValue;
   const shouldRenderExternalConfigureButtons = isSaas && config.APP_SLUG;
   const shouldRenderProjectManagementIntegrations =
     config?.FEATURE_FLAGS?.ENABLE_JIRA ||
@@ -242,6 +260,7 @@ function GitSettingsScreen() {
                   setGithubHostInputHasValue(!!value);
                 }}
                 githubHostSet={existingGithubHost}
+                onClear={() => deleteProviderToken("github")}
               />
             )}
 
@@ -256,6 +275,7 @@ function GitSettingsScreen() {
                   setGitlabHostInputHasValue(!!value);
                 }}
                 gitlabHostSet={existingGitlabHost}
+                onClear={() => deleteProviderToken("gitlab")}
               />
             )}
 
@@ -270,6 +290,7 @@ function GitSettingsScreen() {
                   setBitbucketHostInputHasValue(!!value);
                 }}
                 bitbucketHostSet={existingBitbucketHost}
+                onClear={() => deleteProviderToken("bitbucket")}
               />
             )}
 
@@ -284,6 +305,7 @@ function GitSettingsScreen() {
                   setAzureDevOpsHostInputHasValue(!!value);
                 }}
                 azureDevOpsHostSet={existingAzureDevOpsHost}
+                onClear={() => deleteProviderToken("azure_devops")}
               />
             )}
 
@@ -298,6 +320,16 @@ function GitSettingsScreen() {
                   setForgejoHostInputHasValue(!!value);
                 }}
                 forgejoHostSet={existingForgejoHost}
+                onClear={() => deleteProviderToken("forgejo")}
+              />
+            )}
+
+            {!isSaas && (
+              <NeonApiKeyInput
+                isNeonKeySet={isNeonKeySet}
+                onChange={(value) => {
+                  setNeonApiKeyInputHasValue(!!value);
+                }}
               />
             )}
           </div>
@@ -308,32 +340,15 @@ function GitSettingsScreen() {
 
       <div className="flex gap-6 p-6 justify-end">
         {!shouldRenderExternalConfigureButtons && (
-          <>
-            <BrandButton
-              testId="disconnect-tokens-button"
-              name="disconnect-tokens-button"
-              type="submit"
-              variant="secondary"
-              isDisabled={
-                !isGitHubTokenSet &&
-                !isGitLabTokenSet &&
-                !isBitbucketTokenSet &&
-                !isAzureDevOpsTokenSet &&
-                !isForgejoTokenSet
-              }
-            >
-              {t(I18nKey.GIT$DISCONNECT_TOKENS)}
-            </BrandButton>
-            <BrandButton
-              testId="submit-button"
-              type="submit"
-              variant="primary"
-              isDisabled={isPending || formIsClean}
-            >
-              {!isPending && t("SETTINGS$SAVE_CHANGES")}
-              {isPending && t("SETTINGS$SAVING")}
-            </BrandButton>
-          </>
+          <BrandButton
+            testId="submit-button"
+            type="submit"
+            variant="primary"
+            isDisabled={isPending || formIsClean}
+          >
+            {!isPending && t("SETTINGS$SAVE_CHANGES")}
+            {isPending && t("SETTINGS$SAVING")}
+          </BrandButton>
         )}
       </div>
     </form>

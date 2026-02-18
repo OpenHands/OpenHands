@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { I18nKey } from "#/i18n/declaration";
-import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
+import b1Logo from "#/assets/branding/b1-logo.png";
 import { TOSCheckbox } from "#/components/features/waitlist/tos-checkbox";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -28,7 +28,7 @@ export default function AcceptTOS() {
   return (
     <ModalBackdrop>
       <div className="border border-tertiary p-8 rounded-lg max-w-md w-full flex flex-col gap-6 items-center bg-base-secondary">
-        <OpenHandsLogo width={68} height={46} />
+        <img src={b1Logo} alt="Build.One" width={68} height={46} />
 
         <div className="flex flex-col gap-2 w-full items-center text-center">
           <h1 className="text-2xl font-bold">

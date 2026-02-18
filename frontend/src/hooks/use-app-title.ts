@@ -2,8 +2,8 @@ import { useParams } from "react-router";
 import { useConfig } from "#/hooks/query/use-config";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 
-const APP_TITLE_OSS = "OpenHands";
-const APP_TITLE_SAAS = "OpenHands Cloud";
+const APP_TITLE_OSS = "Build.One";
+const APP_TITLE_SAAS = "Build.One Cloud";
 
 /**
  * Hook that returns the appropriate document title based on APP_MODE and current route.

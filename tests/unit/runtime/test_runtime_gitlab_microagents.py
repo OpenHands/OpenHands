@@ -136,7 +136,7 @@ class MockRuntime(Runtime):
     def list_files(self, path=None):
         return []
 
-    def get_mcp_config(self, extra_stdio_servers=None):
+    def get_mcp_config(self, extra_stdio_servers=None, extra_shttp_servers=None):
         from openhands.core.config.mcp_config import MCPConfig
 
         return MCPConfig()

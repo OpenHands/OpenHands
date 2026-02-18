@@ -1,0 +1,181 @@
+version: 2.1
+
+executors:
+  python:
+    docker:
+      - image: cimg/python:3.12
+    resource_class: medium
+  node:
+    docker:
+      - image: cimg/node:22.12
+    resource_class: medium
+  python-node:
+    docker:
+      - image: cimg/python:3.12-node
+    resource_class: large
+
+jobs:
+  lint-backend:
+    executor: python
+    steps:
+      - checkout
+      - run:
+          name: Install pre-commit
+          command: pip install pre-commit
+      - restore_cache:
+          keys:
+            - pre-commit-v1-{{ checksum "dev_config/python/.pre-commit-config.yaml" }}
+      - run:
+          name: Run pre-commit hooks
+          command: pre-commit run --all-files --config ./dev_config/python/.pre-commit-config.yaml
+      - save_cache:
+          key: pre-commit-v1-{{ checksum "dev_config/python/.pre-commit-config.yaml" }}
+          paths:
+            - ~/.cache/pre-commit
+
+  lint-frontend:
+    executor: node
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-deps-v1-{{ checksum "frontend/package-lock.json" }}
+      - run:
+          name: Install dependencies
+          working_directory: frontend
+          command: npm ci
+      - save_cache:
+          key: frontend-deps-v1-{{ checksum "frontend/package-lock.json" }}
+          paths:
+            - frontend/node_modules
+      - run:
+          name: Lint frontend
+          working_directory: frontend
+          command: npm run lint
+
+  test-backend:
+    executor: python-node
+    steps:
+      - checkout
+      - run:
+          name: Install system dependencies
+          command: sudo apt-get update && sudo apt-get install -y tmux
+      - run:
+          name: Install Poetry
+          command: pip install poetry
+      - restore_cache:
+          keys:
+            - poetry-deps-v1-{{ checksum "poetry.lock" }}
+      - run:
+          name: Install Python dependencies
+          command: poetry install --with dev,test,runtime
+      - save_cache:
+          key: poetry-deps-v1-{{ checksum "poetry.lock" }}
+          paths:
+            - .venv
+            - ~/.cache/pypoetry
+      - run:
+          name: Run backend tests
+          command: poetry run pytest --forked -n auto -s ./tests/unit
+          no_output_timeout: 15m
+
+  test-frontend:
+    executor: node
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-deps-v1-{{ checksum "frontend/package-lock.json" }}
+      - run:
+          name: Install dependencies
+          working_directory: frontend
+          command: npm ci
+      - save_cache:
+          key: frontend-deps-v1-{{ checksum "frontend/package-lock.json" }}
+          paths:
+            - frontend/node_modules
+      - run:
+          name: Build frontend
+          working_directory: frontend
+          command: npm run build
+      - run:
+          name: Run frontend tests with coverage
+          working_directory: frontend
+          command: npm run test:coverage
+
+  build:
+    executor: python-node
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build Docker image
+          command: |
+            docker build \
+              -f containers/app/Dockerfile \
+              -t openhands:build \
+              .
+          no_output_timeout: 30m
+
+  publish:
+    executor: python-node
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Log in to Cloudsmith Docker registry
+          command: docker login docker.cloudsmith.io -u ${BUILDONE_USER} -p ${BUILDONE_TOKEN}
+      - run:
+          name: Build and push Docker image
+          command: |
+            IMAGE="docker.cloudsmith.io/buildone/repository/openhands"
+            docker build \
+              -f containers/app/Dockerfile \
+              -t ${IMAGE}:${CIRCLE_TAG} \
+              .
+            docker push ${IMAGE}:${CIRCLE_TAG}
+          no_output_timeout: 30m
+
+workflows:
+  lint:
+    jobs:
+      - lint-backend:
+          filters:
+            branches:
+              only: /.*/
+      - lint-frontend:
+          filters:
+            branches:
+              only: /.*/
+
+  # test:
+  #   jobs:
+  #     - test-backend:
+  #         filters:
+  #           branches:
+  #             only: /.*/
+  #     - test-frontend:
+  #         filters:
+  #           branches:
+  #             only: /.*/
+
+  build:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+
+  publish:
+    jobs:
+      - publish:
+          context: build-defaults
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /.*/

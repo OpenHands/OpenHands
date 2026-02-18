@@ -611,6 +611,10 @@ async def _consume_remaining(
             await anext(async_iter)
     except StopAsyncIteration:
         return
+    except Exception:
+        logger.exception(
+            'Error in background conversation startup task', stack_info=True
+        )
     finally:
         await db_session.close()
         await httpx_client.aclose()

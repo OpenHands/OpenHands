@@ -14,6 +14,7 @@ from typing import Any, ClassVar, Protocol
 class AppMode(Enum):
     OPENHANDS = 'oss'
     SAAS = 'saas'
+    B1 = 'b1'
 
     # Backwards-compatible alias (deprecated): prefer AppMode.OPENHANDS
     OSS = 'oss'

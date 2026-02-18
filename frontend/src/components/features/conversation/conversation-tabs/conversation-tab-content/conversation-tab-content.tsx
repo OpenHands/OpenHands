@@ -9,6 +9,7 @@ import { ConversationTabTitle } from "../conversation-tab-title";
 import Terminal from "#/components/features/terminal/terminal";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { ENABLE_VSCODE_TAB } from "#/utils/feature-flags";
 
 // Lazy load all tab components
 const EditorTab = lazy(() => import("#/routes/changes-tab"));
@@ -40,7 +41,9 @@ export function ConversationTabContent() {
       isActive: isBrowserActive,
     },
     { key: "served", component: ServedTab, isActive: isServedActive },
-    { key: "vscode", component: VSCodeTab, isActive: isVSCodeActive },
+    ...(ENABLE_VSCODE_TAB()
+      ? [{ key: "vscode", component: VSCodeTab, isActive: isVSCodeActive }]
+      : []),
     {
       key: "terminal",
       component: Terminal,

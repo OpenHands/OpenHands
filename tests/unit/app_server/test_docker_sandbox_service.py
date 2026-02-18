@@ -385,6 +385,19 @@ class TestDockerSandboxService:
         assert call_args[1]['working_dir'] == '/workspace'
         assert call_args[1]['detach'] is True
 
+        # Verify shared package cache volume is included
+        volumes = call_args[1]['volumes']
+        assert 'openhands-package-cache' in volumes
+        assert volumes['openhands-package-cache'] == {
+            'bind': '/opt/package-cache',
+            'mode': 'rw',
+        }
+
+        # Verify cache volume ownership was fixed for the non-root user
+        mock_container.exec_run.assert_any_call(
+            'chown openhands:openhands /opt/package-cache', user='root'
+        )
+
     async def test_start_sandbox_with_spec_id(self, service, mock_sandbox_spec_service):
         """Test starting sandbox with specific spec ID."""
         # Setup

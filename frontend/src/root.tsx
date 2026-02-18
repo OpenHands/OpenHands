@@ -1,5 +1,6 @@
 import {
   Links,
+  LinksFunction,
   Meta,
   MetaFunction,
   Outlet,
@@ -31,10 +32,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+export const links: LinksFunction = () => [
+  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+];
+
 export const meta: MetaFunction = () => [
-  { title: "OpenHands" },
+  { title: "Build.One" },
   { name: "description", content: "Let's Start Building!" },
 ];
+
+export function HydrateFallback() {
+  return (
+    <div className="h-screen w-screen flex items-center justify-center bg-base">
+      <div className="loader h-2.5 w-2.5 rounded-full" />
+    </div>
+  );
+}
 
 export default function App() {
   return <Outlet />;

@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { isMobileDevice } from "#/utils/utils";
 import {
   ensureCursorVisible,
   clearEmptyContent,
@@ -80,8 +79,8 @@ export const useChatInputEvents = (
         return;
       }
 
-      // Original submit logic - only for desktop without shift key
-      if (!isMobileDevice() && !e.shiftKey && !disabled) {
+      // Submit on Enter, new line on Shift+Enter
+      if (!e.shiftKey && !disabled) {
         e.preventDefault();
         handleSubmit();
       }

@@ -108,13 +108,16 @@ class BaseMicroagent(BaseModel):
             if metadata.mcp_tools:
                 if metadata.mcp_tools.sse_servers:
                     logger.warning(
-                        f'Microagent {metadata.name} has SSE servers. Only stdio servers are currently supported.'
+                        f'Microagent {metadata.name} has SSE servers. SSE servers are not supported from microagents.'
                     )
 
-                if not metadata.mcp_tools.stdio_servers:
+                if (
+                    not metadata.mcp_tools.stdio_servers
+                    and not metadata.mcp_tools.shttp_servers
+                ):
                     raise MicroagentValidationError(
-                        f'Microagent {metadata.name} has MCP tools configuration but no stdio servers. '
-                        'Only stdio servers are currently supported.'
+                        f'Microagent {metadata.name} has MCP tools configuration but no stdio or shttp servers. '
+                        'SSE servers are not supported from microagents.'
                     )
         except Exception as e:
             # Provide more detailed error message for validation errors

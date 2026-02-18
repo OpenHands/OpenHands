@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { I18nKey } from "#/i18n/declaration";
-import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
+import b1Logo from "#/assets/branding/b1-logo.png";
 
 export function ReauthModal() {
   const { t } = useTranslation();
@@ -11,7 +11,7 @@ export function ReauthModal() {
   return (
     <ModalBackdrop>
       <ModalBody className="border border-tertiary">
-        <OpenHandsLogo width={68} height={46} />
+        <img src={b1Logo} alt="Build.One" width={68} height={46} />
         <div className="flex flex-col gap-2 w-full items-center text-center">
           <h1 className="text-2xl font-bold">
             {t(I18nKey.AUTH$LOGGING_BACK_IN)}
