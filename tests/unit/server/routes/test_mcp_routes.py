@@ -94,6 +94,23 @@ async def test_get_conversation_link_saas_mode():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('conversation_id', [None, '', 'None'])
+async def test_get_conversation_link_missing_conversation_id(conversation_id):
+    """Do not append a broken conversation link if conversation_id is missing."""
+    mock_service = AsyncMock(spec=GitService)
+
+    with patch('openhands.server.routes.mcp.server_config') as mock_config:
+        mock_config.app_mode = AppMode.SAAS
+
+        result = await get_conversation_link(
+            service=mock_service, conversation_id=conversation_id, body='Original body'
+        )
+
+        assert result == 'Original body'
+        mock_service.get_user.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_get_conversation_link_empty_body():
     """Test get_conversation_link with an empty body."""
     # Mock GitService and user
