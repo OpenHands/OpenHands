@@ -2013,7 +2013,7 @@ class TestGetOrgMembersEndpoint:
                     user_id=str(uuid.uuid4()),
                     email='user1@example.com',
                     role_id=1,
-                    role_name='owner',
+                    role='owner',
                     role_rank=10,
                     status='active',
                 )
@@ -2207,7 +2207,7 @@ class TestGetOrgMembersEndpoint:
                     user_id=str(uuid.uuid4()),
                     email='user2@example.com',
                     role_id=2,
-                    role_name='admin',
+                    role='admin',
                     role_rank=20,
                     status='active',
                 )
@@ -2543,7 +2543,7 @@ class TestUpdateOrgMemberEndpoint:
             user_id=target_user_id,
             email='user@example.com',
             role_id=2,
-            role_name='admin',
+            role='admin',
             role_rank=20,
             status='active',
         )

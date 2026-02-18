@@ -104,7 +104,7 @@ class OrgMemberService:
                     user_id=str(member.user_id),
                     email=user.email if user else None,
                     role_id=member.role_id,
-                    role_name=role.name if role else '',
+                    role=role.name if role else '',
                     role_rank=role.rank if role else 0,
                     status=member.status,
                 )
@@ -240,7 +240,7 @@ class OrgMemberService:
                     user_id=str(target_membership.user_id),
                     email=user.email if user else None,
                     role_id=target_membership.role_id,
-                    role_name=target_role.name,
+                    role=target_role.name,
                     role_rank=target_role.rank,
                     status=target_membership.status,
                 )
@@ -280,7 +280,7 @@ class OrgMemberService:
                 user_id=str(updated_member.user_id),
                 email=user.email if user else None,
                 role_id=updated_member.role_id,
-                role_name=new_role.name,
+                role=new_role.name,
                 role_rank=new_role.rank,
                 status=updated_member.status,
             )

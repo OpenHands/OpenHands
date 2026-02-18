@@ -257,7 +257,7 @@ class OrgMemberResponse(BaseModel):
     user_id: str
     email: str | None
     role_id: int
-    role_name: str
+    role: str
     role_rank: int
     status: str | None
 

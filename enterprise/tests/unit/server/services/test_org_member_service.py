@@ -179,7 +179,7 @@ class TestOrgMemberServiceGetOrgMembers:
             assert data.items[0].user_id == str(current_user_id)
             assert data.items[0].email == 'test@example.com'
             assert data.items[0].role_id == 1
-            assert data.items[0].role_name == 'owner'
+            assert data.items[0].role == 'owner'
             assert data.items[0].role_rank == 10
             assert data.items[0].status == 'active'
 
@@ -462,7 +462,7 @@ class TestOrgMemberServiceGetOrgMembers:
             assert success is True
             assert data is not None
             assert len(data.items) == 1
-            assert data.items[0].role_name == ''
+            assert data.items[0].role == ''
             assert data.items[0].role_rank == 0
 
     @pytest.mark.asyncio
@@ -1099,7 +1099,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Assert
             assert isinstance(data, OrgMemberResponse)
-            assert data.role_name == 'admin'
+            assert data.role == 'admin'
             assert data.role_rank == 20
             mock_update.assert_called_once_with(org_id, target_user_id, admin_role.id)
 
@@ -1431,7 +1431,7 @@ class TestOrgMemberServiceUpdateOrgMember:
 
             # Assert
             assert data is not None
-            assert data.role_name == 'member'
+            assert data.role == 'member'
             assert data.role_rank == 1000
 
 
