@@ -68,6 +68,9 @@ class ResendSyncedUserStore:
 
         Returns:
             The ResendSyncedUser record.
+
+        Raises:
+            RuntimeError: If the record could not be created or retrieved.
         """
         with self.session_maker() as session:
             stmt = (
@@ -84,16 +87,20 @@ class ResendSyncedUserStore:
             result = session.execute(stmt)
             session.commit()
 
-            # If on_conflict_do_nothing triggered, fetch the existing record
             row = result.first()
             if row:
                 return row[0]
 
-            # Record already exists, fetch it
+            # on_conflict_do_nothing triggered, fetch the existing record
             existing = session.execute(
                 select(ResendSyncedUser).where(
                     ResendSyncedUser.email == email.lower(),
                     ResendSyncedUser.audience_id == audience_id,
                 )
             ).first()
-            return existing[0] if existing else None
+            if existing:
+                return existing[0]
+
+            raise RuntimeError(
+                f'Failed to create or retrieve synced user record for {email}'
+            )
