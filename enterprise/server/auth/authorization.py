@@ -118,6 +118,7 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.CHANGE_USER_ROLE_OWNER,
             # Organization Management
             Permission.VIEW_ORG_SETTINGS,
+            Permission.EDIT_ORG_SETTINGS,
             # Organization Management (Owner only)
             Permission.CHANGE_ORGANIZATION_NAME,
             Permission.DELETE_ORGANIZATION,
@@ -141,6 +142,7 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
             Permission.CHANGE_USER_ROLE_ADMIN,
             # Organization Management
             Permission.VIEW_ORG_SETTINGS,
+            Permission.EDIT_ORG_SETTINGS,
         ]
     ),
     RoleName.MEMBER: frozenset(
