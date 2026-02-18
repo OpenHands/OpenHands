@@ -76,16 +76,20 @@ export const useUnifiedGetGitChanges = () => {
         if (Array.isArray(currentData)) {
           const currentIds = new Set(currentData.map((item) => item.path));
           const existingIds = new Set(orderedChanges.map((item) => item.path));
+          const currentDataByPath = new Map(
+            currentData.map((item) => [item.path, item]),
+          );
 
           // Filter out items that already exist in orderedChanges
           const newItems = currentData.filter(
             (item) => !existingIds.has(item.path),
           );
 
-          // Filter out items that no longer exist in the API response
-          const existingItems = orderedChanges.filter((item) =>
-            currentIds.has(item.path),
-          );
+          // Keep existing order, but always use latest objects from currentData
+          // so status/content changes are reflected after refresh.
+          const existingItems = orderedChanges
+            .filter((item) => currentIds.has(item.path))
+            .map((item) => currentDataByPath.get(item.path) || item);
 
           // Add new items to the beginning
           setOrderedChanges([...newItems, ...existingItems]);
@@ -97,12 +101,19 @@ export const useUnifiedGetGitChanges = () => {
     }
   }, [result.isFetching, result.isSuccess, result.data]);
 
+  const refetch = React.useCallback(() => {
+    // Reset local ordering state to force rebuilding from the latest query result.
+    previousDataRef.current = null;
+    setOrderedChanges([]);
+    return result.refetch();
+  }, [result.refetch]);
+
   return {
     data: orderedChanges,
     isLoading: result.isLoading,
     isSuccess: result.isSuccess,
     isError: result.isError,
     error: result.error,
-    refetch: result.refetch,
+    refetch,
   };
 };
