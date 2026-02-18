@@ -118,7 +118,7 @@ async def saas_get_user(
             )
         # Prefer email from DB; fall back to Keycloak if not yet persisted
         email = user_info.get('email') if user_info else None
-        sub = (user_info.get('sub') if user_info else '')
+        sub = user_info.get('sub') if user_info else ''
         if sub:
             db_user = await UserStore.get_user_by_id_async(sub)
             if db_user and db_user.email is not None:
