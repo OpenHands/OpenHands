@@ -1,7 +1,7 @@
 """
-Unit tests for role-based authorization (authorization.py).
+Unit tests for permission-based authorization (authorization.py).
 
-Tests the FastAPI dependencies that validate user roles within organizations.
+Tests the FastAPI dependencies that validate user permissions within organizations.
 """
 
 from unittest.mock import MagicMock, patch
@@ -10,179 +10,322 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from server.auth.authorization import (
-    ROLE_HIERARCHY,
-    OrgRole,
+    ROLE_PERMISSIONS,
+    Permission,
+    RoleName,
+    get_role_permissions,
     get_user_org_role,
-    has_required_role,
-    require_org_admin,
-    require_org_owner,
-    require_org_role,
-    require_org_user,
+    has_permission,
+    require_permission,
 )
 
 # =============================================================================
-# Tests for OrgRole enum
+# Tests for Permission enum
 # =============================================================================
 
 
-class TestOrgRole:
-    """Tests for OrgRole enum."""
+class TestPermission:
+    """Tests for Permission enum."""
 
-    def test_org_role_values(self):
+    def test_permission_values(self):
         """
-        GIVEN: OrgRole enum
-        WHEN: Accessing role values
-        THEN: All expected roles exist with correct string values
+        GIVEN: Permission enum
+        WHEN: Accessing permission values
+        THEN: All expected permissions exist with correct string values
         """
-        assert OrgRole.OWNER.value == 'owner'
-        assert OrgRole.ADMIN.value == 'admin'
-        assert OrgRole.USER.value == 'user'
+        assert Permission.MANAGE_SECRETS.value == 'manage_secrets'
+        assert Permission.MANAGE_MCP.value == 'manage_mcp'
+        assert Permission.MANAGE_INTEGRATIONS.value == 'manage_integrations'
+        assert (
+            Permission.MANAGE_APPLICATION_SETTINGS.value
+            == 'manage_application_settings'
+        )
+        assert Permission.MANAGE_API_KEYS.value == 'manage_api_keys'
+        assert Permission.VIEW_LLM_SETTINGS.value == 'view_llm_settings'
+        assert Permission.EDIT_LLM_SETTINGS.value == 'edit_llm_settings'
+        assert Permission.VIEW_BILLING.value == 'view_billing'
+        assert Permission.ADD_CREDITS.value == 'add_credits'
+        assert (
+            Permission.INVITE_USER_TO_ORGANIZATION.value
+            == 'invite_user_to_organization'
+        )
+        assert Permission.CHANGE_USER_ROLE_MEMBER.value == 'change_user_role:member'
+        assert Permission.CHANGE_USER_ROLE_ADMIN.value == 'change_user_role:admin'
+        assert Permission.CHANGE_USER_ROLE_OWNER.value == 'change_user_role:owner'
+        assert Permission.VIEW_ORG_SETTINGS.value == 'view_org_settings'
+        assert Permission.CHANGE_ORGANIZATION_NAME.value == 'change_organization_name'
+        assert Permission.DELETE_ORGANIZATION.value == 'delete_organization'
 
-    def test_org_role_from_string(self):
+    def test_permission_from_string(self):
         """
-        GIVEN: Valid role string
-        WHEN: Creating OrgRole from string
+        GIVEN: Valid permission string
+        WHEN: Creating Permission from string
         THEN: Correct enum value is returned
         """
-        assert OrgRole('owner') == OrgRole.OWNER
-        assert OrgRole('admin') == OrgRole.ADMIN
-        assert OrgRole('user') == OrgRole.USER
+        assert Permission('manage_secrets') == Permission.MANAGE_SECRETS
+        assert Permission('view_llm_settings') == Permission.VIEW_LLM_SETTINGS
+        assert Permission('delete_organization') == Permission.DELETE_ORGANIZATION
 
-    def test_org_role_invalid_string(self):
+    def test_permission_invalid_string(self):
         """
-        GIVEN: Invalid role string
-        WHEN: Creating OrgRole from string
+        GIVEN: Invalid permission string
+        WHEN: Creating Permission from string
         THEN: ValueError is raised
         """
         with pytest.raises(ValueError):
-            OrgRole('invalid_role')
+            Permission('invalid_permission')
 
 
 # =============================================================================
-# Tests for role hierarchy
+# Tests for RoleName enum
 # =============================================================================
 
 
-class TestRoleHierarchy:
-    """Tests for role hierarchy constants."""
+class TestRoleName:
+    """Tests for RoleName enum."""
 
-    def test_owner_highest_rank(self):
+    def test_role_name_values(self):
         """
-        GIVEN: Role hierarchy
-        WHEN: Comparing role ranks
-        THEN: Owner has highest rank
+        GIVEN: RoleName enum
+        WHEN: Accessing role name values
+        THEN: All expected roles exist with correct string values
         """
-        assert ROLE_HIERARCHY[OrgRole.OWNER] > ROLE_HIERARCHY[OrgRole.ADMIN]
-        assert ROLE_HIERARCHY[OrgRole.OWNER] > ROLE_HIERARCHY[OrgRole.USER]
+        assert RoleName.OWNER.value == 'owner'
+        assert RoleName.ADMIN.value == 'admin'
+        assert RoleName.MEMBER.value == 'member'
 
-    def test_admin_middle_rank(self):
+    def test_role_name_from_string(self):
         """
-        GIVEN: Role hierarchy
-        WHEN: Comparing role ranks
-        THEN: Admin is between owner and user
+        GIVEN: Valid role name string
+        WHEN: Creating RoleName from string
+        THEN: Correct enum value is returned
         """
-        assert ROLE_HIERARCHY[OrgRole.ADMIN] > ROLE_HIERARCHY[OrgRole.USER]
-        assert ROLE_HIERARCHY[OrgRole.ADMIN] < ROLE_HIERARCHY[OrgRole.OWNER]
+        assert RoleName('owner') == RoleName.OWNER
+        assert RoleName('admin') == RoleName.ADMIN
+        assert RoleName('member') == RoleName.MEMBER
 
-    def test_user_lowest_rank(self):
+    def test_role_name_invalid_string(self):
         """
-        GIVEN: Role hierarchy
-        WHEN: Comparing role ranks
-        THEN: User has lowest rank
+        GIVEN: Invalid role name string
+        WHEN: Creating RoleName from string
+        THEN: ValueError is raised
         """
-        assert ROLE_HIERARCHY[OrgRole.USER] < ROLE_HIERARCHY[OrgRole.ADMIN]
-        assert ROLE_HIERARCHY[OrgRole.USER] < ROLE_HIERARCHY[OrgRole.OWNER]
+        with pytest.raises(ValueError):
+            RoleName('invalid_role')
 
 
 # =============================================================================
-# Tests for has_required_role function
+# Tests for ROLE_PERMISSIONS mapping
 # =============================================================================
 
 
-class TestHasRequiredRole:
-    """Tests for has_required_role function."""
+class TestRolePermissions:
+    """Tests for role permission mappings."""
 
-    def test_owner_has_owner_role(self):
+    def test_owner_has_all_permissions(self):
+        """
+        GIVEN: ROLE_PERMISSIONS mapping
+        WHEN: Checking owner permissions
+        THEN: Owner has all permissions including owner-only permissions
+        """
+        owner_perms = ROLE_PERMISSIONS[RoleName.OWNER]
+        assert Permission.MANAGE_SECRETS in owner_perms
+        assert Permission.MANAGE_MCP in owner_perms
+        assert Permission.VIEW_LLM_SETTINGS in owner_perms
+        assert Permission.EDIT_LLM_SETTINGS in owner_perms
+        assert Permission.VIEW_BILLING in owner_perms
+        assert Permission.ADD_CREDITS in owner_perms
+        assert Permission.INVITE_USER_TO_ORGANIZATION in owner_perms
+        assert Permission.CHANGE_USER_ROLE_MEMBER in owner_perms
+        assert Permission.CHANGE_USER_ROLE_ADMIN in owner_perms
+        assert Permission.CHANGE_USER_ROLE_OWNER in owner_perms
+        assert Permission.CHANGE_ORGANIZATION_NAME in owner_perms
+        assert Permission.DELETE_ORGANIZATION in owner_perms
+
+    def test_admin_has_admin_permissions(self):
+        """
+        GIVEN: ROLE_PERMISSIONS mapping
+        WHEN: Checking admin permissions
+        THEN: Admin has admin permissions but not owner-only permissions
+        """
+        admin_perms = ROLE_PERMISSIONS[RoleName.ADMIN]
+        assert Permission.MANAGE_SECRETS in admin_perms
+        assert Permission.MANAGE_MCP in admin_perms
+        assert Permission.VIEW_LLM_SETTINGS in admin_perms
+        assert Permission.EDIT_LLM_SETTINGS in admin_perms
+        assert Permission.VIEW_BILLING in admin_perms
+        assert Permission.ADD_CREDITS in admin_perms
+        assert Permission.INVITE_USER_TO_ORGANIZATION in admin_perms
+        assert Permission.CHANGE_USER_ROLE_MEMBER in admin_perms
+        assert Permission.CHANGE_USER_ROLE_ADMIN in admin_perms
+        # Admin should NOT have owner-only permissions
+        assert Permission.CHANGE_USER_ROLE_OWNER not in admin_perms
+        assert Permission.CHANGE_ORGANIZATION_NAME not in admin_perms
+        assert Permission.DELETE_ORGANIZATION not in admin_perms
+
+    def test_member_has_limited_permissions(self):
+        """
+        GIVEN: ROLE_PERMISSIONS mapping
+        WHEN: Checking member permissions
+        THEN: Member has limited permissions
+        """
+        member_perms = ROLE_PERMISSIONS[RoleName.MEMBER]
+        # Member has basic settings permissions
+        assert Permission.MANAGE_SECRETS in member_perms
+        assert Permission.MANAGE_MCP in member_perms
+        assert Permission.MANAGE_INTEGRATIONS in member_perms
+        assert Permission.MANAGE_APPLICATION_SETTINGS in member_perms
+        assert Permission.MANAGE_API_KEYS in member_perms
+        assert Permission.VIEW_LLM_SETTINGS in member_perms
+        assert Permission.VIEW_ORG_SETTINGS in member_perms
+        # Member should NOT have admin/owner permissions
+        assert Permission.EDIT_LLM_SETTINGS not in member_perms
+        assert Permission.VIEW_BILLING not in member_perms
+        assert Permission.ADD_CREDITS not in member_perms
+        assert Permission.INVITE_USER_TO_ORGANIZATION not in member_perms
+        assert Permission.CHANGE_USER_ROLE_MEMBER not in member_perms
+        assert Permission.CHANGE_USER_ROLE_ADMIN not in member_perms
+        assert Permission.CHANGE_USER_ROLE_OWNER not in member_perms
+        assert Permission.CHANGE_ORGANIZATION_NAME not in member_perms
+        assert Permission.DELETE_ORGANIZATION not in member_perms
+
+
+# =============================================================================
+# Tests for get_role_permissions function
+# =============================================================================
+
+
+class TestGetRolePermissions:
+    """Tests for get_role_permissions function."""
+
+    def test_get_owner_permissions(self):
+        """
+        GIVEN: Role name 'owner'
+        WHEN: get_role_permissions is called
+        THEN: Owner permissions are returned
+        """
+        perms = get_role_permissions('owner')
+        assert Permission.DELETE_ORGANIZATION in perms
+        assert Permission.CHANGE_ORGANIZATION_NAME in perms
+
+    def test_get_admin_permissions(self):
+        """
+        GIVEN: Role name 'admin'
+        WHEN: get_role_permissions is called
+        THEN: Admin permissions are returned
+        """
+        perms = get_role_permissions('admin')
+        assert Permission.EDIT_LLM_SETTINGS in perms
+        assert Permission.DELETE_ORGANIZATION not in perms
+
+    def test_get_member_permissions(self):
+        """
+        GIVEN: Role name 'member'
+        WHEN: get_role_permissions is called
+        THEN: Member permissions are returned
+        """
+        perms = get_role_permissions('member')
+        assert Permission.VIEW_LLM_SETTINGS in perms
+        assert Permission.EDIT_LLM_SETTINGS not in perms
+
+    def test_get_invalid_role_permissions(self):
+        """
+        GIVEN: Invalid role name
+        WHEN: get_role_permissions is called
+        THEN: Empty frozenset is returned
+        """
+        perms = get_role_permissions('invalid_role')
+        assert perms == frozenset()
+
+
+# =============================================================================
+# Tests for has_permission function
+# =============================================================================
+
+
+class TestHasPermission:
+    """Tests for has_permission function."""
+
+    def test_owner_has_delete_organization_permission(self):
         """
         GIVEN: User with owner role
-        WHEN: Checking for owner requirement
+        WHEN: Checking for DELETE_ORGANIZATION permission
         THEN: Returns True
         """
-        assert has_required_role('owner', OrgRole.OWNER) is True
+        mock_role = MagicMock()
+        mock_role.name = 'owner'
+        assert has_permission(mock_role, Permission.DELETE_ORGANIZATION) is True
 
-    def test_owner_has_admin_role(self):
+    def test_owner_has_view_llm_settings_permission(self):
         """
         GIVEN: User with owner role
-        WHEN: Checking for admin requirement
-        THEN: Returns True (owner > admin)
-        """
-        assert has_required_role('owner', OrgRole.ADMIN) is True
-
-    def test_owner_has_user_role(self):
-        """
-        GIVEN: User with owner role
-        WHEN: Checking for user requirement
-        THEN: Returns True (owner > user)
-        """
-        assert has_required_role('owner', OrgRole.USER) is True
-
-    def test_admin_has_admin_role(self):
-        """
-        GIVEN: User with admin role
-        WHEN: Checking for admin requirement
+        WHEN: Checking for VIEW_LLM_SETTINGS permission
         THEN: Returns True
         """
-        assert has_required_role('admin', OrgRole.ADMIN) is True
+        mock_role = MagicMock()
+        mock_role.name = 'owner'
+        assert has_permission(mock_role, Permission.VIEW_LLM_SETTINGS) is True
 
-    def test_admin_has_user_role(self):
+    def test_admin_has_edit_llm_settings_permission(self):
         """
         GIVEN: User with admin role
-        WHEN: Checking for user requirement
-        THEN: Returns True (admin > user)
-        """
-        assert has_required_role('admin', OrgRole.USER) is True
-
-    def test_admin_lacks_owner_role(self):
-        """
-        GIVEN: User with admin role
-        WHEN: Checking for owner requirement
-        THEN: Returns False (admin < owner)
-        """
-        assert has_required_role('admin', OrgRole.OWNER) is False
-
-    def test_user_has_user_role(self):
-        """
-        GIVEN: User with user role
-        WHEN: Checking for user requirement
+        WHEN: Checking for EDIT_LLM_SETTINGS permission
         THEN: Returns True
         """
-        assert has_required_role('user', OrgRole.USER) is True
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+        assert has_permission(mock_role, Permission.EDIT_LLM_SETTINGS) is True
 
-    def test_user_lacks_admin_role(self):
+    def test_admin_lacks_delete_organization_permission(self):
         """
-        GIVEN: User with user role
-        WHEN: Checking for admin requirement
-        THEN: Returns False (user < admin)
-        """
-        assert has_required_role('user', OrgRole.ADMIN) is False
-
-    def test_user_lacks_owner_role(self):
-        """
-        GIVEN: User with user role
-        WHEN: Checking for owner requirement
-        THEN: Returns False (user < owner)
-        """
-        assert has_required_role('user', OrgRole.OWNER) is False
-
-    def test_invalid_role_returns_false(self):
-        """
-        GIVEN: Invalid role string
-        WHEN: Checking for any requirement
+        GIVEN: User with admin role
+        WHEN: Checking for DELETE_ORGANIZATION permission
         THEN: Returns False
         """
-        assert has_required_role('invalid_role', OrgRole.USER) is False
-        assert has_required_role('invalid_role', OrgRole.ADMIN) is False
-        assert has_required_role('invalid_role', OrgRole.OWNER) is False
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+        assert has_permission(mock_role, Permission.DELETE_ORGANIZATION) is False
+
+    def test_member_has_view_llm_settings_permission(self):
+        """
+        GIVEN: User with member role
+        WHEN: Checking for VIEW_LLM_SETTINGS permission
+        THEN: Returns True
+        """
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+        assert has_permission(mock_role, Permission.VIEW_LLM_SETTINGS) is True
+
+    def test_member_lacks_edit_llm_settings_permission(self):
+        """
+        GIVEN: User with member role
+        WHEN: Checking for EDIT_LLM_SETTINGS permission
+        THEN: Returns False
+        """
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+        assert has_permission(mock_role, Permission.EDIT_LLM_SETTINGS) is False
+
+    def test_member_lacks_delete_organization_permission(self):
+        """
+        GIVEN: User with member role
+        WHEN: Checking for DELETE_ORGANIZATION permission
+        THEN: Returns False
+        """
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+        assert has_permission(mock_role, Permission.DELETE_ORGANIZATION) is False
+
+    def test_invalid_role_has_no_permissions(self):
+        """
+        GIVEN: User with invalid role
+        WHEN: Checking for any permission
+        THEN: Returns False
+        """
+        mock_role = MagicMock()
+        mock_role.name = 'invalid_role'
+        assert has_permission(mock_role, Permission.VIEW_LLM_SETTINGS) is False
+        assert has_permission(mock_role, Permission.DELETE_ORGANIZATION) is False
 
 
 # =============================================================================
@@ -197,7 +340,7 @@ class TestGetUserOrgRole:
         """
         GIVEN: User is a member of organization with role
         WHEN: get_user_org_role is called
-        THEN: Role name is returned
+        THEN: Role object is returned
         """
         user_id = str(uuid4())
         org_id = uuid4()
@@ -219,7 +362,7 @@ class TestGetUserOrgRole:
             ),
         ):
             result = get_user_org_role(user_id, org_id)
-            assert result == 'admin'
+            assert result == mock_role
 
     def test_returns_none_when_not_member(self):
         """
@@ -237,70 +380,48 @@ class TestGetUserOrgRole:
             result = get_user_org_role(user_id, org_id)
             assert result is None
 
-    def test_returns_none_when_role_not_found(self):
-        """
-        GIVEN: User is member but role not found
-        WHEN: get_user_org_role is called
-        THEN: None is returned
-        """
-        user_id = str(uuid4())
-        org_id = uuid4()
-
-        mock_org_member = MagicMock()
-        mock_org_member.role_id = 999  # Non-existent role
-
-        with (
-            patch(
-                'server.auth.authorization.OrgMemberStore.get_org_member',
-                return_value=mock_org_member,
-            ),
-            patch(
-                'server.auth.authorization.RoleStore.get_role_by_id',
-                return_value=None,
-            ),
-        ):
-            result = get_user_org_role(user_id, org_id)
-            assert result is None
-
 
 # =============================================================================
-# Tests for require_org_role dependency
+# Tests for require_permission dependency
 # =============================================================================
 
 
-class TestRequireOrgRole:
-    """Tests for require_org_role dependency factory."""
+class TestRequirePermission:
+    """Tests for require_permission dependency factory."""
 
     @pytest.mark.asyncio
     async def test_returns_user_id_when_authorized(self):
         """
-        GIVEN: User with sufficient role
-        WHEN: Role checker is called
+        GIVEN: User with required permission
+        WHEN: Permission checker is called
         THEN: User ID is returned
         """
         user_id = str(uuid4())
         org_id = uuid4()
 
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
         with patch(
             'server.auth.authorization.get_user_org_role',
-            return_value='admin',
+            return_value=mock_role,
         ):
-            role_checker = require_org_role(OrgRole.USER)
-            result = await role_checker(org_id=org_id, user_id=user_id)
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            result = await permission_checker(org_id=org_id, user_id=user_id)
             assert result == user_id
 
     @pytest.mark.asyncio
     async def test_raises_401_when_not_authenticated(self):
         """
         GIVEN: No user ID (not authenticated)
-        WHEN: Role checker is called
+        WHEN: Permission checker is called
         THEN: 401 Unauthorized is raised
         """
         org_id = uuid4()
 
-        role_checker = require_org_role(OrgRole.USER)
+        permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
         with pytest.raises(HTTPException) as exc_info:
-            await role_checker(org_id=org_id, user_id=None)
+            await permission_checker(org_id=org_id, user_id=None)
 
         assert exc_info.value.status_code == 401
         assert 'not authenticated' in exc_info.value.detail.lower()
@@ -309,7 +430,7 @@ class TestRequireOrgRole:
     async def test_raises_403_when_not_member(self):
         """
         GIVEN: User is not a member of organization
-        WHEN: Role checker is called
+        WHEN: Permission checker is called
         THEN: 403 Forbidden is raised
         """
         user_id = str(uuid4())
@@ -319,173 +440,229 @@ class TestRequireOrgRole:
             'server.auth.authorization.get_user_org_role',
             return_value=None,
         ):
-            role_checker = require_org_role(OrgRole.USER)
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
             with pytest.raises(HTTPException) as exc_info:
-                await role_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(org_id=org_id, user_id=user_id)
 
             assert exc_info.value.status_code == 403
             assert 'not a member' in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
-    async def test_raises_403_when_insufficient_role(self):
+    async def test_raises_403_when_insufficient_permission(self):
         """
-        GIVEN: User with insufficient role
-        WHEN: Role checker is called
+        GIVEN: User without required permission
+        WHEN: Permission checker is called
         THEN: 403 Forbidden is raised
         """
         user_id = str(uuid4())
         org_id = uuid4()
 
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+
         with patch(
             'server.auth.authorization.get_user_org_role',
-            return_value='user',
+            return_value=mock_role,
         ):
-            role_checker = require_org_role(OrgRole.ADMIN)
+            permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
             with pytest.raises(HTTPException) as exc_info:
-                await role_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(org_id=org_id, user_id=user_id)
 
             assert exc_info.value.status_code == 403
-            assert 'admin' in exc_info.value.detail.lower()
+            assert 'delete_organization' in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
-    async def test_owner_satisfies_admin_requirement(self):
+    async def test_owner_can_delete_organization(self):
         """
         GIVEN: User with owner role
-        WHEN: Admin role is required
-        THEN: User ID is returned (owner > admin)
+        WHEN: DELETE_ORGANIZATION permission is required
+        THEN: User ID is returned
         """
         user_id = str(uuid4())
         org_id = uuid4()
 
+        mock_role = MagicMock()
+        mock_role.name = 'owner'
+
         with patch(
             'server.auth.authorization.get_user_org_role',
-            return_value='owner',
+            return_value=mock_role,
         ):
-            role_checker = require_org_role(OrgRole.ADMIN)
-            result = await role_checker(org_id=org_id, user_id=user_id)
+            permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
+            result = await permission_checker(org_id=org_id, user_id=user_id)
             assert result == user_id
 
     @pytest.mark.asyncio
-    async def test_logs_warning_on_insufficient_role(self):
+    async def test_admin_cannot_delete_organization(self):
         """
-        GIVEN: User with insufficient role
-        WHEN: Role checker is called
+        GIVEN: User with admin role
+        WHEN: DELETE_ORGANIZATION permission is required
+        THEN: 403 Forbidden is raised
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            return_value=mock_role,
+        ):
+            permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
+            with pytest.raises(HTTPException) as exc_info:
+                await permission_checker(org_id=org_id, user_id=user_id)
+
+            assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_logs_warning_on_insufficient_permission(self):
+        """
+        GIVEN: User without required permission
+        WHEN: Permission checker is called
         THEN: Warning is logged with details
         """
         user_id = str(uuid4())
         org_id = uuid4()
 
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+
         with (
             patch(
                 'server.auth.authorization.get_user_org_role',
-                return_value='user',
+                return_value=mock_role,
             ),
             patch('server.auth.authorization.logger') as mock_logger,
         ):
-            role_checker = require_org_role(OrgRole.OWNER)
+            permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
             with pytest.raises(HTTPException):
-                await role_checker(org_id=org_id, user_id=user_id)
+                await permission_checker(org_id=org_id, user_id=user_id)
 
             mock_logger.warning.assert_called()
             call_args = mock_logger.warning.call_args
             assert call_args[1]['extra']['user_id'] == user_id
-            assert call_args[1]['extra']['user_role'] == 'user'
-            assert call_args[1]['extra']['required_role'] == 'owner'
+            assert call_args[1]['extra']['user_role'] == 'member'
+            assert call_args[1]['extra']['required_permission'] == 'delete_organization'
 
 
 # =============================================================================
-# Tests for convenience dependencies
+# Tests for permission-based access control scenarios
 # =============================================================================
 
 
-class TestConvenienceDependencies:
-    """Tests for pre-configured convenience dependencies."""
+class TestPermissionScenarios:
+    """Tests for real-world permission scenarios."""
 
     @pytest.mark.asyncio
-    async def test_require_org_user_allows_user(self):
+    async def test_member_can_manage_secrets(self):
         """
-        GIVEN: User with user role
-        WHEN: require_org_user is used
+        GIVEN: User with member role
+        WHEN: MANAGE_SECRETS permission is required
         THEN: User ID is returned
         """
         user_id = str(uuid4())
         org_id = uuid4()
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value='user',
-        ):
-            result = await require_org_user(org_id=org_id, user_id=user_id)
-            assert result == user_id
-
-    @pytest.mark.asyncio
-    async def test_require_org_admin_allows_admin(self):
-        """
-        GIVEN: User with admin role
-        WHEN: require_org_admin is used
-        THEN: User ID is returned
-        """
-        user_id = str(uuid4())
-        org_id = uuid4()
+        mock_role = MagicMock()
+        mock_role.name = 'member'
 
         with patch(
             'server.auth.authorization.get_user_org_role',
-            return_value='admin',
+            return_value=mock_role,
         ):
-            result = await require_org_admin(org_id=org_id, user_id=user_id)
+            permission_checker = require_permission(Permission.MANAGE_SECRETS)
+            result = await permission_checker(org_id=org_id, user_id=user_id)
             assert result == user_id
 
     @pytest.mark.asyncio
-    async def test_require_org_admin_rejects_user(self):
+    async def test_member_cannot_invite_users(self):
         """
-        GIVEN: User with user role
-        WHEN: require_org_admin is used
+        GIVEN: User with member role
+        WHEN: INVITE_USER_TO_ORGANIZATION permission is required
         THEN: 403 Forbidden is raised
         """
         user_id = str(uuid4())
         org_id = uuid4()
 
+        mock_role = MagicMock()
+        mock_role.name = 'member'
+
         with patch(
             'server.auth.authorization.get_user_org_role',
-            return_value='user',
+            return_value=mock_role,
         ):
+            permission_checker = require_permission(
+                Permission.INVITE_USER_TO_ORGANIZATION
+            )
             with pytest.raises(HTTPException) as exc_info:
-                await require_org_admin(org_id=org_id, user_id=user_id)
+                await permission_checker(org_id=org_id, user_id=user_id)
 
             assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_require_org_owner_allows_owner(self):
+    async def test_admin_can_invite_users(self):
+        """
+        GIVEN: User with admin role
+        WHEN: INVITE_USER_TO_ORGANIZATION permission is required
+        THEN: User ID is returned
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            return_value=mock_role,
+        ):
+            permission_checker = require_permission(
+                Permission.INVITE_USER_TO_ORGANIZATION
+            )
+            result = await permission_checker(org_id=org_id, user_id=user_id)
+            assert result == user_id
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_change_owner_role(self):
+        """
+        GIVEN: User with admin role
+        WHEN: CHANGE_USER_ROLE_OWNER permission is required
+        THEN: 403 Forbidden is raised
+        """
+        user_id = str(uuid4())
+        org_id = uuid4()
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            return_value=mock_role,
+        ):
+            permission_checker = require_permission(Permission.CHANGE_USER_ROLE_OWNER)
+            with pytest.raises(HTTPException) as exc_info:
+                await permission_checker(org_id=org_id, user_id=user_id)
+
+            assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_owner_can_change_owner_role(self):
         """
         GIVEN: User with owner role
-        WHEN: require_org_owner is used
+        WHEN: CHANGE_USER_ROLE_OWNER permission is required
         THEN: User ID is returned
         """
         user_id = str(uuid4())
         org_id = uuid4()
 
+        mock_role = MagicMock()
+        mock_role.name = 'owner'
+
         with patch(
             'server.auth.authorization.get_user_org_role',
-            return_value='owner',
+            return_value=mock_role,
         ):
-            result = await require_org_owner(org_id=org_id, user_id=user_id)
+            permission_checker = require_permission(Permission.CHANGE_USER_ROLE_OWNER)
+            result = await permission_checker(org_id=org_id, user_id=user_id)
             assert result == user_id
-
-    @pytest.mark.asyncio
-    async def test_require_org_owner_rejects_admin(self):
-        """
-        GIVEN: User with admin role
-        WHEN: require_org_owner is used
-        THEN: 403 Forbidden is raised
-        """
-        user_id = str(uuid4())
-        org_id = uuid4()
-
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value='admin',
-        ):
-            with pytest.raises(HTTPException) as exc_info:
-                await require_org_owner(org_id=org_id, user_id=user_id)
-
-            assert exc_info.value.status_code == 403
