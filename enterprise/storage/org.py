@@ -47,6 +47,7 @@ class Org(Base):  # type: ignore
     conversation_expiration = Column(Integer, nullable=True)
     condenser_max_size = Column(Integer, nullable=True)
     byor_export_enabled = Column(Boolean, nullable=False, default=False)
+    pending_free_credits = Column(Boolean, nullable=False, default=False)
 
     # Relationships
     org_members = relationship('OrgMember', back_populates='org')

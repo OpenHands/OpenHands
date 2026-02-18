@@ -126,3 +126,24 @@ def test_run_agent_variant_tests_v1_calls_handler_and_sets_system_prompt(monkeyp
     # Should be a different instance than the original (copied after handler runs)
     assert result is not agent
     assert result.system_prompt_filename == 'system_prompt_long_horizon.j2'
+
+
+@patch('experiments.experiment_manager.ENABLE_EXPERIMENT_MANAGER', True)
+@patch('experiments.experiment_manager.EXPERIMENT_SYSTEM_PROMPT_EXPERIMENT', True)
+def test_run_agent_variant_tests_v1_preserves_planning_agent_system_prompt():
+    """Planning agents should retain their specialized system prompt and not be overwritten by the experiment."""
+    # Arrange
+    planning_agent = make_agent().model_copy(
+        update={'system_prompt_filename': 'system_prompt_planning.j2'}
+    )
+    conv_id = uuid4()
+
+    # Act
+    result: Agent = SaaSExperimentManager.run_agent_variant_tests__v1(
+        user_id='user-planning',
+        conversation_id=conv_id,
+        agent=planning_agent,
+    )
+
+    # Assert
+    assert result.system_prompt_filename == 'system_prompt_planning.j2'

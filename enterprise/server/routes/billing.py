@@ -10,6 +10,8 @@ from fastapi.responses import RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
 from server.constants import (
+    FREE_CREDIT_AMOUNT,
+    FREE_CREDIT_THRESHOLD,
     STRIPE_API_KEY,
 )
 from server.logger import logger
@@ -254,15 +256,33 @@ async def success_callback(session_id: str, request: Request):
         max_budget = (user_team_info.get('litellm_budget_table') or {}).get(
             'max_budget', 0
         )
+
+        org = session.query(Org).filter(Org.id == user.current_org_id).first()
         new_max_budget = max_budget + add_credits
+
+        # Grant free credits if:
+        # 1. The org has pending free credits (new org, eligible)
+        # 2. The budget after this purchase meets the threshold
+        should_grant_free_credits = (
+            org and org.pending_free_credits and new_max_budget >= FREE_CREDIT_THRESHOLD
+        )
+        if should_grant_free_credits:
+            new_max_budget += FREE_CREDIT_AMOUNT
+            org.pending_free_credits = False
+            logger.info(
+                'free_credits_granted',
+                extra={
+                    'user_id': billing_session.user_id,
+                    'org_id': str(user.current_org_id),
+                    'free_credit_amount': FREE_CREDIT_AMOUNT,
+                },
+            )
 
         await LiteLlmManager.update_team_and_users_budget(
             str(user.current_org_id), new_max_budget
         )
 
         # Enable BYOR export for the org now that they've purchased credits
-        # Update within the same session to avoid nested session issues
-        org = session.query(Org).filter(Org.id == user.current_org_id).first()
         if org:
             org.byor_export_enabled = True
 
@@ -279,6 +299,7 @@ async def success_callback(session_id: str, request: Request):
                 'org_id': str(user.current_org_id),
                 'checkout_session_id': billing_session.id,
                 'stripe_customer_id': stripe_session.customer,
+                'free_credits_granted': should_grant_free_credits,
             },
         )
         session.commit()
