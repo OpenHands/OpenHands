@@ -71,7 +71,6 @@ RATE_LIMIT = float(os.environ.get('RATE_LIMIT', '2'))  # Requests per second
 resend.api_key = RESEND_API_KEY
 
 
-
 class ResendSyncError(Exception):
     """Base exception for Resend sync errors."""
 
