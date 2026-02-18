@@ -291,7 +291,7 @@ async def test_success_callback_stripe_incomplete():
 
 @pytest.mark.asyncio
 async def test_success_callback_success():
-    """Test successful payment completion and credit update (bonus already granted)."""
+    """Test successful payment completion and credit update."""
     mock_request = Request(scope={'type': 'http'})
     mock_request._base_url = URL('http://test.com/')
 
@@ -300,7 +300,6 @@ async def test_success_callback_success():
     mock_billing_session.user_id = 'mock_user'
 
     mock_org = MagicMock()
-    mock_org.pending_free_credits = False  # Not eligible (old org or already granted)
 
     with (
         patch('server.routes.billing.session_maker') as mock_session_maker,
@@ -347,10 +346,10 @@ async def test_success_callback_success():
             == 'https://test.com/settings/billing?checkout=success'
         )
 
-        # Verify LiteLLM API calls - no bonus since not eligible
+        # Verify LiteLLM API calls
         mock_update_budget.assert_called_once_with(
             'mock_org_id',
-            125.0,  # 100 + 25.00 (no bonus)
+            125.0,  # 100 + 25.00
         )
 
         # Verify BYOR export is enabled for the org (updated in same session)
@@ -361,92 +360,6 @@ async def test_success_callback_success():
         assert mock_billing_session.price == 25.0
         mock_db_session.merge.assert_called_once()
         mock_db_session.commit.assert_called_once()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'initial_budget,purchase_cents,pending_credits,expected_final_budget,expected_pending_after',
-    [
-        # New user buys $10 -> gets free credits, pending becomes False
-        (0, 1000, True, 20.0, False),
-        # New user buys $5 -> below threshold, no free credits yet, pending stays True
-        (0, 500, True, 5.0, True),
-        # User with $5 buys $5 more -> reaches threshold, gets free credits
-        (5.0, 500, True, 20.0, False),
-        # User with $5 buys $3 -> below threshold, no free credits yet
-        (5.0, 300, True, 8.0, True),
-        # Old user (not pending) buys $25 -> no free credits, stays False
-        (20.0, 2500, False, 45.0, False),
-    ],
-    ids=[
-        'new_user_buys_10_gets_free_credits',
-        'new_user_buys_5_below_threshold',
-        'user_with_5_buys_5_reaches_threshold',
-        'user_with_5_buys_3_below_threshold',
-        'old_user_not_eligible',
-    ],
-)
-async def test_success_callback_free_credits(
-    initial_budget,
-    purchase_cents,
-    pending_credits,
-    expected_final_budget,
-    expected_pending_after,
-):
-    """Test free credits are granted only when pending and threshold is met."""
-    mock_request = Request(scope={'type': 'http'})
-    mock_request._base_url = URL('http://test.com/')
-
-    mock_billing_session = MagicMock()
-    mock_billing_session.status = 'in_progress'
-    mock_billing_session.user_id = 'mock_user'
-
-    mock_org = MagicMock()
-    mock_org.pending_free_credits = pending_credits
-
-    with (
-        patch('server.routes.billing.session_maker') as mock_session_maker,
-        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
-        patch(
-            'storage.user_store.UserStore.get_user_by_id_async',
-            new_callable=AsyncMock,
-            return_value=MagicMock(current_org_id='mock_org_id'),
-        ),
-        patch(
-            'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
-            return_value={
-                'spend': 0,
-                'litellm_budget_table': {'max_budget': initial_budget},
-            },
-        ),
-        patch(
-            'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'
-        ) as mock_update_budget,
-        patch('server.routes.billing.FREE_CREDIT_THRESHOLD', 10.0),
-        patch('server.routes.billing.FREE_CREDIT_AMOUNT', 10.0),
-    ):
-        mock_db_session = MagicMock()
-        mock_query_chain_billing = MagicMock()
-        mock_query_chain_billing.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        mock_query_chain_org = MagicMock()
-        mock_query_chain_org.filter.return_value.first.return_value = mock_org
-        mock_db_session.query.side_effect = [
-            mock_query_chain_billing,
-            mock_query_chain_org,
-        ]
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
-
-        mock_stripe_retrieve.return_value = MagicMock(
-            status='complete',
-            amount_subtotal=purchase_cents,
-            customer='mock_customer_id',
-        )
-
-        response = await success_callback('test_session_id', mock_request)
-
-        assert response.status_code == 302
-        mock_update_budget.assert_called_once_with('mock_org_id', expected_final_budget)
-        assert mock_org.pending_free_credits is expected_pending_after
 
 
 @pytest.mark.asyncio
@@ -491,11 +404,10 @@ async def test_success_callback_lite_llm_error():
 
 @pytest.mark.asyncio
 async def test_success_callback_lite_llm_update_budget_error_rollback():
-    """Test that pending_free_credits change is not committed when update_team_and_users_budget fails.
+    """Test that database changes are not committed when update_team_and_users_budget fails.
 
-    This test verifies that if LiteLlmManager.update_team_and_users_budget raises an exception
-    after pending_free_credits has been set to False, the database transaction rolls back and
-    pending_free_credits remains True.
+    This test verifies that if LiteLlmManager.update_team_and_users_budget raises an exception,
+    the database transaction rolls back.
     """
     mock_request = Request(scope={'type': 'http'})
     mock_request._base_url = URL('http://test.com/')
@@ -505,7 +417,6 @@ async def test_success_callback_lite_llm_update_budget_error_rollback():
     mock_billing_session.user_id = 'mock_user'
 
     mock_org = MagicMock()
-    mock_org.pending_free_credits = True
 
     with (
         patch('server.routes.billing.session_maker') as mock_session_maker,
@@ -526,8 +437,6 @@ async def test_success_callback_lite_llm_update_budget_error_rollback():
             'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget',
             side_effect=Exception('LiteLLM API Error'),
         ),
-        patch('server.routes.billing.FREE_CREDIT_THRESHOLD', 10.0),
-        patch('server.routes.billing.FREE_CREDIT_AMOUNT', 10.0),
     ):
         mock_db_session = MagicMock()
         mock_query_chain_billing = MagicMock()
@@ -540,7 +449,6 @@ async def test_success_callback_lite_llm_update_budget_error_rollback():
         ]
         mock_session_maker.return_value.__enter__.return_value = mock_db_session
 
-        # Purchase $10 to reach threshold
         mock_stripe_retrieve.return_value = MagicMock(
             status='complete',
             amount_subtotal=1000,  # $10
@@ -671,6 +579,6 @@ async def test_create_customer_setup_session_success():
             customer='mock-customer-id',
             mode='setup',
             payment_method_types=['card'],
-            success_url='https://test.com/?free_credits=success',
+            success_url='https://test.com/?setup=success',
             cancel_url='https://test.com/',
         )

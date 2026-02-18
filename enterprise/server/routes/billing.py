@@ -9,11 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
-from server.constants import (
-    FREE_CREDIT_AMOUNT,
-    FREE_CREDIT_THRESHOLD,
-    STRIPE_API_KEY,
-)
+from server.constants import STRIPE_API_KEY
 from server.logger import logger
 from starlette.datastructures import URL
 from storage.billing_session import BillingSession
@@ -151,7 +147,7 @@ async def create_customer_setup_session(
         customer=customer_info['customer_id'],
         mode='setup',
         payment_method_types=['card'],
-        success_url=f'{base_url}?free_credits=success',
+        success_url=f'{base_url}?setup=success',
         cancel_url=f'{base_url}',
     )
     return CreateBillingSessionResponse(redirect_url=checkout_session.url)
@@ -260,24 +256,6 @@ async def success_callback(session_id: str, request: Request):
         org = session.query(Org).filter(Org.id == user.current_org_id).first()
         new_max_budget = max_budget + add_credits
 
-        # Grant free credits if:
-        # 1. The org has pending free credits (new org, eligible)
-        # 2. The budget after this purchase meets the threshold
-        should_grant_free_credits = (
-            org and org.pending_free_credits and new_max_budget >= FREE_CREDIT_THRESHOLD
-        )
-        if should_grant_free_credits:
-            new_max_budget += FREE_CREDIT_AMOUNT
-            org.pending_free_credits = False
-            logger.info(
-                'free_credits_granted',
-                extra={
-                    'user_id': billing_session.user_id,
-                    'org_id': str(user.current_org_id),
-                    'free_credit_amount': FREE_CREDIT_AMOUNT,
-                },
-            )
-
         await LiteLlmManager.update_team_and_users_budget(
             str(user.current_org_id), new_max_budget
         )
@@ -299,7 +277,6 @@ async def success_callback(session_id: str, request: Request):
                 'org_id': str(user.current_org_id),
                 'checkout_session_id': billing_session.id,
                 'stripe_customer_id': stripe_session.customer,
-                'free_credits_granted': should_grant_free_credits,
             },
         )
         session.commit()
