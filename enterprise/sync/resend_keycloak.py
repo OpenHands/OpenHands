@@ -347,11 +347,16 @@ def _backfill_existing_resend_contacts(
         resend_contacts = get_resend_contacts(audience_id)
         logger.info(f'Found {len(resend_contacts)} contacts in Resend audience')
 
+        already_synced_emails = synced_user_store.get_synced_emails_for_audience(
+            audience_id
+        )
+        logger.info(
+            f'Found {len(already_synced_emails)} already synced emails in database'
+        )
+
         backfilled_count = 0
         for email in resend_contacts:
-            # Check if this contact is already tracked in our database
-            if not synced_user_store.is_user_synced(email, audience_id):
-                # Contact exists in Resend but not in our tracking table - backfill it
+            if email.lower() not in already_synced_emails:
                 synced_user_store.mark_user_synced(
                     email=email,
                     audience_id=audience_id,
@@ -436,6 +441,11 @@ def sync_users_to_resend():
             'errors': 0,
         }
 
+        synced_emails = synced_user_store.get_synced_emails_for_audience(
+            RESEND_AUDIENCE_ID
+        )
+        logger.info(f'Found {len(synced_emails)} already synced emails in database')
+
         # Process users in batches
         offset = 0
         while offset < total_users:
@@ -449,9 +459,7 @@ def sync_users_to_resend():
 
                 email = email.lower()
 
-                # Check if user was already synced (one query per user)
-                # This ensures we don't re-add users who were manually deleted from Resend
-                if synced_user_store.is_user_synced(email, RESEND_AUDIENCE_ID):
+                if email in synced_emails:
                     logger.debug(
                         f'User {email} was already synced to this audience, skipping'
                     )
@@ -482,6 +490,8 @@ def sync_users_to_resend():
                         audience_id=RESEND_AUDIENCE_ID,
                         keycloak_user_id=keycloak_user_id,
                     )
+
+                    synced_emails.add(email)
 
                     stats['added_contacts'] += 1
 

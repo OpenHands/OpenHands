@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Optional, Set
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -33,6 +33,22 @@ class ResendSyncedUserStore:
             )
             result = session.execute(stmt).first()
             return result is not None
+
+    def get_synced_emails_for_audience(self, audience_id: str) -> Set[str]:
+        """Get all synced email addresses for a specific audience.
+
+        Args:
+            audience_id: The Resend audience ID.
+
+        Returns:
+            A set of lowercase email addresses that have been synced.
+        """
+        with self.session_maker() as session:
+            stmt = select(ResendSyncedUser.email).where(
+                ResendSyncedUser.audience_id == audience_id,
+            )
+            result = session.execute(stmt).scalars().all()
+            return set(result)
 
     def mark_user_synced(
         self,
