@@ -16,7 +16,7 @@ class ResendSyncedUser(Base):  # type: ignore
     Resend UI. This respects manual deletions/unsubscribes.
     """
 
-    __tablename__ = "resend_synced_users"
+    __tablename__ = 'resend_synced_users'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     email = Column(String, nullable=False, index=True)
@@ -30,6 +30,6 @@ class ResendSyncedUser(Base):  # type: ignore
 
     __table_args__ = (
         UniqueConstraint(
-            "email", "audience_id", name="uq_resend_synced_email_audience"
+            'email', 'audience_id', name='uq_resend_synced_email_audience'
         ),
     )

@@ -37,8 +37,8 @@ class TestResendSyncedUserStore:
 
     def test_is_user_synced_returns_true_when_exists(self, store, mock_session):
         """Test is_user_synced returns True when user exists in database."""
-        email = "test@example.com"
-        audience_id = "test-audience-123"
+        email = 'test@example.com'
+        audience_id = 'test-audience-123'
 
         mock_row = MagicMock()
         mock_session.execute.return_value.first.return_value = mock_row
@@ -50,8 +50,8 @@ class TestResendSyncedUserStore:
 
     def test_is_user_synced_returns_false_when_not_exists(self, store, mock_session):
         """Test is_user_synced returns False when user doesn't exist."""
-        email = "test@example.com"
-        audience_id = "test-audience-123"
+        email = 'test@example.com'
+        audience_id = 'test-audience-123'
 
         mock_session.execute.return_value.first.return_value = None
 
@@ -61,8 +61,8 @@ class TestResendSyncedUserStore:
 
     def test_is_user_synced_normalizes_email_to_lowercase(self, store, mock_session):
         """Test that is_user_synced normalizes email to lowercase."""
-        email = "TEST@EXAMPLE.COM"
-        audience_id = "test-audience-123"
+        email = 'TEST@EXAMPLE.COM'
+        audience_id = 'test-audience-123'
 
         mock_session.execute.return_value.first.return_value = None
 
@@ -73,9 +73,9 @@ class TestResendSyncedUserStore:
 
     def test_mark_user_synced_creates_new_record(self, store, mock_session):
         """Test that mark_user_synced creates a new record."""
-        email = "test@example.com"
-        audience_id = "test-audience-123"
-        keycloak_user_id = "kc-user-123"
+        email = 'test@example.com'
+        audience_id = 'test-audience-123'
+        keycloak_user_id = 'kc-user-123'
 
         mock_synced_user = MagicMock(spec=ResendSyncedUser)
         mock_result = MagicMock()
@@ -90,8 +90,8 @@ class TestResendSyncedUserStore:
 
     def test_mark_user_synced_handles_existing_record(self, store, mock_session):
         """Test that mark_user_synced handles conflict (existing record)."""
-        email = "test@example.com"
-        audience_id = "test-audience-123"
+        email = 'test@example.com'
+        audience_id = 'test-audience-123'
 
         # First execute (insert) returns None (conflict occurred)
         # Second execute (select existing) returns the record
@@ -112,8 +112,8 @@ class TestResendSyncedUserStore:
 
     def test_mark_user_synced_normalizes_email_to_lowercase(self, store, mock_session):
         """Test that mark_user_synced normalizes email to lowercase."""
-        email = "TEST@EXAMPLE.COM"
-        audience_id = "test-audience-123"
+        email = 'TEST@EXAMPLE.COM'
+        audience_id = 'test-audience-123'
 
         mock_synced_user = MagicMock(spec=ResendSyncedUser)
         mock_result = MagicMock()
@@ -128,8 +128,8 @@ class TestResendSyncedUserStore:
 
     def test_mark_user_synced_without_keycloak_user_id(self, store, mock_session):
         """Test that mark_user_synced works without keycloak_user_id."""
-        email = "test@example.com"
-        audience_id = "test-audience-123"
+        email = 'test@example.com'
+        audience_id = 'test-audience-123'
 
         mock_synced_user = MagicMock(spec=ResendSyncedUser)
         mock_result = MagicMock()
@@ -147,12 +147,12 @@ class TestResendSyncedUser:
 
     def test_model_has_required_fields(self):
         """Test that the model has all required fields."""
-        assert hasattr(ResendSyncedUser, "id")
-        assert hasattr(ResendSyncedUser, "email")
-        assert hasattr(ResendSyncedUser, "audience_id")
-        assert hasattr(ResendSyncedUser, "synced_at")
-        assert hasattr(ResendSyncedUser, "keycloak_user_id")
+        assert hasattr(ResendSyncedUser, 'id')
+        assert hasattr(ResendSyncedUser, 'email')
+        assert hasattr(ResendSyncedUser, 'audience_id')
+        assert hasattr(ResendSyncedUser, 'synced_at')
+        assert hasattr(ResendSyncedUser, 'keycloak_user_id')
 
     def test_model_table_name(self):
         """Test the model's table name."""
-        assert ResendSyncedUser.__tablename__ == "resend_synced_users"
+        assert ResendSyncedUser.__tablename__ == 'resend_synced_users'

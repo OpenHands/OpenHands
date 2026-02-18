@@ -62,7 +62,7 @@ class ResendSyncedUserStore:
                     keycloak_user_id=keycloak_user_id,
                     synced_at=datetime.now(UTC),
                 )
-                .on_conflict_do_nothing(constraint="uq_resend_synced_email_audience")
+                .on_conflict_do_nothing(constraint='uq_resend_synced_email_audience')
                 .returning(ResendSyncedUser)
             )
             result = session.execute(stmt)
