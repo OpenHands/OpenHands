@@ -417,7 +417,7 @@ async def read_conversation_file(
     remote_workspace = AsyncRemoteWorkspace(
         host=agent_server_url,
         api_key=sandbox.session_api_key,
-        working_dir=sandbox_spec.working_dir,
+        working_dir=sandbox.working_dir or sandbox_spec.working_dir,
     )
 
     # Read the file at the specified path
@@ -537,7 +537,7 @@ async def get_conversation_skills(
             all_skills = await app_conversation_service.load_and_merge_all_skills(
                 sandbox,
                 conversation.selected_repository,
-                sandbox_spec.working_dir,
+                sandbox.working_dir or sandbox_spec.working_dir,
                 agent_server_url,
             )
 

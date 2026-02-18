@@ -241,7 +241,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             remote_workspace = AsyncRemoteWorkspace(
                 host=agent_server_url,
                 api_key=sandbox.session_api_key,
-                working_dir=sandbox_spec.working_dir,
+                working_dir=sandbox.working_dir or sandbox_spec.working_dir,
             )
             async for updated_task in self.run_setup_scripts(
                 task, sandbox, remote_workspace, agent_server_url
@@ -255,7 +255,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     request.initial_message,
                     request.system_message_suffix,
                     request.git_provider,
-                    sandbox_spec.working_dir,
+                    sandbox.working_dir or sandbox_spec.working_dir,
                     request.agent_type,
                     request.llm_model,
                     request.conversation_id,

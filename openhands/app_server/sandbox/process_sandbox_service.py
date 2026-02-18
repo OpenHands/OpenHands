@@ -224,6 +224,7 @@ class ProcessSandboxService(SandboxService):
             sandbox_spec_id=process_info.sandbox_spec_id,
             status=status,
             session_api_key=session_api_key,
+            working_dir=process_info.working_dir,
             exposed_urls=exposed_urls,
             created_at=process_info.created_at,
         )
