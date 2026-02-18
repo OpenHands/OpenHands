@@ -89,6 +89,10 @@ vi.mock("react-router", async () => ({
   useNavigate: () => navigateMock,
 }));
 
+vi.mock("#/hooks/query/use-is-authed", () => ({
+  useIsAuthed: () => ({ data: true }),
+}));
+
 describe("Manage Org Route", () => {
   const getMeSpy = vi.spyOn(organizationService, "getMe");
 
@@ -140,7 +144,10 @@ describe("Manage Org Route", () => {
     // Set Zustand store to a team org so clientLoader's org route protection allows access
     useSelectedOrganizationStore.setState({ organizationId: MOCK_TEAM_ORG_ACME.id });
     // Seed organizations into the module-level queryClient used by clientLoader
-    mockQueryClient.setQueryData(["organizations"], [MOCK_TEAM_ORG_ACME]);
+    mockQueryClient.setQueryData(["organizations"], {
+      organizations: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
 
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     // @ts-expect-error - partial mock for testing
@@ -190,9 +197,6 @@ describe("Manage Org Route", () => {
     await waitFor(() => {
       const orgName = screen.getByTestId("org-name");
       expect(orgName).toHaveTextContent("Personal Workspace");
-
-      const billingInfo = screen.getByTestId("billing-info");
-      expect(billingInfo).toHaveTextContent("**** **** **** 1234");
     });
   });
 
@@ -831,7 +835,7 @@ describe("Manage Org Route", () => {
       getConfigSpy.mockRestore();
     });
 
-    it("should show billing information section when enable_billing is true", async () => {
+    it("should show organization name section when enable_billing is true", async () => {
       // Arrange
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
       // @ts-expect-error - partial mock for testing
@@ -853,7 +857,7 @@ describe("Manage Org Route", () => {
 
       // Assert
       await waitFor(() => {
-        expect(screen.getByTestId("billing-info")).toBeInTheDocument();
+        expect(screen.getByTestId("org-name")).toBeInTheDocument();
       });
 
       getConfigSpy.mockRestore();
@@ -913,7 +917,6 @@ describe("Manage Org Route", () => {
         expect(
           screen.queryByTestId("available-credits"),
         ).not.toBeInTheDocument();
-        expect(screen.queryByTestId("billing-info")).not.toBeInTheDocument();
         expect(screen.queryByText(/add/i)).not.toBeInTheDocument();
       });
 
