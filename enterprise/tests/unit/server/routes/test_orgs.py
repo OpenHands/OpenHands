@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 with patch('storage.database.engine', create=True), patch(
     'storage.database.a_engine', create=True
 ):
-    from server.auth.authorization import Permission, require_permission
     from server.email_validation import get_admin_user_id
     from server.routes.org_models import (
         CannotModifySelfError,
@@ -1220,7 +1219,9 @@ async def test_get_org_with_credits_none(mock_app_with_get_user_id, mock_owner_r
 
 
 @pytest.mark.asyncio
-async def test_get_org_sensitive_fields_not_exposed(mock_app_with_get_user_id, mock_owner_role):
+async def test_get_org_sensitive_fields_not_exposed(
+    mock_app_with_get_user_id, mock_owner_role
+):
     """
     GIVEN: Organization is retrieved successfully
     WHEN: Response is returned
@@ -1751,7 +1752,9 @@ async def test_update_org_permission_denied_non_member(mock_update_app):
 
 
 @pytest.mark.asyncio
-async def test_update_org_permission_denied_llm_settings(mock_update_app, mock_owner_role):
+async def test_update_org_permission_denied_llm_settings(
+    mock_update_app, mock_owner_role
+):
     """
     GIVEN: User lacks admin/owner role but tries to update LLM settings
     WHEN: PATCH /api/organizations/{org_id} is called
