@@ -197,22 +197,22 @@ async def get_org(
 ) -> OrgResponse:
     """Get organization details by ID.
 
-    This endpoint allows authenticated users who are members of an organization
-    to retrieve its details. Only members of the organization can access this endpoint.
-    Requires user, admin, or owner role.
+    This endpoint retrieves details for a specific organization. Access requires
+    the VIEW_ORG_SETTINGS permission, which is granted to all organization members
+    (member, admin, and owner roles).
 
     Args:
         org_id: Organization ID (UUID)
-        user_id: Authenticated user ID (injected by dependency, requires org membership)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         OrgResponse: The organization details
 
     Raises:
         HTTPException: 401 if user is not authenticated
-        HTTPException: 403 if user is not a member of the organization
-        HTTPException: 422 if org_id is not a valid UUID (handled by FastAPI)
+        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission
         HTTPException: 404 if organization not found
+        HTTPException: 422 if org_id is not a valid UUID (handled by FastAPI)
         HTTPException: 500 if retrieval fails
     """
     logger.info(
@@ -316,21 +316,20 @@ async def delete_org(
 ) -> dict:
     """Delete an organization.
 
-    This endpoint allows authenticated organization owners to delete their organization.
-    All associated data including organization members, conversations, billing data,
-    and external LiteLLM team resources will be permanently removed.
-    Requires owner role.
+    This endpoint permanently deletes an organization and all associated data including
+    organization members, conversations, billing data, and external LiteLLM team resources.
+    Access requires the DELETE_ORGANIZATION permission, which is granted only to owners.
 
     Args:
-        org_id: Organization ID to delete
-        user_id: Authenticated user ID (injected by dependency, requires owner role)
+        org_id: Organization ID to delete (UUID)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         dict: Confirmation message with deleted organization details
 
     Raises:
         HTTPException: 401 if user is not authenticated
-        HTTPException: 403 if user is not an owner of the organization
+        HTTPException: 403 if user lacks DELETE_ORGANIZATION permission
         HTTPException: 404 if organization not found
         HTTPException: 500 if deletion fails
     """
@@ -427,21 +426,22 @@ async def update_org(
 ) -> OrgResponse:
     """Update an existing organization.
 
-    This endpoint allows authenticated admins and owners to update organization settings.
-    Requires admin or owner role in the organization.
+    This endpoint updates organization settings. Access requires the EDIT_ORG_SETTINGS
+    permission, which is granted to admin and owner roles.
 
     Args:
-        org_id: Organization ID to update (UUID validated by FastAPI)
+        org_id: Organization ID to update (UUID)
         update_data: Organization update data
-        user_id: Authenticated user ID (injected by dependency, requires admin role)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         OrgResponse: The updated organization details
 
     Raises:
         HTTPException: 401 if user is not authenticated
-        HTTPException: 403 if user is not an admin or owner of the organization
+        HTTPException: 403 if user lacks EDIT_ORG_SETTINGS permission
         HTTPException: 404 if organization not found
+        HTTPException: 409 if organization name already exists
         HTTPException: 422 if validation errors occur (handled by FastAPI)
         HTTPException: 500 if update fails
     """
@@ -520,7 +520,27 @@ async def get_org_members(
     ] = 100,
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgMemberPage:
-    """Get all members of an organization with cursor-based pagination."""
+    """Get all members of an organization with cursor-based pagination.
+
+    This endpoint retrieves a paginated list of organization members. Access requires
+    the VIEW_ORG_SETTINGS permission, which is granted to all organization members
+    (member, admin, and owner roles).
+
+    Args:
+        org_id: Organization ID (string, will be converted to UUID)
+        page_id: Optional page ID (offset) for pagination
+        limit: Maximum number of members to return (1-100, default 100)
+        user_id: Authenticated user ID (injected by require_permission dependency)
+
+    Returns:
+        OrgMemberPage: Paginated list of organization members
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission
+        HTTPException: 400 if org_id or page_id format is invalid
+        HTTPException: 500 if retrieval fails
+    """
     try:
         success, error_code, data = await OrgMemberService.get_org_members(
             org_id=UUID(org_id),
