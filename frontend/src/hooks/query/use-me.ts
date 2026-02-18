@@ -12,6 +12,7 @@ export const useMe = () => {
   return useQuery({
     queryKey: ["organizations", organizationId, "me"],
     queryFn: () => organizationService.getMe({ orgId: organizationId! }),
+    staleTime: 1000 * 60 * 5, // 5 minutes
     enabled: isSaas && !!organizationId,
   });
 };

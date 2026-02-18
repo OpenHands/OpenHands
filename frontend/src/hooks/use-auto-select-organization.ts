@@ -16,7 +16,10 @@ export function useAutoSelectOrganization() {
 
   React.useEffect(() => {
     if (!organizationId && organizations && organizations.length > 0) {
-      setOrganizationId(organizations[0].id);
+      // Skip revalidation for initial auto-selection to avoid duplicate API calls.
+      // Revalidation is only needed when user explicitly switches organizations
+      // to redirect away from admin-only pages they may no longer have access to.
+      setOrganizationId(organizations[0].id, { skipRevalidation: true });
     }
   }, [organizationId, organizations, setOrganizationId]);
 }

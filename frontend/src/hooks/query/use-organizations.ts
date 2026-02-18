@@ -5,6 +5,7 @@ export const useOrganizations = () =>
   useQuery({
     queryKey: ["organizations"],
     queryFn: organizationService.getOrganizations,
+    staleTime: 1000 * 60 * 5, // 5 minutes
     select: (data) =>
       // Sort organizations with personal workspace first, then alphabetically by name
       [...data].sort((a, b) => {
