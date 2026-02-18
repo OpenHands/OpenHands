@@ -23,6 +23,7 @@ import { useAutoLogin } from "#/hooks/use-auto-login";
 import { useAuthCallback } from "#/hooks/use-auth-callback";
 import { useReoTracking } from "#/hooks/use-reo-tracking";
 import { useSyncPostHogConsent } from "#/hooks/use-sync-posthog-consent";
+import { useAutoSelectOrganization } from "#/hooks/use-auto-select-organization";
 import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { AlertBanner } from "#/components/features/alerts/alert-banner";
@@ -94,6 +95,9 @@ export default function MainApp() {
 
   // Sync PostHog opt-in/out state with backend setting on mount
   useSyncPostHogConsent();
+
+  // Auto-select the first organization when none is selected
+  useAutoSelectOrganization();
 
   React.useEffect(() => {
     // Don't change language when on TOS page
