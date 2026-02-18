@@ -32,6 +32,7 @@ from server.routes.org_models import (
 )
 from server.services.org_member_service import OrgMemberService
 from storage.org_service import OrgService
+from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
@@ -78,6 +79,12 @@ async def list_user_orgs(
     )
 
     try:
+        # Fetch user to get current_org_id
+        user = await UserStore.get_user_by_id_async(user_id)
+        current_org_id = (
+            str(user.current_org_id) if user and user.current_org_id else None
+        )
+
         # Fetch organizations from service layer
         orgs, next_page_id = OrgService.get_user_orgs_paginated(
             user_id=user_id,
@@ -99,7 +106,11 @@ async def list_user_orgs(
             },
         )
 
-        return OrgPage(items=org_responses, next_page_id=next_page_id)
+        return OrgPage(
+            items=org_responses,
+            next_page_id=next_page_id,
+            current_org_id=current_org_id,
+        )
 
     except Exception as e:
         logger.exception(

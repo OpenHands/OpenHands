@@ -214,6 +214,7 @@ class OrgPage(BaseModel):
 
     items: list[OrgResponse]
     next_page_id: str | None = None
+    current_org_id: str | None = None
 
 
 class OrgUpdate(BaseModel):
