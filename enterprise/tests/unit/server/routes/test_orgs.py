@@ -2027,7 +2027,7 @@ class TestGetOrgMembersEndpoint:
         ) as mock_get:
             # Act
             result = await get_org_members(
-                org_id=org_id,
+                org_id=uuid.UUID(org_id),
                 page_id=None,
                 limit=100,
                 user_id=current_user_id,
@@ -2050,7 +2050,7 @@ class TestGetOrgMembersEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_org_members(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     page_id=None,
                     limit=100,
                     user_id=current_user_id,
@@ -2070,7 +2070,7 @@ class TestGetOrgMembersEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_org_members(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     page_id='invalid',
                     limit=100,
                     user_id=current_user_id,
@@ -2080,22 +2080,19 @@ class TestGetOrgMembersEndpoint:
             assert 'Invalid page_id format' in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_invalid_org_id_format_returns_400(self, current_user_id):
-        """Test that invalid org_id UUID format returns 400 Bad Request."""
+    async def test_invalid_org_id_format_returns_422(self, mock_app, current_user_id):
+        """Test that invalid org_id UUID format returns 422 Unprocessable Entity.
+
+        Note: FastAPI validates UUID path parameters at the routing level,
+        so this test uses the HTTP test client to verify the validation.
+        """
         # Arrange
         invalid_org_id = 'not-a-uuid'
 
-        # Act & Assert
-        with pytest.raises(HTTPException) as exc_info:
-            await get_org_members(
-                org_id=invalid_org_id,
-                page_id=None,
-                limit=100,
-                user_id=current_user_id,
-            )
-
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'Invalid organization ID format' in exc_info.value.detail
+        # Act & Assert - Use test client to test route-level validation
+        with TestClient(mock_app) as client:
+            response = client.get(f'/api/organizations/{invalid_org_id}/members')
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
     async def test_invalid_current_user_id_format_returns_400(self, org_id):
@@ -2103,10 +2100,10 @@ class TestGetOrgMembersEndpoint:
         # Arrange
         invalid_current_user_id = 'not-a-uuid'
 
-        # Act & Assert
+        # Act & Assert - endpoint now expects UUID type for org_id
         with pytest.raises(HTTPException) as exc_info:
             await get_org_members(
-                org_id=org_id,
+                org_id=uuid.UUID(org_id),
                 page_id=None,
                 limit=100,
                 user_id=invalid_current_user_id,
@@ -2126,7 +2123,7 @@ class TestGetOrgMembersEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_org_members(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     page_id=None,
                     limit=100,
                     user_id=current_user_id,
@@ -2146,7 +2143,7 @@ class TestGetOrgMembersEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_org_members(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     page_id=None,
                     limit=100,
                     user_id=current_user_id,
@@ -2166,7 +2163,7 @@ class TestGetOrgMembersEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_org_members(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     page_id=None,
                     limit=100,
                     user_id=current_user_id,
@@ -2191,7 +2188,7 @@ class TestGetOrgMembersEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await get_org_members(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     page_id=None,
                     limit=100,
                     user_id=current_user_id,
@@ -2222,9 +2219,9 @@ class TestGetOrgMembersEndpoint:
             'server.routes.orgs.OrgMemberService.get_org_members',
             AsyncMock(return_value=(True, None, mock_page)),
         ) as mock_get:
-            # Act
+            # Act - endpoint now expects UUID type for org_id
             result = await get_org_members(
-                org_id=org_id,
+                org_id=uuid.UUID(org_id),
                 page_id='100',
                 limit=100,
                 user_id=current_user_id,
@@ -2262,7 +2259,7 @@ class TestRemoveOrgMemberEndpoint:
 
             # Act
             result = await remove_org_member(
-                org_id=org_id,
+                org_id=uuid.UUID(org_id),
                 user_id=target_user_id,
                 current_user_id=current_user_id,
             )
@@ -2286,7 +2283,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2308,7 +2305,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=current_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2330,7 +2327,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2352,7 +2349,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2374,7 +2371,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2396,7 +2393,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2418,7 +2415,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2427,23 +2424,23 @@ class TestRemoveOrgMemberEndpoint:
             assert 'An error occurred' in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_invalid_org_id_format_returns_400(
-        self, mock_request, current_user_id, target_user_id
+    async def test_invalid_org_id_format_returns_422(
+        self, mock_app, current_user_id, target_user_id
     ):
-        """Test that invalid org_id UUID format returns 400 Bad Request."""
+        """Test that invalid org_id UUID format returns 422 Unprocessable Entity.
+
+        Note: FastAPI validates UUID path parameters at the routing level,
+        so this test uses the HTTP test client to verify the validation.
+        """
         # Arrange
         invalid_org_id = 'not-a-uuid'
 
-        # Act & Assert
-        with pytest.raises(HTTPException) as exc_info:
-            await remove_org_member(
-                org_id=invalid_org_id,
-                user_id=target_user_id,
-                current_user_id=current_user_id,
+        # Act & Assert - Use test client to test route-level validation
+        with TestClient(mock_app) as client:
+            response = client.delete(
+                f'/api/organizations/{invalid_org_id}/members/{target_user_id}'
             )
-
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'Invalid organization or user ID format' in exc_info.value.detail
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
     async def test_invalid_user_id_format_returns_400(
@@ -2453,10 +2450,10 @@ class TestRemoveOrgMemberEndpoint:
         # Arrange
         invalid_user_id = 'not-a-uuid'
 
-        # Act & Assert
+        # Act & Assert - endpoint now expects UUID type for org_id
         with pytest.raises(HTTPException) as exc_info:
             await remove_org_member(
-                org_id=org_id,
+                org_id=uuid.UUID(org_id),
                 user_id=invalid_user_id,
                 current_user_id=current_user_id,
             )
@@ -2475,7 +2472,7 @@ class TestRemoveOrgMemberEndpoint:
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
             await remove_org_member(
-                org_id=org_id,
+                org_id=uuid.UUID(org_id),
                 user_id=target_user_id,
                 current_user_id=invalid_current_user_id,
             )
@@ -2497,7 +2494,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2524,7 +2521,7 @@ class TestRemoveOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await remove_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     current_user_id=current_user_id,
                 )
@@ -2555,9 +2552,9 @@ class TestUpdateOrgMemberEndpoint:
         ) as mock_update:
             mock_update.return_value = updated
 
-            # Act
+            # Act - endpoint now expects UUID type for org_id
             result = await update_org_member(
-                org_id=org_id,
+                org_id=uuid.UUID(org_id),
                 user_id=target_user_id,
                 update_data=OrgMemberUpdate(role='admin'),
                 current_user_id=current_user_id,
@@ -2586,7 +2583,7 @@ class TestUpdateOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     update_data=OrgMemberUpdate(role='user'),
                     current_user_id=current_user_id,
@@ -2606,7 +2603,7 @@ class TestUpdateOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=current_user_id,
                     update_data=OrgMemberUpdate(role='admin'),
                     current_user_id=current_user_id,
@@ -2628,7 +2625,7 @@ class TestUpdateOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     update_data=OrgMemberUpdate(role='user'),
                     current_user_id=current_user_id,
@@ -2650,7 +2647,7 @@ class TestUpdateOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     update_data=OrgMemberUpdate(role='superuser'),
                     current_user_id=current_user_id,
@@ -2674,7 +2671,7 @@ class TestUpdateOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     update_data=OrgMemberUpdate(role='admin'),
                     current_user_id=current_user_id,
@@ -2696,7 +2693,7 @@ class TestUpdateOrgMemberEndpoint:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await update_org_member(
-                    org_id=org_id,
+                    org_id=uuid.UUID(org_id),
                     user_id=target_user_id,
                     update_data=OrgMemberUpdate(role='admin'),
                     current_user_id=current_user_id,
@@ -2705,21 +2702,24 @@ class TestUpdateOrgMemberEndpoint:
             assert 'Cannot demote the last owner' in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_invalid_org_id_returns_400(self, current_user_id, target_user_id):
-        """GIVEN invalid org_id UUID WHEN PATCH is called THEN returns 400."""
+    async def test_invalid_org_id_returns_422(
+        self, mock_app, current_user_id, target_user_id
+    ):
+        """GIVEN invalid org_id UUID WHEN PATCH is called THEN returns 422.
+
+        Note: FastAPI validates UUID path parameters at the routing level,
+        so this test uses the HTTP test client to verify the validation.
+        """
         # Arrange
         invalid_org_id = 'not-a-uuid'
 
-        # Act & Assert
-        with pytest.raises(HTTPException) as exc_info:
-            await update_org_member(
-                org_id=invalid_org_id,
-                user_id=target_user_id,
-                update_data=OrgMemberUpdate(role='user'),
-                current_user_id=current_user_id,
+        # Act & Assert - Use test client to test route-level validation
+        with TestClient(mock_app) as client:
+            response = client.patch(
+                f'/api/organizations/{invalid_org_id}/members/{target_user_id}',
+                json={'role': 'user'},
             )
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'Invalid organization or user ID format' in exc_info.value.detail
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 class TestGetMeEndpoint:
