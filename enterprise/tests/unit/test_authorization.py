@@ -380,6 +380,53 @@ class TestGetUserOrgRole:
             result = get_user_org_role(user_id, org_id)
             assert result is None
 
+    def test_returns_role_when_org_id_is_none(self):
+        """
+        GIVEN: User with a current organization
+        WHEN: get_user_org_role is called with org_id=None
+        THEN: Role object is returned using get_org_member_for_current_org
+        """
+        user_id = str(uuid4())
+
+        mock_org_member = MagicMock()
+        mock_org_member.role_id = 1
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        with (
+            patch(
+                'server.auth.authorization.OrgMemberStore.get_org_member_for_current_org',
+                return_value=mock_org_member,
+            ) as mock_get_current,
+            patch(
+                'server.auth.authorization.OrgMemberStore.get_org_member',
+            ) as mock_get_org_member,
+            patch(
+                'server.auth.authorization.RoleStore.get_role_by_id',
+                return_value=mock_role,
+            ),
+        ):
+            result = get_user_org_role(user_id, None)
+            assert result == mock_role
+            mock_get_current.assert_called_once()
+            mock_get_org_member.assert_not_called()
+
+    def test_returns_none_when_org_id_is_none_and_no_current_org(self):
+        """
+        GIVEN: User with no current organization membership
+        WHEN: get_user_org_role is called with org_id=None
+        THEN: None is returned
+        """
+        user_id = str(uuid4())
+
+        with patch(
+            'server.auth.authorization.OrgMemberStore.get_org_member_for_current_org',
+            return_value=None,
+        ):
+            result = get_user_org_role(user_id, None)
+            assert result is None
+
 
 # =============================================================================
 # Tests for require_permission dependency
@@ -544,6 +591,47 @@ class TestRequirePermission:
             assert call_args[1]['extra']['user_id'] == user_id
             assert call_args[1]['extra']['user_role'] == 'member'
             assert call_args[1]['extra']['required_permission'] == 'delete_organization'
+
+    @pytest.mark.asyncio
+    async def test_returns_user_id_when_org_id_is_none(self):
+        """
+        GIVEN: User with required permission in their current org
+        WHEN: Permission checker is called with org_id=None
+        THEN: User ID is returned
+        """
+        user_id = str(uuid4())
+
+        mock_role = MagicMock()
+        mock_role.name = 'admin'
+
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            return_value=mock_role,
+        ) as mock_get_role:
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            result = await permission_checker(org_id=None, user_id=user_id)
+            assert result == user_id
+            mock_get_role.assert_called_once_with(user_id, None)
+
+    @pytest.mark.asyncio
+    async def test_raises_403_when_org_id_is_none_and_not_member(self):
+        """
+        GIVEN: User not a member of their current organization
+        WHEN: Permission checker is called with org_id=None
+        THEN: HTTPException with 403 status is raised
+        """
+        user_id = str(uuid4())
+
+        with patch(
+            'server.auth.authorization.get_user_org_role',
+            return_value=None,
+        ):
+            permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
+            with pytest.raises(HTTPException) as exc_info:
+                await permission_checker(org_id=None, user_id=user_id)
+
+            assert exc_info.value.status_code == 403
+            assert 'not a member' in exc_info.value.detail
 
 
 # =============================================================================

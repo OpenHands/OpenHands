@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker, session_maker
 from storage.org_member import OrgMember
+from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.storage.data_models.settings import Settings
@@ -59,6 +60,26 @@ class OrgMemberStore:
                 )
             )
             return result.scalars().first()
+
+    @staticmethod
+    def get_org_member_for_current_org(user_id: UUID) -> Optional[OrgMember]:
+        """Get the org member for a user's current organization.
+
+        Args:
+            user_id: The user's UUID.
+
+        Returns:
+            The OrgMember for the user's current organization, or None if not found.
+        """
+        with session_maker() as session:
+            user = session.query(User).filter(User.id == user_id).first()
+            if not user:
+                return None
+            return (
+                session.query(OrgMember)
+                .filter(OrgMember.org_id == user.current_org_id, OrgMember.user_id == user_id)
+                .first()
+            )
 
     @staticmethod
     def get_user_orgs(user_id: UUID) -> list[OrgMember]:
