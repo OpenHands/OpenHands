@@ -48,11 +48,11 @@ jobs:
             PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
             REPO_NAME: ${{ github.repository }}
         steps:
-            - name: Checkout software-agent-sdk repository
+            - name: Checkout extensions repository
               uses: actions/checkout@v5
               with:
-                  repository: OpenHands/software-agent-sdk
-                  path: software-agent-sdk
+                  repository: OpenHands/extensions
+                  path: extensions
 
             - name: Checkout PR repository
               uses: actions/checkout@v5
@@ -84,8 +84,8 @@ jobs:
 
             - name: Install OpenHands dependencies
               run: |
-                  # Install OpenHands SDK and tools from local checkout
-                  uv pip install --system ./software-agent-sdk/openhands-sdk ./software-agent-sdk/openhands-tools
+                  # Install OpenHands SDK and tools from PyPI
+                  uv pip install --system openhands-sdk openhands-tools lmnr
 
             - name: Check required configuration
               env:
@@ -113,8 +113,8 @@ jobs:
                   # Change to the PR repository directory so agent can analyze the code
                   cd pr-repo
 
-                  # Run the PR review script from the software-agent-sdk checkout
-                  uv run python ../software-agent-sdk/examples/03_github_workflows/02_pr_review/agent_script.py
+                  # Run the PR review script from the extensions repository
+                  uv run python ../extensions/plugins/pr-review/scripts/agent_script.py
 
             - name: Upload logs as artifact
               uses: actions/upload-artifact@v5
@@ -125,3 +125,12 @@ jobs:
                       *.log
                       output/
                   retention-days: 7
+
+            - name: Upload Laminar trace info for evaluation
+              uses: actions/upload-artifact@v5
+              if: success()
+              with:
+                  name: pr-review-trace-${{ github.event.pull_request.number }}
+                  path: pr-repo/laminar_trace_info.json
+                  retention-days: 30
+                  if-no-files-found: ignore
