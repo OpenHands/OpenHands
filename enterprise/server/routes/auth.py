@@ -5,6 +5,7 @@ import warnings
 from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
 from urllib.parse import quote
+from uuid import UUID as parse_uuid
 
 import posthog
 from fastapi import APIRouter, Header, HTTPException, Request, Response, status
@@ -26,6 +27,13 @@ from server.auth.token_manager import TokenManager
 from server.config import sign_token
 from server.constants import IS_FEATURE_ENV
 from server.routes.event_webhook import _get_session_api_key, _get_user_id
+from server.services.org_invitation_service import (
+    EmailMismatchError,
+    InvitationExpiredError,
+    InvitationInvalidError,
+    OrgInvitationService,
+    UserAlreadyMemberError,
+)
 from storage.database import session_maker
 from storage.user import User
 from storage.user_store import UserStore
@@ -104,22 +112,40 @@ def get_cookie_samesite(request: Request) -> Literal['lax', 'strict']:
     )
 
 
+def _extract_oauth_state(state: str | None) -> tuple[str, str | None, str | None]:
+    """Extract redirect URL, reCAPTCHA token, and invitation token from OAuth state.
+
+    Returns:
+        Tuple of (redirect_url, recaptcha_token, invitation_token).
+        Tokens may be None.
+    """
+    if not state:
+        return '', None, None
+
+    try:
+        # Try to decode as JSON (new format with reCAPTCHA and/or invitation)
+        state_data = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
+        return (
+            state_data.get('redirect_url', ''),
+            state_data.get('recaptcha_token'),
+            state_data.get('invitation_token'),
+        )
+    except Exception:
+        # Old format - state is just the redirect URL
+        return state, None, None
+
+
+# Keep alias for backward compatibility
 def _extract_recaptcha_state(state: str | None) -> tuple[str, str | None]:
     """Extract redirect URL and reCAPTCHA token from OAuth state.
+
+    Deprecated: Use _extract_oauth_state instead.
 
     Returns:
         Tuple of (redirect_url, recaptcha_token). Token may be None.
     """
-    if not state:
-        return '', None
-
-    try:
-        # Try to decode as JSON (new format with reCAPTCHA)
-        state_data = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
-        return state_data.get('redirect_url', ''), state_data.get('recaptcha_token')
-    except Exception:
-        # Old format - state is just the redirect URL
-        return state, None
+    redirect_url, recaptcha_token, _ = _extract_oauth_state(state)
+    return redirect_url, recaptcha_token
 
 
 @oauth_router.get('/keycloak/callback')
@@ -130,8 +156,8 @@ async def keycloak_callback(
     error: Optional[str] = None,
     error_description: Optional[str] = None,
 ):
-    # Extract redirect URL and reCAPTCHA token from state
-    redirect_url, recaptcha_token = _extract_recaptcha_state(state)
+    # Extract redirect URL, reCAPTCHA token, and invitation token from state
+    redirect_url, recaptcha_token, invitation_token = _extract_oauth_state(state)
     if not redirect_url:
         redirect_url = str(request.base_url)
 
@@ -302,8 +328,13 @@ async def keycloak_callback(
         from server.routes.email import verify_email
 
         await verify_email(request=request, user_id=user_id, is_auth_flow=True)
-        redirect_url = f'{request.base_url}login?email_verification_required=true&user_id={user_id}'
-        response = RedirectResponse(redirect_url, status_code=302)
+        verification_redirect_url = f'{request.base_url}login?email_verification_required=true&user_id={user_id}'
+        # Preserve invitation token so it can be included in OAuth state after verification
+        if invitation_token:
+            verification_redirect_url = (
+                f'{verification_redirect_url}&invitation_token={invitation_token}'
+            )
+        response = RedirectResponse(verification_redirect_url, status_code=302)
         return response
 
     # default to github IDP for now.
@@ -381,14 +412,90 @@ async def keycloak_callback(
         )
 
     has_accepted_tos = user.accepted_tos is not None
+
+    # Process invitation token if present (after email verification but before TOS)
+    if invitation_token:
+        try:
+            logger.info(
+                'Processing invitation token during auth callback',
+                extra={
+                    'user_id': user_id,
+                    'invitation_token_prefix': invitation_token[:10] + '...',
+                },
+            )
+
+            await OrgInvitationService.accept_invitation(
+                invitation_token, parse_uuid(user_id)
+            )
+            logger.info(
+                'Invitation accepted during auth callback',
+                extra={'user_id': user_id},
+            )
+
+        except InvitationExpiredError:
+            logger.warning(
+                'Invitation expired during auth callback',
+                extra={'user_id': user_id},
+            )
+            # Add query param to redirect URL
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&invitation_expired=true'
+            else:
+                redirect_url = f'{redirect_url}?invitation_expired=true'
+
+        except InvitationInvalidError as e:
+            logger.warning(
+                'Invalid invitation during auth callback',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&invitation_invalid=true'
+            else:
+                redirect_url = f'{redirect_url}?invitation_invalid=true'
+
+        except UserAlreadyMemberError:
+            logger.info(
+                'User already member during invitation acceptance',
+                extra={'user_id': user_id},
+            )
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&already_member=true'
+            else:
+                redirect_url = f'{redirect_url}?already_member=true'
+
+        except EmailMismatchError as e:
+            logger.warning(
+                'Email mismatch during auth callback invitation acceptance',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&email_mismatch=true'
+            else:
+                redirect_url = f'{redirect_url}?email_mismatch=true'
+
+        except Exception as e:
+            logger.exception(
+                'Unexpected error processing invitation during auth callback',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            # Don't fail the login if invitation processing fails
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&invitation_error=true'
+            else:
+                redirect_url = f'{redirect_url}?invitation_error=true'
+
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:
         encoded_redirect_url = quote(redirect_url, safe='')
         tos_redirect_url = (
             f'{request.base_url}accept-tos?redirect_url={encoded_redirect_url}'
         )
+        if invitation_token:
+            tos_redirect_url = f'{tos_redirect_url}&invitation_success=true'
         response = RedirectResponse(tos_redirect_url, status_code=302)
     else:
+        if invitation_token:
+            redirect_url = f'{redirect_url}&invitation_success=true'
         response = RedirectResponse(redirect_url, status_code=302)
 
     set_response_cookie(

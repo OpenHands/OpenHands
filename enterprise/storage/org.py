@@ -47,11 +47,11 @@ class Org(Base):  # type: ignore
     conversation_expiration = Column(Integer, nullable=True)
     condenser_max_size = Column(Integer, nullable=True)
     byor_export_enabled = Column(Boolean, nullable=False, default=False)
-    pending_free_credits = Column(Boolean, nullable=False, default=False)
 
     # Relationships
     org_members = relationship('OrgMember', back_populates='org')
     current_users = relationship('User', back_populates='current_org')
+    invitations = relationship('OrgInvitation', back_populates='org')
     billing_sessions = relationship('BillingSession', back_populates='org')
     stored_conversation_metadata_saas = relationship(
         'StoredConversationMetadataSaas', back_populates='org'

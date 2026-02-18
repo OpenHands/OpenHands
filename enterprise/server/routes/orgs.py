@@ -2,6 +2,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from server.auth.authorization import (
+    Permission,
+    require_permission,
+)
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
@@ -28,6 +32,7 @@ from server.routes.org_models import (
 )
 from server.services.org_member_service import OrgMemberService
 from storage.org_service import OrgService
+from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
@@ -74,6 +79,12 @@ async def list_user_orgs(
     )
 
     try:
+        # Fetch user to get current_org_id
+        user = await UserStore.get_user_by_id_async(user_id)
+        current_org_id = (
+            str(user.current_org_id) if user and user.current_org_id else None
+        )
+
         # Fetch organizations from service layer
         orgs, next_page_id = OrgService.get_user_orgs_paginated(
             user_id=user_id,
@@ -95,7 +106,11 @@ async def list_user_orgs(
             },
         )
 
-        return OrgPage(items=org_responses, next_page_id=next_page_id)
+        return OrgPage(
+            items=org_responses,
+            next_page_id=next_page_id,
+            current_org_id=current_org_id,
+        )
 
     except Exception as e:
         logger.exception(
@@ -189,23 +204,26 @@ async def create_org(
 @org_router.get('/{org_id}', response_model=OrgResponse, status_code=status.HTTP_200_OK)
 async def get_org(
     org_id: UUID,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgResponse:
     """Get organization details by ID.
 
-    This endpoint allows authenticated users who are members of an organization
-    to retrieve its details. Only members of the organization can access this endpoint.
+    This endpoint retrieves details for a specific organization. Access requires
+    the VIEW_ORG_SETTINGS permission, which is granted to all organization members
+    (member, admin, and owner roles).
 
     Args:
         org_id: Organization ID (UUID)
-        user_id: Authenticated user ID (injected by dependency)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         OrgResponse: The organization details
 
     Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission
+        HTTPException: 404 if organization not found
         HTTPException: 422 if org_id is not a valid UUID (handled by FastAPI)
-        HTTPException: 404 if organization not found or user is not a member
         HTTPException: 500 if retrieval fails
     """
     logger.info(
@@ -305,23 +323,24 @@ async def get_me(
 @org_router.delete('/{org_id}', status_code=status.HTTP_200_OK)
 async def delete_org(
     org_id: UUID,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.DELETE_ORGANIZATION)),
 ) -> dict:
     """Delete an organization.
 
-    This endpoint allows authenticated organization owners to delete their organization.
-    All associated data including organization members, conversations, billing data,
-    and external LiteLLM team resources will be permanently removed.
+    This endpoint permanently deletes an organization and all associated data including
+    organization members, conversations, billing data, and external LiteLLM team resources.
+    Access requires the DELETE_ORGANIZATION permission, which is granted only to owners.
 
     Args:
-        org_id: Organization ID to delete
-        user_id: Authenticated user ID (injected by dependency)
+        org_id: Organization ID to delete (UUID)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         dict: Confirmation message with deleted organization details
 
     Raises:
-        HTTPException: 403 if user is not the organization owner
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks DELETE_ORGANIZATION permission
         HTTPException: 404 if organization not found
         HTTPException: 500 if deletion fails
     """
@@ -414,25 +433,26 @@ async def delete_org(
 async def update_org(
     org_id: UUID,
     update_data: OrgUpdate,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> OrgResponse:
     """Update an existing organization.
 
-    This endpoint allows authenticated users to update organization settings.
-    LLM-related settings require admin or owner role in the organization.
+    This endpoint updates organization settings. Access requires the EDIT_ORG_SETTINGS
+    permission, which is granted to admin and owner roles.
 
     Args:
-        org_id: Organization ID to update (UUID validated by FastAPI)
+        org_id: Organization ID to update (UUID)
         update_data: Organization update data
-        user_id: Authenticated user ID (injected by dependency)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         OrgResponse: The updated organization details
 
     Raises:
-        HTTPException: 400 if org_id is invalid UUID format (handled by FastAPI)
-        HTTPException: 403 if user lacks permission for LLM settings
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks EDIT_ORG_SETTINGS permission
         HTTPException: 404 if organization not found
+        HTTPException: 409 if organization name already exists
         HTTPException: 422 if validation errors occur (handled by FastAPI)
         HTTPException: 500 if update fails
     """
@@ -496,7 +516,7 @@ async def update_org(
 
 @org_router.get('/{org_id}/members')
 async def get_org_members(
-    org_id: str,
+    org_id: UUID,
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -509,13 +529,33 @@ async def get_org_members(
             lte=100,
         ),
     ] = 100,
-    current_user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgMemberPage:
-    """Get all members of an organization with cursor-based pagination."""
+    """Get all members of an organization with cursor-based pagination.
+
+    This endpoint retrieves a paginated list of organization members. Access requires
+    the VIEW_ORG_SETTINGS permission, which is granted to all organization members
+    (member, admin, and owner roles).
+
+    Args:
+        org_id: Organization ID (UUID)
+        page_id: Optional page ID (offset) for pagination
+        limit: Maximum number of members to return (1-100, default 100)
+        user_id: Authenticated user ID (injected by require_permission dependency)
+
+    Returns:
+        OrgMemberPage: Paginated list of organization members
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission
+        HTTPException: 400 if org_id or page_id format is invalid
+        HTTPException: 500 if retrieval fails
+    """
     try:
         success, error_code, data = await OrgMemberService.get_org_members(
-            org_id=UUID(org_id),
-            current_user_id=UUID(current_user_id),
+            org_id=org_id,
+            current_user_id=UUID(user_id),
             page_id=page_id,
             limit=limit,
         )
@@ -562,7 +602,7 @@ async def get_org_members(
 
 @org_router.delete('/{org_id}/members/{user_id}')
 async def remove_org_member(
-    org_id: str,
+    org_id: UUID,
     user_id: str,
     current_user_id: str = Depends(get_user_id),
 ):
@@ -576,7 +616,7 @@ async def remove_org_member(
     """
     try:
         success, error = await OrgMemberService.remove_org_member(
-            org_id=UUID(org_id),
+            org_id=org_id,
             target_user_id=UUID(user_id),
             current_user_id=UUID(current_user_id),
         )
@@ -708,7 +748,7 @@ async def switch_org(
 
 @org_router.patch('/{org_id}/members/{user_id}', response_model=OrgMemberResponse)
 async def update_org_member(
-    org_id: str,
+    org_id: UUID,
     user_id: str,
     update_data: OrgMemberUpdate,
     current_user_id: str = Depends(get_user_id),
@@ -725,7 +765,7 @@ async def update_org_member(
     """
     try:
         return await OrgMemberService.update_org_member(
-            org_id=UUID(org_id),
+            org_id=org_id,
             target_user_id=UUID(user_id),
             current_user_id=UUID(current_user_id),
             update_data=update_data,

@@ -59,7 +59,6 @@ class UserStore:
                 or user_info.get('preferred_username', ''),
                 contact_email=user_info['email'],
                 v1_enabled=True,
-                pending_free_credits=True,
             )
             session.add(org)
 
@@ -84,6 +83,8 @@ class UserStore:
                 role_id=role_id,
                 **user_kwargs,
             )
+            user.email = user_info.get('email')
+            user.email_verified = user_info.get('email_verified')
             session.add(user)
 
             role = RoleStore.get_role_by_name('owner')
@@ -196,7 +197,6 @@ class UserStore:
                 or user_info.get('username', ''),
                 contact_email=user_info['email'],
                 byor_export_enabled=has_completed_billing,
-                pending_free_credits=not has_completed_billing,
             )
             session.add(org)
 
@@ -769,6 +769,30 @@ class UserStore:
                     return None
             finally:
                 await UserStore._release_user_creation_lock(user_id)
+
+    @staticmethod
+    async def get_user_by_email_async(email: str) -> Optional[User]:
+        """Get user by email address (async version).
+
+        This method looks up a user by their email address. Note that email
+        addresses may not be unique across all users in rare cases.
+
+        Args:
+            email: The email address to search for
+
+        Returns:
+            User: The user with the matching email, or None if not found
+        """
+        if not email:
+            return None
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .options(joinedload(User.org_members))
+                .filter(User.email == email.lower().strip())
+            )
+            return result.scalars().first()
 
     @staticmethod
     def list_users() -> list[User]:

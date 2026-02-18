@@ -398,6 +398,121 @@ async def test_create_user_contact_name_falls_back_to_username():
     assert org.contact_name == 'jdoe'
 
 
+# --- Tests for email fields in create_user() ---
+# create_user() should populate user.email and user.email_verified from the
+# Keycloak user_info, ensuring the user table has the correct email data.
+
+
+class _StopAfterUserCreation(Exception):
+    """Halt create_user() after User creation for email field inspection."""
+
+    pass
+
+
+@pytest.mark.asyncio
+async def test_create_user_sets_email_from_user_info():
+    """create_user() should set user.email and user.email_verified from user_info."""
+    # Arrange
+    user_id = str(uuid.uuid4())
+    user_info = {
+        'preferred_username': 'testuser',
+        'email': 'testuser@example.com',
+        'email_verified': True,
+    }
+
+    mock_session = MagicMock()
+    mock_sm = MagicMock()
+    mock_sm.return_value.__enter__ = MagicMock(return_value=mock_session)
+    mock_sm.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_settings = Settings(language='en')
+    mock_role = MagicMock()
+    mock_role.id = 1
+
+    with (
+        patch('storage.user_store.session_maker', mock_sm),
+        patch.object(
+            UserStore,
+            'create_default_settings',
+            new_callable=AsyncMock,
+            return_value=mock_settings,
+        ),
+        patch('storage.org_store.OrgStore.get_kwargs_from_settings', return_value={}),
+        patch.object(UserStore, 'get_kwargs_from_settings', return_value={}),
+        patch('storage.user_store.RoleStore.get_role_by_name', return_value=mock_role),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_kwargs_from_settings',
+            return_value={'llm_model': None, 'llm_base_url': None},
+        ),
+        patch.object(
+            mock_session,
+            'commit',
+            side_effect=_StopAfterUserCreation,
+        ),
+    ):
+        # Act
+        with pytest.raises(_StopAfterUserCreation):
+            await UserStore.create_user(user_id, user_info)
+
+    # Assert - User is the second object added to session (after Org)
+    user = mock_session.add.call_args_list[1][0][0]
+    assert isinstance(user, User)
+    assert user.email == 'testuser@example.com'
+    assert user.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_create_user_handles_missing_email_verified():
+    """create_user() should handle missing email_verified in user_info gracefully."""
+    # Arrange
+    user_id = str(uuid.uuid4())
+    user_info = {
+        'preferred_username': 'testuser',
+        'email': 'testuser@example.com',
+        # email_verified is not present
+    }
+
+    mock_session = MagicMock()
+    mock_sm = MagicMock()
+    mock_sm.return_value.__enter__ = MagicMock(return_value=mock_session)
+    mock_sm.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_settings = Settings(language='en')
+    mock_role = MagicMock()
+    mock_role.id = 1
+
+    with (
+        patch('storage.user_store.session_maker', mock_sm),
+        patch.object(
+            UserStore,
+            'create_default_settings',
+            new_callable=AsyncMock,
+            return_value=mock_settings,
+        ),
+        patch('storage.org_store.OrgStore.get_kwargs_from_settings', return_value={}),
+        patch.object(UserStore, 'get_kwargs_from_settings', return_value={}),
+        patch('storage.user_store.RoleStore.get_role_by_name', return_value=mock_role),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_kwargs_from_settings',
+            return_value={'llm_model': None, 'llm_base_url': None},
+        ),
+        patch.object(
+            mock_session,
+            'commit',
+            side_effect=_StopAfterUserCreation,
+        ),
+    ):
+        # Act
+        with pytest.raises(_StopAfterUserCreation):
+            await UserStore.create_user(user_id, user_info)
+
+    # Assert - User should have email but email_verified should be None
+    user = mock_session.add.call_args_list[1][0][0]
+    assert isinstance(user, User)
+    assert user.email == 'testuser@example.com'
+    assert user.email_verified is None
+
+
 # --- Tests for backfill_contact_name on login ---
 # Existing users created before the resolve_display_name fix may have
 # username-style values in contact_name. The backfill updates these to

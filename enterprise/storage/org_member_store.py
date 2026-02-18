@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker, session_maker
 from storage.org_member import OrgMember
+from storage.user import User
 from storage.user_settings import UserSettings
 
 from openhands.storage.data_models.settings import Settings
@@ -56,6 +57,51 @@ class OrgMemberStore:
             result = await session.execute(
                 select(OrgMember).filter(
                     OrgMember.org_id == org_id, OrgMember.user_id == user_id
+                )
+            )
+            return result.scalars().first()
+
+    @staticmethod
+    def get_org_member_for_current_org(user_id: UUID) -> Optional[OrgMember]:
+        """Get the org member for a user's current organization.
+
+        Args:
+            user_id: The user's UUID.
+
+        Returns:
+            The OrgMember for the user's current organization, or None if not found.
+        """
+        with session_maker() as session:
+            result = (
+                session.query(OrgMember)
+                .join(User, User.id == OrgMember.user_id)
+                .filter(
+                    User.id == user_id,
+                    OrgMember.org_id == User.current_org_id,
+                )
+                .first()
+            )
+            return result
+
+    @staticmethod
+    async def get_org_member_for_current_org_async(
+        user_id: UUID,
+    ) -> Optional[OrgMember]:
+        """Get the org member for a user's current organization (async version).
+
+        Args:
+            user_id: The user's UUID.
+
+        Returns:
+            The OrgMember for the user's current organization, or None if not found.
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgMember)
+                .join(User, User.id == OrgMember.user_id)
+                .filter(
+                    User.id == user_id,
+                    OrgMember.org_id == User.current_org_id,
                 )
             )
             return result.scalars().first()

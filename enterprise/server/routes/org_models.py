@@ -214,6 +214,7 @@ class OrgPage(BaseModel):
 
     items: list[OrgResponse]
     next_page_id: str | None = None
+    current_org_id: str | None = None
 
 
 class OrgUpdate(BaseModel):
@@ -257,7 +258,7 @@ class OrgMemberResponse(BaseModel):
     user_id: str
     email: str | None
     role_id: int
-    role_name: str
+    role: str
     role_rank: int
     status: str | None
 
