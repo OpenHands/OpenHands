@@ -11,7 +11,8 @@ interface ServerError {
   [key: string]: unknown;
 }
 
-const isServerError = (data: object): data is ServerError => "error" in data;
+const isServerError = (data: object): data is ServerError =>
+  "error" in data && "message" in data;
 
 export const useHandleWSEvents = () => {
   const { send } = useSendMessage();
