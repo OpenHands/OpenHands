@@ -183,10 +183,24 @@ class TestSaasSQLAppConversationInfoService:
         saas_service_user1: SaasSQLAppConversationInfoService,
     ):
         """Test that _secure_select method includes user filtering."""
-        # This test verifies that the _secure_select method exists and can be called
-        # The actual SQL generation is tested implicitly through integration
-        query = await saas_service_user1._secure_select()
-        assert query is not None
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from storage.user import User
+
+        # Mock UserStore.get_user_by_id_async to return a mock user
+        mock_user = MagicMock(spec=User)
+        mock_user.id = UUID('a1111111-1111-1111-1111-111111111111')
+        mock_user.current_org_id = UUID('a1111111-1111-1111-1111-111111111111')
+
+        with patch(
+            'enterprise.server.utils.saas_app_conversation_info_injector.UserStore.get_user_by_id_async',
+            new_callable=AsyncMock,
+            return_value=mock_user,
+        ):
+            # This test verifies that the _secure_select method exists and can be called
+            # The actual SQL generation is tested implicitly through integration
+            query = await saas_service_user1._secure_select()
+            assert query is not None
 
     @pytest.mark.asyncio
     async def test_to_info_with_user_id_functionality(
@@ -246,23 +260,42 @@ class TestSaasSQLAppConversationInfoService:
         async_session: AsyncSession,
         multiple_conversation_infos: list[AppConversationInfo],
     ):
-        """Test that user isolation works correctly."""
-        from unittest.mock import MagicMock
+        """Test that user isolation works correctly with both user_id and org_id filtering."""
+        from unittest.mock import MagicMock, patch
 
         from storage.user import User
 
-        # Mock the database session execute method to return mock users
-        # This mock intercepts User queries and returns a mock user object
-        # with user_id and org_id the same as the user_id_uuid from the query
+        user1_id = UUID('a1111111-1111-1111-1111-111111111111')
+        user2_id = UUID('b2222222-2222-2222-2222-222222222222')
+        # Use different org IDs for each user to test org isolation
+        org1_id = UUID('c1111111-1111-1111-1111-111111111111')
+        org2_id = UUID('d2222222-2222-2222-2222-222222222222')
+
+        # Create mock users for UserStore.get_user_by_id_async
+        def create_mock_user_getter():
+            async def mock_get_user(user_id_str):
+                user_id = UUID(user_id_str)
+                mock_user = MagicMock(spec=User)
+                mock_user.id = user_id
+                if user_id == user1_id:
+                    mock_user.current_org_id = org1_id
+                elif user_id == user2_id:
+                    mock_user.current_org_id = org2_id
+                else:
+                    mock_user.current_org_id = user_id
+                return mock_user
+
+            return mock_get_user
+
+        # Mock the database session execute method to return mock users for save operations
         original_execute = async_session.execute
 
         async def mock_execute(query):
             query_str = str(query)
 
-            # Check if this is a User query
+            # Check if this is a User query (for save operations)
             if '"user"' in query_str.lower() and '"user".id' in query_str.lower():
                 # Extract the UUID from the query parameters
-                # The query will have bound parameters, we need to get the UUID value
                 if hasattr(query, 'compile'):
                     try:
                         compiled = query.compile(compile_kwargs={'literal_binds': True})
@@ -287,21 +320,23 @@ class TestSaasSQLAppConversationInfoService:
                             user_id_str = uuid_match.group(0)
                             # If the UUID doesn't have dashes, add them
                             if len(user_id_str) == 32 and '-' not in user_id_str:
-                                # Convert from 'a1111111111111111111111111111111' to 'a1111111-1111-1111-1111-111111111111'
                                 user_id_str = f'{user_id_str[:8]}-{user_id_str[8:12]}-{user_id_str[12:16]}-{user_id_str[16:20]}-{user_id_str[20:]}'
                             user_id_uuid = UUID(user_id_str)
 
-                            # Create a mock user with user_id and org_id the same as user_id_uuid
+                            # Create a mock user with appropriate org_id
                             mock_user = MagicMock(spec=User)
                             mock_user.id = user_id_uuid
-                            mock_user.current_org_id = user_id_uuid
+                            if user_id_uuid == user1_id:
+                                mock_user.current_org_id = org1_id
+                            elif user_id_uuid == user2_id:
+                                mock_user.current_org_id = org2_id
+                            else:
+                                mock_user.current_org_id = user_id_uuid
 
-                            # Create a mock result
                             mock_result = MagicMock()
                             mock_result.scalar_one_or_none.return_value = mock_user
                             return mock_result
                     except Exception:
-                        # If there's any error in parsing, fall back to original execute
                         pass
 
             # For all other queries, use the original execute method
@@ -310,59 +345,67 @@ class TestSaasSQLAppConversationInfoService:
         # Apply the mock
         async_session.execute = mock_execute
 
-        # Create services for different users
-        user1_service = SaasSQLAppConversationInfoService(
-            db_session=async_session,
-            user_context=SpecifyUserContext(
-                user_id='a1111111-1111-1111-1111-111111111111'
-            ),
-        )
-        user2_service = SaasSQLAppConversationInfoService(
-            db_session=async_session,
-            user_context=SpecifyUserContext(
-                user_id='b2222222-2222-2222-2222-222222222222'
-            ),
-        )
+        with patch(
+            'enterprise.server.utils.saas_app_conversation_info_injector.UserStore.get_user_by_id_async',
+            side_effect=create_mock_user_getter(),
+        ):
+            # Create services for different users
+            user1_service = SaasSQLAppConversationInfoService(
+                db_session=async_session,
+                user_context=SpecifyUserContext(
+                    user_id='a1111111-1111-1111-1111-111111111111'
+                ),
+            )
+            user2_service = SaasSQLAppConversationInfoService(
+                db_session=async_session,
+                user_context=SpecifyUserContext(
+                    user_id='b2222222-2222-2222-2222-222222222222'
+                ),
+            )
 
-        # Create conversations for different users
-        user1_info = AppConversationInfo(
-            id=uuid4(),
-            created_by_user_id='a1111111-1111-1111-1111-111111111111',
-            sandbox_id='sandbox_user1',
-            title='User 1 Conversation',
-        )
+            # Create conversations for different users
+            user1_info = AppConversationInfo(
+                id=uuid4(),
+                created_by_user_id='a1111111-1111-1111-1111-111111111111',
+                sandbox_id='sandbox_user1',
+                title='User 1 Conversation',
+            )
 
-        user2_info = AppConversationInfo(
-            id=uuid4(),
-            created_by_user_id='b2222222-2222-2222-2222-222222222222',
-            sandbox_id='sandbox_user2',
-            title='User 2 Conversation',
-        )
+            user2_info = AppConversationInfo(
+                id=uuid4(),
+                created_by_user_id='b2222222-2222-2222-2222-222222222222',
+                sandbox_id='sandbox_user2',
+                title='User 2 Conversation',
+            )
 
-        # Save conversations
-        await user1_service.save_app_conversation_info(user1_info)
-        await user2_service.save_app_conversation_info(user2_info)
+            # Save conversations
+            await user1_service.save_app_conversation_info(user1_info)
+            await user2_service.save_app_conversation_info(user2_info)
 
-        # User 1 should only see their conversation
-        user1_page = await user1_service.search_app_conversation_info()
-        assert len(user1_page.items) == 1
-        assert (
-            user1_page.items[0].created_by_user_id
-            == 'a1111111-1111-1111-1111-111111111111'
-        )
+            # User 1 should only see their conversation
+            user1_page = await user1_service.search_app_conversation_info()
+            assert len(user1_page.items) == 1
+            assert (
+                user1_page.items[0].created_by_user_id
+                == 'a1111111-1111-1111-1111-111111111111'
+            )
 
-        # User 2 should only see their conversation
-        user2_page = await user2_service.search_app_conversation_info()
-        assert len(user2_page.items) == 1
-        assert (
-            user2_page.items[0].created_by_user_id
-            == 'b2222222-2222-2222-2222-222222222222'
-        )
+            # User 2 should only see their conversation
+            user2_page = await user2_service.search_app_conversation_info()
+            assert len(user2_page.items) == 1
+            assert (
+                user2_page.items[0].created_by_user_id
+                == 'b2222222-2222-2222-2222-222222222222'
+            )
 
-        # User 1 should not be able to get user 2's conversation
-        user2_from_user1 = await user1_service.get_app_conversation_info(user2_info.id)
-        assert user2_from_user1 is None
+            # User 1 should not be able to get user 2's conversation
+            user2_from_user1 = await user1_service.get_app_conversation_info(
+                user2_info.id
+            )
+            assert user2_from_user1 is None
 
-        # User 2 should not be able to get user 1's conversation
-        user1_from_user2 = await user2_service.get_app_conversation_info(user1_info.id)
-        assert user1_from_user2 is None
+            # User 2 should not be able to get user 1's conversation
+            user1_from_user2 = await user2_service.get_app_conversation_info(
+                user1_info.id
+            )
+            assert user1_from_user2 is None

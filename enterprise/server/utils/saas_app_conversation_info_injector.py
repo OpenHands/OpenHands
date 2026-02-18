@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
+from storage.user_store import UserStore
 
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -26,7 +27,7 @@ from openhands.app_server.services.injector import InjectorState
 
 
 class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
-    """Extended SQLAppConversationInfoService with user-based filtering and SAAS metadata handling."""
+    """Extended SQLAppConversationInfoService with user and organization-based filtering and SAAS metadata handling."""
 
     async def _secure_select(self):
         query = (
@@ -43,6 +44,13 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         if user_id_str:
             user_id_uuid = UUID(user_id_str)
             query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
+
+            # Filter by organization ID to ensure conversations are isolated per organization
+            user = await UserStore.get_user_by_id_async(user_id_str)
+            if user and user.current_org_id is not None:
+                query = query.where(
+                    StoredConversationMetadataSaas.org_id == user.current_org_id
+                )
 
         return query
 
@@ -62,6 +70,13 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         if user_id_str:
             user_id_uuid = UUID(user_id_str)
             query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
+
+            # Filter by organization ID to ensure conversations are isolated per organization
+            user = await UserStore.get_user_by_id_async(user_id_str)
+            if user and user.current_org_id is not None:
+                query = query.where(
+                    StoredConversationMetadataSaas.org_id == user.current_org_id
+                )
 
         return query
 
@@ -165,11 +180,18 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             .where(StoredConversationMetadata.conversation_version == 'V1')
         )
 
-        # Apply user filtering
+        # Apply user and organization filtering
         user_id_str = await self.user_context.get_user_id()
         if user_id_str:
             user_id_uuid = UUID(user_id_str)
             query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
+
+            # Filter by organization ID to ensure conversations are isolated per organization
+            user = await UserStore.get_user_by_id_async(user_id_str)
+            if user and user.current_org_id is not None:
+                query = query.where(
+                    StoredConversationMetadataSaas.org_id == user.current_org_id
+                )
 
         query = self._apply_filters_with_saas_metadata(
             query=query,
