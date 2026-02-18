@@ -90,7 +90,7 @@ describe("Manage Organization Members Route", () => {
     useSelectedOrganizationStore.setState({ organizationId: MOCK_TEAM_ORG_ACME.id });
     // Seed organizations into the module-level queryClient used by clientLoader
     mockQueryClient.setQueryData(["organizations"], {
-      organizations: [MOCK_TEAM_ORG_ACME],
+      items: [MOCK_TEAM_ORG_ACME],
       currentOrgId: MOCK_TEAM_ORG_ACME.id,
     });
 
