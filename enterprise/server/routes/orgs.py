@@ -3,9 +3,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from server.auth.authorization import (
-    require_org_admin,
-    require_org_owner,
-    require_org_user,
+    Permission,
+    require_permission,
 )
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
@@ -194,7 +193,7 @@ async def create_org(
 @org_router.get('/{org_id}', response_model=OrgResponse, status_code=status.HTTP_200_OK)
 async def get_org(
     org_id: UUID,
-    user_id: str = Depends(require_org_user),
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgResponse:
     """Get organization details by ID.
 
@@ -313,7 +312,7 @@ async def get_me(
 @org_router.delete('/{org_id}', status_code=status.HTTP_200_OK)
 async def delete_org(
     org_id: UUID,
-    user_id: str = Depends(require_org_owner),
+    user_id: str = Depends(require_permission(Permission.DELETE_ORGANIZATION)),
 ) -> dict:
     """Delete an organization.
 
@@ -424,7 +423,7 @@ async def delete_org(
 async def update_org(
     org_id: UUID,
     update_data: OrgUpdate,
-    user_id: str = Depends(require_org_admin),
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> OrgResponse:
     """Update an existing organization.
 
@@ -519,13 +518,13 @@ async def get_org_members(
             lte=100,
         ),
     ] = 100,
-    current_user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgMemberPage:
     """Get all members of an organization with cursor-based pagination."""
     try:
         success, error_code, data = await OrgMemberService.get_org_members(
             org_id=UUID(org_id),
-            current_user_id=UUID(current_user_id),
+            current_user_id=UUID(user_id),
             page_id=page_id,
             limit=limit,
         )
