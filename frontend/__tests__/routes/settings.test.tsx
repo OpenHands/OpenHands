@@ -248,9 +248,10 @@ describe("Settings Screen", () => {
 
   describe("Personal org vs team org visibility", () => {
     it("should not show Organization and Organization Members settings items when personal org is selected", async () => {
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_PERSONAL_ORG,
-      ]);
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
       vi.spyOn(organizationService, "getMe").mockResolvedValue({
         org_id: "1",
         user_id: "99",
@@ -282,12 +283,16 @@ describe("Settings Screen", () => {
       mockQueryClient.clear();
       mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
       // Pre-select the team org in the query client and Zustand store
-      mockQueryClient.setQueryData(["organizations"], [MOCK_TEAM_ORG_ACME]);
+      mockQueryClient.setQueryData(["organizations"], {
+        organizations: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
       useSelectedOrganizationStore.setState({ organizationId: "2" });
 
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_TEAM_ORG_ACME,
-      ]);
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
       vi.spyOn(organizationService, "getMe").mockResolvedValue({
         org_id: "2",
         user_id: "99",
@@ -315,14 +320,18 @@ describe("Settings Screen", () => {
 
     it("should not allow direct URL access to /settings/org when personal org is selected", async () => {
       // Set up orgs in query client so clientLoader can access them
-      mockQueryClient.setQueryData(["organizations"], [MOCK_PERSONAL_ORG]);
+      mockQueryClient.setQueryData(["organizations"], {
+        organizations: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
       // Use Zustand store instead of query client for selected org ID
       // This is the correct pattern - the query client key ["selected_organization"] is never set in production
       useSelectedOrganizationStore.setState({ organizationId: "1" });
 
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_PERSONAL_ORG,
-      ]);
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
       vi.spyOn(organizationService, "getMe").mockResolvedValue({
         org_id: "1",
         user_id: "99",
@@ -349,7 +358,10 @@ describe("Settings Screen", () => {
     it("should not allow direct URL access to /settings/org-members when personal org is selected", async () => {
       // Set up config and organizations in query client so clientLoader can access them
       mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
-      mockQueryClient.setQueryData(["organizations"], [MOCK_PERSONAL_ORG]);
+      mockQueryClient.setQueryData(["organizations"], {
+        organizations: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
       // Use Zustand store for selected org ID
       useSelectedOrganizationStore.setState({ organizationId: "1" });
 
@@ -373,13 +385,17 @@ describe("Settings Screen", () => {
 
     it("should not allow direct URL access to /settings/billing when team org is selected", async () => {
       // Set up orgs in query client so clientLoader can access them
-      mockQueryClient.setQueryData(["organizations"], [MOCK_TEAM_ORG_ACME]);
+      mockQueryClient.setQueryData(["organizations"], {
+        organizations: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
       // Use Zustand store instead of query client for selected org ID
       useSelectedOrganizationStore.setState({ organizationId: "2" });
 
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_TEAM_ORG_ACME,
-      ]);
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
       vi.spyOn(organizationService, "getMe").mockResolvedValue({
         org_id: "1",
         user_id: "99",
@@ -423,12 +439,16 @@ describe("Settings Screen", () => {
 
       mockQueryClient.clear();
       // Set up personal org (billing is only shown for personal orgs, not team orgs)
-      mockQueryClient.setQueryData(["organizations"], [MOCK_PERSONAL_ORG]);
+      mockQueryClient.setQueryData(["organizations"], {
+        organizations: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
       useSelectedOrganizationStore.setState({ organizationId: "1" });
 
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_PERSONAL_ORG,
-      ]);
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
       vi.spyOn(organizationService, "getMe").mockResolvedValue({
         org_id: "1",
         user_id: "99",
@@ -496,7 +516,10 @@ describe("Settings Screen", () => {
     it("should redirect away from /settings/org when personal org is selected in Zustand store", async () => {
       // Arrange: Set up config and organizations in query client
       mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
-      mockQueryClient.setQueryData(["organizations"], [MOCK_PERSONAL_ORG]);
+      mockQueryClient.setQueryData(["organizations"], {
+        organizations: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
 
       // Set org ID ONLY in Zustand store (not in query client)
       // This tests that clientLoader reads from the correct source
@@ -524,7 +547,10 @@ describe("Settings Screen", () => {
     it("should redirect away from /settings/billing when team org is selected in Zustand store", async () => {
       // Arrange: Set up config and organizations in query client
       mockQueryClient.setQueryData(["web-client-config"], { app_mode: "saas" });
-      mockQueryClient.setQueryData(["organizations"], [MOCK_TEAM_ORG_ACME]);
+      mockQueryClient.setQueryData(["organizations"], {
+        organizations: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
 
       // Set org ID ONLY in Zustand store (not in query client)
       useSelectedOrganizationStore.setState({ organizationId: "2" });

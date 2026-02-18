@@ -22,10 +22,14 @@ export const organizationService = {
   },
 
   getOrganizations: async () => {
-    const { data } = await openHands.get<{ items: Organization[] }>(
-      "/api/organizations",
-    );
-    return data?.items || [];
+    const { data } = await openHands.get<{
+      items: Organization[];
+      current_org_id: string | null;
+    }>("/api/organizations");
+    return {
+      items: data?.items || [],
+      currentOrgId: data?.current_org_id || null,
+    };
   },
 
   updateOrganization: async ({

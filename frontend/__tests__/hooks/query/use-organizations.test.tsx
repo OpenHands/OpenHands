@@ -67,12 +67,15 @@ describe("useOrganizations", () => {
 
   it("sorts personal workspace first, then non-personal alphabetically by name", async () => {
     // API returns unsorted: Beta, Personal, Acme, All Hands
-    mockGetOrganizations.mockResolvedValue([
-      createMinimalOrg("3", "Beta LLC", false),
-      createMinimalOrg("1", "Personal Workspace", true),
-      createMinimalOrg("2", "Acme Corp", false),
-      createMinimalOrg("4", "All Hands AI", false),
-    ]);
+    mockGetOrganizations.mockResolvedValue({
+      items: [
+        createMinimalOrg("3", "Beta LLC", false),
+        createMinimalOrg("1", "Personal Workspace", true),
+        createMinimalOrg("2", "Acme Corp", false),
+        createMinimalOrg("4", "All Hands AI", false),
+      ],
+      currentOrgId: "1",
+    });
 
     const { result } = renderHook(() => useOrganizations(), { wrapper });
 
@@ -80,22 +83,25 @@ describe("useOrganizations", () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    const data = result.current.data!;
-    expect(data).toHaveLength(4);
-    expect(data[0].id).toBe("1");
-    expect(data[0].is_personal).toBe(true);
-    expect(data[0].name).toBe("Personal Workspace");
-    expect(data[1].name).toBe("Acme Corp");
-    expect(data[2].name).toBe("All Hands AI");
-    expect(data[3].name).toBe("Beta LLC");
+    const { organizations } = result.current.data!;
+    expect(organizations).toHaveLength(4);
+    expect(organizations[0].id).toBe("1");
+    expect(organizations[0].is_personal).toBe(true);
+    expect(organizations[0].name).toBe("Personal Workspace");
+    expect(organizations[1].name).toBe("Acme Corp");
+    expect(organizations[2].name).toBe("All Hands AI");
+    expect(organizations[3].name).toBe("Beta LLC");
   });
 
   it("treats missing is_personal as false and sorts by name", async () => {
-    mockGetOrganizations.mockResolvedValue([
-      createMinimalOrg("1", "Zebra Org"), // no is_personal
-      createMinimalOrg("2", "Alpha Org", true), // personal first
-      createMinimalOrg("3", "Mango Org"), // no is_personal
-    ]);
+    mockGetOrganizations.mockResolvedValue({
+      items: [
+        createMinimalOrg("1", "Zebra Org"), // no is_personal
+        createMinimalOrg("2", "Alpha Org", true), // personal first
+        createMinimalOrg("3", "Mango Org"), // no is_personal
+      ],
+      currentOrgId: "2",
+    });
 
     const { result } = renderHook(() => useOrganizations(), { wrapper });
 
@@ -103,18 +109,21 @@ describe("useOrganizations", () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    const data = result.current.data!;
-    expect(data[0].id).toBe("2");
-    expect(data[0].is_personal).toBe(true);
-    expect(data[1].name).toBe("Mango Org");
-    expect(data[2].name).toBe("Zebra Org");
+    const { organizations } = result.current.data!;
+    expect(organizations[0].id).toBe("2");
+    expect(organizations[0].is_personal).toBe(true);
+    expect(organizations[1].name).toBe("Mango Org");
+    expect(organizations[2].name).toBe("Zebra Org");
   });
 
   it("handles missing name by treating as empty string for sort", async () => {
     const orgWithName = createMinimalOrg("2", "Beta", false);
     const orgNoName = { ...createMinimalOrg("1", "Alpha", false) };
     delete (orgNoName as Record<string, unknown>).name;
-    mockGetOrganizations.mockResolvedValue([orgWithName, orgNoName] as Organization[]);
+    mockGetOrganizations.mockResolvedValue({
+      items: [orgWithName, orgNoName] as Organization[],
+      currentOrgId: "1",
+    });
 
     const { result } = renderHook(() => useOrganizations(), { wrapper });
 
@@ -122,11 +131,11 @@ describe("useOrganizations", () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    const data = result.current.data!;
+    const { organizations } = result.current.data!;
     // undefined name is coerced to ""; "" sorts before "Beta"
-    expect(data[0].id).toBe("1");
-    expect(data[1].id).toBe("2");
-    expect(data[1].name).toBe("Beta");
+    expect(organizations[0].id).toBe("1");
+    expect(organizations[1].id).toBe("2");
+    expect(organizations[1].name).toBe("Beta");
   });
 
   it("does not mutate the original array from the API", async () => {
@@ -134,7 +143,10 @@ describe("useOrganizations", () => {
       createMinimalOrg("2", "Acme", false),
       createMinimalOrg("1", "Personal", true),
     ];
-    mockGetOrganizations.mockResolvedValue(apiOrgs);
+    mockGetOrganizations.mockResolvedValue({
+      items: apiOrgs,
+      currentOrgId: "1",
+    });
 
     const { result } = renderHook(() => useOrganizations(), { wrapper });
 
@@ -146,7 +158,7 @@ describe("useOrganizations", () => {
     expect(apiOrgs[0].id).toBe("2");
     expect(apiOrgs[1].id).toBe("1");
     // Returned data is sorted
-    expect(result.current.data![0].id).toBe("1");
-    expect(result.current.data![1].id).toBe("2");
+    expect(result.current.data!.organizations[0].id).toBe("1");
+    expect(result.current.data!.organizations[1].id).toBe("2");
   });
 });

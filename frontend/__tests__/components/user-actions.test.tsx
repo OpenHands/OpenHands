@@ -369,10 +369,10 @@ describe("UserActions", () => {
     // menu is hidden via CSS (opacity/pointer-events) rather than unmounted.
 
     beforeEach(() => {
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_PERSONAL_ORG,
-        MOCK_TEAM_ORG_ACME,
-      ]);
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG, MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
       useSelectedOrganizationStore.setState({ organizationId: null });
     });
 

@@ -10,12 +10,14 @@ export const useSwitchOrganization = () => {
     mutationFn: (orgId: string) =>
       organizationService.switchOrganization({ orgId }),
     onSuccess: (_, orgId) => {
-      // Update local state
-      setOrganizationId(orgId);
-      // Refetch getMe for the new organization
+      // Invalidate the target org's /me query to ensure fresh data on every switch
       queryClient.invalidateQueries({
         queryKey: ["organizations", orgId, "me"],
       });
+      // Update local state
+      setOrganizationId(orgId);
+      // Invalidate settings for the new org context
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
   });
 };

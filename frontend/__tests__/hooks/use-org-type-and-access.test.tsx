@@ -36,7 +36,7 @@ describe("useOrgTypeAndAccess", () => {
       setOrganizationId: vi.fn(),
     });
     mockUseOrganizations.mockReturnValue({
-      data: [],
+      data: { organizations: [], currentOrgId: null },
     } as unknown as ReturnType<typeof useOrganizations>);
 
     const { result } = renderHook(() => useOrgTypeAndAccess(), { wrapper });
@@ -57,7 +57,7 @@ describe("useOrgTypeAndAccess", () => {
       setOrganizationId: vi.fn(),
     });
     mockUseOrganizations.mockReturnValue({
-      data: [personalOrg],
+      data: { organizations: [personalOrg], currentOrgId: "org-1" },
     } as unknown as ReturnType<typeof useOrganizations>);
 
     const { result } = renderHook(() => useOrgTypeAndAccess(), { wrapper });
@@ -78,7 +78,7 @@ describe("useOrgTypeAndAccess", () => {
       setOrganizationId: vi.fn(),
     });
     mockUseOrganizations.mockReturnValue({
-      data: [teamOrg],
+      data: { organizations: [teamOrg], currentOrgId: "org-2" },
     } as unknown as ReturnType<typeof useOrganizations>);
 
     const { result } = renderHook(() => useOrgTypeAndAccess(), { wrapper });
@@ -99,7 +99,7 @@ describe("useOrgTypeAndAccess", () => {
       setOrganizationId: vi.fn(),
     });
     mockUseOrganizations.mockReturnValue({
-      data: [teamOrg],
+      data: { organizations: [teamOrg], currentOrgId: "org-3" },
     } as unknown as ReturnType<typeof useOrganizations>);
 
     const { result } = renderHook(() => useOrgTypeAndAccess(), { wrapper });
@@ -119,7 +119,7 @@ describe("useOrgTypeAndAccess", () => {
       setOrganizationId: vi.fn(),
     });
     mockUseOrganizations.mockReturnValue({
-      data: [orgWithoutPersonalField],
+      data: { organizations: [orgWithoutPersonalField], currentOrgId: "org-4" },
     } as unknown as ReturnType<typeof useOrganizations>);
 
     const { result } = renderHook(() => useOrgTypeAndAccess(), { wrapper });

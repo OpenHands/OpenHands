@@ -301,7 +301,12 @@ export const ORG_HANDLERS = [
 
   http.get("/api/organizations", () => {
     const organizations = Array.from(orgs.values());
-    return HttpResponse.json({ items: organizations });
+    // Return the first org as the current org for mock purposes
+    const currentOrgId = organizations.length > 0 ? organizations[0].id : null;
+    return HttpResponse.json({
+      items: organizations,
+      current_org_id: currentOrgId,
+    });
   }),
 
   http.patch("/api/organizations/:orgId", async ({ request, params }) => {

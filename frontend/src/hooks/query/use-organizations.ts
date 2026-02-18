@@ -1,14 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { organizationService } from "#/api/organization-service/organization-service.api";
+import { useIsAuthed } from "./use-is-authed";
 
-export const useOrganizations = () =>
-  useQuery({
+export const useOrganizations = () => {
+  const { data: userIsAuthenticated } = useIsAuthed();
+
+  return useQuery({
     queryKey: ["organizations"],
     queryFn: organizationService.getOrganizations,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    select: (data) =>
+    enabled: !!userIsAuthenticated,
+    select: (data) => ({
       // Sort organizations with personal workspace first, then alphabetically by name
-      [...data].sort((a, b) => {
+      organizations: [...data.items].sort((a, b) => {
         const aIsPersonal = a.is_personal ?? false;
         const bIsPersonal = b.is_personal ?? false;
         if (aIsPersonal && !bIsPersonal) return -1;
@@ -17,4 +21,7 @@ export const useOrganizations = () =>
           sensitivity: "base",
         });
       }),
+      currentOrgId: data.currentOrgId,
+    }),
   });
+};

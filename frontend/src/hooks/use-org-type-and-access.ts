@@ -3,7 +3,8 @@ import { useOrganizations } from "#/hooks/query/use-organizations";
 
 export const useOrgTypeAndAccess = () => {
   const { organizationId } = useSelectedOrganizationId();
-  const { data: organizations } = useOrganizations();
+  const { data } = useOrganizations();
+  const organizations = data?.organizations;
 
   const selectedOrg = organizations?.find((org) => org.id === organizationId);
   const isPersonalOrg = selectedOrg?.is_personal === true;

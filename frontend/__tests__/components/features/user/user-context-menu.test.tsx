@@ -371,9 +371,10 @@ describe("UserContextMenu", () => {
 
   it("should navigate to /settings/org-members when Manage Organization Members is clicked", async () => {
     // Mock a team org so org management buttons are visible (not personal org)
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-      MOCK_TEAM_ORG_ACME,
-    ]);
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+      items: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
 
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
@@ -390,9 +391,10 @@ describe("UserContextMenu", () => {
 
   it("should navigate to /settings/org when Manage Account is clicked", async () => {
     // Mock a team org so org management buttons are visible (not personal org)
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-      MOCK_TEAM_ORG_ACME,
-    ]);
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+      items: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
 
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
@@ -420,9 +422,10 @@ describe("UserContextMenu", () => {
 
   it("should call the onClose handler after each action", async () => {
     // Mock a team org so org management buttons are visible
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-      MOCK_TEAM_ORG_ACME,
-    ]);
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+      items: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
 
     const onCloseMock = vi.fn();
     renderUserContextMenu({ type: "owner", onClose: onCloseMock });
@@ -445,9 +448,10 @@ describe("UserContextMenu", () => {
 
   describe("Personal org vs team org visibility", () => {
     it("should not show Organization and Organization Members settings items when personal org is selected", async () => {
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_PERSONAL_ORG,
-      ]);
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_PERSONAL_ORG],
+        currentOrgId: MOCK_PERSONAL_ORG.id,
+      });
       vi.spyOn(organizationService, "getMe").mockResolvedValue({
         org_id: "1",
         user_id: "99",
@@ -478,9 +482,10 @@ describe("UserContextMenu", () => {
     });
 
     it("should not show Billing settings item when team org is selected", async () => {
-      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-        MOCK_TEAM_ORG_ACME,
-      ]);
+      vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+        items: [MOCK_TEAM_ORG_ACME],
+        currentOrgId: MOCK_TEAM_ORG_ACME.id,
+      });
       vi.spyOn(organizationService, "getMe").mockResolvedValue({
         org_id: "1",
         user_id: "99",
@@ -508,9 +513,10 @@ describe("UserContextMenu", () => {
 
   it("should render the invite user modal when Invite Organization Member is clicked", async () => {
     // Mock a team org so org management buttons are visible (not personal org)
-    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue([
-      MOCK_TEAM_ORG_ACME,
-    ]);
+    vi.spyOn(organizationService, "getOrganizations").mockResolvedValue({
+      items: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
 
     const inviteMembersBatchSpy = vi.spyOn(
       organizationService,

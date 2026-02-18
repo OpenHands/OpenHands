@@ -48,10 +48,11 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
 
   // Org-type detection for route protection
   const orgId = getSelectedOrganizationIdFromStore();
-  const organizations = queryClient.getQueryData<Organization[]>([
-    "organizations",
-  ]);
-  const selectedOrg = organizations?.find((org) => org.id === orgId);
+  const organizationsData = queryClient.getQueryData<{
+    items: Organization[];
+    currentOrgId: string | null;
+  }>(["organizations"]);
+  const selectedOrg = organizationsData?.items?.find((org) => org.id === orgId);
   const isPersonalOrg = selectedOrg?.is_personal === true;
   const isTeamOrg = !!selectedOrg && !selectedOrg.is_personal;
 

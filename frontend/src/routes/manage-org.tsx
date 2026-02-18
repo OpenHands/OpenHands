@@ -2,7 +2,6 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useCreateStripeCheckoutSession } from "#/hooks/mutation/stripe/use-create-stripe-checkout-session";
 import { useOrganization } from "#/hooks/query/use-organization";
-import { useOrganizationPaymentInfo } from "#/hooks/query/use-organization-payment-info";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { cn } from "#/utils/utils";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -17,6 +16,7 @@ import { createPermissionGuard } from "#/utils/org/permission-guard";
 import { isBillingHidden } from "#/utils/org/billing-visibility";
 import { DeleteOrgConfirmationModal } from "#/components/features/org/delete-org-confirmation-modal";
 import { ChangeOrgNameModal } from "#/components/features/org/change-org-name-modal";
+import { useBalance } from "#/hooks/query/use-balance";
 
 interface AddCreditsModalProps {
   onClose: () => void;
@@ -130,7 +130,7 @@ function ManageOrg() {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const { data: organization } = useOrganization();
-  const { data: organizationPaymentInfo } = useOrganizationPaymentInfo();
+  const { data: balance } = useBalance();
   const { data: config } = useConfig();
 
   const role = me?.role ?? "member";
@@ -174,7 +174,7 @@ function ManageOrg() {
           </span>
           <div className="flex items-center gap-2">
             <CreditsChip testId="available-credits">
-              {organization?.credits}
+              ${Number(balance ?? 0).toFixed(2)}
             </CreditsChip>
             {canAddCredits && (
               <InteractiveChip onClick={() => setAddCreditsFormVisible(true)}>
@@ -212,24 +212,6 @@ function ManageOrg() {
           )}
         </div>
       </div>
-
-      {!shouldHideBilling && (
-        <div className="flex flex-col gap-2 w-sm">
-          <span className="text-white text-xs font-semibold ml-1">
-            {t(I18nKey.ORG$BILLING_INFORMATION)}
-          </span>
-
-          <span
-            data-testid="billing-info"
-            className={cn(
-              "text-sm p-3 bg-base rounded text-[#A3A3A3]",
-              "flex items-center justify-between",
-            )}
-          >
-            {organizationPaymentInfo?.cardNumber}
-          </span>
-        </div>
-      )}
 
       {canDeleteOrg && (
         <button

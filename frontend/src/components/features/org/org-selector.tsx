@@ -11,7 +11,8 @@ import { Dropdown } from "#/ui/dropdown/dropdown";
 export function OrgSelector() {
   const { t } = useTranslation();
   const { organizationId } = useSelectedOrganizationId();
-  const { data: organizations, isLoading } = useOrganizations();
+  const { data, isLoading } = useOrganizations();
+  const organizations = data?.organizations;
   const { mutate: switchOrganization, isPending: isSwitching } =
     useSwitchOrganization();
   const shouldHideSelector = useShouldHideOrgSelector();

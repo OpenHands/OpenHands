@@ -1,13 +1,13 @@
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import { getSelectedOrganizationIdFromStore } from "#/stores/selected-organization-store";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
-import { getMeFromQueryClient } from "../query-client-getters";
 import { PermissionKey } from "./permissions";
 import { queryClient } from "#/query-client-config";
 
 /**
  * Get the active organization user.
- * Reads from cache first, fetches if missing.
+ * Uses React Query's fetchQuery to leverage request deduplication,
+ * preventing duplicate API calls when multiple consumers request the same data.
  * @returns OrganizationMember
  */
 export const getActiveOrganizationUser = async (): Promise<
@@ -15,16 +15,17 @@ export const getActiveOrganizationUser = async (): Promise<
 > => {
   const orgId = getSelectedOrganizationIdFromStore();
   if (!orgId) return undefined;
-  let user = getMeFromQueryClient(orgId);
-  if (!user) {
-    try {
-      user = await organizationService.getMe({ orgId });
-      queryClient.setQueryData(["organizations", orgId, "me"], user);
-    } catch {
-      return undefined;
-    }
+
+  try {
+    const user = await queryClient.fetchQuery({
+      queryKey: ["organizations", orgId, "me"],
+      queryFn: () => organizationService.getMe({ orgId }),
+      staleTime: 1000 * 60 * 5, // 5 minutes - matches useMe hook
+    });
+    return user;
+  } catch {
+    return undefined;
   }
-  return user;
 };
 
 /**
