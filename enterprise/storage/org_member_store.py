@@ -72,17 +72,37 @@ class OrgMemberStore:
             The OrgMember for the user's current organization, or None if not found.
         """
         with session_maker() as session:
-            user = session.query(User).filter(User.id == user_id).first()
-            if not user:
-                return None
-            return (
+            result = (
                 session.query(OrgMember)
+                .join(User, User.id == OrgMember.user_id)
                 .filter(
-                    OrgMember.org_id == user.current_org_id,
-                    OrgMember.user_id == user_id,
+                    User.id == user_id,
+                    OrgMember.org_id == User.current_org_id,
                 )
                 .first()
             )
+            return result
+
+    @staticmethod
+    async def get_org_member_for_current_org_async(user_id: UUID) -> Optional[OrgMember]:
+        """Get the org member for a user's current organization (async version).
+
+        Args:
+            user_id: The user's UUID.
+
+        Returns:
+            The OrgMember for the user's current organization, or None if not found.
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgMember)
+                .join(User, User.id == OrgMember.user_id)
+                .filter(
+                    User.id == user_id,
+                    OrgMember.org_id == User.current_org_id,
+                )
+            )
+            return result.scalars().first()
 
     @staticmethod
     def get_user_orgs(user_id: UUID) -> list[OrgMember]:

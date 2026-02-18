@@ -505,7 +505,7 @@ async def update_org(
 
 @org_router.get('/{org_id}/members')
 async def get_org_members(
-    org_id: str,
+    org_id: UUID,
     page_id: Annotated[
         str | None,
         Query(title='Optional next_page_id from the previously returned page'),
@@ -527,7 +527,7 @@ async def get_org_members(
     (member, admin, and owner roles).
 
     Args:
-        org_id: Organization ID (string, will be converted to UUID)
+        org_id: Organization ID (UUID)
         page_id: Optional page ID (offset) for pagination
         limit: Maximum number of members to return (1-100, default 100)
         user_id: Authenticated user ID (injected by require_permission dependency)
@@ -543,7 +543,7 @@ async def get_org_members(
     """
     try:
         success, error_code, data = await OrgMemberService.get_org_members(
-            org_id=UUID(org_id),
+            org_id=org_id,
             current_user_id=UUID(user_id),
             page_id=page_id,
             limit=limit,
@@ -591,7 +591,7 @@ async def get_org_members(
 
 @org_router.delete('/{org_id}/members/{user_id}')
 async def remove_org_member(
-    org_id: str,
+    org_id: UUID,
     user_id: str,
     current_user_id: str = Depends(get_user_id),
 ):
@@ -605,7 +605,7 @@ async def remove_org_member(
     """
     try:
         success, error = await OrgMemberService.remove_org_member(
-            org_id=UUID(org_id),
+            org_id=org_id,
             target_user_id=UUID(user_id),
             current_user_id=UUID(current_user_id),
         )
@@ -737,7 +737,7 @@ async def switch_org(
 
 @org_router.patch('/{org_id}/members/{user_id}', response_model=OrgMemberResponse)
 async def update_org_member(
-    org_id: str,
+    org_id: UUID,
     user_id: str,
     update_data: OrgMemberUpdate,
     current_user_id: str = Depends(get_user_id),
@@ -754,7 +754,7 @@ async def update_org_member(
     """
     try:
         return await OrgMemberService.update_org_member(
-            org_id=UUID(org_id),
+            org_id=org_id,
             target_user_id=UUID(user_id),
             current_user_id=UUID(current_user_id),
             update_data=update_data,
