@@ -1,7 +1,7 @@
 """Create resend_synced_users table.
 
-Revision ID: 094
-Revises: 093
+Revision ID: 096
+Revises: 095
 Create Date: 2025-02-17 00:00:00.000000
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '094'
-down_revision: Union[str, None] = '093'
+revision: str = '096'
+down_revision: Union[str, None] = '095'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
