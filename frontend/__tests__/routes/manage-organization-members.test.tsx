@@ -47,6 +47,10 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+vi.mock("#/hooks/query/use-is-authed", () => ({
+  useIsAuthed: () => ({ data: true }),
+}));
+
 function ManageOrganizationMembersWithPortalRoot() {
   return (
     <div>
@@ -85,7 +89,10 @@ describe("Manage Organization Members Route", () => {
     // Set Zustand store to a team org so clientLoader allows access to /settings/org-members
     useSelectedOrganizationStore.setState({ organizationId: MOCK_TEAM_ORG_ACME.id });
     // Seed organizations into the module-level queryClient used by clientLoader
-    mockQueryClient.setQueryData(["organizations"], [MOCK_TEAM_ORG_ACME]);
+    mockQueryClient.setQueryData(["organizations"], {
+      organizations: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
 
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     // @ts-expect-error - partial mock for testing
