@@ -77,7 +77,10 @@ class OrgMemberStore:
                 return None
             return (
                 session.query(OrgMember)
-                .filter(OrgMember.org_id == user.current_org_id, OrgMember.user_id == user_id)
+                .filter(
+                    OrgMember.org_id == user.current_org_id,
+                    OrgMember.user_id == user_id,
+                )
                 .first()
             )
 

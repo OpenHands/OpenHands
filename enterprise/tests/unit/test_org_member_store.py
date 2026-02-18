@@ -203,7 +203,9 @@ def test_get_org_member_for_current_org(session_maker):
 def test_get_org_member_for_current_org_user_not_found(session_maker):
     # Test getting org_member for non-existent user
     with patch('storage.org_member_store.session_maker', session_maker):
-        retrieved_org_member = OrgMemberStore.get_org_member_for_current_org(uuid.uuid4())
+        retrieved_org_member = OrgMemberStore.get_org_member_for_current_org(
+            uuid.uuid4()
+        )
         assert retrieved_org_member is None
 
 
