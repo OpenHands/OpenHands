@@ -4,7 +4,7 @@ Unit tests for permission-based authorization (authorization.py).
 Tests the FastAPI dependencies that validate user permissions within organizations.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -15,6 +15,7 @@ from server.auth.authorization import (
     RoleName,
     get_role_permissions,
     get_user_org_role,
+    get_user_org_role_async,
     has_permission,
     require_permission,
 )
@@ -449,10 +450,7 @@ class TestRequirePermission:
         mock_role = MagicMock()
         mock_role.name = 'admin'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
             result = await permission_checker(org_id=org_id, user_id=user_id)
             assert result == user_id
@@ -483,10 +481,7 @@ class TestRequirePermission:
         user_id = str(uuid4())
         org_id = uuid4()
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=None,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=None)):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
             with pytest.raises(HTTPException) as exc_info:
                 await permission_checker(org_id=org_id, user_id=user_id)
@@ -507,10 +502,7 @@ class TestRequirePermission:
         mock_role = MagicMock()
         mock_role.name = 'member'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
             with pytest.raises(HTTPException) as exc_info:
                 await permission_checker(org_id=org_id, user_id=user_id)
@@ -531,10 +523,7 @@ class TestRequirePermission:
         mock_role = MagicMock()
         mock_role.name = 'owner'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
             result = await permission_checker(org_id=org_id, user_id=user_id)
             assert result == user_id
@@ -552,10 +541,7 @@ class TestRequirePermission:
         mock_role = MagicMock()
         mock_role.name = 'admin'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
             with pytest.raises(HTTPException) as exc_info:
                 await permission_checker(org_id=org_id, user_id=user_id)
@@ -576,10 +562,7 @@ class TestRequirePermission:
         mock_role.name = 'member'
 
         with (
-            patch(
-                'server.auth.authorization.get_user_org_role',
-                return_value=mock_role,
-            ),
+            patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)),
             patch('server.auth.authorization.logger') as mock_logger,
         ):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
@@ -604,10 +587,7 @@ class TestRequirePermission:
         mock_role = MagicMock()
         mock_role.name = 'admin'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ) as mock_get_role:
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)) as mock_get_role:
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
             result = await permission_checker(org_id=None, user_id=user_id)
             assert result == user_id
@@ -622,10 +602,7 @@ class TestRequirePermission:
         """
         user_id = str(uuid4())
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=None,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=None)):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
             with pytest.raises(HTTPException) as exc_info:
                 await permission_checker(org_id=None, user_id=user_id)
@@ -655,10 +632,7 @@ class TestPermissionScenarios:
         mock_role = MagicMock()
         mock_role.name = 'member'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(Permission.MANAGE_SECRETS)
             result = await permission_checker(org_id=org_id, user_id=user_id)
             assert result == user_id
@@ -676,10 +650,7 @@ class TestPermissionScenarios:
         mock_role = MagicMock()
         mock_role.name = 'member'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(
                 Permission.INVITE_USER_TO_ORGANIZATION
             )
@@ -701,10 +672,7 @@ class TestPermissionScenarios:
         mock_role = MagicMock()
         mock_role.name = 'admin'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(
                 Permission.INVITE_USER_TO_ORGANIZATION
             )
@@ -724,10 +692,7 @@ class TestPermissionScenarios:
         mock_role = MagicMock()
         mock_role.name = 'admin'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(Permission.CHANGE_USER_ROLE_OWNER)
             with pytest.raises(HTTPException) as exc_info:
                 await permission_checker(org_id=org_id, user_id=user_id)
@@ -747,10 +712,7 @@ class TestPermissionScenarios:
         mock_role = MagicMock()
         mock_role.name = 'owner'
 
-        with patch(
-            'server.auth.authorization.get_user_org_role',
-            return_value=mock_role,
-        ):
+        with patch('server.auth.authorization.get_user_org_role_async', AsyncMock(return_value=mock_role)):
             permission_checker = require_permission(Permission.CHANGE_USER_ROLE_OWNER)
             result = await permission_checker(org_id=org_id, user_id=user_id)
             assert result == user_id
