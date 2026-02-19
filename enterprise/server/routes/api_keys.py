@@ -168,15 +168,10 @@ def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
     )
 
 
-<<<<<<< HEAD
 @api_router.get('/llm/byor/permitted')
 async def check_byor_permitted(
     user_id: str = Depends(get_user_id),
 ) -> ByorPermittedResponse:
-=======
-@api_router.get('/llm/byor/permitted', tags=['Keys'])
-async def check_byor_permitted(user_id: str = Depends(get_user_id)) -> ByorPermittedResponse:
->>>>>>> a67492be2e3b5422f6de26a7c8fd5e42f7ca8d17
     """Check if BYOR key export is permitted for the user's current org."""
     try:
         permitted = await OrgService.check_byor_export_enabled(user_id)
