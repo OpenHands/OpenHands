@@ -6,6 +6,8 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from server.routes.api_keys import (
+    ByorPermittedResponse,
+    LlmApiKeyResponse,
     check_byor_permitted,
     delete_byor_key_from_litellm,
     get_llm_api_key_for_byor,
@@ -203,7 +205,7 @@ class TestGetLlmApiKeyForByor:
         result = await get_llm_api_key_for_byor(user_id=user_id)
 
         # Assert
-        assert result == {'key': new_key}
+        assert result == LlmApiKeyResponse(key=new_key)
         mock_check_enabled.assert_called_once_with(user_id)
         mock_get_key.assert_called_once_with(user_id)
         mock_generate_key.assert_called_once_with(user_id)
@@ -228,7 +230,7 @@ class TestGetLlmApiKeyForByor:
         result = await get_llm_api_key_for_byor(user_id=user_id)
 
         # Assert
-        assert result == {'key': existing_key}
+        assert result == LlmApiKeyResponse(key=existing_key)
         mock_check_enabled.assert_called_once_with(user_id)
         mock_get_key.assert_called_once_with(user_id)
         mock_verify_key.assert_called_once_with(existing_key, user_id)
@@ -265,7 +267,7 @@ class TestGetLlmApiKeyForByor:
         result = await get_llm_api_key_for_byor(user_id=user_id)
 
         # Assert
-        assert result == {'key': new_key}
+        assert result == LlmApiKeyResponse(key=new_key)
         mock_check_enabled.assert_called_once_with(user_id)
         mock_get_key.assert_called_once_with(user_id)
         mock_verify_key.assert_called_once_with(invalid_key, user_id)
@@ -305,7 +307,7 @@ class TestGetLlmApiKeyForByor:
         result = await get_llm_api_key_for_byor(user_id=user_id)
 
         # Assert
-        assert result == {'key': new_key}
+        assert result == LlmApiKeyResponse(key=new_key)
         mock_check_enabled.assert_called_once_with(user_id)
         mock_delete_key.assert_called_once_with(user_id, invalid_key)
         mock_generate_key.assert_called_once_with(user_id)
@@ -478,7 +480,7 @@ class TestCheckByorPermitted:
         result = await check_byor_permitted(user_id=user_id)
 
         # Assert
-        assert result == {'permitted': True}
+        assert result == ByorPermittedResponse(permitted=True)
         mock_check_enabled.assert_called_once_with(user_id)
 
     @pytest.mark.asyncio
@@ -493,7 +495,7 @@ class TestCheckByorPermitted:
         result = await check_byor_permitted(user_id=user_id)
 
         # Assert
-        assert result == {'permitted': False}
+        assert result == ByorPermittedResponse(permitted=False)
         mock_check_enabled.assert_called_once_with(user_id)
 
     @pytest.mark.asyncio

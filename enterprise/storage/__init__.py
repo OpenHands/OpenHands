@@ -23,6 +23,7 @@ from storage.org import Org
 from storage.org_invitation import OrgInvitation
 from storage.org_member import OrgMember
 from storage.proactive_convos import ProactiveConversation
+from storage.resend_synced_user import ResendSyncedUser
 from storage.role import Role
 from storage.slack_conversation import SlackConversation
 from storage.slack_team import SlackTeam
@@ -69,6 +70,7 @@ __all__ = [
     'OrgInvitation',
     'OrgMember',
     'ProactiveConversation',
+    'ResendSyncedUser',
     'Role',
     'SlackConversation',
     'SlackTeam',
