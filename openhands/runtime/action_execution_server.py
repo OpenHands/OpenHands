@@ -1059,7 +1059,10 @@ if __name__ == '__main__':
         try:
             safe_resolve_path(full_path, base_dir=client.initial_cwd)
         except PermissionError:
-            return JSONResponse(content=[], status_code=403)
+            return JSONResponse(
+                status_code=403,
+                content={'detail': f"Path '{path}' resolves outside the workspace boundary"},
+            )
 
         if not os.path.exists(full_path):
             # if user just removed a folder, prevent server error 500 in UI
