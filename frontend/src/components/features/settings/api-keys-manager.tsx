@@ -10,6 +10,7 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import { mutateWithToast } from "#/utils/mutate-with-toast";
 import { CreateApiKeyModal } from "./create-api-key-modal";
 import { DeleteApiKeyModal } from "./delete-api-key-modal";
 import { NewApiKeyModal } from "./new-api-key-modal";
@@ -60,19 +61,17 @@ function LlmApiKeyManager({
   const { t } = useTranslation();
   const [showLlmApiKey, setShowLlmApiKey] = useState(false);
 
-  const handleRefreshLlmApiKey = () => {
-    refreshLlmApiKey.mutate(undefined, {
-      onSuccess: () => {
-        displaySuccessToast(
-          t(I18nKey.SETTINGS$API_KEY_REFRESHED, {
-            defaultValue: "API key refreshed successfully",
-          }),
-        );
-      },
-      onError: () => {
-        displayErrorToast(t(I18nKey.ERROR$GENERIC));
-      },
-    });
+  const handleRefreshLlmApiKey = async () => {
+    try {
+      await mutateWithToast(refreshLlmApiKey, undefined, {
+        success: t(I18nKey.SETTINGS$API_KEY_REFRESHED, {
+          defaultValue: "API key refreshed successfully",
+        }),
+        error: t(I18nKey.ERROR$GENERIC),
+      });
+    } catch {
+      // error toast already handled by mutateWithToast
+    }
   };
 
   // Show paywall if payment is required
