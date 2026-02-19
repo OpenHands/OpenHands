@@ -44,6 +44,34 @@ class LiteLlmManager:
     """Manage LiteLLM interactions."""
 
     @staticmethod
+    def get_budget_from_team_info(
+        user_team_info: dict | None, user_id: str, org_id: str
+    ) -> tuple[float, float]:
+        """Extract max_budget and spend from user team info.
+
+        For personal orgs (user_id == org_id), uses litellm_budget_table.max_budget.
+        For team orgs, uses max_budget_in_team (populated by get_user_team_info).
+
+        Args:
+            user_team_info: The response from get_user_team_info
+            user_id: The user's ID
+            org_id: The organization's ID
+
+        Returns:
+            Tuple of (max_budget, spend)
+        """
+        if not user_team_info:
+            return 0, 0
+        spend = user_team_info.get('spend', 0)
+        if user_id == org_id:
+            max_budget = (user_team_info.get('litellm_budget_table') or {}).get(
+                'max_budget', 0
+            )
+        else:
+            max_budget = user_team_info.get('max_budget_in_team') or 0
+        return max_budget, spend
+
+    @staticmethod
     async def create_entries(
         org_id: str,
         keycloak_user_id: str,
@@ -71,8 +99,34 @@ class LiteLlmManager:
                     'x-goog-api-key': LITE_LLM_API_KEY,
                 }
             ) as client:
-                # New users start with $0 budget - they must purchase credits
-                await LiteLlmManager._create_team(client, keycloak_user_id, org_id, 0)
+                # Check if team already exists and get its budget
+                # New users joining existing orgs should inherit the team's budget
+                team_budget = 0.0
+                try:
+                    existing_team = await LiteLlmManager._get_team(client, org_id)
+                    if existing_team:
+                        team_info = existing_team.get('team_info', {})
+                        team_budget = team_info.get('max_budget', 0.0) or 0.0
+                        logger.info(
+                            'LiteLlmManager:create_entries:existing_team_budget',
+                            extra={
+                                'org_id': org_id,
+                                'user_id': keycloak_user_id,
+                                'team_budget': team_budget,
+                            },
+                        )
+                except httpx.HTTPStatusError as e:
+                    # Team doesn't exist yet (404) - this is expected for first user
+                    if e.response.status_code != 404:
+                        raise
+                    logger.info(
+                        'LiteLlmManager:create_entries:no_existing_team',
+                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                    )
+
+                await LiteLlmManager._create_team(
+                    client, keycloak_user_id, org_id, team_budget
+                )
 
                 if create_user:
                     await LiteLlmManager._create_user(
@@ -80,7 +134,7 @@ class LiteLlmManager:
                     )
 
                 await LiteLlmManager._add_user_to_team(
-                    client, keycloak_user_id, org_id, 0
+                    client, keycloak_user_id, org_id, team_budget
                 )
 
                 key = await LiteLlmManager._generate_key(
@@ -892,20 +946,30 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
-        team_info = await LiteLlmManager._get_team(client, team_id)
-        if not team_info:
+        team_response = await LiteLlmManager._get_team(client, team_id)
+        if not team_response:
             return None
 
         # Filter team_memberships based on team_id and keycloak_user_id
         user_membership = next(
             (
                 membership
-                for membership in team_info.get('team_memberships', [])
+                for membership in team_response.get('team_memberships', [])
                 if membership.get('user_id') == keycloak_user_id
                 and membership.get('team_id') == team_id
             ),
             None,
         )
+
+        if not user_membership:
+            return None
+
+        # For team orgs (user_id != team_id), include team-level budget info
+        # The team's max_budget and spend are shared across all members
+        if keycloak_user_id != team_id:
+            team_info = team_response.get('team_info', {})
+            user_membership['max_budget_in_team'] = team_info.get('max_budget')
+            user_membership['spend'] = team_info.get('spend', 0)
 
         return user_membership
 

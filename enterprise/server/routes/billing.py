@@ -93,9 +93,9 @@ async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse
     user_team_info = await LiteLlmManager.get_user_team_info(
         user_id, str(user.current_org_id)
     )
-    # Update to use calculate_credits
-    spend = user_team_info.get('spend', 0)
-    max_budget = (user_team_info.get('litellm_budget_table') or {}).get('max_budget', 0)
+    max_budget, spend = LiteLlmManager.get_budget_from_team_info(
+        user_team_info, user_id, str(user.current_org_id)
+    )
     credits = max(max_budget - spend, 0)
     return GetCreditsResponse(credits=Decimal('{:.2f}'.format(credits)))
 
@@ -249,8 +249,8 @@ async def success_callback(session_id: str, request: Request):
         )
         amount_subtotal = stripe_session.amount_subtotal or 0
         add_credits = amount_subtotal / 100
-        max_budget = (user_team_info.get('litellm_budget_table') or {}).get(
-            'max_budget', 0
+        max_budget, _ = LiteLlmManager.get_budget_from_team_info(
+            user_team_info, billing_session.user_id, str(user.current_org_id)
         )
 
         org = session.query(Org).filter(Org.id == user.current_org_id).first()
