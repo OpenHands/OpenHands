@@ -58,7 +58,9 @@ export function TokenUsageIndicator() {
     return null;
   }, [isV1, sandboxMetrics, storeMetrics]);
 
-  if (!metrics || (metrics.cost === null && metrics.totalTokens === 0)) {
+  if (!metrics || ((metrics.cost === null || metrics.cost === 0) && metrics.totalTokens === 0)) {
+    return null;
+  }
     return null;
   }
 
