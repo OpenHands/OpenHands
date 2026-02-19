@@ -173,8 +173,8 @@ class ProviderHandler:
                 continue
         for provider, exc in exceptions:
             logger.warning(
-              f'Failed to get user from provider {provider}: {exc}',
-              exc_info=(type(exc), exc, exc.__traceback__),
+                f'Failed to get user from provider {provider}: {exc}',
+                exc_info=(type(exc), exc, exc.__traceback__),
             )
         raise AuthenticationError('Need valid provider token')
 

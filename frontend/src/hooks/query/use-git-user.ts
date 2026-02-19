@@ -5,7 +5,6 @@ import { useConfig } from "./use-config";
 import UserService from "#/api/user-service/user-service.api";
 import { useShouldShowUserFeatures } from "#/hooks/use-should-show-user-features";
 import { useLogout } from "../mutation/use-logout";
-import { AxiosError } from "axios";
 
 export const useGitUser = () => {
   const posthog = usePostHog();
@@ -22,11 +21,6 @@ export const useGitUser = () => {
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
-    onError: (error: AxiosError) => {
-      if (error.response?.status === 401) {
-        logout.mutate();
-      }
-    },
   });
 
   React.useEffect(() => {
@@ -40,6 +34,14 @@ export const useGitUser = () => {
       });
     }
   }, [user.data]);
+
+  // If we get a 401 here, it means that the integration tokens need to be
+  // refreshed. Since this happens at login, we log out.
+  React.useEffect(() => {
+    if (user?.error?.response?.status === 401) {
+      logout.mutate();
+    }
+  }, [user.status]);
 
   return user;
 };
