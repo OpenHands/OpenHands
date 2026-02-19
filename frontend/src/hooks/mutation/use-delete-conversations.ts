@@ -14,20 +14,28 @@ export const useDeleteConversations = () => {
       );
     },
     onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
-      const previousConversations = queryClient.getQueryData([
-        "user",
-        "conversations",
-      ]);
+      await queryClient.cancelQueries({
+        queryKey: ["user", "conversations"],
+      });
 
       const idsToDelete = new Set(variables.conversationIds);
-      queryClient.setQueryData(
-        ["user", "conversations"],
-        (old: { conversation_id: string }[] | undefined) =>
-          old?.filter((conv) => !idsToDelete.has(conv.conversation_id)),
-      );
-
-      return { previousConversations };
+      queryClient.setQueriesData<{
+        pages: Array<{
+          results: Array<{ conversation_id: string }>;
+          next_page_id?: string;
+        }>;
+      }>({ queryKey: ["user", "conversations"] }, (oldData) => {
+        if (!oldData) return oldData;
+        return {
+          ...oldData,
+          pages: oldData.pages.map((page) => ({
+            ...page,
+            results: page.results.filter(
+              (conv) => !idsToDelete.has(conv.conversation_id),
+            ),
+          })),
+        };
+      });
     },
 
     onSuccess: (_, variables) => {
@@ -36,14 +44,6 @@ export const useDeleteConversations = () => {
       }
     },
 
-    onError: (_err, _variables, context) => {
-      if (context?.previousConversations) {
-        queryClient.setQueryData(
-          ["user", "conversations"],
-          context.previousConversations,
-        );
-      }
-    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     },
