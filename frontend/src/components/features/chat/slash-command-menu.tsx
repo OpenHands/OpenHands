@@ -56,7 +56,7 @@ export function SlashCommandMenu({
                       {command.name}
                     </span>
                     <span className="text-[#9A9A9A] text-sm">
-                      {command.description}
+                      {t(command.description)}
                     </span>
                   </div>
                   {command.shortcut && (

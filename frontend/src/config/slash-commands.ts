@@ -1,6 +1,8 @@
+import { I18nKey } from "#/i18n/declaration";
+
 export interface SlashCommand {
   name: string;
-  description: string;
+  description: I18nKey;
   shortcut?: string;
   action: string;
 }
@@ -8,18 +10,18 @@ export interface SlashCommand {
 export const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "/clear",
-    description: "Clear chat history",
+    description: I18nKey.SLASH_COMMANDS$CLEAR_DESCRIPTION,
     action: "clear",
   },
   {
     name: "/settings",
-    description: "Open settings",
+    description: I18nKey.SLASH_COMMANDS$SETTINGS_DESCRIPTION,
     shortcut: "⌘,",
     action: "settings",
   },
   {
     name: "/model",
-    description: "Configure LLM model",
+    description: I18nKey.SLASH_COMMANDS$MODEL_DESCRIPTION,
     action: "model",
   },
 ];

@@ -16046,5 +16046,53 @@
     "tr": "Esc",
     "de": "Esc",
     "uk": "Esc"
+  },
+  "SLASH_COMMANDS$CLEAR_DESCRIPTION": {
+    "en": "Clear chat history",
+    "ja": "チャット履歴をクリア",
+    "zh-CN": "清除聊天记录",
+    "zh-TW": "清除聊天記錄",
+    "ko-KR": "채팅 기록 지우기",
+    "no": "Tøm chathistorikk",
+    "it": "Cancella cronologia chat",
+    "pt": "Limpar histórico do chat",
+    "es": "Borrar historial de chat",
+    "ar": "مسح سجل المحادثة",
+    "fr": "Effacer l'historique du chat",
+    "tr": "Sohbet geçmişini temizle",
+    "de": "Chatverlauf löschen",
+    "uk": "Очистити історію чату"
+  },
+  "SLASH_COMMANDS$SETTINGS_DESCRIPTION": {
+    "en": "Open settings",
+    "ja": "設定を開く",
+    "zh-CN": "打开设置",
+    "zh-TW": "開啟設定",
+    "ko-KR": "설정 열기",
+    "no": "Åpne innstillinger",
+    "it": "Apri impostazioni",
+    "pt": "Abrir configurações",
+    "es": "Abrir configuración",
+    "ar": "فتح الإعدادات",
+    "fr": "Ouvrir les paramètres",
+    "tr": "Ayarları aç",
+    "de": "Einstellungen öffnen",
+    "uk": "Відкрити налаштування"
+  },
+  "SLASH_COMMANDS$MODEL_DESCRIPTION": {
+    "en": "Configure LLM model",
+    "ja": "LLMモデルを設定",
+    "zh-CN": "配置LLM模型",
+    "zh-TW": "設定LLM模型",
+    "ko-KR": "LLM 모델 설정",
+    "no": "Konfigurer LLM-modell",
+    "it": "Configura modello LLM",
+    "pt": "Configurar modelo LLM",
+    "es": "Configurar modelo LLM",
+    "ar": "تكوين نموذج LLM",
+    "fr": "Configurer le modèle LLM",
+    "tr": "LLM modelini yapılandır",
+    "de": "LLM-Modell konfigurieren",
+    "uk": "Налаштувати модель LLM"
   }
 }
