@@ -40,7 +40,7 @@ export function CreateApiKeyModal({
       onKeyCreated(newKey);
       setNewKeyName("");
     } catch {
-      // error toast already handled by mutateWithToast
+      // Prevent success-path code from running on mutation failure
     }
   };
 

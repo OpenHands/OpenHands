@@ -37,7 +37,6 @@ export async function mutateWithToast<TData, TVariables>(
     return result;
   } catch (err) {
     if (loadingToastId) toast.dismiss(loadingToastId);
-    if (loadingToastId) toast.dismiss(loadingToastId);
 
     if (error !== false) {
       let message: string;
@@ -50,15 +49,6 @@ export async function mutateWithToast<TData, TVariables>(
       } else {
         message = "An unexpected error occurred";
       }
-      displayErrorToast(message);
-    }
-
-    throw err;
-    if (error !== false) {
-      const message =
-        typeof error === "function"
-          ? error(err as Error)
-          : (error ?? (err as Error).message);
       displayErrorToast(message);
     }
 

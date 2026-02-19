@@ -32,7 +32,7 @@ export function DeleteApiKeyModal({
       });
       onClose();
     } catch {
-      // error toast already handled by mutateWithToast
+      // Keep modal open if deletion fails
     }
   };
 

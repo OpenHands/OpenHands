@@ -69,8 +69,6 @@ function LlmApiKeyManager({
       error: t(I18nKey.ERROR$GENERIC),
     });
   };
-    }
-  };
 
   // Show paywall if payment is required
   if (isPaymentRequired) {
