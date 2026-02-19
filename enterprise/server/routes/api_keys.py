@@ -168,10 +168,15 @@ def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
     )
 
 
+<<<<<<< HEAD
 @api_router.get('/llm/byor/permitted')
 async def check_byor_permitted(
     user_id: str = Depends(get_user_id),
 ) -> ByorPermittedResponse:
+=======
+@api_router.get('/llm/byor/permitted', tags=['Keys'])
+async def check_byor_permitted(user_id: str = Depends(get_user_id)) -> ByorPermittedResponse:
+>>>>>>> a67492be2e3b5422f6de26a7c8fd5e42f7ca8d17
     """Check if BYOR key export is permitted for the user's current org."""
     try:
         permitted = await OrgService.check_byor_export_enabled(user_id)
@@ -186,7 +191,7 @@ async def check_byor_permitted(
         )
 
 
-@api_router.post('')
+@api_router.post('', tags=['Keys'])
 async def create_api_key(
     key_data: ApiKeyCreate, user_id: str = Depends(get_user_id)
 ) -> ApiKeyCreateResponse:
@@ -217,7 +222,7 @@ async def create_api_key(
     )
 
 
-@api_router.get('')
+@api_router.get('', tags=['Keys'])
 async def list_api_keys(user_id: str = Depends(get_user_id)) -> list[ApiKeyResponse]:
     """List all API keys for the authenticated user."""
     try:
@@ -231,7 +236,7 @@ async def list_api_keys(user_id: str = Depends(get_user_id)) -> list[ApiKeyRespo
         )
 
 
-@api_router.delete('/{key_id}')
+@api_router.delete('/{key_id}', tags=['Keys'])
 async def delete_api_key(
     key_id: int, user_id: str = Depends(get_user_id)
 ) -> MessageResponse:
@@ -271,7 +276,7 @@ async def delete_api_key(
         )
 
 
-@api_router.get('/llm/byor')
+@api_router.get('/llm/byor', tags=['Keys'])
 async def get_llm_api_key_for_byor(
     user_id: str = Depends(get_user_id),
 ) -> LlmApiKeyResponse:
@@ -344,7 +349,7 @@ async def get_llm_api_key_for_byor(
         )
 
 
-@api_router.post('/llm/byor/refresh')
+@api_router.post('/llm/byor/refresh', tags=['Keys'])
 async def refresh_llm_api_key_for_byor(
     user_id: str = Depends(get_user_id),
 ) -> LlmApiKeyResponse:
