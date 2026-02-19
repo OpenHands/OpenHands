@@ -15,7 +15,7 @@ def add_health_endpoints(app: FastAPI):
     @app.get('/alive')
     async def alive():
         """Endpoint for liveness probes. If this responds then the server is
-        considered alive. """
+        considered alive."""
         return {'status': 'ok'}
 
     @app.get('/health')
