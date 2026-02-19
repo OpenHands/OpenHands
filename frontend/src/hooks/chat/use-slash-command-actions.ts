@@ -5,18 +5,12 @@ import { useClearConversation } from "#/hooks/mutation/use-clear-conversation";
 
 export interface UseSlashCommandActionsReturn {
   executeCommand: (command: SlashCommand) => boolean;
-  isSlashCommand: (message: string) => boolean;
 }
 
 export function useSlashCommandActions(): UseSlashCommandActionsReturn {
   const navigate = useNavigate();
   const { conversationId } = useParams<{ conversationId: string }>();
   const clearConversation = useClearConversation();
-
-  const isSlashCommand = useCallback((message: string): boolean => {
-    const trimmed = message.trim();
-    return trimmed.startsWith("/") && !trimmed.includes(" ");
-  }, []);
 
   const executeCommand = useCallback(
     (command: SlashCommand): boolean => {
@@ -46,6 +40,5 @@ export function useSlashCommandActions(): UseSlashCommandActionsReturn {
 
   return {
     executeCommand,
-    isSlashCommand,
   };
 }
