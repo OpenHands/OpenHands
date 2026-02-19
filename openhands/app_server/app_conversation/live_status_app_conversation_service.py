@@ -18,6 +18,7 @@ from openhands.agent_server.models import (
     ConversationInfo,
     SendMessageRequest,
     StartConversationRequest,
+    TextContent,
 )
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -78,6 +79,7 @@ from openhands.app_server.utils.llm_metadata import (
 )
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
+from openhands.integrations.service_types import SuggestedTask
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
@@ -85,6 +87,7 @@ from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
+from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 from openhands.tools.preset.default import (
     get_default_tools,
 )
@@ -208,6 +211,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     f'Parent conversation not found: {request.parent_conversation_id}'
                 )
             self._inherit_configuration_from_parent(request, parent_info)
+
+        self._apply_suggested_task(request)
 
         task = AppConversationStartTask(
             created_by_user_id=user_id,
@@ -569,6 +574,55 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
 
+    def _apply_suggested_task(self, request: AppConversationStartRequest) -> None:
+        """Apply suggested task defaults to the start request."""
+        suggested_task: SuggestedTask | None = request.suggested_task
+        if not suggested_task:
+            return
+
+        if request.initial_message is not None:
+            raise ValueError(
+                'initial_message cannot be provided when suggested_task is present'
+            )
+
+        prompt = suggested_task.get_prompt_for_task()
+        if not prompt:
+            raise ValueError(
+                f'Suggested task returned empty prompt for task type {suggested_task.task_type}'
+            )
+        request.initial_message = SendMessageRequest(
+            role='user',
+            content=[TextContent(text=prompt)],
+        )
+        request.trigger = ConversationTrigger.SUGGESTED_TASK
+
+        if not request.selected_repository:
+            request.selected_repository = suggested_task.repo
+        if not request.git_provider:
+            request.git_provider = suggested_task.git_provider
+
+    def _compute_plan_path(
+        self,
+        working_dir: str,
+        git_provider: ProviderType | None,
+    ) -> str:
+        """Compute the PLAN.md path based on provider type.
+
+        Args:
+            working_dir: The workspace working directory
+            git_provider: The git provider type (GitHub, GitLab, Azure DevOps, etc.)
+
+        Returns:
+            Absolute path to PLAN.md file in the appropriate config directory
+        """
+        # GitLab and Azure DevOps use agents-tmp-config (since .agents_tmp is invalid)
+        if git_provider in (ProviderType.GITLAB, ProviderType.AZURE_DEVOPS):
+            config_dir = 'agents-tmp-config'
+        else:
+            config_dir = '.agents_tmp'
+
+        return f'{working_dir}/{config_dir}/PLAN.md'
+
     async def _setup_secrets_for_git_providers(self, user: UserInfo) -> dict:
         """Set up secrets for all git provider authentication.
 
@@ -855,6 +909,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         mcp_config: dict,
         condenser_max_size: int | None,
         secrets: dict[str, SecretValue] | None = None,
+        git_provider: ProviderType | None = None,
+        working_dir: str | None = None,
     ) -> Agent:
         """Create an agent with appropriate tools and context based on agent type.
 
@@ -865,6 +921,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             mcp_config: MCP configuration dictionary
             condenser_max_size: condenser_max_size setting
             secrets: Optional dictionary of secrets for authentication
+            git_provider: Optional git provider type for computing plan path
+            working_dir: Optional working directory for computing plan path
 
         Returns:
             Configured Agent instance with context
@@ -874,9 +932,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Create agent based on type
         if agent_type == AgentType.PLAN:
+            # Compute plan path if working_dir is provided
+            plan_path = None
+            if working_dir:
+                plan_path = self._compute_plan_path(working_dir, git_provider)
+
             agent = Agent(
                 llm=llm,
-                tools=get_planning_tools(),
+                tools=get_planning_tools(plan_path=plan_path),
                 system_prompt_filename='system_prompt_planning.j2',
                 system_prompt_kwargs={'plan_structure': format_plan_structure()},
                 condenser=condenser,
@@ -1018,7 +1081,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             new_content[-1] = TextContent(
                 text=last_content.text + plugin_params_message,
                 cache_prompt=last_content.cache_prompt,
-                enable_truncation=last_content.enable_truncation,
             )
         else:
             # Add as new text content
@@ -1154,6 +1216,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             mcp_config,
             user.condenser_max_size,
             secrets=secrets,
+            git_provider=git_provider,
+            working_dir=working_dir,
         )
 
         # Finalize and return the conversation request

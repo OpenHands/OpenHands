@@ -103,7 +103,7 @@ class SetAuthCookieMiddleware:
         keycloak_auth_cookie = request.cookies.get('keycloak_auth')
         auth_header = request.headers.get('Authorization')
         mcp_auth_header = request.headers.get('X-Session-API-Key')
-        accepted_tos = False
+        accepted_tos: bool | None = False
         if (
             keycloak_auth_cookie is None
             and (auth_header is None or not auth_header.startswith('Bearer '))
@@ -160,6 +160,7 @@ class SetAuthCookieMiddleware:
             '/api/billing/customer-setup-success',
             '/api/billing/stripe-webhook',
             '/api/email/resend',
+            '/api/organizations/members/invite/accept',
             '/oauth/device/authorize',
             '/oauth/device/token',
             '/api/v1/web-client/config',

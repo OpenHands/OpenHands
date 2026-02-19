@@ -20,6 +20,7 @@ from storage.linear_workspace import LinearWorkspace
 from storage.maintenance_task import MaintenanceTask, MaintenanceTaskStatus
 from storage.openhands_pr import OpenhandsPR
 from storage.org import Org
+from storage.org_invitation import OrgInvitation
 from storage.org_member import OrgMember
 from storage.proactive_convos import ProactiveConversation
 from storage.role import Role
@@ -65,6 +66,7 @@ __all__ = [
     'MaintenanceTaskStatus',
     'OpenhandsPR',
     'Org',
+    'OrgInvitation',
     'OrgMember',
     'ProactiveConversation',
     'Role',

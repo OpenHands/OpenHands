@@ -48,7 +48,7 @@ async def test_create_customer_setup_session_uses_customer_id():
             customer=customer_id,
             mode='setup',
             payment_method_types=['card'],
-            success_url=f'{request.base_url}?free_credits=success',
+            success_url=f'{request.base_url}?setup=success',
             cancel_url=f'{request.base_url}',
         )
 

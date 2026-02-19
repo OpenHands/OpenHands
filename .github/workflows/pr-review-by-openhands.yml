@@ -1,0 +1,127 @@
+---
+name: PR Review by OpenHands
+
+on:
+    # Use pull_request_target to allow fork PRs to access secrets when triggered by maintainers
+    # Security: This workflow runs when:
+    #   1. A new PR is opened (non-draft), OR
+    #   2. A draft PR is marked as ready for review, OR
+    #   3. A maintainer adds the 'review-this' label, OR
+    #   4. A maintainer requests openhands-agent or all-hands-bot as a reviewer
+    # Only users with write access can add labels or request reviews, ensuring security.
+    # The PR code is explicitly checked out for review, but secrets are only accessible
+    # because the workflow runs in the base repository context
+    pull_request_target:
+        types: [opened, ready_for_review, labeled, review_requested]
+
+permissions:
+    contents: read
+    pull-requests: write
+    issues: write
+
+jobs:
+    pr-review:
+        # Run when one of the following conditions is met:
+        #   1. A new non-draft PR is opened by a trusted contributor, OR
+        #   2. A draft PR is converted to ready for review by a trusted contributor, OR
+        #   3. 'review-this' label is added, OR
+        #   4. openhands-agent or all-hands-bot is requested as a reviewer
+        # Note: FIRST_TIME_CONTRIBUTOR PRs require manual trigger via label/reviewer request
+        if: |
+            (github.event.action == 'opened' && github.event.pull_request.draft == false && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR') ||
+            (github.event.action == 'ready_for_review' && github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR') ||
+            github.event.label.name == 'review-this' ||
+            github.event.requested_reviewer.login == 'openhands-agent' ||
+            github.event.requested_reviewer.login == 'all-hands-bot'
+        concurrency:
+            group: pr-review-${{ github.event.pull_request.number }}
+            cancel-in-progress: true
+        runs-on: blacksmith-4vcpu-ubuntu-2404
+        env:
+            LLM_MODEL: litellm_proxy/claude-sonnet-4-5-20250929
+            LLM_BASE_URL: https://llm-proxy.app.all-hands.dev
+            # PR context will be automatically provided by the agent script
+            PR_NUMBER: ${{ github.event.pull_request.number }}
+            PR_TITLE: ${{ github.event.pull_request.title }}
+            PR_BODY: ${{ github.event.pull_request.body }}
+            PR_BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+            PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+            REPO_NAME: ${{ github.repository }}
+        steps:
+            - name: Checkout software-agent-sdk repository
+              uses: actions/checkout@v5
+              with:
+                  repository: OpenHands/software-agent-sdk
+                  path: software-agent-sdk
+
+            - name: Checkout PR repository
+              uses: actions/checkout@v5
+              with:
+                  # When using pull_request_target, explicitly checkout the PR branch
+                  # This ensures we review the actual PR code (including fork PRs)
+                  repository: ${{ github.event.pull_request.head.repo.full_name }}
+                  ref: ${{ github.event.pull_request.head.ref }}
+                  fetch-depth: 0
+                  # Security: Don't persist credentials to prevent untrusted PR code from using them
+                  persist-credentials: false
+                  path: pr-repo
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.13'
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  enable-cache: true
+
+            - name: Install GitHub CLI
+              run: |
+                  # Install GitHub CLI for posting review comments
+                  sudo apt-get update
+                  sudo apt-get install -y gh
+
+            - name: Install OpenHands dependencies
+              run: |
+                  # Install OpenHands SDK and tools from local checkout
+                  uv pip install --system ./software-agent-sdk/openhands-sdk ./software-agent-sdk/openhands-tools
+
+            - name: Check required configuration
+              env:
+                  LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+              run: |
+                  if [ -z "$LLM_API_KEY" ]; then
+                    echo "Error: LLM_API_KEY secret is not set."
+                    exit 1
+                  fi
+
+                  echo "PR Number: $PR_NUMBER"
+                  echo "PR Title: $PR_TITLE"
+                  echo "Repository: $REPO_NAME"
+                  echo "LLM model: $LLM_MODEL"
+                  if [ -n "$LLM_BASE_URL" ]; then
+                    echo "LLM base URL: $LLM_BASE_URL"
+                  fi
+
+            - name: Run PR review
+              env:
+                  LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+                  GITHUB_TOKEN: ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}
+                  LMNR_PROJECT_API_KEY: ${{ secrets.LMNR_SKILLS_API_KEY }}
+              run: |
+                  # Change to the PR repository directory so agent can analyze the code
+                  cd pr-repo
+
+                  # Run the PR review script from the software-agent-sdk checkout
+                  uv run python ../software-agent-sdk/examples/03_github_workflows/02_pr_review/agent_script.py
+
+            - name: Upload logs as artifact
+              uses: actions/upload-artifact@v5
+              if: always()
+              with:
+                  name: openhands-pr-review-logs
+                  path: |
+                      *.log
+                      output/
+                  retention-days: 7

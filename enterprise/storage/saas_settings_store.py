@@ -8,10 +8,11 @@ from dataclasses import dataclass
 
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
+from server.constants import LITE_LLM_API_URL
 from server.logger import logger
 from sqlalchemy.orm import joinedload, sessionmaker
 from storage.database import session_maker
-from storage.lite_llm_manager import LiteLlmManager
+from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.org_store import OrgStore
@@ -23,6 +24,7 @@ from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import call_sync_from_async
+from openhands.utils.llm import is_openhands_model
 
 
 @dataclass
@@ -143,22 +145,27 @@ class SaasSettingsStore(SettingsStore):
                     return None
 
             org_id = user.current_org_id
-            # Check if provider is OpenHands and generate API key if needed
-            if self._is_openhands_provider(item):
-                await self._ensure_openhands_api_key(item, str(org_id))
-            org_member = None
+
+            org_member: OrgMember = None
             for om in user.org_members:
                 if om.org_id == org_id:
                     org_member = om
                     break
             if not org_member or not org_member.llm_api_key:
                 return None
-            org = session.query(Org).filter(Org.id == org_id).first()
+
+            org: Org = session.query(Org).filter(Org.id == org_id).first()
             if not org:
                 logger.error(
                     f'Org not found for ID {org_id} as the current org for user {self.user_id}'
                 )
                 return None
+
+            # Check if we need to generate an LLM key.
+            if item.llm_base_url == LITE_LLM_API_URL:
+                await self._ensure_api_key(
+                    item, str(org_id), openhands_type=is_openhands_model(item.llm_model)
+                )
 
             kwargs = item.model_dump(context={'expose_secrets': True})
             for model in (user, org, org_member):
@@ -223,32 +230,49 @@ class SaasSettingsStore(SettingsStore):
         fernet_key = b64encode(hashlib.sha256(jwt_secret.encode()).digest())
         return Fernet(fernet_key)
 
-    def _is_openhands_provider(self, item: Settings) -> bool:
-        """Check if the settings use the OpenHands provider."""
-        return bool(item.llm_model and item.llm_model.startswith('openhands/'))
-
-    async def _ensure_openhands_api_key(self, item: Settings, org_id: str) -> None:
+    async def _ensure_api_key(
+        self, item: Settings, org_id: str, openhands_type: bool = False
+    ) -> None:
         """Generate and set the OpenHands API key for the given settings.
 
-        First checks if an existing key with the OpenHands alias exists,
-        and reuses it if found. Otherwise, generates a new key.
+        First checks if an existing key exists for the user and verifies it
+        is valid in LiteLLM. If valid, reuses it. Otherwise, generates a new key.
         """
-        # Generate new key if none exists
-        generated_key = await LiteLlmManager.generate_key(
+
+        # First, check if our current key is valid
+        if item.llm_api_key and not await LiteLlmManager.verify_existing_key(
+            item.llm_api_key.get_secret_value(),
             self.user_id,
             org_id,
-            None,
-            {'type': 'openhands'},
-        )
+            openhands_type=openhands_type,
+        ):
+            generated_key = None
+            if openhands_type:
+                generated_key = await LiteLlmManager.generate_key(
+                    self.user_id,
+                    org_id,
+                    None,
+                    {'type': 'openhands'},
+                )
+            else:
+                # Must delete any existing key with the same alias first
+                key_alias = get_openhands_cloud_key_alias(self.user_id, org_id)
+                await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
+                generated_key = await LiteLlmManager.generate_key(
+                    self.user_id,
+                    org_id,
+                    key_alias,
+                    None,
+                )
 
-        if generated_key:
-            item.llm_api_key = SecretStr(generated_key)
-            logger.info(
-                'saas_settings_store:store:generated_openhands_key',
-                extra={'user_id': self.user_id},
-            )
-        else:
-            logger.warning(
-                'saas_settings_store:store:failed_to_generate_openhands_key',
-                extra={'user_id': self.user_id},
-            )
+            if generated_key:
+                item.llm_api_key = SecretStr(generated_key)
+                logger.info(
+                    'saas_settings_store:store:generated_openhands_key',
+                    extra={'user_id': self.user_id},
+                )
+            else:
+                logger.warning(
+                    'saas_settings_store:store:failed_to_generate_openhands_key',
+                    extra={'user_id': self.user_id},
+                )
