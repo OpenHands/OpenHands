@@ -37,7 +37,23 @@ export async function mutateWithToast<TData, TVariables>(
     return result;
   } catch (err) {
     if (loadingToastId) toast.dismiss(loadingToastId);
+    if (loadingToastId) toast.dismiss(loadingToastId);
 
+    if (error !== false) {
+      let message: string;
+      if (typeof error === "function") {
+        message = error(err as Error);
+      } else if (error) {
+        message = error;
+      } else if (err instanceof Error) {
+        message = err.message;
+      } else {
+        message = "An unexpected error occurred";
+      }
+      displayErrorToast(message);
+    }
+
+    throw err;
     if (error !== false) {
       const message =
         typeof error === "function"
