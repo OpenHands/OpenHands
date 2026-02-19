@@ -25,6 +25,9 @@ interface ConversationCardProps {
   conversationVersion?: "V0" | "V1";
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onSelectionToggle?: () => void;
 }
 
 export function ConversationCard({
@@ -44,6 +47,9 @@ export function ConversationCard({
   conversationVersion,
   contextMenuOpen = false,
   onContextMenuToggle,
+  selectionMode = false,
+  isSelected = false,
+  onSelectionToggle,
 }: ConversationCardProps) {
   const posthog = usePostHog();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
@@ -117,17 +123,34 @@ export function ConversationCard({
 
   const hasContextMenu = !!(onDelete || onChangeTitle || showOptions);
 
+  const handleCheckboxClick = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onSelectionToggle?.();
+  };
+
   return (
     <div
       data-testid="conversation-card"
       data-context-menu-open={contextMenuOpen.toString()}
-      onClick={onClick}
+      onClick={selectionMode ? handleCheckboxClick : onClick}
       className={cn(
         "relative h-auto w-full p-3.5 border-b border-neutral-600 cursor-pointer",
         "data-[context-menu-open=false]:hover:bg-[#454545]",
+        selectionMode && isSelected && "bg-[#3A3D45]",
       )}
     >
       <div className="flex items-center justify-between w-full">
+        {selectionMode && (
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onSelectionToggle?.()}
+            onClick={(e) => e.stopPropagation()}
+            className="mr-3 h-4 w-4 shrink-0 accent-blue-500 cursor-pointer"
+            data-testid="conversation-select-checkbox"
+          />
+        )}
         <ConversationCardHeader
           title={title}
           titleMode={titleMode}
