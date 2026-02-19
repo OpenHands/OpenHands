@@ -71,7 +71,8 @@ export function TokenUsageIndicator() {
         onClick={() => setMetricsModalOpen(true)}
         className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700 transition-colors cursor-pointer"
         title={t(I18nKey.CONVERSATION$METRICS_INFO)}
-        data-testid="token-usage-indicator"
+        aria-label={t(I18nKey.CONVERSATION$METRICS_INFO)}
+        title={t(I18nKey.CONVERSATION$METRICS_INFO)}
       >
         {metrics.cost !== null && <span>${metrics.cost.toFixed(4)}</span>}
         {metrics.cost !== null && metrics.totalTokens > 0 && (
