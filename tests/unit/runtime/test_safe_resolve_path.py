@@ -2,9 +2,11 @@
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from openhands.runtime.action_execution_server import ActionExecutor
 from openhands.runtime.utils.files import safe_resolve_path
 
 
@@ -77,3 +79,42 @@ class TestSafeResolvePath:
         # Should not raise even if file doesn't exist - we only check containment
         result = safe_resolve_path('nonexistent.txt', str(workspace))
         assert result == workspace / 'nonexistent.txt'
+
+
+class TestResolvePathIntegration:
+    """Tests that _resolve_path on ActionExecutor correctly wires
+    safe_resolve_path with the workspace root as the security boundary."""
+
+    @pytest.fixture
+    def executor(self, workspace):
+        """Create a minimal ActionExecutor-like object with _resolve_path."""
+        obj = object.__new__(ActionExecutor)
+        obj._initial_cwd = str(workspace)
+        return obj
+
+    def test_relative_path_resolved_from_working_dir(self, executor, workspace):
+        subdir = workspace / 'subdir'
+        result = executor._resolve_path('nested.txt', str(subdir))
+        assert result == str(workspace / 'subdir' / 'nested.txt')
+
+    def test_relative_path_in_workspace_root(self, executor, workspace):
+        result = executor._resolve_path('file.txt', str(workspace))
+        assert result == str(workspace / 'file.txt')
+
+    def test_absolute_path_within_workspace(self, executor, workspace):
+        result = executor._resolve_path(str(workspace / 'file.txt'), str(workspace))
+        assert result == str(workspace / 'file.txt')
+
+    def test_dotdot_escaping_workspace_raises(self, executor, workspace):
+        with pytest.raises(PermissionError, match='outside the workspace boundary'):
+            executor._resolve_path('../../etc/passwd', str(workspace / 'subdir'))
+
+    def test_absolute_path_outside_workspace_raises(self, executor, workspace):
+        with pytest.raises(PermissionError, match='outside the workspace boundary'):
+            executor._resolve_path('/etc/passwd', str(workspace))
+
+    def test_symlink_escaping_workspace_raises(self, executor, workspace):
+        link = workspace / 'escape_link'
+        link.symlink_to('/etc')
+        with pytest.raises(PermissionError, match='outside the workspace boundary'):
+            executor._resolve_path('escape_link/passwd', str(workspace))
