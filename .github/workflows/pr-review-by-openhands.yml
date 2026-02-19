@@ -9,7 +9,9 @@ on:
     #   3. openhands-agent or all-hands-bot is requested as a reviewer on a PR from a
     #      collaborator/member/owner, OR
     #   4. A maintainer adds the 'review-this' label (manual trigger for external authors)
-    # Note: PR authors from forks can request reviewers; we gate via author_association.
+    # Note: PR authors (including from forks) can request reviewers, but this workflow
+    # will only auto-run when the PR author is collaborator/member/owner.
+    # For external authors, a maintainer can trigger it by applying the 'review-this' label.
     # The PR code is explicitly checked out for review, but secrets are only accessible
     # because the workflow runs in the base repository context
     pull_request_target:
@@ -31,19 +33,24 @@ jobs:
         if: |
             (
               (
-                github.event.action == 'opened' &&
-                github.event.pull_request.draft == false
-              ) ||
-              (github.event.action == 'ready_for_review') ||
-              (
-                github.event.action == 'review_requested' &&
                 (
-                  github.event.requested_reviewer.login == 'openhands-agent' ||
-                  github.event.requested_reviewer.login == 'all-hands-bot'
-                )
+                  (
+                    github.event.action == 'opened' &&
+                    github.event.pull_request.draft == false
+                  ) ||
+                  (github.event.action == 'ready_for_review') ||
+                  (
+                    github.event.action == 'review_requested' &&
+                    (
+                      github.event.requested_reviewer.login == 'openhands-agent' ||
+                      github.event.requested_reviewer.login == 'all-hands-bot'
+                    )
+                  )
+                ) && contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.pull_request.author_association)
+              ) || (
+                github.event.action == 'labeled' && github.event.label.name == 'review-this'
               )
-            ) && contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.pull_request.author_association) ||
-            github.event.label.name == 'review-this'
+            )
         concurrency:
             group: pr-review-${{ github.event.pull_request.number }}
             cancel-in-progress: true
