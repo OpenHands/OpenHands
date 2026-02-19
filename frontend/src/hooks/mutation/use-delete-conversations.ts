@@ -7,11 +7,18 @@ export const useDeleteConversations = () => {
 
   return useMutation({
     mutationFn: async (variables: { conversationIds: string[] }) => {
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         variables.conversationIds.map((id) =>
           ConversationService.deleteUserConversation(id),
         ),
       );
+
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length > 0) {
+        throw new Error(
+          `Failed to delete ${failures.length} of ${variables.conversationIds.length} conversations`,
+        );
+      }
     },
     onMutate: async (variables) => {
       await queryClient.cancelQueries({
