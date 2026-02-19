@@ -267,7 +267,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # update status
             task.status = AppConversationStartTaskStatus.STARTING_CONVERSATION
-            task.agent_server_url = agent_server_url
+            task.agent_server_url = ''
             yield task
 
             # Start conversation...
