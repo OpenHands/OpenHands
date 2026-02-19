@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -82,8 +81,7 @@ class TestSafeResolvePath:
 
 
 class TestResolvePathIntegration:
-    """Tests that _resolve_path on ActionExecutor correctly wires
-    safe_resolve_path with the workspace root as the security boundary."""
+    """Tests that _resolve_path on ActionExecutor correctly wires safe_resolve_path."""
 
     @pytest.fixture
     def executor(self, workspace):
