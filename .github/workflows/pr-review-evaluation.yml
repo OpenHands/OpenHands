@@ -71,15 +71,14 @@ jobs:
                   LMNR_PROJECT_API_KEY: ${{ secrets.LMNR_SKILLS_API_KEY }}
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
-                  cp trace-info/laminar_trace_info.json .
-                  python extensions/plugins/pr-review/scripts/evaluate_review.py
+                  python extensions/plugins/pr-review/scripts/evaluate_review.py \
+                      --trace-file trace-info/laminar_trace_info.json
 
             - name: Upload evaluation logs
               uses: actions/upload-artifact@v5
               if: always() && steps.check-trace.outputs.trace_exists == 'true'
               with:
                   name: pr-review-evaluation-${{ github.event.pull_request.number }}
-                  path: |
-                      *.log
-                      *.json
+                  path: '*.log'
                   retention-days: 30
+                  if-no-files-found: ignore
