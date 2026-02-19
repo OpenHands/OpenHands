@@ -205,6 +205,7 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
                   onChange={selectAll}
                   className="h-4 w-4 accent-blue-500 cursor-pointer"
                   data-testid="select-all-checkbox"
+                  aria-label="Select all conversations"
                 />
                 {t(I18nKey.CONVERSATION$SELECT_ALL)}
               </label>
