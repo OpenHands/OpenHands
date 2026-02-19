@@ -4,10 +4,13 @@ import { usePostHog } from "posthog-js/react";
 import { useConfig } from "./use-config";
 import UserService from "#/api/user-service/user-service.api";
 import { useShouldShowUserFeatures } from "#/hooks/use-should-show-user-features";
+import { useLogout } from "../mutation/use-logout";
+import { AxiosError } from "axios";
 
 export const useGitUser = () => {
   const posthog = usePostHog();
   const { data: config } = useConfig();
+  const logout = useLogout();
 
   // Use the shared hook to determine if we should fetch user data
   const shouldFetchUser = useShouldShowUserFeatures();
@@ -19,6 +22,11 @@ export const useGitUser = () => {
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
+    onError: (error: AxiosError) => {
+      if (error.response?.status === 401) {
+        logout.mutate();
+      }
+    },
   });
 
   React.useEffect(() => {
