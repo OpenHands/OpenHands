@@ -58,9 +58,10 @@ export function TokenUsageIndicator() {
     return null;
   }, [isV1, sandboxMetrics, storeMetrics]);
 
-  if (!metrics || ((metrics.cost === null || metrics.cost === 0) && metrics.totalTokens === 0)) {
-    return null;
-  }
+  if (
+    !metrics ||
+    ((metrics.cost === null || metrics.cost === 0) && metrics.totalTokens === 0)
+  ) {
     return null;
   }
 
@@ -72,7 +73,6 @@ export function TokenUsageIndicator() {
         className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700 transition-colors cursor-pointer"
         title={t(I18nKey.CONVERSATION$METRICS_INFO)}
         aria-label={t(I18nKey.CONVERSATION$METRICS_INFO)}
-        title={t(I18nKey.CONVERSATION$METRICS_INFO)}
       >
         {metrics.cost !== null && <span>${metrics.cost.toFixed(4)}</span>}
         {metrics.cost !== null && metrics.totalTokens > 0 && (
