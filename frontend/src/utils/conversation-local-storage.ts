@@ -169,7 +169,6 @@ export function useConversationLocalStorageState(conversationId: string): {
   }, [conversationId]);
 
   const updateState = (updates: Partial<ConversationState>) => {
-    setState((prev) => ({ ...prev, ...updates }));
     setConversationState(conversationId, updates);
   };
 
