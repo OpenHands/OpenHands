@@ -48,6 +48,7 @@ jobs:
                     echo "No trace file found for PR #$PR_NUMBER - skipping evaluation"
                   fi
 
+            # Always checkout main branch for security - cannot test script changes in PRs
             - name: Checkout extensions repository
               if: steps.check-trace.outputs.trace_exists == 'true'
               uses: actions/checkout@v5
@@ -68,6 +69,7 @@ jobs:
             - name: Run evaluation
               if: steps.check-trace.outputs.trace_exists == 'true'
               env:
+                  # Script expects LMNR_PROJECT_API_KEY; org secret is named LMNR_SKILLS_API_KEY
                   LMNR_PROJECT_API_KEY: ${{ secrets.LMNR_SKILLS_API_KEY }}
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
@@ -81,4 +83,3 @@ jobs:
                   name: pr-review-evaluation-${{ github.event.pull_request.number }}
                   path: '*.log'
                   retention-days: 30
-                  if-no-files-found: ignore
