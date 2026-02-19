@@ -1,106 +1,18 @@
 ---
 name: PR Review Evaluation
 
-# This workflow runs when a PR is merged or closed to evaluate how well
-# the review agent's comments were addressed.
-#
-# It creates an evaluation trace in Laminar that can be processed by a
-# signal to determine review effectiveness.
-#
-# Prerequisites:
-# - PR must have been reviewed by pr-review-by-openhands.yml first
-# - Trace info artifact must exist from the review workflow
+# This workflow evaluates how well PR review comments were addressed.
+# It calls the reusable workflow from OpenHands/extensions.
 
 on:
     pull_request_target:
         types: [closed]
 
-permissions:
-    contents: read
-    pull-requests: read
-
 jobs:
     evaluate:
-        # Only run if:
-        # 1. This is a merged PR, AND
-        # 2. The PR was previously reviewed (has the trace artifact)
-        runs-on: ubuntu-24.04
-        env:
-            PR_NUMBER: ${{ github.event.pull_request.number }}
-            REPO_NAME: ${{ github.repository }}
-            PR_MERGED: ${{ github.event.pull_request.merged }}
-
-        steps:
-            # Note: actions/download-artifact@v5 only works within the same workflow run.
-            # We use dawidd6/action-download-artifact to download from a different workflow.
-            - name: Download review trace artifact
-              id: download-trace
-              uses: dawidd6/action-download-artifact@v6
-              continue-on-error: true
-              with:
-                  workflow: pr-review-by-openhands.yml
-                  name: pr-review-trace-${{ github.event.pull_request.number }}
-                  path: trace-info
-                  search_artifacts: true
-                  if_no_artifact_found: warn
-
-            # Check if the trace file actually exists (the artifact download may
-            # succeed but with no matching artifact, only issuing a warning)
-            - name: Check if trace file exists
-              id: check-trace
-              run: |
-                  if [ -f "trace-info/laminar_trace_info.json" ]; then
-                    echo "trace_exists=true" >> $GITHUB_OUTPUT
-                    echo "Found trace file for PR #$PR_NUMBER"
-                  else
-                    echo "trace_exists=false" >> $GITHUB_OUTPUT
-                    echo "No trace file found for PR #$PR_NUMBER"
-                    echo "This PR may not have been reviewed by the agent, skipping evaluation"
-                  fi
-
-            - name: Checkout extensions repository
-              if: steps.check-trace.outputs.trace_exists == 'true'
-              uses: actions/checkout@v5
-              with:
-                  repository: OpenHands/extensions
-                  path: extensions
-
-            - name: Set up Python
-              if: steps.check-trace.outputs.trace_exists == 'true'
-              uses: actions/setup-python@v6
-              with:
-                  python-version: '3.13'
-
-            - name: Install uv
-              if: steps.check-trace.outputs.trace_exists == 'true'
-              uses: astral-sh/setup-uv@v7
-              with:
-                  enable-cache: true
-
-            - name: Install dependencies
-              if: steps.check-trace.outputs.trace_exists == 'true'
-              run: |
-                  # Install lmnr SDK for Laminar integration
-                  uv pip install --system lmnr
-
-            - name: Run evaluation
-              if: steps.check-trace.outputs.trace_exists == 'true'
-              env:
-                  LMNR_PROJECT_API_KEY: ${{ secrets.LMNR_SKILLS_API_KEY }}
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  # Copy trace info to working directory
-                  cp trace-info/laminar_trace_info.json .
-
-                  # Run the evaluation script
-                  uv run python extensions/plugins/pr-review/scripts/evaluate_review.py
-
-            - name: Upload evaluation logs
-              uses: actions/upload-artifact@v5
-              if: always() && steps.check-trace.outputs.trace_exists == 'true'
-              with:
-                  name: pr-review-evaluation-${{ github.event.pull_request.number }}
-                  path: |
-                      *.log
-                      *.json
-                  retention-days: 30
+        uses: OpenHands/extensions/.github/workflows/pr-review-evaluation-reusable.yml@main
+        with:
+            pr_number: ${{ github.event.pull_request.number }}
+            repo_name: ${{ github.repository }}
+            pr_merged: ${{ github.event.pull_request.merged }}
+        secrets: inherit
