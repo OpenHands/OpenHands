@@ -196,7 +196,7 @@ function ManageOrg() {
 
         <div
           className={cn(
-            "text-sm p-3 px-0 bg-base rounded",
+            "text-sm py-3 bg-base rounded",
             "flex items-center justify-between",
           )}
         >
