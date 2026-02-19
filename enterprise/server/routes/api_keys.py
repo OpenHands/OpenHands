@@ -207,10 +207,10 @@ async def create_api_key(
                 )
     except Exception:
         logger.exception('Error creating API key')
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to create API key',
-        )
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail='Failed to create API key',
+    )
 
 
 @api_router.get('')
