@@ -154,7 +154,7 @@ function ManageOrg() {
   return (
     <div
       data-testid="manage-org-screen"
-      className="flex flex-col items-start gap-6 px-11 py-6"
+      className="flex flex-col items-start gap-6"
     >
       {changeOrgNameFormVisible && (
         <ChangeOrgNameModal
@@ -169,7 +169,7 @@ function ManageOrg() {
 
       {!shouldHideBilling && (
         <div className="flex flex-col gap-2">
-          <span className="text-white text-xs font-semibold ml-1">
+          <span className="text-white text-xs font-semibold">
             {t(I18nKey.ORG$CREDITS)}
           </span>
           <div className="flex items-center gap-2">
@@ -190,13 +190,13 @@ function ManageOrg() {
       )}
 
       <div data-testid="org-name" className="flex flex-col gap-2 w-sm">
-        <span className="text-white text-xs font-semibold ml-1">
+        <span className="text-white text-xs font-semibold">
           {t(I18nKey.ORG$ORGANIZATION_NAME)}
         </span>
 
         <div
           className={cn(
-            "text-sm p-3 bg-base rounded",
+            "text-sm p-3 px-0 bg-base rounded",
             "flex items-center justify-between",
           )}
         >
