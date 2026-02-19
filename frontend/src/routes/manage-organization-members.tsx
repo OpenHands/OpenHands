@@ -92,7 +92,7 @@ function ManageOrganizationMembers() {
   return (
     <div
       data-testid="manage-organization-members-settings"
-      className="flex-col gap-2"
+      className="flex flex-col gap-2"
     >
       {hasPermissionToInvite && (
         <BrandButton
