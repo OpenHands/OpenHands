@@ -1061,7 +1061,9 @@ if __name__ == '__main__':
         except PermissionError:
             return JSONResponse(
                 status_code=403,
-                content={'detail': f"Path '{path}' resolves outside the workspace boundary"},
+                content={
+                    'detail': f"Path '{path}' resolves outside the workspace boundary"
+                },
             )
 
         if not os.path.exists(full_path):
