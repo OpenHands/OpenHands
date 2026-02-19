@@ -1,0 +1,51 @@
+import toast from "react-hot-toast";
+import { UseMutationResult } from "@tanstack/react-query";
+import {
+  TOAST_OPTIONS,
+  displaySuccessToast,
+  displayErrorToast,
+} from "./custom-toast-handlers";
+
+export type ToastMessages<TData> = {
+  success?: string | ((data: TData) => string) | false;
+  error?: string | ((error: Error) => string) | false;
+  loading?: string;
+};
+
+export async function mutateWithToast<TData, TVariables>(
+  mutation: UseMutationResult<TData, Error, TVariables>,
+  variables: TVariables,
+  messages: ToastMessages<TData>,
+): Promise<TData> {
+  const { success, error, loading } = messages;
+
+  let loadingToastId: string | undefined;
+  if (loading) {
+    loadingToastId = toast.loading(loading, TOAST_OPTIONS);
+  }
+
+  try {
+    const result = await mutation.mutateAsync(variables);
+
+    if (loadingToastId) toast.dismiss(loadingToastId);
+
+    if (success !== false) {
+      const message = typeof success === "function" ? success(result) : success;
+      if (message) displaySuccessToast(message);
+    }
+
+    return result;
+  } catch (err) {
+    if (loadingToastId) toast.dismiss(loadingToastId);
+
+    if (error !== false) {
+      const message =
+        typeof error === "function"
+          ? error(err as Error)
+          : (error ?? (err as Error).message);
+      displayErrorToast(message);
+    }
+
+    throw err;
+  }
+}
