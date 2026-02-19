@@ -667,7 +667,20 @@ async def _clear_v0_conversation(
     conversation_id: str,
     user_id: str | None,
 ) -> ClearEventsResponse:
-    """Clear a V0 conversation's events."""
+    """Clear a V0 conversation's events.
+
+    Raises:
+        FileNotFoundError: If the conversation does not exist.
+    """
+    from openhands.storage.locations import get_conversation_dir
+
+    # Verify the conversation exists before attempting to clear
+    conversation_dir = get_conversation_dir(conversation_id, user_id)
+    try:
+        file_store.list(conversation_dir)
+    except FileNotFoundError:
+        raise FileNotFoundError(f'Conversation {conversation_id} not found')
+
     # Create event store for the conversation
     event_store = EventStore(
         sid=conversation_id, file_store=file_store, user_id=user_id
