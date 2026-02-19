@@ -16,6 +16,18 @@ const trimText = (text: string, maxLength: number): string => {
   return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
 };
 
+// Helper function to detect partial ActionEvents that are still loading
+const isPartialActionEvent = (event: OpenHandsEvent): boolean => {
+  return (
+    event.source === "agent" &&
+    "action" in event &&
+    (event.action === null ||
+      (typeof event.action === "object" &&
+        event.action !== null &&
+        "kind" in event.action))
+  );
+};
+
 // Helper function to create title from translation key
 const createTitleFromKey = (
   key: string,
@@ -39,10 +51,69 @@ const createTitleFromKey = (
 
 // Action Event Processing
 const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
-  // Early return if not an action event
-  if (!isActionEvent(event)) {
-    return "";
+  // Handle complete ActionEvents
+  if (isActionEvent(event)) {
+    return getCompleteActionEventTitle(event);
   }
+
+  // Handle partial ActionEvents that are still loading
+  if (isPartialActionEvent(event)) {
+    return getPartialActionEventTitle(event);
+  }
+
+  // Not an action event at all
+  return "";
+};
+
+// Handle partial ActionEvents that are still loading/streaming
+const getPartialActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
+  // For partial events, try to extract what information we can
+  if (
+    event.action &&
+    typeof event.action === "object" &&
+    "kind" in event.action
+  ) {
+    // We have action kind but the event might be missing other required fields
+    const actionType = event.action.kind;
+
+    switch (actionType) {
+      case "FileEditorAction":
+      case "StrReplaceEditorAction":
+        // Try to extract path information if available
+        if ("path" in event.action && event.action.path) {
+          if ("command" in event.action && event.action.command === "view") {
+            return createTitleFromKey("ACTION_MESSAGE$READ", {
+              path: event.action.path,
+            });
+          } else {
+            return createTitleFromKey("ACTION_MESSAGE$EDIT", {
+              path: event.action.path,
+            });
+          }
+        }
+        break;
+      case "ExecuteBashAction":
+      case "TerminalAction":
+        // Try to extract command if available
+        if ("command" in event.action && event.action.command) {
+          return createTitleFromKey("ACTION_MESSAGE$RUN", {
+            command: trimText(String(event.action.command), 80),
+          });
+        }
+        break;
+      default:
+        // For other action types, show a generic loading message
+        return i18n.t("HOME$LOADING");
+    }
+  }
+
+  // Fallback for very partial events
+  return i18n.t("HOME$LOADING");
+};
+
+// Handle complete ActionEvents with all required fields
+const getCompleteActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
+  // At this point we know isActionEvent(event) is true
 
   const actionType = event.action.kind;
   let actionKey = "";
