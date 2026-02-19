@@ -136,9 +136,9 @@ class ApiKeyCreate(BaseModel):
 class ApiKeyResponse(BaseModel):
     id: int
     name: str | None = None
-    created_at: str
-    last_used_at: str | None = None
-    expires_at: str | None = None
+    created_at: datetime
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
 
 
 class ApiKeyCreateResponse(ApiKeyResponse):
@@ -162,9 +162,9 @@ def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
     return ApiKeyResponse(
         id=key.id,
         name=key.name,
-        created_at=key.created_at.isoformat() if key.created_at else None,
-        last_used_at=key.last_used_at.isoformat() if key.last_used_at else None,
-        expires_at=key.expires_at.isoformat() if key.expires_at else None,
+        created_at=key.created_at,
+        last_used_at=key.last_used_at,
+        expires_at=key.expires_at,
     )
 
 
@@ -203,11 +203,9 @@ async def create_api_key(
                     id=key.id,
                     name=key.name,
                     key=api_key,
-                    created_at=key.created_at.isoformat() if key.created_at else None,
-                    last_used_at=key.last_used_at.isoformat()
-                    if key.last_used_at
-                    else None,
-                    expires_at=key.expires_at.isoformat() if key.expires_at else None,
+                    created_at=key.created_at,
+                    last_used_at=key.last_used_at,
+                    expires_at=key.expires_at,
                 )
     except Exception:
         logger.exception('Error creating API key')
