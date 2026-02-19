@@ -16094,5 +16094,21 @@
     "tr": "LLM modelini yapılandır",
     "de": "LLM-Modell konfigurieren",
     "uk": "Налаштувати модель LLM"
+  },
+  "SLASH_COMMANDS$CLEAR_CONFIRM": {
+    "en": "Are you sure you want to clear the chat history? This action cannot be undone.",
+    "ja": "チャット履歴をクリアしてもよろしいですか？この操作は元に戻せません。",
+    "zh-CN": "确定要清除聊天记录吗？此操作无法撤销。",
+    "zh-TW": "確定要清除聊天記錄嗎？此操作無法撤銷。",
+    "ko-KR": "채팅 기록을 지우시겠습니까? 이 작업은 취소할 수 없습니다.",
+    "no": "Er du sikker på at du vil tømme chathistorikken? Denne handlingen kan ikke angres.",
+    "it": "Sei sicuro di voler cancellare la cronologia della chat? Questa azione non può essere annullata.",
+    "pt": "Tem certeza de que deseja limpar o histórico do chat? Esta ação não pode ser desfeita.",
+    "es": "¿Estás seguro de que deseas borrar el historial de chat? Esta acción no se puede deshacer.",
+    "ar": "هل أنت متأكد أنك تريد مسح سجل المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
+    "fr": "Êtes-vous sûr de vouloir effacer l'historique du chat ? Cette action est irréversible.",
+    "tr": "Sohbet geçmişini temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+    "de": "Sind Sie sicher, dass Sie den Chatverlauf löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "uk": "Ви впевнені, що хочете очистити історію чату? Цю дію неможливо скасувати."
   }
 }

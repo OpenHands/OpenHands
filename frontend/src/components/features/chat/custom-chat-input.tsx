@@ -1,4 +1,5 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { ConversationStatus } from "#/types/conversation-status";
 import { useChatInputLogic } from "#/hooks/chat/use-chat-input-logic";
 import { useFileHandling } from "#/hooks/chat/use-file-handling";
@@ -11,7 +12,10 @@ import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
 import { SlashCommandMenu } from "./slash-command-menu";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { useConversationStore } from "#/stores/conversation-store";
+import { I18nKey } from "#/i18n/declaration";
+import { SlashCommand } from "#/config/slash-commands";
 
 export interface CustomChatInputProps {
   disabled?: boolean;
@@ -36,12 +40,15 @@ export function CustomChatInput({
   className = "",
   buttonClassName = "",
 }: CustomChatInputProps) {
+  const { t } = useTranslation();
   const {
     submittedMessage,
     clearAllFiles,
     setShouldHideSuggestions,
     setSubmittedMessage,
   } = useConversationStore();
+  const [pendingClearCommand, setPendingClearCommand] =
+    useState<SlashCommand | null>(null);
 
   // Disable input when conversation is stopped
   const isConversationStopped = conversationStatus === "STOPPED";
@@ -121,6 +128,18 @@ export function CustomChatInput({
 
   const { executeCommand } = useSlashCommandActions();
 
+  // Wrap executeCommand to require confirmation for destructive commands
+  const executeOrConfirm = useCallback(
+    (command: SlashCommand): boolean => {
+      if (command.action === "clear") {
+        setPendingClearCommand(command);
+        return true;
+      }
+      return executeCommand(command);
+    },
+    [executeCommand],
+  );
+
   // Handle input changes to sync with slash command state
   const handleInputWithSlash = useCallback(() => {
     handleInput();
@@ -133,7 +152,7 @@ export function CustomChatInput({
   const handleSelectCommand = useCallback(
     (command: (typeof filteredCommands)[number]) => {
       selectCommand(command);
-      executeCommand(command);
+      executeOrConfirm(command);
       resetSlashState();
       // Clear the input
       if (chatInputRef.current) {
@@ -141,7 +160,7 @@ export function CustomChatInput({
       }
       smartResize();
     },
-    [selectCommand, executeCommand, resetSlashState, chatInputRef, smartResize],
+    [selectCommand, executeOrConfirm, resetSlashState, chatInputRef, smartResize],
   );
 
   // Handle keyboard events with slash command support
@@ -153,7 +172,7 @@ export function CustomChatInput({
         const selectedCommand = handleSlashKeyDown(e);
         if (selectedCommand) {
           // Command was selected via Enter key
-          executeCommand(selectedCommand);
+          executeOrConfirm(selectedCommand);
           resetSlashState();
           if (chatInputRef.current) {
             chatInputRef.current.textContent = "";
@@ -173,7 +192,7 @@ export function CustomChatInput({
     [
       chatInputRef,
       handleSlashKeyDown,
-      executeCommand,
+      executeOrConfirm,
       resetSlashState,
       smartResize,
       handleKeyDown,
@@ -192,6 +211,17 @@ export function CustomChatInput({
   );
   return (
     <div className={`w-full ${className}`}>
+      {pendingClearCommand && (
+        <ConfirmationModal
+          text={t(I18nKey.SLASH_COMMANDS$CLEAR_CONFIRM)}
+          onConfirm={() => {
+            executeCommand(pendingClearCommand);
+            setPendingClearCommand(null);
+          }}
+          onCancel={() => setPendingClearCommand(null)}
+        />
+      )}
+
       {/* Hidden file input */}
       <HiddenFileInput
         fileInputRef={fileInputRef}
