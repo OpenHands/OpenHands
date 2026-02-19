@@ -11,6 +11,7 @@ import { AgentState } from "#/types/agent-state";
 import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
 import { ServerStatusContextMenu } from "../controls/server-status-context-menu";
 import { ConversationName } from "./conversation-name";
+import { TokenUsageIndicator } from "./token-usage-indicator";
 
 export function ConversationNameWithStatus() {
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -74,6 +75,7 @@ export function ConversationNameWithStatus() {
         />
       </div>
       <ConversationName />
+      <TokenUsageIndicator />
     </div>
   );
 }

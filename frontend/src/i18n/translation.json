@@ -16030,5 +16030,21 @@
     "tr": "Bağlantı panoya kopyalandı",
     "de": "Link in die Zwischenablage kopiert",
     "uk": "Посилання скопійовано в буфер обміну"
+  },
+  "CONVERSATION$TOKENS": {
+    "en": "tokens",
+    "ja": "トークン",
+    "zh-CN": "令牌",
+    "zh-TW": "令牌",
+    "ko-KR": "토큰",
+    "no": "tokens",
+    "it": "token",
+    "pt": "tokens",
+    "es": "tokens",
+    "ar": "رموز",
+    "fr": "jetons",
+    "tr": "jeton",
+    "de": "Token",
+    "uk": "токени"
   }
 }
