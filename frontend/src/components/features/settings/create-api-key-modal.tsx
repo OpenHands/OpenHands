@@ -5,10 +5,8 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { CreateApiKeyResponse } from "#/api/api-keys";
-import {
-  displayErrorToast,
-  displaySuccessToast,
-} from "#/utils/custom-toast-handlers";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { mutateWithToast } from "#/utils/mutate-with-toast";
 import { ApiKeyModalBase } from "./api-key-modal-base";
 import { useCreateApiKey } from "#/hooks/mutation/use-create-api-key";
 
@@ -35,12 +33,14 @@ export function CreateApiKeyModal({
     }
 
     try {
-      const newKey = await createApiKeyMutation.mutateAsync(newKeyName);
+      const newKey = await mutateWithToast(createApiKeyMutation, newKeyName, {
+        success: t(I18nKey.SETTINGS$API_KEY_CREATED),
+        error: t(I18nKey.ERROR$GENERIC),
+      });
       onKeyCreated(newKey);
-      displaySuccessToast(t(I18nKey.SETTINGS$API_KEY_CREATED));
       setNewKeyName("");
     } catch {
-      displayErrorToast(t(I18nKey.ERROR$GENERIC));
+      // error toast already handled by mutateWithToast
     }
   };
 
