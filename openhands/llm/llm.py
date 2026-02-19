@@ -214,6 +214,21 @@ class LLM(RetryMixin, DebugMixin):
         if self.config.completion_kwargs is not None:
             kwargs.update(self.config.completion_kwargs)
 
+        # Databricks has a 25000 max_tokens limit - cap it AFTER completion_kwargs
+        if self.config.model.startswith('databricks/'):
+            # Get the effective max tokens value
+            effective_max = kwargs.get('max_tokens') or kwargs.get(
+                'max_completion_tokens'
+            )
+            if effective_max and effective_max > 25000:
+                logger.warning(
+                    f'Databricks model {self.config.model}: Capping max_tokens from {effective_max} to 25000 (API limit)'
+                )
+            # Databricks uses max_tokens parameter (not max_completion_tokens)
+            # Cap at 25000 or use the effective max if it's already lower
+            kwargs['max_tokens'] = min(effective_max or 25000, 25000)
+            kwargs.pop('max_completion_tokens', None)
+
         self._completion = partial(
             litellm_completion,
             model=self.config.model,

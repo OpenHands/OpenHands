@@ -47,6 +47,12 @@ class AmortizedForgettingCondenser(RollingCondenser):
         event_ids_to_keep = {event.id for event in head + tail}
         event_ids_to_forget = {event.id for event in view} - event_ids_to_keep
 
+        # If there are no events to forget, return a condensation with empty forgotten list
+        # This should normally be prevented by should_condense(), but we handle it defensively
+        if not event_ids_to_forget:
+            event = CondensationAction(forgotten_event_ids=[])
+            return Condensation(action=event)
+
         event = CondensationAction(
             forgotten_events_start_id=min(event_ids_to_forget),
             forgotten_events_end_id=max(event_ids_to_forget),
@@ -54,8 +60,23 @@ class AmortizedForgettingCondenser(RollingCondenser):
 
         return Condensation(action=event)
 
+    def _can_condense(self, view: View) -> bool:
+        """Check if condensation would actually forget any events."""
+        target_size = self.max_size // 2
+        head = view[: self.keep_first]
+        events_from_tail = target_size - len(head)
+
+        # If the view is smaller than or equal to target_size, all events would be kept
+        return len(view) > len(head) + events_from_tail
+
     def should_condense(self, view: View) -> bool:
-        return len(view) > self.max_size or view.unhandled_condensation_request
+        # Only condense if we exceed max_size AND there are events we can actually forget
+        if len(view) > self.max_size:
+            return self._can_condense(view)
+        # If there's an unhandled condensation request, only condense if possible
+        if view.unhandled_condensation_request:
+            return self._can_condense(view)
+        return False
 
     @classmethod
     def from_config(

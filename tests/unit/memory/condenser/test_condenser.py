@@ -510,6 +510,33 @@ def test_amortized_forgetting_condenser_keeps_first_and_last_events():
         assert view[:keep_first] == events[: min(keep_first, i + 1)]
 
 
+def test_amortized_forgetting_condenser_handles_small_view_with_condensation_request():
+    """Test that AmortizedForgettingCondenser doesn't crash when there are too few events to condense.
+
+    This test verifies the fix for the bug where the condenser would try to call min()/max()
+    on an empty set of event_ids_to_forget when the view is smaller than the target size.
+    """
+    max_size = 100
+    condenser = AmortizedForgettingCondenser(max_size=max_size, keep_first=0)
+
+    # Create a small number of events (less than target_size which is max_size // 2)
+    events = [create_test_event(f'Event {i}', id=i) for i in range(10)]
+
+    state = State()
+    state.history = events
+
+    # Create a view with unhandled_condensation_request to trigger condensation attempt
+    view = View(events=events, unhandled_condensation_request=True)
+
+    # Before the fix, this would raise ValueError: min() arg is an empty sequence
+    # After the fix, should_condense should return False and the view should be returned as-is
+    result = condenser.condense(view)
+
+    # The result should be the same view since there are not enough events to condense
+    assert isinstance(result, View)
+    assert result == view
+
+
 def test_llm_attention_condenser_from_config(mock_llm_registry):
     """Test that LLMAttentionCondenser objects can be made from config."""
     config = LLMAttentionCondenserConfig(
