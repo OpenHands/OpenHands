@@ -444,29 +444,23 @@ class ActionExecutor:
         """Resolve a file path relative to the working directory.
 
         Applies defense-in-depth containment checks to ensure the resolved path
-        stays within the initial working directory (workspace root).
+        stays within the workspace root.
         """
+        # Convert relative paths to absolute paths relative to working_dir
+        filepath = Path(path)
+        if not filepath.is_absolute():
+            path_to_check = str(Path(working_dir) / filepath)
+        else:
+            path_to_check = path
+
+        # Resolve symlinks and check containment within workspace root
         try:
-            resolved = safe_resolve_path(path, base_dir=working_dir)
+            resolved = safe_resolve_path(path_to_check, base_dir=self._initial_cwd)
             return str(resolved)
         except PermissionError:
-            # Fall back to basic resolution if the path is outside working_dir
-            # but still allow absolute paths (the workspace root check below
-            # in _check_workspace_containment will catch escapes)
-            filepath = Path(path)
-            if not filepath.is_absolute():
-                resolved_path = str(Path(working_dir) / filepath)
-            else:
-                resolved_path = str(filepath)
-
-            # Defense-in-depth: verify containment against workspace root
-            try:
-                safe_resolve_path(resolved_path, base_dir=self._initial_cwd)
-            except PermissionError:
-                raise PermissionError(
-                    f"Path '{path}' resolves outside the workspace boundary '{self._initial_cwd}'"
-                )
-            return resolved_path
+            raise PermissionError(
+                f"Path '{path}' resolves outside the workspace boundary '{self._initial_cwd}'"
+            )
 
     async def read(self, action: FileReadAction) -> Observation:
         assert self.bash_session is not None
