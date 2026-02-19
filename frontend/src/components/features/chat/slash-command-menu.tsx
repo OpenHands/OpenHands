@@ -19,6 +19,7 @@ export function SlashCommandMenu({
   onSelectCommand,
 }: SlashCommandMenuProps) {
   const { t } = useTranslation();
+  const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
 
   if (!isOpen || commands.length === 0) {
     return null;
@@ -61,7 +62,7 @@ export function SlashCommandMenu({
                   </div>
                   {command.shortcut && (
                     <span className="text-[#6B6B6B] text-xs font-mono bg-[#252525] px-1.5 py-0.5 rounded">
-                      {command.shortcut}
+                      {isMac ? command.shortcut.mac : command.shortcut.default}
                     </span>
                   )}
                 </button>

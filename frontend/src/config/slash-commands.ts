@@ -3,7 +3,7 @@ import { I18nKey } from "#/i18n/declaration";
 export interface SlashCommand {
   name: string;
   description: I18nKey;
-  shortcut?: string;
+  shortcut?: { mac: string; default: string };
   action: string;
 }
 
@@ -16,7 +16,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "/settings",
     description: I18nKey.SLASH_COMMANDS$SETTINGS_DESCRIPTION,
-    shortcut: "⌘,",
+    shortcut: { mac: "⌘,", default: "Ctrl+," },
     action: "settings",
   },
   {
