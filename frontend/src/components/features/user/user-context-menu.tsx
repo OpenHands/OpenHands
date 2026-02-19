@@ -78,7 +78,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
       ref={ref}
       className={cn(
         "w-64 flex flex-col gap-3 bg-tertiary border border-tertiary rounded-xl p-6",
-        "text-sm absolute left-full bottom-0 z-60",
+        "text-sm absolute left-full bottom-0 z-101",
       )}
     >
       {inviteMemberModalIsOpen &&
