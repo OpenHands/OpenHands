@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
+from storage.api_key import ApiKey
 from storage.api_key_store import ApiKeyStore
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member import OrgMember
@@ -135,9 +136,9 @@ class ApiKeyCreate(BaseModel):
 class ApiKeyResponse(BaseModel):
     id: int
     name: str | None = None
-    created_at: str
-    last_used_at: str | None = None
-    expires_at: str | None = None
+    created_at: datetime
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
 
 
 class ApiKeyCreateResponse(ApiKeyResponse):
@@ -152,12 +153,29 @@ class ByorPermittedResponse(BaseModel):
     permitted: bool
 
 
-@api_router.get('/llm/byor/permitted', response_model=ByorPermittedResponse)
-async def check_byor_permitted(user_id: str = Depends(get_user_id)):
+class MessageResponse(BaseModel):
+    message: str
+
+
+def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
+    """Convert an ApiKey model to an ApiKeyResponse."""
+    return ApiKeyResponse(
+        id=key.id,
+        name=key.name,
+        created_at=key.created_at,
+        last_used_at=key.last_used_at,
+        expires_at=key.expires_at,
+    )
+
+
+@api_router.get('/llm/byor/permitted', tags=['Keys'])
+async def check_byor_permitted(
+    user_id: str = Depends(get_user_id),
+) -> ByorPermittedResponse:
     """Check if BYOR key export is permitted for the user's current org."""
     try:
         permitted = await OrgService.check_byor_export_enabled(user_id)
-        return {'permitted': permitted}
+        return ByorPermittedResponse(permitted=permitted)
     except Exception as e:
         logger.exception(
             'Error checking BYOR export permission', extra={'error': str(e)}
@@ -168,8 +186,10 @@ async def check_byor_permitted(user_id: str = Depends(get_user_id)):
         )
 
 
-@api_router.post('', response_model=ApiKeyCreateResponse)
-async def create_api_key(key_data: ApiKeyCreate, user_id: str = Depends(get_user_id)):
+@api_router.post('', tags=['Keys'])
+async def create_api_key(
+    key_data: ApiKeyCreate, user_id: str = Depends(get_user_id)
+) -> ApiKeyCreateResponse:
     """Create a new API key for the authenticated user."""
     try:
         api_key = await api_key_store.create_api_key(
@@ -178,48 +198,29 @@ async def create_api_key(key_data: ApiKeyCreate, user_id: str = Depends(get_user
         # Get the created key details
         keys = await api_key_store.list_api_keys(user_id)
         for key in keys:
-            if key['name'] == key_data.name:
-                return {
-                    **key,
-                    'key': api_key,
-                    'created_at': (
-                        key['created_at'].isoformat() if key['created_at'] else None
-                    ),
-                    'last_used_at': (
-                        key['last_used_at'].isoformat() if key['last_used_at'] else None
-                    ),
-                    'expires_at': (
-                        key['expires_at'].isoformat() if key['expires_at'] else None
-                    ),
-                }
+            if key.name == key_data.name:
+                return ApiKeyCreateResponse(
+                    id=key.id,
+                    name=key.name,
+                    key=api_key,
+                    created_at=key.created_at,
+                    last_used_at=key.last_used_at,
+                    expires_at=key.expires_at,
+                )
     except Exception:
         logger.exception('Error creating API key')
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to create API key',
-        )
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail='Failed to create API key',
+    )
 
 
-@api_router.get('', response_model=list[ApiKeyResponse])
-async def list_api_keys(user_id: str = Depends(get_user_id)):
+@api_router.get('', tags=['Keys'])
+async def list_api_keys(user_id: str = Depends(get_user_id)) -> list[ApiKeyResponse]:
     """List all API keys for the authenticated user."""
     try:
         keys = await api_key_store.list_api_keys(user_id)
-        return [
-            {
-                **key,
-                'created_at': (
-                    key['created_at'].isoformat() if key['created_at'] else None
-                ),
-                'last_used_at': (
-                    key['last_used_at'].isoformat() if key['last_used_at'] else None
-                ),
-                'expires_at': (
-                    key['expires_at'].isoformat() if key['expires_at'] else None
-                ),
-            }
-            for key in keys
-        ]
+        return [api_key_to_response(key) for key in keys]
     except Exception:
         logger.exception('Error listing API keys')
         raise HTTPException(
@@ -228,8 +229,10 @@ async def list_api_keys(user_id: str = Depends(get_user_id)):
         )
 
 
-@api_router.delete('/{key_id}')
-async def delete_api_key(key_id: int, user_id: str = Depends(get_user_id)):
+@api_router.delete('/{key_id}', tags=['Keys'])
+async def delete_api_key(
+    key_id: int, user_id: str = Depends(get_user_id)
+) -> MessageResponse:
     """Delete an API key."""
     try:
         # First, verify the key belongs to the user
@@ -237,7 +240,7 @@ async def delete_api_key(key_id: int, user_id: str = Depends(get_user_id)):
         key_to_delete = None
 
         for key in keys:
-            if key['id'] == key_id:
+            if key.id == key_id:
                 key_to_delete = key
                 break
 
@@ -255,7 +258,7 @@ async def delete_api_key(key_id: int, user_id: str = Depends(get_user_id)):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail='Failed to delete API key',
             )
-        return {'message': 'API key deleted successfully'}
+        return MessageResponse(message='API key deleted successfully')
     except HTTPException:
         raise
     except Exception:
@@ -266,8 +269,10 @@ async def delete_api_key(key_id: int, user_id: str = Depends(get_user_id)):
         )
 
 
-@api_router.get('/llm/byor', response_model=LlmApiKeyResponse)
-async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
+@api_router.get('/llm/byor', tags=['Keys'])
+async def get_llm_api_key_for_byor(
+    user_id: str = Depends(get_user_id),
+) -> LlmApiKeyResponse:
     """Get the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user.
 
     This endpoint validates that the key exists in LiteLLM before returning it.
@@ -290,7 +295,7 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
             # Validate that the key is actually registered in LiteLLM
             is_valid = await LiteLlmManager.verify_key(byor_key, user_id)
             if is_valid:
-                return {'key': byor_key}
+                return LlmApiKeyResponse(key=byor_key)
             else:
                 # Key exists in DB but is invalid in LiteLLM - regenerate it
                 logger.warning(
@@ -315,7 +320,7 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
                 'Successfully generated and stored new BYOR key',
                 extra={'user_id': user_id},
             )
-            return {'key': key}
+            return LlmApiKeyResponse(key=key)
         else:
             logger.error(
                 'Failed to generate new BYOR LLM API key',
@@ -337,8 +342,10 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
         )
 
 
-@api_router.post('/llm/byor/refresh', response_model=LlmApiKeyResponse)
-async def refresh_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
+@api_router.post('/llm/byor/refresh', tags=['Keys'])
+async def refresh_llm_api_key_for_byor(
+    user_id: str = Depends(get_user_id),
+) -> LlmApiKeyResponse:
     """Refresh the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user.
 
     Returns 402 Payment Required if BYOR export is not enabled for the user's org.
@@ -391,7 +398,7 @@ async def refresh_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
             'BYOR LLM API key refresh completed successfully',
             extra={'user_id': user_id},
         )
-        return {'key': key}
+        return LlmApiKeyResponse(key=key)
     except HTTPException as he:
         logger.error(
             'HTTP exception during BYOR LLM API key refresh',

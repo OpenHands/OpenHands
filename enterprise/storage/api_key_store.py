@@ -126,7 +126,7 @@ class ApiKeyStore:
 
             return True
 
-    async def list_api_keys(self, user_id: str) -> list[dict]:
+    async def list_api_keys(self, user_id: str) -> list[ApiKey]:
         """List all API keys for a user."""
         user = await UserStore.get_user_by_id_async(user_id)
         org_id = user.current_org_id
@@ -134,24 +134,14 @@ class ApiKeyStore:
 
     def _list_api_keys_from_db(self, user_id: str, org_id: str) -> list[ApiKey]:
         with self.session_maker() as session:
-            keys = (
+            keys: list[ApiKey] = (
                 session.query(ApiKey)
                 .filter(ApiKey.user_id == user_id)
                 .filter(ApiKey.org_id == org_id)
                 .all()
             )
 
-            return [
-                {
-                    'id': key.id,
-                    'name': key.name,
-                    'created_at': key.created_at,
-                    'last_used_at': key.last_used_at,
-                    'expires_at': key.expires_at,
-                }
-                for key in keys
-                if 'MCP_API_KEY' != key.name
-            ]
+            return [key for key in keys if key.name != 'MCP_API_KEY']
 
     async def retrieve_mcp_api_key(self, user_id: str) -> str | None:
         user = await UserStore.get_user_by_id_async(user_id)
