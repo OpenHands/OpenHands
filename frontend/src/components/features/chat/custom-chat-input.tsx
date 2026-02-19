@@ -160,7 +160,13 @@ export function CustomChatInput({
       }
       smartResize();
     },
-    [selectCommand, executeOrConfirm, resetSlashState, chatInputRef, smartResize],
+    [
+      selectCommand,
+      executeOrConfirm,
+      resetSlashState,
+      chatInputRef,
+      smartResize,
+    ],
   );
 
   // Handle keyboard events with slash command support
