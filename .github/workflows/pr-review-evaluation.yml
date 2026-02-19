@@ -3,6 +3,11 @@ name: PR Review Evaluation
 
 # This workflow evaluates how well PR review comments were addressed.
 # It calls the reusable workflow from OpenHands/extensions.
+#
+# Security note: pull_request_target is safe here because:
+# 1. Only triggers on PR close (not on code changes)
+# 2. Does not checkout PR code - only downloads artifacts from trusted workflow runs
+# 3. Runs evaluation scripts from the extensions repo, not from the PR
 
 on:
     pull_request_target:
@@ -15,4 +20,6 @@ jobs:
             pr_number: ${{ github.event.pull_request.number }}
             repo_name: ${{ github.repository }}
             pr_merged: ${{ github.event.pull_request.merged }}
-        secrets: inherit
+        secrets:
+            LMNR_SKILLS_API_KEY: ${{ secrets.LMNR_SKILLS_API_KEY }}
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
