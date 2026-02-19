@@ -18,7 +18,7 @@ from typing import Annotated
 
 import base62
 import httpx
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel, ConfigDict, Field
@@ -712,13 +712,9 @@ async def clear_conversation_events(
         return await _clear_v0_conversation(conversation_id, user_id)
     except FileNotFoundError:
         logger.warning(f'Conversation {conversation_id} not found for clear')
-        return JSONResponse(
-            content={
-                'status': 'error',
-                'deleted_count': 0,
-                'message': 'Conversation not found',
-            },
+        raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail='Conversation not found',
         )
 
 
