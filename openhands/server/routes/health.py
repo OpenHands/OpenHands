@@ -23,3 +23,7 @@ def add_health_endpoints(app: FastAPI):
     @app.get('/server_info')
     async def get_server_info():
         return get_system_info()
+
+    @app.get('/ready')
+    async def ready() -> str:
+        return 'OK'
