@@ -149,6 +149,7 @@ export function ConversationCard({
             onClick={(e) => e.stopPropagation()}
             className="mr-3 h-4 w-4 shrink-0 accent-blue-500 cursor-pointer"
             data-testid="conversation-select-checkbox"
+            aria-label={`Select conversation ${title}`}
           />
         )}
         <ConversationCardHeader
