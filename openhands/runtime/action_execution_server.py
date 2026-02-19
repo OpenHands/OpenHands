@@ -75,7 +75,7 @@ from openhands.runtime.mcp.proxy import MCPProxyManager
 from openhands.runtime.plugins import ALL_PLUGINS, JupyterPlugin, Plugin, VSCodePlugin
 from openhands.runtime.utils import find_available_tcp_port
 from openhands.runtime.utils.bash import BashSession
-from openhands.runtime.utils.files import insert_lines, read_lines
+from openhands.runtime.utils.files import insert_lines, read_lines, safe_resolve_path
 from openhands.runtime.utils.memory_monitor import MemoryMonitor
 from openhands.runtime.utils.runtime_init import init_user_and_working_directory
 from openhands.runtime.utils.system_stats import (
@@ -441,10 +441,32 @@ class ActionExecutor:
             )
 
     def _resolve_path(self, path: str, working_dir: str) -> str:
-        filepath = Path(path)
-        if not filepath.is_absolute():
-            return str(Path(working_dir) / filepath)
-        return str(filepath)
+        """Resolve a file path relative to the working directory.
+
+        Applies defense-in-depth containment checks to ensure the resolved path
+        stays within the initial working directory (workspace root).
+        """
+        try:
+            resolved = safe_resolve_path(path, base_dir=working_dir)
+            return str(resolved)
+        except PermissionError:
+            # Fall back to basic resolution if the path is outside working_dir
+            # but still allow absolute paths (the workspace root check below
+            # in _check_workspace_containment will catch escapes)
+            filepath = Path(path)
+            if not filepath.is_absolute():
+                resolved_path = str(Path(working_dir) / filepath)
+            else:
+                resolved_path = str(filepath)
+
+            # Defense-in-depth: verify containment against workspace root
+            try:
+                safe_resolve_path(resolved_path, base_dir=self._initial_cwd)
+            except PermissionError:
+                raise PermissionError(
+                    f"Path '{path}' resolves outside the workspace boundary '{self._initial_cwd}'"
+                )
+            return resolved_path
 
     async def read(self, action: FileReadAction) -> Observation:
         assert self.bash_session is not None
@@ -467,10 +489,11 @@ class ActionExecutor:
                 impl_source=FileReadSource.OH_ACI,
             )
 
-        # NOTE: the client code is running inside the sandbox,
-        # so there's no need to check permission
         working_dir = self.bash_session.cwd
-        filepath = self._resolve_path(action.path, working_dir)
+        try:
+            filepath = self._resolve_path(action.path, working_dir)
+        except PermissionError as e:
+            return ErrorObservation(str(e))
         try:
             if filepath.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
                 with open(filepath, 'rb') as file:
@@ -518,7 +541,10 @@ class ActionExecutor:
     async def write(self, action: FileWriteAction) -> Observation:
         assert self.bash_session is not None
         working_dir = self.bash_session.cwd
-        filepath = self._resolve_path(action.path, working_dir)
+        try:
+            filepath = self._resolve_path(action.path, working_dir)
+        except PermissionError as e:
+            return ErrorObservation(str(e))
 
         insert = action.content.split('\n')
         if not os.path.exists(os.path.dirname(filepath)):
@@ -1034,6 +1060,12 @@ if __name__ == '__main__':
             full_path = path
         else:
             full_path = os.path.join(client.initial_cwd, path)
+
+        # Defense-in-depth: verify the resolved path is within workspace
+        try:
+            safe_resolve_path(full_path, base_dir=client.initial_cwd)
+        except PermissionError:
+            return JSONResponse(content=[], status_code=403)
 
         if not os.path.exists(full_path):
             # if user just removed a folder, prevent server error 500 in UI

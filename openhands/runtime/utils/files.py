@@ -16,6 +16,42 @@ from openhands.events.observation import (
 )
 
 
+def safe_resolve_path(file_path: str, base_dir: str | None = None) -> Path:
+    """Resolve a path and ensure it stays within the base directory.
+
+    Provides defense-in-depth path containment validation by resolving symlinks
+    and normalizing paths before checking containment. While container isolation
+    is the primary security boundary, this adds a secondary protection layer.
+
+    Args:
+        file_path: The path to resolve.
+        base_dir: The allowed base directory. Defaults to current working directory.
+
+    Returns:
+        The resolved Path object.
+
+    Raises:
+        PermissionError: If the resolved path escapes the base directory.
+    """
+    if base_dir is None:
+        base_dir = os.getcwd()
+
+    base = Path(base_dir).resolve()
+
+    if not Path(file_path).is_absolute():
+        target = (base / file_path).resolve()
+    else:
+        target = Path(file_path).resolve()
+
+    if not target.is_relative_to(base):
+        raise PermissionError(
+            f"Path '{file_path}' resolves to '{target}' which is outside "
+            f"the allowed directory '{base}'"
+        )
+
+    return target
+
+
 def resolve_path(
     file_path: str,
     working_directory: str,
