@@ -169,7 +169,9 @@ def api_key_to_response(key: ApiKey) -> ApiKeyResponse:
 
 
 @api_router.get('/llm/byor/permitted')
-async def check_byor_permitted(user_id: str = Depends(get_user_id)) -> ByorPermittedResponse:
+async def check_byor_permitted(
+    user_id: str = Depends(get_user_id),
+) -> ByorPermittedResponse:
     """Check if BYOR key export is permitted for the user's current org."""
     try:
         permitted = await OrgService.check_byor_export_enabled(user_id)
@@ -202,7 +204,9 @@ async def create_api_key(
                     name=key.name,
                     key=api_key,
                     created_at=key.created_at.isoformat() if key.created_at else None,
-                    last_used_at=key.last_used_at.isoformat() if key.last_used_at else None,
+                    last_used_at=key.last_used_at.isoformat()
+                    if key.last_used_at
+                    else None,
                     expires_at=key.expires_at.isoformat() if key.expires_at else None,
                 )
     except Exception:
@@ -269,7 +273,7 @@ async def delete_api_key(
 
 @api_router.get('/llm/byor')
 async def get_llm_api_key_for_byor(
-    user_id: str = Depends(get_user_id)
+    user_id: str = Depends(get_user_id),
 ) -> LlmApiKeyResponse:
     """Get the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user.
 
@@ -342,7 +346,7 @@ async def get_llm_api_key_for_byor(
 
 @api_router.post('/llm/byor/refresh')
 async def refresh_llm_api_key_for_byor(
-    user_id: str = Depends(get_user_id)
+    user_id: str = Depends(get_user_id),
 ) -> LlmApiKeyResponse:
     """Refresh the LLM API key for BYOR (Bring Your Own Runtime) for the authenticated user.
 
