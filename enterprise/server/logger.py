@@ -51,6 +51,11 @@ def custom_json_serializer(obj, **kwargs):
                 obj['stack_info'] = format_stack(stack_info)
 
     result = json.dumps(obj, **kwargs)
+
+    # Swap out newlines to make things easier to read
+    if LOG_JSON_FOR_CONSOLE:
+        result = result.replace('\\n', '\n')
+
     return result
 
 
