@@ -1,4 +1,4 @@
-# IMPORTANT: LEGACY V0 CODE
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
 # This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
 # OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
 #   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
@@ -305,7 +305,7 @@ class AddMessageRequest(BaseModel):
     message: str
 
 
-@app.post('/message')
+@app.post('/message', deprecated=True)
 async def add_message(
     data: AddMessageRequest,
     conversation: ServerConversation = Depends(get_conversation),
@@ -321,6 +321,9 @@ async def add_message(
 
     Returns:
         JSONResponse: A JSON response indicating the success of the operation
+
+        For V1 conversations, messages are handled through the agent server.
+        Use the sandbox's exposed agent server URL to send messages.
     """
     try:
         # Create a MessageAction from the provided message text

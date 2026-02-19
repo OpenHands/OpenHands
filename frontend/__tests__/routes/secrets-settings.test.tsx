@@ -58,7 +58,7 @@ beforeEach(() => {
   const getConfigSpy = vi.spyOn(OptionService, "getConfig");
   // @ts-expect-error - only return the config we need
   getConfigSpy.mockResolvedValue({
-    APP_MODE: "oss",
+    app_mode: "oss",
   });
 });
 
@@ -78,7 +78,7 @@ describe("Content", () => {
     const getSecretsSpy = vi.spyOn(SecretsService, "getSecrets");
     // @ts-expect-error - only return the config we need
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "oss",
+      app_mode: "oss",
     });
     getSettingsSpy.mockResolvedValue({
       ...MOCK_DEFAULT_USER_SETTINGS,
@@ -97,7 +97,7 @@ describe("Content", () => {
     const getSecretsSpy = vi.spyOn(SecretsService, "getSecrets");
     // @ts-expect-error - only return the config we need
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "saas",
+      app_mode: "saas",
     });
 
     renderSecretsSettings();

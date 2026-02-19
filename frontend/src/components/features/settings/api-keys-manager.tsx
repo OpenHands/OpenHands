@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
+import { useNavigate } from "react-router";
 import { FaTrash, FaEye, FaEyeSlash, FaCopy } from "react-icons/fa6";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -19,12 +20,41 @@ import { useRefreshLlmApiKey } from "#/hooks/mutation/use-refresh-llm-api-key";
 interface LlmApiKeyManagerProps {
   llmApiKey: { key: string | null } | undefined;
   isLoadingLlmKey: boolean;
+  isPaymentRequired: boolean;
   refreshLlmApiKey: ReturnType<typeof useRefreshLlmApiKey>;
+}
+
+function LlmApiKeyPaywall() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  return (
+    <div className="border-b border-gray-200 pb-6 mb-6 flex flex-col gap-6">
+      <h3 className="text-xl font-medium text-white">
+        {t(I18nKey.SETTINGS$LLM_API_KEY)}
+      </h3>
+      <div className="bg-base-tertiary rounded-md p-4 flex flex-col gap-4">
+        <p className="text-sm text-gray-300">
+          {t(I18nKey.SETTINGS$LLM_API_KEY_PAYWALL_MESSAGE)}
+        </p>
+        <div>
+          <BrandButton
+            type="button"
+            variant="primary"
+            onClick={() => navigate("/settings/billing")}
+          >
+            {t(I18nKey.SETTINGS$LLM_API_KEY_BUY_NOW)}
+          </BrandButton>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function LlmApiKeyManager({
   llmApiKey,
   isLoadingLlmKey,
+  isPaymentRequired,
   refreshLlmApiKey,
 }: LlmApiKeyManagerProps) {
   const { t } = useTranslation();
@@ -44,6 +74,11 @@ function LlmApiKeyManager({
       },
     });
   };
+
+  // Show paywall if payment is required
+  if (isPaymentRequired) {
+    return <LlmApiKeyPaywall />;
+  }
 
   if (isLoadingLlmKey || !llmApiKey) {
     return null;
@@ -206,7 +241,11 @@ function ApiKeysTable({ apiKeys, isLoading, onDeleteKey }: ApiKeysTableProps) {
 export function ApiKeysManager() {
   const { t } = useTranslation();
   const { data: apiKeys = [], isLoading, error } = useApiKeys();
-  const { data: llmApiKey, isLoading: isLoadingLlmKey } = useLlmApiKey();
+  const {
+    data: llmApiKey,
+    isLoading: isLoadingLlmKey,
+    isPaymentRequired,
+  } = useLlmApiKey();
   const refreshLlmApiKey = useRefreshLlmApiKey();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -215,8 +254,8 @@ export function ApiKeysManager() {
     useState<CreateApiKeyResponse | null>(null);
   const [showNewKeyModal, setShowNewKeyModal] = useState(false);
 
-  // Display error toast if the query fails
-  if (error) {
+  // Display error toast if the query fails (but not for payment required)
+  if (error && !isPaymentRequired) {
     displayErrorToast(t(I18nKey.ERROR$GENERIC));
   }
 
@@ -251,6 +290,7 @@ export function ApiKeysManager() {
         <LlmApiKeyManager
           llmApiKey={llmApiKey}
           isLoadingLlmKey={isLoadingLlmKey}
+          isPaymentRequired={isPaymentRequired}
           refreshLlmApiKey={refreshLlmApiKey}
         />
 

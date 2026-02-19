@@ -63,6 +63,11 @@ export interface ConversationState {
 
 interface ConversationStateUpdateEventBase extends BaseEvent {
   /**
+   * Discriminator field for type guards
+   */
+  kind: "ConversationStateUpdateEvent";
+
+  /**
    * The source is always "environment" for conversation state update events
    */
   source: "environment";
@@ -105,6 +110,11 @@ export type ConversationStateUpdateEvent =
 
 // Conversation error event - contains error information
 export interface ConversationErrorEvent extends BaseEvent {
+  /**
+   * Discriminator field for type guards
+   */
+  kind: "ConversationErrorEvent";
+
   /**
    * The source is always "environment" for conversation error events
    */

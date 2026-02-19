@@ -1,9 +1,11 @@
 import base64
 import json
+import uuid
 import warnings
 from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
 from urllib.parse import quote
+from uuid import UUID as parse_uuid
 
 import posthog
 from fastapi import APIRouter, Header, HTTPException, Request, Response, status
@@ -22,12 +24,19 @@ from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
-from server.config import get_config, sign_token
+from server.config import sign_token
 from server.constants import IS_FEATURE_ENV
 from server.routes.event_webhook import _get_session_api_key, _get_user_id
+from server.services.org_invitation_service import (
+    EmailMismatchError,
+    InvitationExpiredError,
+    InvitationInvalidError,
+    OrgInvitationService,
+    UserAlreadyMemberError,
+)
 from storage.database import session_maker
-from storage.saas_settings_store import SaasSettingsStore
-from storage.user_settings import UserSettings
+from storage.user import User
+from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
@@ -87,7 +96,8 @@ def get_cookie_domain(request: Request) -> str | None:
     # for now just use the full hostname except for staging stacks.
     return (
         None
-        if (request.url.hostname or '').endswith('staging.all-hand.dev')
+        if not request.url.hostname
+        or request.url.hostname.endswith('staging.all-hands.dev')
         else request.url.hostname
     )
 
@@ -102,22 +112,40 @@ def get_cookie_samesite(request: Request) -> Literal['lax', 'strict']:
     )
 
 
+def _extract_oauth_state(state: str | None) -> tuple[str, str | None, str | None]:
+    """Extract redirect URL, reCAPTCHA token, and invitation token from OAuth state.
+
+    Returns:
+        Tuple of (redirect_url, recaptcha_token, invitation_token).
+        Tokens may be None.
+    """
+    if not state:
+        return '', None, None
+
+    try:
+        # Try to decode as JSON (new format with reCAPTCHA and/or invitation)
+        state_data = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
+        return (
+            state_data.get('redirect_url', ''),
+            state_data.get('recaptcha_token'),
+            state_data.get('invitation_token'),
+        )
+    except Exception:
+        # Old format - state is just the redirect URL
+        return state, None, None
+
+
+# Keep alias for backward compatibility
 def _extract_recaptcha_state(state: str | None) -> tuple[str, str | None]:
     """Extract redirect URL and reCAPTCHA token from OAuth state.
+
+    Deprecated: Use _extract_oauth_state instead.
 
     Returns:
         Tuple of (redirect_url, recaptcha_token). Token may be None.
     """
-    if not state:
-        return '', None
-
-    try:
-        # Try to decode as JSON (new format with reCAPTCHA)
-        state_data = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
-        return state_data.get('redirect_url', ''), state_data.get('recaptcha_token')
-    except Exception:
-        # Old format - state is just the redirect URL
-        return state, None
+    redirect_url, recaptcha_token, _ = _extract_oauth_state(state)
+    return redirect_url, recaptcha_token
 
 
 @oauth_router.get('/keycloak/callback')
@@ -128,8 +156,8 @@ async def keycloak_callback(
     error: Optional[str] = None,
     error_description: Optional[str] = None,
 ):
-    # Extract redirect URL and reCAPTCHA token from state
-    redirect_url, recaptcha_token = _extract_recaptcha_state(state)
+    # Extract redirect URL, reCAPTCHA token, and invitation token from state
+    redirect_url, recaptcha_token, invitation_token = _extract_oauth_state(state)
     if not redirect_url:
         redirect_url = str(request.base_url)
 
@@ -174,9 +202,37 @@ async def keycloak_callback(
 
     email = user_info.get('email')
     user_id = user_info['sub']
+    user = await UserStore.get_user_by_id_async(user_id)
+    if not user:
+        user = await UserStore.create_user(user_id, user_info)
+    else:
+        # Existing user — gradually backfill contact_name if it still has a username-style value
+        await UserStore.backfill_contact_name(user_id, user_info)
+
+    if not user:
+        logger.error(f'Failed to authenticate user {user_info["preferred_username"]}')
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                'error': f'Failed to authenticate user {user_info["preferred_username"]}'
+            },
+        )
+
+    logger.info(f'Logging in user {str(user.id)} in org {user.current_org_id}')
 
     # reCAPTCHA verification with Account Defender
-    if RECAPTCHA_SITE_KEY and recaptcha_token:
+    if RECAPTCHA_SITE_KEY:
+        if not recaptcha_token:
+            logger.warning(
+                'recaptcha_token_missing',
+                extra={
+                    'user_id': user_id,
+                    'email': email,
+                },
+            )
+            error_url = f'{request.base_url}login?recaptcha_blocked=true'
+            return RedirectResponse(error_url, status_code=302)
+
         user_ip = request.client.host if request.client else 'unknown'
         user_agent = request.headers.get('User-Agent', '')
 
@@ -192,6 +248,7 @@ async def keycloak_callback(
                 user_ip=user_ip,
                 user_agent=user_agent,
                 email=email,
+                user_id=user_id,
             )
 
             if not result.allowed:
@@ -271,8 +328,13 @@ async def keycloak_callback(
         from server.routes.email import verify_email
 
         await verify_email(request=request, user_id=user_id, is_auth_flow=True)
-        redirect_url = f'{request.base_url}login?email_verification_required=true&user_id={user_id}'
-        response = RedirectResponse(redirect_url, status_code=302)
+        verification_redirect_url = f'{request.base_url}login?email_verification_required=true&user_id={user_id}'
+        # Preserve invitation token so it can be included in OAuth state after verification
+        if invitation_token:
+            verification_redirect_url = (
+                f'{verification_redirect_url}&invitation_token={invitation_token}'
+            )
+        response = RedirectResponse(verification_redirect_url, status_code=302)
         return response
 
     # default to github IDP for now.
@@ -349,14 +411,78 @@ async def keycloak_callback(
             f'&state={state}'
         )
 
-    config = get_config()
-    settings_store = SaasSettingsStore(
-        user_id=user_id, session_maker=session_maker, config=config
-    )
-    user_settings = settings_store.get_user_settings_by_keycloak_id(user_id)
-    has_accepted_tos = (
-        user_settings is not None and user_settings.accepted_tos is not None
-    )
+    has_accepted_tos = user.accepted_tos is not None
+
+    # Process invitation token if present (after email verification but before TOS)
+    if invitation_token:
+        try:
+            logger.info(
+                'Processing invitation token during auth callback',
+                extra={
+                    'user_id': user_id,
+                    'invitation_token_prefix': invitation_token[:10] + '...',
+                },
+            )
+
+            await OrgInvitationService.accept_invitation(
+                invitation_token, parse_uuid(user_id)
+            )
+            logger.info(
+                'Invitation accepted during auth callback',
+                extra={'user_id': user_id},
+            )
+
+        except InvitationExpiredError:
+            logger.warning(
+                'Invitation expired during auth callback',
+                extra={'user_id': user_id},
+            )
+            # Add query param to redirect URL
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&invitation_expired=true'
+            else:
+                redirect_url = f'{redirect_url}?invitation_expired=true'
+
+        except InvitationInvalidError as e:
+            logger.warning(
+                'Invalid invitation during auth callback',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&invitation_invalid=true'
+            else:
+                redirect_url = f'{redirect_url}?invitation_invalid=true'
+
+        except UserAlreadyMemberError:
+            logger.info(
+                'User already member during invitation acceptance',
+                extra={'user_id': user_id},
+            )
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&already_member=true'
+            else:
+                redirect_url = f'{redirect_url}?already_member=true'
+
+        except EmailMismatchError as e:
+            logger.warning(
+                'Email mismatch during auth callback invitation acceptance',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&email_mismatch=true'
+            else:
+                redirect_url = f'{redirect_url}?email_mismatch=true'
+
+        except Exception as e:
+            logger.exception(
+                'Unexpected error processing invitation during auth callback',
+                extra={'user_id': user_id, 'error': str(e)},
+            )
+            # Don't fail the login if invitation processing fails
+            if '?' in redirect_url:
+                redirect_url = f'{redirect_url}&invitation_error=true'
+            else:
+                redirect_url = f'{redirect_url}?invitation_error=true'
 
     # If the user hasn't accepted the TOS, redirect to the TOS page
     if not has_accepted_tos:
@@ -364,8 +490,12 @@ async def keycloak_callback(
         tos_redirect_url = (
             f'{request.base_url}accept-tos?redirect_url={encoded_redirect_url}'
         )
+        if invitation_token:
+            tos_redirect_url = f'{tos_redirect_url}&invitation_success=true'
         response = RedirectResponse(tos_redirect_url, status_code=302)
     else:
+        if invitation_token:
+            redirect_url = f'{redirect_url}&invitation_success=true'
         response = RedirectResponse(redirect_url, status_code=302)
 
     set_response_cookie(
@@ -475,28 +605,20 @@ async def accept_tos(request: Request):
     redirect_url = body.get('redirect_url', str(request.base_url))
 
     # Update user settings with TOS acceptance
+    accepted_tos: datetime = datetime.now(timezone.utc)
     with session_maker() as session:
-        user_settings = (
-            session.query(UserSettings)
-            .filter(UserSettings.keycloak_user_id == user_id)
-            .first()
-        )
-
-        if user_settings:
-            user_settings.accepted_tos = datetime.now(timezone.utc)
-            session.merge(user_settings)
-        else:
-            # Create user settings if they don't exist
-            user_settings = UserSettings(
-                keycloak_user_id=user_id,
-                accepted_tos=datetime.now(timezone.utc),
-                user_version=0,  # This will trigger a migration to the latest version on next load
+        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+        if not user:
+            session.rollback()
+            logger.error('User for {user_id} not found.')
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={'error': 'User does not exist'},
             )
-            session.add(user_settings)
-
+        user.accepted_tos = accepted_tos
         session.commit()
 
-    logger.info(f'User {user_id} accepted TOS')
+        logger.info(f'User {user_id} accepted TOS')
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={'redirect_url': redirect_url}
