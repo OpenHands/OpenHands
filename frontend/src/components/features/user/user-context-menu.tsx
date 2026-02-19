@@ -23,9 +23,8 @@ import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
 import { useShouldHideOrgSelector } from "#/hooks/use-should-hide-org-selector";
 
 // Shared className for context menu list items in the user context menu
-// Removes default padding and hover background to match the simpler text-hover style
 const contextMenuListItemClassName = cn(
-  "flex items-center p-0 h-auto hover:bg-transparent hover:text-white gap-1",
+  "flex items-center gap-2 p-2 h-auto hover:bg-white/10 hover:text-white rounded",
 );
 
 interface UserContextMenuProps {
@@ -77,7 +76,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
       data-testid="user-context-menu"
       ref={ref}
       className={cn(
-        "w-64 flex flex-col gap-3 bg-tertiary border border-tertiary rounded-xl p-6",
+        "w-72 flex flex-col gap-3 bg-tertiary border border-tertiary rounded-xl p-4",
         "text-sm absolute left-full bottom-0 z-60",
       )}
     >
@@ -101,7 +100,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
         )}
 
         {!isMember && !isPersonalOrg && (
-          <>
+          <div className="flex flex-col items-start gap-0 w-full">
             <ContextMenuListItem
               onClick={handleInviteMemberClick}
               className={contextMenuListItemClassName}
@@ -126,47 +125,50 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               <FiUsers className="text-white shrink-0" size={14} />
               {t(I18nKey.ORG$MANAGE_ORGANIZATION_MEMBERS)}
             </ContextMenuListItem>
-          </>
+            <Divider className="my-1.5" />
+          </div>
         )}
 
+        <div className="flex flex-col items-start gap-0 w-full">
+          {navItems.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              onClick={onClose}
+              className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full"
+            >
+              {React.cloneElement(item.icon, {
+                className: "text-white",
+                width: 14,
+                height: 14,
+              } as React.SVGProps<SVGSVGElement>)}
+              {t(item.text)}
+            </Link>
+          ))}
+        </div>
+
         <Divider className="my-1.5" />
 
-        {navItems.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
+        <div className="flex flex-col items-start gap-0 w-full">
+          <a
+            href="https://docs.openhands.dev"
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={onClose}
-            className="flex items-center gap-1 cursor-pointer hover:text-white w-full"
+            className="flex items-center gap-2 p-2 cursor-pointer hover:bg-white/10 hover:text-white rounded w-full"
           >
-            {React.cloneElement(item.icon, {
-              className: "text-white",
-              width: 14,
-              height: 14,
-            } as React.SVGProps<SVGSVGElement>)}
-            {t(item.text)}
-          </Link>
-        ))}
+            <DocumentIcon className="text-white" width={14} height={14} />
+            {t(I18nKey.SIDEBAR$DOCS)}
+          </a>
 
-        <Divider className="my-1.5" />
-
-        <a
-          href="https://docs.openhands.dev"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onClose}
-          className="flex items-center gap-1 cursor-pointer hover:text-white w-full"
-        >
-          <DocumentIcon className="text-white" width={14} height={14} />
-          {t(I18nKey.SIDEBAR$DOCS)}
-        </a>
-
-        <ContextMenuListItem
-          onClick={handleLogout}
-          className={contextMenuListItemClassName}
-        >
-          <IoLogOutOutline className="text-white" size={14} />
-          {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
-        </ContextMenuListItem>
+          <ContextMenuListItem
+            onClick={handleLogout}
+            className={contextMenuListItemClassName}
+          >
+            <IoLogOutOutline className="text-white" size={14} />
+            {t(I18nKey.ACCOUNT_SETTINGS$LOGOUT)}
+          </ContextMenuListItem>
+        </div>
       </div>
     </div>
   );
