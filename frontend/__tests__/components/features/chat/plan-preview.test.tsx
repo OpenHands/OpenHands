@@ -92,19 +92,21 @@ describe("PlanPreview", () => {
   });
 
   it("should render nothing when planContent is null", () => {
-    renderPlanPreview(<PlanPreview planContent={null} />);
+    // Arrange & Act
+    const { container } = renderPlanPreview(<PlanPreview planContent={null} />);
 
-    const contentDiv = screen.getByTestId("plan-preview-content");
-    expect(contentDiv).toBeInTheDocument();
-    expect(contentDiv.textContent?.trim() || "").toBe("");
+    // Assert
+    expect(container.firstChild).toBeNull();
   });
 
   it("should render nothing when planContent is undefined", () => {
-    renderPlanPreview(<PlanPreview planContent={undefined} />);
+    // Arrange & Act
+    const { container } = renderPlanPreview(
+      <PlanPreview planContent={undefined} />,
+    );
 
-    const contentDiv = screen.getByTestId("plan-preview-content");
-    expect(contentDiv).toBeInTheDocument();
-    expect(contentDiv.textContent?.trim() || "").toBe("");
+    // Assert
+    expect(container.firstChild).toBeNull();
   });
 
   it("should render markdown content when planContent is provided", () => {

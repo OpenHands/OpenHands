@@ -158,6 +158,57 @@ def test_get_org_member(session_maker):
         assert retrieved_org_member.llm_api_key.get_secret_value() == 'test-key'
 
 
+def test_get_org_member_for_current_org(session_maker):
+    # Test getting org_member for user's current organization
+    with session_maker() as session:
+        # Create test data - user belongs to two orgs but current_org is org1
+        org1 = Org(name='test-org-1')
+        org2 = Org(name='test-org-2')
+        session.add_all([org1, org2])
+        session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org1.id)
+        role = Role(name='admin', rank=1)
+        session.add_all([user, role])
+        session.flush()
+
+        org_member1 = OrgMember(
+            org_id=org1.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key-1',
+            status='active',
+        )
+        org_member2 = OrgMember(
+            org_id=org2.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key-2',
+            status='active',
+        )
+        session.add_all([org_member1, org_member2])
+        session.commit()
+        user_id = user.id
+        org1_id = org1.id
+
+    # Test retrieval - should return org_member for current_org (org1)
+    with patch('storage.org_member_store.session_maker', session_maker):
+        retrieved_org_member = OrgMemberStore.get_org_member_for_current_org(user_id)
+        assert retrieved_org_member is not None
+        assert retrieved_org_member.org_id == org1_id
+        assert retrieved_org_member.user_id == user_id
+        assert retrieved_org_member.llm_api_key.get_secret_value() == 'test-key-1'
+
+
+def test_get_org_member_for_current_org_user_not_found(session_maker):
+    # Test getting org_member for non-existent user
+    with patch('storage.org_member_store.session_maker', session_maker):
+        retrieved_org_member = OrgMemberStore.get_org_member_for_current_org(
+            uuid.uuid4()
+        )
+        assert retrieved_org_member is None
+
+
 def test_add_user_to_org(session_maker):
     # Test adding a user to an org
     with session_maker() as session:

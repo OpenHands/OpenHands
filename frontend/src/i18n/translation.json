@@ -12207,6 +12207,22 @@
     "de": "Lass uns anfangen",
     "uk": "Почнімо"
   },
+  "AUTH$INVITATION_PENDING": {
+    "en": "Sign in to accept your organization invitation",
+    "ja": "組織への招待を受け入れるにはサインインしてください",
+    "zh-CN": "登录以接受您的组织邀请",
+    "zh-TW": "登入以接受您的組織邀請",
+    "ko-KR": "조직 초대를 수락하려면 로그인하세요",
+    "no": "Logg inn for å godta organisasjonsinvitasjonen din",
+    "it": "Accedi per accettare l'invito della tua organizzazione",
+    "pt": "Faça login para aceitar o convite da sua organização",
+    "es": "Inicia sesión para aceptar la invitación de tu organización",
+    "ar": "سجّل الدخول لقبول دعوة مؤسستك",
+    "fr": "Connectez-vous pour accepter l'invitation de votre organisation",
+    "tr": "Organizasyon davetinizi kabul etmek için giriş yapın",
+    "de": "Melden Sie sich an, um Ihre Organisationseinladung anzunehmen",
+    "uk": "Увійдіть, щоб прийняти запрошення до організації"
+  },
   "COMMON$TERMS_OF_SERVICE": {
     "en": "Terms of Service",
     "ja": "利用規約",

@@ -5,6 +5,7 @@ Store class for managing users.
 import asyncio
 import uuid
 from typing import Optional
+from uuid import UUID
 
 from server.auth.token_manager import TokenManager
 from server.constants import (
@@ -82,6 +83,8 @@ class UserStore:
                 role_id=role_id,
                 **user_kwargs,
             )
+            user.email = user_info.get('email')
+            user.email_verified = user_info.get('email_verified')
             session.add(user)
 
             role = RoleStore.get_role_by_name('owner')
@@ -768,10 +771,60 @@ class UserStore:
                 await UserStore._release_user_creation_lock(user_id)
 
     @staticmethod
+    async def get_user_by_email_async(email: str) -> Optional[User]:
+        """Get user by email address (async version).
+
+        This method looks up a user by their email address. Note that email
+        addresses may not be unique across all users in rare cases.
+
+        Args:
+            email: The email address to search for
+
+        Returns:
+            User: The user with the matching email, or None if not found
+        """
+        if not email:
+            return None
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .options(joinedload(User.org_members))
+                .filter(User.email == email.lower().strip())
+            )
+            return result.scalars().first()
+
+    @staticmethod
     def list_users() -> list[User]:
         """List all users."""
         with session_maker() as session:
             return session.query(User).all()
+
+    @staticmethod
+    def update_current_org(user_id: str, org_id: UUID) -> Optional[User]:
+        """Update the user's current organization.
+
+        Args:
+            user_id: The user's ID (Keycloak user ID)
+            org_id: The organization ID to set as current
+
+        Returns:
+            User: The updated user object, or None if user not found
+        """
+        with session_maker() as session:
+            user = (
+                session.query(User)
+                .filter(User.id == uuid.UUID(user_id))
+                .with_for_update()
+                .first()
+            )
+            if not user:
+                return None
+
+            user.current_org_id = org_id
+            session.commit()
+            session.refresh(user)
+            return user
 
     @staticmethod
     async def backfill_contact_name(user_id: str, user_info: dict) -> None:

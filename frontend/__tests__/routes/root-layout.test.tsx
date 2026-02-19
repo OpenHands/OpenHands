@@ -42,6 +42,15 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
 }));
 
+vi.mock("#/hooks/use-invitation", () => ({
+  useInvitation: () => ({
+    invitationToken: null,
+    hasInvitation: false,
+    buildOAuthStateData: (baseState: Record<string, string>) => baseState,
+    clearInvitation: vi.fn(),
+  }),
+}));
+
 function LoginStub() {
   const [searchParams] = useSearchParams();
   const emailVerificationRequired =
@@ -348,6 +357,70 @@ describe("MainApp", () => {
           expect(returnToElement.textContent).toBe(
             "/oauth/device/verify?user_code=F9XN6BKU",
           );
+        },
+        { timeout: 2000 },
+      );
+    });
+  });
+
+  describe("Invitation URL Parameters", () => {
+    beforeEach(() => {
+      vi.spyOn(AuthService, "authenticate").mockRejectedValue({
+        response: { status: 401 },
+        isAxiosError: true,
+      });
+    });
+
+    it("should redirect to login when email_mismatch=true is in query params", async () => {
+      renderMainApp(["/?email_mismatch=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect to login when invitation_success=true is in query params", async () => {
+      renderMainApp(["/?invitation_success=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect to login when invitation_expired=true is in query params", async () => {
+      renderMainApp(["/?invitation_expired=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect to login when invitation_invalid=true is in query params", async () => {
+      renderMainApp(["/?invitation_invalid=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect to login when already_member=true is in query params", async () => {
+      renderMainApp(["/?already_member=true"]);
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId("login-page")).toBeInTheDocument();
         },
         { timeout: 2000 },
       );

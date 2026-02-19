@@ -51,6 +51,7 @@ class Org(Base):  # type: ignore
     # Relationships
     org_members = relationship('OrgMember', back_populates='org')
     current_users = relationship('User', back_populates='current_org')
+    invitations = relationship('OrgInvitation', back_populates='org')
     billing_sessions = relationship('BillingSession', back_populates='org')
     stored_conversation_metadata_saas = relationship(
         'StoredConversationMetadataSaas', back_populates='org'

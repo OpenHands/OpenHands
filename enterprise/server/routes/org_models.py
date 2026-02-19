@@ -45,6 +45,16 @@ class OrgAuthorizationError(OrgDeletionError):
         super().__init__(message)
 
 
+class OrphanedUserError(OrgDeletionError):
+    """Raised when deleting an org would leave users without any organization."""
+
+    def __init__(self, user_ids: list[str]):
+        self.user_ids = user_ids
+        super().__init__(
+            f'Cannot delete organization: {len(user_ids)} user(s) would have no remaining organization'
+        )
+
+
 class OrgNotFoundError(Exception):
     """Raised when organization is not found or user doesn't have access."""
 
@@ -59,7 +69,7 @@ class OrgMemberNotFoundError(Exception):
     def __init__(self, org_id: str, user_id: str):
         self.org_id = org_id
         self.user_id = user_id
-        super().__init__(f'Member not found in organization "{org_id}"')
+        super().__init__(f'Member "{user_id}" not found in organization "{org_id}"')
 
 
 class RoleNotFoundError(Exception):
@@ -68,6 +78,44 @@ class RoleNotFoundError(Exception):
     def __init__(self, role_id: int):
         self.role_id = role_id
         super().__init__(f'Role with id "{role_id}" not found')
+
+
+class InvalidRoleError(Exception):
+    """Raised when an invalid role name is specified."""
+
+    def __init__(self, role_name: str):
+        self.role_name = role_name
+        super().__init__(f'Invalid role: "{role_name}"')
+
+
+class InsufficientPermissionError(Exception):
+    """Raised when user lacks permission to perform an operation."""
+
+    def __init__(self, message: str = 'Insufficient permission'):
+        super().__init__(message)
+
+
+class CannotModifySelfError(Exception):
+    """Raised when user attempts to modify their own membership."""
+
+    def __init__(self, action: str = 'modify'):
+        self.action = action
+        super().__init__(f'Cannot {action} your own membership')
+
+
+class LastOwnerError(Exception):
+    """Raised when attempting to remove or demote the last owner."""
+
+    def __init__(self, action: str = 'remove'):
+        self.action = action
+        super().__init__(f'Cannot {action} the last owner of an organization')
+
+
+class MemberUpdateError(Exception):
+    """Raised when member update operation fails."""
+
+    def __init__(self, message: str = 'Failed to update member'):
+        super().__init__(message)
 
 
 class OrgCreate(BaseModel):
@@ -166,12 +214,17 @@ class OrgPage(BaseModel):
 
     items: list[OrgResponse]
     next_page_id: str | None = None
+    current_org_id: str | None = None
 
 
 class OrgUpdate(BaseModel):
     """Request model for updating an organization."""
 
     # Basic organization information (any authenticated user can update)
+    name: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+    ] = None
     contact_name: str | None = None
     contact_email: EmailStr | None = None
     conversation_expiration: int | None = None
@@ -205,7 +258,7 @@ class OrgMemberResponse(BaseModel):
     user_id: str
     email: str | None
     role_id: int
-    role_name: str
+    role: str
     role_rank: int
     status: str | None
 
@@ -215,6 +268,12 @@ class OrgMemberPage(BaseModel):
 
     items: list[OrgMemberResponse]
     next_page_id: str | None = None
+
+
+class OrgMemberUpdate(BaseModel):
+    """Request model for updating an organization member."""
+
+    role: str | None = None  # Role name: 'owner', 'admin', or 'member'
 
 
 class MeResponse(BaseModel):

@@ -9,15 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
-from server.constants import (
-    STRIPE_API_KEY,
-)
+from server.constants import STRIPE_API_KEY
 from server.logger import logger
 from starlette.datastructures import URL
 from storage.billing_session import BillingSession
 from storage.database import session_maker
 from storage.lite_llm_manager import LiteLlmManager
-from storage.org_store import OrgStore
+from storage.org import Org
 from storage.subscription_access import SubscriptionAccess
 from storage.user_store import UserStore
 
@@ -149,7 +147,7 @@ async def create_customer_setup_session(
         customer=customer_info['customer_id'],
         mode='setup',
         payment_method_types=['card'],
-        success_url=f'{base_url}?free_credits=success',
+        success_url=f'{base_url}?setup=success',
         cancel_url=f'{base_url}',
     )
     return CreateBillingSessionResponse(redirect_url=checkout_session.url)
@@ -254,6 +252,8 @@ async def success_callback(session_id: str, request: Request):
         max_budget = (user_team_info.get('litellm_budget_table') or {}).get(
             'max_budget', 0
         )
+
+        org = session.query(Org).filter(Org.id == user.current_org_id).first()
         new_max_budget = max_budget + add_credits
 
         await LiteLlmManager.update_team_and_users_budget(
@@ -261,7 +261,8 @@ async def success_callback(session_id: str, request: Request):
         )
 
         # Enable BYOR export for the org now that they've purchased credits
-        OrgStore.update_org(user.current_org_id, {'byor_export_enabled': True})
+        if org:
+            org.byor_export_enabled = True
 
         # Store transaction status
         billing_session.status = 'completed'

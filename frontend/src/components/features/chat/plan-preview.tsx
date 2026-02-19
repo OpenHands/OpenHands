@@ -65,7 +65,7 @@ export function PlanPreview({
     return `${planContent.slice(0, MAX_CONTENT_LENGTH)}...`;
   }, [planContent]);
 
-  if (!shouldUsePlanningAgent) {
+  if (!shouldUsePlanningAgent || !planContent) {
     return null;
   }
 
