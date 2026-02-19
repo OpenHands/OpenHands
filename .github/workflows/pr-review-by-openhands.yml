@@ -36,9 +36,11 @@ jobs:
         concurrency:
             group: pr-review-${{ github.event.pull_request.number }}
             cancel-in-progress: true
-        runs-on: ubuntu-24.04
+        runs-on: blacksmith-4vcpu-ubuntu-2404
         steps:
             - name: Run PR Review
+              # Note: This consolidated action uploads PR review logs as a GitHub Actions artifact
+              # named `openhands-pr-review-logs` (and optionally Laminar trace info).
               uses: OpenHands/software-agent-sdk/.github/actions/pr-review@main
               with:
                   llm-model: litellm_proxy/claude-sonnet-4-5-20250929
