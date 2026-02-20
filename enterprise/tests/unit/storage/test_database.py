@@ -6,8 +6,6 @@ keyword arguments to the underlying session maker for backward compatibility.
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestSessionMaker:
     """Test cases for the session_maker function."""
@@ -72,7 +70,9 @@ class TestSessionMaker:
         mock_get_injector.return_value = mock_injector
 
         # Call with multiple kwargs
-        result = session_maker(expire_on_commit=False, autoflush=False, autocommit=False)
+        result = session_maker(
+            expire_on_commit=False, autoflush=False, autocommit=False
+        )
 
         # Verify all kwargs were passed through
         mock_inner_session_maker.assert_called_once_with(
