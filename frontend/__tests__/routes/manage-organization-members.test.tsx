@@ -35,8 +35,8 @@ vi.mock("react-i18next", async () => {
     useTranslation: () => ({
       t: (key: string) => {
         const translations: Record<string, string> = {
-          "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
-          "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+          ORG$SELECT_ORGANIZATION_PLACEHOLDER: "Please select an organization",
+          ORG$PERSONAL_WORKSPACE: "Personal Workspace",
         };
         return translations[key] || key;
       },
@@ -87,7 +87,9 @@ describe("Manage Organization Members Route", () => {
 
   beforeEach(() => {
     // Set Zustand store to a team org so clientLoader allows access to /settings/org-members
-    useSelectedOrganizationStore.setState({ organizationId: MOCK_TEAM_ORG_ACME.id });
+    useSelectedOrganizationStore.setState({
+      organizationId: MOCK_TEAM_ORG_ACME.id,
+    });
     // Seed organizations into the module-level queryClient used by clientLoader
     mockQueryClient.setQueryData(["organizations"], {
       items: [MOCK_TEAM_ORG_ACME],
@@ -277,7 +279,7 @@ describe("Manage Organization Members Route", () => {
   // Helper function to find invite button
   const findInviteButton = () =>
     screen.findByRole("button", {
-      name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
+      name: /ORG\$INVITE_ORG_MEMBERS/i,
     });
 
   // Helper function to verify all three role options are present in dropdown
@@ -644,7 +646,7 @@ describe("Manage Organization Members Route", () => {
       await waitFor(
         () => {
           const inviteButton = screen.queryByRole("button", {
-            name: /ORG\$INVITE_ORGANIZATION_MEMBER/i,
+            name: /ORG\$INVITE_ORG_MEMBERS/i,
           });
           expect(inviteButton).not.toBeInTheDocument();
         },
