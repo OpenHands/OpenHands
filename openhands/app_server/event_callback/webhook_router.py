@@ -144,7 +144,6 @@ async def on_event(
     event_service: EventService = event_service_dependency,
 ) -> Success:
     """Webhook callback for when event stream events occur."""
-    _logger.info('on_event', extra={'conversation_id': conversation_id})
     app_conversation_info = await valid_conversation(
         conversation_id, sandbox_info, app_conversation_info_service
     )
