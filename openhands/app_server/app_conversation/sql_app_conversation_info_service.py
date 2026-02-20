@@ -101,6 +101,7 @@ class StoredConversationMetadata(Base):  # type: ignore
     sandbox_id = Column(String, nullable=True, index=True)
     parent_conversation_id = Column(String, nullable=True, index=True)
     public = Column(Boolean, nullable=True, index=True)
+    environment_url = Column(String, nullable=True)
 
 
 @dataclass
@@ -349,6 +350,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 else None
             ),
             public=info.public,
+            environment_url=info.environment_url,
         )
 
         await self.db_session.merge(stored)
@@ -536,6 +538,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             ),
             sub_conversation_ids=sub_conversation_ids or [],
             public=stored.public,
+            environment_url=stored.environment_url,
             created_at=created_at,
             updated_at=updated_at,
         )

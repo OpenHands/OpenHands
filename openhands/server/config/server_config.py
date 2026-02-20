@@ -53,6 +53,7 @@ class ServerConfig(ServerConfigInterface):
             'FEATURE_FLAGS': {
                 'ENABLE_BILLING': self.enable_billing,
                 'HIDE_LLM_SETTINGS': self.hide_llm_settings,
+                'ENABLE_CONNECT_TO_ENVIRONMENT': True,
             },
         }
         if better_auth_url:

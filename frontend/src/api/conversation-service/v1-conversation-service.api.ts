@@ -350,6 +350,42 @@ class V1ConversationService {
   }
 
   /**
+   * Connect to an existing remote environment
+   * Posts to the app-conversations API with environment_url set.
+   * The environment is added as an MCP server so the agent can interact with it.
+   *
+   * @param environmentUrl URL of the existing environment
+   * @param initialUserMsg Optional initial message
+   * @param agentType Optional agent type
+   * @returns AppConversationStartTask with task ID for polling
+   */
+  static async connectToEnvironment(
+    environmentUrl: string,
+    initialUserMsg?: string,
+    agentType?: "default" | "plan",
+  ): Promise<V1AppConversationStartTask> {
+    const body: V1AppConversationStartRequest = {
+      environment_url: environmentUrl,
+      trigger: "connect_to_environment",
+      agent_type: agentType,
+    };
+
+    if (initialUserMsg) {
+      body.initial_message = {
+        role: "user",
+        content: [{ type: "text", text: initialUserMsg }],
+      };
+    }
+
+    const { data } = await openHands.post<V1AppConversationStartTask>(
+      "/api/v1/app-conversations",
+      body,
+    );
+
+    return data;
+  }
+
+  /**
    * Get all skills associated with a V1 conversation
    * @param conversationId The conversation ID
    * @returns The available skills associated with the conversation

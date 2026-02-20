@@ -11,6 +11,17 @@ const REAL_CONVERSATION_ID = "conv-abc123";
 
 vi.mock("#/utils/feature-flags", () => ({
   USE_PLANNING_AGENT: () => false,
+  ENABLE_VSCODE_TAB: () => false,
+}));
+
+let mockSelectedRepository: string | null = null;
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => ({
+    data: mockSelectedRepository
+      ? { selected_repository: mockSelectedRepository }
+      : null,
+  }),
 }));
 
 let mockConversationId = TASK_CONVERSATION_ID;
@@ -34,6 +45,7 @@ describe("ConversationTabs localStorage behavior", () => {
     localStorage.clear();
     vi.resetAllMocks();
     mockConversationId = TASK_CONVERSATION_ID;
+    mockSelectedRepository = null;
   });
 
   describe("task-prefixed conversation IDs", () => {
@@ -51,6 +63,7 @@ describe("ConversationTabs localStorage behavior", () => {
   describe("consolidated localStorage key", () => {
     it("should use a single consolidated key for tab state", async () => {
       mockConversationId = REAL_CONVERSATION_ID;
+      mockSelectedRepository = "owner/repo";
       const user = userEvent.setup();
 
       render(<ConversationTabs />, {
@@ -72,9 +85,12 @@ describe("ConversationTabs localStorage behavior", () => {
 
     it("should store unpinned tabs in consolidated key via context menu", async () => {
       mockConversationId = REAL_CONVERSATION_ID;
+      mockSelectedRepository = "owner/repo";
       const user = userEvent.setup();
 
-      render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+      render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
 
       const terminalItem = screen.getByText("COMMON$TERMINAL");
       await user.click(terminalItem);

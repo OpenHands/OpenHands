@@ -24,6 +24,7 @@ const VALID_OSS_CONFIG: GetConfigResponse = {
     ENABLE_JIRA: false,
     ENABLE_JIRA_DC: false,
     ENABLE_LINEAR: false,
+    ENABLE_CONNECT_TO_ENVIRONMENT: false,
   },
 };
 
@@ -37,6 +38,7 @@ const VALID_SAAS_CONFIG: GetConfigResponse = {
     ENABLE_JIRA: false,
     ENABLE_JIRA_DC: false,
     ENABLE_LINEAR: false,
+    ENABLE_CONNECT_TO_ENVIRONMENT: false,
   },
 };
 

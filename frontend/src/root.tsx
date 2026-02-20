@@ -33,7 +33,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export const links: LinksFunction = () => [
-  { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+  { rel: "icon", type: "image/svg+xml", href: "/favicon.ico" },
 ];
 
 export const meta: MetaFunction = () => [

@@ -1,6 +1,6 @@
 import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
-import b1Logo from "#/assets/branding/b1-logo.png";
+import b1Logo from "#/assets/branding/b1-logo.svg";
 import { I18nKey } from "#/i18n/declaration";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 

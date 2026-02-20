@@ -14,6 +14,7 @@ import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import { ENABLE_VSCODE_TAB, USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -30,14 +31,34 @@ export function ConversationTabsContextMenu({
   const { state, setUnpinnedTabs } =
     useConversationLocalStorageState(conversationId);
 
+  const { data: conversation } = useActiveConversation();
+  const isRepositoryConversation = !!conversation?.selected_repository;
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   const tabConfig = [
-    { tab: "editor", icon: GitChanges, i18nKey: I18nKey.COMMON$CHANGES },
-    ...(ENABLE_VSCODE_TAB()
-      ? [{ tab: "vscode", icon: VSCodeIcon, i18nKey: I18nKey.COMMON$CODE }]
+    ...(isRepositoryConversation
+      ? [
+          {
+            tab: "editor",
+            icon: GitChanges,
+            i18nKey: I18nKey.COMMON$CHANGES,
+          },
+          ...(ENABLE_VSCODE_TAB()
+            ? [
+                {
+                  tab: "vscode",
+                  icon: VSCodeIcon,
+                  i18nKey: I18nKey.COMMON$CODE,
+                },
+              ]
+            : []),
+          {
+            tab: "terminal",
+            icon: TerminalIcon,
+            i18nKey: I18nKey.COMMON$TERMINAL,
+          },
+        ]
       : []),
-    { tab: "terminal", icon: TerminalIcon, i18nKey: I18nKey.COMMON$TERMINAL },
     { tab: "served", icon: ServerIcon, i18nKey: I18nKey.COMMON$APP },
     { tab: "browser", icon: GlobeIcon, i18nKey: I18nKey.COMMON$BROWSER },
   ];

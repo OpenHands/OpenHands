@@ -126,6 +126,8 @@ async def on_conversation_update(
         pr_number=existing.pr_number,
         # Preserve parent/child relationship and other metadata
         parent_conversation_id=existing.parent_conversation_id,
+        public=existing.public,
+        environment_url=existing.environment_url,
     )
     await app_conversation_info_service.save_app_conversation_info(
         app_conversation_info

@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from openhands.agent_server.models import OpenHandsModel, SendMessageRequest
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
@@ -46,6 +46,8 @@ class AppConversationInfo(BaseModel):
     sub_conversation_ids: list[OpenHandsUUID] = Field(default_factory=list)
 
     public: bool | None = None
+
+    environment_url: str | None = None
 
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -116,7 +118,25 @@ class AppConversationStartRequest(OpenHandsModel):
     parent_conversation_id: OpenHandsUUID | None = None
     agent_type: AgentType = Field(default=AgentType.DEFAULT)
 
+    # Environment connection parameters
+    environment_url: str | None = None
+    environment_conversation_id: str | None = None
+
     public: bool | None = None
+
+    @field_validator('environment_url')
+    @classmethod
+    def validate_environment_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        from urllib.parse import urlparse
+
+        parsed = urlparse(v)
+        if parsed.scheme not in ('http', 'https'):
+            raise ValueError('environment_url must use http or https scheme')
+        if not parsed.hostname:
+            raise ValueError('environment_url must have a valid host')
+        return v
 
 
 class AppConversationUpdateRequest(BaseModel):
@@ -131,6 +151,7 @@ class AppConversationStartTaskStatus(Enum):
     SETTING_UP_GIT_HOOKS = 'SETTING_UP_GIT_HOOKS'
     SETTING_UP_SKILLS = 'SETTING_UP_SKILLS'
     STARTING_CONVERSATION = 'STARTING_CONVERSATION'
+    CONNECTING_TO_ENVIRONMENT = 'CONNECTING_TO_ENVIRONMENT'
     READY = 'READY'
     ERROR = 'ERROR'
 

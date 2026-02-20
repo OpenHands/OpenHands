@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { I18nKey } from "#/i18n/declaration";
-import b1Logo from "#/assets/branding/b1-logo.png";
+import b1Logo from "#/assets/branding/b1-logo.svg";
 
 export function ReauthModal() {
   const { t } = useTranslation();

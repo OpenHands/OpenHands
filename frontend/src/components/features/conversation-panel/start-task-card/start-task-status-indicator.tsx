@@ -21,6 +21,7 @@ export function StartTaskStatusIndicator({
       case "SETTING_UP_GIT_HOOKS":
       case "SETTING_UP_SKILLS":
       case "STARTING_CONVERSATION":
+      case "CONNECTING_TO_ENVIRONMENT":
         return "bg-yellow-500 animate-pulse";
       default:
         return "bg-gray-500";

@@ -13,6 +13,7 @@ class WebClientFeatureFlags(BaseModel):
     enable_jira: bool = False
     enable_jira_dc: bool = False
     enable_linear: bool = False
+    enable_connect_to_environment: bool = True
 
 
 class WebClientConfig(DiscriminatedUnionMixin):

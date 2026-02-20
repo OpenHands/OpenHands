@@ -22,10 +22,25 @@ export const useUnifiedActiveHost = () => {
     useConversationConfig();
 
   const isV1Conversation = conversation?.conversation_version === "V1";
+  const isEnvironmentConnection =
+    conversation?.trigger === "connect_to_environment";
+  const environmentUrl = sessionStorage.getItem(
+    `environment-url:${conversationId}`,
+  );
   const sandboxId = conversationConfig?.runtime_id;
 
-  // Fetch sandbox data for V1 conversations
-  const sandboxesQuery = useBatchSandboxes(sandboxId ? [sandboxId] : []);
+  // For environment connections, use the environment URL directly
+  // No sandbox lookup, no health-check polling needed
+  React.useEffect(() => {
+    if (isEnvironmentConnection && environmentUrl) {
+      setActiveHost(environmentUrl);
+    }
+  }, [isEnvironmentConnection, environmentUrl]);
+
+  // Fetch sandbox data for V1 conversations (skip for environment connections)
+  const sandboxesQuery = useBatchSandboxes(
+    sandboxId && !isEnvironmentConnection ? [sandboxId] : [],
+  );
 
   // Get worker URLs from V1 sandbox or legacy web hosts from V0
   const { data, isLoading: hostsQueryLoading } = useQuery({
@@ -55,6 +70,7 @@ export const useUnifiedActiveHost = () => {
       return { hosts };
     },
     enabled:
+      !isEnvironmentConnection &&
       runtimeIsReady &&
       !!conversationId &&
       (!isV1Conversation || !!sandboxesQuery.data),
@@ -64,47 +80,54 @@ export const useUnifiedActiveHost = () => {
     },
   });
 
-  // Poll all hosts to find which one is active
+  // Poll all hosts to find which one is active (skip for environment connections)
   const apps = useQueries({
-    queries: data.hosts.map((host) => ({
-      queryKey: [conversationId, "unified", "hosts", host],
-      queryFn: async () => {
-        // Skip XHR health check for cross-origin URLs (e.g., Codespaces port
-        // forwarding) since CORS will block the request.  The URL will be
-        // loaded in an iframe which doesn't have CORS restrictions.
-        try {
-          const hostOrigin = new URL(host).origin;
-          if (hostOrigin !== window.location.origin) {
-            return host;
-          }
-        } catch {
-          // invalid URL — fall through to the normal check
-        }
-        try {
-          await axios.get(host);
-          return host;
-        } catch (e) {
-          return "";
-        }
-      },
-      refetchInterval: 3000,
-      meta: {
-        disableToast: true,
-      },
-    })),
+    queries: isEnvironmentConnection
+      ? []
+      : data.hosts.map((host) => ({
+          queryKey: [conversationId, "unified", "hosts", host],
+          queryFn: async () => {
+            // Skip XHR health check for cross-origin URLs (e.g., Codespaces port
+            // forwarding) since CORS will block the request.  The URL will be
+            // loaded in an iframe which doesn't have CORS restrictions.
+            try {
+              const hostOrigin = new URL(host).origin;
+              if (hostOrigin !== window.location.origin) {
+                return host;
+              }
+            } catch {
+              // invalid URL — fall through to the normal check
+            }
+            try {
+              await axios.get(host);
+              return host;
+            } catch (e) {
+              return "";
+            }
+          },
+          refetchInterval: 3000,
+          meta: {
+            disableToast: true,
+          },
+        })),
   });
 
   const appsData = apps.map((app) => app.data);
 
   React.useEffect(() => {
+    if (isEnvironmentConnection) return;
     const successfulApp = appsData.find((app) => app);
     setActiveHost(successfulApp || "");
-  }, [appsData]);
+  }, [appsData, isEnvironmentConnection]);
 
   // Calculate overall loading state including dependent queries for V1
-  const isLoading = isV1Conversation
-    ? isLoadingConfig || sandboxesQuery.isLoading || hostsQueryLoading
-    : hostsQueryLoading;
+  const getLoadingState = () => {
+    if (isEnvironmentConnection) return false;
+    if (isV1Conversation)
+      return isLoadingConfig || sandboxesQuery.isLoading || hostsQueryLoading;
+    return hostsQueryLoading;
+  };
+  const isLoading = getLoadingState();
 
   return { activeHost, isLoading };
 };

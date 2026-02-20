@@ -55,10 +55,20 @@ export const useTaskPolling = () => {
   useEffect(() => {
     const task = taskQuery.data;
     if (task?.app_conversation_id && task.status !== "ERROR") {
+      // Carry forward environment URL from task to conversation
+      const taskKey = `environment-url:${conversationId}`;
+      const envUrl = sessionStorage.getItem(taskKey);
+      if (envUrl) {
+        sessionStorage.setItem(
+          `environment-url:${task.app_conversation_id}`,
+          envUrl,
+        );
+        sessionStorage.removeItem(taskKey);
+      }
       // Replace the URL with the actual conversation ID
       navigate(`/conversations/${task.app_conversation_id}`, { replace: true });
     }
-  }, [taskQuery.data, navigate]);
+  }, [taskQuery.data, navigate, conversationId]);
 
   return {
     isTask,

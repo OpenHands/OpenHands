@@ -20,6 +20,9 @@ import {
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
 import { ENABLE_VSCODE_TAB, USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+
+const REPO_ONLY_TABS = ["editor", "vscode", "terminal"];
 
 export function ConversationTabs() {
   const { conversationId } = useConversationId();
@@ -38,6 +41,9 @@ export function ConversationTabs() {
     setRightPanelShown: setPersistedRightPanelShown,
   } = useConversationLocalStorageState(conversationId);
 
+  const { data: conversation } = useActiveConversation();
+  const isRepositoryConversation = !!conversation?.selected_repository;
+
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
   const shouldShowVSCodeTab = ENABLE_VSCODE_TAB();
 
@@ -49,22 +55,30 @@ export function ConversationTabs() {
 
   // Initialize Zustand state from localStorage on component mount
   useEffect(() => {
-    // Initialize selectedTab from localStorage if available
-    setSelectedTab(persistedState.selectedTab);
+    // If not a repository conversation, reset repo-only tabs to a visible one
+    const persistedTab = persistedState.selectedTab;
+    const tab =
+      !isRepositoryConversation &&
+      persistedTab &&
+      REPO_ONLY_TABS.includes(persistedTab)
+        ? "served"
+        : persistedTab;
+    setSelectedTab(tab);
     setHasRightPanelToggled(persistedState.rightPanelShown);
   }, [
     setSelectedTab,
     setHasRightPanelToggled,
     persistedState.selectedTab,
     persistedState.rightPanelShown,
+    isRepositoryConversation,
   ]);
 
   useEffect(() => {
     const handlePanelVisibilityChange = () => {
       if (isRightPanelShown) {
-        // If no tab is selected, default to editor tab
+        // If no tab is selected, default to first available tab
         if (!selectedTab) {
-          onTabChange("editor");
+          onTabChange(isRepositoryConversation ? "editor" : "served");
         }
       }
     };
@@ -102,25 +116,30 @@ export function ConversationTabs() {
     label: string;
     className?: string;
   }[] = [
-    {
-      tabValue: "editor",
-      isActive: isTabActive("editor"),
-      icon: GitChanges,
-      onClick: () => onTabSelected("editor"),
-      tooltipContent: t(I18nKey.COMMON$CHANGES),
-      tooltipAriaLabel: t(I18nKey.COMMON$CHANGES),
-      label: t(I18nKey.COMMON$CHANGES),
-    },
-    {
-      tabValue: "terminal",
-      isActive: isTabActive("terminal"),
-      icon: TerminalIcon,
-      onClick: () => onTabSelected("terminal"),
-      tooltipContent: t(I18nKey.COMMON$TERMINAL),
-      tooltipAriaLabel: t(I18nKey.COMMON$TERMINAL),
-      label: t(I18nKey.COMMON$TERMINAL),
-      className: "pl-2",
-    },
+    // Git changes, terminal, and code tabs are only for repository conversations
+    ...(isRepositoryConversation
+      ? [
+          {
+            tabValue: "editor",
+            isActive: isTabActive("editor"),
+            icon: GitChanges,
+            onClick: () => onTabSelected("editor"),
+            tooltipContent: t(I18nKey.COMMON$CHANGES),
+            tooltipAriaLabel: t(I18nKey.COMMON$CHANGES),
+            label: t(I18nKey.COMMON$CHANGES),
+          },
+          {
+            tabValue: "terminal",
+            isActive: isTabActive("terminal"),
+            icon: TerminalIcon,
+            onClick: () => onTabSelected("terminal"),
+            tooltipContent: t(I18nKey.COMMON$TERMINAL),
+            tooltipAriaLabel: t(I18nKey.COMMON$TERMINAL),
+            label: t(I18nKey.COMMON$TERMINAL),
+            className: "pl-2",
+          },
+        ]
+      : []),
     {
       tabValue: "served",
       isActive: isTabActive("served"),
@@ -141,7 +160,7 @@ export function ConversationTabs() {
     },
   ];
 
-  if (shouldShowVSCodeTab) {
+  if (shouldShowVSCodeTab && isRepositoryConversation) {
     // Insert after "editor" tab (index 0)
     tabs.splice(1, 0, {
       tabValue: "vscode",

@@ -6,6 +6,8 @@ import { TaskSuggestions } from "#/components/features/home/tasks/task-suggestio
 import { GitRepository } from "#/types/git";
 import { NewConversation } from "#/components/features/home/new-conversation/new-conversation";
 import { RecentConversations } from "#/components/features/home/recent-conversations/recent-conversations";
+import { EnvironmentConnector } from "#/components/features/home/environment-connector/environment-connector";
+import { useConfig } from "#/hooks/query/use-config";
 
 <PrefetchPageLinks page="/conversations/:conversationId" />;
 
@@ -13,6 +15,9 @@ function HomeScreen() {
   const [selectedRepo, setSelectedRepo] = React.useState<GitRepository | null>(
     null,
   );
+  const { data: config } = useConfig();
+  const showEnvironmentConnector =
+    config?.FEATURE_FLAGS?.ENABLE_CONNECT_TO_ENVIRONMENT ?? false;
 
   return (
     <div
@@ -23,17 +28,18 @@ function HomeScreen() {
 
       <div className="pt-[25px] flex justify-center">
         <div
-          className="flex flex-col gap-5 px-6 sm:max-w-full sm:min-w-full md:flex-row lg:px-0 lg:max-w-[703px] lg:min-w-[703px]"
+          className={`flex flex-col gap-5 px-6 sm:max-w-full sm:min-w-full md:flex-row lg:px-0 ${showEnvironmentConnector ? "lg:max-w-[1060px] lg:min-w-[1060px]" : "lg:max-w-[703px] lg:min-w-[703px]"}`}
           data-testid="home-screen-new-conversation-section"
         >
           <RepoConnector onRepoSelection={(repo) => setSelectedRepo(repo)} />
+          {showEnvironmentConnector && <EnvironmentConnector />}
           <NewConversation />
         </div>
       </div>
 
       <div className="pt-4 flex sm:justify-start md:justify-center">
         <div
-          className="flex flex-col gap-5 px-6 md:flex-row min-w-full md:max-w-full lg:px-0 lg:max-w-[703px] lg:min-w-[703px]"
+          className={`flex flex-col gap-5 px-6 md:flex-row min-w-full md:max-w-full lg:px-0 ${showEnvironmentConnector ? "lg:max-w-[1060px] lg:min-w-[1060px]" : "lg:max-w-[703px] lg:min-w-[703px]"}`}
           data-testid="home-screen-recent-conversations-section"
         >
           <RecentConversations />

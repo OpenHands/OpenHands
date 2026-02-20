@@ -7,7 +7,7 @@ import { useSharedConversationEvents } from "#/hooks/query/use-shared-conversati
 import { Messages as V1Messages } from "#/components/v1/chat";
 import { shouldRenderEvent } from "#/components/v1/chat/event-content-helpers/should-render-event";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
-import b1Logo from "#/assets/branding/b1-logo.png";
+import b1Logo from "#/assets/branding/b1-logo.svg";
 
 export default function SharedConversation() {
   const { t } = useTranslation();

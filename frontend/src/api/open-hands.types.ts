@@ -60,7 +60,8 @@ export type ConversationTrigger =
   | "resolver"
   | "gui"
   | "suggested_task"
-  | "microagent_management";
+  | "microagent_management"
+  | "connect_to_environment";
 
 export interface Conversation {
   conversation_id: string;
@@ -79,6 +80,7 @@ export interface Conversation {
   conversation_version?: "V0" | "V1";
   sub_conversation_ids?: string[];
   public?: boolean;
+  environment_url?: string | null;
 }
 
 export interface ResultSet<T> {

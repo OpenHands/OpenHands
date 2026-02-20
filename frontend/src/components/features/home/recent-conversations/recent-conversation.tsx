@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import CodeBranchIcon from "#/icons/u-code-branch.svg?react";
+import GlobeIcon from "#/icons/globe.svg?react";
 import { Conversation } from "#/api/open-hands.types";
 import { GitProviderIcon } from "#/components/shared/git-provider-icon";
 import { Provider } from "#/types/settings";
@@ -18,6 +19,55 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
 
   const hasRepository =
     conversation.selected_repository && conversation.selected_branch;
+  const isEnvironmentConnection =
+    conversation.trigger === "connect_to_environment" &&
+    !!conversation.environment_url;
+
+  const renderSource = () => {
+    if (hasRepository) {
+      return (
+        <div className="flex items-center gap-2">
+          <GitProviderIcon
+            gitProvider={conversation.git_provider as Provider}
+          />
+          <span
+            className="max-w-[124px] truncate"
+            title={conversation.selected_repository || ""}
+          >
+            {conversation.selected_repository}
+          </span>
+        </div>
+      );
+    }
+    if (isEnvironmentConnection) {
+      let displayUrl: string;
+      try {
+        displayUrl = new URL(conversation.environment_url!).hostname;
+      } catch {
+        displayUrl = conversation.environment_url!;
+      }
+      return (
+        <div className="flex items-center gap-1 min-w-0">
+          <GlobeIcon
+            width={12}
+            height={12}
+            className="shrink-0 text-[#A3A3A3]"
+          />
+          <span className="truncate" title={conversation.environment_url!}>
+            {displayUrl}
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-1">
+        <RepoForkedIcon width={12} height={12} color="#A3A3A3" />
+        <span className="max-w-[124px] truncate">
+          {t(I18nKey.COMMON$NO_REPOSITORY)}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <Link
@@ -31,27 +81,8 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
         </span>
       </div>
       <div className="flex items-center justify-between text-xs text-[#A3A3A3] leading-4 font-normal">
-        <div className="flex items-center gap-3">
-          {hasRepository ? (
-            <div className="flex items-center gap-2">
-              <GitProviderIcon
-                gitProvider={conversation.git_provider as Provider}
-              />
-              <span
-                className="max-w-[124px] truncate"
-                title={conversation.selected_repository || ""}
-              >
-                {conversation.selected_repository}
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <RepoForkedIcon width={12} height={12} color="#A3A3A3" />
-              <span className="max-w-[124px] truncate">
-                {t(I18nKey.COMMON$NO_REPOSITORY)}
-              </span>
-            </div>
-          )}
+        <div className="flex items-center gap-3 min-w-0">
+          {renderSource()}
           {hasRepository ? (
             <div className="flex items-center gap-1">
               <CodeBranchIcon width={12} height={12} color="#A3A3A3" />
@@ -65,7 +96,7 @@ export function RecentConversation({ conversation }: RecentConversationProps) {
           ) : null}
         </div>
         {(conversation.created_at || conversation.last_updated_at) && (
-          <span>
+          <span className="shrink-0">
             {formatTimeDelta(
               conversation.created_at || conversation.last_updated_at,
             )}{" "}

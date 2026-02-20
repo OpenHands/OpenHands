@@ -1020,6 +1020,7 @@ describe("View persistence after saving advanced settings", () => {
         ENABLE_JIRA: false,
         ENABLE_JIRA_DC: false,
         ENABLE_LINEAR: false,
+        ENABLE_CONNECT_TO_ENVIRONMENT: false,
       },
     });
 

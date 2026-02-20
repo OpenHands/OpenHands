@@ -298,12 +298,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 api_key=sandbox.session_api_key,
                 working_dir=sandbox_spec.working_dir,
             )
-            async for updated_task in self.run_setup_scripts(
-                task, sandbox, remote_workspace, agent_server_url
-            ):
-                yield updated_task
-            if task.status == AppConversationStartTaskStatus.ERROR:
-                return
+            if request.environment_url:
+                # Skip repo/setup steps for environment connections
+                task.status = AppConversationStartTaskStatus.CONNECTING_TO_ENVIRONMENT
+                yield task
+            else:
+                async for updated_task in self.run_setup_scripts(
+                    task, sandbox, remote_workspace, agent_server_url
+                ):
+                    yield updated_task
+                if task.status == AppConversationStartTaskStatus.ERROR:
+                    return
 
             # Build the start request
             start_conversation_request = (
@@ -318,6 +323,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     request.conversation_id,
                     remote_workspace=remote_workspace,
                     selected_repository=request.selected_repository,
+                    environment_url=request.environment_url,
                 )
             )
 
@@ -355,6 +361,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 trigger=request.trigger,
                 pr_number=request.pr_number,
                 parent_conversation_id=request.parent_conversation_id,
+                environment_url=request.environment_url,
             )
             await self.app_conversation_info_service.save_app_conversation_info(
                 app_conversation_info
@@ -400,6 +407,27 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             task.status = AppConversationStartTaskStatus.ERROR
             task.detail = str(exc)
             yield task
+
+    def _add_environment_mcp_server(
+        self, mcp_servers: dict[str, Any], environment_url: str
+    ) -> None:
+        """Add a remote environment as an MCP server.
+
+        The environment URL is added as an HTTP MCP server so the agent can
+        interact with the remote environment through MCP tools.
+
+        Args:
+            mcp_servers: Dictionary to add the server to
+            environment_url: Base URL of the remote environment
+        """
+        environment_url = environment_url.rstrip('/')
+        mcp_servers['environment'] = {
+            'url': f'{environment_url}/service/swat/mcp/blueprint-dev',
+            'transport': 'http',
+        }
+        _logger.info(
+            f'Added environment MCP server: {environment_url}/service/swat/mcp/blueprint-dev'
+        )
 
     async def _build_app_conversations(
         self, app_conversation_infos: Sequence[AppConversationInfo | None]
@@ -499,6 +527,25 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> AppConversation | None:
         if app_conversation_info is None:
             return None
+
+        # Handle external environment connections (no sandbox)
+        if app_conversation_info.sandbox_id == 'external':
+            env_url = app_conversation_info.environment_url
+            conversation_url = (
+                f'{env_url}/api/conversations/{app_conversation_info.id.hex}'
+                if env_url
+                else None
+            )
+            return AppConversation(
+                **app_conversation_info.model_dump(),
+                sandbox_status=SandboxStatus.RUNNING,
+                execution_status=(
+                    conversation_info.execution_status if conversation_info else None
+                ),
+                conversation_url=conversation_url,
+                session_api_key=None,
+            )
+
         sandbox_status = sandbox.status if sandbox else SandboxStatus.MISSING
         execution_status = (
             conversation_info.execution_status if conversation_info else None
@@ -537,7 +584,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ):
         result = defaultdict(list)
         for stored_conversation in stored_conversations:
-            if stored_conversation:
+            if stored_conversation and stored_conversation.sandbox_id != 'external':
                 result[stored_conversation.sandbox_id].append(stored_conversation.id)
         return result
 
@@ -1161,14 +1208,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID | None = None,
         remote_workspace: AsyncRemoteWorkspace | None = None,
         selected_repository: str | None = None,
+        environment_url: str | None = None,
     ) -> StartConversationRequest:
         """Build a complete conversation request for a user.
 
         This method orchestrates the creation of a conversation request by:
         1. Setting up git provider secrets
         2. Configuring LLM and MCP settings
-        3. Creating an agent with appropriate context
-        4. Finalizing the request with skills and experiment variants
+        3. Optionally adding a remote environment as an MCP server
+        4. Creating an agent with appropriate context
+        5. Finalizing the request with skills and experiment variants
         """
         user = await self.user_context.get_user_info()
         workspace = LocalWorkspace(working_dir=working_dir)
@@ -1178,6 +1227,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # Configure LLM and MCP
         llm, mcp_config = await self._configure_llm_and_mcp(user, llm_model)
+
+        # Add remote environment as MCP server if provided
+        if environment_url:
+            mcp_servers = mcp_config.get('mcpServers', {})
+            self._add_environment_mcp_server(mcp_servers, environment_url)
+            mcp_config['mcpServers'] = mcp_servers
 
         # Create agent with context
         agent = self._create_agent_with_context(

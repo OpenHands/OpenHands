@@ -36,6 +36,8 @@ export interface V1AppConversationStartRequest {
   pr_number?: number[];
   parent_conversation_id?: string | null;
   agent_type?: "default" | "plan";
+  environment_url?: string | null;
+  environment_conversation_id?: string | null;
 }
 
 export type V1AppConversationStartTaskStatus =
@@ -46,6 +48,7 @@ export type V1AppConversationStartTaskStatus =
   | "SETTING_UP_GIT_HOOKS"
   | "SETTING_UP_SKILLS"
   | "STARTING_CONVERSATION"
+  | "CONNECTING_TO_ENVIRONMENT"
   | "READY"
   | "ERROR";
 

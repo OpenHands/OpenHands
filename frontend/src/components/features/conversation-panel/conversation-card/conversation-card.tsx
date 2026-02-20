@@ -4,7 +4,10 @@ import { cn } from "#/utils/utils";
 import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { ConversationStatus } from "#/types/conversation-status";
-import { RepositorySelection } from "#/api/open-hands.types";
+import {
+  ConversationTrigger,
+  RepositorySelection,
+} from "#/api/open-hands.types";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
@@ -23,6 +26,8 @@ interface ConversationCardProps {
   conversationStatus?: ConversationStatus;
   conversationId?: string; // Optional conversation ID for VS Code URL
   conversationVersion?: "V0" | "V1";
+  trigger?: ConversationTrigger;
+  environmentUrl?: string | null;
   contextMenuOpen?: boolean;
   onContextMenuToggle?: (isOpen: boolean) => void;
 }
@@ -42,6 +47,8 @@ export function ConversationCard({
   conversationId,
   conversationStatus,
   conversationVersion,
+  trigger,
+  environmentUrl,
   contextMenuOpen = false,
   onContextMenuToggle,
 }: ConversationCardProps) {
@@ -161,6 +168,8 @@ export function ConversationCard({
         lastUpdatedAt={lastUpdatedAt}
         createdAt={createdAt}
         conversationStatus={conversationStatus}
+        trigger={trigger}
+        environmentUrl={environmentUrl}
       />
     </div>
   );
