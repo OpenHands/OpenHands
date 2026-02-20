@@ -7,7 +7,11 @@ import { selectOrganization } from "test-utils";
 import ManageOrg from "#/routes/manage-org";
 import { organizationService } from "#/api/organization-service/organization-service.api";
 import SettingsScreen, { clientLoader } from "#/routes/settings";
-import { resetOrgMockData, MOCK_TEAM_ORG_ACME } from "#/mocks/org-handlers";
+import {
+  resetOrgMockData,
+  MOCK_TEAM_ORG_ACME,
+  INITIAL_MOCK_ORGS,
+} from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 import BillingService from "#/api/billing-service/billing-service.api";
 import { OrganizationMember } from "#/types/org";
@@ -51,10 +55,12 @@ const RouteStub = createRoutesStub([
   },
 ]);
 
+let queryClient: QueryClient;
+
 const renderManageOrg = () =>
   render(<RouteStub initialEntries={["/settings/org"]} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={queryClient}>
         {children}
       </QueryClientProvider>
     ),
@@ -145,7 +151,14 @@ describe("Manage Org Route", () => {
     useSelectedOrganizationStore.setState({ organizationId: MOCK_TEAM_ORG_ACME.id });
     // Seed organizations into the module-level queryClient used by clientLoader
     mockQueryClient.setQueryData(["organizations"], {
-      organizations: [MOCK_TEAM_ORG_ACME],
+      items: [MOCK_TEAM_ORG_ACME],
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
+
+    queryClient = new QueryClient();
+    // Pre-seed organizations so org selector renders immediately (avoids flaky race with API fetch)
+    queryClient.setQueryData(["organizations"], {
+      items: INITIAL_MOCK_ORGS,
       currentOrgId: MOCK_TEAM_ORG_ACME.id,
     });
 
@@ -174,6 +187,8 @@ describe("Manage Org Route", () => {
     useSelectedOrganizationStore.setState({ organizationId: null });
     // Clear module-level queryClient used by clientLoader
     mockQueryClient.clear();
+    // Clear test queryClient
+    queryClient?.clear();
   });
 
   it("should render the available credits", async () => {

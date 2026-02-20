@@ -112,6 +112,7 @@ describe("Settings Screen", () => {
         {
           Component: () => <div data-testid="org-members-settings-screen" />,
           path: "/settings/org-members",
+          handle: { hideTitle: true },
         },
         {
           Component: () => <div data-testid="organization-settings-screen" />,

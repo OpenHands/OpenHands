@@ -23,6 +23,8 @@ export const clientLoader = createPermissionGuard(
   "invite_user_to_organization",
 );
 
+export const handle = { hideTitle: true };
+
 function ManageOrganizationMembers() {
   const { t } = useTranslation();
   const { data: organizationMembers } = useOrganizationMembers();
@@ -102,7 +104,7 @@ function ManageOrganizationMembers() {
             type="button"
             variant="secondary"
             onClick={() => setInviteModalOpen(true)}
-            className="flex items-center gap-1 rounded-full border-none text-sm text-white font-medium leading-5 bg-[#737373] hover:opacity-80 p-2"
+            className="flex items-center gap-1 rounded-full border-none text-sm text-white font-medium leading-5 bg-org-button hover:opacity-80 p-2"
           >
             <Plus size={14} />
             {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
@@ -118,8 +120,8 @@ function ManageOrganizationMembers() {
           document.getElementById("portal-root") || document.body,
         )}
 
-      <div className="rounded-xl border border-[#171717] bg-[#262626] table-box-shadow flex-1 overflow-y-auto custom-scrollbar">
-        <div className="flex items-center pl-6 text-[11px] text-white font-medium leading-4 border-b border-[#525252] w-full h-9">
+      <div className="rounded-xl border border-org-border bg-org-background table-box-shadow flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex items-center pl-6 text-[11px] text-white font-medium leading-4 border-b border-org-divider w-full h-9">
           {t(I18nKey.ORG$ALL_ORGANIZATION_MEMBERS)}
         </div>
         {organizationMembers && (
@@ -128,7 +130,7 @@ function ManageOrganizationMembers() {
               <li
                 key={member.user_id}
                 data-testid="member-item"
-                className="border-b border-[#525252] last:border-none px-6"
+                className="border-b border-org-divider last:border-none px-6"
               >
                 <OrganizationMemberListItem
                   email={member.email}

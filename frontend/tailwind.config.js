@@ -13,6 +13,13 @@ export default {
           secondary: "#737373",
           muted: "#A3A3A3",
         },
+        org: {
+          border: "#171717",
+          background: "#262626",
+          divider: "#525252",
+          button: "#737373",
+          text: "#A3A3A3",
+        },
       },
     },
   },

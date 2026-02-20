@@ -63,7 +63,7 @@ export function OrganizationMemberListItem({
         <span
           onClick={handleRoleClick}
           className={cn(
-            "text-xs font-normal leading-4 text-[#A3A3A3] flex items-center gap-1 capitalize",
+            "text-xs font-normal leading-4 text-org-text flex items-center gap-1 capitalize",
             roleSelectionIsPermitted ? "cursor-pointer" : "cursor-not-allowed",
           )}
         >

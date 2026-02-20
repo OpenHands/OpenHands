@@ -72,6 +72,7 @@ const RouteStub = createRoutesStub([
       {
         Component: ManageOrganizationMembersWithPortalRoot,
         path: "/settings/org-members",
+        handle: { hideTitle: true },
       },
       {
         Component: () => <div data-testid="user-settings" />,
