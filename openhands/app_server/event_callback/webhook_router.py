@@ -62,6 +62,7 @@ async def valid_sandbox(
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
 ) -> SandboxInfo:
+    _logger.info("valid_sandbox", extra={"session_api_key": session_api_key})
     if session_api_key is None:
         _logger.warning('x_session_api_key_header_required')
         raise HTTPException(
@@ -85,10 +86,12 @@ async def valid_conversation(
     sandbox_info: SandboxInfo,
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> AppConversationInfo:
+    _logger.info("valid_conversation", extra={"conversation_id": conversation_id})
     app_conversation_info = (
         await app_conversation_info_service.get_app_conversation_info(conversation_id)
     )
     if not app_conversation_info:
+        _logger.info("valid_conversation_create")
         # Conversation does not yet exist - create a stub
         return AppConversationInfo(
             id=conversation_id,
@@ -96,8 +99,10 @@ async def valid_conversation(
             created_by_user_id=sandbox_info.created_by_user_id,
         )
     if app_conversation_info.created_by_user_id != sandbox_info.created_by_user_id:
+        _logger.info("valid_conversation_incorrect_user")
         # Make sure that the conversation and sandbox were created by the same user
         raise AuthError()
+    _logger.info("valid_conversation_return")
     return app_conversation_info
 
 
@@ -107,6 +112,7 @@ async def on_conversation_update(
     sandbox_info: SandboxInfo = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> Success:
+    _logger.info("on_conversation_update")
     """Webhook callback for when a conversation starts, pauses, resumes, or deletes."""
     existing = await valid_conversation(
         conversation_info.id, sandbox_info, app_conversation_info_service
@@ -149,7 +155,7 @@ async def on_event(
     event_service: EventService = event_service_dependency,
 ) -> Success:
     """Webhook callback for when event stream events occur."""
-
+    _logger.info("on_event", extra={"conversation_id": conversation_id})
     app_conversation_info = await valid_conversation(
         conversation_id, sandbox_info, app_conversation_info_service
     )
