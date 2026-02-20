@@ -106,7 +106,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               className={contextMenuListItemClassName}
             >
               <IoPersonAddOutline className="text-white" size={14} />
-              {t(I18nKey.ORG$INVITE_ORGANIZATION_MEMBER)}
+              {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
             </ContextMenuListItem>
 
             <Divider className="my-1.5" />
@@ -116,7 +116,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
               className={contextMenuListItemClassName}
             >
               <IoCardOutline className="text-white" size={14} />
-              {t(I18nKey.ORG$MANAGE_ACCOUNT)}
+              {t(I18nKey.ORG$MANAGE_ORGANIZATION)}
             </ContextMenuListItem>
             <ContextMenuListItem
               onClick={handleManageOrganizationMembersClick}

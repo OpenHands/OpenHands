@@ -58,7 +58,7 @@ export function InviteOrganizationMemberModal({
       >
         <div className="w-full flex flex-col gap-2">
           <h3 className="text-lg font-semibold">
-            {t(I18nKey.ORG$INVITE_USERS)}
+            {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
           </h3>
           <p className="text-xs text-gray-400">
             {t(I18nKey.ORG$INVITE_USERS_DESCRIPTION)}
