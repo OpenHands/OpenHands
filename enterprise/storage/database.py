@@ -18,10 +18,10 @@ def _get_db_session_injector():
     return _config.db_session
 
 
-def session_maker():
+def session_maker(**kwargs):
     db_session_injector = _get_db_session_injector()
     session_maker = db_session_injector.get_session_maker()
-    return session_maker()
+    return session_maker(**kwargs)
 
 
 @contextlib.asynccontextmanager
