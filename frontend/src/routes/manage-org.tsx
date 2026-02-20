@@ -4,7 +4,7 @@ import { useCreateStripeCheckoutSession } from "#/hooks/mutation/stripe/use-crea
 import { useOrganization } from "#/hooks/query/use-organization";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { cn } from "#/utils/utils";
-import { BrandButton } from "#/components/features/settings/brand-button";
+import { ModalButtonGroup } from "#/components/shared/modals/modal-button-group";
 import { useMe } from "#/hooks/query/use-me";
 import { useConfig } from "#/hooks/query/use-config";
 import { I18nKey } from "#/i18n/declaration";
@@ -71,7 +71,6 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
 
   const handleAmountInputChange = (value: string) => {
     setInputValue(value);
-    // Clear error message when user starts typing again
     setErrorMessage(null);
   };
 
@@ -81,13 +80,13 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
         data-testid="add-credits-form"
         action={formAction}
         noValidate
-        className="w-sm rounded-xl bg-[#171717] flex flex-col p-6 gap-6 modal-box-shadow"
+        className="w-sm rounded-xl bg-modal-background flex flex-col p-6 gap-6 modal-box-shadow"
       >
         <div className="flex flex-col gap-2">
           <h3 className="text-xl leading-6 font-semibold">
             {t(I18nKey.ORG$ADD_CREDITS)}
           </h3>
-          <div className="rounded w-full p-2 placeholder:text-tertiary-alt bg-[#27272A] border-none pl-3">
+          <div className="rounded w-full p-2 placeholder:text-tertiary-alt bg-modal-input border-none pl-3">
             <input
               data-testid="amount-input"
               name="amount"
@@ -108,23 +107,11 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
           )}
         </div>
 
-        <div className="flex gap-2">
-          <BrandButton
-            type="submit"
-            variant="primary"
-            className="flex-1 flex items-center justify-center bg-[#F3CE49] text-sm leading-4 font-medium rounded h-10"
-          >
-            {t(I18nKey.ORG$NEXT)}
-          </BrandButton>
-          <BrandButton
-            type="button"
-            onClick={onClose}
-            variant="secondary"
-            className="flex-1 bg-[#737373] text-sm text-white leading-4 font-medium rounded border-none h-10"
-          >
-            {t(I18nKey.BUTTON$CLOSE)}
-          </BrandButton>
-        </div>
+        <ModalButtonGroup
+          primaryText={t(I18nKey.ORG$NEXT)}
+          onSecondaryClick={onClose}
+          primaryType="submit"
+        />
       </form>
     </ModalBackdrop>
   );
@@ -211,7 +198,7 @@ function ManageOrg() {
             <button
               type="button"
               onClick={() => setChangeOrgNameFormVisible(true)}
-              className="text-[#A3A3A3] hover:text-white transition-colors cursor-pointer"
+              className="text-modal-muted hover:text-white transition-colors cursor-pointer"
             >
               {t(I18nKey.ORG$CHANGE)}
             </button>
