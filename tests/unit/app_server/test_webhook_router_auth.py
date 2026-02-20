@@ -8,7 +8,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
-from httpx import AsyncClient, ASGITransport
 
 from openhands.app_server.event_callback.webhook_router import (
     valid_conversation,
@@ -192,7 +191,9 @@ class TestValidConversation:
         different_user_info.created_by_user_id = 'different-user-id'
 
         mock_service = AsyncMock()
-        mock_service.get_app_conversation_info = AsyncMock(return_value=different_user_info)
+        mock_service.get_app_conversation_info = AsyncMock(
+            return_value=different_user_info
+        )
 
         # Act & Assert
         from openhands.app_server.errors import AuthError
