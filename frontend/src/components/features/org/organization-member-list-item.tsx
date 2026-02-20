@@ -45,7 +45,7 @@ export function OrganizationMemberListItem({
       <div className="flex items-center gap-2">
         <span
           className={cn(
-            "text-sm font-semibold",
+            "text-sm font-semibold leading-6",
             status === "invited" && "text-gray-400",
           )}
         >
@@ -63,7 +63,7 @@ export function OrganizationMemberListItem({
         <span
           onClick={handleRoleClick}
           className={cn(
-            "text-xs text-gray-400 flex items-center gap-1 capitalize",
+            "text-xs font-normal leading-4 text-[#A3A3A3] flex items-center gap-1 capitalize",
             roleSelectionIsPermitted ? "cursor-pointer" : "cursor-not-allowed",
           )}
         >

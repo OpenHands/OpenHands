@@ -16814,5 +16814,37 @@
     "tr": "Organizasyonu yönet",
     "de": "Organisation verwalten",
     "uk": "Керувати організацією"
+  },
+  "ORG$ORGANIZATION_MEMBERS": {
+    "en": "Organization Members",
+    "ja": "組織メンバー",
+    "zh-CN": "组织成员",
+    "zh-TW": "組織成員",
+    "ko-KR": "조직 구성원",
+    "no": "Organisasjonsmedlemmer",
+    "it": "Membri dell'organizzazione",
+    "pt": "Membros da organização",
+    "es": "Miembros de la organización",
+    "ar": "أعضاء المنظمة",
+    "fr": "Membres de l'organisation",
+    "tr": "Organizasyon Üyeleri",
+    "de": "Organisationsmitglieder",
+    "uk": "Члени організації"
+  },
+  "ORG$ALL_ORGANIZATION_MEMBERS": {
+    "en": "All Organization Members",
+    "ja": "全ての組織メンバー",
+    "zh-CN": "所有组织成员",
+    "zh-TW": "所有組織成員",
+    "ko-KR": "모든 조직 구성원",
+    "no": "Alle organisasjonsmedlemmer",
+    "it": "Tutti i membri dell'organizzazione",
+    "pt": "Todos os membros da organização",
+    "es": "Todos los miembros de la organización",
+    "ar": "جميع أعضاء المنظمة",
+    "fr": "Tous les membres de l'organisation",
+    "tr": "Tüm organizasyon üyeleri",
+    "de": "Alle Organisationsmitglieder",
+    "uk": "Усі члени організації"
   }
 }

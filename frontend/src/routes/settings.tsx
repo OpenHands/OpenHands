@@ -105,11 +105,16 @@ function SettingsScreen() {
       : (navItems[0]?.text ?? "SETTINGS$TITLE");
   }, [navItems, location.pathname]);
 
+  const isManageOrganizationMembers =
+    location.pathname === "/settings/org-members";
+
   return (
     <main data-testid="settings-screen" className="h-full">
       <SettingsLayout navigationItems={navItems}>
         <div className="flex flex-col gap-6 h-full">
-          <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
+          {isManageOrganizationMembers ? null : (
+            <Typography.H2>{t(currentSectionTitle)}</Typography.H2>
+          )}
           <div className="flex-1 overflow-auto custom-scrollbar-always">
             <Outlet />
           </div>

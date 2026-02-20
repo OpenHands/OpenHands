@@ -14,6 +14,7 @@ import {
   resetOrgMockData,
   resetOrgsAndMembersMockData,
   MOCK_TEAM_ORG_ACME,
+  INITIAL_MOCK_ORGS,
 } from "#/mocks/org-handlers";
 import OptionService from "#/api/option-service/option-service.api";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
@@ -110,6 +111,12 @@ describe("Manage Organization Members Route", () => {
     });
 
     queryClient = new QueryClient();
+
+    // Pre-seed organizations so org selector renders immediately (avoids flaky race with API fetch)
+    queryClient.setQueryData(["organizations"], {
+      items: INITIAL_MOCK_ORGS,
+      currentOrgId: MOCK_TEAM_ORG_ACME.id,
+    });
 
     // Set default mock for user (admin role has invite permission)
     getMeSpy.mockResolvedValue({
