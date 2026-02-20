@@ -40,7 +40,7 @@ describe("InviteOrganizationMemberModal", () => {
 
     const modal = screen.getByTestId("invite-modal");
     const closeButton = within(modal).getByRole("button", {
-      name: /cancel/i,
+      name: /close/i,
     });
     await userEvent.click(closeButton);
 

@@ -48,36 +48,41 @@ export function DeleteOrgConfirmationModal({
       aria-label={t(I18nKey.ORG$DELETE_ORGANIZATION)}
     >
       <ModalBody
-        className="items-start border border-tertiary"
+        className="items-start rounded-xl p-6 w-sm items-start flex flex-col gap-6 bg-[#171717] modal-box-shadow"
         testID="delete-org-confirmation"
       >
         <div className="flex flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.ORG$DELETE_ORGANIZATION)} />
           <BaseModalDescription>{confirmationMessage}</BaseModalDescription>
         </div>
-        <div className="flex flex-col gap-2 w-full">
+        <div className="flex gap-2 w-full">
           <BrandButton
             type="button"
             variant="primary"
             onClick={handleConfirm}
-            className="w-full flex items-center justify-center"
+            className="w-full flex items-center justify-center bg-[#F3CE49] text-sm leading-4 font-medium rounded h-10"
             isDisabled={isPending}
           >
             {isPending ? (
-              <LoadingSpinner size="small" />
+              <LoadingSpinner
+                size="small"
+                className="w-5 h-5"
+                innerClassName="hidden"
+                outerClassName="w-5 h-5"
+              />
             ) : (
-              t(I18nKey.ACTION$CONFIRM_DELETE)
+              t(I18nKey.BUTTON$CONFIRM)
             )}
           </BrandButton>
           <BrandButton
             type="button"
             variant="secondary"
             onClick={onClose}
-            className="w-full"
+            className="w-full bg-[#737373] text-sm text-white leading-4 font-medium rounded border-none h-10"
             isDisabled={isPending}
             data-testid="cancel-button"
           >
-            {t(I18nKey.BUTTON$CANCEL)}
+            {t(I18nKey.BUTTON$CLOSE)}
           </BrandButton>
         </div>
       </ModalBody>

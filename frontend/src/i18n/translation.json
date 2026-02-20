@@ -16814,5 +16814,21 @@
     "tr": "Bağlantı panoya kopyalandı",
     "de": "Link in die Zwischenablage kopiert",
     "uk": "Посилання скопійовано в буфер обміну"
+  },
+  "COMMON$TYPE_EMAIL_AND_PRESS_SPACE": {
+    "en": "Type email and press Space",
+    "ja": "メールアドレスを入力してスペースキーを押してください",
+    "zh-CN": "输入邮箱并按空格键",
+    "zh-TW": "輸入電子郵件並按空白鍵",
+    "ko-KR": "이메일을 입력하고 스페이스바를 누르세요",
+    "no": "Skriv inn e-post og trykk på mellomromstasten",
+    "it": "Digita l'e-mail e premi Spazio",
+    "pt": "Digite o e-mail e pressione Espaço",
+    "es": "Escribe el correo electrónico y pulsa Espacio",
+    "ar": "اكتب البريد الإلكتروني واضغط على مفتاح المسافة",
+    "fr": "Tapez l'e-mail et appuyez sur Espace",
+    "tr": "E-postu yazıp Boşluk tuşuna basın",
+    "de": "E-Mail eingeben und Leertaste drücken",
+    "uk": "Введіть e-mail і натисніть Пробіл"
   }
 }

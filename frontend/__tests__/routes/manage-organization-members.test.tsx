@@ -537,7 +537,7 @@ describe("Manage Organization Members Route", () => {
       await userEvent.click(inviteButton);
 
       const modal = screen.getByTestId("invite-modal");
-      const closeButton = within(modal).getByText("BUTTON$CANCEL");
+      const closeButton = within(modal).getByText("BUTTON$CLOSE");
       await userEvent.click(closeButton);
 
       expect(screen.queryByTestId("invite-modal")).not.toBeInTheDocument();

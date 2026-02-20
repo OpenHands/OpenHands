@@ -76,29 +76,31 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
   };
 
   return (
-    <ModalBackdrop>
+    <ModalBackdrop onClose={onClose}>
       <form
         data-testid="add-credits-form"
         action={formAction}
         noValidate
-        className="w-md rounded-xl bg-[#171717] flex flex-col p-6 gap-6"
+        className="w-sm rounded-xl bg-[#171717] flex flex-col p-6 gap-6 modal-box-shadow"
       >
         <div className="flex flex-col gap-2">
-          <h3 className="text-xl font-semibold">
+          <h3 className="text-xl leading-6 font-semibold">
             {t(I18nKey.ORG$ADD_CREDITS)}
           </h3>
-          <input
-            data-testid="amount-input"
-            name="amount"
-            type="number"
-            className="text-lg bg-[#27272A] p-2"
-            placeholder={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
-            min={10}
-            max={25000}
-            step={1}
-            value={inputValue}
-            onChange={(e) => handleAmountInputChange(e.target.value)}
-          />
+          <div className="rounded w-full p-2 placeholder:text-tertiary-alt bg-[#27272A] border-none pl-3">
+            <input
+              data-testid="amount-input"
+              name="amount"
+              type="number"
+              className="w-full text-sm leading-4 font-normal outline-none bg-transparent"
+              placeholder={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
+              min={10}
+              max={25000}
+              step={1}
+              value={inputValue}
+              onChange={(e) => handleAmountInputChange(e.target.value)}
+            />
+          </div>
           {errorMessage && (
             <p className="text-red-500 text-sm mt-1" data-testid="amount-error">
               {errorMessage}
@@ -107,16 +109,20 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
         </div>
 
         <div className="flex gap-2">
-          <BrandButton type="submit" variant="primary" className="flex-1 py-3">
+          <BrandButton
+            type="submit"
+            variant="primary"
+            className="flex-1 flex items-center justify-center bg-[#F3CE49] text-sm leading-4 font-medium rounded h-10"
+          >
             {t(I18nKey.ORG$NEXT)}
           </BrandButton>
           <BrandButton
             type="button"
             onClick={onClose}
             variant="secondary"
-            className="flex-1 py-3"
+            className="flex-1 bg-[#737373] text-sm text-white leading-4 font-medium rounded border-none h-10"
           >
-            {t(I18nKey.BUTTON$CANCEL)}
+            {t(I18nKey.BUTTON$CLOSE)}
           </BrandButton>
         </div>
       </form>

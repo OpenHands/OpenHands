@@ -537,7 +537,7 @@ describe("UserContextMenu", () => {
     ).toBeInTheDocument();
 
     await userEvent.click(
-      await within(portalRoot).findByText("BUTTON$CANCEL"),
+      await within(portalRoot).findByText("BUTTON$CLOSE"),
     );
     expect(inviteMembersBatchSpy).not.toHaveBeenCalled();
   });

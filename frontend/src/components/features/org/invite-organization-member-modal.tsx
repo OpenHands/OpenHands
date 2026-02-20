@@ -53,36 +53,42 @@ export function InviteOrganizationMemberModal({
     <ModalBackdrop onClose={isPending ? undefined : onClose}>
       <div
         data-testid="invite-modal"
-        className="bg-base rounded-xl p-4 border w-sm border-tertiary items-start"
+        className="bg-[#171717] rounded-xl p-6 w-sm items-start modal-box-shadow"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-full flex flex-col gap-2">
-          <h3 className="text-lg font-semibold">
+          <h3 className="text-xl leading-6 font-semibold">
             {t(I18nKey.ORG$INVITE_USERS)}
           </h3>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs leading-4 font-normal text-[#A3A3A3]">
             {t(I18nKey.ORG$INVITE_USERS_DESCRIPTION)}
           </p>
           <div className="flex flex-col gap-2">
-            <span className="text-sm">{t(I18nKey.ORG$EMAILS)}</span>
             <BadgeInput
               name="emails-badge-input"
               value={emails}
-              placeholder="Type email and press space"
+              placeholder={t(I18nKey.COMMON$TYPE_EMAIL_AND_PRESS_SPACE)}
               onChange={handleEmailsChange}
+              className="bg-[#27272A] border-none pl-3"
+              inputClassName="text-sm leading-4 font-normal"
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-4">
             <BrandButton
               type="button"
               variant="primary"
-              className="flex-1 flex items-center justify-center"
+              className="flex-1 flex items-center justify-center bg-[#F3CE49] text-sm leading-4 font-medium rounded h-10"
               onClick={formAction}
               isDisabled={isPending}
             >
               {isPending ? (
-                <LoadingSpinner size="small" />
+                <LoadingSpinner
+                  size="small"
+                  className="w-5 h-5"
+                  innerClassName="hidden"
+                  outerClassName="w-5 h-5"
+                />
               ) : (
                 t(I18nKey.BUTTON$ADD)
               )}
@@ -91,10 +97,10 @@ export function InviteOrganizationMemberModal({
               type="button"
               variant="secondary"
               onClick={onClose}
-              className="flex-1"
+              className="flex-1 bg-[#737373] text-sm text-white leading-4 font-medium rounded border-none h-10"
               isDisabled={isPending}
             >
-              {t(I18nKey.BUTTON$CANCEL)}
+              {t(I18nKey.BUTTON$CLOSE)}
             </BrandButton>
           </div>
         </div>

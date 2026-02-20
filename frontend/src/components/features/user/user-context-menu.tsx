@@ -76,7 +76,7 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
       data-testid="user-context-menu"
       ref={ref}
       className={cn(
-        "w-72 flex flex-col gap-3 bg-tertiary border border-tertiary rounded-xl p-4",
+        "w-72 flex flex-col gap-3 bg-tertiary border border-tertiary rounded-xl p-4 context-menu-box-shadow",
         "text-sm absolute left-full bottom-0 z-101",
       )}
     >

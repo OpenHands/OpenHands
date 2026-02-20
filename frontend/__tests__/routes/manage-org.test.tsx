@@ -254,7 +254,7 @@ describe("Manage Org Route", () => {
     expect(addCreditsForm).toBeInTheDocument();
 
     const cancelButton = within(addCreditsForm).getByRole("button", {
-      name: /cancel/i,
+      name: /close/i,
     });
 
     await userEvent.click(cancelButton);
@@ -700,7 +700,7 @@ describe("Manage Org Route", () => {
 
       const deleteConfirmation = screen.getByTestId("delete-org-confirmation");
       const confirmButton = within(deleteConfirmation).getByRole("button", {
-        name: /ACTION\$CONFIRM_DELETE/i,
+        name: /BUTTON\$CONFIRM/i,
       });
 
       await userEvent.click(confirmButton);
