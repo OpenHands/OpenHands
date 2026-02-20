@@ -16031,22 +16031,6 @@
     "de": "Weiter",
     "uk": "Далі"
   },
-  "ORG$INVITE_USERS": {
-    "en": "Invite Users",
-    "ja": "ユーザーを招待",
-    "zh-CN": "邀请用户",
-    "zh-TW": "邀請用戶",
-    "ko-KR": "사용자 초대",
-    "no": "Inviter brukere",
-    "it": "Invita utenti",
-    "pt": "Convidar usuários",
-    "es": "Invitar usuarios",
-    "ar": "دعوة المستخدمين",
-    "fr": "Inviter des utilisateurs",
-    "tr": "Kullanıcı Davet Et",
-    "de": "Benutzer einladen",
-    "uk": "Запросити користувачів"
-  },
   "ORG$INVITE_USERS_DESCRIPTION": {
     "en": "Invite colleagues using their email address",
     "ja": "メールアドレスを使用して同僚を招待",
@@ -16367,22 +16351,6 @@
     "de": "Team einladen",
     "uk": "Запросити команду"
   },
-  "ORG$MANAGE_ACCOUNT": {
-    "en": "Manage Account",
-    "ja": "アカウント管理",
-    "zh-CN": "管理账户",
-    "zh-TW": "管理帳戶",
-    "ko-KR": "계정 관리",
-    "no": "Administrer konto",
-    "it": "Gestisci account",
-    "pt": "Gerenciar conta",
-    "es": "Administrar cuenta",
-    "ar": "إدارة الحساب",
-    "fr": "Gérer le compte",
-    "tr": "Hesabı Yönet",
-    "de": "Konto verwalten",
-    "uk": "Керувати обліковим записом"
-  },
   "ORG$MANAGE_TEAM": {
     "en": "Manage Team",
     "ja": "チーム管理",
@@ -16590,22 +16558,6 @@
     "tr": "Ayarlar",
     "de": "Einstellungen",
     "uk": "Налаштування"
-  },
-  "ORG$INVITE_ORGANIZATION_MEMBER": {
-    "en": "Invite Organization Member",
-    "ja": "組織メンバーを招待",
-    "zh-CN": "邀请组织成员",
-    "zh-TW": "邀請組織成員",
-    "ko-KR": "조직 구성원 초대",
-    "no": "Inviter organisasjonsmedlem",
-    "it": "Invita membro dell'organizzazione",
-    "pt": "Convidar membro da organização",
-    "es": "Invitar miembro de la organización",
-    "ar": "دعوة عضو في المنظمة",
-    "fr": "Inviter un membre de l'organisation",
-    "tr": "Organizasyon Üyesi Davet Et",
-    "de": "Organisationsmitglied einladen",
-    "uk": "Запросити учасника організації"
   },
   "ORG$MANAGE_ORGANIZATION_MEMBERS": {
     "en": "Manage Organization Members",

@@ -85,8 +85,8 @@ vi.mock("react-i18next", async () => {
     useTranslation: () => ({
       t: (key: string) => {
         const translations: Record<string, string> = {
-          "ORG$SELECT_ORGANIZATION_PLACEHOLDER": "Please select an organization",
-          "ORG$PERSONAL_WORKSPACE": "Personal Workspace",
+          ORG$SELECT_ORGANIZATION_PLACEHOLDER: "Please select an organization",
+          ORG$PERSONAL_WORKSPACE: "Personal Workspace",
         };
         return translations[key] || key;
       },
@@ -118,12 +118,14 @@ describe("UserContextMenu", () => {
     screen.getByText("ACCOUNT_SETTINGS$LOGOUT");
 
     expect(
-      screen.queryByText("ORG$INVITE_ORGANIZATION_MEMBER"),
+      screen.queryByText("ORG$INVITE_ORG_MEMBERS"),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText("ORG$MANAGE_ORGANIZATION_MEMBERS"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("ORG$MANAGE_ORGANIZATION"),
+    ).not.toBeInTheDocument();
   });
 
   it("should render navigation items from SAAS_NAV_ITEMS (except organization-members/org)", async () => {
@@ -145,7 +147,9 @@ describe("UserContextMenu", () => {
     // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
     const expectedItems = SAAS_NAV_ITEMS.filter(
       (item) =>
-        item.to !== "/settings/org-members" && item.to !== "/settings/org" && item.to !== "/settings/billing",
+        item.to !== "/settings/org-members" &&
+        item.to !== "/settings/org" &&
+        item.to !== "/settings/billing",
     );
 
     await waitFor(() => {
@@ -169,7 +173,7 @@ describe("UserContextMenu", () => {
       },
     });
 
-    seedActiveUser({ role: 'admin' })
+    seedActiveUser({ role: "admin" });
 
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
@@ -303,18 +307,18 @@ describe("UserContextMenu", () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
-    screen.getByText("ORG$INVITE_ORGANIZATION_MEMBER");
+    screen.getByText("ORG$INVITE_ORG_MEMBERS");
     screen.getByText("ORG$MANAGE_ORGANIZATION_MEMBERS");
-    screen.getByText("ORG$MANAGE_ACCOUNT");
+    screen.getByText("ORG$MANAGE_ORGANIZATION");
   });
 
   it("should render additional context items when user is an owner", () => {
     renderUserContextMenu({ type: "owner", onClose: vi.fn });
 
     screen.getByTestId("org-selector");
-    screen.getByText("ORG$INVITE_ORGANIZATION_MEMBER");
+    screen.getByText("ORG$INVITE_ORG_MEMBERS");
     screen.getByText("ORG$MANAGE_ORGANIZATION_MEMBERS");
-    screen.getByText("ORG$MANAGE_ACCOUNT");
+    screen.getByText("ORG$MANAGE_ORGANIZATION");
   });
 
   it("should call the logout handler when Logout is clicked", async () => {
@@ -341,7 +345,7 @@ describe("UserContextMenu", () => {
       },
     });
 
-    seedActiveUser({ role: 'admin' })
+    seedActiveUser({ role: "admin" });
 
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
@@ -352,9 +356,7 @@ describe("UserContextMenu", () => {
     });
 
     await waitFor(() => {
-      const billingLink = screen
-        .getByText("SETTINGS$NAV_BILLING")
-        .closest("a");
+      const billingLink = screen.getByText("SETTINGS$NAV_BILLING").closest("a");
       expect(billingLink).toHaveAttribute("href", "/settings/billing");
     });
 
@@ -399,7 +401,9 @@ describe("UserContextMenu", () => {
     renderUserContextMenu({ type: "admin", onClose: vi.fn });
 
     // Wait for orgs to load so org management buttons are visible
-    const manageAccountButton = await screen.findByText("ORG$MANAGE_ACCOUNT");
+    const manageAccountButton = await screen.findByText(
+      "ORG$MANAGE_ORGANIZATION",
+    );
     await userEvent.click(manageAccountButton);
 
     expect(navigateMock).toHaveBeenCalledExactlyOnceWith("/settings/org");
@@ -441,7 +445,7 @@ describe("UserContextMenu", () => {
     await userEvent.click(manageOrganizationMembersButton);
     expect(onCloseMock).toHaveBeenCalledTimes(2);
 
-    const manageAccountButton = screen.getByText("ORG$MANAGE_ACCOUNT");
+    const manageAccountButton = screen.getByText("ORG$MANAGE_ORGANIZATION");
     await userEvent.click(manageAccountButton);
     expect(onCloseMock).toHaveBeenCalledTimes(3);
   });
@@ -478,7 +482,9 @@ describe("UserContextMenu", () => {
         ).not.toBeInTheDocument();
       });
 
-      expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("ORG$MANAGE_ORGANIZATION"),
+      ).not.toBeInTheDocument();
     });
 
     it("should not show Billing settings item when team org is selected", async () => {
@@ -526,9 +532,7 @@ describe("UserContextMenu", () => {
     renderUserContextMenu({ type: "admin", onClose: onCloseMock });
 
     // Wait for orgs to load so org management buttons are visible
-    const inviteButton = await screen.findByText(
-      "ORG$INVITE_ORGANIZATION_MEMBER",
-    );
+    const inviteButton = await screen.findByText("ORG$INVITE_ORG_MEMBERS");
     await userEvent.click(inviteButton);
 
     const portalRoot = screen.getByTestId("portal-root");
@@ -536,9 +540,7 @@ describe("UserContextMenu", () => {
       await within(portalRoot).findByTestId("invite-modal"),
     ).toBeInTheDocument();
 
-    await userEvent.click(
-      await within(portalRoot).findByText("BUTTON$CANCEL"),
-    );
+    await userEvent.click(await within(portalRoot).findByText("BUTTON$CANCEL"));
     expect(inviteMembersBatchSpy).not.toHaveBeenCalled();
   });
 
