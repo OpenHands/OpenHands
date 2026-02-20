@@ -9,8 +9,10 @@ from sqlalchemy import update
 from sqlalchemy.orm import sessionmaker
 from storage.api_key import ApiKey
 from storage.database import session_maker
+from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.utils.async_utils import call_sync_from_async
 
 
 @dataclass
@@ -25,7 +27,7 @@ class ApiKeyStore:
         random_part = ''.join(secrets.choice(alphabet) for _ in range(length))
         return f'{self.API_KEY_PREFIX}{random_part}'
 
-    def create_api_key(
+    async def create_api_key(
         self, user_id: str, name: str | None = None, expires_at: datetime | None = None
     ) -> str:
         """Create a new API key for a user.
@@ -39,15 +41,33 @@ class ApiKeyStore:
             The generated API key
         """
         api_key = self.generate_api_key()
+        user = await UserStore.get_user_by_id_async(user_id)
+        org_id = user.current_org_id
+        await call_sync_from_async(
+            self._store_api_key, user_id, org_id, api_key, name, expires_at
+        )
 
+        return api_key
+
+    def _store_api_key(
+        self,
+        user_id: str,
+        org_id: str,
+        api_key: str,
+        name: str | None,
+        expires_at: datetime | None = None,
+    ) -> None:
+        """Store an existing API key in the database."""
         with self.session_maker() as session:
             key_record = ApiKey(
-                key=api_key, user_id=user_id, name=name, expires_at=expires_at
+                key=api_key,
+                user_id=user_id,
+                org_id=org_id,
+                name=name,
+                expires_at=expires_at,
             )
             session.add(key_record)
             session.commit()
-
-        return api_key
 
     def validate_api_key(self, api_key: str) -> str | None:
         """Validate an API key and return the associated user_id if valid."""
@@ -106,27 +126,37 @@ class ApiKeyStore:
 
             return True
 
-    def list_api_keys(self, user_id: str) -> list[dict]:
+    async def list_api_keys(self, user_id: str) -> list[ApiKey]:
         """List all API keys for a user."""
-        with self.session_maker() as session:
-            keys = session.query(ApiKey).filter(ApiKey.user_id == user_id).all()
+        user = await UserStore.get_user_by_id_async(user_id)
+        org_id = user.current_org_id
+        return await call_sync_from_async(self._list_api_keys_from_db, user_id, org_id)
 
-            return [
-                {
-                    'id': key.id,
-                    'name': key.name,
-                    'created_at': key.created_at,
-                    'last_used_at': key.last_used_at,
-                    'expires_at': key.expires_at,
-                }
-                for key in keys
-                if 'MCP_API_KEY' != key.name
-            ]
-
-    def retrieve_mcp_api_key(self, user_id: str) -> str | None:
+    def _list_api_keys_from_db(self, user_id: str, org_id: str) -> list[ApiKey]:
         with self.session_maker() as session:
             keys: list[ApiKey] = (
-                session.query(ApiKey).filter(ApiKey.user_id == user_id).all()
+                session.query(ApiKey)
+                .filter(ApiKey.user_id == user_id)
+                .filter(ApiKey.org_id == org_id)
+                .all()
+            )
+
+            return [key for key in keys if key.name != 'MCP_API_KEY']
+
+    async def retrieve_mcp_api_key(self, user_id: str) -> str | None:
+        user = await UserStore.get_user_by_id_async(user_id)
+        org_id = user.current_org_id
+        return await call_sync_from_async(
+            self._retrieve_mcp_api_key_from_db, user_id, org_id
+        )
+
+    def _retrieve_mcp_api_key_from_db(self, user_id: str, org_id: str) -> str | None:
+        with self.session_maker() as session:
+            keys: list[ApiKey] = (
+                session.query(ApiKey)
+                .filter(ApiKey.user_id == user_id)
+                .filter(ApiKey.org_id == org_id)
+                .all()
             )
             for key in keys:
                 if key.name == 'MCP_API_KEY':

@@ -9,27 +9,34 @@ import { Sidebar } from "#/components/features/sidebar/sidebar";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
-import { GetConfigResponse } from "#/api/option-service/option.types";
+import { WebClientConfig } from "#/api/option-service/option.types";
 
 // Helper to create mock config with sensible defaults
 const createMockConfig = (
-  overrides: Omit<Partial<GetConfigResponse>, "FEATURE_FLAGS"> & {
-    FEATURE_FLAGS?: Partial<GetConfigResponse["FEATURE_FLAGS"]>;
+  overrides: Omit<Partial<WebClientConfig>, "feature_flags"> & {
+    feature_flags?: Partial<WebClientConfig["feature_flags"]>;
   } = {},
-): GetConfigResponse => {
-  const { FEATURE_FLAGS: featureFlagOverrides, ...restOverrides } = overrides;
+): WebClientConfig => {
+  const { feature_flags: featureFlagOverrides, ...restOverrides } = overrides;
   return {
-    APP_MODE: "oss",
-    GITHUB_CLIENT_ID: "test-client-id",
-    POSTHOG_CLIENT_KEY: "test-posthog-key",
-    FEATURE_FLAGS: {
-      ENABLE_BILLING: false,
-      HIDE_LLM_SETTINGS: false,
-      ENABLE_JIRA: false,
-      ENABLE_JIRA_DC: false,
-      ENABLE_LINEAR: false,
+    app_mode: "oss",
+    posthog_client_key: "test-posthog-key",
+    feature_flags: {
+      enable_billing: false,
+      hide_llm_settings: false,
+      enable_jira: false,
+      enable_jira_dc: false,
+      enable_linear: false,
       ...featureFlagOverrides,
     },
+    providers_configured: [],
+    maintenance_start_time: null,
+    auth_url: null,
+    recaptcha_site_key: null,
+    faulty_models: [],
+    error_message: null,
+    updated_at: "2024-01-14T10:00:00Z",
+    github_app_slug: null,
     ...restOverrides,
   };
 };
@@ -76,9 +83,9 @@ describe("Sidebar", () => {
   });
 
   describe("Settings modal auto-open behavior", () => {
-    it("should NOT open settings modal when HIDE_LLM_SETTINGS is true even with 404 error", async () => {
+    it("should NOT open settings modal when hide_llm_settings is true even with 404 error", async () => {
       getConfigSpy.mockResolvedValue(
-        createMockConfig({ FEATURE_FLAGS: { HIDE_LLM_SETTINGS: true } }),
+        createMockConfig({ feature_flags: { hide_llm_settings: true } }),
       );
       getSettingsSpy.mockRejectedValue(createAxiosNotFoundErrorObject());
 
@@ -89,21 +96,21 @@ describe("Sidebar", () => {
         expect(getSettingsSpy).toHaveBeenCalled();
       });
 
-      // Settings modal should NOT appear when HIDE_LLM_SETTINGS is true
+      // Settings modal should NOT appear when hide_llm_settings is true
       await waitFor(() => {
         expect(screen.queryByTestId("ai-config-modal")).not.toBeInTheDocument();
       });
     });
 
-    it("should open settings modal when HIDE_LLM_SETTINGS is false and 404 error in OSS mode", async () => {
+    it("should open settings modal when hide_llm_settings is false and 404 error in OSS mode", async () => {
       getConfigSpy.mockResolvedValue(
-        createMockConfig({ FEATURE_FLAGS: { HIDE_LLM_SETTINGS: false } }),
+        createMockConfig({ feature_flags: { hide_llm_settings: false } }),
       );
       getSettingsSpy.mockRejectedValue(createAxiosNotFoundErrorObject());
 
       renderSidebar();
 
-      // Settings modal should appear when HIDE_LLM_SETTINGS is false
+      // Settings modal should appear when hide_llm_settings is false
       await waitFor(() => {
         expect(screen.getByTestId("ai-config-modal")).toBeInTheDocument();
       });
@@ -112,8 +119,8 @@ describe("Sidebar", () => {
     it("should NOT open settings modal in SaaS mode even with 404 error", async () => {
       getConfigSpy.mockResolvedValue(
         createMockConfig({
-          APP_MODE: "saas",
-          FEATURE_FLAGS: { HIDE_LLM_SETTINGS: false },
+          app_mode: "saas",
+          feature_flags: { hide_llm_settings: false },
         }),
       );
       getSettingsSpy.mockRejectedValue(createAxiosNotFoundErrorObject());
@@ -133,7 +140,7 @@ describe("Sidebar", () => {
 
     it("should NOT open settings modal when settings exist (no 404 error)", async () => {
       getConfigSpy.mockResolvedValue(
-        createMockConfig({ FEATURE_FLAGS: { HIDE_LLM_SETTINGS: false } }),
+        createMockConfig({ feature_flags: { hide_llm_settings: false } }),
       );
       getSettingsSpy.mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
 
@@ -152,7 +159,7 @@ describe("Sidebar", () => {
 
     it("should NOT open settings modal when on /settings path", async () => {
       getConfigSpy.mockResolvedValue(
-        createMockConfig({ FEATURE_FLAGS: { HIDE_LLM_SETTINGS: false } }),
+        createMockConfig({ feature_flags: { hide_llm_settings: false } }),
       );
       getSettingsSpy.mockRejectedValue(createAxiosNotFoundErrorObject());
 

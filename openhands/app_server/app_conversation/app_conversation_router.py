@@ -186,14 +186,39 @@ async def count_app_conversations(
 
 @router.get('')
 async def batch_get_app_conversations(
-    ids: Annotated[list[UUID], Query()],
+    ids: Annotated[list[str], Query()],
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
 ) -> list[AppConversation | None]:
-    """Get a batch of sandboxed conversations given their ids. Return None for any missing."""
-    assert len(ids) < 100
-    app_conversations = await app_conversation_service.batch_get_app_conversations(ids)
+    """Get a batch of sandboxed conversations given their ids. Return None for any missing.
+
+    Accepts UUIDs as strings (with or without dashes) and converts them internally.
+    Returns 400 Bad Request if any string cannot be converted to a valid UUID.
+    """
+    if len(ids) >= 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Too many ids requested. Maximum is 99.',
+        )
+
+    uuids: list[UUID] = []
+    invalid_ids: list[str] = []
+    for id_str in ids:
+        try:
+            uuids.append(UUID(id_str))
+        except ValueError:
+            invalid_ids.append(id_str)
+
+    if invalid_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Invalid UUID format for ids: {invalid_ids}',
+        )
+
+    app_conversations = await app_conversation_service.batch_get_app_conversations(
+        uuids
+    )
     return app_conversations
 
 
@@ -503,13 +528,6 @@ async def get_conversation_skills(
 
         agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
 
-        # Create remote workspace
-        remote_workspace = AsyncRemoteWorkspace(
-            host=agent_server_url,
-            api_key=sandbox.session_api_key,
-            working_dir=sandbox_spec.working_dir,
-        )
-
         # Load skills from all sources
         logger.info(f'Loading skills for conversation {conversation_id}')
 
@@ -518,9 +536,9 @@ async def get_conversation_skills(
         if isinstance(app_conversation_service, AppConversationServiceBase):
             all_skills = await app_conversation_service.load_and_merge_all_skills(
                 sandbox,
-                remote_workspace,
                 conversation.selected_repository,
                 sandbox_spec.working_dir,
+                agent_server_url,
             )
 
         logger.info(
@@ -531,9 +549,11 @@ async def get_conversation_skills(
         # Transform skills to response format
         skills_response = []
         for skill in all_skills:
-            # Determine type based on trigger
-            skill_type: Literal['repo', 'knowledge']
-            if skill.trigger is None:
+            # Determine type based on AgentSkills format and trigger
+            skill_type: Literal['repo', 'knowledge', 'agentskills']
+            if skill.is_agentskills_format:
+                skill_type = 'agentskills'
+            elif skill.trigger is None:
                 skill_type = 'repo'
             else:
                 skill_type = 'knowledge'
@@ -626,7 +646,6 @@ async def _stream_app_conversation_start(
     user_context: UserContext,
 ) -> AsyncGenerator[str, None]:
     """Stream a json list, item by item."""
-
     # Because the original dependencies are closed after the method returns, we need
     # a new dependency context which will continue intil the stream finishes.
     state = InjectorState()

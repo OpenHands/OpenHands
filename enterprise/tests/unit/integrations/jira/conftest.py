@@ -6,11 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from integrations.jira.jira_manager import JiraManager
+from integrations.jira.jira_payload import (
+    JiraEventType,
+    JiraWebhookPayload,
+)
 from integrations.jira.jira_view import (
-    JiraExistingConversationView,
     JiraNewConversationView,
 )
-from integrations.models import JobContext
 from jinja2 import DictLoader, Environment
 from storage.jira_conversation import JiraConversation
 from storage.jira_user import JiraUser
@@ -25,7 +27,7 @@ def mock_token_manager():
     """Create a mock TokenManager for testing."""
     token_manager = MagicMock()
     token_manager.get_user_id_from_user_email = AsyncMock()
-    token_manager.decrypt_text = MagicMock()
+    token_manager.decrypt_text = MagicMock(return_value='decrypted_key')
     return token_manager
 
 
@@ -60,6 +62,7 @@ def sample_jira_workspace():
     workspace = MagicMock(spec=JiraWorkspace)
     workspace.id = 1
     workspace.name = 'test.atlassian.net'
+    workspace.jira_cloud_id = 'cloud-123'
     workspace.admin_user_id = 'admin_id'
     workspace.webhook_secret = 'encrypted_secret'
     workspace.svc_acc_email = 'service@example.com'
@@ -75,22 +78,41 @@ def sample_user_auth():
     user_auth.get_provider_tokens = AsyncMock(return_value={})
     user_auth.get_access_token = AsyncMock(return_value='test_token')
     user_auth.get_user_id = AsyncMock(return_value='test_user_id')
+    user_auth.get_secrets = AsyncMock(return_value=None)
     return user_auth
 
 
 @pytest.fixture
-def sample_job_context():
-    """Create a sample JobContext for testing."""
-    return JobContext(
+def sample_webhook_payload():
+    """Create a sample JiraWebhookPayload for testing."""
+    return JiraWebhookPayload(
+        event_type=JiraEventType.COMMENT_MENTION,
+        raw_event='comment_created',
         issue_id='12345',
         issue_key='TEST-123',
-        user_msg='Fix this bug @openhands',
         user_email='user@test.com',
         display_name='Test User',
+        account_id='user123',
         workspace_name='test.atlassian.net',
         base_api_url='https://test.atlassian.net',
-        issue_title='Test Issue',
-        issue_description='This is a test issue',
+        comment_body='Fix this bug @openhands',
+    )
+
+
+@pytest.fixture
+def sample_label_webhook_payload():
+    """Create a sample labeled ticket JiraWebhookPayload for testing."""
+    return JiraWebhookPayload(
+        event_type=JiraEventType.LABELED_TICKET,
+        raw_event='jira:issue_updated',
+        issue_id='12345',
+        issue_key='PROJ-123',
+        user_email='user@company.com',
+        display_name='Test User',
+        account_id='user456',
+        workspace_name='jira.company.com',
+        base_api_url='https://jira.company.com',
+        comment_body='',
     )
 
 
@@ -181,31 +203,17 @@ def jira_conversation():
 
 @pytest.fixture
 def new_conversation_view(
-    sample_job_context, sample_user_auth, sample_jira_user, sample_jira_workspace
+    sample_webhook_payload, sample_user_auth, sample_jira_user, sample_jira_workspace
 ):
     """JiraNewConversationView instance for testing"""
     return JiraNewConversationView(
-        job_context=sample_job_context,
+        payload=sample_webhook_payload,
         saas_user_auth=sample_user_auth,
         jira_user=sample_jira_user,
         jira_workspace=sample_jira_workspace,
         selected_repo='test/repo1',
         conversation_id='conv-123',
-    )
-
-
-@pytest.fixture
-def existing_conversation_view(
-    sample_job_context, sample_user_auth, sample_jira_user, sample_jira_workspace
-):
-    """JiraExistingConversationView instance for testing"""
-    return JiraExistingConversationView(
-        job_context=sample_job_context,
-        saas_user_auth=sample_user_auth,
-        jira_user=sample_jira_user,
-        jira_workspace=sample_jira_workspace,
-        selected_repo='test/repo1',
-        conversation_id='conv-123',
+        _decrypted_api_key='decrypted_key',
     )
 
 

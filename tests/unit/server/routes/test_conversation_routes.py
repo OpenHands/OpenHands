@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import status
 from fastapi.responses import JSONResponse
@@ -12,6 +13,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
+    AppConversation,
     AppConversationInfo,
     AppConversationPage,
     AppConversationStartRequest,
@@ -21,8 +23,10 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
+from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.microagent.microagent import KnowledgeMicroagent, RepoMicroagent
 from openhands.microagent.types import MicroagentMetadata, MicroagentType
+from openhands.server.data_models.conversation_info import ConversationStatus
 from openhands.server.data_models.conversation_info_result_set import (
     ConversationInfoResultSet,
 )
@@ -32,7 +36,9 @@ from openhands.server.routes.conversation import (
     get_microagents,
 )
 from openhands.server.routes.manage_conversations import (
+    _RESUME_GRACE_PERIOD,
     UpdateConversationRequest,
+    get_conversation,
     search_conversations,
     update_conversation,
 )
@@ -1459,3 +1465,102 @@ async def test_search_conversations_include_sub_conversations_with_other_filters
                 assert call_kwargs.get('include_sub_conversations') is True
                 assert call_kwargs.get('page_id') == 'test_v1_page_id'
                 assert call_kwargs.get('limit') == 50
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'sandbox_status,execution_status,server_uptime,server_error,expected_status,should_call_server',
+    [
+        # RUNNING sandbox, no execution_status, server responds within grace period -> STARTING
+        (SandboxStatus.RUNNING, None, 30, None, ConversationStatus.STARTING, True),
+        # RUNNING sandbox, no execution_status, server responds past grace period -> RUNNING
+        (
+            SandboxStatus.RUNNING,
+            None,
+            _RESUME_GRACE_PERIOD + 10,
+            None,
+            ConversationStatus.RUNNING,
+            True,
+        ),
+        # RUNNING sandbox, no execution_status, server unresponsive -> STARTING
+        (
+            SandboxStatus.RUNNING,
+            None,
+            None,
+            httpx.ConnectError('Connection refused'),
+            ConversationStatus.STARTING,
+            True,
+        ),
+        # RUNNING sandbox, WITH execution_status -> RUNNING, skip server check
+        (SandboxStatus.RUNNING, 'IDLE', None, None, ConversationStatus.RUNNING, False),
+        # Non-RUNNING sandbox -> STARTING, skip server check
+        (SandboxStatus.STARTING, None, None, None, ConversationStatus.STARTING, False),
+    ],
+    ids=[
+        'running_no_exec_status_within_grace_period',
+        'running_no_exec_status_past_grace_period',
+        'running_no_exec_status_server_unresponsive',
+        'running_with_exec_status_skips_check',
+        'non_running_skips_check',
+    ],
+)
+async def test_get_conversation_resume_status_handling(
+    sandbox_status,
+    execution_status,
+    server_uptime,
+    server_error,
+    expected_status,
+    should_call_server,
+):
+    """Test get_conversation handles resume status correctly for various scenarios."""
+    from openhands.sdk.conversation.state import ConversationExecutionStatus
+
+    conversation_id = uuid4()
+
+    # Convert string execution_status to enum if provided
+    exec_status = None
+    if execution_status == 'IDLE':
+        exec_status = ConversationExecutionStatus.IDLE
+
+    mock_app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='test_user',
+        sandbox_id='test_sandbox',
+        sandbox_status=sandbox_status,
+        execution_status=exec_status,
+        conversation_url='https://sandbox.example.com/conversation',
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_app_conversation_service = AsyncMock(spec=AppConversationService)
+    mock_app_conversation_service.get_app_conversation.return_value = (
+        mock_app_conversation
+    )
+    mock_conversation_store = AsyncMock(spec=ConversationStore)
+    mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+
+    if server_error:
+        mock_httpx_client.get.side_effect = server_error
+    elif server_uptime is not None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'uptime': server_uptime}
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.get.return_value = mock_response
+
+    result = await get_conversation(
+        conversation_id=str(conversation_id),
+        conversation_store=mock_conversation_store,
+        app_conversation_service=mock_app_conversation_service,
+        httpx_client=mock_httpx_client,
+    )
+
+    assert result is not None
+    assert result.status == expected_status
+
+    if should_call_server:
+        mock_httpx_client.get.assert_called_once_with(
+            'https://sandbox.example.com/server_info'
+        )
+    else:
+        mock_httpx_client.get.assert_not_called()

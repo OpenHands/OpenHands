@@ -25,8 +25,9 @@ from openhands.events.action import (
 from openhands.events.action.agent import RecallAction
 from openhands.events.action.commands import CmdRunAction
 from openhands.events.action.message import SystemMessageAction
-from openhands.events.event import Event, RecallType
+from openhands.events.event import Event
 from openhands.events.observation.agent import RecallObservation
+from openhands.events.recall_type import RecallType
 from openhands.events.stream import EventStreamSubscriber
 from openhands.llm.llm import LLM
 from openhands.llm.llm_registry import LLMRegistry

@@ -68,7 +68,8 @@ class StoredAppConversationStartTask(Base):  # type: ignore
 class SQLAppConversationStartTaskService(AppConversationStartTaskService):
     """SQL implementation of AppConversationStartTaskService focused on db operations.
 
-    This allows storing and retrieving conversation start tasks from the database."""
+    This allows storing and retrieving conversation start tasks from the database.
+    """
 
     session: AsyncSession
     user_id: str | None = None
