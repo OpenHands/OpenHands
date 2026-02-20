@@ -64,8 +64,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         Raises:
             AuthError: If no user_id is available (secure default: deny access)
         """
-        # Since webhooks filter by the session_api_key, we have an admin mode
-        # without filtering. Filtering is applied later in the webhook
+        # For internal operations such as getting a conversation by session_api_key
+        # we need a mode that does not have filtering. The dependency `as_admin()`
+        # is used to enable it
         if self.user_context == ADMIN:
             return query
 
