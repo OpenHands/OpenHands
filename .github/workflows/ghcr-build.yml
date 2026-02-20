@@ -240,21 +240,6 @@ jobs:
           # Add build attestations for better security
           sbom: true
 
-  enterprise-preview:
-    name: Enterprise preview
-    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy')
-    runs-on: blacksmith-4vcpu-ubuntu-2204
-    needs: [ghcr_build_enterprise]
-    steps:
-      # This should match the version in enterprise-preview.yml
-      - name: Trigger remote job
-        run: |
-          curl --fail-with-body -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.ALLHANDS_BOT_GITHUB_PAT }}" \
-            -H "Accept: application/vnd.github+json" \
-            -d "{\"ref\": \"main\", \"inputs\": {\"openhandsPrNumber\": \"${{ github.event.pull_request.number }}\", \"deployEnvironment\": \"feature\", \"enterpriseImageTag\": \"pr-${{ github.event.pull_request.number }}\" }}" \
-            https://api.github.com/repos/OpenHands/deploy/actions/workflows/deploy.yaml/dispatches
-
   # "All Runtime Tests Passed" is a required job for PRs to merge
   # We can remove this once the config changes
   runtime_tests_check_success:
