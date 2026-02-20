@@ -151,7 +151,7 @@ class SetAuthCookieMiddleware:
         if request.method == 'OPTIONS':
             return False
         path = request.url.path
-        logger.info("_should_attach", extra={"path": path})
+        logger.info('_should_attach', extra={'path': path})
 
         ignore_paths = (
             '/api/options/config',
