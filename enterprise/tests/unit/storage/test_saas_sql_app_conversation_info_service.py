@@ -523,15 +523,15 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         # ADMIN should see ALL conversations (unfiltered)
         admin_page = await admin_service.search_app_conversation_info()
-        assert len(admin_page.items) == 3, (
-            'ADMIN context should see all conversations without filtering'
-        )
+        assert (
+            len(admin_page.items) == 3
+        ), 'ADMIN context should see all conversations without filtering'
 
         # ADMIN count should return total count (3)
         admin_count = await admin_service.count_app_conversation_info()
-        assert admin_count == 3, (
-            'ADMIN context should count all conversations without filtering'
-        )
+        assert (
+            admin_count == 3
+        ), 'ADMIN context should count all conversations without filtering'
 
     @pytest.mark.asyncio
     async def test_admin_context_can_access_any_conversation(
@@ -562,9 +562,7 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
         )
 
         user2_page = await user2_service.search_app_conversation_info()
-        assert len(user2_page.items) == 0, (
-            'User2 should not see User1 conversation'
-        )
+        assert len(user2_page.items) == 0, 'User2 should not see User1 conversation'
 
         # But ADMIN should see ALL conversations including user1's
         admin_service = SaasSQLAppConversationInfoService(
@@ -603,12 +601,12 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         # For ADMIN, there should be no user_id or org_id filtering
         # The query should not contain filters for user_id or org_id
-        assert str(USER1_ID) not in query_str.replace('-', ''), (
-            'ADMIN context should not filter by user_id'
-        )
-        assert str(USER2_ID) not in query_str.replace('-', ''), (
-            'ADMIN context should not filter by user_id'
-        )
+        assert str(USER1_ID) not in query_str.replace(
+            '-', ''
+        ), 'ADMIN context should not filter by user_id'
+        assert str(USER2_ID) not in query_str.replace(
+            '-', ''
+        ), 'ADMIN context should not filter by user_id'
 
     @pytest.mark.asyncio
     async def test_regular_user_context_filters_correctly(

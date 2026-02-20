@@ -287,7 +287,9 @@ async def test_middleware_ignores_email_resend_path_no_tos_check(
 
 
 @pytest.mark.asyncio
-async def test_middleware_skips_webhook_endpoints(middleware, mock_request, mock_response):
+async def test_middleware_skips_webhook_endpoints(
+    middleware, mock_request, mock_response
+):
     """Test middleware skips webhook endpoints (/api/v1/webhooks/*) and doesn't require auth."""
     # Test various webhook paths
     webhook_paths = [
@@ -313,7 +315,9 @@ async def test_middleware_skips_webhook_endpoints(middleware, mock_request, mock
 
 
 @pytest.mark.asyncio
-async def test_middleware_skips_webhook_secrets_endpoint(middleware, mock_request, mock_response):
+async def test_middleware_skips_webhook_secrets_endpoint(
+    middleware, mock_request, mock_response
+):
     """Test middleware skips the old /api/v1/webhooks/secrets endpoint."""
     # This was explicitly in ignore_paths but is now handled by the prefix check
     mock_request.cookies = {}
@@ -357,7 +361,7 @@ async def test_middleware_does_not_skip_similar_non_webhook_paths(
         # Since there's no auth, middleware catches NoCredentialsError and returns 401
         mock_call_next = AsyncMock()
         result = await middleware(mock_request, mock_call_next)
-        
+
         # Should return a 401 response, not raise an exception
         assert result.status_code == status.HTTP_401_UNAUTHORIZED
         # Should NOT call next for non-webhook paths when auth is missing
