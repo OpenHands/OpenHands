@@ -70,7 +70,6 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             return query
 
         user_id_str = await self.user_context.get_user_id()
-
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"
             raise AuthError('User authentication required')
