@@ -57,18 +57,20 @@ _logger = logging.getLogger(__name__)
 
 async def valid_sandbox(
     user_context: UserContext = Depends(as_admin),
-    session_api_key: str = Depends(
+    session_api_key: str | None = Depends(
         APIKeyHeader(name='X-Session-API-Key', auto_error=False)
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
 ) -> SandboxInfo:
     if session_api_key is None:
+        _logger.warning('x_session_api_key_header_required')
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail='X-Session-API-Key header is required'
         )
 
     sandbox_info = await sandbox_service.get_sandbox_by_session_api_key(session_api_key)
     if sandbox_info is None:
+        _logger.warning('x_session_api_key_header_invalid', extra={"session_api_key": session_api_key})
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
         )
