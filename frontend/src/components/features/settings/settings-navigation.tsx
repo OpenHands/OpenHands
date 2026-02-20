@@ -71,14 +71,21 @@ export function SettingsNavigation({
               onClick={onCloseMobileMenu}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 p-1 sm:px-3.5 sm:py-2 rounded-md transition-colors",
+                  "group flex items-center gap-3 p-1 sm:px-3.5 sm:py-2 rounded-md transition-all duration-200",
                   isActive ? "bg-tertiary" : "hover:bg-tertiary",
                 )
               }
             >
-              {icon}
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <Typography.Text className="text-[#A3A3A3] whitespace-nowrap">
+              <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center">
+                {icon}
+              </span>
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <Typography.Text
+                  className={cn(
+                    "block truncate whitespace-nowrap text-modal-muted transition-all duration-300",
+                    "group-hover:translate-x-1 group-hover:text-white",
+                  )}
+                >
                   {t(text as I18nKey)}
                 </Typography.Text>
               </div>
