@@ -30,26 +30,27 @@ jobs:
         #   3. openhands-agent or all-hands-bot is requested as a reviewer on a PR from a
         #      collaborator/member/owner, OR
         #   4. A maintainer adds the 'review-this' label (manual trigger for external authors)
+        # Condition structure: Each trigger type is isolated to avoid accessing undefined
+        # event properties (e.g., github.event.label when action != 'labeled').
+        # - Non-label triggers require author_association check
+        # - Label trigger ('review-this') is open to anyone (for external contributors)
         if: |
             (
               (
                 (
-                  (
-                    github.event.action == 'opened' &&
-                    github.event.pull_request.draft == false
-                  ) ||
-                  (github.event.action == 'ready_for_review') ||
-                  (
-                    github.event.action == 'review_requested' &&
-                    (
-                      github.event.requested_reviewer.login == 'openhands-agent' ||
-                      github.event.requested_reviewer.login == 'all-hands-bot'
-                    )
-                  )
+                  (github.event.action == 'opened' && github.event.pull_request.draft == false) ||
+                  (github.event.action == 'ready_for_review')
                 ) && contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.pull_request.author_association)
-              ) || (
-                github.event.action == 'labeled' && github.event.label.name == 'review-this'
-              )
+              ) ||
+              (
+                github.event.action == 'review_requested' &&
+                contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.pull_request.author_association) &&
+                (
+                  github.event.requested_reviewer.login == 'openhands-agent' ||
+                  github.event.requested_reviewer.login == 'all-hands-bot'
+                )
+              ) ||
+              (github.event.action == 'labeled' && github.event.label.name == 'review-this')
             )
         concurrency:
             group: pr-review-${{ github.event.pull_request.number }}
