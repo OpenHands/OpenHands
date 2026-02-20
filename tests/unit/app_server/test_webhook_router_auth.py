@@ -90,17 +90,13 @@ class TestValidSandbox:
         assert 'Invalid session API key' in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_valid_sandbox_with_empty_api_key_looks_up_sandbox(self):
-        """Test that empty API key is passed to sandbox service (not rejected at middleware level)."""
-        # Arrange - empty string is falsy but not None, so it passes the None check
-        # and goes to the sandbox service lookup
+    async def test_valid_sandbox_with_empty_api_key_raises_401(self):
+        """Test that empty API key raises 401 error (same as missing key)."""
+        # Arrange - empty string is falsy, so it gets rejected at the check
         session_api_key = ''
         mock_sandbox_service = AsyncMock()
-        mock_sandbox_service.get_sandbox_by_session_api_key = AsyncMock(
-            return_value=None
-        )
 
-        # Act & Assert - should raise 401 because sandbox lookup returns None
+        # Act & Assert - should raise 401 because empty string fails the truth check
         with pytest.raises(HTTPException) as exc_info:
             await valid_sandbox(
                 user_context=ADMIN,
@@ -109,8 +105,9 @@ class TestValidSandbox:
             )
 
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        # Verify the sandbox service was called
-        mock_sandbox_service.get_sandbox_by_session_api_key.assert_called_once_with('')
+        assert 'X-Session-API-Key header is required' in exc_info.value.detail
+        # Verify the sandbox service was NOT called (rejected before lookup)
+        mock_sandbox_service.get_sandbox_by_session_api_key.assert_not_called()
 
 
 class TestValidConversation:
