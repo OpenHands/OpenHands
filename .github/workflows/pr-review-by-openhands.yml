@@ -2,19 +2,11 @@
 name: PR Review by OpenHands
 
 on:
-    # Use pull_request_target so this workflow can use secrets in the base repo context.
-    # Security: This workflow runs when:
-    #   1. A non-draft PR is opened by a collaborator/member/owner, OR
-    #   2. A draft PR is marked ready_for_review by a collaborator/member/owner, OR
-    #   3. openhands-agent or all-hands-bot is requested as a reviewer on a PR from a
-    #      collaborator/member/owner, OR
-    #   4. A maintainer adds the 'review-this' label (manual trigger for external authors)
-    # Note: PR authors (including from forks) can request reviewers, but this workflow
-    # will only auto-run when the PR author is collaborator/member/owner.
-    # For external authors, a maintainer can trigger it by applying the 'review-this' label.
-    # The PR code is explicitly checked out for review, but secrets are only accessible
-    # because the workflow runs in the base repository context.
-    pull_request_target:
+    # TEMPORARY MITIGATION (Clinejection hardening)
+    #
+    # We temporarily avoid `pull_request_target` here. We'll restore it after the PR review
+    # workflow is fully hardened for untrusted execution.
+    pull_request:
         types: [opened, ready_for_review, labeled, review_requested]
 
 permissions:
@@ -24,32 +16,21 @@ permissions:
 
 jobs:
     pr-review:
-        # Run when one of the following conditions is met:
-        #   1. A new non-draft PR is opened by a collaborator/member/owner, OR
-        #   2. A draft PR is converted to ready for review by a collaborator/member/owner, OR
-        #   3. openhands-agent or all-hands-bot is requested as a reviewer on a PR from a
-        #      collaborator/member/owner, OR
-        #   4. A maintainer adds the 'review-this' label (manual trigger for external authors)
+        # Note: fork PRs will not have access to repository secrets under `pull_request`.
+        # Skip forks to avoid noisy failures until we restore a hardened `pull_request_target` flow.
         if: |
+            github.event.pull_request.head.repo.full_name == github.repository &&
             (
-              (
+                (github.event.action == 'opened' && github.event.pull_request.draft == false) ||
+                github.event.action == 'ready_for_review' ||
+                (github.event.action == 'labeled' && github.event.label.name == 'review-this') ||
                 (
-                  (
-                    github.event.action == 'opened' &&
-                    github.event.pull_request.draft == false
-                  ) ||
-                  (github.event.action == 'ready_for_review') ||
-                  (
                     github.event.action == 'review_requested' &&
                     (
-                      github.event.requested_reviewer.login == 'openhands-agent' ||
-                      github.event.requested_reviewer.login == 'all-hands-bot'
+                        github.event.requested_reviewer.login == 'openhands-agent' ||
+                        github.event.requested_reviewer.login == 'all-hands-bot'
                     )
-                  )
-                ) && contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.pull_request.author_association)
-              ) || (
-                github.event.action == 'labeled' && github.event.label.name == 'review-this'
-              )
+                )
             )
         concurrency:
             group: pr-review-${{ github.event.pull_request.number }}
