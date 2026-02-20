@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import Request
+from openhands.app_server.user.specifiy_user_context import ADMIN
 from sqlalchemy import func, select
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
@@ -63,7 +64,13 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         Raises:
             AuthError: If no user_id is available (secure default: deny access)
         """
+        # Since webhooks filter by the session_api_key, we have an admin mode
+        # without filtering. Filtering is applied later in the webhook
+        if self.user_context == ADMIN:
+            return query
+
         user_id_str = await self.user_context.get_user_id()
+
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"
             raise AuthError('User authentication required')
