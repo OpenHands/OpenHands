@@ -869,54 +869,6 @@ async def test_create_user_sets_email_verified_false_from_user_info():
 
 
 @pytest.mark.asyncio
-async def test_create_user_defaults_email_verified_when_missing():
-    """When user_info lacks email_verified, create_user() should default it to False."""
-    user_id = str(uuid.uuid4())
-    user_info = {
-        'preferred_username': 'jdoe',
-        'email': 'jdoe@example.com',
-        # email_verified intentionally omitted
-    }
-
-    mock_session = MagicMock()
-    mock_sm = MagicMock()
-    mock_sm.return_value.__enter__ = MagicMock(return_value=mock_session)
-    mock_sm.return_value.__exit__ = MagicMock(return_value=False)
-
-    mock_settings = Settings(
-        language='en',
-        llm_api_key=SecretStr('test-key'),
-        llm_base_url='http://test.url',
-    )
-
-    mock_role = MagicMock()
-    mock_role.id = 1
-
-    with (
-        patch('storage.user_store.session_maker', mock_sm),
-        patch.object(
-            UserStore,
-            'create_default_settings',
-            new_callable=AsyncMock,
-            return_value=mock_settings,
-        ),
-        patch('storage.user_store.RoleStore.get_role_by_name', return_value=mock_role),
-        patch(
-            'storage.org_member_store.OrgMemberStore.get_kwargs_from_settings',
-            return_value={'llm_model': None, 'llm_base_url': None},
-        ),
-    ):
-        mock_session.commit.side_effect = _StopAfterUserCreation
-        with pytest.raises(_StopAfterUserCreation):
-            await UserStore.create_user(user_id, user_info)
-
-    user = mock_session.add.call_args_list[1][0][0]
-    assert isinstance(user, User)
-    assert user.email == 'jdoe@example.com'
-    assert user.email_verified is False
-
-
-@pytest.mark.asyncio
 async def test_create_user_preserves_org_contact_email():
     """create_user() must still set Org.contact_email (no regression)."""
     user_id = str(uuid.uuid4())

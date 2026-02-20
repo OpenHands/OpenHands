@@ -84,7 +84,7 @@ class UserStore:
                 **user_kwargs,
             )
             user.email = user_info.get('email')
-            user.email_verified = user_info.get('email_verified', False)
+            user.email_verified = user_info.get('email_verified')
             session.add(user)
 
             role = RoleStore.get_role_by_name('owner')
