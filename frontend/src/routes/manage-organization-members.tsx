@@ -102,7 +102,7 @@ function ManageOrganizationMembers() {
           className="flex items-center gap-1"
         >
           <Plus size={14} />
-          {t(I18nKey.ORG$INVITE_ORGANIZATION_MEMBER)}
+          {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
         </BrandButton>
       )}
 

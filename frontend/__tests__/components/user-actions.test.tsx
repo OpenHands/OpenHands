@@ -315,7 +315,9 @@ describe("UserActions", () => {
     expect(
       screen.queryByText("ORG$MANAGE_ORGANIZATION_MEMBERS"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("ORG$MANAGE_ORGANIZATION"),
+    ).not.toBeInTheDocument();
   });
 
   test("should NOT show Team and Organization nav items when personal workspace is selected", async () => {

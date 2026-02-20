@@ -57,8 +57,8 @@ export function InviteOrganizationMemberModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-full flex flex-col gap-2">
-          <h3 className="text-xl leading-6 font-semibold">
-            {t(I18nKey.ORG$INVITE_USERS)}
+          <h3 className="text-lg font-semibold">
+            {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
           </h3>
           <p className="text-xs leading-4 font-normal text-[#A3A3A3]">
             {t(I18nKey.ORG$INVITE_USERS_DESCRIPTION)}
