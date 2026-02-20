@@ -189,7 +189,7 @@ function ManageOrg() {
 
         <div
           className={cn(
-            "text-sm py-3 bg-base rounded",
+            "text-sm p-3 bg-modal-input rounded",
             "flex items-center justify-between",
           )}
         >
@@ -198,7 +198,7 @@ function ManageOrg() {
             <button
               type="button"
               onClick={() => setChangeOrgNameFormVisible(true)}
-              className="text-modal-muted hover:text-white transition-colors cursor-pointer"
+              className="text-sm text-org-text font-normal leading-5 hover:text-white transition-colors cursor-pointer"
             >
               {t(I18nKey.ORG$CHANGE)}
             </button>
