@@ -57,7 +57,7 @@ function ServedApp() {
   }
 
   const fullUrl = path
-    ? `${currentActiveHost.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+    ? `${currentActiveHost.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`
     : currentActiveHost;
 
   return (

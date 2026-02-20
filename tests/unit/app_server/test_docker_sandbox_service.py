@@ -7,8 +7,11 @@ This module tests the Docker sandbox service implementation, focusing on:
 - Health checking and URL generation
 - Error handling for Docker API failures
 - Edge cases with malformed container data
+- Package cache overlay mounts (concurrency-safe caching)
+- Registry mirror for Docker-in-Docker
 """
 
+import os
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1200,7 +1203,6 @@ class TestDockerSandboxServiceInjectorFromEnv:
 
     def test_config_from_env_with_sandbox_host_port(self):
         """Test that SANDBOX_HOST_PORT environment variable is respected."""
-        import os
         from unittest.mock import patch
 
         env_vars = {
@@ -1220,7 +1222,6 @@ class TestDockerSandboxServiceInjectorFromEnv:
 
     def test_config_from_env_with_sandbox_container_url_pattern(self):
         """Test that SANDBOX_CONTAINER_URL_PATTERN environment variable is respected."""
-        import os
         from unittest.mock import patch
 
         env_vars = {
@@ -1240,7 +1241,6 @@ class TestDockerSandboxServiceInjectorFromEnv:
 
     def test_config_from_env_with_both_sandbox_vars(self):
         """Test that both SANDBOX_HOST_PORT and SANDBOX_CONTAINER_URL_PATTERN work together."""
-        import os
         from unittest.mock import patch
 
         env_vars = {
@@ -1259,3 +1259,227 @@ class TestDockerSandboxServiceInjectorFromEnv:
             assert config.sandbox is not None
             assert config.sandbox.host_port == 4000
             assert config.sandbox.container_url_pattern == 'http://192.168.1.100:{port}'
+
+
+class TestPackageCacheOverlay:
+    """Test cases for overlay-based package cache mounts."""
+
+    @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
+    @patch('os.urandom')
+    async def test_start_sandbox_shared_cache(self, mock_urandom, mock_encodebytes):
+        """Test that start_sandbox mounts the shared package cache volume."""
+        mock_urandom.side_effect = [b'container_id', b'session_key']
+        mock_encodebytes.side_effect = ['test_id', 'test_key']
+
+        mock_container = MagicMock()
+        mock_container.name = 'oh-test-test_id'
+        mock_container.status = 'running'
+        mock_container.image.tags = ['test-image:latest']
+        mock_container.attrs = {
+            'Created': '2024-01-15T10:30:00.000000000Z',
+            'Config': {'Env': ['OH_SESSION_API_KEYS_0=test_key']},
+            'NetworkSettings': {'Ports': {}},
+        }
+
+        mock_client = MagicMock()
+        mock_client.containers.run.return_value = mock_container
+
+        service = DockerSandboxService(
+            sandbox_spec_service=AsyncMock(),
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[
+                ExposedPort(
+                    name=AGENT_SERVER, description='Agent', container_port=8000
+                ),
+            ],
+            health_check_path=None,
+            httpx_client=AsyncMock(),
+            max_num_sandboxes=3,
+            docker_client=mock_client,
+        )
+        service.sandbox_spec_service.get_default_sandbox_spec.return_value = MagicMock(
+            id='test-image:latest',
+            initial_env={},
+            working_dir='/workspace',
+            command=None,
+        )
+
+        with (
+            patch.object(service, '_find_unused_port', return_value=12345),
+            patch.object(service, 'pause_old_sandboxes', return_value=[]),
+        ):
+            await service.start_sandbox()
+
+        call_args = mock_client.containers.run.call_args
+        volumes = call_args[1]['volumes']
+        assert 'openhands-package-cache' in volumes
+
+
+class TestRegistryMirror:
+    """Test cases for DinD registry mirror support."""
+
+    def test_start_dockerd_without_mirror(self):
+        """Test that dockerd starts without --registry-mirror when not configured."""
+        mock_container = MagicMock()
+        mock_container.name = 'test-container'
+        mock_container.exec_run.return_value = MagicMock(exit_code=0)
+
+        service = DockerSandboxService(
+            sandbox_spec_service=AsyncMock(),
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[],
+            health_check_path=None,
+            httpx_client=AsyncMock(),
+            max_num_sandboxes=3,
+            docker_client=MagicMock(),
+            registry_mirror_url=None,
+        )
+
+        import asyncio
+
+        asyncio.run(service._start_dockerd(mock_container))
+
+        # First call should be the dockerd start command
+        first_call = mock_container.exec_run.call_args_list[0]
+        cmd = first_call[0][0]
+        assert '--storage-driver=vfs' in cmd
+        assert '--registry-mirror' not in cmd
+
+    def test_start_dockerd_with_mirror(self):
+        """Test that dockerd starts with --registry-mirror when configured."""
+        mock_container = MagicMock()
+        mock_container.name = 'test-container'
+        mock_container.exec_run.return_value = MagicMock(exit_code=0)
+
+        service = DockerSandboxService(
+            sandbox_spec_service=AsyncMock(),
+            container_name_prefix='oh-test-',
+            host_port=3000,
+            container_url_pattern='http://localhost:{port}',
+            mounts=[],
+            exposed_ports=[],
+            health_check_path=None,
+            httpx_client=AsyncMock(),
+            max_num_sandboxes=3,
+            docker_client=MagicMock(),
+            registry_mirror_url='http://host.docker.internal:5555',
+        )
+
+        import asyncio
+
+        asyncio.run(service._start_dockerd(mock_container))
+
+        first_call = mock_container.exec_run.call_args_list[0]
+        cmd = first_call[0][0]
+        assert '--registry-mirror=http://host.docker.internal:5555' in cmd
+        assert '--insecure-registry=host.docker.internal:5555' in cmd
+
+
+class TestDockerSandboxServiceInjectorNewFields:
+    """Test cases for new injector fields (registry cache)."""
+
+    def test_default_dind_registry_settings(self):
+        """Test default DinD registry settings."""
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        injector = DockerSandboxServiceInjector()
+        assert injector.dind_registry_cache is False
+        assert injector.dind_registry_port == 5555
+
+    def test_config_from_env_dind_registry_cache(self):
+        """Test OH_SANDBOX__DIND_REGISTRY_CACHE env var."""
+        from unittest.mock import patch
+
+        with patch.dict(
+            os.environ,
+            {
+                'OH_SANDBOX__DIND_REGISTRY_CACHE': 'true',
+                'OH_SANDBOX__DIND_REGISTRY_PORT': '6666',
+            },
+            clear=False,
+        ):
+            import openhands.app_server.config as config_module
+            from openhands.app_server.config import config_from_env
+
+            config_module._global_config = None
+            config = config_from_env()
+            assert config.sandbox.dind_registry_cache is True
+            assert config.sandbox.dind_registry_port == 6666
+
+
+class TestRegistryCacheManager:
+    """Test cases for RegistryCacheManager."""
+
+    def test_ensure_running_creates_container(self):
+        """Test that ensure_running creates registry container when not found."""
+        from openhands.app_server.sandbox.registry_cache import RegistryCacheManager
+
+        mock_client = MagicMock()
+        mock_client.containers.get.side_effect = NotFound('not found')
+        mock_client.images.get.return_value = MagicMock()
+
+        manager = RegistryCacheManager(port=5555)
+        manager._docker = mock_client
+
+        url = manager.ensure_running()
+
+        assert url == 'http://host.docker.internal:5555'
+        mock_client.containers.run.assert_called_once()
+        call_kwargs = mock_client.containers.run.call_args[1]
+        assert call_kwargs['name'] == 'openhands-registry-cache'
+        assert call_kwargs['ports'] == {'5000/tcp': 5555}
+        env = call_kwargs['environment']
+        assert env['REGISTRY_PROXY_REMOTEURL'] == 'https://registry-1.docker.io'
+
+    def test_ensure_running_already_running(self):
+        """Test that ensure_running is a no-op when container is running."""
+        from openhands.app_server.sandbox.registry_cache import RegistryCacheManager
+
+        mock_container = MagicMock()
+        mock_container.status = 'running'
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        manager = RegistryCacheManager(port=5555)
+        manager._docker = mock_client
+
+        url = manager.ensure_running()
+
+        assert url == 'http://host.docker.internal:5555'
+        mock_client.containers.run.assert_not_called()
+
+    def test_stop_removes_container(self):
+        """Test that stop removes the registry container."""
+        from openhands.app_server.sandbox.registry_cache import RegistryCacheManager
+
+        mock_container = MagicMock()
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+
+        manager = RegistryCacheManager()
+        manager._docker = mock_client
+
+        manager.stop()
+
+        mock_container.remove.assert_called_once_with(force=True)
+
+    def test_stop_container_not_found(self):
+        """Test that stop handles missing container gracefully."""
+        from openhands.app_server.sandbox.registry_cache import RegistryCacheManager
+
+        mock_client = MagicMock()
+        mock_client.containers.get.side_effect = NotFound('not found')
+
+        manager = RegistryCacheManager()
+        manager._docker = mock_client
+
+        # Should not raise
+        manager.stop()

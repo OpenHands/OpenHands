@@ -76,8 +76,7 @@ function GitSettingsScreen() {
   const isBitbucketTokenSet = providers.includes("bitbucket");
   const isAzureDevOpsTokenSet = providers.includes("azure_devops");
   const isForgejoTokenSet = providers.includes("forgejo");
-  const isNeonKeySet =
-    secrets?.some((s) => s.name === "neon-api-key") ?? false;
+  const isNeonKeySet = secrets?.some((s) => s.name === "neon-api-key") ?? false;
 
   const formAction = async (formData: FormData) => {
     const githubToken = (

@@ -112,6 +112,7 @@ class DockerSandboxService(SandboxService):
     app_hostname: str | None = None
     container_labels: dict[str, str] = field(default_factory=dict)
     privileged: bool = False
+    registry_mirror_url: str | None = None
     traefik_network: str | None = None
     traefik_domain: str | None = None
     traefik_entrypoints: str = 'web'
@@ -175,8 +176,14 @@ class DockerSandboxService(SandboxService):
     async def _start_dockerd(self, container) -> None:
         """Start dockerd inside a privileged container for DinD support."""
         _logger.info(f'Starting dockerd in container {container.name}...')
+        dockerd_args = '--storage-driver=vfs'
+        if self.registry_mirror_url:
+            dockerd_args += (
+                f' --registry-mirror={self.registry_mirror_url}'
+                f' --insecure-registry={self.registry_mirror_url.split("//", 1)[-1]}'
+            )
         container.exec_run(
-            'bash -c "dockerd --storage-driver=vfs > /tmp/dockerd.log 2>&1 &"',
+            f'bash -c "dockerd {dockerd_args} > /tmp/dockerd.log 2>&1 &"',
             user='root',
             detach=True,
         )
@@ -664,7 +671,7 @@ class DockerSandboxService(SandboxService):
             for mount in self.mounts
         }
 
-        # Add shared package cache volume
+        # Mount the shared package cache volume
         volumes[_PACKAGE_CACHE_VOLUME] = {
             'bind': _PACKAGE_CACHE_PATH,
             'mode': 'rw',
@@ -702,8 +709,8 @@ class DockerSandboxService(SandboxService):
                 privileged=self.privileged if self.privileged else None,
             )
 
-            # Ensure the shared package cache volume is writable by the
-            # non-root container user (named volumes start root-owned).
+            # Ensure the package cache is writable by the non-root container
+            # user (named volumes start root-owned).
             container.exec_run(
                 f'chown openhands:openhands {_PACKAGE_CACHE_PATH}', user='root'
             )
@@ -1036,6 +1043,21 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Configure via OH_SANDBOX__PRIVILEGED environment variable.'
         ),
     )
+    dind_registry_cache: bool = Field(
+        default=False,
+        description=(
+            'Enable a pull-through registry cache for Docker-in-Docker sandboxes. '
+            'Requires privileged mode. '
+            'Configure via OH_SANDBOX__DIND_REGISTRY_CACHE environment variable.'
+        ),
+    )
+    dind_registry_port: int = Field(
+        default=5555,
+        description=(
+            'Port for the local pull-through registry cache. '
+            'Configure via OH_SANDBOX__DIND_REGISTRY_PORT environment variable.'
+        ),
+    )
     traefik_network: str | None = Field(
         default=None,
         description=(
@@ -1129,6 +1151,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 container_labels=self.container_labels,
                 startup_grace_seconds=self.startup_grace_seconds,
                 privileged=self.privileged,
+                registry_mirror_url=getattr(self, '_registry_mirror_url', None),
                 traefik_network=self.traefik_network,
                 traefik_domain=self.traefik_domain,
                 traefik_entrypoints=self.traefik_entrypoints,

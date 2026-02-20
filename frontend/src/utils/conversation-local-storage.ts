@@ -65,6 +65,7 @@ export function setConversationState(
     const newState = { ...currentState, ...updates };
     localStorage.setItem(key, JSON.stringify(newState));
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.warn("Failed to set conversation localStorage", err);
   }
 }
@@ -74,6 +75,7 @@ export function clearConversationLocalStorage(conversationId: string) {
     const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
     localStorage.removeItem(key);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.warn(
       "Failed to clear conversation localStorage",
       conversationId,

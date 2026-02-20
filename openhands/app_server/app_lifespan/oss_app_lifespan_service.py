@@ -27,6 +27,7 @@ class OssAppLifespanService(AppLifespanService):
         self._pre_pull_sandbox_images()
         self._start_idle_timeout_monitor()
         self._start_tcp_port_forwarder_manager()
+        self._start_registry_cache()
         return self
 
     async def _seed_provider_tokens_from_env(self) -> None:
@@ -157,6 +158,42 @@ class OssAppLifespanService(AppLifespanService):
                 set_tcp_port_forwarder_manager(TcpPortForwarderManager())
         except Exception:
             logger.warning('Failed to start TCP port forwarder manager', exc_info=True)
+
+    def _start_registry_cache(self) -> None:
+        """Start a pull-through registry cache for Docker-in-Docker sandboxes.
+
+        Only activates when the sandbox injector has ``dind_registry_cache=True``
+        and ``privileged=True``.  The mirror URL is stored on the injector so
+        it gets passed through to each ``DockerSandboxService`` instance.
+        """
+        from openhands.app_server.config import get_global_config
+        from openhands.app_server.sandbox.docker_sandbox_service import (
+            DockerSandboxServiceInjector,
+        )
+
+        try:
+            config = get_global_config()
+            injector = config.sandbox
+
+            if not isinstance(injector, DockerSandboxServiceInjector):
+                return
+            if not injector.dind_registry_cache or not injector.privileged:
+                return
+
+            from openhands.app_server.sandbox.registry_cache import (
+                RegistryCacheManager,
+            )
+
+            manager = RegistryCacheManager(port=injector.dind_registry_port)
+            mirror_url = manager.ensure_running()
+            # Store on the injector so inject() can pass it to DockerSandboxService
+            injector._registry_mirror_url = mirror_url  # type: ignore[attr-defined]
+            logger.info(f'Registry cache mirror available at {mirror_url}')
+        except Exception:
+            logger.warning(
+                'Failed to start registry cache — DinD will pull directly',
+                exc_info=True,
+            )
 
     async def _idle_timeout_loop(self) -> None:
         """Periodically check for idle sandboxes and pause them."""

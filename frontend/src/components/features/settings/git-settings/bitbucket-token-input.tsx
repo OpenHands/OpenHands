@@ -37,7 +37,9 @@ export function BitbucketTokenInput({
           label={t(I18nKey.BITBUCKET$TOKEN_LABEL)}
           type="password"
           className="w-full max-w-[680px]"
-          placeholder={isBitbucketTokenSet ? "<hidden>" : "username:app_password"}
+          placeholder={
+            isBitbucketTokenSet ? "<hidden>" : "username:app_password"
+          }
           startContent={
             isBitbucketTokenSet && (
               <KeyStatusIcon
