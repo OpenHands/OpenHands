@@ -482,7 +482,7 @@ async def test_get_org_credits_success(mock_litellm_api):
     spend = 25.0
 
     mock_team_info = {
-        'litellm_budget_table': {'max_budget': max_budget},
+        'max_budget_in_team': max_budget,
         'spend': spend,
     }
 

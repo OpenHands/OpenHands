@@ -59,7 +59,6 @@ class UserStore:
                 or user_info.get('preferred_username', ''),
                 contact_email=user_info['email'],
                 v1_enabled=True,
-                pending_free_credits=True,
             )
             session.add(org)
 
@@ -84,6 +83,8 @@ class UserStore:
                 role_id=role_id,
                 **user_kwargs,
             )
+            user.email = user_info.get('email')
+            user.email_verified = user_info.get('email_verified')
             session.add(user)
 
             role = RoleStore.get_role_by_name('owner')
@@ -196,7 +197,6 @@ class UserStore:
                 or user_info.get('username', ''),
                 contact_email=user_info['email'],
                 byor_export_enabled=has_completed_billing,
-                pending_free_credits=not has_completed_billing,
             )
             session.add(org)
 

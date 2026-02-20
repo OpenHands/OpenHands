@@ -61,8 +61,6 @@ SUBSCRIPTION_PRICE_DATA = {
     },
 }
 
-FREE_CREDIT_THRESHOLD = float(os.environ.get('FREE_CREDIT_THRESHOLD', '10'))
-FREE_CREDIT_AMOUNT = float(os.environ.get('FREE_CREDIT_AMOUNT', '10'))
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', None)
 REQUIRE_PAYMENT = os.environ.get('REQUIRE_PAYMENT', '0') in ('1', 'true')
 
