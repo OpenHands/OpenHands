@@ -124,16 +124,16 @@ export const CONVERSATION_HANDLERS = [
     const response: GetMicroagentsResponse = {
       microagents: [
         {
-          name: "commit",
+          name: "init",
           type: "agentskills",
-          content: "Generate a git commit with a descriptive message",
-          triggers: ["/commit"],
+          content: "Initialize an AGENTS.md file for the repository",
+          triggers: ["/init"],
         },
         {
-          name: "review-pr",
+          name: "releasenotes",
           type: "agentskills",
-          content: "Review a pull request and provide feedback",
-          triggers: ["/review-pr"],
+          content: "Generate a changelog from the most recent release",
+          triggers: ["/releasenotes"],
         },
         {
           name: "test-runner",
@@ -148,10 +148,22 @@ export const CONVERSATION_HANDLERS = [
           triggers: ["/search"],
         },
         {
-          name: "documentation",
-          type: "knowledge",
-          content: "Generate or update project documentation",
-          triggers: ["/docs"],
+          name: "docker",
+          type: "agentskills",
+          content: "Docker usage guide for container environments",
+          triggers: ["docker", "container"],
+        },
+        {
+          name: "github",
+          type: "agentskills",
+          content: "GitHub API interaction guide",
+          triggers: ["github", "git"],
+        },
+        {
+          name: "work_hosts",
+          type: "repo",
+          content: "Available hosts for web applications",
+          triggers: [],
         },
       ],
     };

@@ -12,18 +12,9 @@ export interface SlashCommandItem {
 }
 
 /**
- * Get the slash command for a skill. Prefers an existing "/" trigger,
- * otherwise derives one from the skill name.
- */
-function getSlashCommand(skill: SlashCommandSkill): string {
-  const slashTrigger = skill.triggers?.find((t) => t.startsWith("/"));
-  if (slashTrigger) return slashTrigger;
-  return `/${skill.name}`;
-}
-
-/**
  * Hook for managing slash command autocomplete in the chat input.
  * Detects when user types "/" and provides filtered skill suggestions.
+ * Only skills with explicit "/" triggers (TaskTrigger) appear in the menu.
  */
 export const useSlashCommand = (
   chatInputRef: React.RefObject<HTMLDivElement | null>,
@@ -33,13 +24,27 @@ export const useSlashCommand = (
   const [filterText, setFilterText] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Build slash command items from all skills
+  // Build slash command items from skills:
+  // - Skills with explicit "/" triggers use those triggers
+  // - AgentSkills without "/" triggers get a derived "/<name>" command
   const slashItems = useMemo(() => {
     if (!skills) return [];
-    return skills.map((skill) => ({
-      skill,
-      command: getSlashCommand(skill),
-    }));
+    const items: SlashCommandItem[] = [];
+    skills.forEach((skill) => {
+      const triggers = skill.triggers || [];
+      const slashTriggers = triggers.filter((t) => t.startsWith("/"));
+
+      if (slashTriggers.length > 0) {
+        // Skill has explicit slash triggers
+        slashTriggers.forEach((trigger) => {
+          items.push({ skill, command: trigger });
+        });
+      } else if (skill.type === "agentskills") {
+        // AgentSkills without slash triggers get a derived command
+        items.push({ skill, command: `/${skill.name}` });
+      }
+    });
+    return items;
   }, [skills]);
 
   // Filter items based on user input after "/"
@@ -93,17 +98,17 @@ export const useSlashCommand = (
 
       // Move cursor to end
       const range = document.createRange();
-      const selection = window.getSelection();
+      const sel = window.getSelection();
       range.selectNodeContents(element);
       range.collapse(false);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-
-      // Dispatch input event so smartResize and other handlers fire
-      element.dispatchEvent(new Event("input", { bubbles: true }));
+      sel?.removeAllRanges();
+      sel?.addRange(range);
 
       setIsMenuOpen(false);
       setFilterText("");
+
+      // Trigger a native InputEvent so React's onInput fires (for smartResize etc.)
+      element.dispatchEvent(new InputEvent("input", { bubbles: true }));
     },
     [chatInputRef],
   );

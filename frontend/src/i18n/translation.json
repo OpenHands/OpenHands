@@ -4879,6 +4879,22 @@
     "de": "Getrennt",
     "uk": "Від'єднано"
   },
+  "CHAT_INTERFACE$COMMANDS": {
+    "en": "Commands",
+    "ja": "コマンド",
+    "zh-CN": "命令",
+    "zh-TW": "命令",
+    "ko-KR": "명령어",
+    "no": "Kommandoer",
+    "ar": "أوامر",
+    "de": "Befehle",
+    "fr": "Commandes",
+    "it": "Comandi",
+    "pt": "Comandos",
+    "es": "Comandos",
+    "tr": "Komutlar",
+    "uk": "Команди"
+  },
   "CHAT_INTERFACE$CONNECTING": {
     "en": "Connecting... (this may take 1-2 minutes)",
     "ja": "接続中...（1-2分かかる場合があります）",
