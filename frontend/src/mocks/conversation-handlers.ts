@@ -1,5 +1,9 @@
 import { http, delay, HttpResponse } from "msw";
-import { Conversation, ResultSet } from "#/api/open-hands.types";
+import {
+  Conversation,
+  GetMicroagentsResponse,
+  ResultSet,
+} from "#/api/open-hands.types";
 
 const conversations: Conversation[] = [
   {
@@ -114,5 +118,43 @@ export const CONVERSATION_HANDLERS = [
       return HttpResponse.json(null, { status: 200 });
     }
     return HttpResponse.json(null, { status: 404 });
+  }),
+
+  http.get("/api/conversations/:conversationId/microagents", async () => {
+    const response: GetMicroagentsResponse = {
+      microagents: [
+        {
+          name: "commit",
+          type: "agentskills",
+          content: "Generate a git commit with a descriptive message",
+          triggers: ["/commit"],
+        },
+        {
+          name: "review-pr",
+          type: "agentskills",
+          content: "Review a pull request and provide feedback",
+          triggers: ["/review-pr"],
+        },
+        {
+          name: "test-runner",
+          type: "agentskills",
+          content: "Run the test suite and report results",
+          triggers: ["/test"],
+        },
+        {
+          name: "code-search",
+          type: "knowledge",
+          content: "Search the codebase semantically",
+          triggers: ["/search"],
+        },
+        {
+          name: "documentation",
+          type: "knowledge",
+          content: "Generate or update project documentation",
+          triggers: ["/docs"],
+        },
+      ],
+    };
+    return HttpResponse.json(response);
   }),
 ];
