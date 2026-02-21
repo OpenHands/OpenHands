@@ -1,9 +1,10 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
+from urllib.parse import urlparse, urlunparse
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 from openhands.agent_server.models import OpenHandsModel, SendMessageRequest
 from openhands.agent_server.utils import OpenHandsUUID, utc_now
@@ -18,6 +19,32 @@ from openhands.sdk.plugin import PluginSource
 from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 
 
+def redact_url_credentials(url: str) -> str:
+    """Redact credentials from a URL, replacing the password with '****'.
+
+    Handles standard URL formats with embedded credentials:
+        https://oauth2:TOKEN@gitlab.com/org/repo  ->  https://oauth2:****@gitlab.com/org/repo
+        https://user:pass@host.com/path           ->  https://user:****@host.com/path
+
+    Non-URL strings and URLs without credentials are returned unchanged.
+
+    TODO: Replace with openhands.sdk.git.utils.redact_url_credentials once
+    software-agent-sdk#2152 is merged, to centralize credential handling.
+    """
+    try:
+        parsed = urlparse(url)
+        if not parsed.password:
+            return url
+        # Rebuild netloc with redacted password
+        host = parsed.hostname or ''
+        if parsed.port:
+            host = f'{host}:{parsed.port}'
+        redacted_netloc = f'{parsed.username}:****@{host}'
+        return urlunparse(parsed._replace(netloc=redacted_netloc))
+    except Exception:
+        return url
+
+
 class AgentType(Enum):
     """Agent type for conversation."""
 
@@ -30,12 +57,27 @@ class PluginSpec(PluginSource):
 
     Extends SDK's PluginSource with user-provided plugin configuration parameters.
     Inherits source, ref, and repo_path fields along with their validation.
+
+    The source field is automatically redacted during serialization to prevent
+    credential leakage in API responses, logs, and persisted state.
+    See: https://github.com/OpenHands/OpenHands/issues/12959
     """
 
     parameters: dict[str, Any] | None = Field(
         default=None,
         description='User-provided values for plugin input parameters',
     )
+
+    @field_serializer('source')
+    @classmethod
+    def redact_source_credentials(cls, source: str) -> str:
+        """Redact embedded credentials from plugin source URLs during serialization.
+
+        This ensures credentials are never included in API responses, streaming
+        output, or database records. The original URL with credentials remains
+        available in memory via self.source for runtime plugin operations.
+        """
+        return redact_url_credentials(source)
 
     @property
     def display_name(self) -> str:
