@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1040,6 +1041,109 @@ def test_download_issue_with_specific_comment():
     assert issues[0].number == 1
     assert issues[0].title == 'Issue 1'
     assert issues[0].thread_comments == ['Specific comment body']
+
+
+@pytest.mark.asyncio
+async def test_resolve_issue_pr_mode_uses_merge_base(
+    default_mock_args, mock_github_token
+):
+    """Test that in PR mode, base_commit is computed via merge-base."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        repo_path = os.path.join(temp_dir, 'repo')
+        os.makedirs(repo_path)
+
+        # Initialize a git repo with a commit on main
+        os.system(f'git init {repo_path}')
+        readme_path = os.path.join(repo_path, 'README.md')
+        with open(readme_path, 'w') as f:
+            f.write('hello world')
+        os.system(f'git -C {repo_path} add README.md')
+        os.system(f"git -C {repo_path} commit -m 'Initial commit'")
+
+        main_commit = (
+            subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_path)
+            .decode('utf-8')
+            .strip()
+        )
+
+        # Create a PR branch with a code commit
+        os.system(f'git -C {repo_path} checkout -b feature-branch')
+        code_path = os.path.join(repo_path, 'code.py')
+        with open(code_path, 'w') as f:
+            f.write('print("hello")')
+        os.system(f'git -C {repo_path} add code.py')
+        os.system(f"git -C {repo_path} commit -m 'Add code'")
+
+        branch_commit = (
+            subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_path)
+            .decode('utf-8')
+            .strip()
+        )
+
+        # Go back to main so the clone starts there
+        os.system(
+            f'git -C {repo_path} checkout master 2>/dev/null'
+            f' || git -C {repo_path} checkout main 2>/dev/null'
+        )
+
+        # Set up a bare remote so `git fetch origin` works
+        bare_path = os.path.join(temp_dir, 'bare.git')
+        os.system(f'git clone --bare {repo_path} {bare_path}')
+        os.system(f'git -C {repo_path} remote add origin {bare_path}')
+
+        # Set up mock args for PR mode
+        default_mock_args.issue_type = 'pr'
+        default_mock_args.issue_number = 1
+        default_mock_args.output_dir = temp_dir
+
+        resolver = IssueResolver(default_mock_args)
+
+        # Mock the issue handler
+        mock_issue = Issue(
+            owner='test-owner',
+            repo='test-repo',
+            number=1,
+            title='Test PR',
+            body='Fix things',
+            head_branch='feature-branch',
+            review_threads=[
+                ReviewThread(comment='Please update README', files=['README.md'])
+            ],
+        )
+        mock_handler = MagicMock()
+        mock_handler.get_converted_issues.return_value = [mock_issue]
+        resolver.issue_handler = mock_handler
+
+        # Track what base_commit is passed to process_issue
+        captured_base_commit = None
+
+        async def mock_process_issue(issue, base_commit, handler, reset_logger=False):
+            nonlocal captured_base_commit
+            captured_base_commit = base_commit
+            return ResolverOutput(
+                issue=issue,
+                issue_type='pr',
+                instruction='test',
+                base_commit=base_commit,
+                git_patch='test patch',
+                history=[],
+                metrics=None,
+                success=True,
+                comment_success=None,
+                result_explanation='Resolved',
+                error=None,
+            )
+
+        resolver.process_issue = mock_process_issue
+
+        await resolver.resolve_issue()
+
+        # The base_commit should be the merge-base (which is the main branch
+        # commit since feature-branch was branched from it)
+        assert captured_base_commit is not None
+        assert captured_base_commit == main_commit
+        # It should NOT be the branch tip
+        assert captured_base_commit != branch_commit
 
 
 if __name__ == '__main__':

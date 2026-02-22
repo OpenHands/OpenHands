@@ -650,11 +650,31 @@ class IssueResolver:
                     cwd=repo_dir,
                 )
 
-                base_commit = (
-                    subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_dir)
-                    .decode('utf-8')
-                    .strip()
-                )
+                # Use merge-base so the completion function evaluates the full
+                # PR diff (all commits on the branch), not just the agent's
+                # incremental changes.  This prevents false negatives when the
+                # agent's follow-up commit is docs-only but the earlier commits
+                # on the branch already contain the code changes.
+                try:
+                    base_commit = (
+                        subprocess.check_output(
+                            ['git', 'merge-base', 'HEAD', base_commit],
+                            cwd=repo_dir,
+                        )
+                        .decode('utf-8')
+                        .strip()
+                    )
+                except subprocess.CalledProcessError:
+                    logger.warning(
+                        'Failed to compute merge-base, falling back to branch HEAD'
+                    )
+                    base_commit = (
+                        subprocess.check_output(
+                            ['git', 'rev-parse', 'HEAD'], cwd=repo_dir
+                        )
+                        .decode('utf-8')
+                        .strip()
+                    )
 
             output = await self.process_issue(
                 issue,
