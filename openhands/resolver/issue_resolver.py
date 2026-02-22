@@ -391,6 +391,27 @@ class IssueResolver:
         return {'git_patch': git_patch}
 
     @staticmethod
+    def _extract_metrics(state: State) -> dict[str, Any] | None:
+        """Extract LLM metrics from the controller state.
+
+        Prefers ConversationStats (the source of truth for aggregated LLM metrics
+        across all services) and falls back to state.metrics for backward
+        compatibility.
+        """
+        try:
+            conversation_stats = getattr(state, 'conversation_stats', None)
+            if conversation_stats is not None:
+                combined = conversation_stats.get_combined_metrics()
+                return combined.get()
+            if getattr(state, 'metrics', None):
+                return state.metrics.get()
+        except Exception:
+            logger.warning('Failed to extract metrics from state', exc_info=True)
+            if getattr(state, 'metrics', None):
+                return state.metrics.get()
+        return None
+
+    @staticmethod
     def build_workspace_base(
         output_dir: str, issue_type: str, issue_number: int
     ) -> str:
@@ -474,7 +495,10 @@ class IssueResolver:
             last_error = 'Agent failed to run or crashed'
         else:
             histories = [dataclasses.asdict(event) for event in state.history]
-            metrics = state.metrics.get() if state.metrics else None
+            # Prefer ConversationStats (source of truth for LLM metrics) over
+            # state.metrics which remains at default zero values. This mirrors
+            # the fix in PR #10537 for evaluation scripts.
+            metrics = self._extract_metrics(state)
             # determine success based on the history, issue description and git patch
             success, comment_success, result_explanation = issue_handler.guess_success(
                 issue, state.history, git_patch

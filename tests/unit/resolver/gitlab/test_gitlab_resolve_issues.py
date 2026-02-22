@@ -415,6 +415,7 @@ async def test_complete_runtime(default_mock_args, mock_gitlab_token):
                 metrics=MagicMock(
                     get=MagicMock(return_value={'test_result': 'passed'})
                 ),
+                conversation_stats=None,
                 last_error=None,
             ),
             'run_controller_raises': None,
@@ -449,6 +450,7 @@ async def test_complete_runtime(default_mock_args, mock_gitlab_token):
                 metrics=MagicMock(
                     get=MagicMock(return_value={'test_result': 'passed'})
                 ),
+                conversation_stats=None,
                 last_error=None,
             ),
             'run_controller_raises': None,

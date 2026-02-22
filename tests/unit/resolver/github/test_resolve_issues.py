@@ -373,6 +373,7 @@ async def test_complete_runtime(default_mock_args, mock_github_token):
                 metrics=MagicMock(
                     get=MagicMock(return_value={'test_result': 'passed'})
                 ),
+                conversation_stats=None,
                 last_error=None,
             ),
             'run_controller_raises': None,
@@ -409,6 +410,7 @@ async def test_complete_runtime(default_mock_args, mock_github_token):
                 metrics=MagicMock(
                     get=MagicMock(return_value={'test_result': 'passed'})
                 ),
+                conversation_stats=None,
                 last_error=None,
             ),
             'run_controller_raises': None,
@@ -528,6 +530,64 @@ async def test_process_issue(
             handler_instance.guess_success.assert_called_once()
         else:
             handler_instance.guess_success.assert_not_called()
+
+
+def test_extract_metrics_prefers_conversation_stats():
+    """Test that _extract_metrics prefers conversation_stats over state.metrics."""
+    expected_metrics = {
+        'accumulated_cost': 1.5,
+        'accumulated_token_usage': {'prompt_tokens': 100, 'completion_tokens': 50},
+        'costs': [1.5],
+        'token_usages': [{'prompt_tokens': 100, 'completion_tokens': 50}],
+        'response_latencies': [0.5],
+    }
+
+    # When conversation_stats is available, it should be used
+    mock_combined = MagicMock()
+    mock_combined.get.return_value = expected_metrics
+    mock_conversation_stats = MagicMock()
+    mock_conversation_stats.get_combined_metrics.return_value = mock_combined
+
+    state = MagicMock()
+    state.conversation_stats = mock_conversation_stats
+    state.metrics = MagicMock(
+        get=MagicMock(return_value={'accumulated_cost': 0.0})
+    )
+
+    result = IssueResolver._extract_metrics(state)
+    assert result == expected_metrics
+    mock_conversation_stats.get_combined_metrics.assert_called_once()
+
+
+def test_extract_metrics_falls_back_to_state_metrics():
+    """Test that _extract_metrics falls back to state.metrics when conversation_stats is None."""
+    fallback_metrics = {'accumulated_cost': 0.0}
+
+    state = MagicMock()
+    state.conversation_stats = None
+    state.metrics = MagicMock(
+        get=MagicMock(return_value=fallback_metrics)
+    )
+
+    result = IssueResolver._extract_metrics(state)
+    assert result == fallback_metrics
+    state.metrics.get.assert_called_once()
+
+
+def test_extract_metrics_handles_exception():
+    """Test that _extract_metrics handles exceptions gracefully."""
+    mock_conversation_stats = MagicMock()
+    mock_conversation_stats.get_combined_metrics.side_effect = Exception('test error')
+
+    fallback_metrics = {'accumulated_cost': 0.0}
+    state = MagicMock()
+    state.conversation_stats = mock_conversation_stats
+    state.metrics = MagicMock(
+        get=MagicMock(return_value=fallback_metrics)
+    )
+
+    result = IssueResolver._extract_metrics(state)
+    assert result == fallback_metrics
 
 
 def test_get_instruction(
