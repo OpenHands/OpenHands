@@ -879,6 +879,8 @@ def test_process_single_pr_update(
         'pr',
         'openhands',
         'openhands@all-hands.dev',
+        None,
+        None,
     )
     mock_update_existing_pull_request.assert_called_once_with(
         issue=resolver_output.issue,
@@ -961,6 +963,8 @@ def test_process_single_issue(
         'issue',
         'openhands',
         'openhands@all-hands.dev',
+        None,
+        None,
     )
     mock_send_pull_request.assert_called_once_with(
         issue=resolver_output.issue,
@@ -1175,6 +1179,8 @@ def test_main(
         ANY,
         ANY,  # git_user_name from args
         ANY,  # git_user_email from args
+        ANY,  # commit_message_template from args
+        ANY,  # commit_trailer from args
     )
 
     # Other assertions
@@ -1398,6 +1404,188 @@ def test_make_commit_with_special_characters_in_git_config(mock_subprocess_run):
         f'git -C {repo_dir} config alias.git "git --no-pager"'
     )
     assert expected_config_command == git_config_set_call
+
+
+@patch('subprocess.run')
+def test_make_commit_with_custom_template(mock_subprocess_run):
+    """Test that a custom commit message template is used when provided."""
+    repo_dir = '/path/to/repo'
+    issue = Issue(
+        owner='test-owner',
+        repo='test-repo',
+        number=42,
+        title='Add caching support',
+        body='Test body',
+    )
+
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0, stdout='sample output', stderr=''
+    )
+
+    make_commit(
+        repo_dir,
+        issue,
+        'issue',
+        commit_message_template='feat({issue_type}): {issue_title} (#{issue_number})',
+    )
+
+    calls = mock_subprocess_run.call_args_list
+    git_commit_call = calls[-1][0][0]
+    expected_message = 'feat(issue): Add caching support (#42)'
+    assert git_commit_call == [
+        'git',
+        '-C',
+        repo_dir,
+        'commit',
+        '-m',
+        expected_message,
+    ]
+
+
+@patch('subprocess.run')
+def test_make_commit_with_trailer(mock_subprocess_run):
+    """Test that a commit trailer is appended after a blank line."""
+    repo_dir = '/path/to/repo'
+    issue = Issue(
+        owner='test-owner',
+        repo='test-repo',
+        number=42,
+        title='Test Issue',
+        body='Test body',
+    )
+
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0, stdout='sample output', stderr=''
+    )
+
+    make_commit(
+        repo_dir,
+        issue,
+        'issue',
+        commit_trailer='Signed-off-by: Bot <bot@example.com>',
+    )
+
+    calls = mock_subprocess_run.call_args_list
+    git_commit_call = calls[-1][0][0]
+    expected_message = (
+        'Fix issue #42: Test Issue\n\nSigned-off-by: Bot <bot@example.com>'
+    )
+    assert git_commit_call == [
+        'git',
+        '-C',
+        repo_dir,
+        'commit',
+        '-m',
+        expected_message,
+    ]
+
+
+@patch('subprocess.run')
+def test_make_commit_with_template_and_trailer(mock_subprocess_run):
+    """Test that both custom template and trailer work together."""
+    repo_dir = '/path/to/repo'
+    issue = Issue(
+        owner='test-owner',
+        repo='test-repo',
+        number=42,
+        title='Test Issue',
+        body='Test body',
+    )
+
+    mock_subprocess_run.return_value = MagicMock(
+        returncode=0, stdout='sample output', stderr=''
+    )
+
+    make_commit(
+        repo_dir,
+        issue,
+        'pr',
+        commit_message_template='fix: resolve {issue_type} #{issue_number}',
+        commit_trailer='Model: gpt-4\nResolver-Version: 1.3.0',
+    )
+
+    calls = mock_subprocess_run.call_args_list
+    git_commit_call = calls[-1][0][0]
+    expected_message = (
+        'fix: resolve pr #42\n\nModel: gpt-4\nResolver-Version: 1.3.0'
+    )
+    assert git_commit_call == [
+        'git',
+        '-C',
+        repo_dir,
+        'commit',
+        '-m',
+        expected_message,
+    ]
+
+
+@patch('openhands.resolver.send_pull_request.initialize_repo')
+@patch('openhands.resolver.send_pull_request.apply_patch')
+@patch('openhands.resolver.send_pull_request.send_pull_request')
+@patch('openhands.resolver.send_pull_request.make_commit')
+def test_process_single_issue_with_commit_options(
+    mock_make_commit,
+    mock_send_pull_request,
+    mock_apply_patch,
+    mock_initialize_repo,
+    mock_output_dir,
+    mock_llm_config,
+):
+    """Test that commit_message_template and commit_trailer are passed through."""
+    resolver_output = ResolverOutput(
+        issue=Issue(
+            owner='test-owner',
+            repo='test-repo',
+            number=1,
+            title='Issue 1',
+            body='Body 1',
+        ),
+        issue_type='issue',
+        instruction='Test instruction 1',
+        base_commit='def456',
+        git_patch='Test patch 1',
+        history=[],
+        metrics={},
+        success=True,
+        comment_success=None,
+        result_explanation='Test success 1',
+        error=None,
+    )
+
+    mock_send_pull_request.return_value = (
+        'https://github.com/test-owner/test-repo/pull/1'
+    )
+    mock_initialize_repo.return_value = f'{mock_output_dir}/patches/issue_1'
+
+    process_single_issue(
+        mock_output_dir,
+        resolver_output,
+        'test_token',
+        'test_user',
+        ProviderType.GITHUB,
+        'draft',
+        mock_llm_config,
+        None,
+        False,
+        None,
+        None,
+        None,
+        None,
+        'openhands',
+        'openhands@all-hands.dev',
+        commit_message_template='feat: {issue_title}',
+        commit_trailer='Signed-off-by: Bot',
+    )
+
+    mock_make_commit.assert_called_once_with(
+        f'{mock_output_dir}/patches/issue_1',
+        resolver_output.issue,
+        'issue',
+        'openhands',
+        'openhands@all-hands.dev',
+        'feat: {issue_title}',
+        'Signed-off-by: Bot',
+    )
 
 
 def test_apply_patch_rename_directory(mock_output_dir):

@@ -202,6 +202,26 @@ There are three ways you can upload:
 python -m openhands.resolver.send_pull_request --issue-number ISSUE_NUMBER --username YOUR_GIT_USERNAME --pr-type draft
 ```
 
+### Customizing Commit Messages
+
+You can customize the commit message format using `--commit-message-template` with variable substitution, and append metadata to the commit body using `--commit-trailer`:
+
+```bash
+python -m openhands.resolver.send_pull_request \
+  --issue-number ISSUE_NUMBER \
+  --username YOUR_GIT_USERNAME \
+  --pr-type draft \
+  --commit-message-template 'fix({issue_type}): {issue_title} (#{issue_number})' \
+  --commit-trailer 'Signed-off-by: OpenHands Bot <bot@openhands.dev>'
+```
+
+Supported template variables:
+- `{issue_type}` — "issue" or "pr"
+- `{issue_number}` — the issue/PR number
+- `{issue_title}` — the issue/PR title
+
+The default commit message format is `Fix {issue_type} #{issue_number}: {issue_title}`.
+
 If you want to upload to a fork, you can do so by specifying the `fork-owner`:
 
 ```bash

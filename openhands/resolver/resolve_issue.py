@@ -124,6 +124,21 @@ def main() -> None:
         default=None,
         help='Base domain for the git server (defaults to "github.com" for GitHub, "gitlab.com" for GitLab, "bitbucket.org" for Bitbucket, and "dev.azure.com" for Azure DevOps)',
     )
+    parser.add_argument(
+        '--commit-message-template',
+        type=str,
+        default=None,
+        help='Custom commit message template with variable substitution. '
+        'Supported variables: {issue_type}, {issue_number}, {issue_title}. '
+        "Defaults to 'Fix {issue_type} #{issue_number}: {issue_title}'.",
+    )
+    parser.add_argument(
+        '--commit-trailer',
+        type=str,
+        default=None,
+        help='A string appended after a blank line in the commit body '
+        '(e.g. for signed-off-by lines, model info, CI metadata).',
+    )
 
     my_args = parser.parse_args()
 

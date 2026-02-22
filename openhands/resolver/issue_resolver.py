@@ -71,6 +71,8 @@ class IssueResolver:
             issue_number: Issue number to resolve.
             comment_id: Optional ID of a specific comment to focus on.
             base_domain: The base domain for the git server.
+            commit_message_template: Custom commit message template with variable substitution.
+            commit_trailer: A string appended after a blank line in the commit body.
         """
         parts = args.selected_repo.rsplit('/', 1)
         if len(parts) < 2:
@@ -166,6 +168,8 @@ class IssueResolver:
         )
         self.repo_instruction = repo_instruction
         self.comment_id = args.comment_id
+        self.commit_message_template = getattr(args, 'commit_message_template', None)
+        self.commit_trailer = getattr(args, 'commit_trailer', None)
 
         factory = IssueHandlerFactory(
             owner=self.owner,

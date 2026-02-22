@@ -34,6 +34,16 @@ on:
         type: string
         default: ""
         description: "Custom sandbox env"
+      commit_message_template:
+        required: false
+        type: string
+        default: ""
+        description: "Custom commit message template. Variables: {issue_type}, {issue_number}, {issue_title}"
+      commit_trailer:
+        required: false
+        type: string
+        default: ""
+        description: "String appended after a blank line in the commit body (e.g. signed-off-by, model info)"
       runner:
         required: false
         type: string
@@ -288,18 +298,29 @@ jobs:
           LLM_API_VERSION: ${{ inputs.LLM_API_VERSION }}
           PYTHONPATH: ""
         run: |
+          # Build optional commit message args
+          COMMIT_ARGS=""
+          if [ -n "${{ inputs.commit_message_template }}" ]; then
+            COMMIT_ARGS="$COMMIT_ARGS --commit-message-template '${{ inputs.commit_message_template }}'"
+          fi
+          if [ -n "${{ inputs.commit_trailer }}" ]; then
+            COMMIT_ARGS="$COMMIT_ARGS --commit-trailer '${{ inputs.commit_trailer }}'"
+          fi
+
           if [ "${{ steps.check_result.outputs.RESOLUTION_SUCCESS }}" == "true" ]; then
-            cd /tmp && python -m openhands.resolver.send_pull_request \
+            cd /tmp && eval python -m openhands.resolver.send_pull_request \
               --issue-number ${{ env.ISSUE_NUMBER }} \
               --target-branch ${{ env.TARGET_BRANCH }} \
               --pr-type ${{ inputs.pr_type || 'draft' }} \
-              --reviewer ${{ github.actor }} | tee pr_result.txt && \
+              --reviewer ${{ github.actor }} \
+              $COMMIT_ARGS | tee pr_result.txt && \
               grep "PR created" pr_result.txt | sed 's/.*\///g' > pr_number.txt
           else
-            cd /tmp && python -m openhands.resolver.send_pull_request \
+            cd /tmp && eval python -m openhands.resolver.send_pull_request \
               --issue-number ${{ env.ISSUE_NUMBER }} \
               --pr-type branch \
-              --send-on-failure | tee branch_result.txt && \
+              --send-on-failure \
+              $COMMIT_ARGS | tee branch_result.txt && \
               grep "branch created" branch_result.txt | sed 's/.*\///g; s/.expand=1//g' > branch_name.txt
           fi
 

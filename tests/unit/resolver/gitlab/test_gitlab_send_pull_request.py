@@ -785,6 +785,8 @@ def test_process_single_pr_update(
         'pr',
         'openhands',
         'openhands@all-hands.dev',
+        None,
+        None,
     )
     mock_update_existing_pull_request.assert_called_once_with(
         issue=resolver_output.issue,
@@ -872,6 +874,8 @@ def test_process_single_issue(
         'issue',
         'openhands',
         'openhands@all-hands.dev',
+        None,
+        None,
     )
     mock_send_pull_request.assert_called_once_with(
         issue=resolver_output.issue,
@@ -1094,6 +1098,8 @@ def test_main(
         ANY,
         mock_args.git_user_name,
         mock_args.git_user_email,
+        ANY,  # commit_message_template from args
+        ANY,  # commit_trailer from args
     )
 
     # Other assertions
