@@ -417,6 +417,39 @@ class ForgejoPRHandler(ForgejoIssueHandler):
             thread_comments,
         )
 
+    def _enrich_closing_issues_with_comments(
+        self,
+        closing_issues: list[str],
+        closing_issue_numbers: list[int],
+    ) -> list[str]:
+        """Enrich closing issue bodies with their thread comments.
+
+        For each closing issue, fetches its comments and appends them to the
+        issue body so the agent has full context from the issue discussion.
+        """
+        enriched = []
+        for i, issue_body in enumerate(closing_issues):
+            if i < len(closing_issue_numbers):
+                issue_number = closing_issue_numbers[i]
+                try:
+                    comments = self.get_issue_comments(issue_number)
+                    if comments:
+                        comments_str = '\n---\n'.join(comments)
+                        enriched.append(
+                            f'{issue_body}\n\n--- Issue Comments ---\n{comments_str}'
+                        )
+                    else:
+                        enriched.append(issue_body)
+                except Exception:
+                    logger.warning(
+                        f'Failed to fetch comments for closing issue #{issue_number}',
+                        exc_info=True,
+                    )
+                    enriched.append(issue_body)
+            else:
+                enriched.append(issue_body)
+        return enriched
+
     def get_converted_issues(
         self, issue_numbers: list[int] | None = None, comment_id: int | None = None
     ) -> list[Issue]:
@@ -451,6 +484,11 @@ class ForgejoPRHandler(ForgejoIssueHandler):
             ) = self.download_pr_metadata(pr_number, comment_id)
             head_branch = (pr.get('head') or {}).get('ref')
             thread_comments = self.get_pr_comments(pr_number, comment_id)
+
+            # Enrich closing issues with their thread comments
+            closing_issues = self._enrich_closing_issues_with_comments(
+                closing_issues, closing_issue_numbers
+            )
 
             closing_issues = self.get_context_from_external_issues_references(
                 closing_issues,

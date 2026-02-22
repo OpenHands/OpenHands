@@ -643,3 +643,147 @@ def test_pr_handler_get_converted_issues_with_duplicate_issue_refs():
                 'External context #1.',
                 'External context #2.',
             ]
+
+
+def test_pr_handler_closing_issues_include_comments():
+    """Test that closing issue comments are included in PR resolver context."""
+    with patch('httpx.get') as mock_get:
+        # Mock the response for PRs
+        mock_prs_response = MagicMock()
+        mock_prs_response.json.return_value = [
+            {
+                'number': 1,
+                'title': 'Test PR',
+                'body': 'Test Body',
+                'head': {'ref': 'test-branch'},
+            }
+        ]
+
+        # Mock GraphQL response with a closing issue
+        mock_graphql_response = MagicMock()
+        mock_graphql_response.json.return_value = {
+            'data': {
+                'repository': {
+                    'pullRequest': {
+                        'closingIssuesReferences': {
+                            'edges': [
+                                {
+                                    'node': {
+                                        'body': 'Add caching to the API',
+                                        'number': 42,
+                                    }
+                                }
+                            ]
+                        },
+                        'reviews': {'nodes': []},
+                        'reviewThreads': {'edges': []},
+                    }
+                }
+            }
+        }
+
+        # Mock empty response
+        mock_empty_response = MagicMock()
+        mock_empty_response.json.return_value = []
+
+        # Mock comments for the closing issue #42
+        mock_issue_comments_response = MagicMock()
+        mock_issue_comments_response.json.return_value = [
+            {'body': 'We should use Redis for this'},
+            {'body': 'Agreed, and add TTL support'},
+        ]
+
+        # Mock the response for PR comments
+        mock_pr_comments_response = MagicMock()
+        mock_pr_comments_response.json.return_value = [
+            {'body': 'This needs TTL handling'},
+        ]
+
+        mock_get.side_effect = [
+            mock_prs_response,  # download_issues: PRs list
+            mock_empty_response,  # download_issues: empty page
+            mock_issue_comments_response,  # _enrich: comments for closing issue #42
+            mock_empty_response,  # _enrich: comments pagination
+            mock_pr_comments_response,  # get_pr_comments: PR comments
+            mock_empty_response,  # get_pr_comments: pagination
+        ]
+
+        with patch('httpx.post') as mock_post:
+            mock_post.return_value = mock_graphql_response
+
+            llm_config = LLMConfig(model='test', api_key='test')
+            handler = ServiceContextPR(
+                GithubPRHandler('test-owner', 'test-repo', 'test-token'), llm_config
+            )
+
+            prs = handler.get_converted_issues(issue_numbers=[1])
+
+            assert len(prs) == 1
+            # Verify closing issues include both body and comments
+            assert len(prs[0].closing_issues) == 1
+            assert 'Add caching to the API' in prs[0].closing_issues[0]
+            assert '--- Issue Comments ---' in prs[0].closing_issues[0]
+            assert 'We should use Redis for this' in prs[0].closing_issues[0]
+            assert 'Agreed, and add TTL support' in prs[0].closing_issues[0]
+
+            # Verify PR thread comments are still set
+            assert prs[0].thread_comments == ['This needs TTL handling']
+
+
+def test_pr_handler_closing_issues_no_comments():
+    """Test that closing issues without comments just include the body."""
+    with patch('httpx.get') as mock_get:
+        mock_prs_response = MagicMock()
+        mock_prs_response.json.return_value = [
+            {
+                'number': 1,
+                'title': 'Test PR',
+                'body': 'Test Body',
+                'head': {'ref': 'test-branch'},
+            }
+        ]
+
+        mock_graphql_response = MagicMock()
+        mock_graphql_response.json.return_value = {
+            'data': {
+                'repository': {
+                    'pullRequest': {
+                        'closingIssuesReferences': {
+                            'edges': [
+                                {
+                                    'node': {
+                                        'body': 'Simple issue body',
+                                        'number': 10,
+                                    }
+                                }
+                            ]
+                        },
+                        'reviews': {'nodes': []},
+                        'reviewThreads': {'edges': []},
+                    }
+                }
+            }
+        }
+
+        mock_empty_response = MagicMock()
+        mock_empty_response.json.return_value = []
+
+        mock_get.side_effect = [
+            mock_prs_response,  # download_issues: PRs list
+            mock_empty_response,  # download_issues: empty page
+            mock_empty_response,  # _enrich: no comments for closing issue #10
+            mock_empty_response,  # get_pr_comments: no PR comments
+        ]
+
+        with patch('httpx.post') as mock_post:
+            mock_post.return_value = mock_graphql_response
+
+            llm_config = LLMConfig(model='test', api_key='test')
+            handler = ServiceContextPR(
+                GithubPRHandler('test-owner', 'test-repo', 'test-token'), llm_config
+            )
+
+            prs = handler.get_converted_issues(issue_numbers=[1])
+
+            assert len(prs) == 1
+            assert prs[0].closing_issues == ['Simple issue body']
