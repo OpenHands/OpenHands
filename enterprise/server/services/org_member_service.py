@@ -16,10 +16,12 @@ from server.routes.org_models import (
     OrgMemberUpdate,
     RoleNotFoundError,
 )
+from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member_store import OrgMemberStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
+from openhands.core.logger import openhands_logger as logger
 from openhands.utils.async_utils import call_sync_from_async
 
 
@@ -168,9 +170,42 @@ class OrgMemberService:
             if not success:
                 return False, 'removal_failed'
 
+            # Update user's current_org_id if it points to the org they were removed from
+            user = UserStore.get_user_by_id(str(target_user_id))
+            if user and user.current_org_id == org_id:
+                # Set current_org_id to personal workspace (org.id == user.id)
+                UserStore.update_current_org(str(target_user_id), target_user_id)
+
             return True, None
 
-        return await call_sync_from_async(_remove_member)
+        success, error = await call_sync_from_async(_remove_member)
+
+        # If database removal succeeded, also remove from LiteLLM team
+        if success:
+            try:
+                await LiteLlmManager.remove_user_from_team(
+                    str(target_user_id), str(org_id)
+                )
+                logger.info(
+                    'Successfully removed user from LiteLLM team',
+                    extra={
+                        'user_id': str(target_user_id),
+                        'org_id': str(org_id),
+                    },
+                )
+            except Exception as e:
+                # Log but don't fail the operation - database removal already succeeded
+                # LiteLLM state will be eventually consistent
+                logger.warning(
+                    'Failed to remove user from LiteLLM team',
+                    extra={
+                        'user_id': str(target_user_id),
+                        'org_id': str(org_id),
+                        'error': str(e),
+                    },
+                )
+
+        return success, error
 
     @staticmethod
     async def update_org_member(
