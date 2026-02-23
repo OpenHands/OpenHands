@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import b1Logo from "#/assets/branding/b1-logo.svg";
+import b1Logo from "#/assets/branding/b1-logo.png";
 import GitHubLogo from "#/assets/branding/github-logo.svg?react";
 import GitLabLogo from "#/assets/branding/gitlab-logo.svg?react";
 import BitbucketLogo from "#/assets/branding/bitbucket-logo.svg?react";

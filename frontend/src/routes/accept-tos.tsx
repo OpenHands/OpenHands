@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { I18nKey } from "#/i18n/declaration";
-import b1Logo from "#/assets/branding/b1-logo.svg";
+import b1Logo from "#/assets/branding/b1-logo.png";
 import { TOSCheckbox } from "#/components/features/waitlist/tos-checkbox";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
