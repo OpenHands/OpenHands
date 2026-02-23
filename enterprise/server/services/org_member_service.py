@@ -168,6 +168,12 @@ class OrgMemberService:
             if not success:
                 return False, 'removal_failed'
 
+            # Update user's current_org_id if it points to the org they were removed from
+            user = UserStore.get_user_by_id(str(target_user_id))
+            if user and user.current_org_id == org_id:
+                # Set current_org_id to personal workspace (org.id == user.id)
+                UserStore.update_current_org(str(target_user_id), target_user_id)
+
             return True, None
 
         return await call_sync_from_async(_remove_member)
