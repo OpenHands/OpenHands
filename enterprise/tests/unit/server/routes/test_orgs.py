@@ -2132,7 +2132,9 @@ class TestGetOrgMembersEndpoint:
                     status='active',
                 )
             ],
-            next_page_id=None,
+            total_count=1,
+            current_page=1,
+            per_page=100,
         )
 
         with patch(
@@ -2150,7 +2152,8 @@ class TestGetOrgMembersEndpoint:
             # Assert
             assert isinstance(result, OrgMemberPage)
             assert len(result.items) == 1
-            assert result.next_page_id is None
+            assert result.total_count == 1
+            assert result.current_page == 1
             mock_get.assert_called_once()
 
     @pytest.mark.asyncio
@@ -2326,7 +2329,9 @@ class TestGetOrgMembersEndpoint:
                     status='active',
                 )
             ],
-            next_page_id='200',
+            total_count=201,
+            current_page=2,
+            per_page=100,
         )
 
         with patch(
@@ -2343,12 +2348,14 @@ class TestGetOrgMembersEndpoint:
 
             # Assert
             assert isinstance(result, OrgMemberPage)
-            assert result.next_page_id == '200'
+            assert result.total_count == 201
+            assert result.current_page == 2
             mock_get.assert_called_once_with(
                 org_id=uuid.UUID(org_id),
                 current_user_id=uuid.UUID(current_user_id),
                 page_id='100',
                 limit=100,
+                email_filter=None,
             )
 
 
