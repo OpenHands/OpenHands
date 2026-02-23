@@ -21,9 +21,6 @@ export const useStartTasks = (limit = 10) => {
     queryKey: ["start-tasks", "search", limit],
     queryFn: () => V1ConversationService.searchStartTasks(limit),
     enabled: isV1Enabled,
-    select: (tasks) =>
-      tasks.filter(
-        (task) => task.status !== "READY" && task.status !== "ERROR",
-      ),
+    select: (tasks) => tasks.filter((task) => task.status !== "READY"),
   });
 };

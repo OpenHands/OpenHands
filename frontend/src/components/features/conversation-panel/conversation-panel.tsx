@@ -161,15 +161,19 @@ export function ConversationPanel({ onClose }: ConversationPanelProps) {
         </div>
       )}
       {/* Render in-progress start tasks first */}
-      {startTasks?.map((task) => (
-        <NavLink
-          key={task.id}
-          to={`/conversations/task-${task.id}`}
-          onClick={onClose}
-        >
-          <StartTaskCard task={task} />
-        </NavLink>
-      ))}
+      {startTasks?.map((task) =>
+        task.status === "ERROR" ? (
+          <StartTaskCard key={task.id} task={task} />
+        ) : (
+          <NavLink
+            key={task.id}
+            to={`/conversations/task-${task.id}`}
+            onClick={onClose}
+          >
+            <StartTaskCard task={task} />
+          </NavLink>
+        ),
+      )}
       {/* Then render completed conversations */}
       {conversations?.map((project) => (
         <NavLink

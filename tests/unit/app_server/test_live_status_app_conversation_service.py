@@ -18,6 +18,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
     AppConversationInfo,
     AppConversationStartRequest,
+    AppConversationStartTaskStatus,
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
@@ -1787,3 +1788,177 @@ class TestLiveStatusAppConversationService:
         stdio_server = mcp_servers['stdio-server']
         assert stdio_server['command'] == 'npx'
         assert stdio_server['env'] == {'TOKEN': 'value'}
+
+    @pytest.mark.asyncio
+    async def test_cleanup_sandbox_on_error_deletes_sandbox(self):
+        """Test that _cleanup_sandbox_on_error calls delete_sandbox for a newly created sandbox."""
+        # Arrange
+        sandbox_id = 'test-sandbox-id'
+        request = AppConversationStartRequest()
+        # request.sandbox_id is None by default — this is a newly created sandbox
+        self.mock_sandbox_service.delete_sandbox = AsyncMock(return_value=True)
+
+        # Act
+        await self.service._cleanup_sandbox_on_error(sandbox_id, request)
+
+        # Assert
+        self.mock_sandbox_service.delete_sandbox.assert_called_once_with(sandbox_id)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_sandbox_on_error_skips_preexisting_sandbox(self):
+        """Test that _cleanup_sandbox_on_error does NOT delete a pre-existing sandbox."""
+        # Arrange
+        sandbox_id = 'test-sandbox-id'
+        request = AppConversationStartRequest(sandbox_id='parent-sandbox-id')
+        self.mock_sandbox_service.delete_sandbox = AsyncMock(return_value=True)
+
+        # Act
+        await self.service._cleanup_sandbox_on_error(sandbox_id, request)
+
+        # Assert
+        self.mock_sandbox_service.delete_sandbox.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_sandbox_on_error_skips_when_no_sandbox_id(self):
+        """Test that _cleanup_sandbox_on_error does nothing when sandbox_id is None."""
+        # Arrange
+        request = AppConversationStartRequest()
+        self.mock_sandbox_service.delete_sandbox = AsyncMock(return_value=True)
+
+        # Act
+        await self.service._cleanup_sandbox_on_error(None, request)
+
+        # Assert
+        self.mock_sandbox_service.delete_sandbox.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_sandbox_on_error_suppresses_exceptions(self):
+        """Test that _cleanup_sandbox_on_error does not propagate exceptions from delete_sandbox."""
+        # Arrange
+        sandbox_id = 'test-sandbox-id'
+        request = AppConversationStartRequest()
+        self.mock_sandbox_service.delete_sandbox = AsyncMock(
+            side_effect=Exception('Delete failed')
+        )
+
+        # Act — should not raise
+        await self.service._cleanup_sandbox_on_error(sandbox_id, request)
+
+        # Assert
+        self.mock_sandbox_service.delete_sandbox.assert_called_once_with(sandbox_id)
+
+    @pytest.mark.asyncio
+    async def test_start_app_conversation_cleans_up_sandbox_on_exception(self):
+        """Test that _start_app_conversation cleans up the sandbox when an exception occurs."""
+        # Arrange
+        sandbox_id = 'test-sandbox-123'
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_user_context.get_secrets = AsyncMock(return_value=None)
+
+        # Mock _wait_for_sandbox_start to set sandbox_id, then raise on next step
+        async def mock_wait_for_sandbox(task, extra_env=None):
+            task.sandbox_id = sandbox_id
+            yield task
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+        self.mock_sandbox_service.get_sandbox = AsyncMock(
+            side_effect=Exception('Sandbox error')
+        )
+        self.mock_sandbox_service.delete_sandbox = AsyncMock(return_value=True)
+
+        request = AppConversationStartRequest()
+
+        # Act
+        tasks = []
+        async for task in self.service._start_app_conversation(request):
+            tasks.append(task)
+
+        # Assert
+        last_task = tasks[-1]
+        assert last_task.status == AppConversationStartTaskStatus.ERROR
+        self.mock_sandbox_service.delete_sandbox.assert_called_once_with(sandbox_id)
+
+    @pytest.mark.asyncio
+    async def test_start_app_conversation_cleans_up_sandbox_on_setup_script_error(
+        self,
+    ):
+        """Test that _start_app_conversation cleans up sandbox when run_setup_scripts sets ERROR."""
+        # Arrange
+        sandbox_id = 'test-sandbox-456'
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_user_context.get_secrets = AsyncMock(return_value=None)
+
+        # Mock sandbox and spec
+        mock_sandbox = Mock(spec=SandboxInfo)
+        mock_sandbox.id = sandbox_id
+        mock_sandbox.session_api_key = 'test_key'
+        exposed_url = ExposedUrl(
+            name=AGENT_SERVER, url='http://agent-server:8000', port=60000
+        )
+        mock_sandbox.exposed_urls = [exposed_url]
+
+        mock_sandbox_spec = Mock(spec=SandboxSpecInfo)
+        mock_sandbox_spec.working_dir = '/test/workspace'
+        mock_sandbox.sandbox_spec_id = str(uuid4())
+
+        self.mock_sandbox_service.get_sandbox = AsyncMock(return_value=mock_sandbox)
+        self.mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+        self.mock_sandbox_service.delete_sandbox = AsyncMock(return_value=True)
+
+        async def mock_wait_for_sandbox(task, extra_env=None):
+            task.sandbox_id = sandbox_id
+            yield task
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+
+        # Mock run_setup_scripts to set ERROR status
+        async def mock_run_setup_scripts(task, sandbox, workspace, agent_server_url):
+            task.status = AppConversationStartTaskStatus.ERROR
+            task.detail = 'Setup script failed'
+            yield task
+
+        self.service.run_setup_scripts = mock_run_setup_scripts
+
+        request = AppConversationStartRequest()
+
+        # Act
+        tasks = []
+        async for task in self.service._start_app_conversation(request):
+            tasks.append(task)
+
+        # Assert
+        last_task = tasks[-1]
+        assert last_task.status == AppConversationStartTaskStatus.ERROR
+        self.mock_sandbox_service.delete_sandbox.assert_called_once_with(sandbox_id)
+
+    @pytest.mark.asyncio
+    async def test_start_app_conversation_does_not_clean_up_preexisting_sandbox(self):
+        """Test that _start_app_conversation does NOT delete a pre-existing sandbox on error."""
+        # Arrange
+        preexisting_sandbox_id = 'parent-sandbox-789'
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_user_context.get_secrets = AsyncMock(return_value=None)
+
+        async def mock_wait_for_sandbox(task, extra_env=None):
+            task.sandbox_id = preexisting_sandbox_id
+            yield task
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+        self.mock_sandbox_service.get_sandbox = AsyncMock(
+            side_effect=Exception('Sandbox error')
+        )
+        self.mock_sandbox_service.delete_sandbox = AsyncMock(return_value=True)
+
+        request = AppConversationStartRequest(sandbox_id=preexisting_sandbox_id)
+
+        # Act
+        tasks = []
+        async for task in self.service._start_app_conversation(request):
+            tasks.append(task)
+
+        # Assert
+        last_task = tasks[-1]
+        assert last_task.status == AppConversationStartTaskStatus.ERROR
+        self.mock_sandbox_service.delete_sandbox.assert_not_called()

@@ -6,6 +6,7 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
+import logging
 import os
 
 import socketio
@@ -41,3 +42,9 @@ if _better_auth_url:
     )
 
 app = socketio.ASGIApp(sio, other_asgi_app=base_app)
+
+# Set uvicorn access log level. Defaults to WARNING to suppress high-volume
+# per-request INFO lines in production. Override with ACCESS_LOG_LEVEL env var.
+logging.getLogger('uvicorn.access').setLevel(
+    getattr(logging, os.getenv('ACCESS_LOG_LEVEL', 'WARNING').upper(), logging.WARNING)
+)

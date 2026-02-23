@@ -60,6 +60,27 @@ class AppConversationServiceBase(AppConversationService, ABC):
     init_git_in_empty_workspace: bool
     user_context: UserContext
 
+    async def _log_to_sandbox(
+        self,
+        workspace: AsyncRemoteWorkspace,
+        message: str,
+    ) -> None:
+        """Write a log message to the agent server container's log stream.
+
+        Writes to PID 1's stderr (/proc/1/fd/2) so the message appears in
+        ``docker logs`` for the sandbox container alongside the agent server's
+        own log output.
+        """
+        try:
+            safe_msg = message.replace("'", "'\\''")
+            await workspace.execute_command(
+                f"echo '[app-server] {safe_msg}' >> /proc/1/fd/2",
+                workspace.working_dir,
+                timeout=5,
+            )
+        except Exception:
+            pass  # best-effort, never fail startup over a log relay
+
     async def load_and_merge_all_skills(
         self,
         sandbox: SandboxInfo,
@@ -196,17 +217,25 @@ class AppConversationServiceBase(AppConversationService, ABC):
         # Load and merge all skills
         # Extract agent_server_url from remote_workspace host
         agent_server_url = remote_workspace.host
+        await self._log_to_sandbox(remote_workspace, 'Loading skills...')
         all_skills = await self.load_and_merge_all_skills(
             sandbox, selected_repository, working_dir, agent_server_url
         )
+        await self._log_to_sandbox(remote_workspace, f'Loaded {len(all_skills)} skills')
 
         # Load MCP config directly from workspace files (bypasses agent-server
         # SkillInfo serialization which drops mcp_tools)
-        _logger.warning(f'Agent mcp_config BEFORE workspace merge: {agent.mcp_config}')
+        _logger.info(f'Agent mcp_config BEFORE workspace merge: {agent.mcp_config}')
+        await self._log_to_sandbox(
+            remote_workspace, 'Loading MCP config from workspace...'
+        )
         agent = await self._load_mcp_config_from_workspace(
             agent, remote_workspace, working_dir
         )
-        _logger.warning(f'Agent mcp_config AFTER workspace merge: {agent.mcp_config}')
+        _logger.info(f'Agent mcp_config AFTER workspace merge: {agent.mcp_config}')
+        await self._log_to_sandbox(
+            remote_workspace, f'MCP config after workspace merge: {agent.mcp_config}'
+        )
 
         # Update agent with skills
         agent = self._create_agent_with_skills(agent, all_skills)
@@ -243,12 +272,12 @@ class AppConversationServiceBase(AppConversationService, ABC):
             Updated agent with merged MCP config, or unchanged agent on error
         """
         try:
-            _logger.warning(f'Loading MCP config from workspace files in {working_dir}')
+            _logger.info(f'Loading MCP config from workspace files in {working_dir}')
             mcp_servers = await self._extract_mcp_from_workspace_files(
                 remote_workspace, working_dir
             )
             if not mcp_servers:
-                _logger.warning('No MCP servers found in workspace files')
+                _logger.info('No MCP servers found in workspace files')
                 return agent
 
             # Merge into existing mcp_config
@@ -294,14 +323,14 @@ class AppConversationServiceBase(AppConversationService, ABC):
             find_cmd, working_dir, timeout=10
         )
         if not result.stdout or not result.stdout.strip():
-            _logger.warning(
+            _logger.info(
                 f'No skill/microagent files found in workspace '
                 f'(exit_code={result.exit_code}, stdout={result.stdout!r})'
             )
             return all_mcp_servers
 
         md_files = [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
-        _logger.warning(f'Found {len(md_files)} skill/microagent files: {md_files}')
+        _logger.info(f'Found {len(md_files)} skill/microagent files: {md_files}')
 
         for md_file in md_files:
             mcp_tools = await self._parse_mcp_tools_from_file(
@@ -379,7 +408,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
             mcp_tools = metadata.get('mcp_tools')
             if mcp_tools and isinstance(mcp_tools, dict):
-                _logger.warning(f'Parsed mcp_tools from {file_path}: {mcp_tools}')
+                _logger.info(f'Parsed mcp_tools from {file_path}: {mcp_tools}')
                 return mcp_tools
 
             return None
@@ -423,10 +452,12 @@ class AppConversationServiceBase(AppConversationService, ABC):
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         task.status = AppConversationStartTaskStatus.PREPARING_REPOSITORY
         yield task
+        await self._log_to_sandbox(workspace, 'Preparing repository...')
         await self.clone_or_init_git_repo(task, workspace)
 
         task.status = AppConversationStartTaskStatus.RUNNING_SETUP_SCRIPT
         yield task
+        await self._log_to_sandbox(workspace, 'Running setup scripts...')
         async for updated_task in self.maybe_run_setup_script(workspace, task):
             yield updated_task
         if task.status == AppConversationStartTaskStatus.ERROR:
@@ -434,10 +465,12 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         task.status = AppConversationStartTaskStatus.SETTING_UP_GIT_HOOKS
         yield task
+        await self._log_to_sandbox(workspace, 'Setting up git hooks...')
         await self.maybe_setup_git_hooks(workspace)
 
         task.status = AppConversationStartTaskStatus.SETTING_UP_SKILLS
         yield task
+        await self._log_to_sandbox(workspace, 'Setting up skills...')
         await self.load_and_merge_all_skills(
             sandbox,
             task.request.selected_repository,
@@ -492,7 +525,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         # Create the projects directory if it does not exist yet
         parent = Path(workspace.working_dir).parent
         result = await workspace.execute_command(
-            f'mkdir {workspace.working_dir}', parent
+            f'mkdir -p {workspace.working_dir}', parent
         )
         if result.exit_code:
             _logger.warning(f'mkdir failed: {result.stderr}')
@@ -512,6 +545,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
         if not request.selected_repository:
             if self.init_git_in_empty_workspace:
                 _logger.debug('Initializing a new git repository in the workspace.')
+                await self._log_to_sandbox(
+                    workspace, 'Initializing empty git repository'
+                )
                 cmd = (
                     'git init && git config --global '
                     f'--add safe.directory {workspace.working_dir}'
@@ -539,6 +575,9 @@ class AppConversationServiceBase(AppConversationService, ABC):
         )
 
         # Clone the repo directly into the working directory
+        await self._log_to_sandbox(
+            workspace, f'Cloning repository {request.selected_repository}...'
+        )
         clone_command = f'git clone {remote_repo_url} .'
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
@@ -549,11 +588,17 @@ class AppConversationServiceBase(AppConversationService, ABC):
         # Checkout the appropriate branch
         if request.selected_branch:
             checkout_command = f'git checkout {request.selected_branch}'
+            await self._log_to_sandbox(
+                workspace, f'Checking out branch {request.selected_branch}'
+            )
         else:
             # Generate a random branch name to avoid conflicts
             random_str = base62.encodebytes(os.urandom(16))
             openhands_workspace_branch = f'openhands-workspace-{random_str}'
             checkout_command = f'git checkout -b {openhands_workspace_branch}'
+            await self._log_to_sandbox(
+                workspace, f'Creating branch {openhands_workspace_branch}'
+            )
         result = await workspace.execute_command(
             checkout_command, workspace.working_dir
         )
@@ -603,8 +648,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
             try:
                 steps = json.loads(check.stdout)
                 setup_dir = f'{working_dir}/.openhands/setup'
-                _logger.warning(
+                _logger.info(
                     f'[{task.sandbox_id}] Found setup.json with {len(steps)} steps'
+                )
+                await self._log_to_sandbox(
+                    workspace, f'Found setup.json with {len(steps)} steps'
                 )
                 async for updated_task in self._run_setup_steps(
                     workspace, task, steps, setup_dir
@@ -623,7 +671,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
             _logger.info('No setup script or setup.json found')
             return
 
-        _logger.warning(f'[{task.sandbox_id}] Running setup script: {setup_script}')
+        _logger.info(f'[{task.sandbox_id}] Running setup script: {setup_script}')
+        await self._log_to_sandbox(workspace, f'Running setup script: {setup_script}')
         result = await workspace.execute_command(
             f'chmod +x {setup_script} && bash {setup_script}', timeout=600
         )
@@ -632,6 +681,10 @@ class AppConversationServiceBase(AppConversationService, ABC):
             _logger.warning(
                 f'[{task.sandbox_id}] Setup script failed (exit {result.exit_code}): '
                 f'{error_output}'
+            )
+            await self._log_to_sandbox(
+                workspace,
+                f'Setup script failed (exit {result.exit_code}): {error_output[:200]}',
             )
             task.status = AppConversationStartTaskStatus.ERROR
             first_line = (
@@ -642,7 +695,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
             )
             yield task
         else:
-            _logger.warning(f'[{task.sandbox_id}] Setup script completed successfully')
+            _logger.info(f'[{task.sandbox_id}] Setup script completed successfully')
+            await self._log_to_sandbox(workspace, 'Setup script completed successfully')
 
     async def _run_setup_steps(
         self,
@@ -670,8 +724,11 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 )
                 continue
 
-            _logger.warning(
+            _logger.info(
                 f'[{task.sandbox_id}] Setup step {i + 1} of {total}: {description}'
+            )
+            await self._log_to_sandbox(
+                workspace, f'Setup step {i + 1} of {total}: {description}'
             )
             step_start = time.monotonic()
             result = await workspace.execute_command(script, setup_dir, timeout=600)
@@ -682,6 +739,10 @@ class AppConversationServiceBase(AppConversationService, ABC):
                     f'[{task.sandbox_id}] Setup step {i + 1} of {total} failed after {elapsed:.1f}s '
                     f'("{description}", exit {result.exit_code}): '
                     f'{error_output}'
+                )
+                await self._log_to_sandbox(
+                    workspace,
+                    f'Setup step {i + 1} of {total} failed after {elapsed:.1f}s: {error_output[:200]}',
                 )
                 task.status = AppConversationStartTaskStatus.ERROR
                 # Show first line of error output to the user
@@ -694,9 +755,13 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 yield task
                 return
             output = result.stdout or result.stderr or ''
-            _logger.warning(
+            _logger.info(
                 f'[{task.sandbox_id}] Setup step {i + 1} of {total} completed in {elapsed:.1f}s'
                 + (f'\n{output}' if output else '')
+            )
+            await self._log_to_sandbox(
+                workspace,
+                f'Setup step {i + 1} of {total} completed in {elapsed:.1f}s',
             )
 
         task.detail = None

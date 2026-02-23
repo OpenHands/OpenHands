@@ -36,6 +36,7 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openhands.agent_server.utils import utc_now
@@ -354,7 +355,15 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         )
 
         await self.db_session.merge(stored)
-        await commit_with_sqlite_retry(self.db_session)
+        try:
+            await commit_with_sqlite_retry(self.db_session)
+        except IntegrityError:
+            # Race condition: another request inserted the same conversation_id
+            # between our SELECT (inside merge) and our INSERT.  Roll back and
+            # retry — merge() will now find the existing row and UPDATE instead.
+            await self.db_session.rollback()
+            await self.db_session.merge(stored)
+            await commit_with_sqlite_retry(self.db_session)
         return info
 
     async def update_conversation_statistics(

@@ -253,7 +253,7 @@ async def _resolve_upstream_url(
         manager.touch(info.sandbox_id)
 
     if sandbox.status != SandboxStatus.RUNNING:
-        _logger.warning(
+        _logger.debug(
             f'WS proxy: sandbox not running: {info.sandbox_id} ({sandbox.status})'
         )
         return None

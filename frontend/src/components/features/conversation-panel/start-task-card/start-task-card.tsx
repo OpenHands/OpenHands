@@ -13,9 +13,11 @@ interface StartTaskCardProps {
 export function StartTaskCard({ task, onClick }: StartTaskCardProps) {
   const { t } = useTranslation();
   const title =
-    task.request.title ||
-    task.detail ||
-    t(I18nKey.CONVERSATION$STARTING_CONVERSATION);
+    task.status === "ERROR"
+      ? task.request.title || t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK)
+      : task.request.title ||
+        task.detail ||
+        t(I18nKey.CONVERSATION$STARTING_CONVERSATION);
 
   const selectedRepository = task.request.selected_repository
     ? {
