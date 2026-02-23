@@ -1183,6 +1183,9 @@ class TestOrgMemberServiceRemoveOrgMember:
                 'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
             ) as mock_remove,
             patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+            patch(
                 'server.services.org_member_service.LiteLlmManager.remove_user_from_team',
                 new_callable=AsyncMock,
             ) as mock_litellm_remove,
@@ -1193,6 +1196,7 @@ class TestOrgMemberServiceRemoveOrgMember:
             ]
             mock_get_role.side_effect = [owner_role, member_role]
             mock_remove.return_value = True
+            mock_get_user.return_value = None
 
             # Act
             success, error = await OrgMemberService.remove_org_member(
@@ -1229,6 +1233,9 @@ class TestOrgMemberServiceRemoveOrgMember:
                 'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
             ) as mock_remove,
             patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+            patch(
                 'server.services.org_member_service.LiteLlmManager.remove_user_from_team',
                 new_callable=AsyncMock,
             ) as mock_litellm_remove,
@@ -1239,6 +1246,7 @@ class TestOrgMemberServiceRemoveOrgMember:
             ]
             mock_get_role.side_effect = [owner_role, member_role]
             mock_remove.return_value = True
+            mock_get_user.return_value = None
             mock_litellm_remove.side_effect = Exception('LiteLLM API error')
 
             # Act
