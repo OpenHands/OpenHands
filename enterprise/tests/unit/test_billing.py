@@ -101,7 +101,7 @@ async def test_get_credits_success():
         json={
             'user_info': {
                 'spend': 25.50,
-                'litellm_budget_table': {'max_budget': 100.00},
+                'max_budget_in_team': 100.00,
             }
         },
         request=MagicMock(),
@@ -121,7 +121,7 @@ async def test_get_credits_success():
             'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
             return_value={
                 'spend': 25.50,
-                'litellm_budget_table': {'max_budget': 100.00},
+                'max_budget_in_team': 100.00,
             },
         ),
     ):
@@ -313,7 +313,7 @@ async def test_success_callback_success():
             'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
             return_value={
                 'spend': 25.50,
-                'litellm_budget_table': {'max_budget': 100.00},
+                'max_budget_in_team': 100.00,
             },
         ),
         patch(
@@ -430,7 +430,7 @@ async def test_success_callback_lite_llm_update_budget_error_rollback():
             'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
             return_value={
                 'spend': 0,
-                'litellm_budget_table': {'max_budget': 0},
+                'max_budget_in_team': 0,
             },
         ),
         patch(
