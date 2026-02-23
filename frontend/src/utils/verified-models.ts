@@ -6,6 +6,7 @@ export const VERIFIED_PROVIDERS = [
   "mistral",
   "lemonade",
   "clarifai",
+  "zai",
 ];
 export const VERIFIED_MODELS = [
   "claude-opus-4-5-20251101",
@@ -60,6 +61,14 @@ export const VERIFIED_OPENHANDS_MODELS = [
   "devstral-medium-2512",
   "kimi-k2-0711-preview",
   "qwen3-coder-480b",
+];
+
+// LiteLLM may return GLM models without the provider prefix, so we list them here
+export const VERIFIED_ZAI_MODELS = [
+  "glm-5",
+  "glm-4.7",
+  "glm-4.6",
+  "glm-4.5",
 ];
 
 // Default model for OpenHands provider

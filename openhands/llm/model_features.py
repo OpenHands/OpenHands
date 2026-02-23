@@ -90,6 +90,10 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'gemini-3*',
     # Groq models (via groq/ provider prefix)
     'groq/*',
+    # GLM
+    'glm-5*',
+    'glm-4.7*',
+    'glm-4.6*',
     # Others
     'kimi-k2-0711-preview',
     'kimi-k2-instruct',

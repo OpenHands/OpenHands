@@ -158,6 +158,15 @@ def test_model_matches_provider_qualified(name, pattern, expected):
                 supports_stop_words=True,
             ),
         ),  # provider-qualified still matches basename patterns
+        (
+            'zai/glm-5',
+            ModelFeatures(
+                supports_function_calling=True,
+                supports_reasoning_effort=False,
+                supports_prompt_cache=False,
+                supports_stop_words=True,
+            ),
+        ),
     ],
 )
 def test_get_features(model, expect):
@@ -189,6 +198,11 @@ def test_get_features(model, expect):
         # Google Gemini
         'gemini-2.5-pro',
         'gemini-3-pro-preview',
+        # GLM
+        'glm-5',
+        'zai/glm-5',
+        'glm-4.7',
+        'glm-4.6',
         # Others
         'kimi-k2-0711-preview',
         'kimi-k2-instruct',

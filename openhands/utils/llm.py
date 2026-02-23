@@ -125,6 +125,15 @@ def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
     ]
     model_list = openhands_models + model_list
 
+    # Add GLM models (via Zhipuai / zai provider)
+    glm_models = [
+        'zai/glm-5',
+        'zai/glm-4.7',
+        'zai/glm-4.6',
+        'zai/glm-4.5',
+    ]
+    model_list = glm_models + model_list
+
     # Add Clarifai provider models (via OpenAI-compatible endpoint)
     clarifai_models = [
         # clarifai featured models

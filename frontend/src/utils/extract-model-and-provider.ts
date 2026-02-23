@@ -4,6 +4,7 @@ import {
   VERIFIED_MISTRAL_MODELS,
   VERIFIED_OPENAI_MODELS,
   VERIFIED_OPENHANDS_MODELS,
+  VERIFIED_ZAI_MODELS,
 } from "./verified-models";
 
 /**
@@ -54,6 +55,9 @@ export const extractModelAndProvider = (model: string) => {
     }
     if (VERIFIED_OPENHANDS_MODELS.includes(split[0])) {
       return { provider: "openhands", model: split[0], separator: "/" };
+    }
+    if (VERIFIED_ZAI_MODELS.includes(split[0])) {
+      return { provider: "zai", model: split[0], separator: "/" };
     }
     // return as model only
     return { provider: "", model, separator: "" };
