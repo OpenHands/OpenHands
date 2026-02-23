@@ -149,9 +149,7 @@ async def verified_email(request: Request):
     user_auth: SaasUserAuth = await get_user_auth(request)
     await user_auth.refresh()  # refresh so access token has updated email
     user_auth.email_verified = True
-    await UserStore.update_user_email(
-        user_id=user_auth.user_id, email_verified=True
-    )
+    await UserStore.update_user_email(user_id=user_auth.user_id, email_verified=True)
     scheme = 'http' if request.url.hostname == 'localhost' else 'https'
     redirect_uri = f'{scheme}://{request.url.netloc}/settings/user'
     response = RedirectResponse(redirect_uri, status_code=302)

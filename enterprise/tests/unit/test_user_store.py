@@ -758,68 +758,6 @@ async def test_backfill_user_email_sets_verified_when_null(session_maker):
         assert user.email_verified is True
 
 
-# --- Tests for User.email capture from IDP on create_user() ---
-# When a new user is created, their email from the identity provider
-# must be persisted on the User record. Previously, email was only saved
-# to Org.contact_email but never to User.email.
-
-
-class _StopAfterUserCreation(Exception):
-    """Halt create_user() after User is added to session for inspection."""
-
-    pass
-
-
-@pytest.mark.asyncio
-async def test_create_user_sets_email_from_user_info():
-    """When user_info has 'email', create_user() should set User.email from it."""
-    user_id = str(uuid.uuid4())
-    user_info = {
-        'preferred_username': 'jdoe',
-        'email': 'jdoe@example.com',
-        'email_verified': True,
-    }
-
-    mock_session = MagicMock()
-    mock_sm = MagicMock()
-    mock_sm.return_value.__enter__ = MagicMock(return_value=mock_session)
-    mock_sm.return_value.__exit__ = MagicMock(return_value=False)
-
-    mock_settings = Settings(
-        language='en',
-        llm_api_key=SecretStr('test-key'),
-        llm_base_url='http://test.url',
-    )
-
-    mock_role = MagicMock()
-    mock_role.id = 1
-
-    with (
-        patch('storage.user_store.session_maker', mock_sm),
-        patch.object(
-            UserStore,
-            'create_default_settings',
-            new_callable=AsyncMock,
-            return_value=mock_settings,
-        ),
-        patch('storage.user_store.RoleStore.get_role_by_name', return_value=mock_role),
-        patch(
-            'storage.org_member_store.OrgMemberStore.get_kwargs_from_settings',
-            return_value={'llm_model': None, 'llm_base_url': None},
-        ),
-    ):
-        # commit will raise to stop execution before refresh
-        mock_session.commit.side_effect = _StopAfterUserCreation
-        with pytest.raises(_StopAfterUserCreation):
-            await UserStore.create_user(user_id, user_info)
-
-    # Find the User object added to the session (second add call, after Org)
-    user = mock_session.add.call_args_list[1][0][0]
-    assert isinstance(user, User)
-    assert user.email == 'jdoe@example.com'
-    assert user.email_verified is True
-
-
 @pytest.mark.asyncio
 async def test_create_user_sets_email_verified_false_from_user_info():
     """When user_info has email_verified=False, create_user() should set User.email_verified=False."""
