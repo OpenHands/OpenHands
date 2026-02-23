@@ -990,6 +990,141 @@ class TestOrgMemberServiceRemoveOrgMember:
             assert success is False
             assert error == 'removal_failed'
 
+    @pytest.mark.asyncio
+    async def test_successful_removal_calls_litellm_remove_user_from_team(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that LiteLLM remove_user_from_team is called after successful database removal."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.LiteLlmManager.remove_user_from_team',
+                new_callable=AsyncMock,
+            ) as mock_litellm_remove,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = True
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is True
+            mock_litellm_remove.assert_called_once_with(
+                str(target_user_id), str(org_id)
+            )
+
+    @pytest.mark.asyncio
+    async def test_litellm_failure_does_not_fail_removal(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that LiteLLM failure doesn't fail the overall removal operation."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.LiteLlmManager.remove_user_from_team',
+                new_callable=AsyncMock,
+            ) as mock_litellm_remove,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = True
+            mock_litellm_remove.side_effect = Exception('LiteLLM API error')
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is True
+            assert error is None
+
+    @pytest.mark.asyncio
+    async def test_database_failure_skips_litellm_call(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that LiteLLM is not called when database removal fails."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.LiteLlmManager.remove_user_from_team',
+                new_callable=AsyncMock,
+            ) as mock_litellm_remove,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = False
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is False
+            mock_litellm_remove.assert_not_called()
+
 
 class TestOrgMemberServiceCanRemoveMember:
     """Test cases for OrgMemberService._can_remove_member."""
