@@ -15,6 +15,7 @@ from storage.device_code import DeviceCode  # noqa: F401
 from storage.feedback import Feedback
 from storage.github_app_installation import GithubAppInstallation
 from storage.org import Org
+from storage.org_invitation import OrgInvitation  # noqa: F401
 from storage.org_member import OrgMember
 from storage.role import Role
 from storage.stored_conversation_metadata import StoredConversationMetadata

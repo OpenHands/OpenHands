@@ -265,17 +265,17 @@ async def test_list_api_keys(
     # Verify
     mock_get_user.assert_called_once_with(user_id)
     assert len(result) == 2
-    assert result[0]['id'] == 1
-    assert result[0]['name'] == 'Key 1'
-    assert result[0]['created_at'] == now
-    assert result[0]['last_used_at'] == now
-    assert result[0]['expires_at'] == now + timedelta(days=30)
+    assert result[0].id == 1
+    assert result[0].name == 'Key 1'
+    assert result[0].created_at == now
+    assert result[0].last_used_at == now
+    assert result[0].expires_at == now + timedelta(days=30)
 
-    assert result[1]['id'] == 2
-    assert result[1]['name'] == 'Key 2'
-    assert result[1]['created_at'] == now
-    assert result[1]['last_used_at'] is None
-    assert result[1]['expires_at'] is None
+    assert result[1].id == 2
+    assert result[1].name == 'Key 2'
+    assert result[1].created_at == now
+    assert result[1].last_used_at is None
+    assert result[1].expires_at is None
 
 
 @pytest.mark.asyncio

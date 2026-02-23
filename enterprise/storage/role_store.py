@@ -30,6 +30,20 @@ class RoleStore:
             return session.query(Role).filter(Role.id == role_id).first()
 
     @staticmethod
+    async def get_role_by_id_async(
+        role_id: int,
+        session: Optional[AsyncSession] = None,
+    ) -> Optional[Role]:
+        """Get role by ID (async version)."""
+        if session is not None:
+            result = await session.execute(select(Role).where(Role.id == role_id))
+            return result.scalars().first()
+
+        async with a_session_maker() as session:
+            result = await session.execute(select(Role).where(Role.id == role_id))
+            return result.scalars().first()
+
+    @staticmethod
     def get_role_by_name(name: str) -> Optional[Role]:
         """Get role by name."""
         with session_maker() as session:

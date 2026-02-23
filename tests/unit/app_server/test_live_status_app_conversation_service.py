@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import zipfile
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
@@ -13,6 +14,7 @@ from pydantic import SecretStr
 from openhands.agent_server.models import (
     SendMessageRequest,
     StartConversationRequest,
+    TextContent,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AgentType,
@@ -31,12 +33,31 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.sandbox.sandbox_spec_models import SandboxSpecInfo
 from openhands.app_server.user.user_context import UserContext
 from openhands.integrations.provider import ProviderToken, ProviderType
+from openhands.integrations.service_types import SuggestedTask, TaskType
 from openhands.sdk import Agent, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
 from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
+from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+
+# Env var used by openhands SDK LLM to skip context-window validation (e.g. for gpt-4 in tests)
+_ALLOW_SHORT_CONTEXT_WINDOWS = 'ALLOW_SHORT_CONTEXT_WINDOWS'
+
+
+@pytest.fixture(autouse=True)
+def allow_short_context_windows():
+    """Allow small context windows so unit tests can create LLM with gpt-4 etc."""
+    old = os.environ.pop(_ALLOW_SHORT_CONTEXT_WINDOWS, None)
+    os.environ[_ALLOW_SHORT_CONTEXT_WINDOWS] = 'true'
+    try:
+        yield
+    finally:
+        if old is not None:
+            os.environ[_ALLOW_SHORT_CONTEXT_WINDOWS] = old
+        else:
+            os.environ.pop(_ALLOW_SHORT_CONTEXT_WINDOWS, None)
 
 
 class TestLiveStatusAppConversationService:
@@ -94,7 +115,62 @@ class TestLiveStatusAppConversationService:
         self.mock_sandbox.id = uuid4()
         self.mock_sandbox.status = SandboxStatus.RUNNING
 
-    @pytest.mark.asyncio
+    def test_apply_suggested_task_sets_prompt_and_trigger(self):
+        """Test suggested task prompts populate initial message and trigger."""
+        suggested_task = SuggestedTask(
+            git_provider=ProviderType.GITHUB,
+            task_type=TaskType.UNRESOLVED_COMMENTS,
+            repo='owner/repo',
+            issue_number=42,
+            title='Handle review comments',
+        )
+        request = AppConversationStartRequest(suggested_task=suggested_task)
+
+        self.service._apply_suggested_task(request)
+
+        assert request.initial_message is not None
+        assert (
+            request.initial_message.content[0].text
+            == suggested_task.get_prompt_for_task()
+        )
+        assert request.trigger == ConversationTrigger.SUGGESTED_TASK
+        assert request.selected_repository == suggested_task.repo
+        assert request.git_provider == suggested_task.git_provider
+
+    def test_apply_suggested_task_raises_if_initial_message_present(self):
+        suggested_task = SuggestedTask(
+            repo='foo/bar',
+            git_provider=ProviderType.GITHUB,
+            title='Some title',
+            task_type=TaskType.OPEN_ISSUE,
+            issue_number=123,
+        )
+
+        request = AppConversationStartRequest(
+            suggested_task=suggested_task,
+            initial_message=SendMessageRequest(
+                role='user',
+                content=[TextContent(text='User provided message')],
+            ),
+        )
+
+        with pytest.raises(ValueError, match='initial_message cannot be provided'):
+            self.service._apply_suggested_task(request)
+
+    def test_apply_suggested_task_raises_if_prompt_empty(self):
+        suggested_task = SuggestedTask(
+            repo='foo/bar',
+            git_provider=ProviderType.GITHUB,
+            title='Some title',
+            task_type=TaskType.OPEN_ISSUE,
+            issue_number=123,
+        )
+        request = AppConversationStartRequest(suggested_task=suggested_task)
+
+        with patch.object(SuggestedTask, 'get_prompt_for_task', return_value=''):
+            with pytest.raises(ValueError, match='empty prompt'):
+                self.service._apply_suggested_task(request)
+
     async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
         """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
@@ -682,6 +758,41 @@ class TestLiveStatusAppConversationService:
             == 'https://mcp.tavily.com/mcp/?tavilyApiKey=env_tavily_key'
         )
 
+    def test_compute_plan_path_default_uses_agents_tmp(self):
+        """Test _compute_plan_path returns .agents_tmp/PLAN.md for default/GitHub."""
+        # Arrange
+        working_dir = '/workspace/project'
+
+        # Act
+        path_none = self.service._compute_plan_path(working_dir, None)
+        path_github = self.service._compute_plan_path(working_dir, ProviderType.GITHUB)
+
+        # Assert
+        assert path_none == '/workspace/project/.agents_tmp/PLAN.md'
+        assert path_github == '/workspace/project/.agents_tmp/PLAN.md'
+
+    def test_compute_plan_path_gitlab_uses_agents_tmp_config(self):
+        """Test _compute_plan_path returns agents-tmp-config/PLAN.md for GitLab."""
+        # Arrange
+        working_dir = '/workspace/project'
+
+        # Act
+        path = self.service._compute_plan_path(working_dir, ProviderType.GITLAB)
+
+        # Assert
+        assert path == '/workspace/project/agents-tmp-config/PLAN.md'
+
+    def test_compute_plan_path_azure_uses_agents_tmp_config(self):
+        """Test _compute_plan_path returns agents-tmp-config/PLAN.md for Azure."""
+        # Arrange
+        working_dir = '/workspace/project'
+
+        # Act
+        path = self.service._compute_plan_path(working_dir, ProviderType.AZURE_DEVOPS)
+
+        # Assert
+        assert path == '/workspace/project/agents-tmp-config/PLAN.md'
+
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
     )
@@ -704,6 +815,8 @@ class TestLiveStatusAppConversationService:
         mock_format_plan.return_value = 'test_plan_structure'
         mcp_config = {'default': {'url': 'test'}}
         system_message_suffix = 'Test suffix'
+        working_dir = '/workspace/project'
+        git_provider = ProviderType.GITHUB
 
         # Act
         with patch(
@@ -719,9 +832,14 @@ class TestLiveStatusAppConversationService:
                 system_message_suffix,
                 mcp_config,
                 self.mock_user.condenser_max_size,
+                git_provider=git_provider,
+                working_dir=working_dir,
             )
 
             # Assert
+            mock_get_tools.assert_called_once_with(
+                plan_path='/workspace/project/.agents_tmp/PLAN.md'
+            )
             mock_agent_class.assert_called_once()
             call_kwargs = mock_agent_class.call_args[1]
             assert call_kwargs['llm'] == mock_llm
@@ -1006,6 +1124,8 @@ class TestLiveStatusAppConversationService:
             mock_mcp_config,
             self.mock_user.condenser_max_size,
             secrets=mock_secrets,
+            git_provider=ProviderType.GITHUB,
+            working_dir='/test/dir',
         )
         self.service._finalize_conversation_request.assert_called_once()
 

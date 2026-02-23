@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { MicroagentManagementSidebar } from "./microagent-management-sidebar";
 import { MicroagentManagementMain } from "./microagent-management-main";
@@ -27,6 +27,7 @@ import {
 import { getFirstPRUrl } from "#/utils/parse-pr-url";
 import { I18nKey } from "#/i18n/declaration";
 import { useUserProviders } from "#/hooks/use-user-providers";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
 
 // Handle error events
 const isErrorEvent = (evt: unknown): evt is { error: true; message: string } =>
@@ -92,8 +93,7 @@ const getUpdateConversationInstructions = (
 `;
 
 export function MicroagentManagementContent() {
-  // Responsive width state
-  const [width, setWidth] = useState(window.innerWidth);
+  const isMobile = useBreakpoint();
 
   const {
     addMicroagentModalVisible,
@@ -111,17 +111,6 @@ export function MicroagentManagementContent() {
 
   const { createConversationAndSubscribe, isPending } =
     useCreateConversationAndSubscribeMultiple();
-
-  function handleResize() {
-    setWidth(window.innerWidth);
-  }
-
-  useEffect(() => {
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
 
   const hideUpsertMicroagentModal = (isUpdate: boolean = false) => {
     if (isUpdate) {
@@ -318,7 +307,7 @@ export function MicroagentManagementContent() {
 
   const providersAreSet = providers.length > 0;
 
-  if (width < 1024) {
+  if (isMobile) {
     return (
       <div className="w-full h-full flex flex-col gap-6">
         <div className="w-full rounded-lg border border-[#525252] bg-[#24272E] max-h-[494px] min-h-[494px]">
