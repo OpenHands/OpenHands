@@ -358,7 +358,14 @@ export function ConversationWebSocketProvider({
               },
               posthog,
             });
-            setErrorMessage(event.detail);
+            if (isBudgetOrCreditError(event.detail)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+              trackCreditLimitReached({
+                conversationId: conversationId || "unknown",
+              });
+            } else {
+              setErrorMessage(event.detail);
+            }
           } else {
             // Clear error message on any non-ConversationErrorEvent
             removeErrorMessage();

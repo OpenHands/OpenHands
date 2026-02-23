@@ -301,6 +301,86 @@ async def test_react_to_content_policy_violation(
 
 
 @pytest.mark.asyncio
+async def test_react_to_team_org_budget_exceeded(
+    mock_agent_with_stats,
+    mock_event_stream,
+    mock_status_callback,
+):
+    """Test that team/org-level budget errors from litellm proxy trigger ERROR_LLM_OUT_OF_CREDITS."""
+    mock_agent, conversation_stats, llm_registry = mock_agent_with_stats
+
+    controller = AgentController(
+        agent=mock_agent,
+        event_stream=mock_event_stream,
+        conversation_stats=conversation_stats,
+        status_callback=mock_status_callback,
+        iteration_delta=10,
+        sid='test',
+        confirmation_mode=False,
+        headless_mode=True,
+    )
+
+    controller.state.agent_state = AgentState.RUNNING
+
+    error = BadRequestError(
+        message='Budget has been exceeded! Current cost: 18.51, Max budget: 18.24',
+        model='gpt-4',
+        llm_provider='openai',
+    )
+    await controller._react_to_exception(error)
+
+    mock_status_callback.assert_called_once_with(
+        'error',
+        RuntimeStatus.ERROR_LLM_OUT_OF_CREDITS,
+        RuntimeStatus.ERROR_LLM_OUT_OF_CREDITS.value,
+    )
+    assert controller.state.last_error == RuntimeStatus.ERROR_LLM_OUT_OF_CREDITS.value
+    assert controller.state.agent_state == AgentState.ERROR
+
+    await controller.close()
+
+
+@pytest.mark.asyncio
+async def test_react_to_user_budget_exceeded(
+    mock_agent_with_stats,
+    mock_event_stream,
+    mock_status_callback,
+):
+    """Test that user-level budget errors (ExceededBudget format) still trigger ERROR_LLM_OUT_OF_CREDITS."""
+    mock_agent, conversation_stats, llm_registry = mock_agent_with_stats
+
+    controller = AgentController(
+        agent=mock_agent,
+        event_stream=mock_event_stream,
+        conversation_stats=conversation_stats,
+        status_callback=mock_status_callback,
+        iteration_delta=10,
+        sid='test',
+        confirmation_mode=False,
+        headless_mode=True,
+    )
+
+    controller.state.agent_state = AgentState.RUNNING
+
+    error = BadRequestError(
+        message='ExceededBudget: User=xxx over budget.',
+        model='gpt-4',
+        llm_provider='openai',
+    )
+    await controller._react_to_exception(error)
+
+    mock_status_callback.assert_called_once_with(
+        'error',
+        RuntimeStatus.ERROR_LLM_OUT_OF_CREDITS,
+        RuntimeStatus.ERROR_LLM_OUT_OF_CREDITS.value,
+    )
+    assert controller.state.last_error == RuntimeStatus.ERROR_LLM_OUT_OF_CREDITS.value
+    assert controller.state.agent_state == AgentState.ERROR
+
+    await controller.close()
+
+
+@pytest.mark.asyncio
 async def test_tool_call_validation_error_handling(
     mock_agent_with_stats,
     test_event_stream,
