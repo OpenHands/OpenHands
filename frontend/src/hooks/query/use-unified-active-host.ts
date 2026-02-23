@@ -8,6 +8,16 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useBatchSandboxes } from "./use-batch-sandboxes";
 import { useConversationConfig } from "./use-conversation-config";
 
+function appendDefaultQueryParams(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set("app", "chatPreviewApp");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 /**
  * Unified hook to get active web host for both legacy (V0) and V1 conversations
  * - V0: Uses the legacy getWebHosts API endpoint and polls them
@@ -33,7 +43,7 @@ export const useUnifiedActiveHost = () => {
   // No sandbox lookup, no health-check polling needed
   React.useEffect(() => {
     if (isEnvironmentConnection && environmentUrl) {
-      setActiveHost(environmentUrl);
+      setActiveHost(appendDefaultQueryParams(environmentUrl));
     }
   }, [isEnvironmentConnection, environmentUrl]);
 
@@ -117,7 +127,7 @@ export const useUnifiedActiveHost = () => {
   React.useEffect(() => {
     if (isEnvironmentConnection) return;
     const successfulApp = appsData.find((app) => app);
-    setActiveHost(successfulApp || "");
+    setActiveHost(successfulApp ? appendDefaultQueryParams(successfulApp) : "");
   }, [appsData, isEnvironmentConnection]);
 
   // Calculate overall loading state including dependent queries for V1

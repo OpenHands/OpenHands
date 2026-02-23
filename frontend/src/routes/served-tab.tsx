@@ -60,12 +60,22 @@ function ServedApp() {
     ? `${currentActiveHost.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`
     : currentActiveHost;
 
+  const externalUrl = (() => {
+    try {
+      const url = new URL(fullUrl);
+      url.search = "";
+      return url.toString();
+    } catch {
+      return fullUrl;
+    }
+  })();
+
   return (
     <div className="h-full w-full flex flex-col">
       <div className="w-full p-2 flex items-center gap-4 border-b border-neutral-600">
         <button
           type="button"
-          onClick={() => window.open(fullUrl, "_blank")}
+          onClick={() => window.open(externalUrl, "_blank")}
           className="text-sm"
           aria-label={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
         >
