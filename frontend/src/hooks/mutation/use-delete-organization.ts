@@ -14,8 +14,11 @@ export const useDeleteOrganization = () => {
       return organizationService.deleteOrganization({ orgId: organizationId });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["organizations"] });
       setOrganizationId(null);
+      queryClient.invalidateQueries({
+        queryKey: ["organizations"],
+        exact: true,
+      });
       navigate("/");
     },
   });
