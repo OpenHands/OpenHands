@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { Text } from "#/ui/typography";
@@ -65,9 +65,10 @@ function SlashCommandMenuItem({
   onSelect,
   ref,
 }: SlashCommandMenuItemProps) {
-  const description = item.skill.content
-    ? getSkillDescription(item.skill.content)
-    : null;
+  const description = useMemo(
+    () => (item.skill.content ? getSkillDescription(item.skill.content) : null),
+    [item.skill.content],
+  );
 
   return (
     <button

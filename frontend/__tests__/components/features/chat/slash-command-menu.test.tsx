@@ -2,16 +2,16 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { renderWithProviders } from "test-utils";
-
-// jsdom does not implement scrollIntoView
-beforeAll(() => {
-  Element.prototype.scrollIntoView = vi.fn();
-});
 import {
   SlashCommandMenu,
   getSkillDescription,
 } from "#/components/features/chat/components/slash-command-menu";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+
+// jsdom does not implement scrollIntoView
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+});
 
 const makeItem = (
   name: string,
@@ -103,9 +103,7 @@ describe("SlashCommandMenu", () => {
     );
 
     // First item: first-sentence extraction
-    expect(
-      screen.getByText("Search code semantically."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Search code semantically.")).toBeInTheDocument();
 
     // Third item: frontmatter description extraction
     expect(screen.getByText("Initialize a project")).toBeInTheDocument();
@@ -123,10 +121,7 @@ describe("SlashCommandMenu", () => {
     const listbox = screen.getByRole("listbox");
     expect(listbox).toBeInTheDocument();
     // In test env, translation key is returned as-is
-    expect(listbox).toHaveAttribute(
-      "aria-label",
-      "CHAT_INTERFACE$COMMANDS",
-    );
+    expect(listbox).toHaveAttribute("aria-label", "CHAT_INTERFACE$COMMANDS");
   });
 });
 

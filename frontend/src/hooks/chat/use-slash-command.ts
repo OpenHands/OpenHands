@@ -111,6 +111,9 @@ export const useSlashCommand = (
 
       // Trigger a native InputEvent so React's onInput fires (for smartResize etc.)
       element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+
+      // Restore focus so keyboard events (Enter to submit) work after selection
+      element.focus();
     },
     [chatInputRef],
   );
@@ -134,10 +137,13 @@ export const useSlashCommand = (
           );
           return true;
         case "Enter":
-        case "Tab":
+        case "Tab": {
+          const item = filteredItems[selectedIndex];
+          if (!item) return false;
           e.preventDefault();
-          selectItem(filteredItems[selectedIndex]);
+          selectItem(item);
           return true;
+        }
         case "Escape":
           e.preventDefault();
           setIsMenuOpen(false);
