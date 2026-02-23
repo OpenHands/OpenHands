@@ -68,7 +68,8 @@ export const useSlashCommand = (
     const element = chatInputRef.current;
     if (!element) return null;
 
-    const text = element.innerText || "";
+    // Trim to handle trailing newlines that contentEditable can produce
+    const text = (element.innerText || "").trim();
     // Only trigger slash menu when "/" is at the start of the input
     const match = text.match(/^\/(\S*)$/);
     if (match) return match[1];
@@ -106,6 +107,7 @@ export const useSlashCommand = (
 
       setIsMenuOpen(false);
       setFilterText("");
+      setSelectedIndex(0);
 
       // Trigger a native InputEvent so React's onInput fires (for smartResize etc.)
       element.dispatchEvent(new InputEvent("input", { bubbles: true }));
