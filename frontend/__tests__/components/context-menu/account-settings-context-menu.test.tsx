@@ -5,9 +5,9 @@ import { AccountSettingsContextMenu } from "#/components/features/context-menu/a
 import { MemoryRouter } from "react-router";
 import { renderWithProviders } from "../../../test-utils";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createMockWebClientConfig } from "../../helpers/mock-config";
 
 const mockTrackAddTeamMembersButtonClick = vi.fn();
-const mockUseFeatureFlagEnabled = vi.fn();
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -15,9 +15,13 @@ vi.mock("#/hooks/use-tracking", () => ({
   }),
 }));
 
+// Mock posthog feature flag
 vi.mock("posthog-js/react", () => ({
-  useFeatureFlagEnabled: () => mockUseFeatureFlagEnabled(),
+  useFeatureFlagEnabled: vi.fn(),
 }));
+
+// Import the mocked module to get access to the mock
+import * as posthog from "posthog-js/react";
 
 describe("AccountSettingsContextMenu", () => {
   const user = userEvent.setup();
@@ -31,6 +35,8 @@ describe("AccountSettingsContextMenu", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    // Set default feature flag to false
+    vi.mocked(posthog.useFeatureFlagEnabled).mockReturnValue(false);
   });
 
   // Create a wrapper with MemoryRouter and renderWithProviders
@@ -39,7 +45,7 @@ describe("AccountSettingsContextMenu", () => {
   };
 
   const renderWithSaasConfig = (ui: React.ReactElement) => {
-    queryClient.setQueryData(["config"], { APP_MODE: "saas" });
+    queryClient.setQueryData(["web-client-config"], createMockWebClientConfig({ app_mode: "saas" }));
     return render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>{ui}</MemoryRouter>
@@ -48,7 +54,7 @@ describe("AccountSettingsContextMenu", () => {
   };
 
   const renderWithOssConfig = (ui: React.ReactElement) => {
-    queryClient.setQueryData(["config"], { APP_MODE: "oss" });
+    queryClient.setQueryData(["web-client-config"], createMockWebClientConfig({ app_mode: "oss" }));
     return render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>{ui}</MemoryRouter>
@@ -61,7 +67,7 @@ describe("AccountSettingsContextMenu", () => {
     onLogoutMock.mockClear();
     onCloseMock.mockClear();
     mockTrackAddTeamMembersButtonClick.mockClear();
-    mockUseFeatureFlagEnabled.mockClear();
+    vi.mocked(posthog.useFeatureFlagEnabled).mockClear();
   });
 
   it("should always render the right options", () => {
@@ -137,7 +143,7 @@ describe("AccountSettingsContextMenu", () => {
   });
 
   it("should show Add Team Members button in SaaS mode when feature flag is enabled", () => {
-    mockUseFeatureFlagEnabled.mockReturnValue(true);
+    vi.mocked(posthog.useFeatureFlagEnabled).mockReturnValue(true);
     renderWithSaasConfig(
       <AccountSettingsContextMenu
         onLogout={onLogoutMock}
@@ -150,7 +156,7 @@ describe("AccountSettingsContextMenu", () => {
   });
 
   it("should not show Add Team Members button in SaaS mode when feature flag is disabled", () => {
-    mockUseFeatureFlagEnabled.mockReturnValue(false);
+    vi.mocked(posthog.useFeatureFlagEnabled).mockReturnValue(false);
     renderWithSaasConfig(
       <AccountSettingsContextMenu
         onLogout={onLogoutMock}
@@ -163,7 +169,7 @@ describe("AccountSettingsContextMenu", () => {
   });
 
   it("should not show Add Team Members button in OSS mode even when feature flag is enabled", () => {
-    mockUseFeatureFlagEnabled.mockReturnValue(true);
+    vi.mocked(posthog.useFeatureFlagEnabled).mockReturnValue(true);
     renderWithOssConfig(
       <AccountSettingsContextMenu
         onLogout={onLogoutMock}
@@ -176,7 +182,7 @@ describe("AccountSettingsContextMenu", () => {
   });
 
   it("should call tracking function and onClose when Add Team Members button is clicked", async () => {
-    mockUseFeatureFlagEnabled.mockReturnValue(true);
+    vi.mocked(posthog.useFeatureFlagEnabled).mockReturnValue(true);
     renderWithSaasConfig(
       <AccountSettingsContextMenu
         onLogout={onLogoutMock}

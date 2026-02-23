@@ -33,7 +33,7 @@ export function AccountSettingsContextMenu({
   // Get navigation items and filter out LLM settings if the feature flag is enabled
   const items = useSettingsNavItems();
 
-  const isSaasMode = config?.APP_MODE === "saas";
+  const isSaasMode = config?.app_mode === "saas";
   const showAddTeamMembers = isSaasMode && isAddTeamMemberEnabled;
 
   const navItems = items.map((item) => ({
