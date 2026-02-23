@@ -66,7 +66,7 @@ dependencies = [
   "playwright>=1.55",
   "poetry>=2.1.2",
   "prompt-toolkit>=3.0.50",
-  "protobuf>=5,<6",
+  "protobuf>=5.29.6,<6",
   "psutil",
   "pybase62>=1",
   "pygithub>=2.5",
@@ -191,7 +191,7 @@ tornado = ">=6.5"
 python-dotenv = "*"
 rapidfuzz = "^3.9.0"
 whatthepatch = "^1.0.6"
-protobuf = "^5.0.0,<6.0.0"                         # Updated to support newer opentelemetry
+protobuf = "^5.29.6,<6.0.0"                        # Updated to fix CVE-2026-0994
 opentelemetry-api = "^1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 
