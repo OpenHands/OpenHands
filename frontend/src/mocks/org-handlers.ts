@@ -287,7 +287,7 @@ export const ORG_HANDLERS = [
     return HttpResponse.json(me);
   }),
 
-  http.get("/api/organizations/:orgId/members", ({ params }) => {
+  http.get("/api/organizations/:orgId/members", ({ params, request }) => {
     const orgId = params.orgId?.toString();
     if (!orgId || !ORGS_AND_MEMBERS[orgId]) {
       return HttpResponse.json(
@@ -295,8 +295,35 @@ export const ORG_HANDLERS = [
         { status: 404 },
       );
     }
-    const members = ORGS_AND_MEMBERS[orgId];
-    return HttpResponse.json({ items: members });
+
+    // Parse query parameters
+    const url = new URL(request.url);
+    const pageIdParam = url.searchParams.get("page_id");
+    const limitParam = url.searchParams.get("limit");
+    const emailFilter = url.searchParams.get("email");
+
+    const offset = pageIdParam ? parseInt(pageIdParam, 10) : 0;
+    const limit = limitParam ? parseInt(limitParam, 10) : 10;
+
+    let members = ORGS_AND_MEMBERS[orgId];
+
+    // Apply email filter if provided
+    if (emailFilter) {
+      members = members.filter((member) =>
+        member.email.toLowerCase().includes(emailFilter.toLowerCase()),
+      );
+    }
+
+    const totalCount = members.length;
+    const paginatedMembers = members.slice(offset, offset + limit);
+    const currentPage = Math.floor(offset / limit) + 1;
+
+    return HttpResponse.json({
+      items: paginatedMembers,
+      total_count: totalCount,
+      current_page: currentPage,
+      per_page: limit,
+    });
   }),
 
   http.get("/api/organizations", () => {

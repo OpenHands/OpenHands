@@ -16846,5 +16846,53 @@
     "tr": "Tüm organizasyon üyeleri",
     "de": "Alle Organisationsmitglieder",
     "uk": "Усі члени організації"
+  },
+  "ORG$SEARCH_BY_EMAIL": {
+    "en": "Search by email...",
+    "ja": "メールで検索...",
+    "zh-CN": "按邮箱搜索...",
+    "zh-TW": "按電郵搜尋...",
+    "ko-KR": "이메일로 검색...",
+    "no": "Søk etter e-post...",
+    "it": "Cerca per email...",
+    "pt": "Pesquisar por email...",
+    "es": "Buscar por correo electrónico...",
+    "ar": "البحث بالبريد الإلكتروني...",
+    "fr": "Rechercher par e-mail...",
+    "tr": "E-posta ile ara...",
+    "de": "Nach E-Mail suchen...",
+    "uk": "Пошук за електронною поштою..."
+  },
+  "ORG$NO_MEMBERS_FOUND": {
+    "en": "No members found",
+    "ja": "メンバーが見つかりません",
+    "zh-CN": "未找到成员",
+    "zh-TW": "未找到成員",
+    "ko-KR": "멤버를 찾을 수 없습니다",
+    "no": "Ingen medlemmer funnet",
+    "it": "Nessun membro trovato",
+    "pt": "Nenhum membro encontrado",
+    "es": "No se encontraron miembros",
+    "ar": "لم يتم العثور على أعضاء",
+    "fr": "Aucun membre trouvé",
+    "tr": "Üye bulunamadı",
+    "de": "Keine Mitglieder gefunden",
+    "uk": "Членів не знайдено"
+  },
+  "ORG$NO_MEMBERS_MATCHING_FILTER": {
+    "en": "No members match your search",
+    "ja": "検索に一致するメンバーはいません",
+    "zh-CN": "没有符合搜索条件的成员",
+    "zh-TW": "沒有符合搜尋條件的成員",
+    "ko-KR": "검색과 일치하는 멤버가 없습니다",
+    "no": "Ingen medlemmer samsvarer med søket ditt",
+    "it": "Nessun membro corrisponde alla tua ricerca",
+    "pt": "Nenhum membro corresponde à sua pesquisa",
+    "es": "Ningún miembro coincide con tu búsqueda",
+    "ar": "لا يوجد أعضاء يطابقون بحثك",
+    "fr": "Aucun membre ne correspond à votre recherche",
+    "tr": "Aramanızla eşleşen üye bulunamadı",
+    "de": "Keine Mitglieder entsprechen Ihrer Suche",
+    "uk": "Жодний член не відповідає вашому пошуку"
   }
 }

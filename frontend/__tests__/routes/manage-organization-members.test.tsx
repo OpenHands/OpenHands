@@ -338,12 +338,19 @@ describe("Manage Organization Members Route", () => {
     await selectOrganization({ orgIndex: 1 }); // Acme Corp
     expect(getOrganizationMembersSpy).toHaveBeenLastCalledWith({
       orgId: "2",
+      page: 1,
+      limit: 10,
+      email: undefined,
     });
   });
 
   it("should render the list of organization members", async () => {
     await setupTestWithOrg(0);
     const members = ORGS_AND_MEMBERS["1"];
+
+    // Wait for org "1" member to appear (ensures org switch is complete)
+    // This is needed because placeholderData: keepPreviousData shows stale data during transitions
+    await screen.findByText(members[0].email);
 
     const memberListItems = await screen.findAllByTestId("member-item");
     expect(memberListItems).toHaveLength(members.length);
@@ -559,20 +566,25 @@ describe("Manage Organization Members Route", () => {
         "getOrganizationMembers",
       );
 
-      getOrganizationMembersSpy.mockResolvedValue([
-        {
-          org_id: "1",
-          user_id: "4",
-          email: "tom@acme.org",
-          role: "member",
-          llm_api_key: "**********",
-          max_iterations: 20,
-          llm_model: "gpt-4",
-          llm_api_key_for_byor: null,
-          llm_base_url: "https://api.openai.com",
-          status: "invited",
-        },
-      ]);
+      getOrganizationMembersSpy.mockResolvedValue({
+        items: [
+          {
+            org_id: "1",
+            user_id: "4",
+            email: "tom@acme.org",
+            role: "member",
+            llm_api_key: "**********",
+            max_iterations: 20,
+            llm_model: "gpt-4",
+            llm_api_key_for_byor: null,
+            llm_base_url: "https://api.openai.com",
+            status: "invited",
+          },
+        ],
+        total_count: 1,
+        current_page: 1,
+        per_page: 10,
+      });
 
       await setupInviteTest();
 

@@ -1,6 +1,7 @@
 import {
   Organization,
   OrganizationMember,
+  OrganizationMembersPage,
   UpdateOrganizationMemberParams,
 } from "#/types/org";
 import { openHands } from "../open-hands-axios";
@@ -50,11 +51,33 @@ export const organizationService = {
     await openHands.delete(`/api/organizations/${orgId}`);
   },
 
-  getOrganizationMembers: async ({ orgId }: { orgId: string }) => {
-    const { data } = await openHands.get<{ items: OrganizationMember[] }>(
-      `/api/organizations/${orgId}/members`,
+  getOrganizationMembers: async ({
+    orgId,
+    page = 1,
+    limit = 10,
+    email,
+  }: {
+    orgId: string;
+    page?: number;
+    limit?: number;
+    email?: string;
+  }) => {
+    const params = new URLSearchParams();
+
+    // Calculate offset from page number (page_id is offset-based)
+    const offset = (page - 1) * limit;
+    params.set("page_id", String(offset));
+    params.set("limit", String(limit));
+
+    if (email) {
+      params.set("email", email);
+    }
+
+    const { data } = await openHands.get<OrganizationMembersPage>(
+      `/api/organizations/${orgId}/members?${params.toString()}`,
     );
-    return data?.items || [];
+
+    return data;
   },
 
   getOrganizationPaymentInfo: async ({ orgId }: { orgId: string }) => {
