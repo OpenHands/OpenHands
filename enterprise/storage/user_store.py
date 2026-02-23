@@ -870,6 +870,48 @@ class UserStore:
                 await session.commit()
 
     @staticmethod
+    async def update_user_email(
+        user_id: str,
+        email: str | None = None,
+        email_verified: bool | None = None,
+    ) -> None:
+        """Unconditionally update User.email and/or email_verified.
+
+        Unlike backfill_user_email(), this overwrites existing values.
+        No-op when both arguments are None.
+        Missing user is logged as a warning and ignored.
+        """
+        if email is None and email_verified is None:
+            return
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User).filter(User.id == uuid.UUID(user_id))
+            )
+            user = result.scalars().first()
+            if not user:
+                logger.warning(
+                    'update_user_email:user_not_found',
+                    extra={'user_id': user_id},
+                )
+                return
+
+            if email is not None:
+                user.email = email
+            if email_verified is not None:
+                user.email_verified = email_verified
+
+            logger.info(
+                'update_user_email:updated',
+                extra={
+                    'user_id': user_id,
+                    'email_set': email is not None,
+                    'email_verified_set': email_verified is not None,
+                },
+            )
+            await session.commit()
+
+    @staticmethod
     async def backfill_user_email(user_id: str, user_info: dict) -> None:
         """Set User.email and email_verified from IDP if they are still NULL.
 
