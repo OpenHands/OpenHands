@@ -157,9 +157,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], False)
+            mock_get_count.return_value = 1
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -175,7 +180,9 @@ class TestOrgMemberServiceGetOrgMembers:
             assert data is not None
             assert isinstance(data, OrgMemberPage)
             assert len(data.items) == 1
-            assert data.next_page_id is None
+            assert data.total_count == 1
+            assert data.current_page == 1
+            assert data.per_page == 100
             assert data.items[0].user_id == str(current_user_id)
             assert data.items[0].email == 'test@example.com'
             assert data.items[0].role_id == 1
@@ -267,9 +274,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], False)
+            mock_get_count.return_value = 1
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -282,9 +294,9 @@ class TestOrgMemberServiceGetOrgMembers:
             # Assert
             assert success is True
             assert data is not None
-            assert data.next_page_id is None
+            assert data.current_page == 1
             mock_get_paginated.assert_called_once_with(
-                org_id=org_id, offset=0, limit=100
+                org_id=org_id, offset=0, limit=100, email_filter=None
             )
 
     @pytest.mark.asyncio
@@ -301,9 +313,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], True)
+            mock_get_count.return_value = 200
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -316,9 +333,10 @@ class TestOrgMemberServiceGetOrgMembers:
             # Assert
             assert success is True
             assert data is not None
-            assert data.next_page_id == '150'  # offset (100) + limit (50)
+            assert data.current_page == 3  # offset (100) / limit (50) + 1
+            assert data.total_count == 200
             mock_get_paginated.assert_called_once_with(
-                org_id=org_id, offset=100, limit=50
+                org_id=org_id, offset=100, limit=50, email_filter=None
             )
 
     @pytest.mark.asyncio
@@ -335,9 +353,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([mock_org_member], False)
+            mock_get_count.return_value = 201
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -350,7 +373,8 @@ class TestOrgMemberServiceGetOrgMembers:
             # Assert
             assert success is True
             assert data is not None
-            assert data.next_page_id is None
+            assert data.current_page == 3
+            assert data.total_count == 201
 
     @pytest.mark.asyncio
     async def test_empty_organization_no_members(
@@ -366,9 +390,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([], False)
+            mock_get_count.return_value = 0
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -382,7 +411,7 @@ class TestOrgMemberServiceGetOrgMembers:
             assert success is True
             assert data is not None
             assert len(data.items) == 0
-            assert data.next_page_id is None
+            assert data.total_count == 0
 
     @pytest.mark.asyncio
     async def test_missing_user_relationship_handles_gracefully(
@@ -406,9 +435,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([member_no_user], False)
+            mock_get_count.return_value = 1
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -446,9 +480,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([member_no_role], False)
+            mock_get_count.return_value = 1
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -495,9 +534,14 @@ class TestOrgMemberServiceGetOrgMembers:
                 'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
                 new_callable=AsyncMock,
             ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
         ):
             mock_get_member.return_value = requester_membership_owner
             mock_get_paginated.return_value = ([member1, member2], False)
+            mock_get_count.return_value = 2
 
             # Act
             success, error_code, data = await OrgMemberService.get_org_members(
@@ -511,6 +555,83 @@ class TestOrgMemberServiceGetOrgMembers:
             assert success is True
             assert data is not None
             assert len(data.items) == 2
+            assert data.total_count == 2
+
+    @pytest.mark.asyncio
+    async def test_email_filter_passed_to_store(
+        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+    ):
+        """Test that email filter is passed to store methods."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
+            ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
+        ):
+            mock_get_member.return_value = requester_membership_owner
+            mock_get_paginated.return_value = ([mock_org_member], False)
+            mock_get_count.return_value = 1
+
+            # Act
+            await OrgMemberService.get_org_members(
+                org_id=org_id,
+                current_user_id=current_user_id,
+                page_id=None,
+                limit=10,
+                email_filter='alice',
+            )
+
+            # Assert
+            mock_get_count.assert_called_once_with(org_id=org_id, email_filter='alice')
+            mock_get_paginated.assert_called_once_with(
+                org_id=org_id, offset=0, limit=10, email_filter='alice'
+            )
+
+    @pytest.mark.asyncio
+    async def test_pagination_metadata_correct_for_page_2(
+        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+    ):
+        """Test pagination metadata is correct for page 2."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
+            ) as mock_get_paginated,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
+        ):
+            mock_get_member.return_value = requester_membership_owner
+            mock_get_paginated.return_value = ([mock_org_member], True)
+            mock_get_count.return_value = 25
+
+            # Act - Request page 2 (offset 10) with limit 10
+            success, error_code, data = await OrgMemberService.get_org_members(
+                org_id=org_id,
+                current_user_id=current_user_id,
+                page_id='10',
+                limit=10,
+            )
+
+            # Assert
+            assert success is True
+            assert data is not None
+            assert data.total_count == 25
+            assert data.current_page == 2
+            assert data.per_page == 10
 
 
 @pytest.fixture
