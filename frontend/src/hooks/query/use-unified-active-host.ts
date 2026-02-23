@@ -11,7 +11,10 @@ import { useConversationConfig } from "./use-conversation-config";
 function appendDefaultQueryParams(url: string): string {
   try {
     const parsed = new URL(url);
-    parsed.searchParams.set("app", "chatPreviewApp");
+    parsed.searchParams.set("mainLayoutScreen", "singleScreenLayout");
+    parsed.searchParams.set("initialScreen", "chatPreviewInitialScreen");
+    parsed.searchParams.set("colorScheme", "light");
+    parsed.searchParams.set("_mcp", "1");
     return parsed.toString();
   } catch {
     return url;
