@@ -32,15 +32,14 @@ export function CreateApiKeyModal({
       return;
     }
 
-    try {
-      const newKey = await mutateWithToast(createApiKeyMutation, newKeyName, {
-        success: t(I18nKey.SETTINGS$API_KEY_CREATED),
-        error: t(I18nKey.ERROR$GENERIC),
-      });
+    const newKey = await mutateWithToast(createApiKeyMutation, newKeyName, {
+      success: t(I18nKey.SETTINGS$API_KEY_CREATED),
+      error: t(I18nKey.ERROR$GENERIC),
+    }).catch(() => null);
+
+    if (newKey) {
       onKeyCreated(newKey);
       setNewKeyName("");
-    } catch {
-      // Prevent success-path code from running on mutation failure
     }
   };
 

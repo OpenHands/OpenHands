@@ -63,9 +63,7 @@ function LlmApiKeyManager({
 
   const handleRefreshLlmApiKey = async () => {
     await mutateWithToast(refreshLlmApiKey, undefined, {
-      success: t(I18nKey.SETTINGS$API_KEY_REFRESHED, {
-        defaultValue: "API key refreshed successfully",
-      }),
+      success: t(I18nKey.SETTINGS$API_KEY_REFRESHED),
       error: t(I18nKey.ERROR$GENERIC),
     });
   };

@@ -25,14 +25,13 @@ export function DeleteApiKeyModal({
   const handleDeleteKey = async () => {
     if (!keyToDelete) return;
 
-    try {
-      await mutateWithToast(deleteApiKeyMutation, keyToDelete.id, {
-        success: t(I18nKey.SETTINGS$API_KEY_DELETED),
-        error: t(I18nKey.ERROR$GENERIC),
-      });
+    const result = await mutateWithToast(deleteApiKeyMutation, keyToDelete.id, {
+      success: t(I18nKey.SETTINGS$API_KEY_DELETED),
+      error: t(I18nKey.ERROR$GENERIC),
+    }).catch(() => null);
+
+    if (result !== null) {
       onClose();
-    } catch {
-      // Keep modal open if deletion fails
     }
   };
 
