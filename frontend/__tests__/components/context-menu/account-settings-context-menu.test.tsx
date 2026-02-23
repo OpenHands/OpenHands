@@ -6,12 +6,16 @@ import { MemoryRouter } from "react-router";
 import { renderWithProviders } from "../../../test-utils";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-const mockPosthogCapture = vi.fn();
+const mockTrackAddTeamMembersButtonClick = vi.fn();
 const mockUseFeatureFlagEnabled = vi.fn();
-vi.mock("posthog-js/react", () => ({
-  usePostHog: () => ({
-    capture: mockPosthogCapture,
+
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackAddTeamMembersButtonClick: mockTrackAddTeamMembersButtonClick,
   }),
+}));
+
+vi.mock("posthog-js/react", () => ({
   useFeatureFlagEnabled: () => mockUseFeatureFlagEnabled(),
 }));
 
@@ -56,7 +60,7 @@ describe("AccountSettingsContextMenu", () => {
     onClickAccountSettingsMock.mockClear();
     onLogoutMock.mockClear();
     onCloseMock.mockClear();
-    mockPosthogCapture.mockClear();
+    mockTrackAddTeamMembersButtonClick.mockClear();
     mockUseFeatureFlagEnabled.mockClear();
   });
 
@@ -171,7 +175,7 @@ describe("AccountSettingsContextMenu", () => {
     expect(screen.queryByText("SETTINGS$NAV_ADD_TEAM_MEMBERS")).not.toBeInTheDocument();
   });
 
-  it("should fire Posthog event and call onClose when Add Team Members button is clicked", async () => {
+  it("should call tracking function and onClose when Add Team Members button is clicked", async () => {
     mockUseFeatureFlagEnabled.mockReturnValue(true);
     renderWithSaasConfig(
       <AccountSettingsContextMenu
@@ -183,7 +187,7 @@ describe("AccountSettingsContextMenu", () => {
     const addTeamMembersButton = screen.getByTestId("add-team-members-button");
     await user.click(addTeamMembersButton);
 
-    expect(mockPosthogCapture).toHaveBeenCalledWith("exp_add_team_members");
+    expect(mockTrackAddTeamMembersButtonClick).toHaveBeenCalledOnce();
     expect(onCloseMock).toHaveBeenCalledOnce();
   });
 });

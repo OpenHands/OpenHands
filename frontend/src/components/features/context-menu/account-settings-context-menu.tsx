@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
-import { usePostHog, useFeatureFlagEnabled } from "posthog-js/react";
+import { useFeatureFlagEnabled } from "posthog-js/react";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "./context-menu-list-item";
 import { Divider } from "#/ui/divider";
@@ -12,6 +12,7 @@ import DocumentIcon from "#/icons/document.svg?react";
 import PlusIcon from "#/icons/plus.svg?react";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import { useConfig } from "#/hooks/query/use-config";
+import { useTracking } from "#/hooks/use-tracking";
 
 interface AccountSettingsContextMenuProps {
   onLogout: () => void;
@@ -24,7 +25,7 @@ export function AccountSettingsContextMenu({
 }: AccountSettingsContextMenuProps) {
   const ref = useClickOutsideElement<HTMLUListElement>(onClose);
   const { t } = useTranslation();
-  const posthog = usePostHog();
+  const { trackAddTeamMembersButtonClick } = useTracking();
   const { data: config } = useConfig();
   const isAddTeamMemberEnabled = useFeatureFlagEnabled(
     "exp_add_team_member_button",
@@ -45,7 +46,7 @@ export function AccountSettingsContextMenu({
   const handleNavigationClick = () => onClose();
 
   const handleAddTeamMembers = () => {
-    posthog.capture("exp_add_team_members");
+    trackAddTeamMembersButtonClick();
     onClose();
   };
 
