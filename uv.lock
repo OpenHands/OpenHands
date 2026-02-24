@@ -3823,7 +3823,7 @@ requires-dist = [
     { name = "shellingham", specifier = ">=1.5.4" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.40" },
     { name = "sse-starlette", specifier = ">=3.0.2" },
-    { name = "starlette", specifier = ">=0.48" },
+    { name = "starlette", specifier = ">=0.49.1" },
     { name = "tenacity", specifier = ">=8.5,<10" },
     { name = "termcolor" },
     { name = "toml" },

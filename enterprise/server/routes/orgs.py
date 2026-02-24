@@ -519,7 +519,7 @@ async def get_org_members(
     org_id: UUID,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title='Optional page offset for pagination'),
     ] = None,
     limit: Annotated[
         int,
@@ -528,10 +528,18 @@ async def get_org_members(
             gt=0,
             lte=100,
         ),
-    ] = 100,
+    ] = 10,
+    email: Annotated[
+        str | None,
+        Query(
+            title='Filter members by email (case-insensitive partial match)',
+            min_length=1,
+            max_length=255,
+        ),
+    ] = None,
     user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgMemberPage:
-    """Get all members of an organization with cursor-based pagination.
+    """Get all members of an organization with pagination and optional email filter.
 
     This endpoint retrieves a paginated list of organization members. Access requires
     the VIEW_ORG_SETTINGS permission, which is granted to all organization members
@@ -539,12 +547,15 @@ async def get_org_members(
 
     Args:
         org_id: Organization ID (UUID)
-        page_id: Optional page ID (offset) for pagination
-        limit: Maximum number of members to return (1-100, default 100)
+        page_id: Optional page offset for pagination
+        limit: Maximum number of members to return (1-100, default 10)
+        email: Optional email filter (case-insensitive partial match)
         user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
-        OrgMemberPage: Paginated list of organization members
+        OrgMemberPage: Paginated list of organization members with
+            current_page and per_page metadata. Use the /count endpoint
+            to get the total count separately.
 
     Raises:
         HTTPException: 401 if user is not authenticated
@@ -558,6 +569,7 @@ async def get_org_members(
             current_user_id=UUID(user_id),
             page_id=page_id,
             limit=limit,
+            email_filter=email,
         )
 
         if not success:
@@ -597,6 +609,64 @@ async def get_org_members(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve members',
+        )
+
+
+@org_router.get('/{org_id}/members/count')
+async def get_org_members_count(
+    org_id: UUID,
+    email: Annotated[
+        str | None,
+        Query(
+            title='Filter members by email (case-insensitive partial match)',
+            min_length=1,
+            max_length=255,
+        ),
+    ] = None,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
+) -> int:
+    """Get count of organization members with optional email filter.
+
+    This endpoint returns the total count of organization members matching
+    the filter criteria. Access requires the VIEW_ORG_SETTINGS permission,
+    which is granted to all organization members (member, admin, and owner roles).
+
+    Args:
+        org_id: Organization ID (UUID)
+        email: Optional email filter (case-insensitive partial match)
+        user_id: Authenticated user ID (injected by require_permission dependency)
+
+    Returns:
+        int: Total count of organization members matching the filter
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission or is not a member
+        HTTPException: 400 if org_id format is invalid
+        HTTPException: 500 if retrieval fails
+    """
+    try:
+        return await OrgMemberService.get_org_members_count(
+            org_id=org_id,
+            current_user_id=UUID(user_id),
+            email_filter=email,
+        )
+    except OrgMemberNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='You are not a member of this organization',
+        )
+    except ValueError:
+        logger.exception('Invalid UUID format')
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid organization ID format',
+        )
+    except Exception:
+        logger.exception('Error retrieving organization member count')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve member count',
         )
 
 
