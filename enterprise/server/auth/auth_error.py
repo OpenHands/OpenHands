@@ -38,3 +38,9 @@ class ExpiredError(AuthError):
     """Error when a token has expired (Usually the refresh token)"""
 
     pass
+
+
+class TokenRefreshError(AuthError):
+    """Error when token refresh fails due to timeout or lock contention"""
+
+    pass
