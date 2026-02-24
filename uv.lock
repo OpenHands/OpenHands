@@ -3803,7 +3803,7 @@ requires-dist = [
     { name = "pygithub", specifier = ">=2.5" },
     { name = "pyjwt", specifier = ">=2.9" },
     { name = "pylatexenc" },
-    { name = "pypdf", specifier = ">=6" },
+    { name = "pypdf", specifier = ">=6.7.1" },
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "python-frontmatter", specifier = ">=1.1" },
@@ -7316,11 +7316,11 @@ wheels = [
 
 [[package]]
 name = "pypdf"
-version = "6.6.0"
+version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d8/f4/801632a8b62a805378b6af2b5a3fcbfd8923abf647e0ed1af846a83433b2/pypdf-6.6.0.tar.gz", hash = "sha256:4c887ef2ea38d86faded61141995a3c7d068c9d6ae8477be7ae5de8a8e16592f", size = 5281063, upload-time = "2026-01-09T11:20:11.786Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/cd/pypdf-6.7.1.tar.gz", hash = "sha256:d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2", size = 5281063, upload-time = "2026-02-15T11:20:11.786Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b2/ba/96f99276194f720e74ed99905a080f6e77810558874e8935e580331b46de/pypdf-6.6.0-py3-none-any.whl", hash = "sha256:bca9091ef6de36c7b1a81e09327c554b7ce51e88dad68f5890c2b4a4417f1fd7", size = 328963, upload-time = "2026-01-09T11:20:09.278Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/cd/pypdf-6.7.1-py3-none-any.whl", hash = "sha256:a77d3e22c4c51279c6b3bf2b6db8a3b4b2b8c6e3d9f0e1a2b3c4d5e6f7a8b9c0", size = 328963, upload-time = "2026-02-15T11:20:09.278Z" },
 ]
 
 [[package]]

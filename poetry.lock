@@ -11415,14 +11415,14 @@ diagrams = ["jinja2", "railroad-diagrams"]
 
 [[package]]
 name = "pypdf"
-version = "6.6.0"
+version = "6.7.1"
 description = "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "pypdf-6.6.0-py3-none-any.whl", hash = "sha256:bca9091ef6de36c7b1a81e09327c554b7ce51e88dad68f5890c2b4a4417f1fd7"},
-    {file = "pypdf-6.6.0.tar.gz", hash = "sha256:4c887ef2ea38d86faded61141995a3c7d068c9d6ae8477be7ae5de8a8e16592f"},
+    {file = "pypdf-6.7.1-py3-none-any.whl", hash = "sha256:a77d3e22c4c51279c6b3bf2b6db8a3b4b2b8c6e3d9f0e1a2b3c4d5e6f7a8b9c0"},
+    {file = "pypdf-6.7.1.tar.gz", hash = "sha256:d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2"},
 ]
 
 [package.extras]
