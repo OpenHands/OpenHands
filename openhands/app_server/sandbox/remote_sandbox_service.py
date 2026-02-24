@@ -375,7 +375,7 @@ class RemoteSandboxService(SandboxService):
                     sandbox = result.scalar_one_or_none()
                     if sandbox is None:
                         raise ValueError('sandbox_not_found')
-                    # Backfill the hash for future lookups
+                    # Backfill the hash for future lookups (Auto committed at end of request)
                     sandbox.session_api_key_hash = _hash_session_api_key(
                         session_api_key
                     )
@@ -395,7 +395,7 @@ class RemoteSandboxService(SandboxService):
             try:
                 runtime = await self._get_runtime(stored_sandbox.id)
                 if runtime and runtime.get('session_api_key') == session_api_key:
-                    # Backfill the hash for future lookups
+                    # Backfill the hash for future lookups (Auto committed at end of request)
                     stored_sandbox.session_api_key_hash = _hash_session_api_key(
                         session_api_key
                     )
