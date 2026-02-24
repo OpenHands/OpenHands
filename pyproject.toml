@@ -80,7 +80,7 @@ dependencies = [
   "python-json-logger>=3.2.1",
   "python-multipart",
   "python-pptx",
-  "python-socketio==5.13",
+  "python-socketio==5.14",
   "pythonnet",
   "pyyaml>=6.0.2",
   "qtconsole>=5.6.1",
@@ -199,7 +199,7 @@ libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
 openhands-aci = "0.3.2"
-python-socketio = "5.13.0"
+python-socketio = "5.14.0"
 sse-starlette = "^3.0.2"
 psutil = "*"
 python-json-logger = "^3.2.1"
