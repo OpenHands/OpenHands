@@ -154,10 +154,10 @@ class AuthTokenStore:
             # If token is still valid, return it without acquiring a lock
             if not access_expired or check_expiration_and_refresh is None:
                 return {
-                    "access_token": token_record.access_token,
-                    "refresh_token": token_record.refresh_token,
-                    "access_token_expires_at": token_record.access_token_expires_at,
-                    "refresh_token_expires_at": token_record.refresh_token_expires_at,
+                    'access_token': token_record.access_token,
+                    'refresh_token': token_record.refresh_token,
+                    'access_token_expires_at': token_record.access_token_expires_at,
+                    'refresh_token_expires_at': token_record.refresh_token_expires_at,
                 }
 
         # SLOW PATH: Token needs refresh, acquire lock
@@ -192,13 +192,13 @@ class AuthTokenStore:
                 if not access_expired:
                     # Token was refreshed by another request while we waited
                     logger.debug(
-                        "Token was refreshed by another request while waiting for lock"
+                        'Token was refreshed by another request while waiting for lock'
                     )
                     return {
-                        "access_token": token_record.access_token,
-                        "refresh_token": token_record.refresh_token,
-                        "access_token_expires_at": token_record.access_token_expires_at,
-                        "refresh_token_expires_at": token_record.refresh_token_expires_at,
+                        'access_token': token_record.access_token,
+                        'refresh_token': token_record.refresh_token,
+                        'access_token_expires_at': token_record.access_token_expires_at,
+                        'refresh_token_expires_at': token_record.refresh_token_expires_at,
                     }
 
                 # We're the one doing the refresh
@@ -214,13 +214,13 @@ class AuthTokenStore:
                         update(AuthTokens)
                         .where(AuthTokens.id == token_record.id)
                         .values(
-                            access_token=token_refresh["access_token"],
-                            refresh_token=token_refresh["refresh_token"],
+                            access_token=token_refresh['access_token'],
+                            refresh_token=token_refresh['refresh_token'],
                             access_token_expires_at=token_refresh[
-                                "access_token_expires_at"
+                                'access_token_expires_at'
                             ],
                             refresh_token_expires_at=token_refresh[
-                                "refresh_token_expires_at"
+                                'refresh_token_expires_at'
                             ],
                         )
                     )
@@ -230,10 +230,10 @@ class AuthTokenStore:
                     token_refresh
                     if token_refresh
                     else {
-                        "access_token": token_record.access_token,
-                        "refresh_token": token_record.refresh_token,
-                        "access_token_expires_at": token_record.access_token_expires_at,
-                        "refresh_token_expires_at": token_record.refresh_token_expires_at,
+                        'access_token': token_record.access_token,
+                        'refresh_token': token_record.refresh_token,
+                        'access_token_expires_at': token_record.access_token_expires_at,
+                        'refresh_token_expires_at': token_record.refresh_token_expires_at,
                     }
                 )
 
@@ -247,7 +247,7 @@ class AuthTokenStore:
         if not tokens:
             return False
 
-        access_token_expires_at = tokens["access_token_expires_at"]
+        access_token_expires_at = tokens['access_token_expires_at']
         current_time = int(time.time())
 
         # Return True if the token is not expired (with a small buffer)
@@ -263,7 +263,7 @@ class AuthTokenStore:
         if not tokens:
             return False
 
-        refresh_token_expires_at = tokens["refresh_token_expires_at"]
+        refresh_token_expires_at = tokens['refresh_token_expires_at']
         current_time = int(time.time())
 
         # Return True if the token is not expired (with a small buffer)
@@ -282,7 +282,7 @@ class AuthTokenStore:
         Returns:
             An instance of AuthTokenStore
         """
-        logger.debug(f"auth_token_store.get_instance::{keycloak_user_id}")
+        logger.debug(f'auth_token_store.get_instance::{keycloak_user_id}')
         if keycloak_user_id:
             keycloak_user_id = str(keycloak_user_id)
         return AuthTokenStore(
