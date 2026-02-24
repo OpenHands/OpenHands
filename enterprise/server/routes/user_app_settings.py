@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from server.routes.user_app_settings_models import (
     UserAppSettingsResponse,
     UserAppSettingsUpdate,
-    UserAppSettingsUpdateError,
     UserNotFoundError,
 )
 from server.services.user_app_settings_service import UserAppSettingsService
@@ -103,18 +102,9 @@ async def update_user_app_settings(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
-    except UserAppSettingsUpdateError as e:
-        logger.exception(
-            'Failed to update user app settings',
-            extra={'user_id': user_id, 'error': str(e)},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Failed to update user app settings',
-        )
     except Exception as e:
         logger.exception(
-            'Unexpected error updating user app settings',
+            'Failed to update user app settings',
             extra={'user_id': user_id, 'error': str(e)},
         )
         raise HTTPException(

@@ -2,7 +2,7 @@
 Pydantic models for user app settings API.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from storage.user import User
 
 
@@ -33,7 +33,7 @@ class UserAppSettingsResponse(BaseModel):
     user_consents_to_analytics: bool | None = None
     enable_sound_notifications: bool | None = None
     git_user_name: str | None = None
-    git_user_email: str | None = None
+    git_user_email: EmailStr | None = None
 
     @classmethod
     def from_user(cls, user: User) -> 'UserAppSettingsResponse':
@@ -54,4 +54,4 @@ class UserAppSettingsUpdate(BaseModel):
     user_consents_to_analytics: bool | None = None
     enable_sound_notifications: bool | None = None
     git_user_name: str | None = None
-    git_user_email: str | None = None
+    git_user_email: EmailStr | None = None

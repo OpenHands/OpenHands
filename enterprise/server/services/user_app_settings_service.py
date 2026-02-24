@@ -6,7 +6,6 @@ Separates business logic from route handlers.
 from server.routes.user_app_settings_models import (
     UserAppSettingsResponse,
     UserAppSettingsUpdate,
-    UserAppSettingsUpdateError,
     UserNotFoundError,
 )
 from storage.user_app_settings_store import UserAppSettingsStore
@@ -60,7 +59,6 @@ class UserAppSettingsService:
 
         Raises:
             UserNotFoundError: If user is not found
-            UserAppSettingsUpdateError: If update fails
         """
         logger.info(
             'Updating user app settings',
@@ -74,27 +72,17 @@ class UserAppSettingsService:
             # No fields to update, just return current settings
             return await UserAppSettingsService.get_user_app_settings(user_id)
 
-        try:
-            user = await UserAppSettingsStore.update_user_app_settings(
-                user_id=user_id,
-                update_data=update_data,
-            )
+        user = await UserAppSettingsStore.update_user_app_settings(
+            user_id=user_id,
+            update_data=update_data,
+        )
 
-            if not user:
-                raise UserNotFoundError(user_id)
+        if not user:
+            raise UserNotFoundError(user_id)
 
-            logger.info(
-                'User app settings updated successfully',
-                extra={'user_id': user_id, 'updated_fields': list(update_dict.keys())},
-            )
+        logger.info(
+            'User app settings updated successfully',
+            extra={'user_id': user_id, 'updated_fields': list(update_dict.keys())},
+        )
 
-            return UserAppSettingsResponse.from_user(user)
-
-        except UserNotFoundError:
-            raise
-        except Exception as e:
-            logger.exception(
-                'Failed to update user app settings',
-                extra={'user_id': user_id, 'error': str(e)},
-            )
-            raise UserAppSettingsUpdateError(f'Failed to update user app settings: {e}')
+        return UserAppSettingsResponse.from_user(user)
