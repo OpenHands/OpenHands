@@ -4,7 +4,9 @@ import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict
 
+from server.auth.auth_error import TokenRefreshError
 from sqlalchemy import select, text, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
@@ -130,8 +132,10 @@ class AuthTokenStore:
             If no token record is found, returns None.
 
         Raises:
-            sqlalchemy.exc.OperationalError: If the lock cannot be acquired within
-                the timeout period.
+            TokenRefreshError: If the lock cannot be acquired within the timeout
+                period. This typically means another request is holding the lock
+                for an extended period. Callers should handle this by returning
+                a 401 response to prompt the user to re-authenticate.
         """
         # FAST PATH: Check without lock first to avoid unnecessary lock contention
         async with self.a_session_maker() as session:
@@ -162,81 +166,91 @@ class AuthTokenStore:
                 }
 
         # SLOW PATH: Token needs refresh, acquire lock
-        async with self.a_session_maker() as session:
-            async with session.begin():
-                # Set a lock timeout to prevent indefinite blocking
-                # This ensures we don't hold connections forever if something goes wrong
-                await session.execute(
-                    text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT_SECONDS}s'")
-                )
-
-                # Acquire row-level lock to prevent concurrent refresh attempts
-                result = await session.execute(
-                    select(AuthTokens)
-                    .filter(
-                        AuthTokens.keycloak_user_id == self.keycloak_user_id,
-                        AuthTokens.identity_provider == self.identity_provider_value,
-                    )
-                    .with_for_update()
-                )
-                token_record = result.scalars().one_or_none()
-
-                if not token_record:
-                    return None
-
-                # Double-check: another request may have refreshed while we waited for the lock
-                access_expired, _ = self._is_token_expired(
-                    token_record.access_token_expires_at,
-                    token_record.refresh_token_expires_at,
-                )
-
-                if not access_expired:
-                    # Token was refreshed by another request while we waited
-                    logger.debug(
-                        'Token was refreshed by another request while waiting for lock'
-                    )
-                    return {
-                        'access_token': token_record.access_token,
-                        'refresh_token': token_record.refresh_token,
-                        'access_token_expires_at': token_record.access_token_expires_at,
-                        'refresh_token_expires_at': token_record.refresh_token_expires_at,
-                    }
-
-                # We're the one doing the refresh
-                token_refresh = await check_expiration_and_refresh(
-                    self.idp,
-                    token_record.refresh_token,
-                    token_record.access_token_expires_at,
-                    token_record.refresh_token_expires_at,
-                )
-
-                if token_refresh:
+        try:
+            async with self.a_session_maker() as session:
+                async with session.begin():
+                    # Set a lock timeout to prevent indefinite blocking
+                    # This ensures we don't hold connections forever if something goes wrong
                     await session.execute(
-                        update(AuthTokens)
-                        .where(AuthTokens.id == token_record.id)
-                        .values(
-                            access_token=token_refresh['access_token'],
-                            refresh_token=token_refresh['refresh_token'],
-                            access_token_expires_at=token_refresh[
-                                'access_token_expires_at'
-                            ],
-                            refresh_token_expires_at=token_refresh[
-                                'refresh_token_expires_at'
-                            ],
-                        )
+                        text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT_SECONDS}s'")
                     )
-                    await session.commit()
 
-                return (
-                    token_refresh
-                    if token_refresh
-                    else {
-                        'access_token': token_record.access_token,
-                        'refresh_token': token_record.refresh_token,
-                        'access_token_expires_at': token_record.access_token_expires_at,
-                        'refresh_token_expires_at': token_record.refresh_token_expires_at,
-                    }
-                )
+                    # Acquire row-level lock to prevent concurrent refresh attempts
+                    result = await session.execute(
+                        select(AuthTokens)
+                        .filter(
+                            AuthTokens.keycloak_user_id == self.keycloak_user_id,
+                            AuthTokens.identity_provider
+                            == self.identity_provider_value,
+                        )
+                        .with_for_update()
+                    )
+                    token_record = result.scalars().one_or_none()
+
+                    if not token_record:
+                        return None
+
+                    # Double-check: another request may have refreshed while we waited for the lock
+                    access_expired, _ = self._is_token_expired(
+                        token_record.access_token_expires_at,
+                        token_record.refresh_token_expires_at,
+                    )
+
+                    if not access_expired:
+                        # Token was refreshed by another request while we waited
+                        logger.debug(
+                            'Token was refreshed by another request while waiting for lock'
+                        )
+                        return {
+                            'access_token': token_record.access_token,
+                            'refresh_token': token_record.refresh_token,
+                            'access_token_expires_at': token_record.access_token_expires_at,
+                            'refresh_token_expires_at': token_record.refresh_token_expires_at,
+                        }
+
+                    # We're the one doing the refresh
+                    token_refresh = await check_expiration_and_refresh(
+                        self.idp,
+                        token_record.refresh_token,
+                        token_record.access_token_expires_at,
+                        token_record.refresh_token_expires_at,
+                    )
+
+                    if token_refresh:
+                        await session.execute(
+                            update(AuthTokens)
+                            .where(AuthTokens.id == token_record.id)
+                            .values(
+                                access_token=token_refresh['access_token'],
+                                refresh_token=token_refresh['refresh_token'],
+                                access_token_expires_at=token_refresh[
+                                    'access_token_expires_at'
+                                ],
+                                refresh_token_expires_at=token_refresh[
+                                    'refresh_token_expires_at'
+                                ],
+                            )
+                        )
+                        await session.commit()
+
+                    return (
+                        token_refresh
+                        if token_refresh
+                        else {
+                            'access_token': token_record.access_token,
+                            'refresh_token': token_record.refresh_token,
+                            'access_token_expires_at': token_record.access_token_expires_at,
+                            'refresh_token_expires_at': token_record.refresh_token_expires_at,
+                        }
+                    )
+        except OperationalError as e:
+            # Lock timeout - another request is holding the lock for too long
+            logger.warning(
+                f'Token refresh lock timeout for user {self.keycloak_user_id}: {e}'
+            )
+            raise TokenRefreshError(
+                'Unable to refresh token due to lock timeout. Please try again.'
+            ) from e
 
     async def is_access_token_valid(self) -> bool:
         """Check if the access token is still valid.
