@@ -13,8 +13,9 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.service_types import ProviderType
 
 # Time buffer (in seconds) before actual expiration to consider token expired
-# This ensures tokens are refreshed before they actually expire
-ACCESS_TOKEN_EXPIRY_BUFFER = 14400  # 4 hours
+# This ensures tokens are refreshed before they actually expire. The
+# github default is 8 hours, so 15 minutes leeway is ~3% of this.
+ACCESS_TOKEN_EXPIRY_BUFFER = 900  # 15 minutes
 
 # Database lock timeout to prevent indefinite blocking
 LOCK_TIMEOUT_SECONDS = 5
