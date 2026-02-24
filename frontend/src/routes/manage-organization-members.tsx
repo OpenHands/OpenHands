@@ -6,6 +6,7 @@ import { InviteOrganizationMemberModal } from "#/components/features/org/invite-
 import { ConfirmRemoveMemberModal } from "#/components/features/org/confirm-remove-member-modal";
 import { ConfirmUpdateRoleModal } from "#/components/features/org/confirm-update-role-modal";
 import { useOrganizationMembers } from "#/hooks/query/use-organization-members";
+import { useOrganizationMembersCount } from "#/hooks/query/use-organization-members-count";
 import { OrganizationMember, OrganizationUserRole } from "#/types/org";
 import { OrganizationMemberListItem } from "#/components/features/org/organization-member-list-item";
 import { useUpdateMemberRole } from "#/hooks/mutation/use-update-member-role";
@@ -40,13 +41,19 @@ function ManageOrganizationMembers() {
     setPage(1);
   }, [debouncedEmailFilter]);
 
+  const limit = 10;
+
   const {
     data: membersData,
     isLoading,
     isFetching,
   } = useOrganizationMembers({
     page,
-    limit: 10,
+    limit,
+    email: debouncedEmailFilter,
+  });
+
+  const { data: totalCount } = useOrganizationMembersCount({
     email: debouncedEmailFilter,
   });
 
@@ -69,9 +76,8 @@ function ManageOrganizationMembers() {
   const hasPermissionToInvite = hasPermission("invite_user_to_organization");
 
   // Calculate total pages
-  const totalPages = membersData
-    ? Math.ceil(membersData.total_count / membersData.per_page)
-    : 0;
+  const totalPages =
+    totalCount !== undefined ? Math.ceil(totalCount / limit) : 0;
 
   const handleRoleSelectionClick = (
     member: OrganizationMember,
@@ -170,10 +176,9 @@ function ManageOrganizationMembers() {
       <div className="rounded-xl border border-org-border bg-org-background table-box-shadow flex-1 overflow-y-auto custom-scrollbar">
         <div className="flex items-center justify-between pl-6 pr-6 text-[11px] text-white font-medium leading-4 border-b border-org-divider w-full h-9">
           <span>{t(I18nKey.ORG$ALL_ORGANIZATION_MEMBERS)}</span>
-          {membersData && (
+          {totalCount !== undefined && (
             <span className="text-tertiary-alt">
-              {membersData.total_count}{" "}
-              {membersData.total_count === 1 ? "member" : "members"}
+              {totalCount} {totalCount === 1 ? "member" : "members"}
             </span>
           )}
         </div>

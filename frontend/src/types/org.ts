@@ -48,7 +48,6 @@ export interface OrganizationMember {
 
 export interface OrganizationMembersPage {
   items: OrganizationMember[];
-  total_count: number;
   current_page: number;
   per_page: number;
 }

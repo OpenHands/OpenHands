@@ -565,6 +565,10 @@ describe("Manage Organization Members Route", () => {
         organizationService,
         "getOrganizationMembers",
       );
+      const getOrganizationMembersCountSpy = vi.spyOn(
+        organizationService,
+        "getOrganizationMembersCount",
+      );
 
       getOrganizationMembersSpy.mockResolvedValue({
         items: [
@@ -581,10 +585,10 @@ describe("Manage Organization Members Route", () => {
             status: "invited",
           },
         ],
-        total_count: 1,
         current_page: 1,
         per_page: 10,
       });
+      getOrganizationMembersCountSpy.mockResolvedValue(1);
 
       await setupInviteTest();
 

@@ -314,16 +314,39 @@ export const ORG_HANDLERS = [
       );
     }
 
-    const totalCount = members.length;
     const paginatedMembers = members.slice(offset, offset + limit);
     const currentPage = Math.floor(offset / limit) + 1;
 
     return HttpResponse.json({
       items: paginatedMembers,
-      total_count: totalCount,
       current_page: currentPage,
       per_page: limit,
     });
+  }),
+
+  http.get("/api/organizations/:orgId/members/count", ({ params, request }) => {
+    const orgId = params.orgId?.toString();
+    if (!orgId || !ORGS_AND_MEMBERS[orgId]) {
+      return HttpResponse.json(
+        { error: "Organization not found" },
+        { status: 404 },
+      );
+    }
+
+    // Parse query parameters
+    const url = new URL(request.url);
+    const emailFilter = url.searchParams.get("email");
+
+    let members = ORGS_AND_MEMBERS[orgId];
+
+    // Apply email filter if provided
+    if (emailFilter) {
+      members = members.filter((member) =>
+        member.email.toLowerCase().includes(emailFilter.toLowerCase()),
+      );
+    }
+
+    return HttpResponse.json(members.length);
   }),
 
   http.get("/api/organizations", () => {

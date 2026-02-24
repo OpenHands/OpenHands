@@ -80,6 +80,29 @@ export const organizationService = {
     return data;
   },
 
+  getOrganizationMembersCount: async ({
+    orgId,
+    email,
+  }: {
+    orgId: string;
+    email?: string;
+  }) => {
+    const params = new URLSearchParams();
+
+    if (email) {
+      params.set("email", email);
+    }
+
+    const queryString = params.toString();
+    const url = queryString
+      ? `/api/organizations/${orgId}/members/count?${queryString}`
+      : `/api/organizations/${orgId}/members/count`;
+
+    const { data } = await openHands.get<number>(url);
+
+    return data;
+  },
+
   getOrganizationPaymentInfo: async ({ orgId }: { orgId: string }) => {
     const { data } = await openHands.get<{
       cardNumber: string;
