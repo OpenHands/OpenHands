@@ -9,7 +9,10 @@ import {
 } from "vitest";
 import { screen, waitFor, render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMockAgentErrorEvent } from "#/mocks/mock-ws-helpers";
+import {
+  createMockAgentErrorEvent,
+  createMockConversationErrorEvent,
+} from "#/mocks/mock-ws-helpers";
 import { ConversationWebSocketProvider } from "#/contexts/conversation-websocket-context";
 import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { ConnectionStatusComponent } from "./helpers/websocket-test-components";
@@ -228,6 +231,36 @@ describe("PostHog Analytics Tracking", () => {
           conversationId: "test-conversation-123",
         }),
       );
+    });
+
+    it("should track credit_limit_reached when ConversationErrorEvent contains budget error", async () => {
+      const mockBudgetConversationError = createMockConversationErrorEvent({
+        detail:
+          "Budget has been exceeded! Current cost: 18.51, Max budget: 18.24",
+      });
+
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.send(JSON.stringify(mockBudgetConversationError));
+        }),
+      );
+
+      renderWithProviders(<ConnectionStatusComponent />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "OPEN",
+        );
+      });
+
+      await waitFor(() => {
+        expect(mockTrackCreditLimitReached).toHaveBeenCalledWith(
+          expect.objectContaining({
+            conversationId: "test-conversation-123",
+          }),
+        );
+      });
     });
   });
 });

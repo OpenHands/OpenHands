@@ -24,6 +24,7 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 )
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
+from openhands.app_server.user.specifiy_user_context import ADMIN
 
 
 class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
@@ -63,6 +64,12 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         Raises:
             AuthError: If no user_id is available (secure default: deny access)
         """
+        # For internal operations such as getting a conversation by session_api_key
+        # we need a mode that does not have filtering. The dependency `as_admin()`
+        # is used to enable it
+        if self.user_context == ADMIN:
+            return query
+
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"

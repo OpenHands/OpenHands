@@ -4,10 +4,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ApiKey } from "#/api/api-keys";
-import {
-  displayErrorToast,
-  displaySuccessToast,
-} from "#/utils/custom-toast-handlers";
+import { mutateWithToast } from "#/utils/mutate-with-toast";
 import { ApiKeyModalBase } from "./api-key-modal-base";
 import { useDeleteApiKey } from "#/hooks/mutation/use-delete-api-key";
 
@@ -28,12 +25,13 @@ export function DeleteApiKeyModal({
   const handleDeleteKey = async () => {
     if (!keyToDelete) return;
 
-    try {
-      await deleteApiKeyMutation.mutateAsync(keyToDelete.id);
-      displaySuccessToast(t(I18nKey.SETTINGS$API_KEY_DELETED));
+    const result = await mutateWithToast(deleteApiKeyMutation, keyToDelete.id, {
+      success: t(I18nKey.SETTINGS$API_KEY_DELETED),
+      error: t(I18nKey.ERROR$GENERIC),
+    }).catch(() => null);
+
+    if (result !== null) {
       onClose();
-    } catch {
-      displayErrorToast(t(I18nKey.ERROR$GENERIC));
     }
   };
 

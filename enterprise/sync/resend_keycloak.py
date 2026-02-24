@@ -96,7 +96,7 @@ class ResendAPIError(ResendSyncError):
 EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 
 
-def is_valid_email(email: str) -> bool:
+def is_valid_email(email: Optional[str]) -> bool:
     """Validate an email address format.
 
     This uses a regex pattern that matches most valid email addresses
@@ -104,10 +104,10 @@ def is_valid_email(email: str) -> bool:
     does not accept (e.g., exclamation marks).
 
     Args:
-        email: The email address to validate.
+        email: The email address to validate, or None.
 
     Returns:
-        True if the email is valid, False otherwise.
+        True if the email is valid, False otherwise (including for None).
     """
     if not email:
         return False
@@ -251,6 +251,15 @@ def add_contact_to_resend(
         raise
 
 
+@retry(
+    stop=stop_after_attempt(MAX_RETRIES),
+    wait=wait_exponential(
+        multiplier=INITIAL_BACKOFF_SECONDS,
+        max=MAX_BACKOFF_SECONDS,
+        exp_base=BACKOFF_FACTOR,
+    ),
+    retry=retry_if_exception_type(ResendError),
+)
 def send_welcome_email(
     email: str,
     first_name: Optional[str] = None,
@@ -267,7 +276,7 @@ def send_welcome_email(
         The API response.
 
     Raises:
-        ResendError: If the API call fails.
+        ResendError: If the API call fails after retries.
     """
     try:
         # Prepare the recipient name
