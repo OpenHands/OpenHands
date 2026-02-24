@@ -62,7 +62,7 @@ dependencies = [
   "pathspec>=0.12.1",
   "pexpect",
   "pg8000>=1.31.5",
-  "pillow>=11.3",
+  "pillow>=12.1.1",
   "playwright>=1.55",
   "poetry>=2.1.2",
   "prompt-toolkit>=3.0.50",
@@ -220,7 +220,7 @@ bashlex = "^0.18"
 
 # Explicitly pinned packages for latest versions
 pypdf = "^6.0.0"
-pillow = "^11.3.0"
+pillow = "^12.1.1"
 starlette = "^0.48.0"
 urllib3 = "^2.6.3"
 requests = "^2.32.5"
