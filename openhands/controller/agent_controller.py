@@ -343,9 +343,7 @@ class AgentController:
             elif isinstance(e, InternalServerError):
                 runtime_status = RuntimeStatus.ERROR_LLM_INTERNAL_SERVER_ERROR
                 self.state.last_error = runtime_status.value
-            elif isinstance(e, BadRequestError) and (
-                'ExceededBudget' in str(e) or 'Budget has been exceeded' in str(e)
-            ):
+            elif isinstance(e, BadRequestError) and 'ExceededBudget' in str(e):
                 runtime_status = RuntimeStatus.ERROR_LLM_OUT_OF_CREDITS
                 self.state.last_error = runtime_status.value
             elif isinstance(e, ContentPolicyViolationError) or (
