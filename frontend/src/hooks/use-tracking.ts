@@ -99,6 +99,12 @@ export const useTracking = () => {
     });
   };
 
+  const trackAddTeamMembersButtonClick = () => {
+    posthog.capture("exp_add_team_members", {
+      ...commonProperties,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -109,5 +115,6 @@ export const useTracking = () => {
     trackUserSignupCompleted,
     trackCreditsPurchased,
     trackCreditLimitReached,
+    trackAddTeamMembersButtonClick,
   };
 };

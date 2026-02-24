@@ -5,7 +5,7 @@ Store class for managing organization-member relationships.
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 from storage.database import a_session_maker, session_maker
 from storage.org_member import OrgMember
@@ -184,12 +184,46 @@ class OrgMemberStore:
         return kwargs
 
     @staticmethod
+    async def get_org_members_count(
+        org_id: UUID,
+        email_filter: str | None = None,
+    ) -> int:
+        """Get total count of organization members, optionally filtered by email.
+
+        Args:
+            org_id: Organization UUID.
+            email_filter: Optional case-insensitive partial email match.
+
+        Returns:
+            Total count of matching members.
+        """
+        async with a_session_maker() as session:
+            query = select(func.count(OrgMember.user_id)).filter(
+                OrgMember.org_id == org_id
+            )
+
+            if email_filter:
+                query = query.join(User, User.id == OrgMember.user_id).filter(
+                    User.email.ilike(f'%{email_filter}%')
+                )
+
+            result = await session.execute(query)
+            return result.scalar() or 0
+
+    @staticmethod
     async def get_org_members_paginated(
         org_id: UUID,
         offset: int = 0,
         limit: int = 100,
+        email_filter: str | None = None,
     ) -> tuple[list[OrgMember], bool]:
         """Get paginated list of organization members with user and role info.
+
+        Args:
+            org_id: Organization UUID.
+            offset: Number of records to skip.
+            limit: Maximum number of records to return.
+            email_filter: Optional case-insensitive partial email match.
 
         Returns:
             Tuple of (members_list, has_more) where has_more indicates if there are more results.
@@ -200,13 +234,18 @@ class OrgMemberStore:
             query = (
                 select(OrgMember)
                 .options(joinedload(OrgMember.user), joinedload(OrgMember.role))
+                .join(User, User.id == OrgMember.user_id)
                 .filter(OrgMember.org_id == org_id)
-                .order_by(OrgMember.user_id)
-                .offset(offset)
-                .limit(limit + 1)
             )
+
+            # Apply email filter if provided
+            if email_filter:
+                query = query.filter(User.email.ilike(f'%{email_filter}%'))
+
+            query = query.order_by(OrgMember.user_id).offset(offset).limit(limit + 1)
+
             result = await session.execute(query)
-            members = list(result.scalars().all())
+            members = list(result.unique().scalars().all())
 
             # Check if there are more results
             has_more = len(members) > limit
