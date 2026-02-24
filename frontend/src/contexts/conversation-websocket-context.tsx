@@ -358,7 +358,14 @@ export function ConversationWebSocketProvider({
               },
               posthog,
             });
-            setErrorMessage(event.detail);
+            if (isBudgetOrCreditError(event.detail)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+              trackCreditLimitReached({
+                conversationId: conversationId || "unknown",
+              });
+            } else {
+              setErrorMessage(event.detail);
+            }
           } else {
             // Clear error message on any non-ConversationErrorEvent
             removeErrorMessage();
@@ -498,6 +505,31 @@ export function ConversationWebSocketProvider({
           };
           addEvent(eventWithPlanningFlag);
 
+          // Handle ConversationErrorEvent specifically - show error banner
+          // AgentErrorEvent errors are displayed inline in the chat, not as banners
+          if (isConversationErrorEvent(event)) {
+            trackError({
+              message: event.detail,
+              source: "planning_conversation",
+              metadata: {
+                eventId: event.id,
+                errorCode: event.code,
+              },
+              posthog,
+            });
+            if (isBudgetOrCreditError(event.detail)) {
+              setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+              trackCreditLimitReached({
+                conversationId: conversationId || "unknown",
+              });
+            } else {
+              setErrorMessage(event.detail);
+            }
+          } else {
+            // Clear error message on any non-ConversationErrorEvent
+            removeErrorMessage();
+          }
+
           // Handle AgentErrorEvent specifically
           if (isAgentErrorEvent(event)) {
             trackError({
@@ -513,6 +545,9 @@ export function ConversationWebSocketProvider({
             // Use friendly i18n message for budget/credit errors instead of raw error
             if (isBudgetOrCreditError(event.error)) {
               setErrorMessage(I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS);
+              trackCreditLimitReached({
+                conversationId: conversationId || "unknown",
+              });
             } else {
               setErrorMessage(event.error);
             }
@@ -609,15 +644,18 @@ export function ConversationWebSocketProvider({
       isLoadingHistoryPlanning,
       expectedEventCountPlanning,
       setErrorMessage,
+      removeErrorMessage,
       removeOptimisticUserMessage,
       queryClient,
       subConversations,
+      conversationId,
       setExecutionStatus,
       appendInput,
       appendOutput,
       readConversationFile,
       setPlanContent,
       updateMetricsFromStats,
+      trackCreditLimitReached,
       posthog,
     ],
   );
