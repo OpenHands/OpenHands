@@ -97,12 +97,6 @@ class OrgMemberService:
             except ValueError:
                 return False, 'invalid_page_id', None
 
-        # Get total count (with email filter applied)
-        total_count = await OrgMemberStore.get_org_members_count(
-            org_id=org_id,
-            email_filter=email_filter,
-        )
-
         # Call store to get paginated members
         members, _ = await OrgMemberStore.get_org_members_paginated(
             org_id=org_id,
@@ -137,10 +131,38 @@ class OrgMemberService:
             None,
             OrgMemberPage(
                 items=items,
-                total_count=total_count,
                 current_page=current_page,
                 per_page=limit,
             ),
+        )
+
+    @staticmethod
+    async def get_org_members_count(
+        org_id: UUID,
+        current_user_id: UUID,
+        email_filter: str | None = None,
+    ) -> int:
+        """Get count of organization members with authorization check.
+
+        Args:
+            org_id: Organization UUID.
+            current_user_id: Requesting user's UUID.
+            email_filter: Optional case-insensitive partial email match.
+
+        Returns:
+            int: Count of organization members matching the filter.
+
+        Raises:
+            OrgMemberNotFoundError: If requesting user is not a member of the organization.
+        """
+        # Verify current user is a member of the organization
+        requester_membership = OrgMemberStore.get_org_member(org_id, current_user_id)
+        if not requester_membership:
+            raise OrgMemberNotFoundError(str(org_id), str(current_user_id))
+
+        return await OrgMemberStore.get_org_members_count(
+            org_id=org_id,
+            email_filter=email_filter,
         )
 
     @staticmethod
