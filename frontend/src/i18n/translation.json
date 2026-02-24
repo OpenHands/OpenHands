@@ -11087,6 +11087,22 @@
     "de": "Feedback senden, bitte warten...",
     "uk": "Відправляємо відгук, будь ласка, почекайте..."
   },
+  "SETTINGS$NAV_ADD_TEAM_MEMBERS": {
+    "en": "Add Team Members",
+    "ja": "チームメンバーを追加",
+    "zh-CN": "添加团队成员",
+    "zh-TW": "新增團隊成員",
+    "ko-KR": "팀원 추가",
+    "no": "Legg til teammedlemmer",
+    "it": "Aggiungi membri del team",
+    "pt": "Adicionar membros da equipe",
+    "es": "Agregar miembros del equipo",
+    "ar": "إضافة أعضاء الفريق",
+    "fr": "Ajouter des membres de l'équipe",
+    "tr": "Takım üyeleri ekle",
+    "de": "Teammitglieder hinzufügen",
+    "uk": "Додати учасників команди"
+  },
   "SETTINGS$NAV_USER": {
     "en": "User",
     "ja": "ユーザー",
