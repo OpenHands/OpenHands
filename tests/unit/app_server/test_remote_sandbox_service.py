@@ -119,6 +119,7 @@ def create_stored_sandbox(
     user_id: str = 'test-user-123',
     spec_id: str = 'test-image:latest',
     created_at: datetime | None = None,
+    session_api_key_hash: str | None = None,
 ) -> StoredRemoteSandbox:
     """Helper function to create StoredRemoteSandbox for testing."""
     if created_at is None:
@@ -128,6 +129,7 @@ def create_stored_sandbox(
         id=sandbox_id,
         created_by_user_id=user_id,
         sandbox_spec_id=spec_id,
+        session_api_key_hash=session_api_key_hash,
         created_at=created_at,
     )
 
@@ -994,6 +996,133 @@ class TestErrorHandling:
         assert result is False
 
 
+class TestGetSandboxBySessionApiKey:
+    """Test cases for get_sandbox_by_session_api_key functionality."""
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_with_hash(
+        self, remote_sandbox_service
+    ):
+        """Test finding sandbox by session API key using stored hash."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Setup
+        session_api_key = 'test-session-key'
+        expected_hash = _hash_session_api_key(session_api_key)
+        stored_sandbox = create_stored_sandbox(session_api_key_hash=expected_hash)
+        runtime_data = create_runtime_data(session_api_key=session_api_key)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = stored_sandbox
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
+        )
+
+        # Verify
+        assert result is not None
+        assert result.id == 'test-sandbox-123'
+        assert result.session_api_key == session_api_key
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_not_found(
+        self, remote_sandbox_service
+    ):
+        """Test finding sandbox when no matching hash exists."""
+        # Setup
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_result.scalars.return_value.all.return_value = []
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            'unknown-key'
+        )
+
+        # Verify
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_fallback_backfills_hash(
+        self, remote_sandbox_service
+    ):
+        """Test fallback behavior with legacy sandbox (no hash) that backfills hash."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Setup
+        session_api_key = 'test-session-key'
+        stored_sandbox = create_stored_sandbox(
+            session_api_key_hash=None
+        )  # Legacy sandbox
+        runtime_data = create_runtime_data(session_api_key=session_api_key)
+
+        # First call returns None (no hash match), second returns legacy sandboxes
+        mock_result_no_match = MagicMock()
+        mock_result_no_match.scalar_one_or_none.return_value = None
+        mock_result_legacy = MagicMock()
+        mock_result_legacy.scalars.return_value.all.return_value = [stored_sandbox]
+
+        remote_sandbox_service.db_session.execute = AsyncMock(
+            side_effect=[mock_result_no_match, mock_result_legacy]
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
+        )
+
+        # Verify
+        assert result is not None
+        assert result.id == 'test-sandbox-123'
+        # Verify the hash was backfilled
+        expected_hash = _hash_session_api_key(session_api_key)
+        assert stored_sandbox.session_api_key_hash == expected_hash
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_runtime_error(
+        self, remote_sandbox_service
+    ):
+        """Test handling runtime error when getting sandbox."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Setup
+        session_api_key = 'test-session-key'
+        expected_hash = _hash_session_api_key(session_api_key)
+        stored_sandbox = create_stored_sandbox(session_api_key_hash=expected_hash)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = stored_sandbox
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=Exception('Runtime error')
+        )
+        remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
+
+        # Execute
+        result = await remote_sandbox_service.get_sandbox_by_session_api_key(
+            session_api_key
+        )
+
+        # Verify - should still return sandbox info, just with None runtime
+        assert result is not None
+        assert result.id == 'test-sandbox-123'
+        assert result.status == SandboxStatus.MISSING  # No runtime means MISSING
+
+
 class TestUtilityFunctions:
     """Test cases for utility functions."""
 
@@ -1010,6 +1139,27 @@ class TestUtilityFunctions:
         # Test HTTP URL
         result = _build_service_url('http://localhost:8000', 'work-1')
         assert result == 'http://work-1-localhost:8000'
+
+    def test_hash_session_api_key(self):
+        """Test _hash_session_api_key function."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        # Test that same input always produces same hash
+        key = 'test-session-api-key'
+        hash1 = _hash_session_api_key(key)
+        hash2 = _hash_session_api_key(key)
+        assert hash1 == hash2
+
+        # Test that different inputs produce different hashes
+        key2 = 'another-session-api-key'
+        hash3 = _hash_session_api_key(key2)
+        assert hash1 != hash3
+
+        # Test that hash is a 64-character hex string (SHA-256)
+        assert len(hash1) == 64
+        assert all(c in '0123456789abcdef' for c in hash1)
 
 
 class TestConstants:
