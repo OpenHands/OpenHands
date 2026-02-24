@@ -16910,5 +16910,21 @@
     "tr": "Aramanızla eşleşen üye bulunamadı",
     "de": "Keine Mitglieder entsprechen Ihrer Suche",
     "uk": "Жодний член не відповідає вашому пошуку"
+  },
+  "ORG$FAILED_TO_LOAD_MEMBERS": {
+    "en": "Failed to load members",
+    "ja": "メンバーの読み込みに失敗しました",
+    "zh-CN": "加载成员失败",
+    "zh-TW": "載入成員失敗",
+    "ko-KR": "멤버를 불러오지 못했습니다",
+    "no": "Kunne ikke laste medlemmer",
+    "it": "Impossibile caricare i membri",
+    "pt": "Falha ao carregar membros",
+    "es": "Error al cargar miembros",
+    "ar": "فشل تحميل الأعضاء",
+    "fr": "Échec du chargement des membres",
+    "tr": "Üyeler yüklenemedi",
+    "de": "Mitglieder konnten nicht geladen werden",
+    "uk": "Не вдалося завантажити членів"
   }
 }

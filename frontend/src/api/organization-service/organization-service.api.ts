@@ -93,12 +93,9 @@ export const organizationService = {
       params.set("email", email);
     }
 
-    const queryString = params.toString();
-    const url = queryString
-      ? `/api/organizations/${orgId}/members/count?${queryString}`
-      : `/api/organizations/${orgId}/members/count`;
-
-    const { data } = await openHands.get<number>(url);
+    const { data } = await openHands.get<number>(
+      `/api/organizations/${orgId}/members/count?${params.toString()}`,
+    );
 
     return data;
   },

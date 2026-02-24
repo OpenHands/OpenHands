@@ -47,15 +47,18 @@ function ManageOrganizationMembers() {
     data: membersData,
     isLoading,
     isFetching,
+    error: membersError,
   } = useOrganizationMembers({
     page,
     limit,
     email: debouncedEmailFilter,
   });
 
-  const { data: totalCount } = useOrganizationMembersCount({
+  const { data: totalCount, error: countError } = useOrganizationMembersCount({
     email: debouncedEmailFilter,
   });
+
+  const hasError = membersError || countError;
 
   const { data: user } = useMe();
   const { mutate: updateMemberRole, isPending: isUpdatingRole } =
@@ -189,31 +192,41 @@ function ManageOrganizationMembers() {
           </div>
         )}
 
-        {!isLoading && membersData?.items && membersData.items.length > 0 && (
-          <ul>
-            {membersData.items.map((member) => (
-              <li
-                key={member.user_id}
-                data-testid="member-item"
-                className="border-b border-org-divider last:border-none px-6"
-              >
-                <OrganizationMemberListItem
-                  email={member.email}
-                  role={member.role}
-                  status={member.status}
-                  hasPermissionToChangeRole={canAssignUserRole(member)}
-                  availableRolesToChangeTo={availableRolesToChangeTo}
-                  onRoleChange={(role) =>
-                    handleRoleSelectionClick(member, role)
-                  }
-                  onRemove={() => handleRemoveMember(member)}
-                />
-              </li>
-            ))}
-          </ul>
+        {!isLoading && hasError && (
+          <div className="flex items-center justify-center p-8 text-tertiary-alt">
+            {t(I18nKey.ORG$FAILED_TO_LOAD_MEMBERS)}
+          </div>
         )}
 
         {!isLoading &&
+          !hasError &&
+          membersData?.items &&
+          membersData.items.length > 0 && (
+            <ul>
+              {membersData.items.map((member) => (
+                <li
+                  key={member.user_id}
+                  data-testid="member-item"
+                  className="border-b border-org-divider last:border-none px-6"
+                >
+                  <OrganizationMemberListItem
+                    email={member.email}
+                    role={member.role}
+                    status={member.status}
+                    hasPermissionToChangeRole={canAssignUserRole(member)}
+                    availableRolesToChangeTo={availableRolesToChangeTo}
+                    onRoleChange={(role) =>
+                      handleRoleSelectionClick(member, role)
+                    }
+                    onRemove={() => handleRemoveMember(member)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+        {!isLoading &&
+          !hasError &&
           (!membersData?.items || membersData.items.length === 0) && (
             <div className="flex items-center justify-center p-8 text-tertiary-alt">
               {debouncedEmailFilter
