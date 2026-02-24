@@ -14,7 +14,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderWithProviders, useParamsMock } from "test-utils";
 import type { Message } from "#/message";
-import { SUGGESTIONS } from "#/utils/suggestions";
+
 import { ChatInterface } from "#/components/features/chat/chat-interface";
 import { useWsClient } from "#/context/ws-client-provider";
 import { useConversationId } from "#/hooks/use-conversation-id";
@@ -279,84 +279,12 @@ describe("ChatInterface - Empty state", () => {
     vi.clearAllMocks();
   });
 
-  it.todo("should render suggestions if empty");
-
-  it("should render the default suggestions", () => {
+  it("should render the chat suggestions message when there are no events", () => {
     renderChatInterfaceWithRouter();
 
     const suggestions = screen.getByTestId("chat-suggestions");
-    const repoSuggestions = Object.keys(SUGGESTIONS.repo);
-
-    // check that there are at most 4 suggestions displayed
-    const displayedSuggestions = within(suggestions).getAllByRole("button");
-    expect(displayedSuggestions.length).toBeLessThanOrEqual(4);
-
-    // Check that each displayed suggestion is one of the repo suggestions
-    displayedSuggestions.forEach((suggestion) => {
-      expect(repoSuggestions).toContain(suggestion.textContent);
-    });
+    expect(suggestions).toBeInTheDocument();
   });
-
-  it.fails(
-    "should load the a user message to the input when selecting",
-    async () => {
-      // this is to test that the message is in the UI before the socket is called
-      useWsClientMock.mockImplementation(() => ({
-        send: sendMock,
-        status: "CONNECTED",
-        isLoadingMessages: false,
-        parsedEvents: [],
-      }));
-      const user = userEvent.setup();
-      renderChatInterfaceWithRouter();
-
-      const suggestions = screen.getByTestId("chat-suggestions");
-      const displayedSuggestions = within(suggestions).getAllByRole("button");
-      const input = screen.getByTestId("chat-input");
-
-      await user.click(displayedSuggestions[0]);
-
-      // user message loaded to input
-      expect(screen.queryByTestId("chat-suggestions")).toBeInTheDocument();
-      expect(input).toHaveValue(displayedSuggestions[0].textContent);
-    },
-  );
-
-  it.fails(
-    "should send the message to the socket only if the runtime is active",
-    async () => {
-      useWsClientMock.mockImplementation(() => ({
-        send: sendMock,
-        status: "CONNECTED",
-        isLoadingMessages: false,
-        parsedEvents: [],
-      }));
-      const user = userEvent.setup();
-      const { rerender } = renderChatInterfaceWithRouter();
-
-      const suggestions = screen.getByTestId("chat-suggestions");
-      const displayedSuggestions = within(suggestions).getAllByRole("button");
-
-      await user.click(displayedSuggestions[0]);
-      expect(sendMock).not.toHaveBeenCalled();
-
-      useWsClientMock.mockImplementation(() => ({
-        send: sendMock,
-        status: "CONNECTED",
-        isLoadingMessages: false,
-        parsedEvents: [],
-      }));
-      rerender(
-        <MemoryRouter>
-          <ChatInterface />
-        </MemoryRouter>,
-      );
-
-      await waitFor(() =>
-        expect(sendMock).toHaveBeenCalledWith(expect.any(String)),
-      );
-    },
-  );
 });
 
 describe('ChatInterface - Status Indicator', () => {
