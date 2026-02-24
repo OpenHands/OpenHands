@@ -67,9 +67,17 @@ class OrgMemberService:
         org_id: UUID,
         current_user_id: UUID,
         page_id: str | None = None,
-        limit: int = 100,
+        limit: int = 10,
+        email_filter: str | None = None,
     ) -> tuple[bool, str | None, OrgMemberPage | None]:
         """Get organization members with authorization check.
+
+        Args:
+            org_id: Organization UUID.
+            current_user_id: Requesting user's UUID.
+            page_id: Offset encoded as string (e.g., "0", "10", "20").
+            limit: Items per page (default 10).
+            email_filter: Optional case-insensitive partial email match.
 
         Returns:
             Tuple of (success, error_code, data). If success is True, error_code is None.
@@ -90,8 +98,11 @@ class OrgMemberService:
                 return False, 'invalid_page_id', None
 
         # Call store to get paginated members
-        members, has_more = await OrgMemberStore.get_org_members_paginated(
-            org_id=org_id, offset=offset, limit=limit
+        members, _ = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id,
+            offset=offset,
+            limit=limit,
+            email_filter=email_filter,
         )
 
         # Transform data to response format
@@ -112,12 +123,47 @@ class OrgMemberService:
                 )
             )
 
-        # Calculate next_page_id
-        next_page_id = None
-        if has_more:
-            next_page_id = str(offset + limit)
+        # Calculate current page (1-indexed)
+        current_page = (offset // limit) + 1
 
-        return True, None, OrgMemberPage(items=items, next_page_id=next_page_id)
+        return (
+            True,
+            None,
+            OrgMemberPage(
+                items=items,
+                current_page=current_page,
+                per_page=limit,
+            ),
+        )
+
+    @staticmethod
+    async def get_org_members_count(
+        org_id: UUID,
+        current_user_id: UUID,
+        email_filter: str | None = None,
+    ) -> int:
+        """Get count of organization members with authorization check.
+
+        Args:
+            org_id: Organization UUID.
+            current_user_id: Requesting user's UUID.
+            email_filter: Optional case-insensitive partial email match.
+
+        Returns:
+            int: Count of organization members matching the filter.
+
+        Raises:
+            OrgMemberNotFoundError: If requesting user is not a member of the organization.
+        """
+        # Verify current user is a member of the organization
+        requester_membership = OrgMemberStore.get_org_member(org_id, current_user_id)
+        if not requester_membership:
+            raise OrgMemberNotFoundError(str(org_id), str(current_user_id))
+
+        return await OrgMemberStore.get_org_members_count(
+            org_id=org_id,
+            email_filter=email_filter,
+        )
 
     @staticmethod
     async def remove_org_member(

@@ -267,7 +267,8 @@ class OrgMemberPage(BaseModel):
     """Paginated response for organization members."""
 
     items: list[OrgMemberResponse]
-    next_page_id: str | None = None
+    current_page: int = 1
+    per_page: int = 10
 
 
 class OrgMemberUpdate(BaseModel):
