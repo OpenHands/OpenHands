@@ -78,7 +78,7 @@ dependencies = [
   "python-frontmatter>=1.1",
   "python-jose[cryptography]>=3.3",
   "python-json-logger>=3.2.1",
-  "python-multipart",
+  "python-multipart>=0.0.22",
   "python-pptx",
   "python-socketio==5.14",
   "pythonnet",
@@ -181,7 +181,7 @@ html2text = "*"
 deprecated = "*"
 pexpect = "*"
 jinja2 = "^3.1.6"
-python-multipart = "*"
+python-multipart = ">=0.0.22"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = "^0.12.1"
