@@ -7,7 +7,7 @@ services:
     container_name: openhands-app-${DATE:-}
     hostname: openhands-app
     environment:
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one/}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one}
       - CODESPACE_NAME=${CODESPACE_NAME:-}
       - GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN=${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}
       - AGENT_SERVER_IMAGE_REPOSITORY=${AGENT_SERVER_IMAGE_REPOSITORY:-ghcr.io/openhands/agent-server}
@@ -22,6 +22,7 @@ services:
       - LLM_MODEL=${LLM_MODEL:-anthropic/claude-opus-4-5-20251101}
       - LLM_BASE_URL=${LLM_BASE_URL:-}
       # --- Env vars forwarded into sandbox containers (OH_SANDBOX_FWD__ prefix is stripped) ---
+      - OH_SANDBOX_FWD__AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one}
       - OH_SANDBOX_FWD__BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
       - OH_SANDBOX_FWD__B1_AUTOMATION_HUB_EMAIL=${B1_AUTOMATION_HUB_EMAIL:-}
       - OH_SANDBOX_FWD__B1_AUTOMATION_HUB_PASSWORD=${B1_AUTOMATION_HUB_PASSWORD:-}
