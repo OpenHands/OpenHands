@@ -13,7 +13,8 @@ from unittest.mock import patch
 
 import jwt
 import pytest
-from jose import jwe
+from jwcrypto import jwe as jwcrypto_jwe
+from jwcrypto import jwk
 from pydantic import SecretStr
 
 from openhands.app_server.services.jwt_service import JwtService
@@ -257,16 +258,25 @@ class TestJwtService:
 
     def test_jwe_token_decryption_no_kid_header(self, jwt_service):
         """Test JWE token decryption fails when token has no kid header."""
-        # Create a JWE token without kid header using python-jose directly
+        # Create a JWE token without kid header using jwcrypto directly
         payload = {'user_id': '123'}
         # Create a proper 32-byte key for A256GCM
-        key = b'12345678901234567890123456789012'  # Exactly 32 bytes
+        key_bytes = b'12345678901234567890123456789012'  # Exactly 32 bytes
+        symmetric_key = jwk.JWK(kty='oct', k=jwk.base64url_encode(key_bytes))
 
-        token = jwe.encrypt(
-            json.dumps(payload), key, algorithm='dir', encryption='A256GCM'
+        # Create JWE token without kid in protected header
+        protected_header = {
+            'alg': 'dir',
+            'enc': 'A256GCM',
+        }
+        jwe_token = jwcrypto_jwe.JWE(
+            json.dumps(payload).encode('utf-8'),
+            recipient=symmetric_key,
+            protected=protected_header,
         )
+        token = jwe_token.serialize(compact=True)
 
-        with pytest.raises(ValueError, match='Invalid JWE token format'):
+        with pytest.raises(ValueError, match="Token does not contain 'kid' header"):
             jwt_service.decrypt_jwe_token(token)
 
     def test_jwe_token_decryption_wrong_key(self, jwt_service):

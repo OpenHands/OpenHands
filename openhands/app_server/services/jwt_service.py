@@ -6,8 +6,8 @@ from typing import Any, AsyncGenerator
 
 import jwt
 from fastapi import Request
-from jose import jwe
-from jose.constants import ALGORITHMS
+from jwcrypto import jwe as jwcrypto_jwe
+from jwcrypto import jwk
 from pydantic import BaseModel, PrivateAttr
 
 from openhands.agent_server.utils import utc_now
@@ -168,21 +168,21 @@ class JwtService:
         # Derive a 256-bit key using SHA256
         key_256 = hashlib.sha256(key_bytes).digest()
 
-        # Encrypt the payload (convert to JSON string first)
-        payload_json = json.dumps(jwt_payload)
-        encrypted_token = jwe.encrypt(
-            payload_json,
-            key_256,
-            algorithm=ALGORITHMS.DIR,
-            encryption=ALGORITHMS.A256GCM,
-            kid=key_id,
+        # Create JWK from symmetric key for jwcrypto
+        symmetric_key = jwk.JWK(kty='oct', k=jwk.base64url_encode(key_256))
+
+        # Create JWE token with jwcrypto
+        protected_header = {
+            'alg': 'dir',
+            'enc': 'A256GCM',
+            'kid': key_id,
+        }
+        jwe_token = jwcrypto_jwe.JWE(
+            json.dumps(jwt_payload).encode('utf-8'),
+            recipient=symmetric_key,
+            protected=protected_header,
         )
-        # Ensure we return a string
-        return (
-            encrypted_token.decode('utf-8')
-            if isinstance(encrypted_token, bytes)
-            else encrypted_token
-        )
+        return jwe_token.serialize(compact=True)
 
     def decrypt_jwe_token(
         self, token: str, key_id: str | None = None
@@ -204,10 +204,14 @@ class JwtService:
         if key_id is None:
             # Try to extract key_id from the token's header
             try:
-                header = jwe.get_unverified_header(token)
-                key_id = header.get('kid')
+                jwe_obj = jwcrypto_jwe.JWE()
+                jwe_obj.deserialize(token)
+                protected_header = json.loads(jwe_obj.objects['protected'])
+                key_id = protected_header.get('kid')
                 if not key_id:
                     raise ValueError("Token does not contain 'kid' header with key ID")
+            except ValueError:
+                raise
             except Exception:
                 raise ValueError('Invalid JWE token format')
 
@@ -221,10 +225,16 @@ class JwtService:
         key_256 = hashlib.sha256(key_bytes).digest()
 
         try:
-            payload_json = jwe.decrypt(token, key_256)
-            assert payload_json is not None
+            # Create JWK from symmetric key for jwcrypto
+            symmetric_key = jwk.JWK(kty='oct', k=jwk.base64url_encode(key_256))
+
+            # Decrypt the JWE token
+            jwe_obj = jwcrypto_jwe.JWE()
+            jwe_obj.deserialize(token)
+            jwe_obj.decrypt(symmetric_key)
+
             # Parse the JSON string back to dictionary
-            payload = json.loads(payload_json)
+            payload = json.loads(jwe_obj.payload.decode('utf-8'))
             return payload
         except Exception as e:
             raise Exception(f'Token decryption failed: {str(e)}')
