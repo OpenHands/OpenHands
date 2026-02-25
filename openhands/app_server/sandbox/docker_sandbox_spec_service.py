@@ -19,6 +19,7 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecServiceInjector,
     get_agent_server_env,
     get_agent_server_image,
+    get_forwarded_env,
 )
 from openhands.app_server.services.injector import InjectorState
 
@@ -34,31 +35,6 @@ def get_docker_client() -> docker.DockerClient:
 
 
 _SANDBOX_WORKING_DIR = '/workspace/project'
-
-
-def _get_sandbox_env() -> dict[str, str]:
-    """Build environment variables for sandbox containers.
-
-    Returns a dict containing static config values plus any secrets that are
-    set in the host environment.
-    """
-    env: dict[str, str] = {
-        'COREPACK_ENABLE_DOWNLOAD_PROMPT': '0',
-        'AUTHENTICATION_SERVER_TYPE': 'remote',
-        'DATABASE_SERVER_TYPE': 'neon',
-    }
-
-    # Secrets — only forwarded when set in the host environment.
-    for key in (
-        'BETTER_AUTH_SECRET',
-        'B1_AUTOMATION_HUB_EMAIL',
-        'B1_AUTOMATION_HUB_PASSWORD',
-    ):
-        value = os.getenv(key)
-        if value:
-            env[key] = value
-
-    return env
 
 
 def get_default_sandbox_specs():
@@ -81,7 +57,10 @@ def get_default_sandbox_specs():
                 'YARN_CACHE_FOLDER': '/opt/package-cache/yarn',
                 'NPM_CONFIG_CACHE': '/opt/package-cache/npm',
                 'PIP_CACHE_DIR': '/opt/package-cache/pip',
-                **_get_sandbox_env(),
+                'COREPACK_ENABLE_DOWNLOAD_PROMPT': '0',
+                'AUTHENTICATION_SERVER_TYPE': 'remote',
+                'DATABASE_SERVER_TYPE': 'neon',
+                **get_forwarded_env(),
                 **get_agent_server_env(),
             },
             working_dir=_SANDBOX_WORKING_DIR,

@@ -69,6 +69,26 @@ def get_agent_server_image() -> str:
     return AGENT_SERVER_IMAGE
 
 
+_SANDBOX_FWD_PREFIX = 'OH_SANDBOX_FWD__'
+
+
+def get_forwarded_env() -> dict[str, str]:
+    """Get host environment variables to forward to sandbox containers.
+
+    Any host env var whose name starts with ``OH_SANDBOX_FWD__`` is forwarded
+    into every sandbox container with the prefix stripped.  For example,
+    ``OH_SANDBOX_FWD__OPENAI_API_KEY=sk-...`` becomes ``OPENAI_API_KEY=sk-...``
+    inside the sandbox.
+
+    Only includes variables that are actually set (non-empty).
+    """
+    env: dict[str, str] = {}
+    for key, value in os.environ.items():
+        if key.startswith(_SANDBOX_FWD_PREFIX) and value:
+            env[key[len(_SANDBOX_FWD_PREFIX) :]] = value
+    return env
+
+
 def get_agent_server_env() -> dict[str, str]:
     """Get environment variables to be injected into agent server sandbox environments.
 

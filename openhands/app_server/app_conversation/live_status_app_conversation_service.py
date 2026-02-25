@@ -3,11 +3,12 @@ import json
 import logging
 import os
 import tempfile
+import time
 import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, ClassVar, Sequence
+from typing import Any, AsyncGenerator, Sequence
 from uuid import UUID, uuid4
 
 import httpx
@@ -245,6 +246,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         _logger.info(
             f'Starting conversation: id={request.conversation_id.hex}, repo={request.selected_repository}'
         )
+        startup_start_time = time.monotonic()
 
         # Create and yield the start task
         user_id = await self.user_context.get_user_id()
@@ -403,6 +405,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 user.security_analyzer,
                 self.httpx_client,
             )
+
+            # Log how long it took for the conversation to start
+            duration = time.monotonic() - startup_start_time
+            duration_msg = f'Conversation ready in {duration:.1f}s'
+            _logger.info(f'{duration_msg}: id={request.conversation_id.hex}')
+            await self._log_to_sandbox(remote_workspace, duration_msg)
 
             # Update the start task
             task.status = AppConversationStartTaskStatus.READY
@@ -727,32 +735,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
 
-    # Environment variables to forward from the app server process to every
-    # sandbox container.  These are picked up from ``os.environ`` as a
-    # fallback when the user has not configured them as custom secrets.
-    _FORWARDED_ENV_VARS: ClassVar[list[str]] = [
-        'OPENAI_API_KEY',
-    ]
-
     async def _get_secrets_env_vars(self) -> dict[str, str] | None:
         """Collect user secrets as plain env-var key/value pairs.
 
         Returns a dict suitable for injecting into the sandbox container
         environment, or ``None`` if there are no secrets.  Also resolves
-        ``GITHUB_USER`` from the GitHub token when available, and forwards
-        well-known API-key env vars from the host process when they are not
-        already present in user secrets.
+        ``GITHUB_USER`` from the GitHub token when available.
         """
         env: dict[str, str] = {}
 
-        # 1. Forward well-known env vars from the host process first so that
-        #    user secrets can override them below.
-        for var in self._FORWARDED_ENV_VARS:
-            value = os.environ.get(var)
-            if value:
-                env[var] = value
-
-        # 2. Layer user-configured secrets on top (they take precedence).
+        # Layer user-configured secrets on top.
         secrets = await self.user_context.get_secrets()
         if secrets:
             for name, source in secrets.items():

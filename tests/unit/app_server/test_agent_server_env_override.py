@@ -26,6 +26,7 @@ from openhands.app_server.sandbox.remote_sandbox_spec_service import (
 )
 from openhands.app_server.sandbox.sandbox_spec_service import (
     get_agent_server_env,
+    get_forwarded_env,
 )
 
 
@@ -243,9 +244,14 @@ class TestDockerSandboxSpecEnvironmentOverride:
                 'OH_CONVERSATIONS_PATH',
                 'OH_BASH_EVENTS_DIR',
                 'PYTHONUNBUFFERED',
+                'LOG_LEVEL',
                 'ENV_LOG_LEVEL',
+                'USER',
                 'WORKSPACE_ROOT',
                 'EXTRA_PATH_PREFIX',
+                'YARN_CACHE_FOLDER',
+                'NPM_CONFIG_CACHE',
+                'PIP_CACHE_DIR',
                 'COREPACK_ENABLE_DOWNLOAD_PROMPT',
                 'AUTHENTICATION_SERVER_TYPE',
                 'DATABASE_SERVER_TYPE',
@@ -259,13 +265,62 @@ class TestDockerSandboxSpecEnvironmentOverride:
             assert set(spec.initial_env.keys()) == expected_defaults
 
 
-class TestSandboxEnvVars:
-    """Test _get_sandbox_env() behavior for static vars and secrets."""
+class TestForwardedEnvVars:
+    """Test get_forwarded_env() behavior with the OH_SANDBOX_FWD__ prefix."""
 
-    def test_secrets_included_when_set(self):
-        """Test that secrets are forwarded into sandbox env when present."""
+    def test_prefix_stripped_and_forwarded(self):
+        """Test that OH_SANDBOX_FWD__ prefix is stripped when forwarding."""
         env_vars = {
-            'BETTER_AUTH_SECRET': 'secret123',
+            'OH_SANDBOX_FWD__BETTER_AUTH_SECRET': 'secret123',
+            'OH_SANDBOX_FWD__OPENAI_API_KEY': 'sk-test',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_forwarded_env()
+
+            assert result == {
+                'BETTER_AUTH_SECRET': 'secret123',
+                'OPENAI_API_KEY': 'sk-test',
+            }
+
+    def test_no_forwarded_vars(self):
+        """Test that an empty dict is returned when no prefixed vars are set."""
+        with patch.dict(os.environ, {}, clear=True):
+            result = get_forwarded_env()
+
+            assert result == {}
+
+    def test_non_prefixed_vars_ignored(self):
+        """Test that env vars without the prefix are not forwarded."""
+        env_vars = {
+            'BETTER_AUTH_SECRET': 'should-not-appear',
+            'OPENAI_API_KEY': 'should-not-appear',
+            'OH_SANDBOX_FWD__CUSTOM': 'forwarded',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_forwarded_env()
+
+            assert result == {'CUSTOM': 'forwarded'}
+
+    def test_empty_values_excluded(self):
+        """Test that empty string values are not forwarded."""
+        env_vars = {
+            'OH_SANDBOX_FWD__EMPTY': '',
+            'OH_SANDBOX_FWD__PRESENT': 'value',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_forwarded_env()
+
+            assert 'EMPTY' not in result
+            assert result['PRESENT'] == 'value'
+
+    def test_docker_specs_include_forwarded_env(self):
+        """Test that Docker sandbox specs include forwarded env vars."""
+        env_vars = {
+            'OH_SANDBOX_FWD__BETTER_AUTH_SECRET': 'secret123',
+            'OH_SANDBOX_FWD__OPENAI_API_KEY': 'sk-test',
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
@@ -273,14 +328,16 @@ class TestSandboxEnvVars:
             spec = specs[0]
 
             assert spec.initial_env['BETTER_AUTH_SECRET'] == 'secret123'
+            assert spec.initial_env['OPENAI_API_KEY'] == 'sk-test'
 
-    def test_secrets_excluded_when_absent(self):
-        """Test that secrets are omitted when not set in the environment."""
+    def test_docker_specs_exclude_absent_forwarded_env(self):
+        """Test that absent forwarded env vars are omitted from Docker specs."""
         with patch.dict(os.environ, {}, clear=True):
             specs = get_default_docker_sandbox_specs()
             spec = specs[0]
 
             assert 'BETTER_AUTH_SECRET' not in spec.initial_env
+            assert 'OPENAI_API_KEY' not in spec.initial_env
 
     def test_static_values_always_present(self):
         """Test that static config values are always set."""
