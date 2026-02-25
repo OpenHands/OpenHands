@@ -1646,10 +1646,10 @@ async def test_to_conversation_info_sandbox_id_none():
 @pytest.mark.asyncio
 async def test_get_conversation_info_v0_has_null_sandbox_id():
     """Test that _get_conversation_info returns null sandbox_id for V0 conversations."""
+    from openhands.server.data_models.agent_loop_info import AgentLoopInfo
     from openhands.server.routes.manage_conversations import (
         _get_conversation_info,
     )
-    from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 
     conversation_id = 'test-conversation-v0'
 
@@ -1684,10 +1684,10 @@ async def test_get_conversation_info_v0_has_null_sandbox_id():
 @pytest.mark.asyncio
 async def test_get_conversation_info_returns_all_fields():
     """Test that _get_conversation_info returns all expected fields for V0 conversations."""
+    from openhands.server.data_models.agent_loop_info import AgentLoopInfo
     from openhands.server.routes.manage_conversations import (
         _get_conversation_info,
     )
-    from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 
     conversation_id = 'test-conversation-full'
 
