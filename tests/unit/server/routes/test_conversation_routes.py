@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx
-from openhands.events import event
 import pytest
 from fastapi import status
 from fastapi.responses import JSONResponse
@@ -43,10 +42,10 @@ from openhands.server.routes.conversation import (
 from openhands.server.routes.manage_conversations import (
     _RESUME_GRACE_PERIOD,
     UpdateConversationRequest,
-    get_conversation,
     _get_conversation_info,
-    search_conversations,
     _to_conversation_info,
+    get_conversation,
+    search_conversations,
     update_conversation,
 )
 from openhands.server.session.conversation import ServerConversation
