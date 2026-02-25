@@ -423,7 +423,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             _logger.warning(
                 f'Error getting conversation status from sandbox {sandbox.id}',
                 exc_info=True,
-                stack_info=True,
             )
             return []
         except Exception:
