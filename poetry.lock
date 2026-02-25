@@ -11802,14 +11802,14 @@ unidecode = ["Unidecode (>=1.1.1)"]
 
 [[package]]
 name = "python-socketio"
-version = "5.13.0"
+version = "5.14.0"
 description = "Socket.IO server and client for Python"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "python_socketio-5.13.0-py3-none-any.whl", hash = "sha256:51f68d6499f2df8524668c24bcec13ba1414117cfb3a90115c559b601ab10caf"},
-    {file = "python_socketio-5.13.0.tar.gz", hash = "sha256:ac4e19a0302ae812e23b712ec8b6427ca0521f7c582d6abb096e36e24a263029"},
+    {file = "python_socketio-5.14.0-py3-none-any.whl", hash = "sha256:7de5ad8a55efc33e17897f6cf91d20168d3d259f98c38d38e2940af83136d6f8"},
+    {file = "python_socketio-5.14.0.tar.gz", hash = "sha256:d057737f658b3948392ff452a5c865c5ccc969859c37cf095a73393ce755f98e"},
 ]
 
 [package.dependencies]
@@ -14724,4 +14724,4 @@ third-party-runtimes = ["daytona", "e2b-code-interpreter", "modal", "runloop-api
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "2dd57221bad7f95e0c047155f6ccd98cd5af455114700b206941c8e2d5b8a213"
+content-hash = "be9c30f9eed031f0ca445fcdd24a550c00803883978c8e221f4a36ef0da5cbcd"
