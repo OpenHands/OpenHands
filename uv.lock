@@ -7589,7 +7589,7 @@ dependencies = [
     { name = "bidict" },
     { name = "python-engineio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/bf/bbc41facdb33a7f440a39f213e59202032106b42df4667a32ef4c9ffe604/python_socketio-5.14.0.tar.gz", hash = "sha256:d057737f658b3948392ff452a5c865c5ccc969859c37cf095a73393ce755f98e", size = 122099, upload-time = "2025-09-30T19:30:40.902Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/bf/bbc41facdb33a7f440a39f213e59202032106b42df4667a32ef4c9ffe604/python_socketio-5.14.0.tar.gz", hash = "sha256:d057737f658b3948392ff452a5c865c5ccc969859c37cf095a73393ce755f98e", size = 122099 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ee/8d/f41abde5846c456b33f25e7fa71d8b8ad78785bb812ef0f2393cda2caaf2/python_socketio-5.14.0-py3-none-any.whl", hash = "sha256:7de5ad8a55efc33e17897f6cf91d20168d3d259f98c38d38e2940af83136d6f8", size = 78438 },
 ]
