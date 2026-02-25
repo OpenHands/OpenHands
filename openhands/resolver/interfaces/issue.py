@@ -20,6 +20,7 @@ class Issue(BaseModel):
     @classmethod
     def body_must_not_be_none(cls, v: str | None) -> str:
         return v if v is not None else ''
+
     thread_comments: list[str] | None = None  # Added field for issue thread comments
     closing_issues: list[str] | None = None
     review_comments: list[str] | None = None
