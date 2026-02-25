@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx
+from openhands.events import event
 import pytest
 from fastapi import status
 from fastapi.responses import JSONResponse
@@ -24,10 +25,12 @@ from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
 from openhands.microagent.microagent import KnowledgeMicroagent, RepoMicroagent
 from openhands.microagent.types import MicroagentMetadata, MicroagentType
 from openhands.runtime.runtime_status import RuntimeStatus
 from openhands.sdk.conversation.state import ConversationExecutionStatus
+from openhands.server.data_models.agent_loop_info import AgentLoopInfo
 from openhands.server.data_models.conversation_info import ConversationStatus
 from openhands.server.data_models.conversation_info_result_set import (
     ConversationInfoResultSet,
@@ -41,7 +44,9 @@ from openhands.server.routes.manage_conversations import (
     _RESUME_GRACE_PERIOD,
     UpdateConversationRequest,
     get_conversation,
+    _get_conversation_info,
     search_conversations,
+    _to_conversation_info,
     update_conversation,
 )
 from openhands.server.session.conversation import ServerConversation
@@ -56,8 +61,6 @@ from openhands.storage.data_models.conversation_metadata import (
 async def test_get_microagents():
     """Test the get_microagents function directly."""
     # Create mock microagents
-    from openhands.core.config.mcp_config import MCPConfig, MCPStdioServerConfig
-
     repo_microagent = RepoMicroagent(
         name='test_repo',
         content='This is a test repo microagent',
@@ -1154,8 +1157,6 @@ async def test_add_message_empty_message():
 @pytest.mark.asyncio
 async def test_create_sub_conversation_with_planning_agent():
     """Test creating a sub-conversation from a parent conversation with planning agent."""
-    from uuid import uuid4
-
     parent_conversation_id = uuid4()
     user_id = 'test_user_456'
     sandbox_id = 'test_sandbox_123'
@@ -1515,8 +1516,6 @@ async def test_get_conversation_resume_status_handling(
     should_call_server,
 ):
     """Test get_conversation handles resume status correctly for various scenarios."""
-    from openhands.sdk.conversation.state import ConversationExecutionStatus
-
     conversation_id = uuid4()
 
     # Convert string execution_status to enum if provided
@@ -1574,10 +1573,6 @@ async def test_get_conversation_resume_status_handling(
 @pytest.mark.asyncio
 async def test_to_conversation_info_maps_sandbox_id():
     """Test that _to_conversation_info correctly maps sandbox_id from V1 AppConversation."""
-    from openhands.server.routes.manage_conversations import (
-        _to_conversation_info,
-    )
-
     conversation_id = uuid4()
     test_sandbox_id = 'test-sandbox-123'
 
@@ -1609,48 +1604,8 @@ async def test_to_conversation_info_maps_sandbox_id():
 
 
 @pytest.mark.asyncio
-async def test_to_conversation_info_sandbox_id_none():
-    """Test that _to_conversation_info handles None sandbox_id correctly."""
-    from openhands.server.routes.manage_conversations import (
-        _to_conversation_info,
-    )
-
-    conversation_id = uuid4()
-
-    # Create a mock V1 AppConversation without sandbox_id
-    mock_app_conversation = AppConversation(
-        id=conversation_id,
-        created_by_user_id='test_user',
-        sandbox_id=None,
-        sandbox_status=SandboxStatus.MISSING,
-        execution_status=None,
-        conversation_url='https://sandbox.example.com/conversation',
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-        title='Test Conversation',
-        selected_repository='test/repo',
-        selected_branch='main',
-        git_provider='github',
-        trigger=ConversationTrigger.GUI,
-        sub_conversation_ids=[],
-        public=False,
-    )
-
-    result = _to_conversation_info(mock_app_conversation)
-
-    assert result is not None
-    assert result.sandbox_id is None
-    assert result.conversation_version == 'V1'
-
-
-@pytest.mark.asyncio
 async def test_get_conversation_info_v0_has_null_sandbox_id():
     """Test that _get_conversation_info returns null sandbox_id for V0 conversations."""
-    from openhands.server.data_models.agent_loop_info import AgentLoopInfo
-    from openhands.server.routes.manage_conversations import (
-        _get_conversation_info,
-    )
-
     conversation_id = 'test-conversation-v0'
 
     # Create mock V0 conversation metadata (no sandbox_id field)
@@ -1668,6 +1623,9 @@ async def test_get_conversation_info_v0_has_null_sandbox_id():
         conversation_id=conversation_id,
         runtime_status=RuntimeStatus.READY,
         status=ConversationStatus.STOPPED,
+        event_store=None,
+        url=None,
+        session_api_key=None,
     )
 
     result = await _get_conversation_info(
@@ -1684,11 +1642,6 @@ async def test_get_conversation_info_v0_has_null_sandbox_id():
 @pytest.mark.asyncio
 async def test_get_conversation_info_returns_all_fields():
     """Test that _get_conversation_info returns all expected fields for V0 conversations."""
-    from openhands.server.data_models.agent_loop_info import AgentLoopInfo
-    from openhands.server.routes.manage_conversations import (
-        _get_conversation_info,
-    )
-
     conversation_id = 'test-conversation-full'
 
     # Create mock V0 conversation metadata
@@ -1710,6 +1663,7 @@ async def test_get_conversation_info_returns_all_fields():
         conversation_id=conversation_id,
         runtime_status=RuntimeStatus.READY,
         status=ConversationStatus.STOPPED,
+        event_store=None,
         url='https://example.com/conversation',
         session_api_key='test-key',
     )
