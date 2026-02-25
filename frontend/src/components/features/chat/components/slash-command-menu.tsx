@@ -5,14 +5,6 @@ import { Text } from "#/ui/typography";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
 
 /**
- * Format a skill name into a human-readable label.
- * e.g. "code-search" -> "Code search", "init" -> "Init"
- */
-function formatSkillName(name: string): string {
-  return name.replace(/[-_]/g, " ").replace(/^\w/, (c) => c.toUpperCase());
-}
-
-/**
  * Extract a short description from skill content.
  * Tries YAML frontmatter "description:" first, then falls back
  * to the first meaningful line after headers and frontmatter.
@@ -86,16 +78,11 @@ function SlashCommandMenuItem({
         onSelect(item);
       }}
     >
-      <div className="flex items-center gap-2">
-        <Text className="font-semibold">
-          {formatSkillName(item.skill.name)}
-        </Text>
-        <Text className="text-[#9ca3af]">{item.command}</Text>
-      </div>
+      <Text className="font-semibold">{item.command}</Text>
       {description && (
-        <div className="text-xs text-[#9ca3af] mt-0.5 truncate">
+        <Text className="text-xs text-[#9ca3af] mt-0.5 truncate block">
           {description}
-        </div>
+        </Text>
       )}
     </button>
   );

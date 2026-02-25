@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
 import { Skill } from "#/api/conversation-service/v1-conversation-service.types";
 import { Microagent } from "#/api/open-hands.types";
@@ -58,6 +58,15 @@ export const useSlashCommand = (
     );
   }, [slashItems, filterText]);
 
+  // Keep refs in sync so handleSlashKeyDown always reads the latest values,
+  // avoiding stale closures from React's batched state updates.
+  const isMenuOpenRef = useRef(isMenuOpen);
+  isMenuOpenRef.current = isMenuOpen;
+  const filteredItemsRef = useRef(filteredItems);
+  filteredItemsRef.current = filteredItems;
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
+
   // Reset selected index when the filter text changes
   useEffect(() => {
     setSelectedIndex(0);
@@ -68,8 +77,9 @@ export const useSlashCommand = (
     const element = chatInputRef.current;
     if (!element) return null;
 
-    // Trim to handle trailing newlines that contentEditable can produce
-    const text = (element.innerText || "").trim();
+    // Strip trailing newlines that contentEditable can produce, but preserve
+    // spaces so "/command " (after selection) won't re-trigger the menu.
+    const text = (element.innerText || "").replace(/[\n\r]+$/, "");
     // Only trigger slash menu when "/" is at the start of the input
     const match = text.match(/^\/(\S*)$/);
     if (match) return match[1];
@@ -118,27 +128,29 @@ export const useSlashCommand = (
     [chatInputRef],
   );
 
-  // Handle keyboard navigation in the menu
+  // Handle keyboard navigation in the menu.
+  // Uses refs to always read the latest state, avoiding stale closures.
   const handleSlashKeyDown = useCallback(
     (e: React.KeyboardEvent): boolean => {
-      if (!isMenuOpen || filteredItems.length === 0) return false;
+      const items = filteredItemsRef.current;
+      if (!isMenuOpenRef.current || items.length === 0) return false;
 
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
           setSelectedIndex((prev) =>
-            prev < filteredItems.length - 1 ? prev + 1 : 0,
+            prev < items.length - 1 ? prev + 1 : 0,
           );
           return true;
         case "ArrowUp":
           e.preventDefault();
           setSelectedIndex((prev) =>
-            prev > 0 ? prev - 1 : filteredItems.length - 1,
+            prev > 0 ? prev - 1 : items.length - 1,
           );
           return true;
         case "Enter":
         case "Tab": {
-          const item = filteredItems[selectedIndex];
+          const item = items[selectedIndexRef.current];
           if (!item) return false;
           e.preventDefault();
           selectItem(item);
@@ -152,7 +164,7 @@ export const useSlashCommand = (
           return false;
       }
     },
-    [isMenuOpen, filteredItems, selectedIndex, selectItem],
+    [selectItem],
   );
 
   const closeMenu = useCallback(() => setIsMenuOpen(false), []);

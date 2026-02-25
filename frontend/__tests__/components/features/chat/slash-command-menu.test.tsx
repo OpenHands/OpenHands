@@ -45,7 +45,7 @@ describe("SlashCommandMenu", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("renders all items", () => {
+  it("renders all items with slash commands as primary text", () => {
     renderWithProviders(
       <SlashCommandMenu
         items={defaultItems}
@@ -54,10 +54,9 @@ describe("SlashCommandMenu", () => {
       />,
     );
 
-    expect(screen.getByText("Code search")).toBeInTheDocument();
     expect(screen.getByText("/code-search")).toBeInTheDocument();
-    expect(screen.getByText("Random number")).toBeInTheDocument();
-    expect(screen.getByText("Init")).toBeInTheDocument();
+    expect(screen.getByText("/random-number")).toBeInTheDocument();
+    expect(screen.getByText("/init")).toBeInTheDocument();
   });
 
   it("marks the selected item with aria-selected", () => {
