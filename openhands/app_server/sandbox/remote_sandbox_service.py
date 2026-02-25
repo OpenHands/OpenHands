@@ -336,13 +336,17 @@ class RemoteSandboxService(SandboxService):
 
     async def get_sandbox(self, sandbox_id: str) -> Union[SandboxInfo, None]:
         """Get a single sandbox by checking its corresponding runtime."""
+        _logger.info(f'Getting sandbox with id: {sandbox_id}')
         stored_sandbox = await self._get_stored_sandbox(sandbox_id)
+        _logger.info(f'Got sandbox: {stored_sandbox}')
         if stored_sandbox is None:
             return None
 
         runtime = None
         try:
+            _logger.info(f'Getting runtime for sandbox id: {stored_sandbox.id}')
             runtime = await self._get_runtime(stored_sandbox.id)
+            _logger.info(f'Got runtime: {runtime}')
         except Exception:
             _logger.exception(
                 f'Error getting runtime: {stored_sandbox.id}', stack_info=True
