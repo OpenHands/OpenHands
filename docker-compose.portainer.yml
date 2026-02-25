@@ -34,6 +34,7 @@ services:
       - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-}
       - B1_AUTOMATION_HUB_EMAIL=${B1_AUTOMATION_HUB_EMAIL:-}
       - B1_AUTOMATION_HUB_PASSWORD=${B1_AUTOMATION_HUB_PASSWORD:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
 
       # --- Make sandbox containers visible in Portainer ---
       - 'OH_SANDBOX_CONTAINER_LABELS={"com.docker.compose.project": "${STACK}", "com.docker.compose.service": "agent-server"}'

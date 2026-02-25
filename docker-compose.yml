@@ -23,6 +23,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-}
       - B1_AUTOMATION_HUB_EMAIL=${B1_AUTOMATION_HUB_EMAIL:-}
       - B1_AUTOMATION_HUB_PASSWORD=${B1_AUTOMATION_HUB_PASSWORD:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     ports:
       - "3000:3000"
     extra_hosts:

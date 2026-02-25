@@ -7,7 +7,7 @@ import zipfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, Sequence
+from typing import Any, AsyncGenerator, ClassVar, Sequence
 from uuid import UUID, uuid4
 
 import httpx
@@ -727,31 +727,48 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
 
+    # Environment variables to forward from the app server process to every
+    # sandbox container.  These are picked up from ``os.environ`` as a
+    # fallback when the user has not configured them as custom secrets.
+    _FORWARDED_ENV_VARS: ClassVar[list[str]] = [
+        'OPENAI_API_KEY',
+    ]
+
     async def _get_secrets_env_vars(self) -> dict[str, str] | None:
         """Collect user secrets as plain env-var key/value pairs.
 
         Returns a dict suitable for injecting into the sandbox container
         environment, or ``None`` if there are no secrets.  Also resolves
-        ``GITHUB_USER`` from the GitHub token when available.
+        ``GITHUB_USER`` from the GitHub token when available, and forwards
+        well-known API-key env vars from the host process when they are not
+        already present in user secrets.
         """
-        secrets = await self.user_context.get_secrets()
-        if not secrets:
-            return None
         env: dict[str, str] = {}
-        for name, source in secrets.items():
-            try:
-                value = source.get_value()
-                if value:
-                    env[name] = value
-            except Exception:
-                pass
 
-        # Resolve GITHUB_USER from the GitHub token so sandbox scripts can
-        # reference it without an extra API call.
-        if 'GITHUB_USER' not in env:
-            github_user = await self._resolve_github_user(env)
-            if github_user:
-                env['GITHUB_USER'] = github_user
+        # 1. Forward well-known env vars from the host process first so that
+        #    user secrets can override them below.
+        for var in self._FORWARDED_ENV_VARS:
+            value = os.environ.get(var)
+            if value:
+                env[var] = value
+
+        # 2. Layer user-configured secrets on top (they take precedence).
+        secrets = await self.user_context.get_secrets()
+        if secrets:
+            for name, source in secrets.items():
+                try:
+                    value = source.get_value()
+                    if value:
+                        env[name] = value
+                except Exception:
+                    pass
+
+            # Resolve GITHUB_USER from the GitHub token so sandbox scripts can
+            # reference it without an extra API call.
+            if 'GITHUB_USER' not in env:
+                github_user = await self._resolve_github_user(env)
+                if github_user:
+                    env['GITHUB_USER'] = github_user
 
         return env or None
 

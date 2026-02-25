@@ -5,6 +5,7 @@ including initialization, configuration, and mounting to FastAPI applications.
 """
 
 import logging
+import os
 from typing import Any, Optional
 
 from anyio import get_cancelled_exc_class
@@ -148,7 +149,21 @@ class MCPProxyManager:
         """
         from urllib.parse import urlparse
 
-        tools = {t.name: t.model_dump() for t in stdio_servers}
+        # The MCP SDK only passes a limited safe subset of env vars (HOME, PATH,
+        # etc.) to stdio subprocesses.  Container-level env vars such as
+        # OPENAI_API_KEY are therefore invisible to MCP server processes unless
+        # they are explicitly listed in the server's ``env`` dict.  Merge the
+        # current process environment into each server config so that any env
+        # var injected into the sandbox container (via extra_env / secrets) is
+        # available to every MCP stdio subprocess.  Server-specific values take
+        # precedence over the inherited ones.
+        tools: dict[str, Any] = {}
+        for t in stdio_servers:
+            cfg = t.model_dump()
+            merged_env = os.environ.copy()
+            merged_env.update(cfg.get('env') or {})
+            cfg['env'] = merged_env
+            tools[t.name] = cfg
 
         # Add shttp servers to the config
         if shttp_servers:
