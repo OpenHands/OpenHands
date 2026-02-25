@@ -418,9 +418,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_info = [c for c in conversation_info if c]
             return conversation_info
         except httpx.HTTPStatusError as exc:
-            # The runtime API stops idle sandboxes all the time and they return a 503.
+            # The runtime API stops idle sandboxes all the time and they return a 404 or a 503.
             # This is normal and should not be logged.
-            if not exc.response or exc.response.status_code != 503:
+            if not exc.response or exc.response.status_code not in (404, 503):
                 _logger.exception(
                     f'Error getting conversation status from sandbox {sandbox.id}',
                     exc_info=True,
