@@ -431,6 +431,7 @@ LOQUACIOUS_LOGGERS = [
     'socketio.client',
     'socketio.server',
     'aiosqlite',
+    'alembic.runtime.plugins',
     'alembic.runtime.plugins.setup',
 ]
 
