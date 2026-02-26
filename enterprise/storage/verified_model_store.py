@@ -89,7 +89,9 @@ class VerifiedModelStore:
         .. deprecated::
             Use :meth:`search_models` instead for SQL-level filtering.
         """
-        result = VerifiedModelStore.search_models(provider=provider, enabled_only=True, limit=10**9)
+        result = VerifiedModelStore.search_models(
+            provider=provider, enabled_only=True, limit=10**9
+        )
         return result.items
 
     @staticmethod
