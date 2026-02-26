@@ -1,6 +1,6 @@
 # Plugin Launch Flow
 
-This document describes how plugins are launched in OpenHands, from the plugin directory through to agent execution.
+This document describes how plugins are launched in OpenHands Saas / Eneterprise, from the plugin directory through to agent execution.
 
 ## Architecture Overview
 
