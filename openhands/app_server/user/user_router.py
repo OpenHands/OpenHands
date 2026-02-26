@@ -7,6 +7,8 @@ from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.server.dependencies import get_dependencies
 
+# We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
+# is protected. The actual protection is provided by SetAuthCookieMiddleware
 router = APIRouter(prefix='/users', tags=['User'], dependencies=get_dependencies())
 user_dependency = depends_user_context()
 

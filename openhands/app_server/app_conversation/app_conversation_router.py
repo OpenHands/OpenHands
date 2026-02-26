@@ -75,6 +75,8 @@ from openhands.app_server.utils.docker_utils import (
 from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
+# We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
+# is protected. The actual protection is provided by SetAuthCookieMiddleware
 router = APIRouter(
     prefix='/app-conversations', tags=['Conversations'], dependencies=get_dependencies()
 )

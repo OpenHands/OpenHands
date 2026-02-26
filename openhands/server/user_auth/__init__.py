@@ -28,6 +28,9 @@ async def get_user_id(
         APIKeyHeader(name='X-Access-Token', auto_error=False)
     ),
 ) -> str | None:
+    """Get the current user_id. Used for dependency injection - the
+    api key header is used here to signal the requirement in OpenAPI
+    docs"""
     user_auth = await get_user_auth(request)
     user_id = await user_auth.get_user_id()
     return user_id

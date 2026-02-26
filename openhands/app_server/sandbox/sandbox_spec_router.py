@@ -14,6 +14,10 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
 )
 from openhands.server.dependencies import get_dependencies
 
+# We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
+# is protected. The actual protection is provided by SetAuthCookieMiddleware
+# Sandboxes specs share a single immutable list for the server right now, but that is likely to
+# change in the future
 router = APIRouter(
     prefix='/sandbox-specs', tags=['Sandbox'], dependencies=get_dependencies()
 )
