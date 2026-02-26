@@ -115,6 +115,12 @@ class Settings(BaseModel):
         data['secret_store'] = secret_store
         return data
 
+    @field_validator('llm_base_url')
+    @classmethod
+    def validate_llm_base_url_not_endpoint(cls, v: str | None) -> str | None:
+        """Delegate to LLMConfig's base_url validator."""
+        return LLMConfig.validate_base_url_not_endpoint(v)
+
     @field_validator('condenser_max_size')
     @classmethod
     def validate_condenser_max_size(cls, v: int | None) -> int | None:

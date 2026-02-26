@@ -1,8 +1,10 @@
 import pathlib
 
 import pytest
+from pydantic import ValidationError
 
 from openhands.core.config import OpenHandsConfig
+from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.utils import load_from_toml
 
 
@@ -254,3 +256,79 @@ api_key = "test-api-key"
     non_azure_llm = default_config.get_llm_config('llm')
     assert non_azure_llm.model == 'anthropic/claude-3-sonnet'
     assert non_azure_llm.api_version is None
+
+
+# ---------------------------------------------------------------------------
+# base_url validation tests (issue #13079)
+# ---------------------------------------------------------------------------
+
+
+class TestBaseUrlValidation:
+    """Test that base_url rejects API endpoint paths."""
+
+    @pytest.mark.parametrize(
+        'bad_url, suffix',
+        [
+            ('https://proxy.example.com/v1/chat/completions', '/chat/completions'),
+            ('https://proxy.example.com/chat/completions', '/chat/completions'),
+            ('https://proxy.example.com/v1/completions', '/completions'),
+            ('https://proxy.example.com/v1/messages', '/messages'),
+            ('https://proxy.example.com/v1/embeddings', '/embeddings'),
+            # Trailing slash should still be caught
+            ('https://proxy.example.com/v1/chat/completions/', '/chat/completions'),
+            # Case-insensitive
+            ('https://proxy.example.com/V1/Chat/Completions', '/chat/completions'),
+        ],
+    )
+    def test_rejects_endpoint_paths(self, bad_url: str, suffix: str):
+        with pytest.raises(
+            ValidationError, match='should not include the API endpoint path'
+        ):
+            LLMConfig(model='test-model', base_url=bad_url)
+
+    @pytest.mark.parametrize(
+        'good_url',
+        [
+            'https://proxy.example.com/v1',
+            'https://proxy.example.com',
+            'https://api.openai.com/v1',
+            'https://api.anthropic.com',
+            'http://localhost:4000',
+            'http://localhost:11434',
+            None,
+        ],
+    )
+    def test_accepts_valid_base_urls(self, good_url: str | None):
+        config = LLMConfig(model='test-model', base_url=good_url)
+        assert config.base_url == good_url
+
+    def test_error_message_suggests_correct_url(self):
+        with pytest.raises(ValidationError) as exc_info:
+            LLMConfig(
+                model='test-model',
+                base_url='https://my-proxy.com/v1/chat/completions',
+            )
+        error_msg = str(exc_info.value)
+        assert 'https://my-proxy.com/v1' in error_msg
+
+    def test_toml_with_invalid_base_url(
+        self, default_config: OpenHandsConfig, tmp_path: pathlib.Path
+    ):
+        """Config loading with an invalid base_url should fall back to defaults."""
+        toml_content = """
+[core]
+workspace_base = "./workspace"
+
+[llm]
+model = "test-model"
+api_key = "test-key"
+base_url = "https://proxy.example.com/v1/chat/completions"
+        """
+        toml_file = tmp_path / 'bad_base_url.toml'
+        toml_file.write_text(toml_content)
+
+        load_from_toml(default_config, str(toml_file))
+
+        # The invalid config should be rejected, falling back to defaults
+        llm = default_config.get_llm_config('llm')
+        assert llm.base_url is None  # default

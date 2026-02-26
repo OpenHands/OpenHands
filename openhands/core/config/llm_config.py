@@ -10,7 +10,14 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+)
 
 from openhands.core.logger import LOG_DIR
 from openhands.core.logger import openhands_logger as logger
@@ -110,6 +117,41 @@ class LLMConfig(BaseModel):
     )
 
     model_config = ConfigDict(extra='forbid')
+
+    @field_validator('base_url')
+    @classmethod
+    def validate_base_url_not_endpoint(cls, v: str | None) -> str | None:
+        """Reject base_url values that include API endpoint paths.
+
+        Users sometimes paste the full endpoint URL (e.g.
+        ``https://proxy.example.com/v1/chat/completions``) instead of just the
+        base (``https://proxy.example.com/v1``).  LiteLLM appends the endpoint
+        path automatically, so including it in base_url causes a cryptic 404.
+        """
+        if v is None:
+            return v
+
+        url = v.rstrip('/')
+
+        # Known API endpoint suffixes that LiteLLM appends automatically.
+        invalid_suffixes = [
+            '/chat/completions',
+            '/completions',
+            '/messages',
+            '/embeddings',
+        ]
+
+        url_lower = url.lower()
+        for suffix in invalid_suffixes:
+            if url_lower.endswith(suffix):
+                suggested_url = url[: len(url) - len(suffix)] or url
+                raise ValueError(
+                    f'base_url should not include the API endpoint path '
+                    f'"{suffix}". Use only the base URL, e.g., '
+                    f'"{suggested_url}".'
+                )
+
+        return v
 
     @classmethod
     def from_toml_section(cls, data: dict) -> dict[str, LLMConfig]:
