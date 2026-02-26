@@ -14,7 +14,6 @@ import { useLogout } from "#/hooks/mutation/use-logout";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
-import { MicroagentManagementButton } from "#/components/shared/buttons/microagent-management-button";
 import { cn } from "#/utils/utils";
 
 export function Sidebar() {
@@ -88,9 +87,6 @@ export function Sidebar() {
                   ? null
                   : setConversationPanelIsOpen((prev) => !prev)
               }
-              disabled={settings?.email_verified === false}
-            />
-            <MicroagentManagementButton
               disabled={settings?.email_verified === false}
             />
           </div>
