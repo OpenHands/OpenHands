@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from openhands.server.dependencies import get_dependencies
 from pydantic import BaseModel, Field
 from sqlalchemy.future import select
 from storage.database import session_maker
@@ -12,7 +13,7 @@ from openhands.server.shared import file_store
 from openhands.server.user_auth import get_user_id
 from openhands.utils.async_utils import call_sync_from_async
 
-router = APIRouter(prefix='/feedback', tags=['feedback'])
+router = APIRouter(prefix='/feedback', tags=['feedback'], dependencies=get_dependencies())
 
 
 async def get_event_ids(conversation_id: str, user_id: str) -> List[int]:

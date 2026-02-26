@@ -15,7 +15,7 @@ from openhands.server.shared import config
 from openhands.utils.http_session import httpx_verify_option
 
 GITHUB_PROXY_ENDPOINTS = bool(os.environ.get('GITHUB_PROXY_ENDPOINTS'))
-
+# Github proxy...
 
 def add_github_proxy_routes(app: FastAPI):
     """

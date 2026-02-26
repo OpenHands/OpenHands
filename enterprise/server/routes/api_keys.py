@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from openhands.server.dependencies import get_dependencies
 from pydantic import BaseModel, field_validator
 from storage.api_key import ApiKey
 from storage.api_key_store import ApiKeyStore
@@ -118,7 +119,7 @@ async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
 
 
 # Initialize API router and key store
-api_router = APIRouter(prefix='/api/keys')
+api_router = APIRouter(prefix='/api/keys', dependencies=get_dependencies())
 api_key_store = ApiKeyStore.get_instance()
 
 

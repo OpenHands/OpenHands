@@ -10,8 +10,9 @@ from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxPage
 from openhands.app_server.sandbox.sandbox_service import (
     SandboxService,
 )
+from openhands.server.dependencies import get_dependencies
 
-router = APIRouter(prefix='/sandboxes', tags=['Sandbox'])
+router = APIRouter(prefix='/sandboxes', tags=['Sandbox'], dependencies=get_dependencies())
 sandbox_service_dependency = depends_sandbox_service()
 
 # Read methods

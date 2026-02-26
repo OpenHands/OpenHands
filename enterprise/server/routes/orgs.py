@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from openhands.server.dependencies import get_dependencies
 from server.auth.authorization import (
     Permission,
     require_permission,
@@ -38,7 +39,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
 
 # Initialize API router
-org_router = APIRouter(prefix='/api/organizations')
+org_router = APIRouter(prefix='/api/organizations', tags=["Orgs"], dependencies=get_dependencies())
 
 
 @org_router.get('', response_model=OrgPage)

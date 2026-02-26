@@ -5,8 +5,9 @@ from fastapi import APIRouter, HTTPException, status
 from openhands.app_server.config import depends_user_context
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
+from openhands.server.dependencies import get_dependencies
 
-router = APIRouter(prefix='/users', tags=['User'])
+router = APIRouter(prefix='/users', tags=['User'], dependencies=get_dependencies())
 user_dependency = depends_user_context()
 
 # Read methods
