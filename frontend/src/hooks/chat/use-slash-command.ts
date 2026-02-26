@@ -138,15 +138,11 @@ export const useSlashCommand = (
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
-          setSelectedIndex((prev) =>
-            prev < items.length - 1 ? prev + 1 : 0,
-          );
+          setSelectedIndex((prev) => (prev < items.length - 1 ? prev + 1 : 0));
           return true;
         case "ArrowUp":
           e.preventDefault();
-          setSelectedIndex((prev) =>
-            prev > 0 ? prev - 1 : items.length - 1,
-          );
+          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : items.length - 1));
           return true;
         case "Enter":
         case "Tab": {
