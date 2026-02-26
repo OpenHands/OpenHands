@@ -75,23 +75,22 @@ async def list_verified_models(
 ):
     """List all verified models, optionally filtered by provider."""
     try:
-        if provider:
-            all_models = VerifiedModelStore.get_models_by_provider(provider)
-        else:
-            all_models = VerifiedModelStore.get_all_models()
-
         try:
             offset = int(page_id) if page_id else 0
         except ValueError:
             offset = 0
-        page = all_models[offset : offset + limit + 1]
-        has_more = len(page) > limit
-        if has_more:
-            page = page[:limit]
+
+        # Use SQL-level filtering and pagination
+        result = VerifiedModelStore.search_models(
+            provider=provider,
+            enabled_only=False,  # Admin sees all models including disabled
+            offset=offset,
+            limit=limit,
+        )
 
         return VerifiedModelPage(
-            items=[_to_response(m) for m in page],
-            next_page_id=str(offset + limit) if has_more else None,
+            items=[_to_response(m) for m in result['items']],
+            next_page_id=str(offset + limit) if result['has_more'] else None,
         )
     except Exception:
         logger.exception('Error listing verified models')
