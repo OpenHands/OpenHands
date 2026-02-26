@@ -2,7 +2,6 @@ import { useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight } from "lucide-react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
@@ -43,8 +42,6 @@ export function PlanPreview({
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
   const { scrollDomToBottom } = useScrollContext();
 
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
-
   const handleViewClick = () => {
     navigateToTab("planner");
   };
@@ -65,7 +62,7 @@ export function PlanPreview({
     return `${planContent.slice(0, MAX_CONTENT_LENGTH)}...`;
   }, [planContent]);
 
-  if (!shouldUsePlanningAgent || !planContent) {
+  if (!planContent) {
     return null;
   }
 

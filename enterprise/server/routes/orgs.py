@@ -38,7 +38,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
 
 # Initialize API router
-org_router = APIRouter(prefix='/api/organizations')
+org_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
 
 
 @org_router.get('', response_model=OrgPage)
