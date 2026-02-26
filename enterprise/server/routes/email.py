@@ -8,6 +8,7 @@ from server.auth.keycloak_manager import get_keycloak_admin
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import set_response_cookie
 from server.utils.rate_limit_utils import check_rate_limit_by_user_id
+from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
@@ -60,6 +61,10 @@ async def update_email(
                 'enabled': user['enabled'],  # Retain existing values
                 'username': user['username'],  # Required field
             },
+        )
+
+        await UserStore.update_user_email(
+            user_id=user_id, email=email, email_verified=False
         )
 
         user_auth: SaasUserAuth = await get_user_auth(request)
@@ -144,6 +149,7 @@ async def verified_email(request: Request):
     user_auth: SaasUserAuth = await get_user_auth(request)
     await user_auth.refresh()  # refresh so access token has updated email
     user_auth.email_verified = True
+    await UserStore.update_user_email(user_id=user_auth.user_id, email_verified=True)
     scheme = 'http' if request.url.hostname == 'localhost' else 'https'
     redirect_uri = f'{scheme}://{request.url.netloc}/settings/user'
     response = RedirectResponse(redirect_uri, status_code=302)

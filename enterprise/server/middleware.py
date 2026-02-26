@@ -103,11 +103,13 @@ class SetAuthCookieMiddleware:
         keycloak_auth_cookie = request.cookies.get('keycloak_auth')
         auth_header = request.headers.get('Authorization')
         mcp_auth_header = request.headers.get('X-Session-API-Key')
+        api_auth_header = request.headers.get('X-Access-Token')
         accepted_tos: bool | None = False
         if (
             keycloak_auth_cookie is None
             and (auth_header is None or not auth_header.startswith('Bearer '))
             and mcp_auth_header is None
+            and api_auth_header is None
         ):
             raise NoCredentialsError
 
