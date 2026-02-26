@@ -5,6 +5,7 @@ import { renderWithProviders } from "test-utils";
 import {
   SlashCommandMenu,
   getSkillDescription,
+  stripMarkdown,
 } from "#/components/features/chat/components/slash-command-menu";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
 
@@ -170,5 +171,56 @@ describe("getSkillDescription", () => {
     expect(getSkillDescription(content)).toBe(
       "A description without punctuation",
     );
+  });
+
+  it("strips markdown from frontmatter description", () => {
+    const content =
+      '---\ndescription: "A **bold** and *italic* description"\n---\nBody.';
+    expect(getSkillDescription(content)).toBe(
+      "A bold and italic description",
+    );
+  });
+
+  it("strips markdown from body fallback", () => {
+    const content = "# Title\n\nUse `code` and [links](http://example.com).";
+    expect(getSkillDescription(content)).toBe("Use code and links.");
+  });
+});
+
+describe("stripMarkdown", () => {
+  it("strips bold syntax", () => {
+    expect(stripMarkdown("a **bold** word")).toBe("a bold word");
+  });
+
+  it("strips italic syntax", () => {
+    expect(stripMarkdown("an *italic* word")).toBe("an italic word");
+  });
+
+  it("strips bold-italic syntax", () => {
+    expect(stripMarkdown("***both***")).toBe("both");
+  });
+
+  it("strips inline code", () => {
+    expect(stripMarkdown("run `npm test` now")).toBe("run npm test now");
+  });
+
+  it("strips links", () => {
+    expect(stripMarkdown("see [docs](http://example.com)")).toBe("see docs");
+  });
+
+  it("strips images", () => {
+    expect(stripMarkdown("![alt text](image.png)")).toBe("alt text");
+  });
+
+  it("strips strikethrough", () => {
+    expect(stripMarkdown("~~removed~~")).toBe("removed");
+  });
+
+  it("strips underscore emphasis", () => {
+    expect(stripMarkdown("__bold__ and _italic_")).toBe("bold and italic");
+  });
+
+  it("returns plain text unchanged", () => {
+    expect(stripMarkdown("plain text")).toBe("plain text");
   });
 });

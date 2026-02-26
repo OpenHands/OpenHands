@@ -5,9 +5,35 @@ import { Text } from "#/ui/typography";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
 
 /**
+ * Strip common inline Markdown syntax so descriptions render as plain text.
+ * Handles: bold, italic, inline code, links, and images.
+ */
+export function stripMarkdown(text: string): string {
+  return (
+    text
+      // Images: ![alt](url) → alt
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // Links: [text](url) → text
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // Bold/italic: ***text***, **text**, *text*, ___text___, __text__, _text_
+      .replace(/\*{3}(.+?)\*{3}/g, "$1")
+      .replace(/\*{2}(.+?)\*{2}/g, "$1")
+      .replace(/\*(.+?)\*/g, "$1")
+      .replace(/_{3}(.+?)_{3}/g, "$1")
+      .replace(/_{2}(.+?)_{2}/g, "$1")
+      .replace(/_(.+?)_/g, "$1")
+      // Inline code: `text` → text
+      .replace(/`(.+?)`/g, "$1")
+      // Strikethrough: ~~text~~ → text
+      .replace(/~~(.+?)~~/g, "$1")
+  );
+}
+
+/**
  * Extract a short description from skill content.
  * Tries YAML frontmatter "description:" first, then falls back
  * to the first meaningful line after headers and frontmatter.
+ * Returns plain text with Markdown formatting stripped.
  */
 export function getSkillDescription(content: string): string | null {
   let body = content;
@@ -25,7 +51,7 @@ export function getSkillDescription(content: string): string | null {
       ) {
         desc = desc.slice(1, -1);
       }
-      return desc;
+      return stripMarkdown(desc);
     }
     // Skip frontmatter for body parsing
     body = content.slice(frontmatterMatch[0].length);
@@ -39,9 +65,10 @@ export function getSkillDescription(content: string): string | null {
 
   if (!meaningful) return null;
 
-  // Return first sentence or whole line
-  const sentence = meaningful.match(/^[^.!?\n]*[.!?]/);
-  return sentence?.[0] || meaningful;
+  // Strip Markdown first so URLs inside links don't confuse sentence detection
+  const stripped = stripMarkdown(meaningful);
+  const sentence = stripped.match(/^[^.!?\n]*[.!?]/);
+  return sentence?.[0] || stripped;
 }
 
 interface SlashCommandMenuItemProps {

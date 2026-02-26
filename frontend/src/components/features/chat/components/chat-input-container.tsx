@@ -70,33 +70,36 @@ export function ChatInputContainer({
       onDragLeave={(e) => onDragLeave(e, disabled)}
       onDrop={(e) => onDrop(e, disabled)}
     >
-      {/* Slash Command Menu */}
-      {isSlashMenuOpen && onSlashSelect && (
-        <SlashCommandMenu
-          items={slashItems}
-          selectedIndex={slashSelectedIndex}
-          onSelect={onSlashSelect}
-        />
-      )}
-
       {/* Drag Over UI */}
       {isDragOver && <DragOver />}
 
       <UploadedFiles />
 
-      <ChatInputRow
-        chatInputRef={chatInputRef}
-        disabled={disabled}
-        showButton={showButton}
-        buttonClassName={buttonClassName}
-        handleFileIconClick={handleFileIconClick}
-        handleSubmit={handleSubmit}
-        onInput={onInput}
-        onPaste={onPaste}
-        onKeyDown={onKeyDown}
-        onFocus={onFocus}
-        onBlur={onBlur}
-      />
+      {/* Wrapper so the slash menu anchors just above the input row,
+          not above the entire (possibly resized) container */}
+      <div className="relative w-full">
+        {isSlashMenuOpen && onSlashSelect && (
+          <SlashCommandMenu
+            items={slashItems}
+            selectedIndex={slashSelectedIndex}
+            onSelect={onSlashSelect}
+          />
+        )}
+
+        <ChatInputRow
+          chatInputRef={chatInputRef}
+          disabled={disabled}
+          showButton={showButton}
+          buttonClassName={buttonClassName}
+          handleFileIconClick={handleFileIconClick}
+          handleSubmit={handleSubmit}
+          onInput={onInput}
+          onPaste={onPaste}
+          onKeyDown={onKeyDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        />
+      </div>
 
       <ChatInputActions
         disabled={disabled}
