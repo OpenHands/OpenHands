@@ -1,6 +1,13 @@
 import asyncio
 import warnings
 
+from openhands.core.logger import openhands_logger as logger
+from openhands.core.schema.agent import AgentState
+from openhands.events.action import MessageAction
+from openhands.events.observation.agent import AgentStateChangedObservation
+from openhands.events.serialization.event import event_to_dict
+from openhands.server.shared import conversation_manager
+
 from integrations.linear.linear_manager import LinearManager
 from integrations.utils import (
     extract_summary_from_conversation_manager,
@@ -13,16 +20,9 @@ from storage.conversation_callback import (
     ConversationCallbackProcessor,
 )
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.core.schema.agent import AgentState
-from openhands.events.action import MessageAction
-from openhands.events.observation.agent import AgentStateChangedObservation
-from openhands.events.serialization.event import event_to_dict
-from openhands.server.shared import conversation_manager
-
 warnings.warn(
-    'linear_callback_processor is deprecated. '
-    'Use integrations.linear.linear_v1_callback_processor instead.',
+    "linear_callback_processor is deprecated. "
+    "Use integrations.linear.linear_v1_callback_processor instead.",
     DeprecationWarning,
     stacklevel=2,
 )
@@ -56,11 +56,11 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
                 self.workspace_name
             )
             if not workspace:
-                logger.error(f'[Linear] Workspace {self.workspace_name} not found')
+                logger.error(f"[Linear] Workspace {self.workspace_name} not found")
                 return
 
-            if workspace.status != 'active':
-                logger.error(f'[Linear] Workspace {workspace.id} is not active')
+            if workspace.status != "active":
+                logger.error(f"[Linear] Workspace {workspace.id} is not active")
                 return
 
             # Decrypt API key
@@ -76,11 +76,11 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
             )
 
             logger.info(
-                f'[Linear] Sent summary comment to issue {self.issue_key} '
-                f'(workspace {self.workspace_name})'
+                f"[Linear] Sent summary comment to issue {self.issue_key} "
+                f"(workspace {self.workspace_name})"
             )
         except Exception as e:
-            logger.error(f'[Linear] Failed to send summary comment: {str(e)}')
+            logger.error(f"[Linear] Failed to send summary comment: {str(e)}")
 
     async def __call__(
         self,
@@ -94,7 +94,7 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
             callback: The conversation callback
             observation: The AgentStateChangedObservation that triggered the callback
         """
-        logger.info(f'[Linear] Callback agent state was {observation.agent_state}')
+        logger.info(f"[Linear] Callback agent state was {observation.agent_state}")
         if observation.agent_state not in (
             AgentState.AWAITING_USER_INPUT,
             AgentState.FINISHED,
@@ -104,7 +104,7 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
         conversation_id = callback.conversation_id
         try:
             logger.info(
-                f'[Linear] Sending summary instruction for conversation {conversation_id}'
+                f"[Linear] Sending summary instruction for conversation {conversation_id}"
             )
 
             # Get the summary instruction
@@ -117,10 +117,10 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
                 conversation_manager, conversation_id
             )
             logger.info(
-                'last_user_msg',
+                "last_user_msg",
                 extra={
-                    'last_user_msg': [m.content for m in last_user_msg],
-                    'summary_instruction': summary_instruction,
+                    "last_user_msg": [m.content for m in last_user_msg],
+                    "summary_instruction": summary_instruction,
                 },
             )
             if (
@@ -129,7 +129,7 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
             ):
                 # Extract the summary from the event store
                 logger.info(
-                    f'[Linear] Extracting summary for conversation {conversation_id}'
+                    f"[Linear] Extracting summary for conversation {conversation_id}"
                 )
                 summary = await extract_summary_from_conversation_manager(
                     conversation_manager, conversation_id
@@ -138,24 +138,24 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
                 # Send the summary to Linear
                 asyncio.create_task(self._send_comment_to_linear(summary))
 
-                logger.info(f'[Linear] Summary sent for conversation {conversation_id}')
+                logger.info(f"[Linear] Summary sent for conversation {conversation_id}")
                 return
 
             # Add the summary instruction to the event stream
             logger.info(
-                f'[Linear] Sending summary instruction to conversation {conversation_id} {summary_event}'
+                f"[Linear] Sending summary instruction to conversation {conversation_id} {summary_event}"
             )
             await conversation_manager.send_event_to_conversation(
                 conversation_id, summary_event
             )
 
             logger.info(
-                f'[Linear] Sent summary instruction to conversation {conversation_id} {summary_event}'
+                f"[Linear] Sent summary instruction to conversation {conversation_id} {summary_event}"
             )
 
         except Exception:
             logger.error(
-                '[Linear] Error processing conversation callback',
+                "[Linear] Error processing conversation callback",
                 exc_info=True,
                 stack_info=True,
             )

@@ -9,9 +9,9 @@ class LinearPluginConfig:
     """Configuration for the Linear plugin."""
 
     webhooks_enabled: bool = False
-    client_id: str = ''
-    client_secret: str = ''
-    web_host: str = ''
+    client_id: str = ""
+    client_secret: str = ""
+    web_host: str = ""
 
 
 class LinearPlugin:
@@ -44,13 +44,13 @@ class LinearPlugin:
         self._initialized = False
 
     @staticmethod
-    def from_env() -> 'LinearPlugin':
+    def from_env() -> "LinearPlugin":
         from server.auth.constants import LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET
         from server.constants import WEB_HOST
 
         config = LinearPluginConfig(
-            webhooks_enabled=os.environ.get('LINEAR_WEBHOOKS_ENABLED', '0')
-            in ('1', 'true'),
+            webhooks_enabled=os.environ.get("LINEAR_WEBHOOKS_ENABLED", "0")
+            in ("1", "true"),
             client_id=LINEAR_CLIENT_ID,
             client_secret=LINEAR_CLIENT_SECRET,
             web_host=WEB_HOST,

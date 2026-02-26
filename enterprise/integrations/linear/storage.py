@@ -6,8 +6,8 @@ from storage.linear_user import LinearUser
 from storage.linear_workspace import LinearWorkspace
 
 __all__ = [
-    'LinearConversation',
-    'LinearIntegrationStore',
-    'LinearUser',
-    'LinearWorkspace',
+    "LinearConversation",
+    "LinearIntegrationStore",
+    "LinearUser",
+    "LinearWorkspace",
 ]

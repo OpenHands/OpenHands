@@ -17,9 +17,9 @@ from integrations.linear.linear_v1_callback_processor import (
 def processor():
     return LinearV1CallbackProcessor(
         linear_view_data={
-            'issue_id': 'abc-123',
-            'issue_key': 'LIN-123',
-            'workspace_name': 'my-workspace',
+            "issue_id": "abc-123",
+            "issue_key": "LIN-123",
+            "workspace_name": "my-workspace",
         },
         should_request_summary=True,
     )
@@ -40,9 +40,9 @@ def mock_callback():
 @pytest.fixture
 def mock_finished_event():
     event = MagicMock()
-    event.__class__.__name__ = 'ConversationStateUpdateEvent'
-    event.key = 'execution_status'
-    event.value = 'finished'
+    event.__class__.__name__ = "ConversationStateUpdateEvent"
+    event.key = "execution_status"
+    event.value = "finished"
     event.id = uuid4()
     return event
 
@@ -56,9 +56,9 @@ class TestLinearV1CallbackProcessorInit:
         assert proc.should_request_summary is True
 
     def test_custom_fields(self, processor):
-        assert processor.linear_view_data['issue_id'] == 'abc-123'
-        assert processor.linear_view_data['issue_key'] == 'LIN-123'
-        assert processor.linear_view_data['workspace_name'] == 'my-workspace'
+        assert processor.linear_view_data["issue_id"] == "abc-123"
+        assert processor.linear_view_data["issue_key"] == "LIN-123"
+        assert processor.linear_view_data["workspace_name"] == "my-workspace"
         assert processor.should_request_summary is True
 
 
@@ -72,7 +72,7 @@ class TestCallFiltering:
         """Non-ConversationStateUpdateEvent should be ignored."""
         event = MagicMock()
         with patch(
-            'integrations.linear.linear_v1_callback_processor.isinstance',
+            "integrations.linear.linear_v1_callback_processor.isinstance",
             return_value=False,
         ):
             result = await processor(conversation_id, mock_callback, event)
@@ -84,11 +84,11 @@ class TestCallFiltering:
     ):
         """Events with execution_status != 'finished' should be ignored."""
         event = MagicMock()
-        event.key = 'execution_status'
-        event.value = 'running'
+        event.key = "execution_status"
+        event.value = "running"
 
         with patch(
-            'integrations.linear.linear_v1_callback_processor.isinstance',
+            "integrations.linear.linear_v1_callback_processor.isinstance",
             return_value=True,
         ):
             result = await processor(conversation_id, mock_callback, event)
@@ -100,11 +100,11 @@ class TestCallFiltering:
     ):
         """Events with a different key should be ignored."""
         event = MagicMock()
-        event.key = 'some_other_key'
-        event.value = 'finished'
+        event.key = "some_other_key"
+        event.value = "finished"
 
         with patch(
-            'integrations.linear.linear_v1_callback_processor.isinstance',
+            "integrations.linear.linear_v1_callback_processor.isinstance",
             return_value=True,
         ):
             result = await processor(conversation_id, mock_callback, event)
@@ -117,18 +117,18 @@ class TestCallFiltering:
         """When should_request_summary is False, return None."""
         proc = LinearV1CallbackProcessor(
             linear_view_data={
-                'issue_id': 'abc-123',
-                'issue_key': 'LIN-123',
-                'workspace_name': 'my-workspace',
+                "issue_id": "abc-123",
+                "issue_key": "LIN-123",
+                "workspace_name": "my-workspace",
             },
             should_request_summary=False,
         )
         event = MagicMock()
-        event.key = 'execution_status'
-        event.value = 'finished'
+        event.key = "execution_status"
+        event.value = "finished"
 
         with patch(
-            'integrations.linear.linear_v1_callback_processor.isinstance',
+            "integrations.linear.linear_v1_callback_processor.isinstance",
             return_value=True,
         ):
             result = await proc(conversation_id, mock_callback, event)
@@ -139,29 +139,27 @@ class TestSummaryFlow:
     """Test the summary request and posting flow."""
 
     @pytest.mark.asyncio
-    async def test_successful_summary(
-        self, processor, conversation_id, mock_callback
-    ):
+    async def test_successful_summary(self, processor, conversation_id, mock_callback):
         """Happy path: summary is requested and posted to Linear."""
         event = MagicMock()
-        event.key = 'execution_status'
-        event.value = 'finished'
+        event.key = "execution_status"
+        event.value = "finished"
         event.id = uuid4()
 
         with (
             patch(
-                'integrations.linear.linear_v1_callback_processor.isinstance',
+                "integrations.linear.linear_v1_callback_processor.isinstance",
                 return_value=True,
             ),
             patch.object(
                 processor,
-                '_request_summary',
+                "_request_summary",
                 new_callable=AsyncMock,
-                return_value='Summary text',
+                return_value="Summary text",
             ),
             patch.object(
                 processor,
-                '_post_summary_to_linear',
+                "_post_summary_to_linear",
                 new_callable=AsyncMock,
             ) as mock_post,
         ):
@@ -169,8 +167,8 @@ class TestSummaryFlow:
 
         assert result is not None
         assert result.status == EventCallbackResultStatus.SUCCESS
-        assert result.detail == 'Summary text'
-        mock_post.assert_called_once_with('Summary text')
+        assert result.detail == "Summary text"
+        mock_post.assert_called_once_with("Summary text")
         assert processor.should_request_summary is False
 
     @pytest.mark.asyncio
@@ -179,24 +177,24 @@ class TestSummaryFlow:
     ):
         """After processing, should_request_summary should be False."""
         event = MagicMock()
-        event.key = 'execution_status'
-        event.value = 'finished'
+        event.key = "execution_status"
+        event.value = "finished"
         event.id = uuid4()
 
         with (
             patch(
-                'integrations.linear.linear_v1_callback_processor.isinstance',
+                "integrations.linear.linear_v1_callback_processor.isinstance",
                 return_value=True,
             ),
             patch.object(
                 processor,
-                '_request_summary',
+                "_request_summary",
                 new_callable=AsyncMock,
-                return_value='Summary',
+                return_value="Summary",
             ),
             patch.object(
                 processor,
-                '_post_summary_to_linear',
+                "_post_summary_to_linear",
                 new_callable=AsyncMock,
             ),
         ):
@@ -210,24 +208,24 @@ class TestSummaryFlow:
     ):
         """When summary request fails, return error result and attempt to post error."""
         event = MagicMock()
-        event.key = 'execution_status'
-        event.value = 'finished'
+        event.key = "execution_status"
+        event.value = "finished"
         event.id = uuid4()
 
         with (
             patch(
-                'integrations.linear.linear_v1_callback_processor.isinstance',
+                "integrations.linear.linear_v1_callback_processor.isinstance",
                 return_value=True,
             ),
             patch.object(
                 processor,
-                '_request_summary',
+                "_request_summary",
                 new_callable=AsyncMock,
-                side_effect=RuntimeError('Test error'),
+                side_effect=RuntimeError("Test error"),
             ),
             patch.object(
                 processor,
-                '_post_summary_to_linear',
+                "_post_summary_to_linear",
                 new_callable=AsyncMock,
             ) as mock_post,
         ):
@@ -235,10 +233,10 @@ class TestSummaryFlow:
 
         assert result is not None
         assert result.status == EventCallbackResultStatus.ERROR
-        assert 'Test error' in result.detail
+        assert "Test error" in result.detail
         # Should have attempted to post error message to Linear
         mock_post.assert_called_once()
-        assert 'error' in mock_post.call_args[0][0].lower()
+        assert "error" in mock_post.call_args[0][0].lower()
 
 
 class TestPostSummaryToLinear:
@@ -249,19 +247,19 @@ class TestPostSummaryToLinear:
         """Missing issue_id should raise RuntimeError."""
         proc = LinearV1CallbackProcessor(
             linear_view_data={
-                'workspace_name': 'my-workspace',
+                "workspace_name": "my-workspace",
             },
         )
-        with pytest.raises(RuntimeError, match='Missing required Linear view data'):
-            await proc._post_summary_to_linear('summary')
+        with pytest.raises(RuntimeError, match="Missing required Linear view data"):
+            await proc._post_summary_to_linear("summary")
 
     @pytest.mark.asyncio
     async def test_missing_workspace_name_raises(self):
         """Missing workspace_name should raise RuntimeError."""
         proc = LinearV1CallbackProcessor(
             linear_view_data={
-                'issue_id': 'abc-123',
+                "issue_id": "abc-123",
             },
         )
-        with pytest.raises(RuntimeError, match='Missing required Linear view data'):
-            await proc._post_summary_to_linear('summary')
+        with pytest.raises(RuntimeError, match="Missing required Linear view data"):
+            await proc._post_summary_to_linear("summary")
