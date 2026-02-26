@@ -11,7 +11,7 @@ from server.verified_models.verified_model_models import (
     VerifiedModelUpdate,
 )
 
-from enterprise.server.verified_models.verified_model_service import (
+from server.verified_models.verified_model_service import (
     VerifiedModelService,
     verified_model_store_dependency,
 )

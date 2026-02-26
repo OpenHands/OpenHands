@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from enterprise.server.verified_models.verified_model_service import (
+from server.verified_models.verified_model_service import (
     VerifiedModelService,
     verified_model_store_dependency,
 )
