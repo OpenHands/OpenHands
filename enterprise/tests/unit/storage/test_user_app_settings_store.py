@@ -69,9 +69,9 @@ async def test_get_user_by_id_success(async_session_maker):
         await session.commit()
         user_id = str(user.id)
 
-    # Act
-    with patch('storage.user_app_settings_store.a_session_maker', async_session_maker):
-        result = await UserAppSettingsStore.get_user_by_id(user_id)
+        # Act - create store with the session
+        store = UserAppSettingsStore(db_session=session)
+        result = await store.get_user_by_id(user_id)
 
     # Assert
     assert result is not None
@@ -94,8 +94,9 @@ async def test_get_user_by_id_not_found(async_session_maker):
     non_existent_id = str(uuid.uuid4())
 
     # Act
-    with patch('storage.user_app_settings_store.a_session_maker', async_session_maker):
-        result = await UserAppSettingsStore.get_user_by_id(non_existent_id)
+    async with async_session_maker() as session:
+        store = UserAppSettingsStore(db_session=session)
+        result = await store.get_user_by_id(non_existent_id)
 
     # Assert
     assert result is None
@@ -124,19 +125,17 @@ async def test_update_user_app_settings_success(async_session_maker):
         await session.commit()
         user_id = str(user.id)
 
-    update_data = UserAppSettingsUpdate(
-        language='es',
-        user_consents_to_analytics=True,
-        enable_sound_notifications=True,
-        git_user_name='newuser',
-        git_user_email='new@example.com',
-    )
-
-    # Act
-    with patch('storage.user_app_settings_store.a_session_maker', async_session_maker):
-        result = await UserAppSettingsStore.update_user_app_settings(
-            user_id, update_data
+        update_data = UserAppSettingsUpdate(
+            language='es',
+            user_consents_to_analytics=True,
+            enable_sound_notifications=True,
+            git_user_name='newuser',
+            git_user_email='new@example.com',
         )
+
+        # Act - create store with the session
+        store = UserAppSettingsStore(db_session=session)
+        result = await store.update_user_app_settings(user_id, update_data)
 
     # Assert
     assert result is not None
@@ -171,14 +170,12 @@ async def test_update_user_app_settings_partial(async_session_maker):
         await session.commit()
         user_id = str(user.id)
 
-    # Only update language
-    update_data = UserAppSettingsUpdate(language='fr')
+        # Only update language
+        update_data = UserAppSettingsUpdate(language='fr')
 
-    # Act
-    with patch('storage.user_app_settings_store.a_session_maker', async_session_maker):
-        result = await UserAppSettingsStore.update_user_app_settings(
-            user_id, update_data
-        )
+        # Act - create store with the session
+        store = UserAppSettingsStore(db_session=session)
+        result = await store.update_user_app_settings(user_id, update_data)
 
     # Assert
     assert result is not None
@@ -199,10 +196,9 @@ async def test_update_user_app_settings_user_not_found(async_session_maker):
     update_data = UserAppSettingsUpdate(language='en')
 
     # Act
-    with patch('storage.user_app_settings_store.a_session_maker', async_session_maker):
-        result = await UserAppSettingsStore.update_user_app_settings(
-            non_existent_id, update_data
-        )
+    async with async_session_maker() as session:
+        store = UserAppSettingsStore(db_session=session)
+        result = await store.update_user_app_settings(non_existent_id, update_data)
 
     # Assert
     assert result is None

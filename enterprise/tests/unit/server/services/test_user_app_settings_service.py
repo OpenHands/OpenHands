@@ -5,7 +5,7 @@ Tests the service layer for user app settings operations.
 """
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from server.routes.user_app_settings_models import (
@@ -36,51 +36,70 @@ def mock_user(user_id):
     return user
 
 
+@pytest.fixture
+def mock_store():
+    """Create a mock UserAppSettingsStore."""
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_user_context(user_id):
+    """Create a mock UserContext that returns the user_id."""
+    context = MagicMock()
+    context.get_user_id = AsyncMock(return_value=user_id)
+    return context
+
+
 @pytest.mark.asyncio
-async def test_get_user_app_settings_success(user_id, mock_user):
+async def test_get_user_app_settings_success(
+    user_id, mock_user, mock_store, mock_user_context
+):
     """
     GIVEN: A user exists in the database
     WHEN: get_user_app_settings is called
     THEN: UserAppSettingsResponse is returned with correct data
     """
     # Arrange
-    with patch(
-        'server.services.user_app_settings_service.UserAppSettingsStore.get_user_by_id',
-        AsyncMock(return_value=mock_user),
-    ):
-        # Act
-        result = await UserAppSettingsService.get_user_app_settings(user_id)
+    mock_store.get_user_by_id = AsyncMock(return_value=mock_user)
+    service = UserAppSettingsService(store=mock_store, user_context=mock_user_context)
 
-        # Assert
-        assert isinstance(result, UserAppSettingsResponse)
-        assert result.language == 'en'
-        assert result.user_consents_to_analytics is True
-        assert result.enable_sound_notifications is False
-        assert result.git_user_name == 'testuser'
-        assert result.git_user_email == 'test@example.com'
+    # Act
+    result = await service.get_user_app_settings()
+
+    # Assert
+    assert isinstance(result, UserAppSettingsResponse)
+    assert result.language == 'en'
+    assert result.user_consents_to_analytics is True
+    assert result.enable_sound_notifications is False
+    assert result.git_user_name == 'testuser'
+    assert result.git_user_email == 'test@example.com'
+    mock_store.get_user_by_id.assert_called_once_with(user_id)
 
 
 @pytest.mark.asyncio
-async def test_get_user_app_settings_user_not_found(user_id):
+async def test_get_user_app_settings_user_not_found(
+    user_id, mock_store, mock_user_context
+):
     """
     GIVEN: A user does not exist in the database
     WHEN: get_user_app_settings is called
     THEN: UserNotFoundError is raised
     """
     # Arrange
-    with patch(
-        'server.services.user_app_settings_service.UserAppSettingsStore.get_user_by_id',
-        AsyncMock(return_value=None),
-    ):
-        # Act & Assert
-        with pytest.raises(UserNotFoundError) as exc_info:
-            await UserAppSettingsService.get_user_app_settings(user_id)
+    mock_store.get_user_by_id = AsyncMock(return_value=None)
+    service = UserAppSettingsService(store=mock_store, user_context=mock_user_context)
 
-        assert user_id in str(exc_info.value)
+    # Act & Assert
+    with pytest.raises(UserNotFoundError) as exc_info:
+        await service.get_user_app_settings()
+
+    assert user_id in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_update_user_app_settings_success(user_id, mock_user):
+async def test_update_user_app_settings_success(
+    user_id, mock_user, mock_store, mock_user_context
+):
     """
     GIVEN: A user exists in the database
     WHEN: update_user_app_settings is called with new values
@@ -95,23 +114,25 @@ async def test_update_user_app_settings_success(user_id, mock_user):
         user_consents_to_analytics=False,
     )
 
-    with patch(
-        'server.services.user_app_settings_service.UserAppSettingsStore.update_user_app_settings',
-        AsyncMock(return_value=mock_user),
-    ):
-        # Act
-        result = await UserAppSettingsService.update_user_app_settings(
-            user_id, update_data
-        )
+    mock_store.update_user_app_settings = AsyncMock(return_value=mock_user)
+    service = UserAppSettingsService(store=mock_store, user_context=mock_user_context)
 
-        # Assert
-        assert isinstance(result, UserAppSettingsResponse)
-        assert result.language == 'es'
-        assert result.user_consents_to_analytics is False
+    # Act
+    result = await service.update_user_app_settings(update_data)
+
+    # Assert
+    assert isinstance(result, UserAppSettingsResponse)
+    assert result.language == 'es'
+    assert result.user_consents_to_analytics is False
+    mock_store.update_user_app_settings.assert_called_once_with(
+        user_id=user_id, update_data=update_data
+    )
 
 
 @pytest.mark.asyncio
-async def test_update_user_app_settings_no_changes(user_id, mock_user):
+async def test_update_user_app_settings_no_changes(
+    user_id, mock_user, mock_store, mock_user_context
+):
     """
     GIVEN: A user exists in the database
     WHEN: update_user_app_settings is called with no fields
@@ -120,29 +141,23 @@ async def test_update_user_app_settings_no_changes(user_id, mock_user):
     # Arrange
     update_data = UserAppSettingsUpdate()  # No fields set
 
-    with (
-        patch(
-            'server.services.user_app_settings_service.UserAppSettingsStore.get_user_by_id',
-            AsyncMock(return_value=mock_user),
-        ) as mock_get,
-        patch(
-            'server.services.user_app_settings_service.UserAppSettingsStore.update_user_app_settings',
-            AsyncMock(),
-        ) as mock_update,
-    ):
-        # Act
-        result = await UserAppSettingsService.update_user_app_settings(
-            user_id, update_data
-        )
+    mock_store.get_user_by_id = AsyncMock(return_value=mock_user)
+    mock_store.update_user_app_settings = AsyncMock()
+    service = UserAppSettingsService(store=mock_store, user_context=mock_user_context)
 
-        # Assert
-        assert isinstance(result, UserAppSettingsResponse)
-        mock_get.assert_called_once_with(user_id)
-        mock_update.assert_not_called()
+    # Act
+    result = await service.update_user_app_settings(update_data)
+
+    # Assert
+    assert isinstance(result, UserAppSettingsResponse)
+    mock_store.get_user_by_id.assert_called_once_with(user_id)
+    mock_store.update_user_app_settings.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_update_user_app_settings_user_not_found(user_id):
+async def test_update_user_app_settings_user_not_found(
+    user_id, mock_store, mock_user_context
+):
     """
     GIVEN: A user does not exist in the database
     WHEN: update_user_app_settings is called
@@ -151,12 +166,11 @@ async def test_update_user_app_settings_user_not_found(user_id):
     # Arrange
     update_data = UserAppSettingsUpdate(language='en')
 
-    with patch(
-        'server.services.user_app_settings_service.UserAppSettingsStore.update_user_app_settings',
-        AsyncMock(return_value=None),
-    ):
-        # Act & Assert
-        with pytest.raises(UserNotFoundError) as exc_info:
-            await UserAppSettingsService.update_user_app_settings(user_id, update_data)
+    mock_store.update_user_app_settings = AsyncMock(return_value=None)
+    service = UserAppSettingsService(store=mock_store, user_context=mock_user_context)
 
-        assert user_id in str(exc_info.value)
+    # Act & Assert
+    with pytest.raises(UserNotFoundError) as exc_info:
+        await service.update_user_app_settings(update_data)
+
+    assert user_id in str(exc_info.value)
