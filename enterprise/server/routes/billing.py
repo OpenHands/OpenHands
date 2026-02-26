@@ -23,7 +23,7 @@ from openhands.app_server.config import get_global_config
 from openhands.server.user_auth import get_user_id
 
 stripe.api_key = STRIPE_API_KEY
-billing_router = APIRouter(prefix='/api/billing')
+billing_router = APIRouter(prefix='/api/billing', tags=['Billing'])
 
 
 async def validate_billing_enabled() -> None:

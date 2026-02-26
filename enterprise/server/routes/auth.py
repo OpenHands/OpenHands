@@ -208,6 +208,7 @@ async def keycloak_callback(
     else:
         # Existing user — gradually backfill contact_name if it still has a username-style value
         await UserStore.backfill_contact_name(user_id, user_info)
+        await UserStore.backfill_user_email(user_id, user_info)
 
     if not user:
         logger.error(f'Failed to authenticate user {user_info["preferred_username"]}')
@@ -549,7 +550,10 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
         user_id=user_info['sub'], offline_token=keycloak_refresh_token
     )
 
-    return RedirectResponse(state if state else request.base_url, status_code=302)
+    redirect_url, _, _ = _extract_oauth_state(state)
+    return RedirectResponse(
+        redirect_url if redirect_url else request.base_url, status_code=302
+    )
 
 
 @oauth_router.get('/github/callback')
