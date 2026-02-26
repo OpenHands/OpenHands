@@ -16,7 +16,9 @@ from openhands.server.dependencies import get_dependencies
 # is protected. The actual protection is provided by SetAuthCookieMiddleware
 # Sandboxes specs share a single immutable list for the server right now, but that is likely to
 # change in the future
-router = APIRouter(prefix='/sandboxes', tags=['Sandbox'], dependencies=get_dependencies())
+router = APIRouter(
+    prefix='/sandboxes', tags=['Sandbox'], dependencies=get_dependencies()
+)
 sandbox_service_dependency = depends_sandbox_service()
 
 # Read methods

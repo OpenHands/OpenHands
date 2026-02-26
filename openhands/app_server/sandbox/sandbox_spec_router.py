@@ -14,7 +14,9 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
 )
 from openhands.server.dependencies import get_dependencies
 
-router = APIRouter(prefix='/sandbox-specs', tags=['Sandbox'], dependencies=get_dependencies())
+router = APIRouter(
+    prefix='/sandbox-specs', tags=['Sandbox'], dependencies=get_dependencies()
+)
 sandbox_spec_service_dependency = depends_sandbox_spec_service()
 
 

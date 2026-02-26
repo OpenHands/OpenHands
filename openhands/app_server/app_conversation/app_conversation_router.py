@@ -75,7 +75,9 @@ from openhands.app_server.utils.docker_utils import (
 from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
-router = APIRouter(prefix='/app-conversations', tags=['Conversations'], dependencies=get_dependencies())
+router = APIRouter(
+    prefix='/app-conversations', tags=['Conversations'], dependencies=get_dependencies()
+)
 logger = logging.getLogger(__name__)
 app_conversation_service_dependency = depends_app_conversation_service()
 app_conversation_start_task_service_dependency = (

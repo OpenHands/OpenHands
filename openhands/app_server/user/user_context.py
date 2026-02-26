@@ -1,7 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator
-
-from fastapi import Request
 
 from openhands.app_server.services.injector import Injector
 from openhands.app_server.user.user_models import (

@@ -22,7 +22,12 @@ async def get_access_token(request: Request) -> SecretStr | None:
     return access_token
 
 
-async def get_user_id(request: Request, api_key_header: str | None = Depends(APIKeyHeader(name="X-Access-Token", auto_error=False))) -> str | None:
+async def get_user_id(
+    request: Request,
+    api_key_header: str | None = Depends(
+        APIKeyHeader(name='X-Access-Token', auto_error=False)
+    ),
+) -> str | None:
     user_auth = await get_user_auth(request)
     user_id = await user_auth.get_user_id()
     return user_id
