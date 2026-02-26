@@ -35,6 +35,19 @@ class OptionService {
   }
 
   /**
+   * Retrieve the list of models available from a running Ollama instance
+   * @param baseUrl - The base URL of the Ollama instance
+   * @returns List of Ollama models available, or empty array on failure
+   */
+  static async getOllamaModels(baseUrl: string): Promise<string[]> {
+    const { data } = await openHands.get<string[]>(
+      "/api/options/models/ollama",
+      { params: { base_url: baseUrl } },
+    );
+    return data;
+  }
+
+  /**
    * Get the web client configuration from the server
    * @returns Web client configuration response
    */

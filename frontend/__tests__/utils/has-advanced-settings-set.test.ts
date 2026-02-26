@@ -100,4 +100,26 @@ describe("hasAdvancedSettingsSet", () => {
       expect(result).toBe(true);
     });
   });
+
+  describe("ollama special handling", () => {
+    test("should return false for ollama model with base_url set", () => {
+      expect(
+        hasAdvancedSettingsSet({
+          ...DEFAULT_SETTINGS,
+          llm_model: "ollama/llama3",
+          llm_base_url: "http://localhost:11434",
+        }),
+      ).toBe(false);
+    });
+
+    test("should return true for non-ollama model with base_url set", () => {
+      expect(
+        hasAdvancedSettingsSet({
+          ...DEFAULT_SETTINGS,
+          llm_model: "openai/gpt-4o",
+          llm_base_url: "http://custom-endpoint.com",
+        }),
+      ).toBe(true);
+    });
+  });
 });

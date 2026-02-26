@@ -6831,6 +6831,22 @@
     "de": "Preisdetails anzeigen.",
     "uk": "Переглянути деталі цін."
   },
+  "SETTINGS$OLLAMA_HELP_TEXT": {
+    "en": "Ollama runs locally and doesn't require an API key. Make sure Ollama is running before connecting. If running in Docker, use http://host.docker.internal:11434 as the base URL.",
+    "ja": "Ollamaはローカルで動作し、APIキーは不要です。接続前にOllamaが実行中であることを確認してください。Dockerで実行する場合は、ベースURLとしてhttp://host.docker.internal:11434を使用してください。",
+    "zh-CN": "Ollama 在本地运行，不需要 API 密钥。连接前请确保 Ollama 正在运行。如果在 Docker 中运行，请使用 http://host.docker.internal:11434 作为基础 URL。",
+    "zh-TW": "Ollama 在本地運行，不需要 API 金鑰。連接前請確保 Ollama 正在運行。如果在 Docker 中運行，請使用 http://host.docker.internal:11434 作為基礎 URL。",
+    "ko-KR": "Ollama는 로컬에서 실행되며 API 키가 필요하지 않습니다. 연결하기 전에 Ollama가 실행 중인지 확인하세요. Docker에서 실행하는 경우 기본 URL로 http://host.docker.internal:11434를 사용하세요.",
+    "no": "Ollama kjører lokalt og krever ingen API-nøkkel. Sørg for at Ollama kjører før du kobler til. Hvis du kjører i Docker, bruk http://host.docker.internal:11434 som basis-URL.",
+    "ar": "يعمل Ollama محليًا ولا يتطلب مفتاح API. تأكد من أن Ollama قيد التشغيل قبل الاتصال. إذا كنت تعمل في Docker، استخدم http://host.docker.internal:11434 كعنوان URL الأساسي.",
+    "de": "Ollama läuft lokal und benötigt keinen API-Schlüssel. Stellen Sie sicher, dass Ollama läuft, bevor Sie eine Verbindung herstellen. Bei Ausführung in Docker verwenden Sie http://host.docker.internal:11434 als Basis-URL.",
+    "fr": "Ollama s'exécute localement et ne nécessite pas de clé API. Assurez-vous qu'Ollama est en cours d'exécution avant de vous connecter. Si vous utilisez Docker, utilisez http://host.docker.internal:11434 comme URL de base.",
+    "it": "Ollama viene eseguito localmente e non richiede una chiave API. Assicurati che Ollama sia in esecuzione prima di connetterti. Se eseguito in Docker, usa http://host.docker.internal:11434 come URL di base.",
+    "pt": "O Ollama é executado localmente e não requer uma chave de API. Certifique-se de que o Ollama esteja em execução antes de conectar. Se estiver executando no Docker, use http://host.docker.internal:11434 como URL base.",
+    "es": "Ollama se ejecuta localmente y no requiere una clave API. Asegúrese de que Ollama esté en ejecución antes de conectarse. Si ejecuta en Docker, use http://host.docker.internal:11434 como URL base.",
+    "tr": "Ollama yerel olarak çalışır ve API anahtarı gerektirmez. Bağlanmadan önce Ollama'nın çalıştığından emin olun. Docker'da çalıştırıyorsanız, temel URL olarak http://host.docker.internal:11434 kullanın.",
+    "uk": "Ollama працює локально і не потребує API-ключа. Переконайтеся, що Ollama запущено перед підключенням. Якщо ви працюєте в Docker, використовуйте http://host.docker.internal:11434 як базову URL-адресу."
+  },
   "SETTINGS$CREATE_API_KEY": {
     "en": "Create API Key",
     "uk": "Створити API ключ",

@@ -8,9 +8,11 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 from typing import Any
 
+import httpx
 from fastapi import APIRouter
 
 from openhands.controller.agent import Agent
+from openhands.core.logger import openhands_logger as logger
 from openhands.security.options import SecurityAnalyzers
 from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import config, server_config
@@ -35,6 +37,30 @@ async def get_litellm_models() -> list[str]:
         list[str]: A sorted list of unique model names.
     """
     return get_supported_llm_models(config)
+
+
+@app.get('/models/ollama', response_model=list[str])
+async def get_ollama_models(
+    base_url: str = 'http://localhost:11434',
+) -> list[str]:
+    """Discover models from a running Ollama instance.
+
+    Args:
+        base_url: The base URL of the Ollama instance. Defaults to http://localhost:11434.
+
+    Returns:
+        list[str]: A sorted list of model names prefixed with 'ollama/'.
+    """
+    ollama_url = base_url.strip('/') + '/api/tags'
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(ollama_url, timeout=5)
+            response.raise_for_status()
+            models_data = response.json().get('models', [])
+            return sorted(['ollama/' + model['name'] for model in models_data])
+    except Exception as e:
+        logger.warning(f'Failed to fetch Ollama models from {base_url}: {e}')
+        return []
 
 
 @app.get('/agents', response_model=list[str])

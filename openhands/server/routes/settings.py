@@ -91,6 +91,8 @@ async def load_settings(
         if is_openhands_model(settings.llm_model):
             if settings.llm_base_url == LITE_LLM_API_URL:
                 settings_with_token_data.llm_base_url = None
+        elif settings.llm_model and settings.llm_model.startswith('ollama/'):
+            pass  # Keep Ollama base URL — frontend needs it for Basic mode
         elif settings.llm_model and settings.llm_base_url == get_provider_api_base(
             settings.llm_model
         ):
@@ -146,6 +148,9 @@ async def store_llm_settings(
             if is_openhands_model(settings.llm_model):
                 # OpenHands models use the LiteLLM proxy
                 settings.llm_base_url = LITE_LLM_API_URL
+            elif settings.llm_model and settings.llm_model.startswith('ollama/'):
+                # Ollama models use the local Ollama server
+                settings.llm_base_url = 'http://localhost:11434'
             elif settings.llm_model:
                 # For non-openhands models, try to get URL from litellm
                 try:

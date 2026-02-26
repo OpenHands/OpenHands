@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { organizeModelsAndProviders } from "#/utils/organize-models-and-providers";
 import { useAIConfigOptions } from "#/hooks/query/use-ai-config-options";
+import { useOllamaModels } from "#/hooks/query/use-ollama-models";
 import { useSettings } from "#/hooks/query/use-settings";
 import { hasAdvancedSettingsSet } from "#/utils/has-advanced-settings-set";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
@@ -25,6 +26,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { isCustomModel } from "#/utils/is-custom-model";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
+import { OllamaStatusIndicator } from "#/components/features/settings/ollama-status-indicator";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
@@ -106,6 +108,20 @@ function LlmSettingsScreen() {
     null,
   );
 
+  // Ollama base URL state with debouncing for API calls
+  const [ollamaBaseUrl, setOllamaBaseUrl] = React.useState<string>(
+    "http://localhost:11434",
+  );
+  const [debouncedOllamaBaseUrl, setDebouncedOllamaBaseUrl] =
+    React.useState<string>("http://localhost:11434");
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedOllamaBaseUrl(ollamaBaseUrl);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [ollamaBaseUrl]);
+
   const modelsAndProviders = organizeModelsAndProviders(
     resources?.models || [],
   );
@@ -129,6 +145,33 @@ function LlmSettingsScreen() {
 
     return false;
   };
+
+  const isOllamaProvider = () => {
+    if (view === "basic") {
+      return selectedProvider === "ollama";
+    }
+    if (view === "advanced") {
+      const model = dirtyInputs.model ? currentModel : settings?.llm_model;
+      return model?.startsWith("ollama/");
+    }
+    return false;
+  };
+
+  // Fetch Ollama models dynamically when Ollama provider is selected
+  const { data: ollamaModels } = useOllamaModels(
+    isOllamaProvider() ? debouncedOllamaBaseUrl : null,
+  );
+
+  // Merge dynamically discovered Ollama models into the model list
+  const mergedModelsAndProviders = React.useMemo(() => {
+    if (!ollamaModels || ollamaModels.length === 0) return modelsAndProviders;
+    const result = { ...modelsAndProviders };
+    const ollamaOrganized = organizeModelsAndProviders(ollamaModels);
+    if (ollamaOrganized.ollama) {
+      result.ollama = ollamaOrganized.ollama;
+    }
+    return result;
+  }, [modelsAndProviders, ollamaModels]);
 
   const shouldUseOpenHandsKey = isOpenHandsProvider() && isSaasMode;
 
@@ -161,6 +204,14 @@ function LlmSettingsScreen() {
       setCurrentSelectedModel(settings.llm_model);
     }
   }, [settings?.llm_model]);
+
+  // Initialize Ollama base URL from saved settings
+  React.useEffect(() => {
+    if (settings?.llm_model?.startsWith("ollama/") && settings?.llm_base_url) {
+      setOllamaBaseUrl(settings.llm_base_url);
+      setDebouncedOllamaBaseUrl(settings.llm_base_url);
+    }
+  }, [settings?.llm_model, settings?.llm_base_url]);
 
   // Update confirmation mode state when settings change
   React.useEffect(() => {
@@ -228,6 +279,8 @@ function LlmSettingsScreen() {
     // Use OpenHands-managed key for OpenHands provider in SaaS mode
     const finalApiKey = shouldUseOpenHandsKey ? null : apiKey;
 
+    const ollamaBaseUrlValue = formData.get("ollama-base-url")?.toString();
+
     saveSettings(
       {
         llm_model: fullLlmModel,
@@ -239,8 +292,11 @@ function LlmSettingsScreen() {
             ? null
             : securityAnalyzer || DEFAULT_SETTINGS.security_analyzer,
 
-        // reset advanced settings
-        llm_base_url: DEFAULT_SETTINGS.llm_base_url,
+        // For Ollama, preserve base URL; for others, reset advanced settings
+        llm_base_url:
+          provider === "ollama"
+            ? ollamaBaseUrlValue || "http://localhost:11434"
+            : DEFAULT_SETTINGS.llm_base_url,
         agent: DEFAULT_SETTINGS.agent,
         enable_default_condenser: DEFAULT_SETTINGS.enable_default_condenser,
       },
@@ -511,7 +567,7 @@ function LlmSettingsScreen() {
               {!isLoading && !isFetching && (
                 <>
                   <ModelSelector
-                    models={modelsAndProviders}
+                    models={mergedModelsAndProviders}
                     currentModel={settings.llm_model || DEFAULT_OPENHANDS_MODEL}
                     onChange={handleModelIsDirty}
                     onDefaultValuesChanged={onDefaultValuesChanged}
@@ -524,7 +580,29 @@ function LlmSettingsScreen() {
                 </>
               )}
 
-              {!shouldUseOpenHandsKey && (
+              {isOllamaProvider() && (
+                <>
+                  <SettingsInput
+                    testId="ollama-base-url-input"
+                    name="ollama-base-url"
+                    label={t(I18nKey.SETTINGS$BASE_URL)}
+                    defaultValue={ollamaBaseUrl}
+                    placeholder="http://localhost:11434"
+                    type="text"
+                    className="w-full max-w-[680px]"
+                    onChange={(value) => {
+                      setOllamaBaseUrl(value);
+                      handleBaseUrlIsDirty(value);
+                    }}
+                  />
+                  <OllamaStatusIndicator baseUrl={debouncedOllamaBaseUrl} />
+                  <p className="text-xs text-tertiary-alt max-w-[680px]">
+                    {t(I18nKey.SETTINGS$OLLAMA_HELP_TEXT)}
+                  </p>
+                </>
+              )}
+
+              {!shouldUseOpenHandsKey && !isOllamaProvider() && (
                 <>
                   <SettingsInput
                     testId="llm-api-key-input"

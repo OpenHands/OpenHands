@@ -21,8 +21,12 @@ export const hasAdvancedSettingsSet = (
   }
 
   // Check for advanced-only settings that differ from defaults
+  // Ollama base URL is expected in basic mode, not an advanced setting
+  const isOllamaModel = settings.llm_model?.startsWith("ollama/");
   const hasBaseUrl =
-    !!settings.llm_base_url && settings.llm_base_url.trim() !== "";
+    !!settings.llm_base_url &&
+    settings.llm_base_url.trim() !== "" &&
+    !isOllamaModel;
   const hasCustomAgent =
     settings.agent !== undefined && settings.agent !== DEFAULT_SETTINGS.agent;
   // Default is true, so only check if explicitly disabled
