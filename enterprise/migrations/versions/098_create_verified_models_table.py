@@ -1,8 +1,8 @@
 """Create verified_models table.
 
-Revision ID: 097
-Revises: 096
-Create Date: 2026-02-21 00:00:00.000000
+Revision ID: 098
+Revises: 097
+Create Date: 2026-02-26 00:00:00.000000
 
 """
 
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '097'
-down_revision: Union[str, None] = '096'
+revision: str = '098'
+down_revision: Union[str, None] = '097'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
