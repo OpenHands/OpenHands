@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 
 from integrations.linear.linear_manager import LinearManager
 from integrations.utils import (
@@ -18,6 +19,13 @@ from openhands.events.action import MessageAction
 from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.events.serialization.event import event_to_dict
 from openhands.server.shared import conversation_manager
+
+warnings.warn(
+    'linear_callback_processor is deprecated. '
+    'Use integrations.linear.linear_v1_callback_processor instead.',
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 token_manager = TokenManager()
 linear_manager = LinearManager(token_manager)
