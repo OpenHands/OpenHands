@@ -208,17 +208,24 @@ class JwtService:
         except Exception:
             raise ValueError('Invalid JWE token format')
 
+        # Extract and validate the protected header
+        try:
+            protected_header = json.loads(jwe_obj.objects['protected'])
+        except (KeyError, json.JSONDecodeError) as e:
+            raise ValueError(f'Invalid JWE token format: {type(e).__name__}')
+
+        # Verify algorithms to prevent cryptographic agility attacks
+        if (
+            protected_header.get('alg') != 'dir'
+            or protected_header.get('enc') != 'A256GCM'
+        ):
+            raise ValueError('Unsupported or unexpected JWE algorithm')
+
         if key_id is None:
             # Extract key_id from the token's header
-            try:
-                protected_header = json.loads(jwe_obj.objects['protected'])
-                key_id = protected_header.get('kid')
-                if not key_id:
-                    raise ValueError("Token does not contain 'kid' header with key ID")
-            except KeyError as e:
-                raise ValueError(f'Missing required field in JWE header: {e}')
-            except json.JSONDecodeError as e:
-                raise ValueError(f'Failed to parse JWE protected header: {e}')
+            key_id = protected_header.get('kid')
+            if not key_id:
+                raise ValueError("Token does not contain 'kid' header with key ID")
 
         if key_id not in self._keys:
             raise ValueError(f"Key ID '{key_id}' not found")
