@@ -54,9 +54,9 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.2",
-  "openhands-agent-server==1.11.4",
-  "openhands-sdk==1.11.4",
-  "openhands-tools==1.11.4",
+  "openhands-agent-server==1.11.5",
+  "openhands-sdk==1.11.5",
+  "openhands-tools==1.11.5",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "pathspec>=0.12.1",
@@ -66,21 +66,21 @@ dependencies = [
   "playwright>=1.55",
   "poetry>=2.1.2",
   "prompt-toolkit>=3.0.50",
-  "protobuf>=5,<6",
+  "protobuf>=5.29.6,<6",
   "psutil",
   "pybase62>=1",
   "pygithub>=2.5",
   "pyjwt>=2.9",
   "pylatexenc",
-  "pypdf>=6",
+  "pypdf>=6.7.1",
   "python-docx",
   "python-dotenv",
   "python-frontmatter>=1.1",
   "python-jose[cryptography]>=3.3",
   "python-json-logger>=3.2.1",
-  "python-multipart",
+  "python-multipart>=0.0.22",
   "python-pptx",
-  "python-socketio==5.13",
+  "python-socketio==5.14",
   "pythonnet",
   "pyyaml>=6.0.2",
   "qtconsole>=5.6.1",
@@ -91,7 +91,7 @@ dependencies = [
   "shellingham>=1.5.4",
   "sqlalchemy[asyncio]>=2.0.40",
   "sse-starlette>=3.0.2",
-  "starlette>=0.48",
+  "starlette>=0.49.1",
   "tenacity>=8.5,<10",
   "termcolor",
   "toml",
@@ -181,7 +181,7 @@ html2text = "*"
 deprecated = "*"
 pexpect = "*"
 jinja2 = "^3.1.6"
-python-multipart = "*"
+python-multipart = ">=0.0.22"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = "^0.12.1"
@@ -191,7 +191,7 @@ tornado = ">=6.5"
 python-dotenv = "*"
 rapidfuzz = "^3.9.0"
 whatthepatch = "^1.0.6"
-protobuf = "^5.0.0,<6.0.0"                         # Updated to support newer opentelemetry
+protobuf = ">=5.29.6,<6.0.0"                       # Updated to fix CVE-2026-0994
 opentelemetry-api = "^1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 
@@ -199,7 +199,7 @@ libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
 openhands-aci = "0.3.2"
-python-socketio = "5.13.0"
+python-socketio = "5.14.0"
 sse-starlette = "^3.0.2"
 psutil = "*"
 python-json-logger = "^3.2.1"
@@ -219,9 +219,9 @@ python-docx = "*"
 bashlex = "^0.18"
 
 # Explicitly pinned packages for latest versions
-pypdf = "^6.0.0"
+pypdf = "^6.7.1"
 pillow = "^11.3.0"
-starlette = "^0.48.0"
+starlette = "^0.49.1"
 urllib3 = "^2.6.3"
 requests = "^2.32.5"
 setuptools = ">=78.1.1"
@@ -246,9 +246,9 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-openhands-sdk = "1.11.4"
-openhands-agent-server = "1.11.4"
-openhands-tools = "1.11.4"
+openhands-sdk = "1.11.5"
+openhands-agent-server = "1.11.5"
+openhands-tools = "1.11.5"
 python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"

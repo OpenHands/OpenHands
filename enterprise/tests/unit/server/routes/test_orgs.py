@@ -2132,7 +2132,8 @@ class TestGetOrgMembersEndpoint:
                     status='active',
                 )
             ],
-            next_page_id=None,
+            current_page=1,
+            per_page=100,
         )
 
         with patch(
@@ -2150,7 +2151,7 @@ class TestGetOrgMembersEndpoint:
             # Assert
             assert isinstance(result, OrgMemberPage)
             assert len(result.items) == 1
-            assert result.next_page_id is None
+            assert result.current_page == 1
             mock_get.assert_called_once()
 
     @pytest.mark.asyncio
@@ -2326,7 +2327,8 @@ class TestGetOrgMembersEndpoint:
                     status='active',
                 )
             ],
-            next_page_id='200',
+            current_page=2,
+            per_page=100,
         )
 
         with patch(
@@ -2343,13 +2345,130 @@ class TestGetOrgMembersEndpoint:
 
             # Assert
             assert isinstance(result, OrgMemberPage)
-            assert result.next_page_id == '200'
+            assert result.current_page == 2
             mock_get.assert_called_once_with(
                 org_id=uuid.UUID(org_id),
                 current_user_id=uuid.UUID(current_user_id),
                 page_id='100',
                 limit=100,
+                email_filter=None,
             )
+
+
+class TestGetOrgMembersCountEndpoint:
+    """Test cases for GET /api/organizations/{org_id}/members/count endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_count_succeeds_returns_int(self, org_id, current_user_id):
+        """Test that successful count returns an integer."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members_count',
+            AsyncMock(return_value=42),
+        ) as mock_get_count:
+            # Import here to avoid circular import issues
+            from server.routes.orgs import get_org_members_count
+
+            # Act
+            result = await get_org_members_count(
+                org_id=uuid.UUID(org_id),
+                email=None,
+                user_id=current_user_id,
+            )
+
+            # Assert
+            assert result == 42
+            mock_get_count.assert_called_once_with(
+                org_id=uuid.UUID(org_id),
+                current_user_id=uuid.UUID(current_user_id),
+                email_filter=None,
+            )
+
+    @pytest.mark.asyncio
+    async def test_count_with_email_filter(self, org_id, current_user_id):
+        """Test that email filter is passed to service."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members_count',
+            AsyncMock(return_value=5),
+        ) as mock_get_count:
+            from server.routes.orgs import get_org_members_count
+
+            # Act
+            result = await get_org_members_count(
+                org_id=uuid.UUID(org_id),
+                email='alice',
+                user_id=current_user_id,
+            )
+
+            # Assert
+            assert result == 5
+            mock_get_count.assert_called_once_with(
+                org_id=uuid.UUID(org_id),
+                current_user_id=uuid.UUID(current_user_id),
+                email_filter='alice',
+            )
+
+    @pytest.mark.asyncio
+    async def test_not_a_member_returns_403(self, org_id, current_user_id):
+        """Test that OrgMemberNotFoundError returns 403 Forbidden."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members_count',
+            AsyncMock(side_effect=OrgMemberNotFoundError(org_id, current_user_id)),
+        ):
+            from server.routes.orgs import get_org_members_count
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await get_org_members_count(
+                    org_id=uuid.UUID(org_id),
+                    email=None,
+                    user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+            assert 'not a member of this organization' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_invalid_uuid_returns_400(self, org_id):
+        """Test that invalid user_id UUID format returns 400 Bad Request."""
+        # Arrange
+        invalid_user_id = 'not-a-uuid'
+
+        from server.routes.orgs import get_org_members_count
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await get_org_members_count(
+                org_id=uuid.UUID(org_id),
+                email=None,
+                user_id=invalid_user_id,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Invalid organization ID format' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_service_exception_returns_500(self, org_id, current_user_id):
+        """Test that generic exception returns 500 Internal Server Error."""
+        # Arrange
+        with patch(
+            'server.routes.orgs.OrgMemberService.get_org_members_count',
+            AsyncMock(side_effect=Exception('Database error')),
+        ):
+            from server.routes.orgs import get_org_members_count
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await get_org_members_count(
+                    org_id=uuid.UUID(org_id),
+                    email=None,
+                    user_id=current_user_id,
+                )
+
+            assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert 'Failed to retrieve member count' in exc_info.value.detail
 
 
 class TestRemoveOrgMemberEndpoint:

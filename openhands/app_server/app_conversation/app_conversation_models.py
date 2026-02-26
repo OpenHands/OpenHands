@@ -170,7 +170,15 @@ class AppConversationStartRequest(OpenHandsModel):
 
 
 class AppConversationUpdateRequest(BaseModel):
-    public: bool
+    """Request model for updating conversation metadata.
+
+    All fields are optional - only provided fields will be updated.
+    """
+
+    public: bool | None = None
+    selected_repository: str | None = None
+    selected_branch: str | None = None
+    git_provider: ProviderType | None = None
 
 
 class AppConversationStartTaskStatus(Enum):

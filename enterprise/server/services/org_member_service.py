@@ -16,10 +16,12 @@ from server.routes.org_models import (
     OrgMemberUpdate,
     RoleNotFoundError,
 )
+from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member_store import OrgMemberStore
 from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
+from openhands.core.logger import openhands_logger as logger
 from openhands.utils.async_utils import call_sync_from_async
 
 
@@ -65,9 +67,17 @@ class OrgMemberService:
         org_id: UUID,
         current_user_id: UUID,
         page_id: str | None = None,
-        limit: int = 100,
+        limit: int = 10,
+        email_filter: str | None = None,
     ) -> tuple[bool, str | None, OrgMemberPage | None]:
         """Get organization members with authorization check.
+
+        Args:
+            org_id: Organization UUID.
+            current_user_id: Requesting user's UUID.
+            page_id: Offset encoded as string (e.g., "0", "10", "20").
+            limit: Items per page (default 10).
+            email_filter: Optional case-insensitive partial email match.
 
         Returns:
             Tuple of (success, error_code, data). If success is True, error_code is None.
@@ -88,8 +98,11 @@ class OrgMemberService:
                 return False, 'invalid_page_id', None
 
         # Call store to get paginated members
-        members, has_more = await OrgMemberStore.get_org_members_paginated(
-            org_id=org_id, offset=offset, limit=limit
+        members, _ = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id,
+            offset=offset,
+            limit=limit,
+            email_filter=email_filter,
         )
 
         # Transform data to response format
@@ -110,12 +123,47 @@ class OrgMemberService:
                 )
             )
 
-        # Calculate next_page_id
-        next_page_id = None
-        if has_more:
-            next_page_id = str(offset + limit)
+        # Calculate current page (1-indexed)
+        current_page = (offset // limit) + 1
 
-        return True, None, OrgMemberPage(items=items, next_page_id=next_page_id)
+        return (
+            True,
+            None,
+            OrgMemberPage(
+                items=items,
+                current_page=current_page,
+                per_page=limit,
+            ),
+        )
+
+    @staticmethod
+    async def get_org_members_count(
+        org_id: UUID,
+        current_user_id: UUID,
+        email_filter: str | None = None,
+    ) -> int:
+        """Get count of organization members with authorization check.
+
+        Args:
+            org_id: Organization UUID.
+            current_user_id: Requesting user's UUID.
+            email_filter: Optional case-insensitive partial email match.
+
+        Returns:
+            int: Count of organization members matching the filter.
+
+        Raises:
+            OrgMemberNotFoundError: If requesting user is not a member of the organization.
+        """
+        # Verify current user is a member of the organization
+        requester_membership = OrgMemberStore.get_org_member(org_id, current_user_id)
+        if not requester_membership:
+            raise OrgMemberNotFoundError(str(org_id), str(current_user_id))
+
+        return await OrgMemberStore.get_org_members_count(
+            org_id=org_id,
+            email_filter=email_filter,
+        )
 
     @staticmethod
     async def remove_org_member(
@@ -168,9 +216,42 @@ class OrgMemberService:
             if not success:
                 return False, 'removal_failed'
 
+            # Update user's current_org_id if it points to the org they were removed from
+            user = UserStore.get_user_by_id(str(target_user_id))
+            if user and user.current_org_id == org_id:
+                # Set current_org_id to personal workspace (org.id == user.id)
+                UserStore.update_current_org(str(target_user_id), target_user_id)
+
             return True, None
 
-        return await call_sync_from_async(_remove_member)
+        success, error = await call_sync_from_async(_remove_member)
+
+        # If database removal succeeded, also remove from LiteLLM team
+        if success:
+            try:
+                await LiteLlmManager.remove_user_from_team(
+                    str(target_user_id), str(org_id)
+                )
+                logger.info(
+                    'Successfully removed user from LiteLLM team',
+                    extra={
+                        'user_id': str(target_user_id),
+                        'org_id': str(org_id),
+                    },
+                )
+            except Exception as e:
+                # Log but don't fail the operation - database removal already succeeded
+                # LiteLLM state will be eventually consistent
+                logger.warning(
+                    'Failed to remove user from LiteLLM team',
+                    extra={
+                        'user_id': str(target_user_id),
+                        'org_id': str(org_id),
+                        'error': str(e),
+                    },
+                )
+
+        return success, error
 
     @staticmethod
     async def update_org_member(

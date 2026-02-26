@@ -175,7 +175,8 @@ class TestOrgMemberServiceGetOrgMembers:
             assert data is not None
             assert isinstance(data, OrgMemberPage)
             assert len(data.items) == 1
-            assert data.next_page_id is None
+            assert data.current_page == 1
+            assert data.per_page == 100
             assert data.items[0].user_id == str(current_user_id)
             assert data.items[0].email == 'test@example.com'
             assert data.items[0].role_id == 1
@@ -282,9 +283,9 @@ class TestOrgMemberServiceGetOrgMembers:
             # Assert
             assert success is True
             assert data is not None
-            assert data.next_page_id is None
+            assert data.current_page == 1
             mock_get_paginated.assert_called_once_with(
-                org_id=org_id, offset=0, limit=100
+                org_id=org_id, offset=0, limit=100, email_filter=None
             )
 
     @pytest.mark.asyncio
@@ -316,9 +317,9 @@ class TestOrgMemberServiceGetOrgMembers:
             # Assert
             assert success is True
             assert data is not None
-            assert data.next_page_id == '150'  # offset (100) + limit (50)
+            assert data.current_page == 3  # offset (100) / limit (50) + 1
             mock_get_paginated.assert_called_once_with(
-                org_id=org_id, offset=100, limit=50
+                org_id=org_id, offset=100, limit=50, email_filter=None
             )
 
     @pytest.mark.asyncio
@@ -350,7 +351,7 @@ class TestOrgMemberServiceGetOrgMembers:
             # Assert
             assert success is True
             assert data is not None
-            assert data.next_page_id is None
+            assert data.current_page == 3
 
     @pytest.mark.asyncio
     async def test_empty_organization_no_members(
@@ -382,7 +383,6 @@ class TestOrgMemberServiceGetOrgMembers:
             assert success is True
             assert data is not None
             assert len(data.items) == 0
-            assert data.next_page_id is None
 
     @pytest.mark.asyncio
     async def test_missing_user_relationship_handles_gracefully(
@@ -512,6 +512,156 @@ class TestOrgMemberServiceGetOrgMembers:
             assert data is not None
             assert len(data.items) == 2
 
+    @pytest.mark.asyncio
+    async def test_email_filter_passed_to_store(
+        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+    ):
+        """Test that email filter is passed to store methods."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
+            ) as mock_get_paginated,
+        ):
+            mock_get_member.return_value = requester_membership_owner
+            mock_get_paginated.return_value = ([mock_org_member], False)
+
+            # Act
+            await OrgMemberService.get_org_members(
+                org_id=org_id,
+                current_user_id=current_user_id,
+                page_id=None,
+                limit=10,
+                email_filter='alice',
+            )
+
+            # Assert
+            mock_get_paginated.assert_called_once_with(
+                org_id=org_id, offset=0, limit=10, email_filter='alice'
+            )
+
+    @pytest.mark.asyncio
+    async def test_pagination_metadata_correct_for_page_2(
+        self, org_id, current_user_id, mock_org_member, requester_membership_owner
+    ):
+        """Test pagination metadata is correct for page 2."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_paginated',
+                new_callable=AsyncMock,
+            ) as mock_get_paginated,
+        ):
+            mock_get_member.return_value = requester_membership_owner
+            mock_get_paginated.return_value = ([mock_org_member], True)
+
+            # Act - Request page 2 (offset 10) with limit 10
+            success, error_code, data = await OrgMemberService.get_org_members(
+                org_id=org_id,
+                current_user_id=current_user_id,
+                page_id='10',
+                limit=10,
+            )
+
+            # Assert
+            assert success is True
+            assert data is not None
+            assert data.current_page == 2
+            assert data.per_page == 10
+
+
+class TestOrgMemberServiceGetOrgMembersCount:
+    """Test cases for OrgMemberService.get_org_members_count."""
+
+    @pytest.fixture
+    def requester_membership(self, org_id, current_user_id):
+        """Create a mock requester membership."""
+        membership = MagicMock(spec=OrgMember)
+        membership.org_id = org_id
+        membership.user_id = current_user_id
+        membership.role_id = 1
+        return membership
+
+    @pytest.mark.asyncio
+    async def test_count_succeeds_returns_count(
+        self, org_id, current_user_id, requester_membership
+    ):
+        """Test that successful count returns the member count."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
+        ):
+            mock_get_member.return_value = requester_membership
+            mock_get_count.return_value = 42
+
+            # Act
+            count = await OrgMemberService.get_org_members_count(
+                org_id=org_id,
+                current_user_id=current_user_id,
+            )
+
+            # Assert
+            assert count == 42
+            mock_get_count.assert_called_once_with(org_id=org_id, email_filter=None)
+
+    @pytest.mark.asyncio
+    async def test_count_with_email_filter(
+        self, org_id, current_user_id, requester_membership
+    ):
+        """Test that email filter is passed to store method."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_members_count',
+                new_callable=AsyncMock,
+            ) as mock_get_count,
+        ):
+            mock_get_member.return_value = requester_membership
+            mock_get_count.return_value = 5
+
+            # Act
+            count = await OrgMemberService.get_org_members_count(
+                org_id=org_id,
+                current_user_id=current_user_id,
+                email_filter='alice',
+            )
+
+            # Assert
+            assert count == 5
+            mock_get_count.assert_called_once_with(org_id=org_id, email_filter='alice')
+
+    @pytest.mark.asyncio
+    async def test_not_a_member_raises_error(self, org_id, current_user_id):
+        """Test that non-member raises OrgMemberNotFoundError."""
+        # Arrange
+        with patch(
+            'server.services.org_member_service.OrgMemberStore.get_org_member'
+        ) as mock_get_member:
+            mock_get_member.return_value = None
+
+            # Act & Assert
+            with pytest.raises(OrgMemberNotFoundError):
+                await OrgMemberService.get_org_members_count(
+                    org_id=org_id,
+                    current_user_id=current_user_id,
+                )
+
 
 @pytest.fixture
 def target_membership_owner(org_id, target_user_id, owner_role):
@@ -549,6 +699,9 @@ class TestOrgMemberServiceRemoveOrgMember:
             patch(
                 'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
             ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
         ):
             mock_get_member.side_effect = [
                 requester_membership_owner,
@@ -556,6 +709,7 @@ class TestOrgMemberServiceRemoveOrgMember:
             ]
             mock_get_role.side_effect = [owner_role, member_role]
             mock_remove.return_value = True
+            mock_get_user.return_value = None
 
             # Act
             success, error = await OrgMemberService.remove_org_member(
@@ -590,6 +744,9 @@ class TestOrgMemberServiceRemoveOrgMember:
             patch(
                 'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
             ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
         ):
             mock_get_member.side_effect = [
                 requester_membership_owner,
@@ -597,6 +754,7 @@ class TestOrgMemberServiceRemoveOrgMember:
             ]
             mock_get_role.side_effect = [owner_role, admin_role]
             mock_remove.return_value = True
+            mock_get_user.return_value = None
 
             # Act
             success, error = await OrgMemberService.remove_org_member(
@@ -630,6 +788,9 @@ class TestOrgMemberServiceRemoveOrgMember:
             patch(
                 'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
             ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
         ):
             mock_get_member.side_effect = [
                 requester_membership_admin,
@@ -637,6 +798,7 @@ class TestOrgMemberServiceRemoveOrgMember:
             ]
             mock_get_role.side_effect = [admin_role, member_role]
             mock_remove.return_value = True
+            mock_get_user.return_value = None
 
             # Act
             success, error = await OrgMemberService.remove_org_member(
@@ -927,6 +1089,9 @@ class TestOrgMemberServiceRemoveOrgMember:
             patch(
                 'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
             ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
         ):
             mock_get_member.side_effect = [
                 requester_membership_owner,
@@ -940,6 +1105,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 another_owner,
             ]
             mock_remove.return_value = True
+            mock_get_user.return_value = None
 
             # Act
             success, error = await OrgMemberService.remove_org_member(
@@ -989,6 +1155,302 @@ class TestOrgMemberServiceRemoveOrgMember:
             # Assert
             assert success is False
             assert error == 'removal_failed'
+
+    @pytest.mark.asyncio
+    async def test_remove_member_updates_current_org_id_when_matching(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that current_org_id is updated to personal workspace when it matches removed org."""
+        # Arrange
+        mock_user = MagicMock(spec=User)
+        mock_user.current_org_id = (
+            org_id  # User's current org matches the org being removed
+        )
+
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.UserStore.update_current_org'
+            ) as mock_update_org,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = True
+            mock_get_user.return_value = mock_user
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is True
+            assert error is None
+            mock_update_org.assert_called_once_with(str(target_user_id), target_user_id)
+
+    @pytest.mark.asyncio
+    async def test_remove_member_does_not_update_current_org_id_when_not_matching(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that current_org_id is NOT updated when it differs from removed org."""
+        # Arrange
+        different_org_id = uuid.uuid4()
+        mock_user = MagicMock(spec=User)
+        mock_user.current_org_id = different_org_id  # User's current org is different
+
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.UserStore.update_current_org'
+            ) as mock_update_org,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = True
+            mock_get_user.return_value = mock_user
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is True
+            assert error is None
+            mock_update_org.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_remove_member_succeeds_when_user_not_found_after_removal(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that removal succeeds even if user lookup returns None after removal."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.UserStore.update_current_org'
+            ) as mock_update_org,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = True
+            mock_get_user.return_value = None  # User not found
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is True
+            assert error is None
+            mock_update_org.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_successful_removal_calls_litellm_remove_user_from_team(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that LiteLLM remove_user_from_team is called after successful database removal."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.LiteLlmManager.remove_user_from_team',
+                new_callable=AsyncMock,
+            ) as mock_litellm_remove,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = True
+            mock_get_user.return_value = None
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is True
+            mock_litellm_remove.assert_called_once_with(
+                str(target_user_id), str(org_id)
+            )
+
+    @pytest.mark.asyncio
+    async def test_litellm_failure_does_not_fail_removal(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that LiteLLM failure doesn't fail the overall removal operation."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.UserStore.get_user_by_id'
+            ) as mock_get_user,
+            patch(
+                'server.services.org_member_service.LiteLlmManager.remove_user_from_team',
+                new_callable=AsyncMock,
+            ) as mock_litellm_remove,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = True
+            mock_get_user.return_value = None
+            mock_litellm_remove.side_effect = Exception('LiteLLM API error')
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is True
+            assert error is None
+
+    @pytest.mark.asyncio
+    async def test_database_failure_skips_litellm_call(
+        self,
+        org_id,
+        current_user_id,
+        target_user_id,
+        requester_membership_owner,
+        target_membership_user,
+        owner_role,
+        member_role,
+    ):
+        """Test that LiteLLM is not called when database removal fails."""
+        # Arrange
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch(
+                'server.services.org_member_service.RoleStore.get_role_by_id'
+            ) as mock_get_role,
+            patch(
+                'server.services.org_member_service.OrgMemberStore.remove_user_from_org'
+            ) as mock_remove,
+            patch(
+                'server.services.org_member_service.LiteLlmManager.remove_user_from_team',
+                new_callable=AsyncMock,
+            ) as mock_litellm_remove,
+        ):
+            mock_get_member.side_effect = [
+                requester_membership_owner,
+                target_membership_user,
+            ]
+            mock_get_role.side_effect = [owner_role, member_role]
+            mock_remove.return_value = False
+
+            # Act
+            success, error = await OrgMemberService.remove_org_member(
+                org_id, target_user_id, current_user_id
+            )
+
+            # Assert
+            assert success is False
+            mock_litellm_remove.assert_not_called()
 
 
 class TestOrgMemberServiceCanRemoveMember:
