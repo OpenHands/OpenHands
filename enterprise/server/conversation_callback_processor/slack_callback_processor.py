@@ -52,8 +52,7 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
     last_user_msg_id: int | None = None
 
     async def _send_message_to_slack(self, message: str) -> None:
-        """
-        Send a message to Slack using the conversation_manager's send_to_event_stream method.
+        """Send a message to Slack using the conversation_manager's send_to_event_stream method.
 
         Args:
             message: The message content to send to Slack
@@ -94,13 +93,11 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
         callback: ConversationCallback,
         observation: AgentStateChangedObservation,
     ) -> None:
-        """
-        Process a conversation event by sending a summary to Slack.
+        """Process a conversation event by sending a summary to Slack.
 
         Args:
-            conversation_id: The ID of the conversation to process
-            observation: The AgentStateChangedObservation that triggered the callback
-            callback: The conversation callback
+            callback: The conversation callback.
+            observation: The AgentStateChangedObservation that triggered the callback.
         """
         logger.info(f'[Slack] Callback agent state was {observation.agent_state}')
         if observation.agent_state not in (

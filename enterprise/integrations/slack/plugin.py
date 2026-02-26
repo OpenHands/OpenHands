@@ -9,7 +9,7 @@ plugin architecture (see #12978, #12971, #12972).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from fastapi import APIRouter
 

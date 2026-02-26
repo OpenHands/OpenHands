@@ -197,7 +197,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
             if not response['ok']:
                 raise RuntimeError(
-                    f"Slack API error: {response.get('error', 'Unknown error')}"
+                    f'Slack API error: {response.get("error", "Unknown error")}'
                 )
 
             _logger.info(
