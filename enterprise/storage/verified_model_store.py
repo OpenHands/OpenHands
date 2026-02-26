@@ -1,6 +1,6 @@
 """Store for managing verified LLM models in the database."""
 
-from typing import TypedDict
+from dataclasses import dataclass
 
 from sqlalchemy import and_
 from storage.database import session_maker
@@ -9,7 +9,8 @@ from storage.verified_model import VerifiedModel
 from openhands.core.logger import openhands_logger as logger
 
 
-class SearchModelsResult(TypedDict):
+@dataclass
+class SearchModelsResult:
     """Result of search_models with pagination info."""
 
     items: list[VerifiedModel]
@@ -74,8 +75,32 @@ class VerifiedModelStore:
         Returns:
             list[VerifiedModel]: All models where is_enabled is True
         """
-        result = VerifiedModelStore.search_models(enabled_only=True, limit=1000)
-        return result['items']
+        # Fetch all enabled models without limit to avoid silent data loss
+        result = VerifiedModelStore.search_models(enabled_only=True, limit=10**9)
+        return result.items
+
+    @staticmethod
+    def get_models_by_provider(provider: str) -> list[VerifiedModel]:
+        """Get all enabled models for a specific provider.
+
+        Args:
+            provider: The provider name (e.g., 'openhands', 'anthropic')
+
+        .. deprecated::
+            Use :meth:`search_models` instead for SQL-level filtering.
+        """
+        result = VerifiedModelStore.search_models(provider=provider, enabled_only=True, limit=10**9)
+        return result.items
+
+    @staticmethod
+    def get_all_models() -> list[VerifiedModel]:
+        """Get all models (including disabled).
+
+        .. deprecated::
+            Use :meth:`search_models` instead for SQL-level filtering.
+        """
+        result = VerifiedModelStore.search_models(enabled_only=False, limit=10**9)
+        return result.items
 
     @staticmethod
     def get_model(model_name: str, provider: str) -> VerifiedModel | None:

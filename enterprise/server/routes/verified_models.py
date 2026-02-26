@@ -89,8 +89,8 @@ async def list_verified_models(
         )
 
         return VerifiedModelPage(
-            items=[_to_response(m) for m in result['items']],
-            next_page_id=str(offset + limit) if result['has_more'] else None,
+            items=[_to_response(m) for m in result.items],
+            next_page_id=str(offset + limit) if result.has_more else None,
         )
     except Exception:
         logger.exception('Error listing verified models')
