@@ -125,7 +125,6 @@ function ManageOrganizationMembers() {
   const canAssignUserRole = (member: OrganizationMember) =>
     user != null &&
     user?.user_id !== member.user_id &&
-    user?.role !== member.role &&
     hasPermission(`change_user_role:${member.role}`);
 
   return (

@@ -415,45 +415,124 @@ describe("Manage Organization Members Route", () => {
   });
 
   it("should not allow an admin to change the owner's role", async () => {
-    await verifyRoleChangeNotPermitted(
-      {
-        org_id: "3",
-        user_id: "1",
-        email: "test@example.com",
-        role: "admin",
-        llm_api_key: "**********",
-        max_iterations: 20,
-        llm_model: "gpt-4",
-        llm_api_key_for_byor: null,
-        llm_base_url: "https://api.openai.com",
-        status: "active",
-      },
-      1, // Acme Corp (org "2")
-      0, // first member is "owner" (alice)
-      "Owner",
-    );
+    // User is bob (admin, user_id: "2") trying to edit alice (owner, user_id: "1")
+    // Admins don't have change_user_role:owner permission, so dropdown shouldn't show
+
+    // Reset mock data to ensure clean state
+    resetOrgsAndMembersMockData();
+
+    // Pre-seed the /me query data to avoid stale cache issues
+    const userData = {
+      org_id: "2",
+      user_id: "2", // bob (admin) - different from alice
+      email: "bob@acme.org",
+      role: "admin" as const,
+      llm_api_key: "**********",
+      max_iterations: 20,
+      llm_model: "gpt-4",
+      llm_api_key_for_byor: null,
+      llm_base_url: "https://api.openai.com",
+      status: "active" as const,
+    };
+
+    getMeSpy.mockResolvedValue(userData);
+    queryClient.setQueryData(["organizations", "2", "me"], userData);
+
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
+    await selectOrganization({ orgIndex: 1 }); // Acme Corp (org "2")
+
+    // Wait for member list to load
+    const memberListItems = await screen.findAllByTestId("member-item");
+
+    // First member is alice (owner)
+    const targetMember = memberListItems[0];
+    const roleText = within(targetMember).getByText(/^owner$/i);
+    expect(roleText).toBeInTheDocument();
+    await userEvent.click(roleText);
+
+    // Verify that the dropdown does not open (admin can't edit owner)
+    expectDropdownNotVisible(targetMember);
   });
 
-  it("should not allow an admin to change another admin's role", async () => {
-    // Org 3 (Beta LLC) has evan(admin) at index 1 - but there's only one admin
-    // So we test that an admin can't click on their own role (evan is the only admin)
-    await verifyRoleChangeNotPermitted(
+  it("should allow an admin to change another admin's role", async () => {
+    // Mock members to include two admins so we can test admin editing another admin
+    const getOrganizationMembersSpy = vi.spyOn(
+      organizationService,
+      "getOrganizationMembers",
+    );
+    const getOrganizationMembersCountSpy = vi.spyOn(
+      organizationService,
+      "getOrganizationMembersCount",
+    );
+
+    const twoAdminsMembers = [
       {
-        org_id: "3",
+        org_id: "2",
         user_id: "1",
-        email: "test@example.com",
-        role: "admin",
+        email: "admin1@acme.org",
+        role: "admin" as const,
         llm_api_key: "**********",
         max_iterations: 20,
         llm_model: "gpt-4",
         llm_api_key_for_byor: null,
         llm_base_url: "https://api.openai.com",
-        status: "active",
+        status: "active" as const,
       },
-      2, // Beta LLC (org "3") - has tony(user), evan(admin)
-      1, // second member is evan (admin) - can't change own role
-      "Admin",
-    );
+      {
+        org_id: "2",
+        user_id: "2",
+        email: "admin2@acme.org",
+        role: "admin" as const,
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active" as const,
+      },
+    ];
+
+    getOrganizationMembersSpy.mockResolvedValue({
+      items: twoAdminsMembers,
+      current_page: 1,
+      per_page: 10,
+    });
+    getOrganizationMembersCountSpy.mockResolvedValue(2);
+
+    // Current user is admin1 (user_id: "1")
+    getMeSpy.mockResolvedValue({
+      org_id: "2",
+      user_id: "1",
+      email: "admin1@acme.org",
+      role: "admin",
+      llm_api_key: "**********",
+      max_iterations: 20,
+      llm_model: "gpt-4",
+      llm_api_key_for_byor: null,
+      llm_base_url: "https://api.openai.com",
+      status: "active",
+    });
+
+    const updateMemberRoleSpy = createUpdateMemberRoleSpy();
+
+    renderManageOrganizationMembers();
+    await screen.findByTestId("manage-organization-members-settings");
+    await selectOrganization({ orgIndex: 1 }); // Acme Corp
+
+    // Find admin2 and change their role to member
+    const admin2Member = await findMemberByEmail("admin2@acme.org");
+    await changeMemberRole(admin2Member, "admin", "member");
+
+    expect(updateMemberRoleSpy).toHaveBeenCalledExactlyOnceWith({
+      userId: "2",
+      orgId: "2",
+      role: "member",
+    });
+
+    // Restore spies to prevent interference with subsequent tests
+    getOrganizationMembersSpy.mockRestore();
+    getOrganizationMembersCountSpy.mockRestore();
   });
 
   it("should not allow a user to change their own role", async () => {
@@ -522,9 +601,6 @@ describe("Manage Organization Members Route", () => {
     expect(screen.queryByText("charlie@acme.org")).not.toBeInTheDocument();
   });
 
-  it.todo(
-    "should not allow a user to change another user's role if they are the same role",
-  );
 
   describe("Inviting Organization Members", () => {
     it("should render an invite organization member button", async () => {
@@ -680,25 +756,124 @@ describe("Manage Organization Members Route", () => {
   });
 
   describe("Role-based role change permission behavior", () => {
-    it("should not allow an owner to change another owner's role", async () => {
+    it("should not allow an owner to change their own role", async () => {
       // Acme Corp (org "2") - alice is owner, can't change her own role
-      await verifyRoleChangeNotPermitted(
+
+      // Reset mock data to ensure clean state
+      resetOrgsAndMembersMockData();
+
+      // Pre-seed the /me query data to avoid stale cache issues
+      const userData = {
+        org_id: "2",
+        user_id: "1", // alice (owner) - same as first member
+        email: "alice@acme.org",
+        role: "owner" as const,
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active" as const,
+      };
+
+      getMeSpy.mockResolvedValue(userData);
+      queryClient.setQueryData(["organizations", "2", "me"], userData);
+
+      renderManageOrganizationMembers();
+      await screen.findByTestId("manage-organization-members-settings");
+      await selectOrganization({ orgIndex: 1 }); // Acme Corp (org "2")
+
+      // Wait for member list to load
+      const memberListItems = await screen.findAllByTestId("member-item");
+
+      // First member is alice (owner) - same as current user
+      const targetMember = memberListItems[0];
+      const roleText = within(targetMember).getByText(/^owner$/i);
+      expect(roleText).toBeInTheDocument();
+      await userEvent.click(roleText);
+
+      // Verify that the dropdown does not open (can't edit own role)
+      expectDropdownNotVisible(targetMember);
+    });
+
+    it("should allow an owner to change another owner's role", async () => {
+      // Mock members to include two owners so we can test owner editing another owner
+      const getOrganizationMembersSpy = vi.spyOn(
+        organizationService,
+        "getOrganizationMembers",
+      );
+      const getOrganizationMembersCountSpy = vi.spyOn(
+        organizationService,
+        "getOrganizationMembersCount",
+      );
+
+      const twoOwnersMembers = [
         {
-          org_id: "1",
-          user_id: "1", // First member is owner in org 1
-          email: "alice@acme.org",
-          role: "owner",
+          org_id: "2",
+          user_id: "1",
+          email: "owner1@acme.org",
+          role: "owner" as const,
           llm_api_key: "**********",
           max_iterations: 20,
           llm_model: "gpt-4",
           llm_api_key_for_byor: null,
           llm_base_url: "https://api.openai.com",
-          status: "active",
+          status: "active" as const,
         },
-        1, // Acme Corp (org "2")
-        0, // First member is owner (alice)
-        "owner",
-      );
+        {
+          org_id: "2",
+          user_id: "2",
+          email: "owner2@acme.org",
+          role: "owner" as const,
+          llm_api_key: "**********",
+          max_iterations: 20,
+          llm_model: "gpt-4",
+          llm_api_key_for_byor: null,
+          llm_base_url: "https://api.openai.com",
+          status: "active" as const,
+        },
+      ];
+
+      getOrganizationMembersSpy.mockResolvedValue({
+        items: twoOwnersMembers,
+        current_page: 1,
+        per_page: 10,
+      });
+      getOrganizationMembersCountSpy.mockResolvedValue(2);
+
+      // Current user is owner1 (user_id: "1")
+      getMeSpy.mockResolvedValue({
+        org_id: "2",
+        user_id: "1",
+        email: "owner1@acme.org",
+        role: "owner",
+        llm_api_key: "**********",
+        max_iterations: 20,
+        llm_model: "gpt-4",
+        llm_api_key_for_byor: null,
+        llm_base_url: "https://api.openai.com",
+        status: "active",
+      });
+
+      const updateMemberRoleSpy = createUpdateMemberRoleSpy();
+
+      renderManageOrganizationMembers();
+      await screen.findByTestId("manage-organization-members-settings");
+      await selectOrganization({ orgIndex: 1 }); // Acme Corp
+
+      // Find owner2 and change their role to admin
+      const owner2Member = await findMemberByEmail("owner2@acme.org");
+      await changeMemberRole(owner2Member, "owner", "admin");
+
+      expect(updateMemberRoleSpy).toHaveBeenCalledExactlyOnceWith({
+        userId: "2",
+        orgId: "2",
+        role: "admin",
+      });
+
+      // Restore spies to prevent interference with subsequent tests
+      getOrganizationMembersSpy.mockRestore();
+      getOrganizationMembersCountSpy.mockRestore();
     });
 
     it("Owner should see all three role options (owner, admin, user) in dropdown regardless of target member's role", async () => {

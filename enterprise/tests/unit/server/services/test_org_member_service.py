@@ -1480,13 +1480,13 @@ class TestOrgMemberServiceCanRemoveMember:
         # Assert
         assert result is True
 
-    def test_admin_cannot_remove_admin(self):
-        """Test that admin cannot remove another admin."""
+    def test_admin_can_remove_admin(self):
+        """Test that admin can remove another admin."""
         # Act
         result = OrgMemberService._can_remove_member('admin', 'admin')
 
         # Assert
-        assert result is False
+        assert result is True
 
     def test_admin_cannot_remove_owner(self):
         """Test that admin cannot remove owner."""
@@ -1912,10 +1912,10 @@ class TestOrgMemberServiceCanUpdateMemberRole:
             OrgMemberService._can_update_member_role('owner', 'member', 'owner') is True
         )
 
-    def test_owner_cannot_modify_owner(self):
-        """Owner cannot change another owner's role."""
+    def test_owner_can_modify_owner(self):
+        """Owner can change another owner's role."""
         assert (
-            OrgMemberService._can_update_member_role('owner', 'owner', 'admin') is False
+            OrgMemberService._can_update_member_role('owner', 'owner', 'admin') is True
         )
 
     def test_admin_can_set_admin_or_member_for_member(self):
@@ -1928,12 +1928,17 @@ class TestOrgMemberServiceCanUpdateMemberRole:
             is True
         )
 
-    def test_admin_cannot_modify_admin_or_owner(self):
-        """Admin cannot modify admin or owner targets."""
+    def test_admin_can_modify_admin(self):
+        """Admin can change another admin's role to admin or member."""
         assert (
-            OrgMemberService._can_update_member_role('admin', 'admin', 'member')
-            is False
+            OrgMemberService._can_update_member_role('admin', 'admin', 'member') is True
         )
+        assert (
+            OrgMemberService._can_update_member_role('admin', 'admin', 'admin') is True
+        )
+
+    def test_admin_cannot_modify_owner(self):
+        """Admin cannot modify owner targets."""
         assert (
             OrgMemberService._can_update_member_role('admin', 'owner', 'admin') is False
         )

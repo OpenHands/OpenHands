@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from server.constants import ROLE_ADMIN, ROLE_MEMBER, ROLE_OWNER
+from server.constants import ROLE_ADMIN, ROLE_OWNER
 from server.routes.org_models import (
     CannotModifySelfError,
     InsufficientPermissionError,
@@ -375,28 +375,25 @@ class OrgMemberService:
         """Check if requester can change target's role to new_role.
 
         Permission rules:
-        - Owners can modify admins and users, can set any role
-        - Owners cannot modify other owners
-        - Admins can only modify users
-        - Admins can only set admin or user roles (not owner)
+        - Owners can modify anyone (including other owners), can set any role
+        - Admins can modify members and other admins (not owners)
+        - Admins can only set admin or member roles (not owner)
         """
         is_requester_owner = requester_role_name == ROLE_OWNER
         is_requester_admin = requester_role_name == ROLE_ADMIN
         is_target_owner = target_role_name == ROLE_OWNER
-        is_target_admin = target_role_name == ROLE_ADMIN
         is_new_role_owner = new_role_name == ROLE_OWNER
 
         if is_requester_owner:
-            # Owners cannot modify other owners
-            if is_target_owner:
-                return False
-            # Owners can set any role (owner, admin, user)
+            # Owners can modify anyone (including other owners)
+            # Owners can set any role (owner, admin, member)
             return True
         elif is_requester_admin:
-            # Admins cannot modify owners or other admins
-            if is_target_owner or is_target_admin:
+            # Admins cannot modify owners
+            if is_target_owner:
                 return False
-            # Admins can only set admin or user roles (not owner)
+            # Admins can modify members and other admins
+            # Admins can only set admin or member roles (not owner)
             return not is_new_role_owner
         return False
 
@@ -406,8 +403,8 @@ class OrgMemberService:
         if requester_role_name == ROLE_OWNER:
             return True
         elif requester_role_name == ROLE_ADMIN:
-            # Admins can only remove members (not owners or other admins)
-            return target_role_name == ROLE_MEMBER
+            # Admins can remove members and other admins (not owners)
+            return target_role_name != ROLE_OWNER
         return False
 
     @staticmethod
