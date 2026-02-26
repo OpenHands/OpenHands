@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
+from storage.user_store import UserStore
 from utils.identity import resolve_display_name
 
 from openhands.integrations.provider import (
@@ -115,13 +116,21 @@ async def saas_get_user(
                 content='Failed to retrieve user_info.',
                 status_code=status.HTTP_401_UNAUTHORIZED,
             )
+        # Prefer email from DB; fall back to Keycloak if not yet persisted
+        email = user_info.get('email') if user_info else None
+        sub = user_info.get('sub') if user_info else ''
+        if sub:
+            db_user = await UserStore.get_user_by_id_async(sub)
+            if db_user and db_user.email is not None:
+                email = db_user.email
+
         retval = await _check_idp(
             access_token=access_token,
             default_value=User(
-                id=(user_info.get('sub') if user_info else '') or '',
+                id=sub,
                 login=(user_info.get('preferred_username') if user_info else '') or '',
                 avatar_url='',
-                email=user_info.get('email') if user_info else None,
+                email=email,
                 name=resolve_display_name(user_info) if user_info else None,
                 company=user_info.get('company') if user_info else None,
             ),

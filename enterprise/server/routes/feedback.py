@@ -8,11 +8,18 @@ from storage.feedback import ConversationFeedback
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 
 from openhands.events.event_store import EventStore
+from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import file_store
 from openhands.server.user_auth import get_user_id
 from openhands.utils.async_utils import call_sync_from_async
 
-router = APIRouter(prefix='/feedback', tags=['feedback'])
+# We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
+# is protected. The actual protection is provided by SetAuthCookieMiddleware
+# TODO: It may be an error by you can actually post feedback to a conversation you don't
+# own right now - maybe this is useful in the context of public shared conversations?
+router = APIRouter(
+    prefix='/feedback', tags=['feedback'], dependencies=get_dependencies()
+)
 
 
 async def get_event_ids(conversation_id: str, user_id: str) -> List[int]:
