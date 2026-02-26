@@ -2,7 +2,6 @@
 
 import pytest
 from server.verified_models.verified_model_service import (
-    StoredVerifiedModel,
     VerifiedModelService,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -211,9 +210,10 @@ class TestDeleteVerifiedModel:
     async def test_delete_model(self, _seed_models, async_session_maker):
         async with async_session_maker() as session:
             service = VerifiedModelService(session)
-            assert await service.delete_verified_model(
-                'claude-sonnet', 'openhands'
-            ) is True
+            assert (
+                await service.delete_verified_model('claude-sonnet', 'openhands')
+                is True
+            )
 
         async with async_session_maker() as session:
             service = VerifiedModelService(session)
@@ -224,6 +224,6 @@ class TestDeleteVerifiedModel:
     async def test_delete_not_found(self, _seed_models, async_session_maker):
         async with async_session_maker() as session:
             service = VerifiedModelService(session)
-            assert await service.delete_verified_model(
-                'nonexistent', 'openhands'
-            ) is False
+            assert (
+                await service.delete_verified_model('nonexistent', 'openhands') is False
+            )
