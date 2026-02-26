@@ -24,9 +24,6 @@
 # Disable color in terminal output
 #disable_color = false
 
-# Bitbucket API mode to use for Bitbucket integrations ("cloud" or "server")
-#bitbucket_mode = "cloud"
-
 # Path to store trajectories, can be a folder or a file
 # If it's a folder, the session id will be used as the file name
 #save_trajectory_path="./trajectories"

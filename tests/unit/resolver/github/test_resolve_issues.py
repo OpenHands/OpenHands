@@ -1,6 +1,5 @@
 import os
 import tempfile
-from argparse import Namespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,7 +29,7 @@ def default_mock_args():
 
     Tests can override specific attributes as needed.
     """
-    mock_args = Namespace()
+    mock_args = MagicMock()
     mock_args.selected_repo = 'test-owner/test-repo'
     mock_args.token = 'test-token'
     mock_args.username = 'test-user'
@@ -48,7 +47,6 @@ def default_mock_args():
     mock_args.repo_instruction_file = None
     mock_args.issue_type = 'issue'
     mock_args.prompt_file = None
-    mock_args.runtime = None
     return mock_args
 
 

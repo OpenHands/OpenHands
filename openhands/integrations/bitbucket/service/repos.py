@@ -25,50 +25,27 @@ class BitBucketReposMixin(BitBucketMixinBase):
         repositories = []
 
         if public:
+            # Extract workspace and repo from URL using robust URL parsing
+            # URL format: https://{domain}/{workspace}/{repo}/{additional_params}
             try:
                 parsed_url = urlparse(query)
+                # Remove leading slash and split path into segments
                 path_segments = [
                     segment for segment in parsed_url.path.split('/') if segment
                 ]
-                if self._is_server:
-                    # Server URLs: /projects/{projectKey}/repos/{repoSlug}
-                    if 'projects' in path_segments:
-                        idx = path_segments.index('projects')
-                        if (
-                            len(path_segments) > idx + 2
-                            and path_segments[idx + 1]
-                            and path_segments[idx + 2] == 'repos'
-                        ):
-                            project_key = path_segments[idx + 1]
-                            repo_name = (
-                                path_segments[idx + 3]
-                                if len(path_segments) > idx + 3
-                                else ''
-                            )
-                        elif len(path_segments) > idx + 2:
-                            project_key = path_segments[idx + 1]
-                            repo_name = path_segments[idx + 2]
-                        else:
-                            project_key = ''
-                            repo_name = ''
-                    else:
-                        project_key = (
-                            path_segments[0] if len(path_segments) >= 1 else ''
-                        )
-                        repo_name = path_segments[1] if len(path_segments) >= 2 else ''
-                else:
-                    if len(path_segments) >= 2:
-                        project_key = path_segments[0]
-                        repo_name = path_segments[1]
-                    else:
-                        project_key = ''
-                        repo_name = ''
-                if project_key and repo_name:
+
+                # We need at least 2 path segments: workspace and repo
+                if len(path_segments) >= 2:
+                    workspace_slug = path_segments[0]
+                    repo_name = path_segments[1]
+
                     repo = await self.get_repository_details_from_repo_name(
-                        f'{project_key}/{repo_name}'
+                        f'{workspace_slug}/{repo_name}'
                     )
                     repositories.append(repo)
             except (ValueError, IndexError):
+                # If URL parsing fails or doesn't have expected structure,
+                # return empty list for public search
                 pass
 
             return repositories
@@ -79,23 +56,6 @@ class BitBucketReposMixin(BitBucketMixinBase):
             return await self.get_paginated_repos(
                 1, per_page, sort, workspace_slug, repo_query
             )
-
-        if self._is_server:
-            if '/' in query:
-                project_key, repo_query = query.split('/', 1)
-                return await self.get_paginated_repos(
-                    1, per_page, sort, project_key, repo_query
-                )
-            all_projects = await self.get_installations()
-            for project_key in all_projects:
-                try:
-                    repos = await self.get_paginated_repos(
-                        1, per_page, sort, project_key, query
-                    )
-                    repositories.extend(repos)
-                except Exception:
-                    continue
-            return repositories
 
         all_installations = await self.get_installations()
 
@@ -126,11 +86,7 @@ class BitBucketReposMixin(BitBucketMixinBase):
         return repositories
 
     async def _get_user_workspaces(self) -> list[dict[str, Any]]:
-        """Get all workspaces or projects the user has access to"""
-        if self._is_server:
-            projects_url = f'{self.BASE_URL}/projects'
-            projects = await self._fetch_paginated_data(projects_url, {}, 100)
-            return projects
+        """Get all workspaces the user has access to"""
         url = f'{self.BASE_URL}/workspaces'
         data, _ = await self._make_request(url)
         return data.get('values', [])
@@ -138,21 +94,6 @@ class BitBucketReposMixin(BitBucketMixinBase):
     async def get_installations(
         self, query: str | None = None, limit: int = 100
     ) -> list[str]:
-        if self._is_server:
-            projects_url = f'{self.BASE_URL}/projects'
-            params: dict[str, Any] = {'limit': limit}
-            projects = await self._fetch_paginated_data(projects_url, params, limit)
-            project_keys: list[str] = []
-            for project in projects:
-                key = project.get('key')
-                name = project.get('name', '')
-                if not key:
-                    continue
-                if query and query.lower() not in f'{key}{name}'.lower():
-                    continue
-                project_keys.append(key)
-            return project_keys
-
         workspaces_url = f'{self.BASE_URL}/workspaces'
         params = {}
         if query:
@@ -160,11 +101,11 @@ class BitBucketReposMixin(BitBucketMixinBase):
 
         workspaces = await self._fetch_paginated_data(workspaces_url, params, limit)
 
-        workspace_slugs: list[str] = []
+        installations: list[str] = []
         for workspace in workspaces:
-            workspace_slugs.append(workspace['slug'])
+            installations.append(workspace['slug'])
 
-        return workspace_slugs
+        return installations
 
     async def get_paginated_repos(
         self,
@@ -190,30 +131,6 @@ class BitBucketReposMixin(BitBucketMixinBase):
 
         # Convert installation_id to string for use as workspace_slug
         workspace_slug = installation_id
-
-        if self._is_server:
-            workspace_repos_url = f'{self.BASE_URL}/projects/{workspace_slug}/repos'
-            params: dict[str, Any] = {'limit': per_page}
-            response, _ = await self._make_request(workspace_repos_url, params)
-            repos = response.get('values', [])
-            if query:
-                repos = [
-                    repo
-                    for repo in repos
-                    if query.lower() in repo.get('name', '').lower()
-                ]
-            formatted_link_header = ''
-            if not response.get('isLastPage', True):
-                next_start = response.get('nextPageStart')
-                if next_start is not None:
-                    formatted_link_header = (
-                        f'<{workspace_repos_url}?start={next_start}>; rel="next"'
-                    )
-            return [
-                self._parse_repository(repo, link_header=formatted_link_header)
-                for repo in repos
-            ]
-
         workspace_repos_url = f'{self.BASE_URL}/repositories/{workspace_slug}'
 
         # Map sort parameter to Bitbucket API compatible values
@@ -285,23 +202,6 @@ class BitBucketReposMixin(BitBucketMixinBase):
         MAX_REPOS = 1000
         PER_PAGE = 100  # Maximum allowed by Bitbucket API
         repositories: list[Repository] = []
-
-        if self._is_server:
-            projects = await self.get_installations(limit=MAX_REPOS)
-            for project_key in projects:
-                project_repos_url = f'{self.BASE_URL}/projects/{project_key}/repos'
-                project_repos = await self._fetch_paginated_data(
-                    project_repos_url,
-                    {'limit': PER_PAGE},
-                    MAX_REPOS - len(repositories),
-                )
-                for repo in project_repos:
-                    repositories.append(self._parse_repository(repo))
-                    if len(repositories) >= MAX_REPOS:
-                        break
-                if len(repositories) >= MAX_REPOS:
-                    break
-            return repositories
 
         # Get user's workspaces with pagination
         workspaces_url = f'{self.BASE_URL}/workspaces'

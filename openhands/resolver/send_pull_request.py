@@ -3,7 +3,6 @@ import json
 import os
 import shutil
 import subprocess
-from typing import Literal
 
 import jinja2
 from pydantic import SecretStr
@@ -14,6 +13,7 @@ from openhands.integrations.service_types import ProviderType
 from openhands.llm.llm import LLM
 from openhands.resolver.interfaces.azure_devops import AzureDevOpsIssueHandler
 from openhands.resolver.interfaces.bitbucket import BitbucketIssueHandler
+from openhands.resolver.interfaces.bitbucket_data_center import BitbucketDCIssueHandler
 from openhands.resolver.interfaces.forgejo import ForgejoIssueHandler
 from openhands.resolver.interfaces.github import GithubIssueHandler
 from openhands.resolver.interfaces.gitlab import GitlabIssueHandler
@@ -253,14 +253,13 @@ def send_pull_request(
     base_domain: str | None = None,
     git_user_name: str = 'openhands',
     git_user_email: str = 'openhands@all-hands.dev',
-    bitbucket_mode: Literal['cloud', 'server'] = 'cloud',
 ) -> str:
     """Send a pull request to a GitHub, GitLab, Bitbucket, Forgejo, or Azure DevOps repository.
 
     Args:
         issue: The issue to send the pull request for
         token: The token to use for authentication
-        username: The username, if provided. For Bitbucket this is treated as the user ID.
+        username: The username, if provided
         platform: The platform of the repository.
         patch_dir: The directory containing the patches to apply
         pr_type: The type: branch (no PR created), draft or ready (regular PR created)
@@ -272,7 +271,6 @@ def send_pull_request(
         base_domain: The base domain for the git server (defaults to "github.com" for GitHub, "gitlab.com" for GitLab, "bitbucket.org" for Bitbucket, "codeberg.org" for Forgejo, and "dev.azure.com" for Azure DevOps)
         git_user_name: Git username to configure when creating commits
         git_user_email: Git email to configure when creating commits
-        bitbucket_mode: Bitbucket API mode to use ("cloud" or "server").
     """
     if pr_type not in ['branch', 'draft', 'ready']:
         raise ValueError(f'Invalid pr_type: {pr_type}')
@@ -302,12 +300,14 @@ def send_pull_request(
     elif platform == ProviderType.BITBUCKET:
         handler = ServiceContextIssue(
             BitbucketIssueHandler(
-                issue.owner,
-                issue.repo,
-                token,
-                user_id=username,
-                base_domain=base_domain,
-                bitbucket_mode=bitbucket_mode,
+                issue.owner, issue.repo, token, username, base_domain
+            ),
+            None,
+        )
+    elif platform == ProviderType.BITBUCKET_DATA_CENTER:
+        handler = ServiceContextIssue(
+            BitbucketDCIssueHandler(
+                issue.owner, issue.repo, token, username, base_domain
             ),
             None,
         )
@@ -417,6 +417,14 @@ def send_pull_request(
                 'target_branch': base_branch,
                 'draft': pr_type == 'draft',
             }
+        elif platform == ProviderType.BITBUCKET_DATA_CENTER:
+            data = {
+                'title': final_pr_title,
+                'description': pr_body,
+                'source_branch': head_branch,
+                'target_branch': base_branch,
+                'draft': pr_type == 'draft',
+            }
         elif platform == ProviderType.FORGEJO:
             data = {
                 'title': final_pr_title,
@@ -477,6 +485,7 @@ def update_existing_pull_request(
             ProviderType.AZURE_DEVOPS: 'dev.azure.com',
             ProviderType.BITBUCKET: 'bitbucket.org',
             ProviderType.FORGEJO: 'codeberg.org',
+            ProviderType.BITBUCKET_DATA_CENTER: 'bitbucket.example.com',
         }.get(platform, 'github.com')
 
     handler = None
@@ -500,6 +509,13 @@ def update_existing_pull_request(
     elif platform == ProviderType.BITBUCKET:
         handler = ServiceContextIssue(
             BitbucketIssueHandler(
+                issue.owner, issue.repo, token, username, base_domain
+            ),
+            llm_config,
+        )
+    elif platform == ProviderType.BITBUCKET_DATA_CENTER:
+        handler = ServiceContextIssue(
+            BitbucketDCIssueHandler(
                 issue.owner, issue.repo, token, username, base_domain
             ),
             llm_config,
@@ -598,7 +614,6 @@ def process_single_issue(
     base_domain: str | None = None,
     git_user_name: str = 'openhands',
     git_user_email: str = 'openhands@all-hands.dev',
-    bitbucket_mode: Literal['cloud', 'server'] = 'cloud',
 ) -> None:
     # Determine default base_domain based on platform
     if base_domain is None:
@@ -608,6 +623,12 @@ def process_single_issue(
             else 'gitlab.com'
             if platform == ProviderType.GITLAB
             else 'dev.azure.com'
+            if platform == ProviderType.AZURE_DEVOPS
+            else 'bitbucket.org'
+            if platform == ProviderType.BITBUCKET
+            else 'bitbucket.example.com'
+            if platform == ProviderType.BITBUCKET_DATA_CENTER
+            else 'github.com'
         )
     if not resolver_output.success and not send_on_failure:
         logger.info(
@@ -671,7 +692,6 @@ def process_single_issue(
             base_domain=base_domain,
             git_user_name=git_user_name,
             git_user_email=git_user_email,
-            bitbucket_mode=bitbucket_mode,
         )
 
 
@@ -770,14 +790,6 @@ def main() -> None:
         help='Base domain for the git server (defaults to "github.com" for GitHub, "gitlab.com" for GitLab, and "dev.azure.com" for Azure DevOps)',
     )
     parser.add_argument(
-        '--bitbucket-mode',
-        dest='bitbucket_mode',
-        type=str,
-        default='cloud',
-        choices=['cloud', 'server'],
-        help='Bitbucket API mode to use (cloud or server).',
-    )
-    parser.add_argument(
         '--git-user-name',
         type=str,
         default='openhands',
@@ -850,7 +862,6 @@ def main() -> None:
         my_args.base_domain,
         my_args.git_user_name,
         my_args.git_user_email,
-        my_args.bitbucket_mode,
     )
 
 

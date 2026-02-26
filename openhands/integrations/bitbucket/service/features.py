@@ -38,36 +38,8 @@ class BitBucketFeaturesMixin(BitBucketMixinBase):
             )
 
         # Step 2: Get file content using the main branch
-        owner, repo = self._extract_owner_and_repo(repository)
-        repo_base = self._repo_api_base(owner, repo)
-
-        if self._is_server:
-            file_url = f'{repo_base}/browse/{file_path}'
-            params = {'at': f'refs/heads/{repo_details.main_branch}'}
-            response, _ = await self._make_request(file_url, params=params)
-            if isinstance(response, dict):
-                lines = response.get('lines')
-                if isinstance(lines, list):
-                    content = '\n'.join(
-                        line.get('text', '') for line in lines if isinstance(line, dict)
-                    )
-                else:
-                    content = response.get('content', '')
-            else:
-                content = str(response)
-        else:
-            file_url = f'{repo_base}/src/{repo_details.main_branch}/{file_path}'
-            response, _ = await self._make_request(file_url)
-            if isinstance(response, dict):
-                lines = response.get('lines')
-                if isinstance(lines, list):
-                    content = '\n'.join(
-                        line.get('text', '') for line in lines if isinstance(line, dict)
-                    )
-                else:
-                    content = response.get('data', '')
-            else:
-                content = str(response)
+        file_url = f'{self.BASE_URL}/repositories/{repository}/src/{repo_details.main_branch}/{file_path}'
+        response, _ = await self._make_request(file_url)
 
         # Parse the content to extract triggers from frontmatter
-        return self._parse_microagent_content(content, file_path)
+        return self._parse_microagent_content(response, file_path)

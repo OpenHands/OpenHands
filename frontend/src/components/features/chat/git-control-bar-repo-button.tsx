@@ -5,6 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { GitProviderIcon } from "#/components/shared/git-provider-icon";
 import { GitExternalLinkIcon } from "./git-external-link-icon";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
+import { useSettings } from "#/hooks/query/use-settings";
 
 interface GitControlBarRepoButtonProps {
   selectedRepository: string | null | undefined;
@@ -20,11 +21,17 @@ export function GitControlBarRepoButton({
   disabled,
 }: GitControlBarRepoButtonProps) {
   const { t } = useTranslation();
+  const { data: settings } = useSettings();
 
   const hasRepository = selectedRepository && gitProvider;
 
+  // Get the host for the current provider from settings
+  const providerHost = gitProvider
+    ? settings?.provider_tokens_set[gitProvider]
+    : null;
+
   const repositoryUrl = hasRepository
-    ? constructRepositoryUrl(gitProvider, selectedRepository)
+    ? constructRepositoryUrl(gitProvider, selectedRepository, providerHost)
     : undefined;
 
   const buttonText = hasRepository

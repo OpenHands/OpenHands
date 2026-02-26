@@ -21,6 +21,7 @@ class ProviderType(Enum):
     GITHUB = 'github'
     GITLAB = 'gitlab'
     BITBUCKET = 'bitbucket'
+    BITBUCKET_DATA_CENTER = 'bitbucket_data_center'
     FORGEJO = 'forgejo'
     AZURE_DEVOPS = 'azure_devops'
     ENTERPRISE_SSO = 'enterprise_sso'
@@ -76,6 +77,16 @@ class SuggestedTask(BaseModel):
                 'tokenEnvVar': 'BITBUCKET_TOKEN',
                 'ciSystem': 'Bitbucket Pipelines',
                 'ciProvider': 'Bitbucket',
+                'requestVerb': 'pull request',
+            }
+        elif self.git_provider == ProviderType.BITBUCKET_DATA_CENTER:
+            return {
+                'requestType': 'Pull Request',
+                'requestTypeShort': 'PR',
+                'apiName': 'Bitbucket Data Center API',
+                'tokenEnvVar': 'BITBUCKET_DATA_CENTER_TOKEN',
+                'ciSystem': 'Bitbucket Pipelines',
+                'ciProvider': 'Bitbucket Data Center',
                 'requestVerb': 'pull request',
             }
 

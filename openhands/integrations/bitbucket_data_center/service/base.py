@@ -4,9 +4,9 @@ from typing import Any
 import httpx
 from pydantic import SecretStr
 
-from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.protocols.http_client import HTTPClient
 from openhands.integrations.service_types import (
+    AuthenticationError,
     BaseGitService,
     OwnerType,
     ProviderType,
@@ -18,18 +18,22 @@ from openhands.integrations.service_types import (
 from openhands.utils.http_session import httpx_verify_option
 
 
-class BitBucketMixinBase(BaseGitService, HTTPClient):
+class BitbucketDCMixinBase(BaseGitService, HTTPClient):
     """
-    Base mixin for BitBucket service containing common functionality
+    Base mixin for BitBucket data center service containing common functionality
     """
 
-    BASE_URL = 'https://api.bitbucket.org/2.0'
+    BASE_URL: str = ''  # Set dynamically from domain in __init__
+    user_id: str | None
+
+    def _repo_api_base(self, owner: str, repo: str) -> str:
+        return f'{self.BASE_URL}/projects/{owner}/repos/{repo}'
 
     @staticmethod
     def _resolve_primary_email(emails: list[dict]) -> str | None:
-        """Find the primary confirmed email from a list of Bitbucket email objects.
+        """Find the primary confirmed email from a list of Bitbucket data center email objects.
 
-        Bitbucket's /user/emails endpoint returns objects with
+        Bitbucket data center's /user/emails endpoint returns objects with
         'email', 'is_primary', and 'is_confirmed' keys.
         """
         for entry in emails:
@@ -63,21 +67,14 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         return status_code == 401
 
     async def _get_headers(self) -> dict[str, str]:
-        """Get headers for Bitbucket API requests."""
+        """Get headers for Bitbucket data center API requests."""
         token_value = self.token.get_secret_value()
 
-        # Check if the token contains a colon, which indicates it's in username:password format
-        if ':' in token_value:
-            auth_str = base64.b64encode(token_value.encode()).decode()
-            return {
-                'Authorization': f'Basic {auth_str}',
-                'Accept': 'application/json',
-            }
-        else:
-            return {
-                'Authorization': f'Bearer {token_value}',
-                'Accept': 'application/json',
-            }
+        auth_str = base64.b64encode(token_value.encode()).decode()
+        return {
+            'Authorization': f'Basic {auth_str}',
+            'Accept': 'application/json',
+        }
 
     async def _make_request(
         self,
@@ -85,7 +82,7 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         params: dict | None = None,
         method: RequestMethod = RequestMethod.GET,
     ) -> tuple[Any, dict]:
-        """Make a request to the Bitbucket API.
+        """Make a request to the Bitbucket data center API.
 
         Args:
             url: The URL to request
@@ -113,16 +110,27 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
                         method=method,
                     )
                 response.raise_for_status()
-                return response.json(), dict(response.headers)
+                try:
+                    data = response.json()
+                except ValueError:
+                    data = response.text
+                return data, dict(response.headers)
         except httpx.HTTPStatusError as e:
             raise self.handle_http_status_error(e)
         except httpx.HTTPError as e:
             raise self.handle_http_error(e)
 
+    async def verify_access(self) -> None:
+        """Verify that the token and host are valid by making a lightweight API call.
+        Raises an exception if the token is invalid or the host is unreachable.
+        """
+        url = f'{self.BASE_URL}/repos'
+        await self._make_request(url, {'limit': '1'})
+
     async def _fetch_paginated_data(
         self, url: str, params: dict, max_items: int
     ) -> list[dict]:
-        """Fetch data with pagination support for Bitbucket API.
+        """Fetch data with pagination support for Bitbucket data center API.
 
         Args:
             url: The API endpoint URL
@@ -134,6 +142,7 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         """
         all_items: list[dict] = []
         current_url = url
+        base_endpoint = url
 
         while current_url and len(all_items) < max_items:
             response, _ = await self._make_request(current_url, params)
@@ -142,16 +151,20 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
             page_items = response.get('values', [])
             all_items.extend(page_items)
 
-            # Get next page URL from response
-            current_url = response.get('next')
-
-            # Clear params for subsequent requests as they're included in the next URL
-            params = {}
+            if response.get('isLastPage', True):
+                break
+            next_start = response.get('nextPageStart')
+            if next_start is None:
+                break
+            params = params or {}
+            params = dict(params)
+            params['start'] = next_start
+            current_url = base_endpoint
 
         return all_items[:max_items]
 
     async def get_user_emails(self) -> list[dict]:
-        """Fetch the authenticated user's email addresses from Bitbucket.
+        """Fetch the authenticated user's email addresses from Bitbucket data center.
 
         Calls GET /user/emails which returns a paginated response with a
         'values' list of email objects containing 'email', 'is_primary',
@@ -163,61 +176,86 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
 
     async def get_user(self) -> User:
         """Get the authenticated user's information."""
-        url = f'{self.BASE_URL}/user'
-        data, _ = await self._make_request(url)
 
-        account_id = data.get('account_id', '')
-
-        email = None
-        try:
-            emails = await self.get_user_emails()
-            email = self._resolve_primary_email(emails)
-        except Exception:
-            logger.warning(
-                'bitbucket:get_user:email_fallback_failed',
-                exc_info=True,
+        if not self.user_id:
+            # HTTP Access tokens (x-token-auth) don't have user info.
+            # For OAuth, the user_id should be set.
+            return User(
+                id='',
+                login='',
+                avatar_url='',
+                name=None,
+                email=None,
             )
 
+        # Basic auth - extract username and query users API to get slug
+        users_url = f'{self.BASE_URL}/users'
+        data, _ = await self._make_request(
+            users_url, {'filter': self.user_id, 'avatarSize': 64}
+        )
+        users = data.get('values', [])
+        if not users:
+            raise AuthenticationError(f'User not found: {self.user_id}')
+
+        user_data = users[0]
+        avatar = user_data.get('avatarUrl', '')
+        # Handle relative avatar URLs (Server returns /users/... paths)
+        if avatar.startswith('/users'):
+            # Strip /rest/api/1.0 from BASE_URL to get the base server URL
+            base_server_url = self.BASE_URL.rsplit('/rest/api/1.0', 1)[0]
+            avatar = f'{base_server_url}{avatar}'
+        display_name = user_data.get('displayName')
+        email = user_data.get('emailAddress')
         return User(
-            id=account_id,
-            login=data.get('username', ''),
-            avatar_url=data.get('links', {}).get('avatar', {}).get('href', ''),
-            name=data.get('display_name'),
+            id=str(user_data.get('id') or user_data.get('slug') or self.user_id),
+            login=user_data.get('name') or self.user_id,
+            avatar_url=avatar,
+            name=display_name,
             email=email,
         )
 
-    def _parse_repository(
+    async def _parse_repository(
         self, repo: dict, link_header: str | None = None
     ) -> Repository:
-        """Parse a Bitbucket API repository response into a Repository object.
+        """Parse a Bitbucket data center API repository response into a Repository object.
 
         Args:
-            repo: Repository data from Bitbucket API
+            repo: Repository data from Bitbucket data center API
             link_header: Optional link header for pagination
 
         Returns:
             Repository object
         """
-        repo_id = repo.get('uuid', '')
-
-        workspace_slug = repo.get('workspace', {}).get('slug', '')
+        project_key = repo.get('project', {}).get('key', '')
         repo_slug = repo.get('slug', '')
-        full_name = (
-            f'{workspace_slug}/{repo_slug}' if workspace_slug and repo_slug else ''
-        )
 
-        is_public = not repo.get('is_private', True)
-        owner_type = OwnerType.ORGANIZATION
-        main_branch = repo.get('mainbranch', {}).get('name')
+        if not project_key or not repo_slug:
+            raise ValueError(
+                f'Cannot parse repository: missing project key or slug. '
+                f'Got project_key={project_key!r}, repo_slug={repo_slug!r}'
+            )
+
+        full_name = f'{project_key}/{repo_slug}'
+        is_public = repo.get('public', False)
+
+        main_branch: str | None = None
+        try:
+            default_branch_url = (
+                f'{self._repo_api_base(project_key, repo_slug)}/default-branch'
+            )
+            default_branch_data, _ = await self._make_request(default_branch_url)
+            main_branch = default_branch_data.get('displayId') or None
+        except Exception:
+            pass
 
         return Repository(
-            id=repo_id,
-            full_name=full_name,  # type: ignore[arg-type]
-            git_provider=ProviderType.BITBUCKET,
+            id=str(repo.get('id', '')),
+            full_name=full_name,
+            git_provider=ProviderType.BITBUCKET_DATA_CENTER,
             is_public=is_public,
-            stargazers_count=None,  # Bitbucket doesn't have stars
-            pushed_at=repo.get('updated_on'),
-            owner_type=owner_type,
+            stargazers_count=None,
+            pushed_at=None,
+            owner_type=OwnerType.ORGANIZATION,
             link_header=link_header,
             main_branch=main_branch,
         )
@@ -233,9 +271,10 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
         Returns:
             Repository object with details
         """
-        url = f'{self.BASE_URL}/repositories/{repository}'
+        owner, repo = self._extract_owner_and_repo(repository)
+        url = self._repo_api_base(owner, repo)
         data, _ = await self._make_request(url)
-        return self._parse_repository(data)
+        return await self._parse_repository(data)
 
     async def _get_cursorrules_url(self, repository: str) -> str:
         """Get the URL for checking .cursorrules file."""
@@ -246,7 +285,11 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
                 f'Main branch not found for repository {repository}. '
                 f'This repository may be empty or have no default branch configured.'
             )
-        return f'{self.BASE_URL}/repositories/{repository}/src/{repo_details.main_branch}/.cursorrules'
+        owner, repo = self._extract_owner_and_repo(repository)
+        return (
+            f'{self.BASE_URL}/projects/{owner}/repos/{repo}/browse/.cursorrules'
+            f'?at=refs/heads/{repo_details.main_branch}'
+        )
 
     async def _get_microagents_directory_url(
         self, repository: str, microagents_path: str
@@ -259,7 +302,12 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
                 f'Main branch not found for repository {repository}. '
                 f'This repository may be empty or have no default branch configured.'
             )
-        return f'{self.BASE_URL}/repositories/{repository}/src/{repo_details.main_branch}/{microagents_path}'
+
+        owner, repo = self._extract_owner_and_repo(repository)
+        return (
+            f'{self.BASE_URL}/projects/{owner}/repos/{repo}/browse/{microagents_path}'
+            f'?at=refs/heads/{repo_details.main_branch}'
+        )
 
     def _get_microagents_directory_params(self, microagents_path: str) -> dict | None:
         """Get parameters for the microagents directory request. Return None if no parameters needed."""
@@ -267,16 +315,18 @@ class BitBucketMixinBase(BaseGitService, HTTPClient):
 
     def _is_valid_microagent_file(self, item: dict) -> bool:
         """Check if an item represents a valid microagent file."""
+        file_name = item.get('path', {}).get('name', '')
         return (
-            item['type'] == 'commit_file'
-            and item['path'].endswith('.md')
-            and not item['path'].endswith('README.md')
+            item.get('type') == 'FILE'
+            and file_name.endswith('.md')
+            and file_name != 'README.md'
         )
 
     def _get_file_name_from_item(self, item: dict) -> str:
         """Extract file name from directory item."""
-        return item['path'].split('/')[-1]
+        return item.get('path', {}).get('name', '')
 
     def _get_file_path_from_item(self, item: dict, microagents_path: str) -> str:
         """Extract file path from directory item."""
-        return item['path']
+        file_name = self._get_file_name_from_item(item)
+        return f'{microagents_path}/{file_name}'

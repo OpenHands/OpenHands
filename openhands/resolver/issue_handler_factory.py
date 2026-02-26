@@ -1,11 +1,13 @@
-from typing import Literal
-
 from openhands.core.config import LLMConfig
 from openhands.integrations.provider import ProviderType
 from openhands.resolver.interfaces.azure_devops import AzureDevOpsIssueHandler
 from openhands.resolver.interfaces.bitbucket import (
     BitbucketIssueHandler,
     BitbucketPRHandler,
+)
+from openhands.resolver.interfaces.bitbucket_data_center import (
+    BitbucketDCIssueHandler,
+    BitbucketDCPRHandler,
 )
 from openhands.resolver.interfaces.forgejo import (
     ForgejoIssueHandler,
@@ -30,7 +32,6 @@ class IssueHandlerFactory:
         base_domain: str,
         issue_type: str,
         llm_config: LLMConfig,
-        bitbucket_mode: Literal['cloud', 'server'] = 'cloud',
     ) -> None:
         self.owner = owner
         self.repo = repo
@@ -40,7 +41,6 @@ class IssueHandlerFactory:
         self.base_domain = base_domain
         self.issue_type = issue_type
         self.llm_config = llm_config
-        self.bitbucket_mode = bitbucket_mode
 
     def create(self) -> ServiceContextIssue | ServiceContextPR:
         if self.issue_type == 'issue':
@@ -72,9 +72,19 @@ class IssueHandlerFactory:
                         self.owner,
                         self.repo,
                         self.token,
-                        user_id=self.username,
-                        base_domain=self.base_domain,
-                        bitbucket_mode=self.bitbucket_mode,
+                        self.username,
+                        self.base_domain,
+                    ),
+                    self.llm_config,
+                )
+            elif self.platform == ProviderType.BITBUCKET_DATA_CENTER:
+                return ServiceContextIssue(
+                    BitbucketDCIssueHandler(
+                        self.owner,
+                        self.repo,
+                        self.token,
+                        self.username,
+                        self.base_domain,
                     ),
                     self.llm_config,
                 )
@@ -140,9 +150,19 @@ class IssueHandlerFactory:
                         self.owner,
                         self.repo,
                         self.token,
-                        user_id=self.username,
-                        base_domain=self.base_domain,
-                        bitbucket_mode=self.bitbucket_mode,
+                        self.username,
+                        self.base_domain,
+                    ),
+                    self.llm_config,
+                )
+            elif self.platform == ProviderType.BITBUCKET_DATA_CENTER:
+                return ServiceContextPR(
+                    BitbucketDCPRHandler(
+                        self.owner,
+                        self.repo,
+                        self.token,
+                        self.username,
+                        self.base_domain,
                     ),
                     self.llm_config,
                 )
