@@ -36,7 +36,7 @@ When a user clicks "Launch", the plugin directory:
 If a plugin requires user input (API keys, configuration values, etc.), the frontend displays a form modal before starting the conversation. Parameters are passed in the launch URL and rendered as form fields:
 
 - **String values** → Text input
-- **Number values** → Number input  
+- **Number values** → Number input
 - **Boolean values** → Checkbox
 
 The user fills in required values, then clicks "Start Conversation" to proceed.
@@ -47,7 +47,7 @@ The user fills in required values, then clicks "Start Conversation" to proceed.
    ```
    /launch?plugins=BASE64_JSON&message=/city-weather:now%20Tokyo
    ```
-   
+
    The `plugins` parameter includes any parameter definitions with default values:
    ```json
    [{
@@ -67,14 +67,14 @@ The user fills in required values, then clicks "Start Conversation" to proceed.
      "initial_message": {"content": [{"type": "text", "text": "/city-weather:now Tokyo"}]}
    }
    ```
-   
+
    Call stack:
    - `AppConversationRouter` receives request with `PluginSpec` list
    - `LiveStatusAppConversationService._finalize_conversation_request()` converts `PluginSpec` → `PluginSource`
    - Creates `StartConversationRequest(plugins=sdk_plugins, ...)` and sends to agent server
 
 4. **Agent Server** (inside sandbox, [SDK PR #1651](https://github.com/OpenHands/software-agent-sdk/pull/1651)) stores specs, defers loading:
-   
+
    Call stack:
    - `ConversationService.start_conversation()` receives `StartConversationRequest`
    - Creates `StoredConversation` with plugin specs
@@ -82,7 +82,7 @@ The user fills in required values, then clicks "Start Conversation" to proceed.
    - Plugin loading deferred until first `run()` or `send_message()`
 
 5. **SDK** fetches and loads plugins on first use:
-   
+
    Call stack:
    - `LocalConversation._ensure_plugins_loaded()` triggered by first message
    - For each plugin spec:
