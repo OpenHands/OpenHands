@@ -6,21 +6,25 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
+from http.client import HTTPException
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
 from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import config, server_config
 from openhands.utils.llm import get_supported_llm_models
+from enterprise.server.verified_models.verified_model_service import VerifiedModelService, verified_model_store_dependency
 
 app = APIRouter(prefix='/api/options', dependencies=get_dependencies())
 
 
 @app.get('/models', response_model=list[str])
-async def get_litellm_models() -> list[str]:
+async def get_litellm_models(
+    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency)
+) -> list[str]:
     """Get all models supported by LiteLLM.
 
     This function combines models from litellm and Bedrock, removing any
@@ -35,29 +39,12 @@ async def get_litellm_models() -> list[str]:
     Returns:
         list[str]: A sorted list of unique model names.
     """
-    verified_models = _load_verified_models_from_db()
+    page = await verified_model_service.search_verified_models(enabled_only=True)
+    if page.next_page_id:
+        raise HTTPException("Too many models defined in db")
+    verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
     return get_supported_llm_models(config, verified_models)
 
-
-def _load_verified_models_from_db() -> list[str] | None:
-    """Try to load verified models from the database (SaaS mode only).
-
-    Returns:
-        List of model strings like 'provider/model_name' if available, None otherwise.
-    """
-    try:
-        from storage.verified_model_store import VerifiedModelStore
-    except ImportError:
-        return None
-
-    try:
-        db_models = VerifiedModelStore.get_enabled_models()
-        return [f'{m.provider}/{m.model_name}' for m in db_models]
-    except Exception:
-        from openhands.core.logger import openhands_logger as logger
-
-        logger.exception('Failed to load verified models from database')
-        return None
 
 
 @app.get('/agents', response_model=list[str])
