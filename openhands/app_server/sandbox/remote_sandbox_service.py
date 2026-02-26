@@ -113,21 +113,47 @@ class RemoteSandboxService(SandboxService):
     user_context: UserContext
     httpx_client: httpx.AsyncClient
     db_session: AsyncSession
+    # Flag to control whether to reuse the cached httpx client or create a new one.
+    # When True (default), uses the injected client for efficiency.
+    # When False, creates a new client for each request to avoid DNS caching issues.
+    reuse_httpx_client: bool = True
 
     async def _send_runtime_api_request(
         self, method: str, path: str, **kwargs: Any
     ) -> httpx.Response:
-        """Send a request to the remote runtime API."""
+        """Send a request to the remote runtime API.
+
+        When reuse_httpx_client is False, creates a new client for each request
+        to work around DNS caching issues where newly allocated sandbox URLs
+        may not be immediately resolvable externally.
+        """
+        url = self.api_url + path
+        headers = {'X-API-Key': self.api_key}
+
+        # Create a fresh client to force new DNS resolution for each request
+        if not self.reuse_httpx_client:
+            async with httpx.AsyncClient(timeout=self.httpx_client.timeout) as new_client:
+                try:
+                    return await new_client.request(method, url, headers=headers, **kwargs)
+                except httpx.HTTPError:
+                    # Keep reuse_httpx_client False for subsequent requests
+                    raise
+
+        # Default: reuse the injected client for efficiency
         try:
-            url = self.api_url + path
             return await self.httpx_client.request(
-                method, url, headers={'X-API-Key': self.api_key}, **kwargs
+                method, url, headers=headers, **kwargs
             )
         except httpx.TimeoutException:
             _logger.error(f'No response received within timeout for URL: {url}')
             raise
         except httpx.HTTPError as e:
-            _logger.error(f'HTTP error for URL {url}: {e}')
+            if self.reuse_httpx_client:
+                _logger.warning(
+                    f'HTTP error for URL {url}: {e}. Disabling httpx client reuse to '
+                    'force fresh DNS resolution for future requests.'
+                )
+            self.reuse_httpx_client = False
             raise
 
     def _to_sandbox_info(
