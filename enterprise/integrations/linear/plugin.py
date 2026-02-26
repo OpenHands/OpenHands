@@ -24,7 +24,7 @@ class LinearPlugin:
     def __init__(self, config: LinearPluginConfig) -> None:
         self._config = config
         self._router: APIRouter | None = None
-        self._initialized = False
+        self._initialized: bool = False
 
     @property
     def config(self) -> LinearPluginConfig:
