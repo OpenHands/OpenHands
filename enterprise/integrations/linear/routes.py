@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+from typing import Any
 
 import requests
 from fastapi import (
@@ -125,9 +126,9 @@ LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql'
 
 LINEAR_WEBHOOKS_ENABLED = False
 _plugin_config: LinearPluginConfig = LinearPluginConfig()
-linear_manager: LinearManager | None = None
-redis_client = None
-token_manager: TokenManager | None = None
+linear_manager: LinearManager = None  # type: ignore[assignment]
+redis_client: Any = None
+token_manager: TokenManager = None  # type: ignore[assignment]
 _linear_redirect_uri = ''
 
 

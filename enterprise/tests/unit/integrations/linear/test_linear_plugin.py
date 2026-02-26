@@ -41,11 +41,11 @@ class TestLinearPlugin:
     def test_initialize_and_shutdown(self):
         cfg = LinearPluginConfig()
         plugin = LinearPlugin(cfg)
-        assert plugin._initialized is False
+        assert not plugin._initialized
         plugin.initialize()
-        assert plugin._initialized is True
+        assert plugin._initialized
         plugin.shutdown()
-        assert plugin._initialized is False
+        assert not plugin._initialized
 
     def test_get_router(self):
         mock_router = APIRouter()
