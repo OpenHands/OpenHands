@@ -28,7 +28,8 @@ from storage.slack_user import SlackUser
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
 from openhands.integrations.service_types import Repository
-from openhands.server.shared import config, server_config
+from openhands.server.shared import config as _default_config
+from openhands.server.shared import server_config as _default_server_config
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -44,8 +45,16 @@ authorize_url_generator = AuthorizeUrlGenerator(
 
 
 class SlackManager(Manager):
-    def __init__(self, token_manager):
+    """Manages Slack integration: message routing, auth, and conversation lifecycle.
+
+    Dependencies can be injected via the constructor to support
+    plugin-based deployment and testing.
+    """
+
+    def __init__(self, token_manager, *, openhands_config=None, server_config=None):
         self.token_manager = token_manager
+        self.openhands_config = openhands_config or _default_config
+        self.server_config = server_config or _default_server_config
         self.login_link = (
             'User has not yet authenticated: [Click here to Login to OpenHands]({}).'
         )
@@ -104,7 +113,7 @@ class SlackManager(Manager):
             external_auth_id=user_id,
         )
         repos: list[Repository] = await client.get_repositories(
-            'pushed', server_config.app_mode, None, None, None, None
+            'pushed', self.server_config.app_mode, None, None, None, None
         )
         return repos
 
@@ -192,7 +201,7 @@ class SlackManager(Manager):
             return
 
         if isinstance(slack_view, SlackUnkownUserView):
-            jwt_secret = config.jwt_secret
+            jwt_secret = self.openhands_config.jwt_secret
             if not jwt_secret:
                 raise ValueError('Must configure jwt_secret')
             state = jwt.encode(

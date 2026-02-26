@@ -1,4 +1,5 @@
 import logging
+from typing import ClassVar
 from uuid import UUID
 
 import httpx
@@ -28,9 +29,24 @@ _logger = logging.getLogger(__name__)
 
 
 class SlackV1CallbackProcessor(EventCallbackProcessor):
-    """Callback processor for Slack V1 integrations."""
+    """Callback processor for Slack V1 integrations.
+
+    Handles ``ConversationStateUpdateEvent`` events to post summaries
+    and status notifications back to Slack threads.
+
+    Supported execution statuses:
+    - ``finished``: Requests an agent summary and posts it to Slack.
+    - ``awaiting_user_input``: Notifies the user that the agent needs input.
+    """
 
     slack_view_data: dict[str, str | None] = Field(default_factory=dict)
+    should_request_summary: bool = Field(default=True)
+
+    # Statuses that this processor reacts to
+    _HANDLED_STATUSES: ClassVar[frozenset[str]] = frozenset({
+        'finished',
+        'awaiting_user_input',
+    })
 
     async def __call__(
         self,
@@ -39,20 +55,43 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         event: Event,
     ) -> EventCallbackResult | None:
         """Process events for Slack V1 integration."""
-
         # Only handle ConversationStateUpdateEvent
         if not isinstance(event, ConversationStateUpdateEvent):
             return None
 
-        # Only act when execution has finished
-        if not (event.key == 'execution_status' and event.value == 'finished'):
+        # Only act on execution_status changes we care about
+        if event.key != 'execution_status' or event.value not in self._HANDLED_STATUSES:
             return None
 
-        _logger.info('[Slack V1] Callback agent state was %s', event)
+        _logger.info(
+            '[Slack V1] Callback event: key=%s value=%s, should_request_summary=%s',
+            event.key,
+            event.value,
+            self.should_request_summary,
+        )
 
+        if event.value == 'awaiting_user_input':
+            return await self._handle_awaiting_user_input(
+                conversation_id, callback, event
+            )
+
+        # event.value == 'finished'
+        if not self.should_request_summary:
+            return None
+        self.should_request_summary = False
+
+        return await self._handle_finished(conversation_id, callback, event)
+
+    async def _handle_finished(
+        self,
+        conversation_id: UUID,
+        callback: EventCallback,
+        event: ConversationStateUpdateEvent,
+    ) -> EventCallbackResult:
+        """Request a summary from the agent and post it to Slack."""
         try:
             summary = await self._request_summary(conversation_id)
-            await self._post_summary_to_slack(summary)
+            await self._post_message_to_slack(summary)
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
@@ -63,25 +102,62 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
             )
         except Exception as e:
             _logger.exception('[Slack V1] Error processing callback: %s', e)
-
-            # Only try to post error to Slack if we have basic requirements
-            try:
-                await self._post_summary_to_slack(
-                    f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                    f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
-                    'for more information.'
-                )
-            except Exception as post_error:
-                _logger.warning(
-                    '[Slack V1] Failed to post error message to Slack: %s', post_error
-                )
-
+            await self._try_post_error(conversation_id, e)
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
                 event_id=event.id,
                 conversation_id=conversation_id,
                 detail=str(e),
+            )
+
+    async def _handle_awaiting_user_input(
+        self,
+        conversation_id: UUID,
+        callback: EventCallback,
+        event: ConversationStateUpdateEvent,
+    ) -> EventCallbackResult | None:
+        """Notify the Slack user that the agent is waiting for input."""
+        try:
+            conversation_link = CONVERSATION_URL.format(conversation_id)
+            msg = (
+                f'The agent is waiting for your input. '
+                f'[Continue the conversation here]({conversation_link}).'
+            )
+            await self._post_message_to_slack(msg)
+
+            return EventCallbackResult(
+                status=EventCallbackResultStatus.SUCCESS,
+                event_callback_id=callback.id,
+                event_id=event.id,
+                conversation_id=conversation_id,
+                detail='Notified user: awaiting input',
+            )
+        except Exception as e:
+            _logger.exception(
+                '[Slack V1] Error sending awaiting-input notification: %s', e
+            )
+            return EventCallbackResult(
+                status=EventCallbackResultStatus.ERROR,
+                event_callback_id=callback.id,
+                event_id=event.id,
+                conversation_id=conversation_id,
+                detail=str(e),
+            )
+
+    async def _try_post_error(
+        self, conversation_id: UUID, error: Exception
+    ) -> None:
+        """Best-effort attempt to post an error message to Slack."""
+        try:
+            await self._post_message_to_slack(
+                f'OpenHands encountered an error: **{str(error)}**.\n\n'
+                f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
+                ' for more information.'
+            )
+        except Exception as post_error:
+            _logger.warning(
+                '[Slack V1] Failed to post error message to Slack: %s', post_error
             )
 
     # -------------------------------------------------------------------------
@@ -96,8 +172,8 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
         return bot_access_token
 
-    async def _post_summary_to_slack(self, summary: str) -> None:
-        """Post a summary message to the configured Slack channel."""
+    async def _post_message_to_slack(self, message: str) -> None:
+        """Post a message to the configured Slack channel/thread."""
         bot_access_token = self._get_bot_access_token()
         if not bot_access_token:
             raise RuntimeError('Missing Slack bot access token')
@@ -113,7 +189,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
             # Post the summary as a threaded reply
             response = client.chat_postMessage(
                 channel=channel_id,
-                text=summary,
+                text=message,
                 thread_ts=thread_ts,
                 unfurl_links=False,
                 unfurl_media=False,
@@ -125,7 +201,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 )
 
             _logger.info(
-                '[Slack V1] Successfully posted summary to channel %s', channel_id
+                '[Slack V1] Successfully posted message to channel %s', channel_id
             )
 
         except Exception as e:
@@ -211,12 +287,10 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
     # -------------------------------------------------------------------------
 
     async def _request_summary(self, conversation_id: UUID) -> str:
-        """
-        Ask the agent to produce a summary of its work and return the agent response.
+        """Ask the agent to produce a summary of its work and return the response text.
 
-        NOTE: This method now returns a string (the agent server's response text)
-        and raises exceptions on errors. The wrapping into EventCallbackResult
-        is handled by __call__.
+        Raises exceptions on errors; wrapping into ``EventCallbackResult``
+        is handled by the caller.
         """
         # Import services within the method to avoid circular imports
         from openhands.app_server.config import (

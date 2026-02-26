@@ -133,7 +133,7 @@ class TestSlackV1CallbackProcessor:
     @patch('storage.slack_team_store.SlackTeamStore.get_instance')
     @patch('integrations.slack.slack_v1_callback_processor.WebClient')
     @patch.object(SlackV1CallbackProcessor, '_request_summary')
-    async def test_double_callback_processing(
+    async def test_double_callback_skips_second(
         self,
         mock_request_summary,
         mock_web_client,
@@ -142,7 +142,7 @@ class TestSlackV1CallbackProcessor:
         finish_event,
         event_callback,
     ):
-        """Test that processor handles double callback correctly and processes both times."""
+        """Test that should_request_summary prevents double processing on finished events."""
         conversation_id = uuid4()
 
         # Mock SlackTeamStore
@@ -158,28 +158,26 @@ class TestSlackV1CallbackProcessor:
         mock_slack_client.chat_postMessage.return_value = {'ok': True}
         mock_web_client.return_value = mock_slack_client
 
-        # First callback
+        # First callback should succeed
         result1 = await slack_callback_processor(
             conversation_id, event_callback, finish_event
         )
 
-        # Second callback (should not exit, should process again)
+        # Second callback should be skipped (should_request_summary is now False)
         result2 = await slack_callback_processor(
             conversation_id, event_callback, finish_event
         )
 
-        # Verify both callbacks succeeded
         assert result1 is not None
         assert result1.status == EventCallbackResultStatus.SUCCESS
         assert result1.detail == 'Test summary from agent'
 
-        assert result2 is not None
-        assert result2.status == EventCallbackResultStatus.SUCCESS
-        assert result2.detail == 'Test summary from agent'
+        # Second call returns None because should_request_summary was set to False
+        assert result2 is None
 
-        # Verify both callbacks triggered summary requests and Slack posts
-        assert mock_request_summary.call_count == 2
-        assert mock_slack_client.chat_postMessage.call_count == 2
+        # Only one summary request and one Slack post
+        assert mock_request_summary.call_count == 1
+        assert mock_slack_client.chat_postMessage.call_count == 1
 
     # -------------------------------------------------------------------------
     # Successful end-to-end flow
@@ -429,3 +427,71 @@ class TestSlackV1CallbackProcessor:
         assert result is not None
         assert result.status == EventCallbackResultStatus.ERROR
         assert expected_error_fragment in result.detail
+
+    # -------------------------------------------------------------------------
+    # Awaiting user input tests
+    # -------------------------------------------------------------------------
+
+    @patch('storage.slack_team_store.SlackTeamStore.get_instance')
+    @patch('integrations.slack.slack_v1_callback_processor.WebClient')
+    async def test_awaiting_user_input_notification(
+        self,
+        mock_web_client,
+        mock_slack_team_store,
+        slack_callback_processor,
+        event_callback,
+    ):
+        """Test that awaiting_user_input posts a notification to Slack."""
+        conversation_id = uuid4()
+        awaiting_event = ConversationStateUpdateEvent(
+            key='execution_status', value='awaiting_user_input'
+        )
+
+        mock_store = MagicMock()
+        mock_store.get_team_bot_token.return_value = 'xoxb-test-token'
+        mock_slack_team_store.return_value = mock_store
+
+        mock_slack_client = MagicMock()
+        mock_slack_client.chat_postMessage.return_value = {'ok': True}
+        mock_web_client.return_value = mock_slack_client
+
+        result = await slack_callback_processor(
+            conversation_id, event_callback, awaiting_event
+        )
+
+        assert result is not None
+        assert result.status == EventCallbackResultStatus.SUCCESS
+        assert 'awaiting input' in result.detail
+        mock_slack_client.chat_postMessage.assert_called_once()
+        posted_text = mock_slack_client.chat_postMessage.call_args.kwargs['text']
+        assert 'waiting for your input' in posted_text
+
+    @patch('storage.slack_team_store.SlackTeamStore.get_instance')
+    @patch('integrations.slack.slack_v1_callback_processor.WebClient')
+    async def test_awaiting_user_input_does_not_consume_summary_flag(
+        self,
+        mock_web_client,
+        mock_slack_team_store,
+        slack_callback_processor,
+        event_callback,
+    ):
+        """Test that awaiting_user_input does not set should_request_summary to False."""
+        conversation_id = uuid4()
+        awaiting_event = ConversationStateUpdateEvent(
+            key='execution_status', value='awaiting_user_input'
+        )
+
+        mock_store = MagicMock()
+        mock_store.get_team_bot_token.return_value = 'xoxb-test-token'
+        mock_slack_team_store.return_value = mock_store
+
+        mock_slack_client = MagicMock()
+        mock_slack_client.chat_postMessage.return_value = {'ok': True}
+        mock_web_client.return_value = mock_slack_client
+
+        await slack_callback_processor(
+            conversation_id, event_callback, awaiting_event
+        )
+
+        # should_request_summary should still be True
+        assert slack_callback_processor.should_request_summary is True

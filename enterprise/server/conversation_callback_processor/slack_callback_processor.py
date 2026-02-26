@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 
 from integrations.models import Message, SourceType
 from integrations.slack.slack_manager import SlackManager
@@ -26,12 +27,22 @@ slack_manager = SlackManager(token_manager)
 
 
 class SlackCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to Slack.
+    """Legacy (V0) processor for sending conversation summaries to Slack.
 
-    This processor is used to send summaries of conversations to Slack channels
-    when agent state changes occur.
+    .. deprecated::
+        Use :class:`integrations.slack.slack_v1_callback_processor.SlackV1CallbackProcessor`
+        instead. This V0 processor will be removed once the V1 migration is
+        complete (see issue #12978).
     """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        warnings.warn(
+            'SlackCallbackProcessor (V0) is deprecated. '
+            'Use SlackV1CallbackProcessor instead (see #12978).',
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     slack_user_id: str
     channel_id: str
