@@ -2,7 +2,6 @@ import os
 
 from enterprise.server.auth.auth_utils import user_verifier
 from integrations.github.github_service import SaaSGitHubService
-from openhands.integrations.service_types import ProviderType
 from pydantic import SecretStr
 
 from openhands.core.logger import openhands_logger as logger
