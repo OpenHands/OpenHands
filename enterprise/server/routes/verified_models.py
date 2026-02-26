@@ -1,14 +1,18 @@
 """API routes for managing verified LLM models (admin only)."""
 
-from typing import Annotated, AsyncGenerator
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, field_validator
 from server.email_validation import get_admin_user_id
-from storage.verified_model_store import VerifiedModelStore, search_models as _search_models
 from storage.verified_model_store import (
     create_model as _create_model,
+)
+from storage.verified_model_store import (
     delete_model as _delete_model,
+)
+from storage.verified_model_store import search_models as _search_models
+from storage.verified_model_store import (
     update_model as _update_model,
 )
 
@@ -169,9 +173,7 @@ async def delete_verified_model(
 ):
     """Delete a verified model by provider and model name."""
     try:
-        success = await _delete_model(
-            model_name=model_name, provider=provider
-        )
+        success = await _delete_model(model_name=model_name, provider=provider)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

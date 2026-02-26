@@ -97,7 +97,9 @@ class VerifiedModelStore:
         .. deprecated::
             Use :meth:`search_models` instead for SQL-level filtering.
         """
-        result = await self.search_models(provider=provider, enabled_only=True, limit=10**9)
+        result = await self.search_models(
+            provider=provider, enabled_only=True, limit=10**9
+        )
         return result.items
 
     async def get_all_models(self) -> list[VerifiedModel]:

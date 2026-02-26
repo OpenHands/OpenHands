@@ -67,9 +67,7 @@ class TestCreateModel:
         async with async_session_maker() as session:
             store = VerifiedModelStore(session)
             await store.create_model(model_name='claude', provider='openhands')
-            model = await store.create_model(
-                model_name='claude', provider='anthropic'
-            )
+            model = await store.create_model(model_name='claude', provider='anthropic')
             assert model.provider == 'anthropic'
 
 
@@ -100,7 +98,9 @@ class TestSearchModels:
             assert len(result.items) == 2  # Only enabled models
             assert result.has_more is False
 
-    async def test_search_models_enabled_only_true(self, _seed_models, async_session_maker):
+    async def test_search_models_enabled_only_true(
+        self, _seed_models, async_session_maker
+    ):
         async with async_session_maker() as session:
             store = VerifiedModelStore(session)
             result = await store.search_models(enabled_only=True)
@@ -108,7 +108,9 @@ class TestSearchModels:
             names = {m.model_name for m in result.items}
             assert 'gpt-4o' not in names  # Disabled model not included
 
-    async def test_search_models_enabled_only_false(self, _seed_models, async_session_maker):
+    async def test_search_models_enabled_only_false(
+        self, _seed_models, async_session_maker
+    ):
         async with async_session_maker() as session:
             store = VerifiedModelStore(session)
             result = await store.search_models(enabled_only=False)
