@@ -38,7 +38,7 @@ class UserVerifier:
             return False
         return bool(self.file_users)
 
-    def is_user_allowed(self, provider_type: str, username: str, email: str | None) -> bool:
+    def is_user_allowed(self, username: str) -> bool:
         """Check if user is allowed based on file and/or sheet configuration."""
         logger.debug(f'Checking if GitHub user {username} is allowed')
         if self.file_users:
