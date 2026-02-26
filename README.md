@@ -54,7 +54,7 @@ The experience will be familiar to anyone who has used Devin or Jules.
 ### OpenHands Cloud
 This is a deployment of OpenHands GUI, running on hosted infrastructure.
 
-You can try it with a free $10 credit by [signing in with your GitHub account](https://app.all-hands.dev).
+You can try it for free using the Minimax model by [signing in with your GitHub or GitLab account](https://app.all-hands.dev).
 
 OpenHands Cloud comes with source-available features and integrations:
 - Integrations with Slack, Jira, and Linear

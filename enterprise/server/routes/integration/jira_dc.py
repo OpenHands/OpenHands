@@ -2,7 +2,7 @@ import json
 import os
 import re
 import uuid
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import requests
 from fastapi import (
@@ -316,7 +316,7 @@ async def create_jira_dc_workspace(
                 'response_type': 'code',
             }
 
-            auth_url = f"{JIRA_DC_AUTH_URL}?{'&'.join([f'{k}={v}' for k, v in auth_params.items()])}"
+            auth_url = f'{JIRA_DC_AUTH_URL}?{urlencode(auth_params)}'
 
             return JSONResponse(
                 content={
@@ -436,7 +436,7 @@ async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):
                 'state': state,
                 'response_type': 'code',
             }
-            auth_url = f"{JIRA_DC_AUTH_URL}?{'&'.join([f'{k}={v}' for k, v in auth_params.items()])}"
+            auth_url = f'{JIRA_DC_AUTH_URL}?{urlencode(auth_params)}'
 
             return JSONResponse(
                 content={

@@ -36,7 +36,7 @@ export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
     closeAccountMenu();
   };
 
-  const isOSS = config?.APP_MODE === "oss";
+  const isOSS = config?.app_mode === "oss";
 
   // Show the menu based on the new logic
   const showMenu =
@@ -60,7 +60,7 @@ export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
             showMenu && "opacity-100 pointer-events-auto",
             // Invisible hover bridge: extends hover zone to create a "safe corridor"
             // for diagonal mouse movement to the menu (only active when menu is visible)
-            "group-hover:before:absolute group-hover:before:bottom-0 group-hover:before:right-0 group-hover:before:w-[200px] group-hover:before:h-[300px]",
+            "group-hover:before:content-[''] group-hover:before:block group-hover:before:absolute group-hover:before:inset-[-320px] group-hover:before:z-9998",
           )}
         >
           <AccountSettingsContextMenu

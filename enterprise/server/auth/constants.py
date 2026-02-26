@@ -38,8 +38,18 @@ ROLE_CHECK_ENABLED = os.getenv('ROLE_CHECK_ENABLED', 'false').lower() in (
     'y',
     'on',
 )
-BLOCKED_EMAIL_DOMAINS = [
-    domain.strip().lower()
-    for domain in os.getenv('BLOCKED_EMAIL_DOMAINS', '').split(',')
-    if domain.strip()
-]
+
+DUPLICATE_EMAIL_CHECK = os.getenv('DUPLICATE_EMAIL_CHECK', 'true') in ('1', 'true')
+
+# reCAPTCHA Enterprise
+RECAPTCHA_PROJECT_ID = os.getenv('RECAPTCHA_PROJECT_ID', '').strip()
+RECAPTCHA_SITE_KEY = os.getenv('RECAPTCHA_SITE_KEY', '').strip()
+RECAPTCHA_HMAC_SECRET = os.getenv('RECAPTCHA_HMAC_SECRET', '').strip()
+RECAPTCHA_BLOCK_THRESHOLD = float(os.getenv('RECAPTCHA_BLOCK_THRESHOLD', '0.3'))
+
+# Account Defender labels that indicate suspicious activity
+SUSPICIOUS_LABELS = {
+    'SUSPICIOUS_LOGIN_ACTIVITY',
+    'SUSPICIOUS_ACCOUNT_CREATION',
+    'RELATED_ACCOUNTS_NUMBER_HIGH',
+}

@@ -6,7 +6,6 @@ import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation"
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
-import { ENABLE_PUBLIC_CONVERSATION_SHARING } from "#/utils/feature-flags";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
@@ -38,6 +37,7 @@ export function ConversationName() {
     handleExportConversation,
     handleTogglePublic,
     handleCopyShareLink,
+    shareUrl,
     handleConfirmDelete,
     handleConfirmStop,
     metricsModalVisible,
@@ -91,6 +91,10 @@ export function ConversationName() {
   };
 
   const handleKeyUp = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input)
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
     if (event.key === "Enter") {
       event.currentTarget.blur();
     }
@@ -182,16 +186,9 @@ export function ConversationName() {
                 onDownloadViaVSCode={
                   shouldShowDownload ? handleDownloadViaVSCode : undefined
                 }
-                onTogglePublic={
-                  ENABLE_PUBLIC_CONVERSATION_SHARING()
-                    ? handleTogglePublic
-                    : undefined
-                }
-                onCopyShareLink={
-                  ENABLE_PUBLIC_CONVERSATION_SHARING()
-                    ? handleCopyShareLink
-                    : undefined
-                }
+                onTogglePublic={handleTogglePublic}
+                shareUrl={shareUrl}
+                onCopyShareLink={handleCopyShareLink}
                 onDownloadConversation={
                   shouldShowDownloadConversation
                     ? handleDownloadConversation

@@ -46,8 +46,10 @@ class MockSandboxService(SandboxService):
     ) -> SandboxInfo | None:
         return await self.get_sandbox_by_session_api_key_mock(session_api_key)
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
-        return await self.start_sandbox_mock(sandbox_spec_id)
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
+        return await self.start_sandbox_mock(sandbox_spec_id, sandbox_id)
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         return await self.resume_sandbox_mock(sandbox_id)

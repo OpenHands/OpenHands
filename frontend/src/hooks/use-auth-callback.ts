@@ -15,7 +15,7 @@ export const useAuthCallback = () => {
 
   useEffect(() => {
     // Only run in SAAS mode
-    if (config?.APP_MODE !== "saas") {
+    if (config?.app_mode !== "saas") {
       return;
     }
 
@@ -24,7 +24,7 @@ export const useAuthCallback = () => {
       return;
     }
 
-    // Only set login method if authentication was successful
+    // Only process callback if authentication was successful
     if (!isAuthed) {
       return;
     }
@@ -32,15 +32,37 @@ export const useAuthCallback = () => {
     // Check if we have a login_method query parameter
     const searchParams = new URLSearchParams(location.search);
     const loginMethod = searchParams.get("login_method");
+    const returnTo = searchParams.get("returnTo");
 
     // Set the login method if it's valid
     if (Object.values(LoginMethod).includes(loginMethod as LoginMethod)) {
       setLoginMethod(loginMethod as LoginMethod);
 
-      // Clean up the URL by removing the login_method parameter
+      // Clean up the URL by removing auth-related parameters
       searchParams.delete("login_method");
-      const newUrl = `${location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-      navigate(newUrl, { replace: true });
+      searchParams.delete("returnTo");
+
+      // Determine where to navigate after authentication
+      let destination = "/";
+      if (returnTo && returnTo !== "/login") {
+        destination = returnTo;
+      } else if (location.pathname !== "/login" && location.pathname !== "/") {
+        destination = location.pathname;
+      }
+
+      const remainingParams = searchParams.toString();
+      const finalUrl = remainingParams
+        ? `${destination}?${remainingParams}`
+        : destination;
+
+      navigate(finalUrl, { replace: true });
     }
-  }, [isAuthed, isAuthLoading, location.search, config?.APP_MODE]);
+  }, [
+    isAuthed,
+    isAuthLoading,
+    location.search,
+    location.pathname,
+    config?.app_mode,
+    navigate,
+  ]);
 };

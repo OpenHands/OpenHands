@@ -10,6 +10,15 @@ repos:
         args: ["--allow-multiple-documents"]
       - id: debug-statements
 
+
+  - repo: local
+    hooks:
+      - id: warn-appmode-oss
+        name: "Warn on AppMode.OSS in backend (use AppMode.OPENHANDS)"
+        language: system
+        entry: bash -lc 'if rg -n "\\bAppMode\\.OSS\\b" openhands tests/unit; then echo "Found AppMode.OSS usage. Prefer AppMode.OPENHANDS."; exit 1; fi'
+        pass_filenames: false
+
   - repo: https://github.com/tox-dev/pyproject-fmt
     rev: v2.5.1
     hooks:

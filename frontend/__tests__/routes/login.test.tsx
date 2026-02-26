@@ -1,0 +1,634 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createRoutesStub } from "react-router";
+import LoginPage from "#/routes/login";
+import OptionService from "#/api/option-service/option-service.api";
+import AuthService from "#/api/auth-service/auth-service.api";
+
+const { useEmailVerificationMock, resendEmailVerificationMock } = vi.hoisted(
+  () => ({
+    useEmailVerificationMock: vi.fn(() => ({
+      emailVerified: false,
+      hasDuplicatedEmail: false,
+      emailVerificationModalOpen: false,
+      setEmailVerificationModalOpen: vi.fn(),
+      userId: null as string | null,
+      resendEmailVerification: vi.fn(),
+    })),
+    resendEmailVerificationMock: vi.fn(),
+  }),
+);
+
+vi.mock("#/hooks/use-github-auth-url", () => ({
+  useGitHubAuthUrl: () => "https://github.com/login/oauth/authorize",
+}));
+
+vi.mock("#/hooks/use-email-verification", () => ({
+  useEmailVerification: () => useEmailVerificationMock(),
+}));
+
+const { useAuthUrlMock } = vi.hoisted(() => ({
+  useAuthUrlMock: vi.fn(
+    (config: { identityProvider: string; appMode: string | null }) => {
+      const urls: Record<string, string> = {
+        gitlab: "https://gitlab.com/oauth/authorize",
+        bitbucket: "https://bitbucket.org/site/oauth2/authorize",
+      };
+      if (config.appMode === "saas") {
+        return (
+          urls[config.identityProvider] || "https://gitlab.com/oauth/authorize"
+        );
+      }
+      return null;
+    },
+  ),
+}));
+
+vi.mock("#/hooks/use-auth-url", () => ({
+  useAuthUrl: (config: { identityProvider: string; appMode: string | null }) =>
+    useAuthUrlMock(config),
+}));
+
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackLoginButtonClick: vi.fn(),
+  }),
+}));
+
+const { useInvitationMock, buildOAuthStateDataMock } = vi.hoisted(() => ({
+  useInvitationMock: vi.fn(() => ({
+    invitationToken: null as string | null,
+    hasInvitation: false,
+    buildOAuthStateData: (baseState: Record<string, string>) => baseState,
+    clearInvitation: vi.fn(),
+  })),
+  buildOAuthStateDataMock: vi.fn(
+    (baseState: Record<string, string>) => baseState,
+  ),
+}));
+
+vi.mock("#/hooks/use-invitation", () => ({
+  useInvitation: () => useInvitationMock(),
+}));
+
+const RouterStub = createRoutesStub([
+  {
+    Component: LoginPage,
+    path: "/login",
+  },
+]);
+
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  }
+
+  return Wrapper;
+};
+
+describe("LoginPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("location", { href: "" });
+
+    // @ts-expect-error - partial mock for testing
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+      app_mode: "saas",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github", "gitlab", "bitbucket"],
+      auth_url: "https://auth.example.com",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
+      },
+    });
+
+    vi.spyOn(AuthService, "authenticate").mockRejectedValue({
+      response: { status: 401 },
+      isAxiosError: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  describe("Rendering", () => {
+    it("should render login page with heading", async () => {
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("login-page")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("AUTH$LETS_GET_STARTED")).toBeInTheDocument();
+    });
+
+    it("should display all configured provider buttons", async () => {
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("login-content")).toBeInTheDocument();
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: "GITLAB$CONNECT_TO_GITLAB" }),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", {
+            name: /BITBUCKET\$CONNECT_TO_BITBUCKET/i,
+          }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("should only display configured providers", async () => {
+      // @ts-expect-error - partial mock for testing
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+        app_mode: "saas",
+        posthog_client_key: "test-posthog-key",
+        providers_configured: ["github"],
+        auth_url: "https://auth.example.com",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByRole("button", { name: "GITLAB$CONNECT_TO_GITLAB" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: "BITBUCKET$CONNECT_TO_BITBUCKET",
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should display message when no providers are configured", async () => {
+      // @ts-expect-error - partial mock for testing
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+        app_mode: "saas",
+        posthog_client_key: "test-posthog-key",
+        providers_configured: [],
+        auth_url: "https://auth.example.com",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("AUTH$NO_PROVIDERS_CONFIGURED"),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("OAuth Flow", () => {
+    it("should redirect to GitHub auth URL when GitHub button is clicked", async () => {
+      const user = userEvent.setup();
+      const mockUrl = "https://github.com/login/oauth/authorize";
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+      });
+
+      const githubButton = screen.getByRole("button", {
+        name: "GITHUB$CONNECT_TO_GITHUB",
+      });
+      await user.click(githubButton);
+
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain(mockUrl);
+    });
+
+    it("should redirect to GitLab auth URL when GitLab button is clicked", async () => {
+      const user = userEvent.setup();
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITLAB$CONNECT_TO_GITLAB" }),
+        ).toBeInTheDocument();
+      });
+
+      const gitlabButton = screen.getByRole("button", {
+        name: "GITLAB$CONNECT_TO_GITLAB",
+      });
+      await user.click(gitlabButton);
+
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain("https://gitlab.com/oauth/authorize");
+    });
+
+    it("should redirect to Bitbucket auth URL when Bitbucket button is clicked", async () => {
+      const user = userEvent.setup();
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("login-content")).toBeInTheDocument();
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", {
+            name: /BITBUCKET\$CONNECT_TO_BITBUCKET/i,
+          }),
+        ).toBeInTheDocument();
+      });
+
+      const bitbucketButton = screen.getByRole("button", {
+        name: /BITBUCKET\$CONNECT_TO_BITBUCKET/i,
+      });
+      await user.click(bitbucketButton);
+
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain(
+        "https://bitbucket.org/site/oauth2/authorize",
+      );
+    });
+  });
+
+  describe("Redirects", () => {
+    it("should redirect authenticated users to home", async () => {
+      vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(
+        () => {
+          expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect authenticated users to returnTo destination", async () => {
+      vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
+
+      render(<RouterStub initialEntries={["/login?returnTo=/settings"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(
+        () => {
+          expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("should redirect OSS mode users to home", async () => {
+      // @ts-expect-error - partial mock for testing
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+        app_mode: "oss",
+        posthog_client_key: "test-posthog-key",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
+        },
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(
+        () => {
+          expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
+        },
+        { timeout: 2000 },
+      );
+    });
+  });
+
+  describe("Email Verification", () => {
+    it("should display email verified message when emailVerified is true", async () => {
+      useEmailVerificationMock.mockReturnValue({
+        emailVerified: true,
+        hasDuplicatedEmail: false,
+        emailVerificationModalOpen: false,
+        setEmailVerificationModalOpen: vi.fn(),
+        userId: null,
+        resendEmailVerification: resendEmailVerificationMock,
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("AUTH$EMAIL_VERIFIED_PLEASE_LOGIN"),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("should display duplicate email error when hasDuplicatedEmail is true", async () => {
+      useEmailVerificationMock.mockReturnValue({
+        emailVerified: false,
+        hasDuplicatedEmail: true,
+        emailVerificationModalOpen: false,
+        setEmailVerificationModalOpen: vi.fn(),
+        userId: null,
+        resendEmailVerification: resendEmailVerificationMock,
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("AUTH$DUPLICATE_EMAIL_ERROR"),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("should pass userId to EmailVerificationModal when userId is provided", async () => {
+      const user = userEvent.setup();
+      const testUserId = "test-user-id-123";
+      const setEmailVerificationModalOpen = vi.fn();
+
+      useEmailVerificationMock.mockReturnValue({
+        emailVerified: false,
+        hasDuplicatedEmail: false,
+        emailVerificationModalOpen: true,
+        setEmailVerificationModalOpen,
+        userId: testUserId,
+        resendEmailVerification: resendEmailVerificationMock,
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("AUTH$PLEASE_CHECK_EMAIL_TO_VERIFY"),
+        ).toBeInTheDocument();
+      });
+
+      const resendButton = screen.getByRole("button", {
+        name: /SETTINGS\$RESEND_VERIFICATION/i,
+      });
+      await user.click(resendButton);
+
+      expect(resendEmailVerificationMock).toHaveBeenCalledWith({
+        userId: testUserId,
+        isAuthFlow: true,
+      });
+    });
+  });
+
+  describe("Loading States", () => {
+    it("should show loading spinner while checking auth", async () => {
+      vi.spyOn(AuthService, "authenticate").mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        const spinner = document.querySelector(".animate-spin");
+        expect(spinner).toBeInTheDocument();
+      });
+    });
+
+    it("should show loading spinner while loading config", async () => {
+      vi.spyOn(OptionService, "getConfig").mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        const spinner = document.querySelector(".animate-spin");
+        expect(spinner).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("Terms and Privacy", () => {
+    it("should display Terms and Privacy notice", async () => {
+      useEmailVerificationMock.mockReturnValue({
+        emailVerified: false,
+        hasDuplicatedEmail: false,
+        emailVerificationModalOpen: false,
+        setEmailVerificationModalOpen: vi.fn(),
+        userId: null as string | null,
+        resendEmailVerification: resendEmailVerificationMock,
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("terms-and-privacy-notice"),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("Invitation Flow", () => {
+    it("should display invitation pending message when hasInvitation is true", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("AUTH$INVITATION_PENDING")).toBeInTheDocument();
+      });
+    });
+
+    it("should not display invitation pending message when hasInvitation is false", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: null,
+        hasInvitation: false,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("login-content")).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByText("AUTH$INVITATION_PENDING"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should pass buildOAuthStateData to LoginContent for OAuth state encoding", async () => {
+      const user = userEvent.setup();
+      const mockBuildOAuthStateData = vi.fn((baseState: Record<string, string>) => ({
+        ...baseState,
+        invitation_token: "inv-test-token-12345",
+      }));
+
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: mockBuildOAuthStateData,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+      });
+
+      const githubButton = screen.getByRole("button", {
+        name: "GITHUB$CONNECT_TO_GITHUB",
+      });
+      await user.click(githubButton);
+
+      // buildOAuthStateData should have been called during the OAuth redirect
+      expect(mockBuildOAuthStateData).toHaveBeenCalled();
+    });
+
+    it("should include invitation token in OAuth state when invitation is present", async () => {
+      const user = userEvent.setup();
+      const mockBuildOAuthStateData = vi.fn((baseState: Record<string, string>) => ({
+        ...baseState,
+        invitation_token: "inv-test-token-12345",
+      }));
+
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: mockBuildOAuthStateData,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+      });
+
+      const githubButton = screen.getByRole("button", {
+        name: "GITHUB$CONNECT_TO_GITHUB",
+      });
+      await user.click(githubButton);
+
+      // Verify the redirect URL contains the state with invitation token
+      await waitFor(() => {
+        expect(window.location.href).toContain("state=");
+      });
+
+      // Decode and verify the state contains invitation_token
+      const url = new URL(window.location.href);
+      const state = url.searchParams.get("state");
+      if (state) {
+        const decodedState = JSON.parse(atob(state));
+        expect(decodedState.invitation_token).toBe("inv-test-token-12345");
+      }
+    });
+
+    it("should handle login with invitation_token URL parameter", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-url-token-67890",
+        hasInvitation: true,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login?invitation_token=inv-url-token-67890"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("AUTH$INVITATION_PENDING")).toBeInTheDocument();
+      });
+    });
+  });
+});

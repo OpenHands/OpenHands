@@ -350,3 +350,21 @@
 .api-configuration-modal {
   box-shadow: 0 183px 51px 0 rgba(0, 0, 0, 0.00), 0 117px 47px 0 rgba(0, 0, 0, 0.01), 0 66px 40px 0 rgba(0, 0, 0, 0.03), 0 29px 29px 0 rgba(0, 0, 0, 0.04), 0 7px 16px 0 rgba(0, 0, 0, 0.05);
 }
+
+/* Shine text effect for streaming content */
+@keyframes shine {
+  0% {
+    background-position: 200% 0%;
+  }
+  100% {
+    background-position: -200% 0%;
+  }
+}
+
+.shine-text {
+  color: transparent;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  animation: shine 2s linear infinite;
+  background: radial-gradient(circle at center, rgb(24 24 27 / 85%), transparent) -200% 50% / 200% 100% no-repeat, #f4f4f5;
+}

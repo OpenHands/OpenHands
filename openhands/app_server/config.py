@@ -48,7 +48,14 @@ from openhands.app_server.services.httpx_client_injector import HttpxClientInjec
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService, JwtServiceInjector
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
+from openhands.app_server.web_client.default_web_client_config_injector import (
+    DefaultWebClientConfigInjector,
+)
+from openhands.app_server.web_client.web_client_config_injector import (
+    WebClientConfigInjector,
+)
 from openhands.sdk.utils.models import OpenHandsModel
+from openhands.server.types import AppMode
 
 
 def get_default_persistence_dir() -> Path:
@@ -67,7 +74,8 @@ def get_default_persistence_dir() -> Path:
 def get_default_web_url() -> str | None:
     """Get legacy web host parameter.
 
-    If present, we assume we are running under https."""
+    If present, we assume we are running under https.
+    """
     web_host = os.getenv('WEB_HOST')
     if not web_host:
         return None
@@ -81,7 +89,7 @@ def get_openhands_provider_base_url() -> str | None:
 
 def _get_default_lifespan():
     # Check legacy parameters for saas mode. If we are in SAAS mode do not apply
-    # OSS alembic migrations
+    # OpenHands alembic migrations
     if 'saas' in (os.getenv('OPENHANDS_CONFIG_CLS') or '').lower():
         return None
     return OssAppLifespanService()
@@ -113,9 +121,12 @@ class AppServerConfig(OpenHandsModel):
             persistence_dir=get_default_persistence_dir()
         )
     )
-
     # Services
     lifespan: AppLifespanService | None = Field(default_factory=_get_default_lifespan)
+    app_mode: AppMode = AppMode.OPENHANDS
+    web_client: WebClientConfigInjector = Field(
+        default_factory=DefaultWebClientConfigInjector
+    )
 
 
 def config_from_env() -> AppServerConfig:
@@ -131,6 +142,9 @@ def config_from_env() -> AppServerConfig:
     )
     from openhands.app_server.event.filesystem_event_service import (
         FilesystemEventServiceInjector,
+    )
+    from openhands.app_server.event.google_cloud_event_service import (
+        GoogleCloudEventServiceInjector,
     )
     from openhands.app_server.event_callback.sql_event_callback_service import (
         SQLEventCallbackServiceInjector,
@@ -160,7 +174,13 @@ def config_from_env() -> AppServerConfig:
     config: AppServerConfig = from_env(AppServerConfig, 'OH')  # type: ignore
 
     if config.event is None:
-        config.event = FilesystemEventServiceInjector()
+        if os.environ.get('FILE_STORE') == 'google_cloud':
+            # Legacy V0 google cloud storage configuration
+            config.event = GoogleCloudEventServiceInjector(
+                bucket_name=os.environ.get('FILE_STORE_PATH')
+            )
+        else:
+            config.event = FilesystemEventServiceInjector()
 
     if config.event_callback is None:
         config.event_callback = SQLEventCallbackServiceInjector()
@@ -175,7 +195,51 @@ def config_from_env() -> AppServerConfig:
         elif os.getenv('RUNTIME') in ('local', 'process'):
             config.sandbox = ProcessSandboxServiceInjector()
         else:
-            config.sandbox = DockerSandboxServiceInjector()
+            # Support legacy environment variables for Docker sandbox configuration
+            docker_sandbox_kwargs: dict = {}
+            if os.getenv('SANDBOX_HOST_PORT'):
+                docker_sandbox_kwargs['host_port'] = int(
+                    os.environ['SANDBOX_HOST_PORT']
+                )
+            if os.getenv('SANDBOX_CONTAINER_URL_PATTERN'):
+                docker_sandbox_kwargs['container_url_pattern'] = os.environ[
+                    'SANDBOX_CONTAINER_URL_PATTERN'
+                ]
+            # Allow configuring sandbox startup grace period
+            # This is useful for slower machines or cloud environments where
+            # the agent-server container takes longer to initialize
+            if os.getenv('SANDBOX_STARTUP_GRACE_SECONDS'):
+                docker_sandbox_kwargs['startup_grace_seconds'] = int(
+                    os.environ['SANDBOX_STARTUP_GRACE_SECONDS']
+                )
+            # Parse SANDBOX_VOLUMES and convert to VolumeMount objects
+            # This is set by the CLI's --mount-cwd flag
+            sandbox_volumes = os.getenv('SANDBOX_VOLUMES')
+            if sandbox_volumes:
+                from openhands.app_server.sandbox.docker_sandbox_service import (
+                    VolumeMount,
+                )
+
+                mounts = []
+                for mount_spec in sandbox_volumes.split(','):
+                    mount_spec = mount_spec.strip()
+                    if not mount_spec:
+                        continue
+                    parts = mount_spec.split(':')
+                    if len(parts) >= 2:
+                        host_path = parts[0]
+                        container_path = parts[1]
+                        mode = parts[2] if len(parts) > 2 else 'rw'
+                        mounts.append(
+                            VolumeMount(
+                                host_path=host_path,
+                                container_path=container_path,
+                                mode=mode,
+                            )
+                        )
+                if mounts:
+                    docker_sandbox_kwargs['mounts'] = mounts
+            config.sandbox = DockerSandboxServiceInjector(**docker_sandbox_kwargs)
 
     if config.sandbox_spec is None:
         if os.getenv('RUNTIME') == 'remote':

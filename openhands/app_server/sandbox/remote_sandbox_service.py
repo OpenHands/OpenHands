@@ -1,8 +1,10 @@
 import asyncio
+import hashlib
 import logging
 import os
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Union
+from uuid import UUID
 
 import base62
 import httpx
@@ -35,6 +37,8 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
+    ALLOW_CORS_ORIGINS_VARIABLE,
+    WEBHOOK_CALLBACK_VARIABLE,
     SandboxService,
     SandboxServiceInjector,
 )
@@ -47,8 +51,6 @@ from openhands.app_server.utils.sql_utils import Base, UtcDateTime
 from openhands.sdk.utils.paging import page_iterator
 
 _logger = logging.getLogger(__name__)
-WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
-ALLOW_CORS_ORIGINS_VARIABLE = 'OH_ALLOW_CORS_ORIGINS_0'
 polling_task: asyncio.Task | None = None
 POD_STATUS_MAPPING = {
     'ready': SandboxStatus.RUNNING,
@@ -71,6 +73,11 @@ WORKER_1_PORT = 12000
 WORKER_2_PORT = 12001
 
 
+def _hash_session_api_key(session_api_key: str) -> str:
+    """Hash a session API key using SHA-256."""
+    return hashlib.sha256(session_api_key.encode()).hexdigest()
+
+
 class StoredRemoteSandbox(Base):  # type: ignore
     """Local storage for remote sandbox info.
 
@@ -83,6 +90,7 @@ class StoredRemoteSandbox(Base):  # type: ignore
     id = Column(String, primary_key=True)
     created_by_user_id = Column(String, nullable=True, index=True)
     sandbox_spec_id = Column(String, index=True)  # shadows runtime['image']
+    session_api_key_hash = Column(String, nullable=True, index=True)
     created_at = Column(UtcDateTime, server_default=func.now(), index=True)
 
 
@@ -271,6 +279,12 @@ class RemoteSandboxService(SandboxService):
             # we are probably in local development and the only url in use is localhost
             environment[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
 
+        # Add worker port environment variables so the agent knows which ports to use
+        # for web applications. These match the ports exposed via the WORKER_1 and
+        # WORKER_2 URLs.
+        environment[WORKER_1] = str(WORKER_1_PORT)
+        environment[WORKER_2] = str(WORKER_2_PORT)
+
         return environment
 
     async def search_sandboxes(
@@ -336,12 +350,14 @@ class RemoteSandboxService(SandboxService):
 
         return self._to_sandbox_info(stored_sandbox, runtime)
 
-    async def get_sandbox_by_session_api_key(
+    async def _get_sandbox_by_session_api_key_legacy(
         self, session_api_key: str
     ) -> Union[SandboxInfo, None]:
-        """Get a single sandbox by session API key."""
-        # TODO: We should definitely refactor this and store the session_api_key in
-        # the v1_remote_sandbox table
+        """Legacy method to get sandbox by session API key via runtime API.
+
+        This is the fallback for sandboxes created before the session_api_key_hash
+        column was added. It calls the remote runtime API which is less efficient.
+        """
         try:
             response = await self._send_runtime_api_request(
                 'GET',
@@ -359,6 +375,10 @@ class RemoteSandboxService(SandboxService):
                     sandbox = result.scalar_one_or_none()
                     if sandbox is None:
                         raise ValueError('sandbox_not_found')
+                    # Backfill the hash for future lookups (Auto committed at end of request)
+                    sandbox.session_api_key_hash = _hash_session_api_key(
+                        session_api_key
+                    )
                     return self._to_sandbox_info(sandbox, runtime)
         except Exception:
             _logger.exception(
@@ -375,6 +395,10 @@ class RemoteSandboxService(SandboxService):
             try:
                 runtime = await self._get_runtime(stored_sandbox.id)
                 if runtime and runtime.get('session_api_key') == session_api_key:
+                    # Backfill the hash for future lookups (Auto committed at end of request)
+                    stored_sandbox.session_api_key_hash = _hash_session_api_key(
+                        session_api_key
+                    )
                     return self._to_sandbox_info(stored_sandbox, runtime)
             except Exception:
                 # Continue checking other sandboxes if one fails
@@ -382,7 +406,42 @@ class RemoteSandboxService(SandboxService):
 
         return None
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def get_sandbox_by_session_api_key(
+        self, session_api_key: str
+    ) -> Union[SandboxInfo, None]:
+        """Get a single sandbox by session API key.
+
+        Uses the stored session_api_key_hash for efficient database lookup instead
+        of calling the remote runtime API. Falls back to legacy API-based lookup
+        for sandboxes created before the hash column was added.
+        """
+        session_api_key_hash = _hash_session_api_key(session_api_key)
+
+        # First try to find sandbox by hash in the database
+        stmt = await self._secure_select()
+        stmt = stmt.where(
+            StoredRemoteSandbox.session_api_key_hash == session_api_key_hash
+        )
+        result = await self.db_session.execute(stmt)
+        stored_sandbox = result.scalar_one_or_none()
+
+        if stored_sandbox:
+            try:
+                runtime = await self._get_runtime(stored_sandbox.id)
+                return self._to_sandbox_info(stored_sandbox, runtime)
+            except Exception:
+                _logger.exception(
+                    f'Error getting runtime for sandbox {stored_sandbox.id}',
+                    stack_info=True,
+                )
+                return self._to_sandbox_info(stored_sandbox, None)
+
+        # Fallback for sandboxes created before the hash column was added
+        return await self._get_sandbox_by_session_api_key_legacy(session_api_key)
+
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Start a new sandbox by creating a remote runtime."""
         try:
             # Enforce sandbox limits by cleaning up old sandboxes
@@ -401,8 +460,9 @@ class RemoteSandboxService(SandboxService):
                     raise ValueError('Sandbox Spec not found')
                 sandbox_spec = sandbox_spec_maybe
 
-            # Create a unique id
-            sandbox_id = base62.encodebytes(os.urandom(16))
+            # Create a unique id, use provided sandbox_id if available
+            if sandbox_id is None:
+                sandbox_id = base62.encodebytes(os.urandom(16))
 
             # get user id
             user_id = await self.user_context.get_user_id()
@@ -444,6 +504,13 @@ class RemoteSandboxService(SandboxService):
             )
             response.raise_for_status()
             runtime_data = response.json()
+
+            # Store the session_api_key hash for efficient lookups
+            session_api_key = runtime_data.get('session_api_key')
+            if session_api_key:
+                stored_sandbox.session_api_key_hash = _hash_session_api_key(
+                    session_api_key
+                )
 
             # Hack - result doesn't contain this
             runtime_data['pod_status'] = 'pending'
@@ -701,8 +768,18 @@ async def refresh_conversation(
 
         updated_conversation_info = ConversationInfo.model_validate(response.json())
 
-        # TODO: As of writing, ConversationInfo from AgentServer does not have a title to update...
         app_conversation_info.updated_at = updated_conversation_info.updated_at
+
+        # TODO: This is a temp fix - the agent server is storing metrics in a new format
+        # We should probably update the data structures and to store / display the more
+        # explicit metrics
+        try:
+            app_conversation_info.metrics = (
+                updated_conversation_info.stats.get_combined_metrics()
+            )
+        except Exception:
+            _logger.exception('error_updating_conversation_metrics', stack_info=True)
+
         # TODO: Update other appropriate attributes...
 
         await app_conversation_info_service.save_app_conversation_info(
@@ -729,7 +806,9 @@ async def refresh_conversation(
             return EventPage.model_validate(response.json())
 
         async for event in page_iterator(fetch_events_page):
-            existing = await event_service.get_event(event.id)
+            existing = await event_service.get_event(
+                app_conversation_info.id, UUID(event.id)
+            )
             if existing is None:
                 await event_service.save_event(app_conversation_info.id, event)
                 await event_callback_service.execute_callbacks(
@@ -790,7 +869,7 @@ class RemoteSandboxServiceInjector(SandboxServiceInjector):
         # This is primarily used for local development rather than production
         config = get_global_config()
         web_url = config.web_url
-        if web_url is None:
+        if web_url is None or 'localhost' in web_url:
             global polling_task
             if polling_task is None:
                 polling_task = asyncio.create_task(

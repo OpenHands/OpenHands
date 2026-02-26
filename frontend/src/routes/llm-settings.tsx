@@ -113,7 +113,7 @@ function LlmSettingsScreen() {
   // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
   const currentModel = currentSelectedModel || settings?.llm_model;
 
-  const isSaasMode = config?.APP_MODE === "saas";
+  const isSaasMode = config?.app_mode === "saas";
 
   const isOpenHandsProvider = () => {
     if (view === "basic") {
@@ -608,7 +608,7 @@ function LlmSettingsScreen() {
                 </>
               )}
 
-              {config?.APP_MODE !== "saas" && (
+              {config?.app_mode !== "saas" && (
                 <>
                   <SettingsInput
                     testId="search-api-key-input"
@@ -667,8 +667,9 @@ function LlmSettingsScreen() {
                   )?.toString()}
                   onChange={(value) => handleCondenserMaxSizeIsDirty(value)}
                   isDisabled={!settings.enable_default_condenser}
+                  className="w-full max-w-[680px] capitalize"
                 />
-                <p className="text-xs text-tertiary-alt mt-1">
+                <p className="text-xs text-tertiary-alt mt-6">
                   {t(I18nKey.SETTINGS$CONDENSER_MAX_SIZE_TOOLTIP)}
                 </p>
               </div>

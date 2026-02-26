@@ -33,10 +33,10 @@ npm run dev:mock:saas
 These commands set `VITE_MOCK_API=true` which activates the MSW Service Worker to intercept requests.
 
 > [!NOTE]
-> **OSS vs SaaS Mode**
+> **OpenHands vs SaaS Mode**
 >
 > OpenHands runs in two modes:
-> - **OSS mode**: For local/self-hosted deployments where users provide their own LLM API keys and configure git providers manually
+> - **OpenHands mode**: For local/self-hosted deployments where users provide their own LLM API keys and configure git providers manually
 > - **SaaS mode**: For the cloud offering with billing, managed API keys, and OAuth-based GitHub integration
 >
 > Use `dev:mock:saas` when working on SaaS-specific features like billing, API key management, or subscription flows.

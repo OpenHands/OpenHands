@@ -3,7 +3,7 @@ import logging
 import os
 import socket
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import AsyncGenerator
 
 import base62
@@ -27,6 +27,9 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
+    ALLOW_CORS_ORIGINS_VARIABLE,
+    SESSION_API_KEY_VARIABLE,
+    WEBHOOK_CALLBACK_VARIABLE,
     SandboxService,
     SandboxServiceInjector,
 )
@@ -37,8 +40,7 @@ from openhands.app_server.utils.docker_utils import (
 )
 
 _logger = logging.getLogger(__name__)
-SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
-WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
+STARTUP_GRACE_SECONDS = 15
 
 
 class VolumeMount(BaseModel):
@@ -78,7 +80,11 @@ class DockerSandboxService(SandboxService):
     health_check_path: str | None
     httpx_client: httpx.AsyncClient
     max_num_sandboxes: int
+    web_url: str | None = None
+    extra_hosts: dict[str, str] = field(default_factory=dict)
     docker_client: docker.DockerClient = field(default_factory=get_docker_client)
+    startup_grace_seconds: int = STARTUP_GRACE_SECONDS
+    use_host_network: bool = False
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -135,36 +141,61 @@ class DockerSandboxService(SandboxService):
             env = self._get_container_env_vars(container)
             session_api_key = env.get(SESSION_API_KEY_VARIABLE)
 
-            # Get the first exposed port mapping
+            # Get the exposed port mappings
             exposed_urls = []
-            port_bindings = container.attrs.get('NetworkSettings', {}).get('Ports', {})
-            if port_bindings:
-                for container_port, host_bindings in port_bindings.items():
-                    if host_bindings:
-                        host_port = host_bindings[0]['HostPort']
-                        exposed_port = next(
-                            (
-                                exposed_port
-                                for exposed_port in self.exposed_ports
-                                if container_port
-                                == f'{exposed_port.container_port}/tcp'
-                            ),
-                            None,
+
+            # Check if container is using host network mode
+            network_mode = container.attrs.get('HostConfig', {}).get('NetworkMode', '')
+            is_host_network = network_mode == 'host'
+
+            if is_host_network:
+                # Host network mode: container ports are directly accessible on host
+                for exposed_port in self.exposed_ports:
+                    host_port = exposed_port.container_port
+                    url = self.container_url_pattern.format(port=host_port)
+
+                    # VSCode URLs require the api_key and working dir
+                    if exposed_port.name == VSCODE:
+                        url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+
+                    exposed_urls.append(
+                        ExposedUrl(
+                            name=exposed_port.name,
+                            url=url,
+                            port=host_port,
                         )
-                        if exposed_port:
-                            url = self.container_url_pattern.format(port=host_port)
-
-                            # VSCode URLs require the api_key and working dir
-                            if exposed_port.name == VSCODE:
-                                url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
-
-                            exposed_urls.append(
-                                ExposedUrl(
-                                    name=exposed_port.name,
-                                    url=url,
-                                    port=host_port,
-                                )
+                    )
+            else:
+                # Bridge network mode: use port bindings
+                port_bindings = container.attrs.get('NetworkSettings', {}).get(
+                    'Ports', {}
+                )
+                if port_bindings:
+                    for container_port, host_bindings in port_bindings.items():
+                        if host_bindings:
+                            host_port = int(host_bindings[0]['HostPort'])
+                            matching_port = next(
+                                (
+                                    ep
+                                    for ep in self.exposed_ports
+                                    if container_port == f'{ep.container_port}/tcp'
+                                ),
+                                None,
                             )
+                            if matching_port:
+                                url = self.container_url_pattern.format(port=host_port)
+
+                                # VSCode URLs require the api_key and working dir
+                                if matching_port.name == VSCODE:
+                                    url += f'/?tkn={session_api_key}&folder={container.attrs["Config"]["WorkingDir"]}'
+
+                                exposed_urls.append(
+                                    ExposedUrl(
+                                        name=matching_port.name,
+                                        url=url,
+                                        port=host_port,
+                                    )
+                                )
 
         return SandboxInfo(
             id=container.name,
@@ -199,8 +230,20 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                _logger.info(f'Sandbox server not running: {app_server_url} : {exc}')
-                sandbox_info.status = SandboxStatus.ERROR
+                # If the server has exceeded the startup grace period, it's an error
+                if sandbox_info.created_at < utc_now() - timedelta(
+                    seconds=self.startup_grace_seconds
+                ):
+                    _logger.info(
+                        f'Sandbox server not running: {app_server_url} : {exc}'
+                    )
+                    sandbox_info.status = SandboxStatus.ERROR
+                else:
+                    _logger.debug(
+                        f'Sandbox server not yet available (still starting): '
+                        f'{app_server_url} : {exc}'
+                    )
+                    sandbox_info.status = SandboxStatus.STARTING
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None
         return sandbox_info
@@ -283,8 +326,19 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return None
 
-    async def start_sandbox(self, sandbox_spec_id: str | None = None) -> SandboxInfo:
+    async def start_sandbox(
+        self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
+    ) -> SandboxInfo:
         """Start a new sandbox."""
+        # Warn about port collision risk when using host network mode with multiple sandboxes
+        if self.use_host_network and self.max_num_sandboxes > 1:
+            _logger.warning(
+                'Host network mode is enabled with max_num_sandboxes > 1. '
+                'Multiple sandboxes will attempt to bind to the same ports, '
+                'which may cause port collision errors. Consider setting '
+                'max_num_sandboxes=1 when using host network mode.'
+            )
+
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
@@ -298,10 +352,12 @@ class DockerSandboxService(SandboxService):
                 raise ValueError('Sandbox Spec not found')
             sandbox_spec = sandbox_spec_maybe
 
-        # Generate container ID and session api key
-        container_name = (
-            f'{self.container_name_prefix}{base62.encodebytes(os.urandom(16))}'
-        )
+        # Generate a sandbox id if none was provided
+        if sandbox_id is None:
+            sandbox_id = base62.encodebytes(os.urandom(16))
+
+        # Generate container name and session api key
+        container_name = f'{self.container_name_prefix}{sandbox_id}'
         session_api_key = base62.encodebytes(os.urandom(32))
 
         # Prepare environment variables
@@ -311,13 +367,27 @@ class DockerSandboxService(SandboxService):
             f'http://host.docker.internal:{self.host_port}/api/v1/webhooks'
         )
 
+        # Set CORS origins for remote browser access when web_url is configured.
+        # This allows the agent-server container to accept requests from the
+        # frontend when running OpenHands on a remote machine.
+        if self.web_url:
+            env_vars[ALLOW_CORS_ORIGINS_VARIABLE] = self.web_url
+
         # Prepare port mappings and add port environment variables
-        port_mappings = {}
-        for exposed_port in self.exposed_ports:
-            host_port = self._find_unused_port()
-            port_mappings[exposed_port.container_port] = host_port
-            # Add port as environment variable
-            env_vars[exposed_port.name] = str(host_port)
+        # When using host network, container ports are directly accessible on the host
+        # so we use the container ports directly instead of mapping to random host ports
+        port_mappings: dict[int, int] | None = None
+        if self.use_host_network:
+            # Host network mode: container ports are directly accessible
+            for exposed_port in self.exposed_ports:
+                env_vars[exposed_port.name] = str(exposed_port.container_port)
+        else:
+            # Bridge network mode: map container ports to random host ports
+            port_mappings = {}
+            for exposed_port in self.exposed_ports:
+                host_port = self._find_unused_port()
+                port_mappings[exposed_port.container_port] = host_port
+                env_vars[exposed_port.name] = str(host_port)
 
         # Prepare labels
         labels = {
@@ -332,6 +402,12 @@ class DockerSandboxService(SandboxService):
             }
             for mount in self.mounts
         }
+
+        # Determine network mode
+        network_mode = 'host' if self.use_host_network else None
+
+        if self.use_host_network:
+            _logger.info(f'Starting sandbox {container_name} with host network mode')
 
         try:
             # Create and start the container
@@ -349,6 +425,14 @@ class DockerSandboxService(SandboxService):
                 # Use Docker's tini init process to ensure proper signal handling and reaping of
                 # zombie child processes.
                 init=True,
+                # Allow agent-server containers to resolve host.docker.internal
+                # and other custom hostnames for LAN deployments
+                # Note: extra_hosts is not needed with host network mode
+                extra_hosts=self.extra_hosts
+                if self.extra_hosts and not self.use_host_network
+                else None,
+                # Network mode: 'host' for host networking, None for default bridge
+                network_mode=network_mode,
             )
 
             sandbox_info = await self._container_to_sandbox_info(container)
@@ -422,8 +506,23 @@ class DockerSandboxService(SandboxService):
 class DockerSandboxServiceInjector(SandboxServiceInjector):
     """Dependency injector for docker sandbox services."""
 
-    container_url_pattern: str = 'http://localhost:{port}'
-    host_port: int = 3000
+    container_url_pattern: str = Field(
+        default='http://localhost:{port}',
+        description=(
+            'URL pattern for exposed sandbox ports. Use {port} as placeholder. '
+            'For remote access, set to your server IP (e.g., http://192.168.1.100:{port}). '
+            'Configure via OH_SANDBOX_CONTAINER_URL_PATTERN environment variable.'
+        ),
+    )
+    host_port: int = Field(
+        default=3000,
+        description=(
+            'The port on which the main OpenHands app server is running. '
+            'Used for webhook callbacks from agent-server containers. '
+            'If running OpenHands on a non-default port, set this to match. '
+            'Configure via OH_SANDBOX_HOST_PORT environment variable.'
+        ),
+    )
     container_name_prefix: str = 'oh-agent-server-'
     max_num_sandboxes: int = Field(
         default=5,
@@ -469,15 +568,51 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'determine whether the server is running'
         ),
     )
+    extra_hosts: dict[str, str] = Field(
+        default_factory=lambda: {'host.docker.internal': 'host-gateway'},
+        description=(
+            'Extra hostname mappings to add to agent-server containers. '
+            'This allows containers to resolve hostnames like host.docker.internal '
+            'for LAN deployments and MCP connections. '
+            'Format: {"hostname": "ip_or_gateway"}'
+        ),
+    )
+    startup_grace_seconds: int = Field(
+        default=STARTUP_GRACE_SECONDS,
+        description=(
+            'Number of seconds were no response from the agent server is acceptable'
+            'before it is considered an error'
+        ),
+    )
+    use_host_network: bool = Field(
+        default=os.getenv('SANDBOX_USE_HOST_NETWORK', '').lower()
+        in (
+            'true',
+            '1',
+            'yes',
+        ),
+        description=(
+            'Whether to use host networking mode for sandbox containers. '
+            'When enabled, containers share the host network namespace, '
+            'making all container ports directly accessible on the host. '
+            'This is useful for reverse proxy setups where dynamic port mapping '
+            'is problematic. Configure via OH_SANDBOX_USE_HOST_NETWORK environment variable.'
+        ),
+    )
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
     ) -> AsyncGenerator[SandboxService, None]:
         # Define inline to prevent circular lookup
         from openhands.app_server.config import (
+            get_global_config,
             get_httpx_client,
             get_sandbox_spec_service,
         )
+
+        # Get web_url from global config for CORS support
+        config = get_global_config()
+        web_url = config.web_url
 
         async with (
             get_httpx_client(state) as httpx_client,
@@ -493,4 +628,8 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 health_check_path=self.health_check_path,
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
+                web_url=web_url,
+                extra_hosts=self.extra_hosts,
+                startup_grace_seconds=self.startup_grace_seconds,
+                use_host_network=self.use_host_network,
             )

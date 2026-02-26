@@ -1,0 +1,105 @@
+name: Feature Request or Enhancement
+description: Suggest a new feature or improvement for OpenHands
+title: '[Feature]: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thank you for suggesting a feature! 💡
+
+        **Please provide detailed information.** Vague or low-effort requests may be closed. Well-documented feature requests with strong community support are more likely to be added to the roadmap.
+
+  - type: checkboxes
+    attributes:
+      label: Is there an existing feature request for this?
+      description: Please search existing issues and feature requests before creating a new one. If found, react or comment to the duplicate issue instead of making a new one.
+      options:
+      - label: I have searched existing issues and feature requests, and this is not a duplicate.
+        required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem or Use Case
+      description: What problem are you trying to solve? What use case would this feature enable?
+      placeholder: |
+        Example - "As a developer working on large codebases, I need to search across multiple files simultaneously. Currently, I have to search file-by-file which is time-consuming and inefficient."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your ideal solution. What should this feature do? How should it work?
+      placeholder: |
+        Example - "Add a global search feature that allows searching across all files in the workspace. Results should show file name, line number, and context around matches. Include regex support and filtering options."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds? What are their limitations?
+      placeholder: Example - "I tried using grep in the terminal, but it's not integrated with the UI and doesn't provide click-to-navigate functionality."
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority / Severity
+      description: How important is this feature to your workflow?
+      options:
+        - "Critical - Blocking my work, no workaround available"
+        - "High - Significant impact on productivity"
+        - "Medium - Would improve experience"
+        - "Low - Nice to have"
+      default: 2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Estimated Scope
+      description: To the best of your knowledge, how complex do you think this feature would be to implement?
+      options:
+        - "Small - UI tweak, config option, or minor change"
+        - "Medium - New feature with moderate complexity"
+        - "Large - Significant feature requiring architecture changes"
+        - "Unknown - Not sure about the technical complexity"
+      default: 3
+
+  - type: dropdown
+    id: feature-area
+    attributes:
+      label: Feature Area
+      description: Which part of OpenHands does this feature relate to? If you select "Other", please specify the area in the Additional Context section below.
+      options:
+        - "Agent / AI behavior"
+        - "User Interface / UX"
+        - "CLI / Command-line interface"
+        - "File system / Workspace management"
+        - "Configuration / Settings"
+        - "Integrations (GitHub, GitLab, etc.)"
+        - "Performance / Optimization"
+        - "Documentation"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-details
+    attributes:
+      label: Technical Implementation Ideas (Optional)
+      description: If you have technical expertise, share implementation ideas, API suggestions, or relevant technical details.
+      placeholder: |
+        Example - "Could use ripgrep library for fast search. Expose results via /api/search endpoint. Frontend can use virtualized list for rendering large result sets."
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, mockups, or examples that help illustrate this feature request.
+      placeholder: Drag and drop screenshots, mockups, or links here.

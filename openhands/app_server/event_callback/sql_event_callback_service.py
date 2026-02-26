@@ -7,7 +7,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from typing import AsyncGenerator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Request
 from sqlalchemy import UUID as SQLUUID
@@ -59,7 +59,7 @@ class StoredEventCallback(Base):  # type: ignore
 
 class StoredEventCallbackResult(Base):  # type: ignore
     __tablename__ = 'event_callback_result'
-    id = Column(SQLUUID, primary_key=True)
+    id = Column(SQLUUID, primary_key=True, default=uuid4)
     status = Column(Enum(EventCallbackResultStatus), nullable=True)
     event_callback_id = Column(SQLUUID, index=True)
     event_id = Column(String, index=True)
@@ -90,7 +90,7 @@ class SQLEventCallbackService(EventCallbackService):
         self.db_session.add(stored_callback)
         await self.db_session.commit()
         await self.db_session.refresh(stored_callback)
-        return EventCallback(**row2dict(stored_callback))
+        return EventCallback.model_validate(row2dict(stored_callback))
 
     async def get_event_callback(self, id: UUID) -> EventCallback | None:
         """Get a single event callback, returning None if not found."""
@@ -98,7 +98,7 @@ class SQLEventCallbackService(EventCallbackService):
         result = await self.db_session.execute(stmt)
         stored_callback = result.scalar_one_or_none()
         if stored_callback:
-            return EventCallback(**row2dict(stored_callback))
+            return EventCallback.model_validate(row2dict(stored_callback))
         return None
 
     async def delete_event_callback(self, id: UUID) -> bool:
@@ -173,7 +173,9 @@ class SQLEventCallbackService(EventCallbackService):
             next_page_id = str(offset + limit)
 
         # Convert stored callbacks to domain models
-        callbacks = [EventCallback(**row2dict(cb)) for cb in stored_callbacks]
+        callbacks = [
+            EventCallback.model_validate(row2dict(cb)) for cb in stored_callbacks
+        ]
         return EventCallbackPage(items=callbacks, next_page_id=next_page_id)
 
     async def save_event_callback(self, event_callback: EventCallback) -> EventCallback:
@@ -202,7 +204,9 @@ class SQLEventCallbackService(EventCallbackService):
         result = await self.db_session.execute(query)
         stored_callbacks = result.scalars().all()
         if stored_callbacks:
-            callbacks = [EventCallback(**row2dict(cb)) for cb in stored_callbacks]
+            callbacks = [
+                EventCallback.model_validate(row2dict(cb)) for cb in stored_callbacks
+            ]
             await asyncio.gather(
                 *[
                     self.execute_callback(conversation_id, callback, event)

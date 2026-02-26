@@ -1,5 +1,6 @@
 import React from "react";
 import { useLocation } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useGitUser } from "#/hooks/query/use-git-user";
 import { UserActions } from "./user-actions";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
@@ -12,11 +13,12 @@ import { ConversationPanelWrapper } from "../conversation-panel/conversation-pan
 import { useLogout } from "#/hooks/mutation/use-logout";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { MicroagentManagementButton } from "#/components/shared/buttons/microagent-management-button";
+import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 
 export function Sidebar() {
-  const location = useLocation();
+  const { t } = useTranslation();
+  const { pathname } = useLocation();
   const user = useGitUser();
   const { data: config } = useConfig();
   const {
@@ -32,10 +34,8 @@ export function Sidebar() {
   const [conversationPanelIsOpen, setConversationPanelIsOpen] =
     React.useState(false);
 
-  const { pathname } = useLocation();
-
   React.useEffect(() => {
-    if (location.pathname === "/settings") {
+    if (pathname === "/settings") {
       setSettingsModalIsOpen(false);
     } else if (
       !isFetchingSettings &&
@@ -47,19 +47,26 @@ export function Sidebar() {
       displayErrorToast(
         "Something went wrong while fetching settings. Please reload the page.",
       );
-    } else if (config?.APP_MODE === "oss" && settingsError?.status === 404) {
+    } else if (
+      config?.app_mode === "oss" &&
+      settingsError?.status === 404 &&
+      !config?.feature_flags?.hide_llm_settings
+    ) {
       setSettingsModalIsOpen(true);
     }
   }, [
-    settingsError?.status,
-    settingsError,
+    pathname,
     isFetchingSettings,
-    location.pathname,
+    settingsIsError,
+    settingsError,
+    config?.app_mode,
+    config?.feature_flags?.hide_llm_settings,
   ]);
 
   return (
     <>
       <aside
+        aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
         className={cn(
           "h-[54px] p-3 md:p-0 md:h-[40px] md:h-auto flex flex-row md:flex-col gap-1 bg-base md:w-[75px] md:min-w-[75px] sm:pt-0 sm:px-2 md:pt-[14px] md:px-0",
           pathname === "/" && "md:pt-6.5 md:pb-3",
@@ -80,9 +87,6 @@ export function Sidebar() {
                   ? null
                   : setConversationPanelIsOpen((prev) => !prev)
               }
-              disabled={settings?.email_verified === false}
-            />
-            <MicroagentManagementButton
               disabled={settings?.email_verified === false}
             />
           </div>

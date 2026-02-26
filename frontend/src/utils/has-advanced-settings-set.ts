@@ -27,7 +27,7 @@ export const hasAdvancedSettingsSet = (
     settings.agent !== undefined && settings.agent !== DEFAULT_SETTINGS.agent;
   // Default is true, so only check if explicitly disabled
   const hasDisabledCondenser = settings.enable_default_condenser === false;
-  // Check if condenser size differs from default (default is 120)
+  // Check if condenser size differs from default (default is 240)
   const hasCustomCondenserSize =
     settings.condenser_max_size !== undefined &&
     settings.condenser_max_size !== null &&

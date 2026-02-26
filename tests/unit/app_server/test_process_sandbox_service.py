@@ -185,6 +185,41 @@ class TestProcessSandboxService:
         result = await process_sandbox_service.delete_sandbox('nonexistent')
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_start_sandbox_with_sandbox_id(self, process_sandbox_service):
+        """Test starting a sandbox with a specified sandbox_id."""
+        # Mock subprocess and waiting for server
+        with (
+            patch.object(
+                process_sandbox_service, '_start_agent_process'
+            ) as mock_start_process,
+            patch.object(
+                process_sandbox_service, '_wait_for_server_ready', return_value=True
+            ),
+            patch.object(
+                process_sandbox_service,
+                '_get_process_status',
+                return_value=SandboxStatus.RUNNING,
+            ),
+        ):
+            mock_process = MagicMock()
+            mock_process.pid = 1234
+            mock_start_process.return_value = mock_process
+
+            # Mock successful health check response
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            process_sandbox_service.httpx_client.get.return_value = mock_response
+
+            # Execute with custom sandbox_id
+            result = await process_sandbox_service.start_sandbox(
+                sandbox_id='custom_sandbox_id'
+            )
+
+            # Verify
+            assert result is not None
+            assert result.id == 'custom_sandbox_id'
+
     @patch('psutil.Process')
     def test_get_process_status_paused(
         self, mock_process_class, process_sandbox_service

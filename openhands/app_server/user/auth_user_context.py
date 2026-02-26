@@ -31,7 +31,7 @@ class AuthUserContext(UserContext):
 
     async def get_user_id(self) -> str | None:
         # If you have an auth object here you are logged in. If user_id is None
-        # it means we are in OSS mode.
+        # it means we are in OpenHands (OSS mode).
         user_id = await self.user_auth.get_user_id()
         return user_id
 
@@ -63,9 +63,13 @@ class AuthUserContext(UserContext):
             self._provider_handler = provider_handler
         return provider_handler
 
-    async def get_authenticated_git_url(self, repository: str) -> str:
+    async def get_authenticated_git_url(
+        self, repository: str, is_optional: bool = False
+    ) -> str:
         provider_handler = await self.get_provider_handler()
-        url = await provider_handler.get_authenticated_git_url(repository)
+        url = await provider_handler.get_authenticated_git_url(
+            repository, is_optional=is_optional
+        )
         return url
 
     async def get_latest_token(self, provider_type: ProviderType) -> str | None:

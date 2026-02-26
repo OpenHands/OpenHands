@@ -1,4 +1,4 @@
-# IMPORTANT: LEGACY V0 CODE
+# IMPORTANT: LEGACY V0 CODE - Deprecated since version 1.0.0, scheduled for removal April 1, 2026
 # This file is part of the legacy (V0) implementation of OpenHands and will be removed soon as we complete the migration to V1.
 # OpenHands V1 uses the Software Agent SDK for the agentic core and runs a new application server. Please refer to:
 #   - V1 agentic core (SDK): https://github.com/OpenHands/software-agent-sdk
@@ -153,10 +153,11 @@ async def run_controller(
     # Add MCP tools to the agent
     if agent.config.enable_mcp:
         # Add OpenHands' MCP server by default
-        _, openhands_mcp_stdio_servers = (
-            OpenHandsMCPConfigImpl.create_default_mcp_server_config(
-                config.mcp_host, config, None
-            )
+        (
+            _,
+            openhands_mcp_stdio_servers,
+        ) = await OpenHandsMCPConfigImpl.create_default_mcp_server_config(
+            config.mcp_host, config, None
         )
         runtime.config.mcp.stdio_servers.extend(openhands_mcp_stdio_servers)
 

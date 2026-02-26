@@ -15,7 +15,6 @@ from integrations.slack.slack_manager import SlackManager
 from integrations.utils import (
     HOST_URL,
 )
-from pydantic import SecretStr
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
@@ -35,6 +34,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 from storage.database import session_maker
 from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
+from storage.user_store import UserStore
 
 from openhands.integrations.service_types import ProviderType
 from openhands.server.shared import config, sio
@@ -79,6 +79,14 @@ async def install_callback(
             status_code=400,
         )
 
+    if not config.jwt_secret:
+        logger.error('slack_install_callback_error JWT not configured.')
+        return _html_response(
+            title='Error',
+            description=html.escape('JWT not configured'),
+            status_code=500,
+        )
+
     try:
         client = AsyncWebClient()  # no prepared token needed for this
         # Complete the installation by calling oauth.v2.access API method
@@ -94,20 +102,21 @@ async def install_callback(
 
         # Create a state variable for keycloak oauth
         payload = {}
-        jwt_secret: SecretStr = config.jwt_secret  # type: ignore[assignment]
         if state:
             payload = jwt.decode(
-                state, jwt_secret.get_secret_value(), algorithms=['HS256']
+                state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
             )
         payload['slack_user_id'] = authed_user.get('id')
         payload['bot_access_token'] = bot_access_token
         payload['team_id'] = team_id
 
-        state = jwt.encode(payload, jwt_secret.get_secret_value(), algorithm='HS256')
+        state = jwt.encode(
+            payload, config.jwt_secret.get_secret_value(), algorithm='HS256'
+        )
 
         # Redirect into keycloak
         scope = quote('openid email profile offline_access')
-        redirect_uri = quote(f'{HOST_URL}/slack/keycloak-callback')
+        redirect_uri = f'{HOST_URL}/slack/keycloak-callback'
         auth_url = (
             f'{KEYCLOAK_SERVER_URL_EXT}/realms/{KEYCLOAK_REALM_NAME}/protocol/openid-connect/auth'
             f'?client_id={KEYCLOAK_CLIENT_ID}&response_type=code'
@@ -149,16 +158,23 @@ async def keycloak_callback(
             status_code=400,
         )
 
-    jwt_secret: SecretStr = config.jwt_secret  # type: ignore[assignment]
+    if not config.jwt_secret:
+        logger.error('problem_retrieving_keycloak_tokens JWT not configured.')
+        return _html_response(
+            title='Error',
+            description=html.escape('JWT not configured'),
+            status_code=500,
+        )
+
     payload: dict[str, str] = jwt.decode(
-        state, jwt_secret.get_secret_value(), algorithms=['HS256']
+        state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
     )
     slack_user_id = payload['slack_user_id']
     bot_access_token = payload['bot_access_token']
     team_id = payload['team_id']
 
     # Retrieve the keycloak_user_id
-    redirect_uri = f'https://{request.url.netloc}{request.url.path}'
+    redirect_uri = f'{HOST_URL}{request.url.path}'
     (
         keycloak_access_token,
         keycloak_refresh_token,
@@ -180,6 +196,13 @@ async def keycloak_callback(
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
     keycloak_user_id = user_info['sub']
+    user = await UserStore.get_user_by_id_async(keycloak_user_id)
+    if not user:
+        return _html_response(
+            title='Failed to authenticate.',
+            description=f'Please re-login into <a href="{HOST_URL}" style="color:#ecedee;text-decoration:underline;">OpenHands Cloud</a>. Then try <a href="https://docs.all-hands.dev/usage/cloud/slack-installation" style="color:#ecedee;text-decoration:underline;">installing the OpenHands Slack App</a> again',
+            status_code=400,
+        )
 
     # These tokens are offline access tokens - store them!
     await token_manager.store_offline_token(keycloak_user_id, keycloak_refresh_token)
@@ -211,6 +234,7 @@ async def keycloak_callback(
     slack_display_name = slack_user_info.data['user']['profile']['display_name']
     slack_user = SlackUser(
         keycloak_user_id=keycloak_user_id,
+        org_id=user.current_org_id,
         slack_user_id=slack_user_id,
         slack_display_name=slack_display_name,
     )
@@ -305,7 +329,7 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
 
     body = await request.body()
     form = await request.form()
-    payload = json.loads(form.get('payload'))  # type: ignore[arg-type]
+    payload = json.loads(form.get('payload'))
 
     logger.info('slack_on_form_interaction', extra={'payload': payload})
 

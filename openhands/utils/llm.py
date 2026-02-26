@@ -5,17 +5,113 @@ import httpx
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm
+    from litellm import LlmProviders, ProviderConfigManager, get_llm_provider
 
 from openhands.core.config import LLMConfig, OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.llm import bedrock
 
+# Hardcoded OpenHands provider models used in self-hosted mode.
+# In SaaS mode these are loaded from the database instead.
+OPENHANDS_MODELS = [
+    'openhands/claude-opus-4-5-20251101',
+    'openhands/claude-sonnet-4-5-20250929',
+    'openhands/gpt-5.2-codex',
+    'openhands/gpt-5.2',
+    'openhands/minimax-m2.5',
+    'openhands/gemini-3-pro-preview',
+    'openhands/gemini-3-flash-preview',
+    'openhands/deepseek-chat',
+    'openhands/devstral-medium-2512',
+    'openhands/kimi-k2-0711-preview',
+    'openhands/qwen3-coder-480b',
+]
 
-def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
+CLARIFAI_MODELS = [
+    'clarifai/openai.chat-completion.gpt-oss-120b',
+    'clarifai/openai.chat-completion.gpt-oss-20b',
+    'clarifai/openai.chat-completion.gpt-5',
+    'clarifai/openai.chat-completion.gpt-5-mini',
+    'clarifai/qwen.qwen3.qwen3-next-80B-A3B-Thinking',
+    'clarifai/qwen.qwenLM.Qwen3-30B-A3B-Instruct-2507',
+    'clarifai/qwen.qwenLM.Qwen3-30B-A3B-Thinking-2507',
+    'clarifai/qwen.qwenLM.Qwen3-14B',
+    'clarifai/qwen.qwenCoder.Qwen3-Coder-30B-A3B-Instruct',
+    'clarifai/deepseek-ai.deepseek-chat.DeepSeek-R1-0528-Qwen3-8B',
+    'clarifai/deepseek-ai.deepseek-chat.DeepSeek-V3_1',
+    'clarifai/zai.completion.GLM_4_5',
+    'clarifai/moonshotai.kimi.Kimi-K2-Instruct',
+]
+
+
+def is_openhands_model(model: str | None) -> bool:
+    """Check if the model uses the OpenHands provider.
+
+    Args:
+        model: The model name to check.
+
+    Returns:
+        True if the model starts with 'openhands/', False otherwise.
+    """
+    return bool(model and model.startswith('openhands/'))
+
+
+def get_provider_api_base(model: str) -> str | None:
+    """Get the API base URL for a model using litellm.
+
+    This function tries multiple approaches to determine the API base URL:
+    1. First tries litellm.get_api_base() which handles OpenAI, Gemini, Mistral
+    2. Falls back to ProviderConfigManager.get_provider_model_info() for providers
+       like Anthropic that have ModelInfo classes with get_api_base() methods
+
+    Args:
+        model: The model name (e.g., 'gpt-4', 'anthropic/claude-sonnet-4-5-20250929')
+
+    Returns:
+        The API base URL if found, None otherwise.
+    """
+    # First try get_api_base (handles OpenAI, Gemini with specific URL patterns)
+    try:
+        api_base = litellm.get_api_base(model, {})
+        if api_base:
+            return api_base
+    except Exception:
+        pass
+
+    # Fall back to ProviderConfigManager for providers like Anthropic
+    try:
+        # Get the provider from the model
+        _, provider_name, _, _ = get_llm_provider(model)
+        if provider_name:
+            # Convert provider name to LlmProviders enum
+            try:
+                provider_enum = LlmProviders(provider_name)
+                model_info = ProviderConfigManager.get_provider_model_info(
+                    model, provider_enum
+                )
+                if model_info and hasattr(model_info, 'get_api_base'):
+                    return model_info.get_api_base()
+            except ValueError:
+                pass  # Provider not in enum
+    except Exception:
+        pass
+
+    return None
+
+
+def get_supported_llm_models(
+    config: OpenHandsConfig,
+    verified_models: list[str] | None = None,
+) -> list[str]:
     """Get all models supported by LiteLLM.
 
     This function combines models from litellm and Bedrock, removing any
     error-prone Bedrock models.
+
+    Args:
+        config: The OpenHands configuration.
+        verified_models: Optional list of verified model strings from the database
+            (SaaS mode). When provided, these replace the hardcoded OPENHANDS_MODELS.
 
     Returns:
         list[str]: A sorted list of unique model names.
@@ -53,42 +149,8 @@ def get_supported_llm_models(config: OpenHandsConfig) -> list[str]:
             except httpx.HTTPError as e:
                 logger.error(f'Error getting OLLAMA models: {e}')
 
-    # Add OpenHands provider models
-    openhands_models = [
-        'openhands/claude-sonnet-4-20250514',
-        'openhands/claude-sonnet-4-5-20250929',
-        'openhands/gpt-5-2025-08-07',
-        'openhands/gpt-5-mini-2025-08-07',
-        'openhands/claude-opus-4-20250514',
-        'openhands/claude-opus-4-5-20251101',
-        'openhands/gemini-2.5-pro',
-        'openhands/o3',
-        'openhands/o4-mini',
-        'openhands/devstral-small-2505',
-        'openhands/devstral-small-2507',
-        'openhands/devstral-medium-2507',
-        'openhands/kimi-k2-0711-preview',
-        'openhands/qwen3-coder-480b',
-    ]
-    model_list = openhands_models + model_list
-
-    # Add Clarifai provider models (via OpenAI-compatible endpoint)
-    clarifai_models = [
-        # clarifai featured models
-        'clarifai/openai.chat-completion.gpt-oss-120b',
-        'clarifai/openai.chat-completion.gpt-oss-20b',
-        'clarifai/openai.chat-completion.gpt-5',
-        'clarifai/openai.chat-completion.gpt-5-mini',
-        'clarifai/qwen.qwen3.qwen3-next-80B-A3B-Thinking',
-        'clarifai/qwen.qwenLM.Qwen3-30B-A3B-Instruct-2507',
-        'clarifai/qwen.qwenLM.Qwen3-30B-A3B-Thinking-2507',
-        'clarifai/qwen.qwenLM.Qwen3-14B',
-        'clarifai/qwen.qwenCoder.Qwen3-Coder-30B-A3B-Instruct',
-        'clarifai/deepseek-ai.deepseek-chat.DeepSeek-R1-0528-Qwen3-8B',
-        'clarifai/deepseek-ai.deepseek-chat.DeepSeek-V3_1',
-        'clarifai/zai.completion.GLM_4_5',
-        'clarifai/moonshotai.kimi.Kimi-K2-Instruct',
-    ]
-    model_list = clarifai_models + model_list
+    # Use database-backed models if provided (SaaS), otherwise use hardcoded list
+    openhands_models = verified_models if verified_models else OPENHANDS_MODELS
+    model_list = openhands_models + CLARIFAI_MODELS + model_list
 
     return sorted(set(model_list))

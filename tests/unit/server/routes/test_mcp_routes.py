@@ -48,7 +48,7 @@ async def test_get_conversation_link_non_saas_mode():
 
     # Test with non-SAAS mode
     with patch('openhands.server.routes.mcp.server_config') as mock_config:
-        mock_config.app_mode = AppMode.OSS
+        mock_config.app_mode = AppMode.OPENHANDS
 
         # Call the function
         result = await get_conversation_link(
@@ -123,3 +123,29 @@ async def test_get_conversation_link_empty_body():
 
         # Verify that get_user was called
         mock_service.get_user.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_link_none_conversation_id():
+    """Test get_conversation_link returns body unchanged when conversation_id is None."""
+    mock_service = AsyncMock(spec=GitService)
+
+    with patch('openhands.server.routes.mcp.server_config') as mock_config:
+        mock_config.app_mode = AppMode.SAAS
+
+        body = 'This is the PR body.'
+
+        # Test with None conversation_id
+        result = await get_conversation_link(
+            service=mock_service, conversation_id=None, body=body
+        )
+        assert result == body
+
+        # Test with empty string conversation_id
+        result = await get_conversation_link(
+            service=mock_service, conversation_id='', body=body
+        )
+        assert result == body
+
+        # Verify get_user was never called (early return)
+        mock_service.get_user.assert_not_called()
