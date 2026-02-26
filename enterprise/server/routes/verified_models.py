@@ -1,6 +1,8 @@
 """API routes for managing verified LLM models (admin only)."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, field_validator
 from server.email_validation import get_admin_user_id
 from storage.verified_model_store import VerifiedModelStore
@@ -43,6 +45,13 @@ class VerifiedModelResponse(BaseModel):
     is_enabled: bool
 
 
+class VerifiedModelPage(BaseModel):
+    """Paginated response model for verified model list."""
+
+    items: list[VerifiedModelResponse]
+    next_page_id: str | None = None
+
+
 def _to_response(model) -> VerifiedModelResponse:
     return VerifiedModelResponse(
         id=model.id,
@@ -52,18 +61,38 @@ def _to_response(model) -> VerifiedModelResponse:
     )
 
 
-@api_router.get('', response_model=list[VerifiedModelResponse])
+@api_router.get('', response_model=VerifiedModelPage)
 async def list_verified_models(
     provider: str | None = None,
+    page_id: Annotated[
+        str | None,
+        Query(title='Optional next_page_id from the previously returned page'),
+    ] = None,
+    limit: Annotated[
+        int, Query(title='The max number of results in the page', gt=0, le=100)
+    ] = 100,
     user_id: str = Depends(get_admin_user_id),
 ):
     """List all verified models, optionally filtered by provider."""
     try:
         if provider:
-            models = VerifiedModelStore.get_models_by_provider(provider)
+            all_models = VerifiedModelStore.get_models_by_provider(provider)
         else:
-            models = VerifiedModelStore.get_all_models()
-        return [_to_response(m) for m in models]
+            all_models = VerifiedModelStore.get_all_models()
+
+        try:
+            offset = int(page_id) if page_id else 0
+        except ValueError:
+            offset = 0
+        page = all_models[offset : offset + limit + 1]
+        has_more = len(page) > limit
+        if has_more:
+            page = page[:limit]
+
+        return VerifiedModelPage(
+            items=[_to_response(m) for m in page],
+            next_page_id=str(offset + limit) if has_more else None,
+        )
     except Exception:
         logger.exception('Error listing verified models')
         raise HTTPException(
