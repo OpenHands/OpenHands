@@ -10,11 +10,11 @@ from http.client import HTTPException
 from typing import Any
 
 from fastapi import APIRouter, Depends
-
 from server.verified_models.verified_model_service import (
     VerifiedModelService,
     verified_model_store_dependency,
 )
+
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
 from openhands.server.dependencies import get_dependencies

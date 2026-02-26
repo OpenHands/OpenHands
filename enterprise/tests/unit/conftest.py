@@ -5,7 +5,7 @@ from uuid import UUID
 import pytest
 from server.constants import ORG_SETTINGS_VERSION
 from server.verified_models.verified_model_service import (
-    StoredVerfiedModel,  # noqa: F401
+    StoredVerifiedModel,  # noqa: F401
 )
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

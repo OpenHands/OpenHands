@@ -10,7 +10,6 @@ from server.verified_models.verified_model_models import (
     VerifiedModelPage,
     VerifiedModelUpdate,
 )
-
 from server.verified_models.verified_model_service import (
     VerifiedModelService,
     verified_model_store_dependency,
