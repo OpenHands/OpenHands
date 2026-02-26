@@ -67,11 +67,29 @@ The user fills in required values, then clicks "Start Conversation" to proceed.
      "initial_message": {"content": [{"type": "text", "text": "/city-weather:now Tokyo"}]}
    }
    ```
-   Passes plugin specs to agent server via `StartConversationRequest`
+   
+   Call stack:
+   - `AppConversationRouter` receives request with `PluginSpec` list
+   - `LiveStatusAppConversationService._finalize_conversation_request()` converts `PluginSpec` → `PluginSource`
+   - Creates `StartConversationRequest(plugins=sdk_plugins, ...)` and sends to agent server
 
-4. **Agent Server** (inside sandbox, [SDK PR #1651](https://github.com/OpenHands/software-agent-sdk/pull/1651)) stores specs, defers loading to first message
+4. **Agent Server** (inside sandbox, [SDK PR #1651](https://github.com/OpenHands/software-agent-sdk/pull/1651)) stores specs, defers loading:
+   
+   Call stack:
+   - `ConversationService.start_conversation()` receives `StartConversationRequest`
+   - Creates `StoredConversation` with plugin specs
+   - Creates `LocalConversation(plugins=request.plugins, ...)`
+   - Plugin loading deferred until first `run()` or `send_message()`
 
-5. **SDK** fetches plugin repo, loads `plugin.json`, merges skills/hooks/MCP into agent
+5. **SDK** fetches and loads plugins on first use:
+   
+   Call stack:
+   - `LocalConversation._ensure_plugins_loaded()` triggered by first message
+   - For each plugin spec:
+     - `Plugin.fetch(source, ref, repo_path)` → clones/caches git repo
+     - `Plugin.load(path)` → parses `plugin.json`, loads commands/skills/hooks
+     - `plugin.add_skills_to(context)` → merges skills into agent
+     - `plugin.add_mcp_config_to(config)` → merges MCP servers
 
 6. **Agent** receives message, `/city-weather:now` triggers the skill
 
