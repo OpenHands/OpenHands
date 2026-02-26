@@ -2,6 +2,13 @@ import os
 from dataclasses import dataclass
 
 from fastapi import APIRouter
+from server.auth.constants import (
+    JIRA_DC_BASE_URL,
+    JIRA_DC_CLIENT_ID,
+    JIRA_DC_CLIENT_SECRET,
+    JIRA_DC_ENABLE_OAUTH,
+)
+from server.constants import WEB_HOST
 
 
 @dataclass
@@ -47,14 +54,6 @@ class JiraDcPlugin:
 
     @staticmethod
     def from_env() -> 'JiraDcPlugin':
-        from server.auth.constants import (
-            JIRA_DC_BASE_URL,
-            JIRA_DC_CLIENT_ID,
-            JIRA_DC_CLIENT_SECRET,
-            JIRA_DC_ENABLE_OAUTH,
-        )
-        from server.constants import WEB_HOST
-
         config = JiraDcPluginConfig(
             webhooks_enabled=os.environ.get('JIRA_DC_WEBHOOKS_ENABLED', '0')
             in ('1', 'true'),

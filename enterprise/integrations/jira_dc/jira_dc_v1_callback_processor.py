@@ -9,6 +9,7 @@ from integrations.utils import (
     markdown_to_jira_markup,
 )
 from pydantic import Field
+from server.auth.token_manager import TokenManager
 from storage.jira_dc_integration_store import JiraDcIntegrationStore
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
@@ -78,7 +79,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
                 event_callback_id=callback.id,
-                event_id=event.id,
+                event_id=str(event.id),
                 conversation_id=conversation_id,
                 detail=summary,
             )
@@ -101,7 +102,7 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
                 event_callback_id=callback.id,
-                event_id=event.id,
+                event_id=str(event.id),
                 conversation_id=conversation_id,
                 detail=str(e),
             )
@@ -112,8 +113,6 @@ class JiraDcV1CallbackProcessor(EventCallbackProcessor):
 
     async def _post_summary_to_jira_dc(self, summary: str) -> None:
         """Post a summary comment to the configured Jira DC issue."""
-        from server.auth.token_manager import TokenManager
-
         issue_key = self.jira_dc_view_data.get('issue_key')
         workspace_name = self.jira_dc_view_data.get('workspace_name')
         base_api_url = self.jira_dc_view_data.get('base_api_url')
