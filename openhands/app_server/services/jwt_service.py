@@ -215,10 +215,8 @@ class JwtService:
                 key_id = protected_header.get("kid")
                 if not key_id:
                     raise ValueError("Token does not contain 'kid' header with key ID")
-            except ValueError:
-                raise
-            except Exception:
-                raise ValueError("Invalid JWE token format")
+            except (KeyError, json.JSONDecodeError) as e:
+                raise ValueError(f"Invalid JWE token format: {type(e).__name__}")
 
         if key_id not in self._keys:
             raise ValueError(f"Key ID '{key_id}' not found")
