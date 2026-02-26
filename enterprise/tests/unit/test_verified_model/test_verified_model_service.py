@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 from storage.base import Base
 
-from enterprise.server.routes.verified_models.verified_model_store import (
+from server.routes.verified_models.verified_model_store import (
     VerifiedModelStore,
 )
 
