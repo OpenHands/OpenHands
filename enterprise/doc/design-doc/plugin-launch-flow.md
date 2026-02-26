@@ -43,7 +43,7 @@ The user fills in required values, then clicks "Start Conversation" to proceed.
 
 ## Launch Flow
 
-1. **Plugin Directory** constructs a launch URL when user clicks "Launch":
+1. **Plugin Directory** (external) constructs a launch URL when user clicks "Launch":
    ```
    /launch?plugins=BASE64_JSON&message=/city-weather:now%20Tokyo
    ```
@@ -57,7 +57,9 @@ The user fills in required values, then clicks "Start Conversation" to proceed.
    }]
    ```
 
-2. **Frontend** (`/launch` route) displays modal with parameter form, then calls:
+2. **OpenHands Frontend** (`/launch` route, [PR #12699](https://github.com/OpenHands/OpenHands/pull/12699)) displays modal with parameter form, collects user input
+
+3. **OpenHands App Server** ([PR #12338](https://github.com/OpenHands/OpenHands/pull/12338)) receives the API call:
    ```
    POST /api/v1/app-conversations
    {
@@ -65,10 +67,9 @@ The user fills in required values, then clicks "Start Conversation" to proceed.
      "initial_message": {"content": [{"type": "text", "text": "/city-weather:now Tokyo"}]}
    }
    ```
+   Passes plugin specs to agent server via `StartConversationRequest`
 
-3. **App Server** passes plugin specs to agent server via `StartConversationRequest`
-
-4. **Agent Server** (inside sandbox) stores specs, defers loading to first message
+4. **Agent Server** (inside sandbox, [SDK PR #1651](https://github.com/OpenHands/software-agent-sdk/pull/1651)) stores specs, defers loading to first message
 
 5. **SDK** fetches plugin repo, loads `plugin.json`, merges skills/hooks/MCP into agent
 
@@ -104,6 +105,7 @@ The SDK exposes this field but does not auto-invoke it—callers control the ini
 
 ## Related
 
-- [PR #12338](https://github.com/OpenHands/OpenHands/pull/12338) - App server plugin support
-- [PR #12699](https://github.com/OpenHands/OpenHands/pull/12699) - Frontend `/launch` route
+- [OpenHands PR #12338](https://github.com/OpenHands/OpenHands/pull/12338) - App server plugin support
+- [OpenHands PR #12699](https://github.com/OpenHands/OpenHands/pull/12699) - Frontend `/launch` route
 - [SDK PR #1651](https://github.com/OpenHands/software-agent-sdk/pull/1651) - Agent server plugin loading
+- [SDK PR #1647](https://github.com/OpenHands/software-agent-sdk/pull/1647) - Plugin.fetch() for remote plugin fetching
