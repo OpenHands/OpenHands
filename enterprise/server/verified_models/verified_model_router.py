@@ -2,12 +2,19 @@
 
 from typing import Annotated
 
-from enterprise.server.verified_models.verified_model_service import VerifiedModelService, verified_model_store_dependency
-from server.verified_models.verified_model_models import VerifiedModelPage, VerifiedModelCreate, VerifiedModel, VerifiedModelUpdate
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from server.email_validation import get_admin_user_id
+from server.verified_models.verified_model_models import (
+    VerifiedModel,
+    VerifiedModelCreate,
+    VerifiedModelPage,
+    VerifiedModelUpdate,
+)
 
-from openhands.core.logger import openhands_logger as logger
+from enterprise.server.verified_models.verified_model_service import (
+    VerifiedModelService,
+    verified_model_store_dependency,
+)
 
 api_router = APIRouter(prefix='/api/admin/verified-models', tags=['Verified Models'])
 
@@ -23,7 +30,9 @@ async def search_verified_models(
         int, Query(title='The max number of results in the page', gt=0, le=100)
     ] = 100,
     user_id: str = Depends(get_admin_user_id),
-    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency),
+    verified_model_service: VerifiedModelService = Depends(
+        verified_model_store_dependency
+    ),
 ) -> VerifiedModelPage:
     """List all verified models, optionally filtered by provider."""
     # Use SQL-level filtering and pagination
@@ -40,7 +49,9 @@ async def search_verified_models(
 async def create_verified_model(
     data: VerifiedModelCreate,
     user_id: str = Depends(get_admin_user_id),
-    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency),
+    verified_model_service: VerifiedModelService = Depends(
+        verified_model_store_dependency
+    ),
 ) -> VerifiedModel:
     """Create a new verified model."""
     model = await verified_model_service.create_verified_model(
@@ -57,7 +68,9 @@ async def update_verified_model(
     model_name: str,
     data: VerifiedModelUpdate,
     user_id: str = Depends(get_admin_user_id),
-    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency),
+    verified_model_service: VerifiedModelService = Depends(
+        verified_model_store_dependency
+    ),
 ) -> VerifiedModel:
     """Update a verified model by provider and model name."""
     try:
@@ -81,8 +94,12 @@ async def delete_verified_model(
     provider: str,
     model_name: str,
     user_id: str = Depends(get_admin_user_id),
-    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency),
+    verified_model_service: VerifiedModelService = Depends(
+        verified_model_store_dependency
+    ),
 ) -> bool:
     """Delete a verified model by provider and model name."""
-    success = await verified_model_service.delete_verified_model(model_name=model_name, provider=provider)
+    success = await verified_model_service.delete_verified_model(
+        model_name=model_name, provider=provider
+    )
     return success

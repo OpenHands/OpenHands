@@ -11,19 +11,24 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from enterprise.server.verified_models.verified_model_service import (
+    VerifiedModelService,
+    verified_model_store_dependency,
+)
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
 from openhands.server.dependencies import get_dependencies
 from openhands.server.shared import config, server_config
 from openhands.utils.llm import get_supported_llm_models
-from enterprise.server.verified_models.verified_model_service import VerifiedModelService, verified_model_store_dependency
 
 app = APIRouter(prefix='/api/options', dependencies=get_dependencies())
 
 
 @app.get('/models', response_model=list[str])
 async def get_litellm_models(
-    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency)
+    verified_model_service: VerifiedModelService = Depends(
+        verified_model_store_dependency
+    ),
 ) -> list[str]:
     """Get all models supported by LiteLLM.
 
@@ -41,10 +46,9 @@ async def get_litellm_models(
     """
     page = await verified_model_service.search_verified_models(enabled_only=True)
     if page.next_page_id:
-        raise HTTPException("Too many models defined in db")
+        raise HTTPException('Too many models defined in db')
     verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
     return get_supported_llm_models(config, verified_models)
-
 
 
 @app.get('/agents', response_model=list[str])

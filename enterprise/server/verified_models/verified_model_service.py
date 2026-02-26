@@ -2,11 +2,7 @@
 
 from dataclasses import dataclass
 
-from enterprise.server.verified_models.verified_model_models import VerifiedModel, VerifiedModelPage
-from openhands.app_server.config import depends_db_session
 from sqlalchemy import (
-    and_,
-    select,
     Boolean,
     Column,
     DateTime,
@@ -14,13 +10,19 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    and_,
     func,
+    select,
     text,
 )
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.base import Base
 
+from enterprise.server.verified_models.verified_model_models import (
+    VerifiedModel,
+    VerifiedModelPage,
+)
+from openhands.app_server.config import depends_db_session
 from openhands.core.logger import openhands_logger as logger
 
 
@@ -66,6 +68,7 @@ class VerifiedModelService:
 
     Follows the async pattern with db_session as an attribute.
     """
+
     db_session: AsyncSession
 
     async def search_verified_models(
@@ -99,7 +102,9 @@ class VerifiedModelService:
             query = query.where(and_(*filters))
 
         # Order by provider, then model_name
-        query = query.order_by(StoredVerifiedModel.provider, StoredVerifiedModel.model_name)
+        query = query.order_by(
+            StoredVerifiedModel.provider, StoredVerifiedModel.model_name
+        )
 
         # Fetch limit + 1 to check if there are more results
         offset = int(page_id or '0')
@@ -114,9 +119,7 @@ class VerifiedModelService:
         if has_more:
             next_page_id = str(offset + limit)
 
-        items = [
-            verified_model(result) for result in results
-        ]
+        items = [verified_model(result) for result in results]
         return VerifiedModelPage(items=items, next_page_id=next_page_id)
 
     async def get_model(self, model_name: str, provider: str) -> VerifiedModel | None:
