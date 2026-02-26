@@ -43,10 +43,12 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
     should_request_summary: bool = Field(default=True)
 
     # Statuses that this processor reacts to
-    _HANDLED_STATUSES: ClassVar[frozenset[str]] = frozenset({
-        'finished',
-        'awaiting_user_input',
-    })
+    _HANDLED_STATUSES: ClassVar[frozenset[str]] = frozenset(
+        {
+            'finished',
+            'awaiting_user_input',
+        }
+    )
 
     async def __call__(
         self,
@@ -145,9 +147,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 detail=str(e),
             )
 
-    async def _try_post_error(
-        self, conversation_id: UUID, error: Exception
-    ) -> None:
+    async def _try_post_error(self, conversation_id: UUID, error: Exception) -> None:
         """Best-effort attempt to post an error message to Slack."""
         try:
             await self._post_message_to_slack(

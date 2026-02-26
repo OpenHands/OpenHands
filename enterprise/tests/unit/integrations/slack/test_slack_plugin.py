@@ -43,7 +43,7 @@ class TestSlackPlugin:
         assert plugin._initialized is True
 
         # Double init is a no-op
-        plugin.initialize()
+        plugin.initialize()  # type: ignore[unreachable]
         assert plugin._initialized is True
 
         plugin.shutdown()

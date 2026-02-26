@@ -53,9 +53,7 @@ def create_slack_router(plugin_config: SlackPluginConfig) -> APIRouter:
     """
     router = APIRouter(prefix='/slack')
 
-    signature_verifier = SignatureVerifier(
-        signing_secret=plugin_config.signing_secret
-    )
+    signature_verifier = SignatureVerifier(signing_secret=plugin_config.signing_secret)
     authorize_url_generator = AuthorizeUrlGenerator(
         client_id=plugin_config.client_id,
         scopes=['app_mentions:read', 'chat:write'],
@@ -323,9 +321,7 @@ def create_slack_router(plugin_config: SlackPluginConfig) -> APIRouter:
         return JSONResponse({'success': True})
 
     @router.post('/on-form-interaction')
-    async def on_form_interaction(
-        request: Request, background_tasks: BackgroundTasks
-    ):
+    async def on_form_interaction(request: Request, background_tasks: BackgroundTasks):
         """Handle interactive form submissions (e.g. repository selection dropdown)."""
         if not plugin_config.webhooks_enabled:
             return JSONResponse({'success': 'slack_webhooks_disabled'})
