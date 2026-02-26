@@ -43,7 +43,7 @@ The user fills in required values, then clicks "Start Conversation" to proceed.
 
 ## Launch Flow
 
-1. **Plugin Directory** (external) constructs a launch URL when user clicks "Launch":
+1. **Plugin Directory** (external) constructs a launch URL to the OpenHands app server when user clicks "Launch":
    ```
    /launch?plugins=BASE64_JSON&message=/city-weather:now%20Tokyo
    ```
