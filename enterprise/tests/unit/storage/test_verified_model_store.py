@@ -74,23 +74,23 @@ class TestGetModel:
 class TestSearchModels:
     def test_search_models_no_filters(self, _seed_models):
         result = VerifiedModelStore.search_models()
-        assert len(result['items']) == 2  # Only enabled models
-        assert result['has_more'] is False
+        assert len(result.items) == 2  # Only enabled models
+        assert result.has_more is False
 
     def test_search_models_enabled_only_true(self, _seed_models):
         result = VerifiedModelStore.search_models(enabled_only=True)
-        assert len(result['items']) == 2
-        names = {m.model_name for m in result['items']}
+        assert len(result.items) == 2
+        names = {m.model_name for m in result.items}
         assert 'gpt-4o' not in names  # Disabled model not included
 
     def test_search_models_enabled_only_false(self, _seed_models):
         result = VerifiedModelStore.search_models(enabled_only=False)
-        assert len(result['items']) == 3  # All models including disabled
+        assert len(result.items) == 3  # All models including disabled
 
     def test_search_models_by_provider(self, _seed_models):
         result = VerifiedModelStore.search_models(provider='openhands')
-        assert len(result['items']) == 1
-        assert result['items'][0].model_name == 'claude-sonnet'
+        assert len(result.items) == 1
+        assert result.items[0].model_name == 'claude-sonnet'
 
     def test_search_models_pagination(self, _seed_models):
         # Create more models for pagination testing
@@ -102,19 +102,19 @@ class TestSearchModels:
         # Total: 7 models (3 initial + 4 new)
         # First page
         result = VerifiedModelStore.search_models(enabled_only=False, offset=0, limit=3)
-        assert len(result['items']) == 3
-        assert result['has_more'] is True  # 4 more items after position 2
+        assert len(result.items) == 3
+        assert result.has_more is True  # 4 more items after position 2
 
         # Second page (offset 3)
         result = VerifiedModelStore.search_models(enabled_only=False, offset=3, limit=3)
-        assert len(result['items']) == 3
+        assert len(result.items) == 3
         # There are 4 items total starting at offset 3 (positions 3,4,5,6), so has_more is still True
-        assert result['has_more'] is True
+        assert result.has_more is True
 
         # Third page (offset 6) - last item
         result = VerifiedModelStore.search_models(enabled_only=False, offset=6, limit=3)
-        assert len(result['items']) == 1
-        assert result['has_more'] is False  # No more items after position 6
+        assert len(result.items) == 1
+        assert result.has_more is False  # No more items after position 6
 
 
 class TestGetModels:
