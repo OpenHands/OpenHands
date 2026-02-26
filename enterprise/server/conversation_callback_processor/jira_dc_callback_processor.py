@@ -1,4 +1,12 @@
 import asyncio
+import warnings
+
+from openhands.core.logger import openhands_logger as logger
+from openhands.core.schema.agent import AgentState
+from openhands.events.action import MessageAction
+from openhands.events.observation.agent import AgentStateChangedObservation
+from openhands.events.serialization.event import event_to_dict
+from openhands.server.shared import conversation_manager
 
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
 from integrations.utils import (
@@ -13,20 +21,19 @@ from storage.conversation_callback import (
     ConversationCallbackProcessor,
 )
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.core.schema.agent import AgentState
-from openhands.events.action import MessageAction
-from openhands.events.observation.agent import AgentStateChangedObservation
-from openhands.events.serialization.event import event_to_dict
-from openhands.server.shared import conversation_manager
+warnings.warn(
+    'jira_dc_callback_processor is deprecated. '
+    'Use integrations.jira_dc.jira_dc_v1_callback_processor instead.',
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 token_manager = TokenManager()
 jira_dc_manager = JiraDcManager(token_manager)
 
 
 class JiraDcCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to Jira DC.
+    """Processor for sending conversation summaries to Jira DC.
 
     This processor is used to send summaries of conversations to Jira DC issues
     when agent state changes occur.
@@ -37,8 +44,7 @@ class JiraDcCallbackProcessor(ConversationCallbackProcessor):
     base_api_url: str
 
     async def _send_comment_to_jira_dc(self, message: str) -> None:
-        """
-        Send a comment to Jira DC issue.
+        """Send a comment to Jira DC issue.
 
         Args:
             message: The message content to send to Jira DC
@@ -80,8 +86,7 @@ class JiraDcCallbackProcessor(ConversationCallbackProcessor):
         callback: ConversationCallback,
         observation: AgentStateChangedObservation,
     ) -> None:
-        """
-        Process a conversation event by sending a summary to Jira DC.
+        """Process a conversation event by sending a summary to Jira DC.
 
         Args:
             callback: The conversation callback
