@@ -2,17 +2,15 @@
 
 from typing import Annotated
 
+from enterprise.server.verified_models.verified_model_service import VerifiedModelService, verified_model_store_dependency
+from server.verified_models.verified_model_models import VerifiedModelPage
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, field_validator
 from server.email_validation import get_admin_user_id
-from storage.verified_model_store import (
+from server.verified_models.verified_model_models import (
     create_model as _create_model,
-)
-from storage.verified_model_store import (
     delete_model as _delete_model,
-)
-from storage.verified_model_store import search_models as _search_models
-from storage.verified_model_store import (
+    search_models as _search_models,
     update_model as _update_model,
 )
 
@@ -21,57 +19,8 @@ from openhands.core.logger import openhands_logger as logger
 api_router = APIRouter(prefix='/api/admin/verified-models', tags=['Verified Models'])
 
 
-class VerifiedModelCreate(BaseModel):
-    model_name: str
-    provider: str
-    is_enabled: bool = True
-
-    @field_validator('model_name')
-    @classmethod
-    def validate_model_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v or len(v) > 255:
-            raise ValueError('model_name must be 1-255 characters')
-        return v
-
-    @field_validator('provider')
-    @classmethod
-    def validate_provider(cls, v: str) -> str:
-        v = v.strip()
-        if not v or len(v) > 100:
-            raise ValueError('provider must be 1-100 characters')
-        return v
-
-
-class VerifiedModelUpdate(BaseModel):
-    is_enabled: bool | None = None
-
-
-class VerifiedModelResponse(BaseModel):
-    id: int
-    model_name: str
-    provider: str
-    is_enabled: bool
-
-
-class VerifiedModelPage(BaseModel):
-    """Paginated response model for verified model list."""
-
-    items: list[VerifiedModelResponse]
-    next_page_id: str | None = None
-
-
-def _to_response(model) -> VerifiedModelResponse:
-    return VerifiedModelResponse(
-        id=model.id,
-        model_name=model.model_name,
-        provider=model.provider,
-        is_enabled=model.is_enabled,
-    )
-
-
-@api_router.get('', response_model=VerifiedModelPage)
-async def list_verified_models(
+@api_router.get('')
+async def search_verified_models(
     provider: str | None = None,
     page_id: Annotated[
         str | None,
@@ -81,7 +30,8 @@ async def list_verified_models(
         int, Query(title='The max number of results in the page', gt=0, le=100)
     ] = 100,
     user_id: str = Depends(get_admin_user_id),
-):
+    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency),
+) -> VerifiedModelPage:
     """List all verified models, optionally filtered by provider."""
     try:
         try:
@@ -90,7 +40,7 @@ async def list_verified_models(
             offset = 0
 
         # Use SQL-level filtering and pagination
-        result = await _search_models(
+        result = await verified_model_service.search_models(
             provider=provider,
             enabled_only=False,  # Admin sees all models including disabled
             offset=offset,
@@ -98,7 +48,7 @@ async def list_verified_models(
         )
 
         return VerifiedModelPage(
-            items=[_to_response(m) for m in result.items],
+            items=result.items,
             next_page_id=str(offset + limit) if result.has_more else None,
         )
     except Exception:
@@ -109,11 +59,12 @@ async def list_verified_models(
         )
 
 
-@api_router.post('', response_model=VerifiedModelResponse, status_code=201)
+@api_router.post('', status_code=201)
 async def create_verified_model(
     data: VerifiedModelCreate,
     user_id: str = Depends(get_admin_user_id),
-):
+    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency),
+) -> VerifiedModelResponse:
     """Create a new verified model."""
     try:
         model = await _create_model(
@@ -135,13 +86,14 @@ async def create_verified_model(
         )
 
 
-@api_router.put('/{provider}/{model_name:path}', response_model=VerifiedModelResponse)
+@api_router.put('/{provider}/{model_name:path}')
 async def update_verified_model(
     provider: str,
     model_name: str,
     data: VerifiedModelUpdate,
     user_id: str = Depends(get_admin_user_id),
-):
+    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency),
+) -> VerifiedModelResponse:
     """Update a verified model by provider and model name."""
     try:
         model = await _update_model(
@@ -170,6 +122,7 @@ async def delete_verified_model(
     provider: str,
     model_name: str,
     user_id: str = Depends(get_admin_user_id),
+    verified_model_service: VerifiedModelService = Depends(verified_model_store_dependency),
 ):
     """Delete a verified model by provider and model name."""
     try:

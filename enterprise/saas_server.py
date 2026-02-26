@@ -47,7 +47,7 @@ from server.routes.org_invitations import (  # noqa: E402
 from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
-from server.routes.verified_models import (  # noqa: E402
+from server.verified_models.verified_model_router import (  # noqa: E402
     api_router as verified_models_router,
 )
 from server.sharing.shared_conversation_router import (  # noqa: E402

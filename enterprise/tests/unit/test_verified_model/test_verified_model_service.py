@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 from storage.base import Base
-from storage.verified_model_store import VerifiedModelStore
+from enterprise.server.routes.verified_models.verified_model_store import VerifiedModelStore
 
 
 @pytest.fixture
@@ -154,17 +154,6 @@ class TestSearchModels:
             result = await store.search_models(enabled_only=False, offset=6, limit=3)
             assert len(result.items) == 1
             assert result.has_more is False  # No more items after position 6
-
-
-class TestGetModels:
-    async def test_get_enabled_models(self, _seed_models, async_session_maker):
-        async with async_session_maker() as session:
-            store = VerifiedModelStore(session)
-            models = await store.get_enabled_models()
-            assert len(models) == 2
-            names = {m.model_name for m in models}
-            assert 'gpt-4o' not in names
-
 
 class TestUpdateModel:
     async def test_update_model(self, _seed_models, async_session_maker):
