@@ -8,7 +8,7 @@ class VerifiedModelCreate(BaseModel):
         str,
         StringConstraints(max_length=255),
     ]
-    provider = Annotated[
+    provider: Annotated[
         str,
         StringConstraints(max_length=100),
     ]

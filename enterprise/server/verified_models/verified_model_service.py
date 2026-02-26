@@ -2,9 +2,11 @@
 
 from dataclasses import dataclass
 
-from enterprise.server.verified_models.verified_model_models import VerifiedModel
+from enterprise.server.verified_models.verified_model_models import VerifiedModel, VerifiedModelPage
 from openhands.app_server.config import depends_db_session
 from sqlalchemy import (
+    and_,
+    select,
     Boolean,
     Column,
     DateTime,
@@ -22,7 +24,7 @@ from storage.base import Base
 from openhands.core.logger import openhands_logger as logger
 
 
-class VerifiedModelRow(Base):  # type: ignore
+class StoredVerifiedModel(Base):  # type: ignore
     """A verified LLM model available in the model selector.
 
     The composite unique constraint on (model_name, provider) allows the same
@@ -47,7 +49,7 @@ class VerifiedModelRow(Base):  # type: ignore
     )
 
 
-def verified_model(result: VerifiedModelRow) -> VerifiedModel:
+def verified_model(result: StoredVerifiedModel) -> VerifiedModel:
     return VerifiedModel(
         id=result.id,
         model_name=result.model_name,
@@ -84,20 +86,20 @@ class VerifiedModelService:
         Returns:
             SearchModelsResult containing items list and has_more flag
         """
-        query = select(VerifiedModelRow)
+        query = select(StoredVerifiedModel)
 
         # Build filters
         filters = []
         if provider:
-            filters.append(VerifiedModelRow.provider == provider)
+            filters.append(StoredVerifiedModel.provider == provider)
         if enabled_only:
-            filters.append(VerifiedModelRow.is_enabled.is_(True))
+            filters.append(StoredVerifiedModel.is_enabled.is_(True))
 
         if filters:
             query = query.where(and_(*filters))
 
         # Order by provider, then model_name
-        query = query.order_by(VerifiedModelRow.provider, VerifiedModelRow.model_name)
+        query = query.order_by(StoredVerifiedModel.provider, StoredVerifiedModel.model_name)
 
         # Fetch limit + 1 to check if there are more results
         offset = int(page_id or '0')
@@ -113,7 +115,7 @@ class VerifiedModelService:
             next_page_id = str(offset + limit)
 
         items = [
-            verified_model(result) for row in results
+            verified_model(result) for result in results
         ]
         return VerifiedModelPage(items=items, next_page_id=next_page_id)
 
@@ -124,16 +126,16 @@ class VerifiedModelService:
             model_name: The model identifier
             provider: The provider name
         """
-        query = select(VerifiedModelRow).where(
+        query = select(StoredVerifiedModel).where(
             and_(
-                VerifiedModelRow.model_name == model_name,
-                VerifiedModelRow.provider == provider,
+                StoredVerifiedModel.model_name == model_name,
+                StoredVerifiedModel.provider == provider,
             )
         )
         result = await self.db_session.execute(query)
         return result.scalars().first()
 
-    async def create_model(
+    async def create_verified_model(
         self,
         model_name: str,
         provider: str,
@@ -149,10 +151,10 @@ class VerifiedModelService:
         Raises:
             ValueError: If a model with the same (model_name, provider) already exists
         """
-        existing_query = select(VerifiedModelRow).where(
+        existing_query = select(StoredVerifiedModel).where(
             and_(
-                VerifiedModelRow.model_name == model_name,
-                VerifiedModelRow.provider == provider,
+                StoredVerifiedModel.model_name == model_name,
+                StoredVerifiedModel.provider == provider,
             )
         )
         result = await self.db_session.execute(existing_query)
@@ -160,7 +162,7 @@ class VerifiedModelService:
         if existing:
             raise ValueError(f'Model {provider}/{model_name} already exists')
 
-        model = VerifiedModelRow(
+        model = StoredVerifiedModel(
             model_name=model_name,
             provider=provider,
             is_enabled=is_enabled,
@@ -171,7 +173,7 @@ class VerifiedModelService:
         logger.info(f'Created verified model: {provider}/{model_name}')
         return verified_model(model)
 
-    async def update_model(
+    async def update_verified_model(
         self,
         model_name: str,
         provider: str,
@@ -187,10 +189,10 @@ class VerifiedModelService:
         Returns:
             The updated model if found, None otherwise
         """
-        query = select(VerifiedModel).where(
+        query = select(StoredVerifiedModel).where(
             and_(
-                VerifiedModel.model_name == model_name,
-                VerifiedModel.provider == provider,
+                StoredVerifiedModel.model_name == model_name,
+                StoredVerifiedModel.provider == provider,
             )
         )
         result = await self.db_session.execute(query)
@@ -206,7 +208,7 @@ class VerifiedModelService:
         logger.info(f'Updated verified model: {provider}/{model_name}')
         return verified_model(model)
 
-    async def delete_model(self, model_name: str, provider: str) -> bool:
+    async def delete_verified_model(self, model_name: str, provider: str) -> bool:
         """Delete a verified model.
 
         Args:
@@ -216,10 +218,10 @@ class VerifiedModelService:
         Returns:
             True if deleted, False if not found
         """
-        query = select(VerifiedModelRow).where(
+        query = select(StoredVerifiedModel).where(
             and_(
-                VerifiedModelRow.model_name == model_name,
-                VerifiedModelRow.provider == provider,
+                StoredVerifiedModel.model_name == model_name,
+                StoredVerifiedModel.provider == provider,
             )
         )
         result = await self.db_session.execute(query)
