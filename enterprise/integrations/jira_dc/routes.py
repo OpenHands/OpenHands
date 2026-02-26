@@ -12,15 +12,15 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
-from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth.user_auth import get_user_auth
-from pydantic import BaseModel, Field, field_validator
-
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
 from integrations.models import Message, SourceType
+from pydantic import BaseModel, Field, field_validator
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from storage.redis import create_redis_client
+
+from openhands.core.logger import openhands_logger as logger
+from openhands.server.user_auth.user_auth import get_user_auth
 
 # ---------------------------------------------------------------------------
 # Request / Response models

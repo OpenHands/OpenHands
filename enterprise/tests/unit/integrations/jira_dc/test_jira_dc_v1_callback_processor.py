@@ -4,12 +4,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from openhands.app_server.event_callback.event_callback_result_models import (
-    EventCallbackResultStatus,
-)
-
 from integrations.jira_dc.jira_dc_v1_callback_processor import (
     JiraDcV1CallbackProcessor,
+)
+
+from openhands.app_server.event_callback.event_callback_result_models import (
+    EventCallbackResultStatus,
 )
 
 

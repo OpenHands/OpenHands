@@ -1,13 +1,6 @@
 import asyncio
 import warnings
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.core.schema.agent import AgentState
-from openhands.events.action import MessageAction
-from openhands.events.observation.agent import AgentStateChangedObservation
-from openhands.events.serialization.event import event_to_dict
-from openhands.server.shared import conversation_manager
-
 from integrations.jira_dc.jira_dc_manager import JiraDcManager
 from integrations.utils import (
     extract_summary_from_conversation_manager,
@@ -20,6 +13,13 @@ from storage.conversation_callback import (
     ConversationCallback,
     ConversationCallbackProcessor,
 )
+
+from openhands.core.logger import openhands_logger as logger
+from openhands.core.schema.agent import AgentState
+from openhands.events.action import MessageAction
+from openhands.events.observation.agent import AgentStateChangedObservation
+from openhands.events.serialization.event import event_to_dict
+from openhands.server.shared import conversation_manager
 
 warnings.warn(
     'jira_dc_callback_processor is deprecated. '

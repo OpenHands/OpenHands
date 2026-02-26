@@ -3,7 +3,6 @@
 from unittest.mock import patch
 
 from fastapi import APIRouter
-
 from integrations.jira_dc.plugin import JiraDcPlugin, JiraDcPluginConfig
 
 
@@ -48,11 +47,11 @@ class TestJiraDcPlugin:
     def test_initialize_and_shutdown(self):
         cfg = JiraDcPluginConfig()
         plugin = JiraDcPlugin(cfg)
-        assert plugin._initialized is False
+        assert not plugin._initialized
         plugin.initialize()
-        assert plugin._initialized is True
+        assert plugin._initialized
         plugin.shutdown()
-        assert plugin._initialized is False
+        assert not plugin._initialized
 
     @patch('integrations.jira_dc.routes.create_jira_dc_router')
     def test_get_router(self, mock_create_router):
