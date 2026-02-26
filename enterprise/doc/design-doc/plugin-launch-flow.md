@@ -33,11 +33,13 @@ When a user clicks "Launch", the plugin directory:
 
 ### Parameter Collection
 
-If a plugin requires user input (API keys, configuration values, etc.), the frontend displays a form modal before starting the conversation. Parameters are passed in the launch URL and rendered as form fields:
+If a plugin requires user input (API keys, configuration values, etc.), the frontend displays a form modal before starting the conversation. Parameters are passed in the launch URL and rendered as form fields based on their type:
 
 - **String values** → Text input
 - **Number values** → Number input
 - **Boolean values** → Checkbox
+
+Only primitive types are supported. Complex types (arrays, objects) are not currently supported for parameter input.
 
 The user fills in required values, then clicks "Start Conversation" to proceed.
 
