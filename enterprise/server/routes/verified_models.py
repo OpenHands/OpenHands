@@ -1,11 +1,16 @@
 """API routes for managing verified LLM models (admin only)."""
 
-from typing import Annotated
+from typing import Annotated, AsyncGenerator
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, field_validator
 from server.email_validation import get_admin_user_id
-from storage.verified_model_store import VerifiedModelStore
+from storage.verified_model_store import VerifiedModelStore, search_models as _search_models
+from storage.verified_model_store import (
+    create_model as _create_model,
+    delete_model as _delete_model,
+    update_model as _update_model,
+)
 
 from openhands.core.logger import openhands_logger as logger
 
@@ -81,7 +86,7 @@ async def list_verified_models(
             offset = 0
 
         # Use SQL-level filtering and pagination
-        result = VerifiedModelStore.search_models(
+        result = await _search_models(
             provider=provider,
             enabled_only=False,  # Admin sees all models including disabled
             offset=offset,
@@ -107,7 +112,7 @@ async def create_verified_model(
 ):
     """Create a new verified model."""
     try:
-        model = VerifiedModelStore.create_model(
+        model = await _create_model(
             model_name=data.model_name,
             provider=data.provider,
             is_enabled=data.is_enabled,
@@ -135,7 +140,7 @@ async def update_verified_model(
 ):
     """Update a verified model by provider and model name."""
     try:
-        model = VerifiedModelStore.update_model(
+        model = await _update_model(
             model_name=model_name,
             provider=provider,
             is_enabled=data.is_enabled,
@@ -164,7 +169,7 @@ async def delete_verified_model(
 ):
     """Delete a verified model by provider and model name."""
     try:
-        success = VerifiedModelStore.delete_model(
+        success = await _delete_model(
             model_name=model_name, provider=provider
         )
         if not success:

@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy import and_
-from storage.database import session_maker
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from storage.database import a_session_maker
 from storage.verified_model import VerifiedModel
 
 from openhands.core.logger import openhands_logger as logger
@@ -20,12 +21,19 @@ class SearchModelsResult:
 class VerifiedModelStore:
     """Store for CRUD operations on verified models.
 
-    Follows the project convention of static methods with session_maker()
-    (see UserStore, OrgMemberStore for reference).
+    Follows the async pattern with db_session as an attribute.
     """
 
-    @staticmethod
-    def search_models(
+    def __init__(self, db_session: AsyncSession):
+        """Initialize the store with a database session.
+
+        Args:
+            db_session: The async database session to use for queries.
+        """
+        self.db_session = db_session
+
+    async def search_models(
+        self,
         provider: str | None = None,
         enabled_only: bool = True,
         offset: int = 0,
@@ -42,45 +50,45 @@ class VerifiedModelStore:
         Returns:
             SearchModelsResult containing items list and has_more flag
         """
-        with session_maker() as session:
-            query = session.query(VerifiedModel)
+        query = select(VerifiedModel)
 
-            # Build filters
-            filters = []
-            if provider:
-                filters.append(VerifiedModel.provider == provider)
-            if enabled_only:
-                filters.append(VerifiedModel.is_enabled.is_(True))
+        # Build filters
+        filters = []
+        if provider:
+            filters.append(VerifiedModel.provider == provider)
+        if enabled_only:
+            filters.append(VerifiedModel.is_enabled.is_(True))
 
-            if filters:
-                query = query.filter(and_(*filters))
+        if filters:
+            query = query.where(and_(*filters))
 
-            # Order by provider, then model_name
-            query = query.order_by(VerifiedModel.provider, VerifiedModel.model_name)
+        # Order by provider, then model_name
+        query = query.order_by(VerifiedModel.provider, VerifiedModel.model_name)
 
-            # Fetch limit + 1 to check if there are more results
-            results = query.offset(offset).limit(limit + 1).all()
-            has_more = len(results) > limit
+        # Fetch limit + 1 to check if there are more results
+        query = query.offset(offset).limit(limit + 1)
 
-            # Return only the requested number of results
-            if has_more:
-                results = results[:limit]
+        result = await self.db_session.execute(query)
+        results = list(result.scalars().all())
+        has_more = len(results) > limit
 
-            return SearchModelsResult(items=results, has_more=has_more)
+        # Return only the requested number of results
+        if has_more:
+            results = results[:limit]
 
-    @staticmethod
-    def get_enabled_models() -> list[VerifiedModel]:
+        return SearchModelsResult(items=results, has_more=has_more)
+
+    async def get_enabled_models(self) -> list[VerifiedModel]:
         """Get all enabled models.
 
         Returns:
             list[VerifiedModel]: All models where is_enabled is True
         """
         # Fetch all enabled models without limit to avoid silent data loss
-        result = VerifiedModelStore.search_models(enabled_only=True, limit=10**9)
+        result = await self.search_models(enabled_only=True, limit=10**9)
         return result.items
 
-    @staticmethod
-    def get_models_by_provider(provider: str) -> list[VerifiedModel]:
+    async def get_models_by_provider(self, provider: str) -> list[VerifiedModel]:
         """Get all enabled models for a specific provider.
 
         Args:
@@ -89,44 +97,39 @@ class VerifiedModelStore:
         .. deprecated::
             Use :meth:`search_models` instead for SQL-level filtering.
         """
-        result = VerifiedModelStore.search_models(
-            provider=provider, enabled_only=True, limit=10**9
-        )
+        result = await self.search_models(provider=provider, enabled_only=True, limit=10**9)
         return result.items
 
-    @staticmethod
-    def get_all_models() -> list[VerifiedModel]:
+    async def get_all_models(self) -> list[VerifiedModel]:
         """Get all models (including disabled).
 
         .. deprecated::
             Use :meth:`search_models` instead for SQL-level filtering.
         """
-        result = VerifiedModelStore.search_models(enabled_only=False, limit=10**9)
+        result = await self.search_models(enabled_only=False, limit=10**9)
         return result.items
 
-    @staticmethod
-    def get_model(model_name: str, provider: str) -> VerifiedModel | None:
+    async def get_model(self, model_name: str, provider: str) -> VerifiedModel | None:
         """Get a model by its composite key (model_name, provider).
 
         Args:
             model_name: The model identifier
             provider: The provider name
         """
-        with session_maker() as session:
-            return (
-                session.query(VerifiedModel)
-                .filter(
-                    and_(
-                        VerifiedModel.model_name == model_name,
-                        VerifiedModel.provider == provider,
-                    )
-                )
-                .first()
+        query = select(VerifiedModel).where(
+            and_(
+                VerifiedModel.model_name == model_name,
+                VerifiedModel.provider == provider,
             )
+        )
+        result = await self.db_session.execute(query)
+        return result.scalars().first()
 
-    @staticmethod
-    def create_model(
-        model_name: str, provider: str, is_enabled: bool = True
+    async def create_model(
+        self,
+        model_name: str,
+        provider: str,
+        is_enabled: bool = True,
     ) -> VerifiedModel:
         """Create a new verified model.
 
@@ -138,33 +141,30 @@ class VerifiedModelStore:
         Raises:
             ValueError: If a model with the same (model_name, provider) already exists
         """
-        with session_maker() as session:
-            existing = (
-                session.query(VerifiedModel)
-                .filter(
-                    and_(
-                        VerifiedModel.model_name == model_name,
-                        VerifiedModel.provider == provider,
-                    )
-                )
-                .first()
+        existing_query = select(VerifiedModel).where(
+            and_(
+                VerifiedModel.model_name == model_name,
+                VerifiedModel.provider == provider,
             )
-            if existing:
-                raise ValueError(f'Model {provider}/{model_name} already exists')
+        )
+        result = await self.db_session.execute(existing_query)
+        existing = result.scalars().first()
+        if existing:
+            raise ValueError(f'Model {provider}/{model_name} already exists')
 
-            model = VerifiedModel(
-                model_name=model_name,
-                provider=provider,
-                is_enabled=is_enabled,
-            )
-            session.add(model)
-            session.commit()
-            session.refresh(model)
-            logger.info(f'Created verified model: {provider}/{model_name}')
-            return model
+        model = VerifiedModel(
+            model_name=model_name,
+            provider=provider,
+            is_enabled=is_enabled,
+        )
+        self.db_session.add(model)
+        await self.db_session.commit()
+        await self.db_session.refresh(model)
+        logger.info(f'Created verified model: {provider}/{model_name}')
+        return model
 
-    @staticmethod
-    def update_model(
+    async def update_model(
+        self,
         model_name: str,
         provider: str,
         is_enabled: bool | None = None,
@@ -179,30 +179,26 @@ class VerifiedModelStore:
         Returns:
             The updated model if found, None otherwise
         """
-        with session_maker() as session:
-            model = (
-                session.query(VerifiedModel)
-                .filter(
-                    and_(
-                        VerifiedModel.model_name == model_name,
-                        VerifiedModel.provider == provider,
-                    )
-                )
-                .first()
+        query = select(VerifiedModel).where(
+            and_(
+                VerifiedModel.model_name == model_name,
+                VerifiedModel.provider == provider,
             )
-            if not model:
-                return None
+        )
+        result = await self.db_session.execute(query)
+        model = result.scalars().first()
+        if not model:
+            return None
 
-            if is_enabled is not None:
-                model.is_enabled = is_enabled
+        if is_enabled is not None:
+            model.is_enabled = is_enabled
 
-            session.commit()
-            session.refresh(model)
-            logger.info(f'Updated verified model: {provider}/{model_name}')
-            return model
+        await self.db_session.commit()
+        await self.db_session.refresh(model)
+        logger.info(f'Updated verified model: {provider}/{model_name}')
+        return model
 
-    @staticmethod
-    def delete_model(model_name: str, provider: str) -> bool:
+    async def delete_model(self, model_name: str, provider: str) -> bool:
         """Delete a verified model.
 
         Args:
@@ -212,21 +208,88 @@ class VerifiedModelStore:
         Returns:
             True if deleted, False if not found
         """
-        with session_maker() as session:
-            model = (
-                session.query(VerifiedModel)
-                .filter(
-                    and_(
-                        VerifiedModel.model_name == model_name,
-                        VerifiedModel.provider == provider,
-                    )
-                )
-                .first()
+        query = select(VerifiedModel).where(
+            and_(
+                VerifiedModel.model_name == model_name,
+                VerifiedModel.provider == provider,
             )
-            if not model:
-                return False
+        )
+        result = await self.db_session.execute(query)
+        model = result.scalars().first()
+        if not model:
+            return False
 
-            session.delete(model)
-            session.commit()
-            logger.info(f'Deleted verified model: {provider}/{model_name}')
-            return True
+        await self.db_session.delete(model)
+        await self.db_session.commit()
+        logger.info(f'Deleted verified model: {provider}/{model_name}')
+        return True
+
+
+# Module-level async convenience functions for backward compatibility
+async def search_models(
+    provider: str | None = None,
+    enabled_only: bool = True,
+    offset: int = 0,
+    limit: int = 100,
+) -> SearchModelsResult:
+    """Search for verified models (module-level async convenience function)."""
+    async with a_session_maker() as session:
+        store = VerifiedModelStore(session)
+        return await store.search_models(provider, enabled_only, offset, limit)
+
+
+async def get_enabled_models() -> list[VerifiedModel]:
+    """Get all enabled models (module-level async convenience function)."""
+    async with a_session_maker() as session:
+        store = VerifiedModelStore(session)
+        return await store.get_enabled_models()
+
+
+async def get_models_by_provider(provider: str) -> list[VerifiedModel]:
+    """Get all enabled models for a specific provider (module-level async convenience function)."""
+    async with a_session_maker() as session:
+        store = VerifiedModelStore(session)
+        return await store.get_models_by_provider(provider)
+
+
+async def get_all_models() -> list[VerifiedModel]:
+    """Get all models (module-level async convenience function)."""
+    async with a_session_maker() as session:
+        store = VerifiedModelStore(session)
+        return await store.get_all_models()
+
+
+async def get_model(model_name: str, provider: str) -> VerifiedModel | None:
+    """Get a model by its composite key (module-level async convenience function)."""
+    async with a_session_maker() as session:
+        store = VerifiedModelStore(session)
+        return await store.get_model(model_name, provider)
+
+
+async def create_model(
+    model_name: str,
+    provider: str,
+    is_enabled: bool = True,
+) -> VerifiedModel:
+    """Create a new verified model (module-level async convenience function)."""
+    async with a_session_maker() as session:
+        store = VerifiedModelStore(session)
+        return await store.create_model(model_name, provider, is_enabled)
+
+
+async def update_model(
+    model_name: str,
+    provider: str,
+    is_enabled: bool | None = None,
+) -> VerifiedModel | None:
+    """Update an existing verified model (module-level async convenience function)."""
+    async with a_session_maker() as session:
+        store = VerifiedModelStore(session)
+        return await store.update_model(model_name, provider, is_enabled)
+
+
+async def delete_model(model_name: str, provider: str) -> bool:
+    """Delete a verified model (module-level async convenience function)."""
+    async with a_session_maker() as session:
+        store = VerifiedModelStore(session)
+        return await store.delete_model(model_name, provider)
