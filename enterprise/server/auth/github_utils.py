@@ -11,7 +11,7 @@ from openhands.integrations.github.github_types import GitHubUser
 
 
 def is_user_allowed(user_login: str):
-    if user_verifier.is_active() and not user_verifier.is_user_allowed(ProviderType.GITHUB.value, user_login):
+    if user_verifier.is_active() and not user_verifier.is_user_allowed(user_login):
         logger.warning(f'GitHub user {user_login} not in allow list')
         return False
 

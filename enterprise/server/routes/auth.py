@@ -352,7 +352,7 @@ async def keycloak_callback(
     )
 
     username = user_info['preferred_username']
-    if user_verifier.is_active() and not user_verifier.is_user_allowed(idp, username):
+    if user_verifier.is_active() and not user_verifier.is_user_allowed(username):
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={'error': 'Not authorized via waitlist'},
