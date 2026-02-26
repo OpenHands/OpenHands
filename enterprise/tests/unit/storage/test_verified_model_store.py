@@ -118,20 +118,11 @@ class TestSearchModels:
 
 
 class TestGetModels:
-    def test_get_all_models(self, _seed_models):
-        models = VerifiedModelStore.get_all_models()
-        assert len(models) == 3
-
     def test_get_enabled_models(self, _seed_models):
         models = VerifiedModelStore.get_enabled_models()
         assert len(models) == 2
         names = {m.model_name for m in models}
         assert 'gpt-4o' not in names
-
-    def test_get_models_by_provider(self, _seed_models):
-        models = VerifiedModelStore.get_models_by_provider('openhands')
-        assert len(models) == 1
-        assert models[0].model_name == 'claude-sonnet'
 
 
 class TestUpdateModel:

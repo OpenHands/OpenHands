@@ -78,29 +78,6 @@ class VerifiedModelStore:
         return result['items']
 
     @staticmethod
-    def get_models_by_provider(provider: str) -> list[VerifiedModel]:
-        """Get all enabled models for a specific provider.
-
-        Args:
-            provider: The provider name (e.g., 'openhands', 'anthropic')
-
-        Note:
-            This method is deprecated. Use search_models() instead.
-        """
-        result = VerifiedModelStore.search_models(provider=provider, enabled_only=True, limit=1000)
-        return result['items']
-
-    @staticmethod
-    def get_all_models() -> list[VerifiedModel]:
-        """Get all models (including disabled).
-
-        Note:
-            This method is deprecated. Use search_models() instead.
-        """
-        result = VerifiedModelStore.search_models(enabled_only=False, limit=1000)
-        return result['items']
-
-    @staticmethod
     def get_model(model_name: str, provider: str) -> VerifiedModel | None:
         """Get a model by its composite key (model_name, provider).
 
