@@ -316,3 +316,8 @@ lint.pydocstyle.convention = "google"
 concurrency = [ "gevent" ]
 relative_files = true
 omit = [ "enterprise/tests/*", "**/test_*" ]
+
+[tool.uv]
+# Exclude pypdf2 — unused transitive dependency from archived openhands-aci (CVE-2023-36464).
+# openhands-aci already ships pypdf (the modern replacement) which is what the code actually uses.
+override-dependencies = [ "pypdf2 ; python_version < '0'" ]
