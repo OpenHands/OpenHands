@@ -550,7 +550,9 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
     )
 
     redirect_url, _, _ = _extract_oauth_state(state)
-    return RedirectResponse(redirect_url if redirect_url else request.base_url, status_code=302)
+    return RedirectResponse(
+        redirect_url if redirect_url else request.base_url, status_code=302
+    )
 
 
 @oauth_router.get('/github/callback')
