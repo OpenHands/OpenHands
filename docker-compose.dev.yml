@@ -15,10 +15,13 @@ services:
       - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-31536c8-python}
       - SANDBOX_USER_ID=0
       - WORKSPACE_MOUNT_PATH=${WORKSPACE_BASE:-$PWD/workspace}
+      - OH_SANDBOX__RESOURCE_PREFIX=${OH_SANDBOX__RESOURCE_PREFIX:-openhands}
       - OH_SANDBOX__NETWORK=openhands-net
       - OH_SANDBOX__APP_HOSTNAME=openhands-app
       - 'OH_SANDBOX_CONTAINER_LABELS={"com.docker.compose.project": "openhands"}'
       - OH_SANDBOX__PRIVILEGED=true
+      - OH_SANDBOX__DIND_REGISTRY_MIRROR_URL=http://openhands-registry-cache:5000
+      - OH_SANDBOX__DIND_REGISTRY_MIRRORS=docker.cloudsmith.io=http://openhands-cloudsmith-cache:5000
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
       - LLM_MODEL=${LLM_MODEL:-anthropic/claude-opus-4-5-20251101}
       - LLM_BASE_URL=${LLM_BASE_URL:-}
@@ -50,6 +53,37 @@ services:
     pull_policy: build
     stdin_open: true
     tty: true
+    depends_on:
+      - registry-cache
+      - cloudsmith-cache
+
+  registry-cache:
+    image: registry:2
+    container_name: openhands-registry-cache
+    environment:
+      - REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io
+    volumes:
+      - openhands-registry-cache:/var/lib/registry
+    networks:
+      - openhands-net
+    restart: unless-stopped
+
+  cloudsmith-cache:
+    image: registry:2
+    container_name: openhands-cloudsmith-cache
+    environment:
+      - REGISTRY_PROXY_REMOTEURL=https://docker.cloudsmith.io
+      - REGISTRY_PROXY_USERNAME=${BUILDONE_USER:-}
+      - REGISTRY_PROXY_PASSWORD=${BUILDONE_TOKEN:-}
+    volumes:
+      - openhands-cloudsmith-cache:/var/lib/registry
+    networks:
+      - openhands-net
+    restart: unless-stopped
+
+volumes:
+  openhands-registry-cache:
+  openhands-cloudsmith-cache:
 
 networks:
   openhands-net:

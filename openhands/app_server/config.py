@@ -233,6 +233,14 @@ def config_from_env() -> AppServerConfig:
                         )
                 if mounts:
                     docker_sandbox_kwargs['mounts'] = mounts
+            # Resource prefix for Docker resource names (volumes, containers)
+            resource_prefix = os.getenv('OH_SANDBOX__RESOURCE_PREFIX')
+            if resource_prefix:
+                docker_sandbox_kwargs['resource_prefix'] = resource_prefix
+            # Container name prefix for sandbox containers
+            container_name_prefix = os.getenv('OH_SANDBOX__CONTAINER_NAME_PREFIX')
+            if container_name_prefix:
+                docker_sandbox_kwargs['container_name_prefix'] = container_name_prefix
             # Docker network mode for container-to-container communication
             sandbox_network = os.getenv('OH_SANDBOX__NETWORK')
             if sandbox_network:
@@ -259,6 +267,21 @@ def config_from_env() -> AppServerConfig:
             dind_registry_port = os.getenv('OH_SANDBOX__DIND_REGISTRY_PORT')
             if dind_registry_port:
                 docker_sandbox_kwargs['dind_registry_port'] = int(dind_registry_port)
+            dind_registry_mirror_url = os.getenv('OH_SANDBOX__DIND_REGISTRY_MIRROR_URL')
+            if dind_registry_mirror_url:
+                docker_sandbox_kwargs['dind_registry_mirror_url'] = (
+                    dind_registry_mirror_url
+                )
+            # Extra registry mirrors (comma-separated host=url pairs)
+            dind_registry_mirrors_str = os.getenv('OH_SANDBOX__DIND_REGISTRY_MIRRORS')
+            if dind_registry_mirrors_str:
+                mirrors = {}
+                for pair in dind_registry_mirrors_str.split(','):
+                    pair = pair.strip()
+                    if '=' in pair:
+                        host, url = pair.split('=', 1)
+                        mirrors[host.strip()] = url.strip()
+                docker_sandbox_kwargs['dind_registry_mirrors'] = mirrors
             # Traefik integration for subdomain routing of sandbox worker ports
             traefik_network = os.getenv('OH_SANDBOX__TRAEFIK_NETWORK')
             if traefik_network:

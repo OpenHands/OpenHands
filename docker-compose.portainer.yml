@@ -2,6 +2,12 @@
 volumes:
   openhands_state:
   openhands_workspace:
+  openhands-registry-cache:
+    name: ${STACK}-registry-cache
+  openhands-cloudsmith-cache:
+    name: ${STACK}-cloudsmith-cache
+  openhands-package-cache:
+    name: ${STACK}-package-cache
 
 networks:
   openhands-net:
@@ -27,9 +33,13 @@ services:
       # --- Sandbox / Runtime ---
       - SANDBOX_USER_ID=${SANDBOX_USER_ID:-0}
       - WORKSPACE_MOUNT_PATH=/opt/workspace_base
+      - OH_SANDBOX__RESOURCE_PREFIX=${STACK}
+      - OH_SANDBOX__CONTAINER_NAME_PREFIX=${STACK}-agent-server-
       - OH_SANDBOX__NETWORK=${STACK}-openhands-net
       - OH_SANDBOX__APP_HOSTNAME=openhands-app
       - OH_SANDBOX__PRIVILEGED=true
+      - OH_SANDBOX__DIND_REGISTRY_MIRROR_URL=http://${STACK}-registry-cache:5000
+      - OH_SANDBOX__DIND_REGISTRY_MIRRORS=docker.cloudsmith.io=http://${STACK}-cloudsmith-cache:5000
       - AGENT_SERVER_IMAGE_REPOSITORY=${AGENT_SERVER_IMAGE_REPOSITORY:-ghcr.io/openhands/agent-server}
       - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-}
 
@@ -64,3 +74,30 @@ services:
       - openhands_workspace:/opt/workspace_base
     stdin_open: true
     tty: true
+    depends_on:
+      - registry-cache
+      - cloudsmith-cache
+
+  registry-cache:
+    image: registry:2
+    container_name: ${STACK}-registry-cache
+    environment:
+      - REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io
+    volumes:
+      - openhands-registry-cache:/var/lib/registry
+    networks:
+      openhands-net:
+    restart: unless-stopped
+
+  cloudsmith-cache:
+    image: registry:2
+    container_name: ${STACK}-cloudsmith-cache
+    environment:
+      - REGISTRY_PROXY_REMOTEURL=https://docker.cloudsmith.io
+      - REGISTRY_PROXY_USERNAME=${BUILDONE_USER:-}
+      - REGISTRY_PROXY_PASSWORD=${BUILDONE_TOKEN:-}
+    volumes:
+      - openhands-cloudsmith-cache:/var/lib/registry
+    networks:
+      openhands-net:
+    restart: unless-stopped

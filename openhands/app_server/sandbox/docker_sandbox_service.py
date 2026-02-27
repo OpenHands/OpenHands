@@ -45,7 +45,6 @@ _logger = logging.getLogger(__name__)
 STARTUP_GRACE_SECONDS = 60
 
 _DOCKER_SOCKET = '/var/run/docker.sock'
-_PACKAGE_CACHE_VOLUME = 'openhands-package-cache'
 _PACKAGE_CACHE_PATH = '/opt/package-cache'
 
 
@@ -106,6 +105,7 @@ class DockerSandboxService(SandboxService):
     health_check_path: str | None
     httpx_client: httpx.AsyncClient
     max_num_sandboxes: int
+    resource_prefix: str = 'openhands'
     web_url: str | None = None
     extra_hosts: dict[str, str] = field(default_factory=dict)
     network: str | None = None
@@ -113,6 +113,7 @@ class DockerSandboxService(SandboxService):
     container_labels: dict[str, str] = field(default_factory=dict)
     privileged: bool = False
     registry_mirror_url: str | None = None
+    registry_mirrors: dict[str, str] = field(default_factory=dict)
     traefik_network: str | None = None
     traefik_domain: str | None = None
     traefik_entrypoints: str = 'web'
@@ -176,12 +177,60 @@ class DockerSandboxService(SandboxService):
     async def _start_dockerd(self, container) -> None:
         """Start dockerd inside a privileged container for DinD support."""
         _logger.info(f'Starting dockerd in container {container.name}...')
-        dockerd_args = '--storage-driver=vfs'
+
+        # In DinD the container's root filesystem is itself an overlayfs
+        # mount.  Running Docker inside creates nested overlayfs which fails
+        # when extracting image layers that contain whiteout files ("operation
+        # not permitted").  Mounting a tmpfs at /var/lib/docker gives the
+        # inner Docker a real filesystem so its overlayfs works correctly.
+        # This also lets us keep the containerd image store active (needed
+        # for per-registry hosts.toml mirror configs).
+        container.exec_run('mkdir -p /var/lib/docker', user='root')
+        container.exec_run(
+            'mount -t tmpfs -o size=8G tmpfs /var/lib/docker', user='root'
+        )
+
+        dockerd_args = ''
+
+        if self.registry_mirrors:
+            # Write per-registry mirror configs (hosts.toml).  Docker 29+
+            # with the containerd image store reads host configs from
+            # /etc/docker/certs.d/<host>/hosts.toml.
+            #
+            # We only grant the "pull" capability (blob downloads) to the
+            # cache — NOT "resolve".  The containerd image store resolves
+            # manifests differently from the legacy store and the registry:2
+            # pull-through cache returns manifest lists where platform-
+            # specific manifests are expected, causing size-validation
+            # failures.  By omitting "resolve", containerd resolves tags
+            # directly against the upstream registry (authenticated via
+            # ``docker login`` below) and only routes blob fetches through
+            # the cache.
+            container.exec_run('mkdir -p /etc/docker/certs.d', user='root')
+            for upstream_host, mirror_url in self.registry_mirrors.items():
+                host_dir = f'/etc/docker/certs.d/{upstream_host}'
+                container.exec_run(f'mkdir -p {host_dir}', user='root')
+                hosts_toml = (
+                    f'server = "https://{upstream_host}"\n\n'
+                    f'[host."{mirror_url}"]\n'
+                    f'  capabilities = ["pull"]\n'
+                    f'  skip_verify = true\n'
+                )
+                container.exec_run(
+                    [
+                        'bash',
+                        '-c',
+                        f"cat > {host_dir}/hosts.toml << 'TOML'\n{hosts_toml}TOML",
+                    ],
+                    user='root',
+                )
+
         if self.registry_mirror_url:
             dockerd_args += (
                 f' --registry-mirror={self.registry_mirror_url}'
                 f' --insecure-registry={self.registry_mirror_url.split("//", 1)[-1]}'
             )
+
         container.exec_run(
             f'bash -c "dockerd {dockerd_args} > /tmp/dockerd.log 2>&1 &"',
             user='root',
@@ -205,9 +254,34 @@ class DockerSandboxService(SandboxService):
                         'chmod 666 /var/run/docker.sock', user='root'
                     ),
                 )
+                # Authenticate to private registries that need
+                # per-user credentials.  The BUILDONE_USER /
+                # BUILDONE_TOKEN env vars are set per-sandbox from
+                # the user's custom secrets.
+                await loop.run_in_executor(
+                    None,
+                    lambda: container.exec_run(
+                        'bash -c "'
+                        'if [ -n "$BUILDONE_USER" ] && [ -n "$BUILDONE_TOKEN" ]; then '
+                        'docker login docker.cloudsmith.io '
+                        '-u "$BUILDONE_USER" -p "$BUILDONE_TOKEN" '
+                        '>/dev/null 2>&1; fi"',
+                        user='root',
+                    ),
+                )
                 return
             await asyncio.sleep(1)
-        _logger.warning(f'dockerd failed to start in container {container.name}')
+        # Capture dockerd log to help diagnose startup failures.
+        log_result = container.exec_run('cat /tmp/dockerd.log', user='root')
+        dockerd_log = (
+            log_result.output.decode(errors='replace')
+            if log_result.output
+            else '(empty)'
+        )
+        _logger.warning(
+            f'dockerd failed to start in container {container.name}. '
+            f'dockerd log:\n{dockerd_log}'
+        )
 
     def _schedule_codespace_port_visibility(
         self, port_mappings: dict[int, int]
@@ -672,7 +746,8 @@ class DockerSandboxService(SandboxService):
         }
 
         # Mount the shared package cache volume
-        volumes[_PACKAGE_CACHE_VOLUME] = {
+        package_cache_volume = f'{self.resource_prefix}-package-cache'
+        volumes[package_cache_volume] = {
             'bind': _PACKAGE_CACHE_PATH,
             'mode': 'rw',
         }
@@ -891,7 +966,7 @@ class DockerSandboxService(SandboxService):
 
             # Remove associated volume
             try:
-                volume_name = f'openhands-workspace-{sandbox_id}'
+                volume_name = f'{self.resource_prefix}-workspace-{sandbox_id}'
                 volume = self.docker_client.volumes.get(volume_name)
                 volume.remove()
             except (NotFound, APIError):
@@ -921,6 +996,15 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Used for webhook callbacks from agent-server containers. '
             'If running OpenHands on a non-default port, set this to match. '
             'Configure via OH_SANDBOX_HOST_PORT environment variable.'
+        ),
+    )
+    resource_prefix: str = Field(
+        default='openhands',
+        description=(
+            'Prefix for Docker resource names (volumes, containers) created by '
+            'the sandbox service. Use a unique value per deployment when multiple '
+            'OpenHands instances share the same Docker daemon. '
+            'Configure via OH_SANDBOX__RESOURCE_PREFIX environment variable.'
         ),
     )
     container_name_prefix: str = 'oh-agent-server-'
@@ -1058,6 +1142,27 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
             'Configure via OH_SANDBOX__DIND_REGISTRY_PORT environment variable.'
         ),
     )
+    dind_registry_mirror_url: str | None = Field(
+        default=None,
+        description=(
+            'URL of an external pull-through registry cache (e.g. one defined '
+            'in docker-compose.yml). When set, the programmatic registry cache '
+            'is skipped and this URL is used directly as the --registry-mirror '
+            'for dockerd inside privileged sandboxes. '
+            'Configure via OH_SANDBOX__DIND_REGISTRY_MIRROR_URL environment variable.'
+        ),
+    )
+    dind_registry_mirrors: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            'Mapping of upstream registry hostnames to local pull-through cache URLs. '
+            'Used to configure containerd host mirrors inside privileged sandboxes '
+            'so that pulls from non-Docker-Hub registries are cached locally. '
+            'Example: {"docker.cloudsmith.io": "http://openhands-cloudsmith-cache:5000"} '
+            'Configure via OH_SANDBOX__DIND_REGISTRY_MIRRORS environment variable '
+            'as comma-separated host=url pairs.'
+        ),
+    )
     traefik_network: str | None = Field(
         default=None,
         description=(
@@ -1144,6 +1249,7 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 health_check_path=self.health_check_path,
                 httpx_client=httpx_client,
                 max_num_sandboxes=self.max_num_sandboxes,
+                resource_prefix=self.resource_prefix,
                 web_url=web_url,
                 extra_hosts=self.extra_hosts,
                 network=self.network,
@@ -1151,7 +1257,9 @@ class DockerSandboxServiceInjector(SandboxServiceInjector):
                 container_labels=self.container_labels,
                 startup_grace_seconds=self.startup_grace_seconds,
                 privileged=self.privileged,
-                registry_mirror_url=getattr(self, '_registry_mirror_url', None),
+                registry_mirror_url=self.dind_registry_mirror_url
+                or getattr(self, '_registry_mirror_url', None),
+                registry_mirrors=self.dind_registry_mirrors,
                 traefik_network=self.traefik_network,
                 traefik_domain=self.traefik_domain,
                 traefik_entrypoints=self.traefik_entrypoints,

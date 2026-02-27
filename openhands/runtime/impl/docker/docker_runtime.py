@@ -40,7 +40,11 @@ from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.shutdown_listener import add_shutdown_listener
 from openhands.utils.tenacity_stop import stop_if_should_exit
 
-CONTAINER_NAME_PREFIX = 'openhands-runtime-'
+_RESOURCE_PREFIX = os.environ.get('OH_SANDBOX__RESOURCE_PREFIX', 'openhands')
+CONTAINER_NAME_PREFIX = f'{_RESOURCE_PREFIX}-runtime-'
+
+_PACKAGE_CACHE_VOLUME = f'{_RESOURCE_PREFIX}-package-cache'
+_PACKAGE_CACHE_PATH = '/opt/package-cache'
 
 EXECUTION_SERVER_PORT_RANGE = (30000, 39999)
 VSCODE_PORT_RANGE = (40000, 49999)
@@ -319,6 +323,13 @@ class DockerRuntime(ActionExecutionClient):
                 f'Mount dir (legacy): {self.config.workspace_mount_path} with mode: {mount_mode}'
             )
 
+        # Mount the shared package cache volume so that npm, yarn, and pip
+        # downloads are preserved across sandbox containers.
+        volumes[_PACKAGE_CACHE_VOLUME] = {
+            'bind': _PACKAGE_CACHE_PATH,
+            'mode': 'rw',
+        }
+
         return volumes
 
     def _process_overlay_mounts(self) -> list[Mount]:
@@ -468,6 +479,9 @@ class DockerRuntime(ActionExecutionClient):
                 'APP_PORT_2': str(self._app_ports[1]),
                 'OPENHANDS_SESSION_ID': str(self.sid),
                 'PIP_BREAK_SYSTEM_PACKAGES': '1',
+                'YARN_CACHE_FOLDER': f'{_PACKAGE_CACHE_PATH}/yarn',
+                'NPM_CONFIG_CACHE': f'{_PACKAGE_CACHE_PATH}/npm',
+                'PIP_CACHE_DIR': f'{_PACKAGE_CACHE_PATH}/pip',
             }
         )
         if self.config.debug or DEBUG:
@@ -536,6 +550,12 @@ class DockerRuntime(ActionExecutionClient):
                 mounts=overlay_mounts,  # type: ignore
                 device_requests=device_requests,
                 **(self.config.sandbox.docker_runtime_kwargs or {}),
+            )
+            # Ensure the package cache is writable by the non-root container
+            # user (named volumes start root-owned).
+            assert self.container is not None
+            self.container.exec_run(
+                f'chown openhands:openhands {_PACKAGE_CACHE_PATH}', user='root'
             )
             self.log('debug', f'Container started. Server url: {self.api_url}')
             self.set_runtime_status(RuntimeStatus.RUNTIME_STARTED)

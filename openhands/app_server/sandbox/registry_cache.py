@@ -12,16 +12,24 @@ from docker.errors import APIError, NotFound
 
 _logger = logging.getLogger(__name__)
 
-_CONTAINER_NAME = 'openhands-registry-cache'
-_VOLUME_NAME = 'openhands-registry-cache'
 _IMAGE = 'registry:2'
 
 
 class RegistryCacheManager:
     """Manages a local pull-through Docker registry cache container."""
 
-    def __init__(self, port: int = 5555) -> None:
+    def __init__(
+        self,
+        port: int = 5555,
+        labels: dict[str, str] | None = None,
+        network: str | None = None,
+        resource_prefix: str = 'openhands',
+    ) -> None:
         self.port = port
+        self.labels = labels or {}
+        self.network = network
+        self.container_name = f'{resource_prefix}-registry-cache'
+        self.volume_name = f'{resource_prefix}-registry-cache'
         self._docker: docker.DockerClient | None = None
 
     @property
@@ -37,7 +45,7 @@ class RegistryCacheManager:
         If the container already exists and is running, this is a no-op.
         """
         try:
-            container = self._client.containers.get(_CONTAINER_NAME)
+            container = self._client.containers.get(self.container_name)
             if container.status == 'running':
                 _logger.info('Registry cache already running')
                 return self._mirror_url()
@@ -54,9 +62,9 @@ class RegistryCacheManager:
             self._client.images.pull(_IMAGE)
 
         _logger.info(f'Starting registry cache container on port {self.port}...')
-        self._client.containers.run(  # type: ignore[call-overload]
+        container = self._client.containers.run(  # type: ignore[call-overload]
             image=_IMAGE,
-            name=_CONTAINER_NAME,
+            name=self.container_name,
             detach=True,
             restart_policy={'Name': 'unless-stopped'},
             ports={'5000/tcp': self.port},
@@ -64,8 +72,10 @@ class RegistryCacheManager:
                 'REGISTRY_PROXY_REMOTEURL': 'https://registry-1.docker.io',
             },
             volumes={
-                _VOLUME_NAME: {'bind': '/var/lib/registry', 'mode': 'rw'},
+                self.volume_name: {'bind': '/var/lib/registry', 'mode': 'rw'},
             },
+            labels=self.labels if self.labels else None,
+            network=self.network if self.network else None,
         )
         _logger.info('Registry cache container started')
         return self._mirror_url()
@@ -73,7 +83,7 @@ class RegistryCacheManager:
     def stop(self) -> None:
         """Stop and remove the registry cache container."""
         try:
-            container = self._client.containers.get(_CONTAINER_NAME)
+            container = self._client.containers.get(self.container_name)
             container.remove(force=True)
             _logger.info('Registry cache container removed')
         except (NotFound, APIError):

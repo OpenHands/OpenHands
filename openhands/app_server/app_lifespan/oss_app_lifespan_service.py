@@ -177,6 +177,10 @@ class OssAppLifespanService(AppLifespanService):
 
             if not isinstance(injector, DockerSandboxServiceInjector):
                 return
+            # Skip if an external registry mirror is already configured
+            # (e.g. via docker-compose service).
+            if injector.dind_registry_mirror_url:
+                return
             if not injector.dind_registry_cache or not injector.privileged:
                 return
 
@@ -184,7 +188,12 @@ class OssAppLifespanService(AppLifespanService):
                 RegistryCacheManager,
             )
 
-            manager = RegistryCacheManager(port=injector.dind_registry_port)
+            manager = RegistryCacheManager(
+                port=injector.dind_registry_port,
+                labels=injector.container_labels,
+                network=injector.network,
+                resource_prefix=injector.resource_prefix,
+            )
             mirror_url = manager.ensure_running()
             # Store on the injector so inject() can pass it to DockerSandboxService
             injector._registry_mirror_url = mirror_url  # type: ignore[attr-defined]
