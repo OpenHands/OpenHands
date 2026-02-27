@@ -235,6 +235,38 @@ describe("LoginContent", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("should display Bitbucket signup disabled message when Bitbucket is configured", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github", "bitbucket"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("AUTH$BITBUCKET_SIGNUP_DISABLED"),
+    ).toBeInTheDocument();
+  });
+
+  it("should not display Bitbucket signup disabled message when Bitbucket is not configured", () => {
+    render(
+      <MemoryRouter>
+        <LoginContent
+          githubAuthUrl="https://github.com/oauth/authorize"
+          appMode="saas"
+          providersConfigured={["github"]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByText("AUTH$BITBUCKET_SIGNUP_DISABLED"),
+    ).not.toBeInTheDocument();
+  });
+
   it("should call buildOAuthStateData when clicking auth button", async () => {
     const user = userEvent.setup();
     const mockBuildOAuthStateData = vi.fn((baseState) => ({
