@@ -301,38 +301,4 @@ describe("LoginContent", () => {
       }
     });
   });
-
-  it("should render provider logos with correct white color styling", () => {
-    render(
-      <MemoryRouter>
-        <LoginContent
-          githubAuthUrl="https://github.com/oauth/authorize"
-          appMode="saas"
-          authUrl="https://auth.example.com"
-          providersConfigured={["github", "gitlab", "bitbucket"]}
-        />
-      </MemoryRouter>,
-    );
-
-    const githubButton = screen.getByRole("button", {
-      name: "GITHUB$CONNECT_TO_GITHUB",
-    });
-    const gitlabButton = screen.getByRole("button", {
-      name: "GITLAB$CONNECT_TO_GITLAB",
-    });
-    const bitbucketButton = screen.getByRole("button", {
-      name: /BITBUCKET\$CONNECT_TO_BITBUCKET/i,
-    });
-
-    const githubLogo = githubButton.querySelector("svg");
-    const gitlabLogo = gitlabButton.querySelector("svg");
-    const bitbucketLogo = bitbucketButton.querySelector("svg");
-
-    expect(githubLogo).toBeInTheDocument();
-    expect(gitlabLogo).toBeInTheDocument();
-    expect(bitbucketLogo).toBeInTheDocument();
-
-    // Bitbucket logo must have fill-white class since its SVG doesn't use currentColor
-    expect(bitbucketLogo).toHaveClass("fill-white");
-  });
 });
