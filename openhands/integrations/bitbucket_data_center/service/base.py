@@ -2,10 +2,9 @@ import base64
 from typing import Any
 
 import httpx
-
-from openhands.core.logger import openhands_logger as logger
 from pydantic import SecretStr
 
+from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.protocols.http_client import HTTPClient
 from openhands.integrations.service_types import (
     AuthenticationError,

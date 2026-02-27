@@ -75,7 +75,8 @@ class BitbucketDCReposMixin(BitbucketDCMixinBase):
             )
             if repo_query:
                 raw_repos = [
-                    r for r in raw_repos
+                    r
+                    for r in raw_repos
                     if repo_query.lower() in r.get('slug', '').lower()
                     or repo_query.lower() in r.get('name', '').lower()
                 ]
@@ -149,7 +150,8 @@ class BitbucketDCReposMixin(BitbucketDCMixinBase):
         repos = response.get('values', [])
         if query:
             repos = [
-                repo for repo in repos
+                repo
+                for repo in repos
                 if query.lower() in repo.get('slug', '').lower()
                 or query.lower() in repo.get('name', '').lower()
             ]

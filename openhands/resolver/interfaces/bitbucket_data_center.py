@@ -162,12 +162,14 @@ class BitbucketDCIssueHandler(IssueHandlerInterface):
         Returns:
             The URL of the created pull request
         """
-        result = self.create_pull_request({
-            'title': title,
-            'description': body,
-            'source_branch': head,
-            'target_branch': base,
-        })
+        result = self.create_pull_request(
+            {
+                'title': title,
+                'description': body,
+                'source_branch': head,
+                'target_branch': base,
+            }
+        )
         return result.get('html_url', '')
 
     def create_pull_request(self, data: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -16,7 +16,13 @@ def make_service():
 
 
 def _repo_dict(key='PROJ', slug='myrepo', name='My Repository'):
-    return {'id': 1, 'slug': slug, 'name': name, 'project': {'key': key}, 'public': False}
+    return {
+        'id': 1,
+        'slug': slug,
+        'name': name,
+        'project': {'key': key},
+        'public': False,
+    }
 
 
 # ── search_repositories URL parsing ──────────────────────────────────────────
