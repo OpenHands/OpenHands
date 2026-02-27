@@ -215,7 +215,11 @@ export function LoginContent({
                 onClick={handleBitbucketAuth}
                 className={`${buttonBaseClasses} bg-[#2684FF] text-white`}
               >
-                <BitbucketLogo width={14} height={14} className="shrink-0" />
+                <BitbucketLogo
+                  width={14}
+                  height={14}
+                  className="shrink-0 fill-white"
+                />
                 <span className={buttonLabelClasses}>
                   {t(I18nKey.BITBUCKET$CONNECT_TO_BITBUCKET)}
                 </span>
