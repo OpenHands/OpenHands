@@ -8,9 +8,8 @@
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 
 from typing import Any
-from urllib.request import Request
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
