@@ -121,7 +121,7 @@ export function LoginContent({
     }
   };
 
- const handleBitbucketDataCenterAuth = () => {
+  const handleBitbucketDataCenterAuth = () => {
     if (bitbucketDataCenterAuthUrl) {
       handleAuthRedirect(bitbucketDataCenterAuthUrl, "bitbucket_data_center");
     }

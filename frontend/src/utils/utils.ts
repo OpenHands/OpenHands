@@ -294,9 +294,10 @@ export const constructPullRequestUrl = (
       return `${baseUrl}/${repositoryName}/-/merge_requests/${prNumber}`;
     case "bitbucket":
       return `${baseUrl}/${repositoryName}/pull-requests/${prNumber}`;
-    case "bitbucket_data_center":
+    case "bitbucket_data_center": {
       const [project, repo] = repositoryName.split("/");
       return `${baseUrl}/projects/${project}/repos/${repo}/pull-requests/${prNumber}`;
+    }
     case "azure_devops": {
       // Azure DevOps format: org/project/repo
       const parts = repositoryName.split("/");
@@ -435,7 +436,7 @@ export const constructBranchUrl = (
       return `${baseUrl}/${repositoryName}/-/tree/${branchName}`;
     case "bitbucket":
       return `${baseUrl}/${repositoryName}/src/${branchName}`;
-    case "bitbucket_data_center":
+    case "bitbucket_data_center": {
       // Bitbucket Server format: /projects/{PROJECT}/repos/{repo}/browse?at=refs/heads/{branch}
       const parts = repositoryName.split("/");
       if (parts.length >= 2) {
@@ -443,6 +444,7 @@ export const constructBranchUrl = (
         return `${baseUrl}/projects/${project}/repos/${repo}/browse?at=refs/heads/${branchName}`;
       }
       return "";
+    }
     case "azure_devops": {
       // Azure DevOps format: org/project/repo
       const parts = repositoryName.split("/");

@@ -157,6 +157,7 @@ function GitSettingsScreen() {
           setGithubHostInputHasValue(false);
           setGitlabHostInputHasValue(false);
           setBitbucketHostInputHasValue(false);
+          setBitbucketDCHostInputHasValue(false);
           setAzureDevOpsHostInputHasValue(false);
           setForgejoHostInputHasValue(false);
         },
@@ -174,6 +175,7 @@ function GitSettingsScreen() {
     !githubHostInputHasValue &&
     !gitlabHostInputHasValue &&
     !bitbucketHostInputHasValue &&
+    !bitbucketDCHostInputHasValue &&
     !azureDevOpsHostInputHasValue &&
     !forgejoHostInputHasValue;
   const shouldRenderExternalConfigureButtons =
