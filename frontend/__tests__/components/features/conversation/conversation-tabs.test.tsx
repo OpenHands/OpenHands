@@ -10,10 +10,6 @@ import { useConversationStore } from "#/stores/conversation-store";
 const TASK_CONVERSATION_ID = "task-ec03fb2ab8604517b24af632b058c2fd";
 const REAL_CONVERSATION_ID = "conv-abc123";
 
-vi.mock("#/utils/feature-flags", () => ({
-  USE_PLANNING_AGENT: () => false,
-}));
-
 let mockConversationId = TASK_CONVERSATION_ID;
 
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -120,9 +116,7 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Verify localStorage was updated
       const storedState = JSON.parse(
-        localStorage.getItem(
-          `conversation-state-${REAL_CONVERSATION_ID}`,
-        )!,
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("terminal");
       expect(storedState.rightPanelShown).toBe(true);
@@ -152,9 +146,7 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Verify localStorage was updated
       const storedState = JSON.parse(
-        localStorage.getItem(
-          `conversation-state-${REAL_CONVERSATION_ID}`,
-        )!,
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.rightPanelShown).toBe(false);
     });
@@ -184,9 +176,7 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Verify localStorage was updated
       const storedState = JSON.parse(
-        localStorage.getItem(
-          `conversation-state-${REAL_CONVERSATION_ID}`,
-        )!,
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("browser");
     });
