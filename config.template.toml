@@ -227,6 +227,13 @@ model = "gpt-4o"
 #for_routing = true
 #max_input_tokens = 128000
 
+# Example Avian LLM configuration (OpenAI-compatible API)
+# Get your API key at https://avian.io
+#[llm.avian]
+#model = "avian/deepseek/deepseek-v3.2"
+#api_key = ""
+#base_url = "https://api.avian.io/v1"
+
 
 #################################### Agent ###################################
 # Configuration for agents (group name starts with 'agent')

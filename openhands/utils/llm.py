@@ -43,6 +43,14 @@ CLARIFAI_MODELS = [
     'clarifai/moonshotai.kimi.Kimi-K2-Instruct',
 ]
 
+# Avian provider models (OpenAI-compatible API at https://api.avian.io/v1)
+AVIAN_MODELS = [
+    'avian/deepseek/deepseek-v3.2',
+    'avian/moonshotai/kimi-k2.5',
+    'avian/z-ai/glm-5',
+    'avian/minimax/minimax-m2.5',
+]
+
 
 def is_openhands_model(model: str | None) -> bool:
     """Check if the model uses the OpenHands provider.
@@ -151,6 +159,6 @@ def get_supported_llm_models(
 
     # Use database-backed models if provided (SaaS), otherwise use hardcoded list
     openhands_models = verified_models if verified_models else OPENHANDS_MODELS
-    model_list = openhands_models + CLARIFAI_MODELS + model_list
+    model_list = openhands_models + CLARIFAI_MODELS + AVIAN_MODELS + model_list
 
     return sorted(set(model_list))
