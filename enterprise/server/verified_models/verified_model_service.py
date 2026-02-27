@@ -118,6 +118,7 @@ class VerifiedModelService:
         # Return only the requested number of results
         if has_more:
             next_page_id = str(offset + limit)
+            results.pop()
 
         items = [verified_model(result) for result in results]
         return VerifiedModelPage(items=items, next_page_id=next_page_id)
