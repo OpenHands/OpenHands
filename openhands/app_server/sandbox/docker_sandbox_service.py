@@ -230,7 +230,7 @@ class DockerSandboxService(SandboxService):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                # If the server is
+                # If the server has exceeded the startup grace period, it's an error
                 if sandbox_info.created_at < utc_now() - timedelta(
                     seconds=self.startup_grace_seconds
                 ):
@@ -239,6 +239,10 @@ class DockerSandboxService(SandboxService):
                     )
                     sandbox_info.status = SandboxStatus.ERROR
                 else:
+                    _logger.debug(
+                        f'Sandbox server not yet available (still starting): '
+                        f'{app_server_url} : {exc}'
+                    )
                     sandbox_info.status = SandboxStatus.STARTING
                 sandbox_info.exposed_urls = None
                 sandbox_info.session_api_key = None

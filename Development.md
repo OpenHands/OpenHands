@@ -200,7 +200,7 @@ Here's a guide to the important documentation files in the repository:
 - [/frontend/README.md](./frontend/README.md): Frontend React application setup and development guide
 - [/containers/README.md](./containers/README.md): Information about Docker containers and deployment
 - [/tests/unit/README.md](./tests/unit/README.md): Guide to writing and running unit tests
-- [/evaluation/README.md](./evaluation/README.md): Documentation for the evaluation framework and benchmarks
+- [OpenHands/benchmarks](https://github.com/OpenHands/benchmarks): Documentation for the evaluation framework and benchmarks
 - [/skills/README.md](./skills/README.md): Information about the skills architecture and implementation
 - [/openhands/server/README.md](./openhands/server/README.md): Server implementation details and API documentation
 - [/openhands/runtime/README.md](./openhands/runtime/README.md): Documentation for the runtime environment and execution model

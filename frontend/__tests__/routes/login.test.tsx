@@ -57,6 +57,22 @@ vi.mock("#/hooks/use-tracking", () => ({
   }),
 }));
 
+const { useInvitationMock, buildOAuthStateDataMock } = vi.hoisted(() => ({
+  useInvitationMock: vi.fn(() => ({
+    invitationToken: null as string | null,
+    hasInvitation: false,
+    buildOAuthStateData: (baseState: Record<string, string>) => baseState,
+    clearInvitation: vi.fn(),
+  })),
+  buildOAuthStateDataMock: vi.fn(
+    (baseState: Record<string, string>) => baseState,
+  ),
+}));
+
+vi.mock("#/hooks/use-invitation", () => ({
+  useInvitation: () => useInvitationMock(),
+}));
+
 const RouterStub = createRoutesStub([
   {
     Component: LoginPage,
@@ -87,18 +103,18 @@ describe("LoginPage", () => {
     vi.clearAllMocks();
     vi.stubGlobal("location", { href: "" });
 
+    // @ts-expect-error - partial mock for testing
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test-client-id",
-      POSTHOG_CLIENT_KEY: "test-posthog-key",
-      PROVIDERS_CONFIGURED: ["github", "gitlab", "bitbucket"],
-      AUTH_URL: "https://auth.example.com",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "saas",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github", "gitlab", "bitbucket"],
+      auth_url: "https://auth.example.com",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
 
@@ -151,18 +167,18 @@ describe("LoginPage", () => {
     });
 
     it("should only display configured providers", async () => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test-client-id",
-        POSTHOG_CLIENT_KEY: "test-posthog-key",
-        PROVIDERS_CONFIGURED: ["github"],
-        AUTH_URL: "https://auth.example.com",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "saas",
+        posthog_client_key: "test-posthog-key",
+        providers_configured: ["github"],
+        auth_url: "https://auth.example.com",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 
@@ -187,18 +203,18 @@ describe("LoginPage", () => {
     });
 
     it("should display message when no providers are configured", async () => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test-client-id",
-        POSTHOG_CLIENT_KEY: "test-posthog-key",
-        PROVIDERS_CONFIGURED: [],
-        AUTH_URL: "https://auth.example.com",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "saas",
+        posthog_client_key: "test-posthog-key",
+        providers_configured: [],
+        auth_url: "https://auth.example.com",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 
@@ -234,7 +250,8 @@ describe("LoginPage", () => {
       });
       await user.click(githubButton);
 
-      expect(window.location.href).toBe(mockUrl);
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain(mockUrl);
     });
 
     it("should redirect to GitLab auth URL when GitLab button is clicked", async () => {
@@ -255,7 +272,8 @@ describe("LoginPage", () => {
       });
       await user.click(gitlabButton);
 
-      expect(window.location.href).toBe("https://gitlab.com/oauth/authorize");
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain("https://gitlab.com/oauth/authorize");
     });
 
     it("should redirect to Bitbucket auth URL when Bitbucket button is clicked", async () => {
@@ -282,7 +300,8 @@ describe("LoginPage", () => {
       });
       await user.click(bitbucketButton);
 
-      expect(window.location.href).toBe(
+      // URL includes state parameter added by handleAuthRedirect
+      expect(window.location.href).toContain(
         "https://bitbucket.org/site/oauth2/authorize",
       );
     });
@@ -320,16 +339,16 @@ describe("LoginPage", () => {
     });
 
     it("should redirect OSS mode users to home", async () => {
+      // @ts-expect-error - partial mock for testing
       vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        APP_MODE: "oss",
-        GITHUB_CLIENT_ID: "test-client-id",
-        POSTHOG_CLIENT_KEY: "test-posthog-key",
-        FEATURE_FLAGS: {
-          ENABLE_BILLING: false,
-          HIDE_LLM_SETTINGS: false,
-          ENABLE_JIRA: false,
-          ENABLE_JIRA_DC: false,
-          ENABLE_LINEAR: false,
+        app_mode: "oss",
+        posthog_client_key: "test-posthog-key",
+        feature_flags: {
+          enable_billing: false,
+          hide_llm_settings: false,
+          enable_jira: false,
+          enable_jira_dc: false,
+          enable_linear: false,
         },
       });
 
@@ -476,6 +495,139 @@ describe("LoginPage", () => {
         expect(
           screen.getByTestId("terms-and-privacy-notice"),
         ).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("Invitation Flow", () => {
+    it("should display invitation pending message when hasInvitation is true", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("AUTH$INVITATION_PENDING")).toBeInTheDocument();
+      });
+    });
+
+    it("should not display invitation pending message when hasInvitation is false", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: null,
+        hasInvitation: false,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("login-content")).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByText("AUTH$INVITATION_PENDING"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should pass buildOAuthStateData to LoginContent for OAuth state encoding", async () => {
+      const user = userEvent.setup();
+      const mockBuildOAuthStateData = vi.fn((baseState: Record<string, string>) => ({
+        ...baseState,
+        invitation_token: "inv-test-token-12345",
+      }));
+
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: mockBuildOAuthStateData,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+      });
+
+      const githubButton = screen.getByRole("button", {
+        name: "GITHUB$CONNECT_TO_GITHUB",
+      });
+      await user.click(githubButton);
+
+      // buildOAuthStateData should have been called during the OAuth redirect
+      expect(mockBuildOAuthStateData).toHaveBeenCalled();
+    });
+
+    it("should include invitation token in OAuth state when invitation is present", async () => {
+      const user = userEvent.setup();
+      const mockBuildOAuthStateData = vi.fn((baseState: Record<string, string>) => ({
+        ...baseState,
+        invitation_token: "inv-test-token-12345",
+      }));
+
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-test-token-12345",
+        hasInvitation: true,
+        buildOAuthStateData: mockBuildOAuthStateData,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "GITHUB$CONNECT_TO_GITHUB" }),
+        ).toBeInTheDocument();
+      });
+
+      const githubButton = screen.getByRole("button", {
+        name: "GITHUB$CONNECT_TO_GITHUB",
+      });
+      await user.click(githubButton);
+
+      // Verify the redirect URL contains the state with invitation token
+      await waitFor(() => {
+        expect(window.location.href).toContain("state=");
+      });
+
+      // Decode and verify the state contains invitation_token
+      const url = new URL(window.location.href);
+      const state = url.searchParams.get("state");
+      if (state) {
+        const decodedState = JSON.parse(atob(state));
+        expect(decodedState.invitation_token).toBe("inv-test-token-12345");
+      }
+    });
+
+    it("should handle login with invitation_token URL parameter", async () => {
+      useInvitationMock.mockReturnValue({
+        invitationToken: "inv-url-token-67890",
+        hasInvitation: true,
+        buildOAuthStateData: buildOAuthStateDataMock,
+        clearInvitation: vi.fn(),
+      });
+
+      render(<RouterStub initialEntries={["/login?invitation_token=inv-url-token-67890"]} />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("AUTH$INVITATION_PENDING")).toBeInTheDocument();
       });
     });
   });

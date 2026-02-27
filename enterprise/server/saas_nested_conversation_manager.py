@@ -1139,6 +1139,71 @@ class SaasNestedConversationManager(ConversationManager):
         }
         update_conversation_metadata(conversation_id, metadata_content)
 
+    async def list_files(self, sid: str, path: str | None = None) -> list[str]:
+        """List files in the workspace for a conversation.
+
+        Delegates to the nested container's list-files endpoint.
+
+        Args:
+            sid: The session/conversation ID.
+            path: Optional path to list files from. If None, lists from workspace root.
+
+        Returns:
+            A list of file paths.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None or runtime.get('status') != 'running':
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        session_api_key = runtime.get('session_api_key')
+
+        return await self._fetch_list_files_from_nested(
+            sid, nested_url, session_api_key, path
+        )
+
+    async def select_file(self, sid: str, file: str) -> tuple[str | None, str | None]:
+        """Read a file from the workspace via nested container.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None or runtime.get('status') != 'running':
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        session_api_key = runtime.get('session_api_key')
+
+        return await self._fetch_select_file_from_nested(
+            sid, nested_url, session_api_key, file
+        )
+
+    async def upload_files(
+        self, sid: str, files: list[tuple[str, bytes]]
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        """Upload files to the workspace via nested container.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None or runtime.get('status') != 'running':
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        session_api_key = runtime.get('session_api_key')
+
+        return await self._fetch_upload_files_to_nested(
+            sid, nested_url, session_api_key, files
+        )
+
 
 def _last_updated_at_key(conversation: ConversationMetadata) -> float:
     last_updated_at = conversation.last_updated_at

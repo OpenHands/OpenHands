@@ -10,7 +10,6 @@ import httpx
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import (
-    DEFAULT_INITIAL_BUDGET,
     LITE_LLM_API_KEY,
     LITE_LLM_API_URL,
     LITE_LLM_TEAM_ID,
@@ -24,15 +23,53 @@ from storage.user_settings import UserSettings
 from openhands.server.settings import Settings
 from openhands.utils.http_session import httpx_verify_option
 
-# Timeout in seconds for BYOR key verification requests to LiteLLM
-BYOR_KEY_VERIFICATION_TIMEOUT = 5.0
+# Timeout in seconds for key verification requests to LiteLLM
+KEY_VERIFICATION_TIMEOUT = 5.0
 
 # A very large number to represent "unlimited" until LiteLLM fixes their unlimited update bug.
 UNLIMITED_BUDGET_SETTING = 1000000000.0
 
 
+def get_openhands_cloud_key_alias(keycloak_user_id: str, org_id: str) -> str:
+    """Generate the key alias for OpenHands Cloud managed keys."""
+    return f'OpenHands Cloud - user {keycloak_user_id} - org {org_id}'
+
+
+def get_byor_key_alias(keycloak_user_id: str, org_id: str) -> str:
+    """Generate the key alias for BYOR (Bring Your Own Runtime) keys."""
+    return f'BYOR Key - user {keycloak_user_id}, org {org_id}'
+
+
 class LiteLlmManager:
     """Manage LiteLLM interactions."""
+
+    @staticmethod
+    def get_budget_from_team_info(
+        user_team_info: dict | None, user_id: str, org_id: str
+    ) -> tuple[float, float]:
+        """Extract max_budget and spend from user team info.
+
+        For personal orgs (user_id == org_id), uses litellm_budget_table.max_budget.
+        For team orgs, uses max_budget_in_team (populated by get_user_team_info).
+
+        Args:
+            user_team_info: The response from get_user_team_info
+            user_id: The user's ID
+            org_id: The organization's ID
+
+        Returns:
+            Tuple of (max_budget, spend)
+        """
+        if not user_team_info:
+            return 0, 0
+        spend = user_team_info.get('spend', 0)
+        if user_id == org_id:
+            max_budget = (user_team_info.get('litellm_budget_table') or {}).get(
+                'max_budget', 0
+            )
+        else:
+            max_budget = user_team_info.get('max_budget_in_team') or 0
+        return max_budget, spend
 
     @staticmethod
     async def create_entries(
@@ -62,8 +99,33 @@ class LiteLlmManager:
                     'x-goog-api-key': LITE_LLM_API_KEY,
                 }
             ) as client:
+                # Check if team already exists and get its budget
+                # New users joining existing orgs should inherit the team's budget
+                team_budget = 0.0
+                try:
+                    existing_team = await LiteLlmManager._get_team(client, org_id)
+                    if existing_team:
+                        team_info = existing_team.get('team_info', {})
+                        team_budget = team_info.get('max_budget', 0.0) or 0.0
+                        logger.info(
+                            'LiteLlmManager:create_entries:existing_team_budget',
+                            extra={
+                                'org_id': org_id,
+                                'user_id': keycloak_user_id,
+                                'team_budget': team_budget,
+                            },
+                        )
+                except httpx.HTTPStatusError as e:
+                    # Team doesn't exist yet (404) - this is expected for first user
+                    if e.response.status_code != 404:
+                        raise
+                    logger.info(
+                        'LiteLlmManager:create_entries:no_existing_team',
+                        extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                    )
+
                 await LiteLlmManager._create_team(
-                    client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
+                    client, keycloak_user_id, org_id, team_budget
                 )
 
                 if create_user:
@@ -72,14 +134,14 @@ class LiteLlmManager:
                     )
 
                 await LiteLlmManager._add_user_to_team(
-                    client, keycloak_user_id, org_id, DEFAULT_INITIAL_BUDGET
+                    client, keycloak_user_id, org_id, team_budget
                 )
 
                 key = await LiteLlmManager._generate_key(
                     client,
                     keycloak_user_id,
                     org_id,
-                    f'OpenHands Cloud - user {keycloak_user_id} - org {org_id}',
+                    get_openhands_cloud_key_alias(keycloak_user_id, org_id),
                     None,
                 )
 
@@ -115,8 +177,24 @@ class LiteLlmManager:
                 if not user_json:
                     return None
                 user_info = user_json['user_info']
-                max_budget = user_info.get('max_budget', 0.0)
-                spend = user_info.get('spend', 0.0)
+
+                # Log original user values before any modifications for debugging
+                original_max_budget = user_info.get('max_budget')
+                original_spend = user_info.get('spend')
+                logger.info(
+                    'LiteLlmManager:migrate_lite_llm_entries:original_user_values',
+                    extra={
+                        'org_id': org_id,
+                        'user_id': keycloak_user_id,
+                        'original_max_budget': original_max_budget,
+                        'original_spend': original_spend,
+                    },
+                )
+
+                max_budget = (
+                    original_max_budget if original_max_budget is not None else 0.0
+                )
+                spend = original_spend if original_spend is not None else 0.0
                 # In upgrade to V4, we no longer use billing margin, but instead apply this directly
                 # in litellm. The default billing marign was 2 before this (hence the magic numbers below)
                 if (
@@ -137,10 +215,36 @@ class LiteLlmManager:
                     max_budget *= billing_margin
                     spend *= billing_margin
 
-                if not max_budget:
-                    # if max_budget is None, then we've already migrated the User
+                # Check if max_budget is None (not 0.0) or set to unlimited to determine if already migrated
+                # A user with max_budget=0.0 is different from max_budget=None
+                if (
+                    original_max_budget is None
+                    or original_max_budget == UNLIMITED_BUDGET_SETTING
+                ):
+                    # if max_budget is None or UNLIMITED, then we've already migrated the User
+                    logger.info(
+                        'LiteLlmManager:migrate_lite_llm_entries:already_migrated',
+                        extra={
+                            'org_id': org_id,
+                            'user_id': keycloak_user_id,
+                            'original_max_budget': original_max_budget,
+                        },
+                    )
                     return None
                 credits = max(max_budget - spend, 0.0)
+
+                # Log calculated migration values before performing updates
+                logger.info(
+                    'LiteLlmManager:migrate_lite_llm_entries:calculated_values',
+                    extra={
+                        'org_id': org_id,
+                        'user_id': keycloak_user_id,
+                        'adjusted_max_budget': max_budget,
+                        'adjusted_spend': spend,
+                        'calculated_credits': credits,
+                        'new_user_max_budget': UNLIMITED_BUDGET_SETTING,
+                    },
+                )
 
                 logger.debug(
                     'LiteLlmManager:migrate_lite_llm_entries:create_team',
@@ -209,7 +313,7 @@ class LiteLlmManager:
                             client,
                             keycloak_user_id,
                             org_id,
-                            f'OpenHands Cloud - user {keycloak_user_id} - org {org_id}',
+                            get_openhands_cloud_key_alias(keycloak_user_id, org_id),
                             None,
                         )
                         if new_key:
@@ -842,20 +946,30 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
-        team_info = await LiteLlmManager._get_team(client, team_id)
-        if not team_info:
+        team_response = await LiteLlmManager._get_team(client, team_id)
+        if not team_response:
             return None
 
         # Filter team_memberships based on team_id and keycloak_user_id
         user_membership = next(
             (
                 membership
-                for membership in team_info.get('team_memberships', [])
+                for membership in team_response.get('team_memberships', [])
                 if membership.get('user_id') == keycloak_user_id
                 and membership.get('team_id') == team_id
             ),
             None,
         )
+
+        if not user_membership:
+            return None
+
+        # For team orgs (user_id != team_id), include team-level budget info
+        # The team's max_budget and spend are shared across all members
+        if keycloak_user_id != team_id:
+            team_info = team_response.get('team_info', {})
+            user_membership['max_budget_in_team'] = team_info.get('max_budget')
+            user_membership['spend'] = team_info.get('spend', 0)
 
         return user_membership
 
@@ -1002,7 +1116,7 @@ class LiteLlmManager:
         try:
             async with httpx.AsyncClient(
                 verify=httpx_verify_option(),
-                timeout=BYOR_KEY_VERIFICATION_TIMEOUT,
+                timeout=KEY_VERIFICATION_TIMEOUT,
             ) as client:
                 # Make a lightweight request to verify the key
                 # Using /v1/models endpoint as it's lightweight and requires authentication
@@ -1016,7 +1130,7 @@ class LiteLlmManager:
                 # Only 200 status code indicates valid key
                 if response.status_code == 200:
                     logger.debug(
-                        'BYOR key verification successful',
+                        'Key verification successful',
                         extra={'user_id': user_id},
                     )
                     return True
@@ -1024,7 +1138,7 @@ class LiteLlmManager:
                 # All other status codes (401, 403, 500, etc.) are treated as invalid
                 # This includes authentication errors and server errors
                 logger.warning(
-                    'BYOR key verification failed - treating as invalid',
+                    'Key verification failed - treating as invalid',
                     extra={
                         'user_id': user_id,
                         'status_code': response.status_code,
@@ -1037,7 +1151,7 @@ class LiteLlmManager:
             # Any exception (timeout, network error, etc.) means we can't verify
             # Return False to trigger regeneration rather than returning potentially invalid key
             logger.warning(
-                'BYOR key verification error - treating as invalid to ensure key validity',
+                'Key verification error - treating as invalid to ensure key validity',
                 extra={
                     'user_id': user_id,
                     'error': str(e),
@@ -1080,6 +1194,103 @@ class LiteLlmManager:
             'key_max_budget': key_info.get('max_budget'),
             'key_spend': key_info.get('spend'),
         }
+
+    @staticmethod
+    async def _get_all_keys_for_user(
+        client: httpx.AsyncClient,
+        keycloak_user_id: str,
+    ) -> list[dict]:
+        """Get all keys for a user from LiteLLM.
+
+        Returns a list of key info dictionaries containing:
+        - token: the key value (hashed or partial)
+        - key_alias: the alias for the key
+        - key_name: the name of the key
+        - spend: the amount spent on this key
+        - max_budget: the max budget for this key
+        - team_id: the team the key belongs to
+        - metadata: any metadata associated with the key
+
+        Returns an empty list if no keys found or on error.
+        """
+        if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
+            logger.warning('LiteLLM API configuration not found')
+            return []
+
+        try:
+            response = await client.get(
+                f'{LITE_LLM_API_URL}/user/info?user_id={keycloak_user_id}',
+                headers={'x-goog-api-key': LITE_LLM_API_KEY},
+            )
+            response.raise_for_status()
+            user_json = response.json()
+            # The user/info endpoint returns keys in the 'keys' field
+            return user_json.get('keys', [])
+        except Exception as e:
+            logger.warning(
+                'LiteLlmManager:_get_all_keys_for_user:error',
+                extra={
+                    'user_id': keycloak_user_id,
+                    'error': str(e),
+                },
+            )
+            return []
+
+    @staticmethod
+    async def _verify_existing_key(
+        client: httpx.AsyncClient,
+        key_value: str,
+        keycloak_user_id: str,
+        org_id: str,
+        openhands_type: bool = False,
+    ) -> bool:
+        """Check if an existing key exists for the user/org in LiteLLM.
+
+        Verifies the provided key_value matches a key registered in LiteLLM for
+        the given user and organization. For openhands_type=True, looks for keys
+        with metadata type='openhands' and matching team_id. For openhands_type=False,
+        looks for keys with matching alias and team_id.
+
+        Returns True if the key is found and valid, False otherwise.
+        """
+        found = False
+        keys = await LiteLlmManager._get_all_keys_for_user(client, keycloak_user_id)
+        for key_info in keys:
+            metadata = key_info.get('metadata') or {}
+            team_id = key_info.get('team_id')
+            key_alias = key_info.get('key_alias')
+            token = None
+            if (
+                openhands_type
+                and metadata.get('type') == 'openhands'
+                and team_id == org_id
+            ):
+                # Found an existing OpenHands key for this org
+                key_name = key_info.get('key_name')
+                token = key_name[-4:] if key_name else None  # last 4 digits of key
+                if token and key_value.endswith(
+                    token
+                ):  # check if this is our current key
+                    found = True
+                    break
+            if (
+                not openhands_type
+                and team_id == org_id
+                and (
+                    key_alias == get_openhands_cloud_key_alias(keycloak_user_id, org_id)
+                    or key_alias == get_byor_key_alias(keycloak_user_id, org_id)
+                )
+            ):
+                # Found an existing key for this org (regardless of type)
+                key_name = key_info.get('key_name')
+                token = key_name[-4:] if key_name else None  # last 4 digits of key
+                if token and key_value.endswith(
+                    token
+                ):  # check if this is our current key
+                    found = True
+                    break
+
+        return found
 
     @staticmethod
     async def _delete_key_by_alias(
@@ -1178,6 +1389,8 @@ class LiteLlmManager:
     update_user_in_team = staticmethod(with_http_client(_update_user_in_team))
     generate_key = staticmethod(with_http_client(_generate_key))
     get_key_info = staticmethod(with_http_client(_get_key_info))
+    verify_existing_key = staticmethod(with_http_client(_verify_existing_key))
     delete_key = staticmethod(with_http_client(_delete_key))
     get_user_keys = staticmethod(with_http_client(_get_user_keys))
+    delete_key_by_alias = staticmethod(with_http_client(_delete_key_by_alias))
     update_user_keys = staticmethod(with_http_client(_update_user_keys))

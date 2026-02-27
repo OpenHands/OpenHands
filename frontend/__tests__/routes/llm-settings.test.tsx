@@ -337,9 +337,9 @@ describe("Content", () => {
   describe("API key visibility in Basic Settings", () => {
     it("should hide API key input when SaaS mode is enabled and OpenHands provider is selected", async () => {
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
+      // @ts-expect-error - only return app_mode for these tests
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
+        app_mode: "saas",
       });
 
       renderLlmSettingsScreen();
@@ -364,9 +364,9 @@ describe("Content", () => {
 
     it("should show API key input when SaaS mode is enabled and non-OpenHands provider is selected", async () => {
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
+      // @ts-expect-error - only return app_mode for these tests
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
+        app_mode: "saas",
       });
 
       renderLlmSettingsScreen();
@@ -395,9 +395,9 @@ describe("Content", () => {
 
     it("should show API key input when OSS mode is enabled and OpenHands provider is selected", async () => {
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
+      // @ts-expect-error - only return app_mode for these tests
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "oss",
+        app_mode: "oss",
       });
 
       renderLlmSettingsScreen();
@@ -422,9 +422,9 @@ describe("Content", () => {
 
     it("should show API key input when OSS mode is enabled and non-OpenHands provider is selected", async () => {
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
+      // @ts-expect-error - only return app_mode for these tests
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "oss",
+        app_mode: "oss",
       });
 
       renderLlmSettingsScreen();
@@ -453,9 +453,9 @@ describe("Content", () => {
 
     it("should hide API key input when switching from non-OpenHands to OpenHands provider in SaaS mode", async () => {
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
+      // @ts-expect-error - only return app_mode for these tests
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
+        app_mode: "saas",
       });
 
       renderLlmSettingsScreen();
@@ -498,9 +498,9 @@ describe("Content", () => {
 
     it("should show API key input when switching from OpenHands to non-OpenHands provider in SaaS mode", async () => {
       const getConfigSpy = vi.spyOn(OptionService, "getConfig");
-      // @ts-expect-error - only return APP_MODE for these tests
+      // @ts-expect-error - only return app_mode for these tests
       getConfigSpy.mockResolvedValue({
-        APP_MODE: "saas",
+        app_mode: "saas",
       });
 
       renderLlmSettingsScreen();
@@ -1014,16 +1014,16 @@ describe("View persistence after saving advanced settings", () => {
   it("should remain on Advanced view after saving when search API key is set", async () => {
     // Arrange: Start with default settings (non-SaaS mode to show search API key field)
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
+    // @ts-expect-error - partial mock for testing
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "oss",
-      GITHUB_CLIENT_ID: "fake-github-client-id",
-      POSTHOG_CLIENT_KEY: "fake-posthog-client-key",
-      FEATURE_FLAGS: {
-        ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: false,
-        ENABLE_JIRA: false,
-        ENABLE_JIRA_DC: false,
-        ENABLE_LINEAR: false,
+      app_mode: "oss",
+      posthog_client_key: "fake-posthog-client-key",
+      feature_flags: {
+        enable_billing: false,
+        hide_llm_settings: false,
+        enable_jira: false,
+        enable_jira_dc: false,
+        enable_linear: false,
       },
     });
 
