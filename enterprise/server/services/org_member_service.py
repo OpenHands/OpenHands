@@ -390,8 +390,7 @@ class OrgMemberService:
             # Admins cannot modify owners
             if is_target_owner:
                 return False
-            # Admins can modify members and other admins
-            # Admins can only set admin or member roles (not owner)
+            # Admins can only set admin or user roles (not owner)
             return not is_new_role_owner
         return False
 

@@ -1985,12 +1985,6 @@ class TestOrgMemberServiceCanUpdateMemberRole:
     def test_admin_cannot_modify_owner(self):
         """Admin cannot modify owner targets."""
         assert (
-            OrgMemberService._can_update_member_role('admin', 'admin', 'admin') is True
-        )
-
-    def test_admin_cannot_modify_owner(self):
-        """Admin cannot modify owner targets."""
-        assert (
             OrgMemberService._can_update_member_role('admin', 'owner', 'admin') is False
         )
 
