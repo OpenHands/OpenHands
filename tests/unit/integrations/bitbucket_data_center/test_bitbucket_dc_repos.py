@@ -15,8 +15,8 @@ def make_service():
     return BitbucketDCService(token=SecretStr('tok'), base_domain='host.example.com')
 
 
-def _repo_dict(key='PROJ', slug='myrepo'):
-    return {'id': 1, 'slug': slug, 'project': {'key': key}, 'public': False}
+def _repo_dict(key='PROJ', slug='myrepo', name='My Repository'):
+    return {'id': 1, 'slug': slug, 'name': name, 'project': {'key': key}, 'public': False}
 
 
 # ── search_repositories URL parsing ──────────────────────────────────────────
@@ -105,20 +105,82 @@ async def test_search_repositories_slash_query():
     svc = make_service()
     query = 'PROJ/myrepo'
 
-    mock_repo = _repo_dict('PROJ', 'myrepo')
-    # _parse_repository is async and makes an extra call for default branch
+    mock_repo = _repo_dict('PROJ', slug='myrepo', name='My Repository')
+    mock_default_branch = {'displayId': 'main'}
 
     with patch.object(
         svc,
-        'get_paginated_repos',
-        new=AsyncMock(return_value=[await _make_parsed_repo(svc, mock_repo)]),
-    ) as mock_paged:
-        repos = await svc.search_repositories(
-            query, 25, 'name', 'asc', False, AppMode.SAAS
-        )
+        '_fetch_paginated_data',
+        new=AsyncMock(return_value=[mock_repo]),
+    ) as mock_fetch:
+        with patch.object(
+            svc,
+            '_make_request',
+            new=AsyncMock(return_value=(mock_default_branch, {})),
+        ):
+            repos = await svc.search_repositories(
+                query, 25, 'name', 'asc', False, AppMode.SAAS
+            )
 
-    mock_paged.assert_called_once_with(1, 25, 'name', 'PROJ', 'myrepo')
+    mock_fetch.assert_called_once_with(
+        'https://host.example.com/rest/api/1.0/projects/PROJ/repos',
+        {'limit': 25},
+        1000,
+    )
     assert len(repos) == 1
+    assert repos[0].full_name == 'PROJ/myrepo'
+
+
+@pytest.mark.asyncio
+async def test_search_repositories_slash_query_filters_by_name():
+    """Filter matches the human-readable name when slug doesn't match."""
+    svc = make_service()
+    matching = _repo_dict('PROJ', slug='proj-alpha', name='My Repository')
+    non_matching = _repo_dict('PROJ', slug='proj-beta', name='Other Repo')
+    mock_default_branch = {'displayId': 'main'}
+
+    with patch.object(
+        svc,
+        '_fetch_paginated_data',
+        new=AsyncMock(return_value=[matching, non_matching]),
+    ):
+        with patch.object(
+            svc,
+            '_make_request',
+            new=AsyncMock(return_value=(mock_default_branch, {})),
+        ):
+            repos = await svc.search_repositories(
+                'PROJ/my repository', 25, 'name', 'asc', False, AppMode.SAAS
+            )
+
+    assert len(repos) == 1
+    assert repos[0].full_name == 'PROJ/proj-alpha'
+
+
+@pytest.mark.asyncio
+async def test_search_repositories_slash_query_filters_by_slug():
+    """Filter matches the slug when the human-readable name doesn't match."""
+    svc = make_service()
+    matching = _repo_dict('PROJ', slug='my-repo', name='My Repository')
+    non_matching = _repo_dict('PROJ', slug='other-repo', name='Other Repository')
+    mock_default_branch = {'displayId': 'main'}
+
+    with patch.object(
+        svc,
+        '_fetch_paginated_data',
+        new=AsyncMock(return_value=[matching, non_matching]),
+    ):
+        with patch.object(
+            svc,
+            '_make_request',
+            new=AsyncMock(return_value=(mock_default_branch, {})),
+        ):
+            repos = await svc.search_repositories(
+                'PROJ/my-repo', 25, 'name', 'asc', False, AppMode.SAAS
+            )
+
+    assert len(repos) == 1
+    assert repos[0].full_name == 'PROJ/my-repo'
 
 
 # ── get_paginated_repos ───────────────────────────────────────────────────────
@@ -184,6 +246,56 @@ async def test_get_paginated_repos_last_page():
 
     assert len(repos) == 1
     assert repos[0].link_header == ''
+
+
+@pytest.mark.asyncio
+async def test_get_paginated_repos_filters_by_slug():
+    """Query matches slug when name doesn't contain the search term."""
+    svc = make_service()
+    mock_response = {
+        'values': [
+            _repo_dict('PROJ', slug='my-repo', name='My Repository'),
+            _repo_dict('PROJ', slug='other-repo', name='Other Repository'),
+        ],
+        'isLastPage': True,
+    }
+    mock_default_branch = {'displayId': 'main'}
+
+    with patch.object(
+        svc,
+        '_make_request',
+        side_effect=[(mock_response, {}), (mock_default_branch, {})],
+    ):
+        repos = await svc.get_paginated_repos(1, 25, 'name', 'PROJ', query='my-repo')
+
+    assert len(repos) == 1
+    assert repos[0].full_name == 'PROJ/my-repo'
+
+
+@pytest.mark.asyncio
+async def test_get_paginated_repos_filters_by_name():
+    """Query matches human-readable name when slug doesn't contain the search term."""
+    svc = make_service()
+    mock_response = {
+        'values': [
+            _repo_dict('PROJ', slug='proj-alpha', name='My Repository'),
+            _repo_dict('PROJ', slug='proj-beta', name='Other Repository'),
+        ],
+        'isLastPage': True,
+    }
+    mock_default_branch = {'displayId': 'main'}
+
+    with patch.object(
+        svc,
+        '_make_request',
+        side_effect=[(mock_response, {}), (mock_default_branch, {})],
+    ):
+        repos = await svc.get_paginated_repos(
+            1, 25, 'name', 'PROJ', query='my repository'
+        )
+
+    assert len(repos) == 1
+    assert repos[0].full_name == 'PROJ/proj-alpha'
 
 
 # ── get_all_repositories ──────────────────────────────────────────────────────

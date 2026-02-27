@@ -17,7 +17,7 @@ class BitbucketDCFeaturesMixin(BitbucketDCMixinBase):
         """Fetch individual file content from Bitbucket data center repository.
 
         Args:
-            repository: Repository name in format 'workspace/repo_slug'
+            repository: Repository name in format 'project/repo_slug'
             file_path: Path to the file within the repository
 
         Returns:

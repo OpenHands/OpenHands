@@ -2,6 +2,8 @@ import base64
 from typing import Any
 
 import httpx
+
+from openhands.core.logger import openhands_logger as logger
 from pydantic import SecretStr
 
 from openhands.integrations.protocols.http_client import HTTPClient
@@ -45,7 +47,7 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         """Extract owner and repo from repository string.
 
         Args:
-            repository: Repository name in format 'workspace/repo_slug'
+            repository: Repository name in format 'project/repo_slug'
 
         Returns:
             Tuple of (owner, repo)
@@ -64,7 +66,7 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         return self.token
 
     def _has_token_expired(self, status_code: int) -> bool:
-        return status_code == 401
+        return False  # DC tokens cannot be refreshed programmatically
 
     async def _get_headers(self) -> dict[str, str]:
         """Get headers for Bitbucket data center API requests."""
@@ -245,8 +247,8 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
             )
             default_branch_data, _ = await self._make_request(default_branch_url)
             main_branch = default_branch_data.get('displayId') or None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f'Could not fetch default branch for {full_name}: {e}')
 
         return Repository(
             id=str(repo.get('id', '')),
@@ -266,7 +268,7 @@ class BitbucketDCMixinBase(BaseGitService, HTTPClient):
         """Get repository details from repository name.
 
         Args:
-            repository: Repository name in format 'workspace/repo_slug'
+            repository: Repository name in format 'project/repo_slug'
 
         Returns:
             Repository object with details

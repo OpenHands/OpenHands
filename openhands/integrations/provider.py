@@ -752,8 +752,13 @@ class ProviderHandler:
                     scm_path = f'scm/{project.lower()}/{repo_slug}.git'
                     # Percent-encode each credential part so special characters
                     # (e.g. @, #, /) don't break the URL.
-                    dc_user, dc_pass = token_value.split(':', 1)
-                    url_creds = f'{quote(dc_user, safe="")}:{quote(dc_pass, safe="")}'
+                    if ':' in token_value:
+                        dc_user, dc_pass = token_value.split(':', 1)
+                        url_creds = (
+                            f'{quote(dc_user, safe="")}:{quote(dc_pass, safe="")}'
+                        )
+                    else:
+                        url_creds = f'x-token-auth:{quote(token_value, safe="")}'
                     remote_url = f'{protocol}://{url_creds}@{domain}/{scm_path}'
                 elif provider == ProviderType.AZURE_DEVOPS:
                     # Azure DevOps uses PAT with Basic auth

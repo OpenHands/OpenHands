@@ -1,5 +1,6 @@
 import base64
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -100,11 +101,13 @@ class BitbucketDCIssueHandler(IssueHandlerInterface):
 
     def get_authorize_url(self) -> str:
         if ':' in self.token:
-            return f'https://{self.token}@{self.base_domain}/'
+            user, _, token = self.token.partition(':')
+            creds = f'{quote(user, safe="")}:{quote(token, safe="")}'
         elif self.username:
-            return f'https://{self.username}:{self.token}@{self.base_domain}/'
+            creds = f'{quote(self.username, safe="")}:{quote(self.token, safe="")}'
         else:
-            return f'https://{self.token}@{self.base_domain}/'
+            creds = quote(self.token, safe='')
+        return f'https://{creds}@{self.base_domain}/'
 
     def get_graphql_url(self) -> str:
         # DC has no GraphQL API; return a placeholder
@@ -159,32 +162,13 @@ class BitbucketDCIssueHandler(IssueHandlerInterface):
         Returns:
             The URL of the created pull request
         """
-        url = f'{self._get_repo_api_base()}/pull-requests'
-        payload = {
+        result = self.create_pull_request({
             'title': title,
             'description': body,
-            'fromRef': {
-                'id': f'refs/heads/{head}',
-                'repository': {
-                    'slug': self.repo,
-                    'project': {'key': self.owner},
-                },
-            },
-            'toRef': {
-                'id': f'refs/heads/{base}',
-                'repository': {
-                    'slug': self.repo,
-                    'project': {'key': self.owner},
-                },
-            },
-        }
-        response = httpx.post(
-            url, headers=self.headers, json=payload, verify=httpx_verify_option()
-        )
-        response.raise_for_status()
-        data = response.json()
-        links = data.get('links', {}).get('self', [])
-        return links[0].get('href', '') if links else ''
+            'source_branch': head,
+            'target_branch': base,
+        })
+        return result.get('html_url', '')
 
     def create_pull_request(self, data: dict[str, Any] | None = None) -> dict[str, Any]:
         """Create a pull request and return html_url and number.

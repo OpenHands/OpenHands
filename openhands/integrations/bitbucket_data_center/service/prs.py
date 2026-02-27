@@ -24,7 +24,7 @@ class BitbucketDCPRsMixin(BitbucketDCMixinBase):
         """Creates a pull request in Bitbucket data center.
 
         Args:
-            repo_name: The repository name in the format "workspace/repo"
+            repo_name: The repository name in the format "project/repo"
             source_branch: The source branch name
             target_branch: The target branch name
             title: The title of the pull request
@@ -114,7 +114,6 @@ class BitbucketDCPRsMixin(BitbucketDCMixinBase):
             pr_details = await self.get_pr_details(repository, pr_number)
 
             # Bitbucket data center API response structure
-            # https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-pull-request-id-get
             if 'state' in pr_details:
                 # Bitbucket data center state values: OPEN, MERGED, DECLINED, SUPERSEDED
                 return pr_details['state'] == 'OPEN'

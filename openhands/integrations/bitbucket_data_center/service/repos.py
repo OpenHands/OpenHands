@@ -65,25 +65,21 @@ class BitbucketDCReposMixin(BitbucketDCMixinBase):
 
             return repositories
 
-        # Search for repos once workspace prefix exists
+        MAX_REPOS = 1000
+        # Search for repos once project prefix exists
         if '/' in query:
-            workspace_slug, repo_query = query.split('/', 1)
-            # Fetch all pages of results for this workspace/project
-            all_repos = []
-            page = 1
-            while True:
-                repos = await self.get_paginated_repos(
-                    page, per_page, sort, workspace_slug, repo_query
-                )
-                if not repos:
-                    break
-                all_repos.extend(repos)
-                # Check if there are more pages by looking at link_header
-                if repos and repos[0].link_header:
-                    page += 1
-                else:
-                    break
-            return all_repos
+            project_slug, repo_query = query.split('/', 1)
+            project_repos_url = f'{self.BASE_URL}/projects/{project_slug}/repos'
+            raw_repos = await self._fetch_paginated_data(
+                project_repos_url, {'limit': per_page}, MAX_REPOS
+            )
+            if repo_query:
+                raw_repos = [
+                    r for r in raw_repos
+                    if repo_query.lower() in r.get('slug', '').lower()
+                    or repo_query.lower() in r.get('name', '').lower()
+                ]
+            return [await self._parse_repository(repo) for repo in raw_repos]
 
         # No '/' in query, search across all projects
         all_projects = await self.get_installations()
@@ -97,8 +93,8 @@ class BitbucketDCReposMixin(BitbucketDCMixinBase):
                 continue
         return repositories
 
-    async def _get_user_workspaces(self) -> list[dict[str, Any]]:
-        """Get all workspaces the user has access to"""
+    async def _get_user_projects(self) -> list[dict[str, Any]]:
+        """Get all projects the user has access to"""
         projects_url = f'{self.BASE_URL}/projects'
         projects = await self._fetch_paginated_data(projects_url, {}, 100)
         return projects
@@ -128,13 +124,13 @@ class BitbucketDCReposMixin(BitbucketDCMixinBase):
         installation_id: str | None,
         query: str | None = None,
     ) -> list[Repository]:
-        """Get paginated repositories for a specific workspace.
+        """Get paginated repositories for a specific project.
 
         Args:
             page: The page number to fetch
             per_page: The number of repositories per page
             sort: The sort field ('pushed', 'updated', 'created', 'full_name')
-            installation_id: The workspace slug to fetch repositories from (as int, will be converted to string)
+            installation_id: The project slug to fetch repositories from (as int, will be converted to string)
 
         Returns:
             A list of Repository objects
@@ -142,25 +138,27 @@ class BitbucketDCReposMixin(BitbucketDCMixinBase):
         if not installation_id:
             return []
 
-        # Convert installation_id to string for use as workspace_slug
-        workspace_slug = installation_id
+        # Convert installation_id to string for use as project_slug
+        project_slug = installation_id
 
-        workspace_repos_url = f'{self.BASE_URL}/projects/{workspace_slug}/repos'
+        project_repos_url = f'{self.BASE_URL}/projects/{project_slug}/repos'
         # Calculate start offset from page number (Bitbucket Server uses 0-based start index)
         start = (page - 1) * per_page
         params: dict[str, Any] = {'limit': per_page, 'start': start}
-        response, _ = await self._make_request(workspace_repos_url, params)
+        response, _ = await self._make_request(project_repos_url, params)
         repos = response.get('values', [])
         if query:
             repos = [
-                repo for repo in repos if query.lower() in repo.get('name', '').lower()
+                repo for repo in repos
+                if query.lower() in repo.get('slug', '').lower()
+                or query.lower() in repo.get('name', '').lower()
             ]
         formatted_link_header = ''
         if not response.get('isLastPage', True):
             next_page = page + 1
             # Use 'page=' format for frontend compatibility with extractNextPageFromLink
             formatted_link_header = (
-                f'<{workspace_repos_url}?page={next_page}>; rel="next"'
+                f'<{project_repos_url}?page={next_page}>; rel="next"'
             )
         return [
             await self._parse_repository(repo, link_header=formatted_link_header)

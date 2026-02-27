@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from openhands.integrations.bitbucket_data_center.service.base import (
     BitbucketDCMixinBase,
@@ -82,14 +82,14 @@ class BitbucketDCResolverMixin(BitbucketDCMixinBase):
             updated_ms = comment_data.get('updatedDate')
 
             created_at = (
-                datetime.fromtimestamp(created_ms / 1000)
+                datetime.fromtimestamp(created_ms / 1000, tz=timezone.utc)
                 if created_ms is not None
-                else datetime.fromtimestamp(0)
+                else datetime.fromtimestamp(0, tz=timezone.utc)
             )
             updated_at = (
-                datetime.fromtimestamp(updated_ms / 1000)
+                datetime.fromtimestamp(updated_ms / 1000, tz=timezone.utc)
                 if updated_ms is not None
-                else datetime.fromtimestamp(0)
+                else datetime.fromtimestamp(0, tz=timezone.utc)
             )
 
             author = (
