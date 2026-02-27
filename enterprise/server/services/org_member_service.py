@@ -263,10 +263,9 @@ class OrgMemberService:
         """Update a member's role in an organization.
 
         Permission rules:
-        - Admins can change roles of users (rank > ADMIN_RANK) to Admin or User
-        - Admins cannot modify other Admins or Owners
-        - Owners can change roles of non-owners (rank > OWNER_RANK) to any role
-        - Owners cannot modify other Owners
+        - Owners can modify anyone (including other owners), can set any role
+        - Admins can modify other admins and users
+        - Admins can only set admin or user roles (not owner)
 
         Args:
             org_id: Organization ID
@@ -376,8 +375,8 @@ class OrgMemberService:
 
         Permission rules:
         - Owners can modify anyone (including other owners), can set any role
-        - Admins can modify members and other admins (not owners)
-        - Admins can only set admin or member roles (not owner)
+        - Admins can modify other admins and users
+        - Admins can only set admin or user roles (not owner)
         """
         is_requester_owner = requester_role_name == ROLE_OWNER
         is_requester_admin = requester_role_name == ROLE_ADMIN
@@ -386,7 +385,6 @@ class OrgMemberService:
 
         if is_requester_owner:
             # Owners can modify anyone (including other owners)
-            # Owners can set any role (owner, admin, member)
             return True
         elif is_requester_admin:
             # Admins cannot modify owners
@@ -403,7 +401,7 @@ class OrgMemberService:
         if requester_role_name == ROLE_OWNER:
             return True
         elif requester_role_name == ROLE_ADMIN:
-            # Admins can remove members and other admins (not owners)
+            # Admins can remove admins and members (not owners)
             return target_role_name != ROLE_OWNER
         return False
 
