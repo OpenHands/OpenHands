@@ -15,6 +15,10 @@ from server.verified_models.verified_model_service import (
     verified_model_store_dependency,
 )
 
+from openhands.app_server.config import get_db_session
+from openhands.server.routes import public
+from openhands.utils.llm import get_supported_llm_models
+
 api_router = APIRouter(prefix='/api/admin/verified-models', tags=['Verified Models'])
 
 
@@ -102,3 +106,34 @@ async def delete_verified_model(
         model_name=model_name, provider=provider
     )
     return success
+
+
+async def get_llm_models_default_impl(request: Request):
+    """Primary implementation of _get_llm_models_impl, designed to be explicitly
+    overridden in other environments
+
+    This function combines models from litellm and Bedrock, removing any
+    error-prone Bedrock models.
+
+    To get the models:
+    ```sh
+    curl http://localhost:3000/api/litellm-models
+    ```
+
+    Returns:
+        list[str]: A sorted list of unique model names.
+    """
+    async with get_db_session(request.state, request) as db_session:
+        # Prevent circular import
+        from openhands.server.shared import config
+
+        verified_model_service = VerifiedModelService(db_session)
+        page = await verified_model_service.search_verified_models(enabled_only=True)
+        if page.next_page_id:
+            raise HTTPException('Too many models defined in db')
+        verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
+        return get_supported_llm_models(config, verified_models)
+
+
+# Set the public function for getting llm models
+public.get_llm_models_impl = get_llm_models_default_impl

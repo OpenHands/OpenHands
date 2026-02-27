@@ -6,14 +6,11 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
-from http.client import HTTPException
-from typing import Any
 
-from fastapi import APIRouter, Depends
-from server.verified_models.verified_model_service import (
-    VerifiedModelService,
-    verified_model_store_dependency,
-)
+from typing import Any
+from urllib.request import Request
+
+from fastapi import APIRouter
 
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
@@ -24,17 +21,12 @@ from openhands.utils.llm import get_supported_llm_models
 app = APIRouter(prefix='/api/options', dependencies=get_dependencies())
 
 
-@app.get('/models', response_model=list[str])
-async def get_litellm_models(
-    verified_model_service: VerifiedModelService = Depends(
-        verified_model_store_dependency
-    ),
-) -> list[str]:
-    """Get all models supported by LiteLLM.
+async def get_llm_models_default_impl(request: Request):
+    """Primary implementation of _get_llm_models_impl, designed to be explicitly
+    overridden in other environments
 
     This function combines models from litellm and Bedrock, removing any
-    error-prone Bedrock models. In SaaS mode, it uses database-backed
-    verified models for dynamic updates without code deployments.
+    error-prone Bedrock models.
 
     To get the models:
     ```sh
@@ -44,11 +36,15 @@ async def get_litellm_models(
     Returns:
         list[str]: A sorted list of unique model names.
     """
-    page = await verified_model_service.search_verified_models(enabled_only=True)
-    if page.next_page_id:
-        raise HTTPException('Too many models defined in db')
-    verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
-    return get_supported_llm_models(config, verified_models)
+    return get_supported_llm_models(config, [])
+
+
+get_llm_models_impl = get_llm_models_default_impl
+
+
+@app.get('/models')
+async def get_litellm_models(request: Request) -> list[str]:
+    return await get_llm_models_impl(request)
 
 
 @app.get('/agents', response_model=list[str])
