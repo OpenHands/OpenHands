@@ -13,38 +13,27 @@ import { ConversationTabNav } from "./conversation-tab-nav";
 import { ChatActionTooltip } from "../../chat/chat-action-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { VSCodeTooltipContent } from "./vscode-tooltip-content";
-import {
-  useConversationStore,
-  type ConversationTab,
-} from "#/stores/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 
 export function ConversationTabs() {
   const { conversationId } = useConversationId();
-  const {
-    selectedTab,
-    isRightPanelShown,
-    setHasRightPanelToggled,
-    setSelectedTab,
-  } = useConversationStore();
+  const { setHasRightPanelToggled, setSelectedTab } = useConversationStore();
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  const { state: persistedState } =
+    useConversationLocalStorageState(conversationId);
+
   const {
-    state: persistedState,
-    setSelectedTab: setPersistedSelectedTab,
-    setRightPanelShown: setPersistedRightPanelShown,
-  } = useConversationLocalStorageState(conversationId);
-
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
-
-  const onTabChange = (value: ConversationTab | null) => {
-    setSelectedTab(value);
-    // Persist the selected tab to localStorage
-    setPersistedSelectedTab(value);
-  };
+    selectTab,
+    isTabActive,
+    onTabChange,
+    selectedTab,
+    isRightPanelShown,
+  } = useSelectConversationTab();
 
   // Initialize Zustand state from localStorage on component mount
   useEffect(() => {
@@ -73,30 +62,21 @@ export function ConversationTabs() {
 
   const { t } = useTranslation();
 
-  const onTabSelected = (tab: ConversationTab) => {
-    if (selectedTab === tab && isRightPanelShown) {
-      // If clicking the same active tab, close the drawer
-      setHasRightPanelToggled(false);
-      setPersistedRightPanelShown(false);
-    } else {
-      // If clicking a different tab or drawer is closed, open drawer and select tab
-      onTabChange(tab);
-      if (!isRightPanelShown) {
-        setHasRightPanelToggled(true);
-        setPersistedRightPanelShown(true);
-      }
-    }
-  };
-
-  const isTabActive = (tab: ConversationTab) =>
-    isRightPanelShown && selectedTab === tab;
-
   const tabs = [
+    {
+      tabValue: "planner",
+      isActive: isTabActive("planner"),
+      icon: LessonPlanIcon,
+      onClick: () => selectTab("planner"),
+      tooltipContent: t(I18nKey.COMMON$PLANNER),
+      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
+      label: t(I18nKey.COMMON$PLANNER),
+    },
     {
       tabValue: "editor",
       isActive: isTabActive("editor"),
       icon: GitChanges,
-      onClick: () => onTabSelected("editor"),
+      onClick: () => selectTab("editor"),
       tooltipContent: t(I18nKey.COMMON$CHANGES),
       tooltipAriaLabel: t(I18nKey.COMMON$CHANGES),
       label: t(I18nKey.COMMON$CHANGES),
@@ -105,7 +85,7 @@ export function ConversationTabs() {
       tabValue: "vscode",
       isActive: isTabActive("vscode"),
       icon: VSCodeIcon,
-      onClick: () => onTabSelected("vscode"),
+      onClick: () => selectTab("vscode"),
       tooltipContent: <VSCodeTooltipContent />,
       tooltipAriaLabel: t(I18nKey.COMMON$CODE),
       label: t(I18nKey.COMMON$CODE),
@@ -114,7 +94,7 @@ export function ConversationTabs() {
       tabValue: "terminal",
       isActive: isTabActive("terminal"),
       icon: TerminalIcon,
-      onClick: () => onTabSelected("terminal"),
+      onClick: () => selectTab("terminal"),
       tooltipContent: t(I18nKey.COMMON$TERMINAL),
       tooltipAriaLabel: t(I18nKey.COMMON$TERMINAL),
       label: t(I18nKey.COMMON$TERMINAL),
@@ -124,7 +104,7 @@ export function ConversationTabs() {
       tabValue: "served",
       isActive: isTabActive("served"),
       icon: ServerIcon,
-      onClick: () => onTabSelected("served"),
+      onClick: () => selectTab("served"),
       tooltipContent: t(I18nKey.COMMON$APP),
       tooltipAriaLabel: t(I18nKey.COMMON$APP),
       label: t(I18nKey.COMMON$APP),
@@ -133,24 +113,12 @@ export function ConversationTabs() {
       tabValue: "browser",
       isActive: isTabActive("browser"),
       icon: GlobeIcon,
-      onClick: () => onTabSelected("browser"),
+      onClick: () => selectTab("browser"),
       tooltipContent: t(I18nKey.COMMON$BROWSER),
       tooltipAriaLabel: t(I18nKey.COMMON$BROWSER),
       label: t(I18nKey.COMMON$BROWSER),
     },
   ];
-
-  if (shouldUsePlanningAgent) {
-    tabs.unshift({
-      tabValue: "planner",
-      isActive: isTabActive("planner"),
-      icon: LessonPlanIcon,
-      onClick: () => onTabSelected("planner"),
-      tooltipContent: t(I18nKey.COMMON$PLANNER),
-      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
-      label: t(I18nKey.COMMON$PLANNER),
-    });
-  }
 
   // Filter out unpinned tabs
   const visibleTabs = tabs.filter(
@@ -167,6 +135,7 @@ export function ConversationTabs() {
       {visibleTabs.map(
         (
           {
+            tabValue,
             icon,
             onClick,
             isActive,
@@ -183,6 +152,7 @@ export function ConversationTabs() {
             ariaLabel={tooltipAriaLabel}
           >
             <ConversationTabNav
+              tabValue={tabValue}
               icon={icon}
               onClick={onClick}
               isActive={isActive}

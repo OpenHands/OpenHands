@@ -194,6 +194,8 @@ async def test_keycloak_callback_user_not_allowed(mock_request):
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.migrate_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = False
@@ -229,6 +231,8 @@ async def test_keycloak_callback_success_with_valid_offline_token(mock_request):
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.migrate_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
             return_value=('test_access_token', 'test_refresh_token')
@@ -300,6 +304,8 @@ async def test_keycloak_callback_email_not_verified(mock_request):
         mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         # Act
         result = await keycloak_callback(
@@ -347,6 +353,8 @@ async def test_keycloak_callback_email_not_verified_missing_field(mock_request):
         mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         # Act
         result = await keycloak_callback(
@@ -388,6 +396,8 @@ async def test_keycloak_callback_success_without_offline_token(mock_request):
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
         mock_user_store.migrate_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_token_manager.get_keycloak_tokens = AsyncMock(
             return_value=('test_access_token', 'test_refresh_token')
@@ -622,6 +632,8 @@ async def test_keycloak_callback_blocked_email_domain(mock_request):
         mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_domain_blocker.is_active.return_value = True
         mock_domain_blocker.is_domain_blocked.return_value = True
@@ -685,6 +697,8 @@ async def test_keycloak_callback_allowed_email_domain(mock_request):
         mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_domain_blocker.is_active.return_value = True
         mock_domain_blocker.is_domain_blocked.return_value = False
@@ -748,6 +762,8 @@ async def test_keycloak_callback_domain_blocking_inactive(mock_request):
         mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_domain_blocker.is_active.return_value = False
         mock_domain_blocker.is_domain_blocked.return_value = False
@@ -809,6 +825,8 @@ async def test_keycloak_callback_missing_email(mock_request):
         mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_domain_blocker.is_active.return_value = True
 
@@ -854,6 +872,8 @@ async def test_keycloak_callback_duplicate_email_detected(mock_request):
         mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         # Act
         result = await keycloak_callback(
@@ -898,6 +918,8 @@ async def test_keycloak_callback_duplicate_email_deletion_fails(mock_request):
         mock_user.current_org_id = 'test_org_id'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         # Act
         result = await keycloak_callback(
@@ -955,6 +977,8 @@ async def test_keycloak_callback_duplicate_check_exception(mock_request):
         mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -1012,6 +1036,8 @@ async def test_keycloak_callback_no_duplicate_email(mock_request):
         mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -1072,6 +1098,8 @@ async def test_keycloak_callback_no_email_in_user_info(mock_request):
         mock_user.accepted_tos = '2025-01-01'
         mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
         mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -1228,6 +1256,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
@@ -1292,6 +1322,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.current_org_id = 'test_org_id'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_domain_blocker.is_domain_blocked.return_value = False
 
@@ -1374,6 +1406,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
@@ -1461,6 +1495,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
@@ -1545,6 +1581,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
@@ -1628,6 +1666,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
@@ -1708,6 +1748,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
@@ -1774,6 +1816,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
@@ -1846,6 +1890,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.accepted_tos = '2025-01-01'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
@@ -1916,6 +1962,8 @@ class TestKeycloakCallbackRecaptcha:
             mock_user.current_org_id = 'test_org_id'
             mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
             mock_user_store.create_user = AsyncMock(return_value=mock_user)
+            mock_user_store.backfill_contact_name = AsyncMock()
+            mock_user_store.backfill_user_email = AsyncMock()
 
             mock_domain_blocker.is_domain_blocked.return_value = False
 
@@ -1935,3 +1983,57 @@ class TestKeycloakCallbackRecaptcha:
             assert call_kwargs[0][0] == 'recaptcha_blocked_at_callback'
             assert call_kwargs[1]['extra']['score'] == 0.2
             assert call_kwargs[1]['extra']['user_id'] == 'test_user_id'
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
+    mock_request,
+):
+    """When an existing user logs in, backfill_user_email should be called."""
+    user_info = {
+        'sub': 'test_user_id',
+        'preferred_username': 'test_user',
+        'identity_provider': 'github',
+        'email': 'test@example.com',
+        'email_verified': True,
+    }
+
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+        patch('server.routes.auth.set_response_cookie'),
+        patch('server.routes.auth.UserStore') as mock_user_store,
+        patch('server.routes.auth.posthog'),
+    ):
+        mock_user = MagicMock()
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user.accepted_tos = '2025-01-01'
+
+        mock_user_store.get_user_by_id_async = AsyncMock(return_value=mock_user)
+        mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
+
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(return_value=user_info)
+        mock_token_manager.store_idp_tokens = AsyncMock()
+        mock_token_manager.validate_offline_token = AsyncMock(return_value=True)
+        mock_token_manager.check_duplicate_base_email = AsyncMock(return_value=False)
+
+        mock_verifier.is_active.return_value = True
+        mock_verifier.is_user_allowed.return_value = True
+
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+
+        # backfill_user_email should have been called with the user_id and user_info
+        mock_user_store.backfill_user_email.assert_called_once_with(
+            'test_user_id', user_info
+        )

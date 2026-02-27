@@ -205,6 +205,13 @@ def config_from_env() -> AppServerConfig:
                 docker_sandbox_kwargs['container_url_pattern'] = os.environ[
                     'SANDBOX_CONTAINER_URL_PATTERN'
                 ]
+            # Allow configuring sandbox startup grace period
+            # This is useful for slower machines or cloud environments where
+            # the agent-server container takes longer to initialize
+            if os.getenv('SANDBOX_STARTUP_GRACE_SECONDS'):
+                docker_sandbox_kwargs['startup_grace_seconds'] = int(
+                    os.environ['SANDBOX_STARTUP_GRACE_SECONDS']
+                )
             # Parse SANDBOX_VOLUMES and convert to VolumeMount objects
             # This is set by the CLI's --mount-cwd flag
             sandbox_volumes = os.getenv('SANDBOX_VOLUMES')
@@ -243,20 +250,7 @@ def config_from_env() -> AppServerConfig:
             config.sandbox_spec = DockerSandboxSpecServiceInjector()
 
     if config.app_conversation_info is None:
-        # Use enterprise injector if running in SAAS mode
-        if 'saas' in (os.getenv('OPENHANDS_CONFIG_CLS') or '').lower():
-            try:
-                # Import enterprise injector dynamically
-                from enterprise.server.utils.saas_app_conversation_info_injector import (
-                    SaasAppConversationInfoServiceInjector,
-                )
-
-                config.app_conversation_info = SaasAppConversationInfoServiceInjector()
-            except ImportError:
-                # Fallback to OSS injector if enterprise module is not available
-                config.app_conversation_info = SQLAppConversationInfoServiceInjector()
-        else:
-            config.app_conversation_info = SQLAppConversationInfoServiceInjector()
+        config.app_conversation_info = SQLAppConversationInfoServiceInjector()
 
     if config.app_conversation_start_task is None:
         config.app_conversation_start_task = (

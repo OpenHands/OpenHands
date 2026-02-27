@@ -1,5 +1,6 @@
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
@@ -8,7 +9,6 @@ import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ChangeAgentContextMenu } from "./change-agent-context-menu";
 import { cn } from "#/utils/utils";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -26,8 +26,6 @@ export function ChangeAgentButton() {
 
   const isWebSocketConnected = webSocketStatus === "CONNECTED";
 
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
-
   const { curAgentState } = useAgentState();
 
   const { t } = useTranslation();
@@ -36,11 +34,40 @@ export function ChangeAgentButton() {
 
   const { data: conversation } = useActiveConversation();
 
-  // Poll sub-conversation task and invalidate parent conversation when ready
-  useSubConversationTaskPolling(
+  const queryClient = useQueryClient();
+
+  // Track the last invalidated task ID to prevent duplicate invalidations
+  const lastInvalidatedTaskIdRef = useRef<string | null>(null);
+
+  // Poll sub-conversation task status
+  const { taskStatus, subConversationId } = useSubConversationTaskPolling(
     subConversationTaskId,
     conversation?.conversation_id || null,
   );
+
+  // Invalidate parent conversation cache when task is ready (only once per task)
+  useEffect(() => {
+    if (
+      taskStatus === "READY" &&
+      subConversationId &&
+      conversation?.conversation_id &&
+      subConversationTaskId &&
+      lastInvalidatedTaskIdRef.current !== subConversationTaskId
+    ) {
+      // Mark this task as invalidated to prevent duplicate calls
+      lastInvalidatedTaskIdRef.current = subConversationTaskId;
+      // Invalidate the parent conversation to refetch with updated sub_conversation_ids
+      queryClient.invalidateQueries({
+        queryKey: ["user", "conversation", conversation.conversation_id],
+      });
+    }
+  }, [
+    taskStatus,
+    subConversationId,
+    conversation?.conversation_id,
+    subConversationTaskId,
+    queryClient,
+  ]);
 
   // Get handlePlanClick and isCreatingConversation from custom hook
   const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
@@ -53,10 +80,7 @@ export function ChangeAgentButton() {
   }, [isAgentRunning, contextMenuOpen, isWebSocketConnected]);
 
   const isButtonDisabled =
-    isAgentRunning ||
-    isCreatingConversation ||
-    !isWebSocketConnected ||
-    !shouldUsePlanningAgent;
+    isAgentRunning || isCreatingConversation || !isWebSocketConnected;
 
   // Handle Shift + Tab keyboard shortcut to cycle through modes
   useEffect(() => {
@@ -120,10 +144,6 @@ export function ChangeAgentButton() {
     }
     return <LessonPlanIcon width={18} height={18} color="#ffffff" />;
   }, [isExecutionAgent]);
-
-  if (!shouldUsePlanningAgent) {
-    return null;
-  }
 
   return (
     <div className="relative">

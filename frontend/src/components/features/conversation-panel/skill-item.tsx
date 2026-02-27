@@ -11,6 +11,15 @@ interface SkillItemProps {
 }
 
 export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
+  let skillTypeLabel: string;
+  if (skill.type === "repo") {
+    skillTypeLabel = "Repository";
+  } else if (skill.type === "knowledge") {
+    skillTypeLabel = "Knowledge";
+  } else {
+    skillTypeLabel = "AgentSkills";
+  }
+
   return (
     <div className="rounded-md overflow-hidden">
       <button
@@ -25,7 +34,7 @@ export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
         </div>
         <div className="flex items-center">
           <Typography.Text className="px-2 py-1 text-xs rounded-full bg-gray-800 mr-2">
-            {skill.type === "repo" ? "Repository" : "Knowledge"}
+            {skillTypeLabel}
           </Typography.Text>
           <Typography.Text className="text-gray-300">
             {isExpanded ? (

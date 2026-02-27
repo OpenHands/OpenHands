@@ -31,6 +31,8 @@ class User(Base):  # type: ignore
     user_consents_to_analytics = Column(Boolean, nullable=True)
     email = Column(String, nullable=True)
     email_verified = Column(Boolean, nullable=True)
+    git_user_name = Column(String, nullable=True)
+    git_user_email = Column(String, nullable=True)
 
     # Relationships
     role = relationship('Role', back_populates='users')

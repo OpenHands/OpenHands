@@ -360,7 +360,7 @@ class OpenHandsMCPConfig:
         return None
 
     @staticmethod
-    def create_default_mcp_server_config(
+    async def create_default_mcp_server_config(
         host: str, config: 'OpenHandsConfig', user_id: str | None = None
     ) -> tuple[MCPSHTTPServerConfig | None, list[MCPStdioServerConfig]]:
         """Create a default MCP server configuration.

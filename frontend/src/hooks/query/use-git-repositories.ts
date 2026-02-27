@@ -31,7 +31,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
   const { data: installations } = useAppInstallations(provider);
 
   const useInstallationRepos = provider
-    ? shouldUseInstallationRepos(provider, config?.APP_MODE)
+    ? shouldUseInstallationRepos(provider, config?.app_mode)
     : false;
 
   const repos = useInfiniteQuery<

@@ -7,7 +7,7 @@ import { TrajectoryActions } from "../trajectory/trajectory-actions";
 import { createChatMessage } from "#/services/chat-service";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
-import { isOpenHandsAction, isActionOrObservation } from "#/types/core/guards";
+import { useFilteredEvents } from "#/hooks/use-filtered-events";
 import { FeedbackModal } from "../feedback/feedback-modal";
 import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { TypingIndicator } from "./typing-indicator";
@@ -18,6 +18,7 @@ import { ScrollProvider } from "#/context/scroll-context";
 import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState } from "#/hooks/use-agent-state";
+import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
 import { ScrollToBottomButton } from "#/components/shared/buttons/scroll-to-bottom-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -25,28 +26,13 @@ import { ChatMessagesSkeleton } from "./chat-messages-skeleton";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
-import { useEventStore } from "#/stores/use-event-store";
 import { ErrorMessageBanner } from "./error-message-banner";
-import {
-  hasUserEvent,
-  shouldRenderEvent,
-} from "./event-content-helpers/should-render-event";
-import {
-  Messages as V1Messages,
-  hasUserEvent as hasV1UserEvent,
-  shouldRenderEvent as shouldRenderV1Event,
-} from "#/components/v1/chat";
+import { Messages as V1Messages } from "#/components/v1/chat";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
 import { useConfig } from "#/hooks/query/use-config";
 import { validateFiles } from "#/utils/file-validation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConfirmationModeEnabled from "./confirmation-mode-enabled";
-import {
-  isV0Event,
-  isV1Event,
-  isSystemPromptEvent,
-  isConversationStateUpdateEvent,
-} from "#/types/v1/type-guards";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
@@ -71,8 +57,16 @@ export function ChatInterface() {
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   const conversationWebSocket = useConversationWebSocket();
   const { send } = useSendMessage();
-  const storeEvents = useEventStore((state) => state.events);
-  const uiEvents = useEventStore((state) => state.uiEvents);
+  const {
+    v0Events,
+    v1UiEvents,
+    v1FullEvents,
+    totalEvents,
+    hasSubstantiveAgentActions,
+    v0UserEventsExist,
+    v1UserEventsExist,
+    userEventsExist,
+  } = useFilteredEvents();
   const { setOptimisticUserMessage, getOptimisticUserMessage } =
     useOptimisticUserMessageStore();
   const { t } = useTranslation();
@@ -88,6 +82,37 @@ export function ChatInterface() {
   const { data: config } = useConfig();
 
   const { curAgentState } = useAgentState();
+  const { handleBuildPlanClick } = useHandleBuildPlanClick();
+
+  // Disable Build button while agent is running (streaming)
+  const isAgentRunning =
+    curAgentState === AgentState.RUNNING ||
+    curAgentState === AgentState.LOADING;
+
+  // Global keyboard shortcut for Build button (Cmd+Enter / Ctrl+Enter)
+  // This is placed here instead of PlanPreview to avoid duplicate listeners
+  // when multiple PlanPreview components exist in the chat
+  React.useEffect(() => {
+    if (isAgentRunning) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        handleBuildPlanClick(event);
+        scrollDomToBottom();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isAgentRunning, handleBuildPlanClick, scrollDomToBottom]);
 
   const [feedbackPolarity, setFeedbackPolarity] = React.useState<
     "positive" | "negative"
@@ -101,73 +126,20 @@ export function ChatInterface() {
 
   const isV1Conversation = conversation?.conversation_version === "V1";
 
-  // Track when we should show V1 messages (after DOM has rendered)
-  const [showV1Messages, setShowV1Messages] = React.useState(false);
-  const prevV1LoadingRef = React.useRef(
-    conversationWebSocket?.isLoadingHistory,
-  );
-
-  // Wait for DOM to render before showing V1 messages
-  React.useEffect(() => {
-    const wasLoading = prevV1LoadingRef.current;
-    const isLoading = conversationWebSocket?.isLoadingHistory;
-
-    if (wasLoading && !isLoading) {
-      // Loading just finished - wait for next frame to ensure DOM is ready
-      requestAnimationFrame(() => {
-        setShowV1Messages(true);
-      });
-    } else if (isLoading) {
-      // Reset when loading starts
-      setShowV1Messages(false);
-    }
-
-    prevV1LoadingRef.current = isLoading;
-  }, [conversationWebSocket?.isLoadingHistory]);
+  // Show V1 messages immediately if events exist in store (e.g., remount),
+  // or once loading completes. This replaces the old transition-observation
+  // pattern (useState + useEffect watching loading→loaded) which always showed
+  // skeleton on remount because local state initialized to false.
+  const showV1Messages =
+    v1FullEvents.length > 0 || !conversationWebSocket?.isLoadingHistory;
 
   const isReturningToConversation = !!params.conversationId;
+  // Only show loading skeleton when genuinely loading AND no events in store yet.
+  // If events exist (e.g., remount after data was already fetched), skip skeleton.
   const isHistoryLoading =
-    (isLoadingMessages && !isV1Conversation) ||
-    (isV1Conversation &&
-      (conversationWebSocket?.isLoadingHistory || !showV1Messages));
+    (isLoadingMessages && !isV1Conversation && v0Events.length === 0) ||
+    (isV1Conversation && !showV1Messages);
   const isChatLoading = isHistoryLoading && !isTask;
-
-  // Filter V0 events
-  const v0Events = storeEvents
-    .filter(isV0Event)
-    .filter(isActionOrObservation)
-    .filter(shouldRenderEvent);
-
-  // Filter V1 events - use uiEvents for rendering (actions replaced by observations)
-  const v1UiEvents = uiEvents.filter(isV1Event).filter(shouldRenderV1Event);
-  // Keep full v1 events for lookups (includes both actions and observations)
-  const v1FullEvents = storeEvents.filter(isV1Event);
-
-  // Combined events count for tracking
-  const totalEvents = v0Events.length || v1UiEvents.length;
-
-  // Check if there are any substantive agent actions (not just system messages)
-  const hasSubstantiveAgentActions = React.useMemo(
-    () =>
-      storeEvents
-        .filter(isV0Event)
-        .filter(isActionOrObservation)
-        .some(
-          (event) =>
-            isOpenHandsAction(event) &&
-            event.source === "agent" &&
-            event.action !== "system",
-        ) ||
-      storeEvents
-        .filter(isV1Event)
-        .some(
-          (event) =>
-            event.source === "agent" &&
-            !isSystemPromptEvent(event) &&
-            !isConversationStateUpdateEvent(event),
-        ),
-    [storeEvents],
-  );
 
   const handleSendMessage = async (
     content: string,
@@ -230,6 +202,21 @@ export function ChatInterface() {
     setFeedbackPolarity(polarity);
   };
 
+  // Auto-scroll to bottom when new messages arrive
+  React.useEffect(() => {
+    if (autoScroll) {
+      scrollDomToBottom();
+    }
+    // Note: We intentionally exclude autoScroll from deps because we only want
+    // to scroll when message content changes, not when autoScroll state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    v1UiEvents.length,
+    v0Events.length,
+    optimisticUserMessage,
+    scrollDomToBottom,
+  ]);
+
   // Create a ScrollProvider with the scroll hook values
   const scrollProviderValue = {
     scrollRef,
@@ -240,10 +227,6 @@ export function ChatInterface() {
     setHitBottom,
     onChatBodyScroll,
   };
-
-  const v0UserEventsExist = hasUserEvent(v0Events);
-  const v1UserEventsExist = hasV1UserEvent(v1FullEvents);
-  const userEventsExist = v0UserEventsExist || v1UserEventsExist;
 
   // Get server status indicator props
   const isStartingStatus =
@@ -298,7 +281,7 @@ export function ChatInterface() {
             </div>
           )}
 
-          {!isLoadingMessages && v0UserEventsExist && (
+          {(!isLoadingMessages || v0Events.length > 0) && v0UserEventsExist && (
             <V0Messages
               messages={v0Events}
               isAwaitingUserConfirmation={
@@ -330,7 +313,7 @@ export function ChatInterface() {
                   onNegativeFeedback={() =>
                     onClickShareFeedbackActionButton("negative")
                   }
-                  isSaasMode={config?.APP_MODE === "saas"}
+                  isSaasMode={config?.app_mode === "saas"}
                 />
               )}
             </div>
@@ -352,7 +335,7 @@ export function ChatInterface() {
           <InteractiveChatBox onSubmit={handleSendMessage} />
         </div>
 
-        {config?.APP_MODE !== "saas" && !isV1Conversation && (
+        {config?.app_mode !== "saas" && !isV1Conversation && (
           <FeedbackModal
             isOpen={feedbackModalIsOpen}
             onClose={() => setFeedbackModalIsOpen(false)}

@@ -1,5 +1,8 @@
 import { useState } from "react";
-import type { ConversationTab } from "#/stores/conversation-store";
+import type {
+  ConversationTab,
+  ConversationMode,
+} from "#/stores/conversation-store";
 
 export const LOCAL_STORAGE_KEYS = {
   CONVERSATION_STATE: "conversation-state",
@@ -12,12 +15,16 @@ export interface ConversationState {
   selectedTab: ConversationTab | null;
   rightPanelShown: boolean;
   unpinnedTabs: string[];
+  conversationMode: ConversationMode;
+  subConversationTaskId: string | null;
 }
 
 const DEFAULT_CONVERSATION_STATE: ConversationState = {
   selectedTab: "editor",
   rightPanelShown: true,
   unpinnedTabs: [],
+  conversationMode: "code",
+  subConversationTaskId: null,
 };
 
 /**
@@ -91,6 +98,7 @@ export function useConversationLocalStorageState(conversationId: string): {
   setSelectedTab: (tab: ConversationTab | null) => void;
   setRightPanelShown: (shown: boolean) => void;
   setUnpinnedTabs: (tabs: string[]) => void;
+  setConversationMode: (mode: ConversationMode) => void;
 } {
   const [state, setState] = useState<ConversationState>(() =>
     getConversationState(conversationId),
@@ -106,5 +114,6 @@ export function useConversationLocalStorageState(conversationId: string): {
     setSelectedTab: (tab) => updateState({ selectedTab: tab }),
     setRightPanelShown: (shown) => updateState({ rightPanelShown: shown }),
     setUnpinnedTabs: (tabs) => updateState({ unpinnedTabs: tabs }),
+    setConversationMode: (mode) => updateState({ conversationMode: mode }),
   };
 }
