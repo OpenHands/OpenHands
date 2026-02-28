@@ -57,12 +57,18 @@ async def create_verified_model(
     ),
 ) -> VerifiedModel:
     """Create a new verified model."""
-    model = await verified_model_service.create_verified_model(
-        model_name=data.model_name,
-        provider=data.provider,
-        is_enabled=data.is_enabled,
-    )
-    return model
+    try:
+        model = await verified_model_service.create_verified_model(
+            model_name=data.model_name,
+            provider=data.provider,
+            is_enabled=data.is_enabled,
+        )
+        return model
+    except ValueError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
 
 
 @api_router.put('/{provider}/{model_name:path}')
@@ -76,20 +82,17 @@ async def update_verified_model(
     ),
 ) -> VerifiedModel:
     """Update a verified model by provider and model name."""
-    try:
-        model = await verified_model_service.update_verified_model(
-            model_name=model_name,
-            provider=provider,
-            is_enabled=data.is_enabled,
+    model = await verified_model_service.update_verified_model(
+        model_name=model_name,
+        provider=provider,
+        is_enabled=data.is_enabled,
+    )
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Model {provider}/{model_name} not found',
         )
-        if not model:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Model {provider}/{model_name} not found',
-            )
-        return model
-    except HTTPException:
-        raise
+    return model
 
 
 @api_router.delete('/{provider}/{model_name:path}')
@@ -102,10 +105,16 @@ async def delete_verified_model(
     ),
 ) -> bool:
     """Delete a verified model by provider and model name."""
-    success = await verified_model_service.delete_verified_model(
-        model_name=model_name, provider=provider
-    )
-    return success
+    try:
+        await verified_model_service.delete_verified_model(
+            model_name=model_name, provider=provider
+        )
+        return True
+    except ValueError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(ex),
+        )
 
 
 async def get_llm_models_saas_impl(request: Request) -> list[str]:

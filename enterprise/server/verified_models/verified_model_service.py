@@ -212,7 +212,7 @@ class VerifiedModelService:
         logger.info(f'Updated verified model: {provider}/{model_name}')
         return verified_model(model)
 
-    async def delete_verified_model(self, model_name: str, provider: str) -> bool:
+    async def delete_verified_model(self, model_name: str, provider: str):
         """Delete a verified model.
 
         Args:
@@ -231,12 +231,11 @@ class VerifiedModelService:
         result = await self.db_session.execute(query)
         model = result.scalars().first()
         if not model:
-            return False
+            raise ValueError('Unknown model')
 
         await self.db_session.delete(model)
         await self.db_session.commit()
         logger.info(f'Deleted verified model: {provider}/{model_name}')
-        return True
 
 
 def verified_model_store_dependency(db_session: AsyncSession = depends_db_session()):
