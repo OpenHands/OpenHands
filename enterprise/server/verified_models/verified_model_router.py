@@ -1,6 +1,6 @@
 """API routes for managing verified LLM models (admin only)."""
 
-from typing import Annotated, Callable
+from typing import Annotated, Awaitable, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from server.email_validation import get_admin_user_id
@@ -108,9 +108,7 @@ async def delete_verified_model(
     return success
 
 
-def get_llm_models_saas_impl_dependency() -> (
-    Callable[[Request], Callable[[Request], list[str]]]
-):
+def get_llm_models_saas_impl_dependency() -> Callable[[Request], Awaitable[list[str]]]:
     """Factory that returns the SaaS implementation for the LLM models endpoint.
 
     Override this in saas_server.py via app.dependency_overrides to enable
