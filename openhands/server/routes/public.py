@@ -7,7 +7,7 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
@@ -20,29 +20,21 @@ from openhands.utils.llm import get_supported_llm_models
 app = APIRouter(prefix='/api/options', dependencies=get_dependencies())
 
 
-# Dependency factory for LLM models implementation
-# Override this in enterprise/saas mode to use database-backed verified models
-def get_llm_models_impl_dependency() -> Callable[[Request], Awaitable[list[str]]]:
+async def get_llm_models_dependency(request: Request) -> list[str]:
     """Returns a callable that provides the LLM models implementation.
 
     Returns a factory that produces the actual implementation function.
     Override this in enterprise/saas mode via app.dependency_overrides.
     """
 
-    async def impl(request: Request) -> list[str]:
-        return get_supported_llm_models(config, [])
-
-    return impl
+    return get_supported_llm_models(config, [])
 
 
 @app.get('/models')
 async def get_litellm_models(
-    request: Request,
-    get_models: Callable[[Request], Awaitable[list[str]]] = Depends(
-        get_llm_models_impl_dependency
-    ),
+    models: list[str] = Depends(get_llm_models_dependency),
 ) -> list[str]:
-    return await get_models(request)
+    return models
 
 
 @app.get('/agents', response_model=list[str])

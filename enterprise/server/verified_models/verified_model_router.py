@@ -117,7 +117,7 @@ async def delete_verified_model(
         )
 
 
-async def get_llm_models_saas_impl(request: Request) -> list[str]:
+async def get_saas_llm_models_dependency(request: Request) -> list[str]:
     """SaaS implementation for the LLM models endpoint."""
     async with get_db_session(request.state, request) as db_session:
         # Prevent circular import
@@ -138,6 +138,6 @@ async def get_llm_models_saas_impl(request: Request) -> list[str]:
 # This must be called after the app is created in saas_server.py
 def override_llm_models_dependency(app):
     """Override the default LLM models implementation with SaaS version."""
-    app.dependency_overrides[public.get_llm_models_impl_dependency] = (
-        lambda: get_llm_models_saas_impl
+    app.dependency_overrides[public.get_llm_models_dependency] = (
+        get_saas_llm_models_dependency
     )
