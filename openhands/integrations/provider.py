@@ -172,7 +172,7 @@ class ProviderHandler:
                 exceptions.append((provider, e))
                 continue
         for provider, exc in exceptions:
-            logger.error(
+            logger.warning(
                 f'Failed to get user from provider {provider}: {exc}',
                 exc_info=(type(exc), exc, exc.__traceback__),
             )

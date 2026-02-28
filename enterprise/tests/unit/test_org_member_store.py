@@ -158,6 +158,57 @@ def test_get_org_member(session_maker):
         assert retrieved_org_member.llm_api_key.get_secret_value() == 'test-key'
 
 
+def test_get_org_member_for_current_org(session_maker):
+    # Test getting org_member for user's current organization
+    with session_maker() as session:
+        # Create test data - user belongs to two orgs but current_org is org1
+        org1 = Org(name='test-org-1')
+        org2 = Org(name='test-org-2')
+        session.add_all([org1, org2])
+        session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org1.id)
+        role = Role(name='admin', rank=1)
+        session.add_all([user, role])
+        session.flush()
+
+        org_member1 = OrgMember(
+            org_id=org1.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key-1',
+            status='active',
+        )
+        org_member2 = OrgMember(
+            org_id=org2.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key-2',
+            status='active',
+        )
+        session.add_all([org_member1, org_member2])
+        session.commit()
+        user_id = user.id
+        org1_id = org1.id
+
+    # Test retrieval - should return org_member for current_org (org1)
+    with patch('storage.org_member_store.session_maker', session_maker):
+        retrieved_org_member = OrgMemberStore.get_org_member_for_current_org(user_id)
+        assert retrieved_org_member is not None
+        assert retrieved_org_member.org_id == org1_id
+        assert retrieved_org_member.user_id == user_id
+        assert retrieved_org_member.llm_api_key.get_secret_value() == 'test-key-1'
+
+
+def test_get_org_member_for_current_org_user_not_found(session_maker):
+    # Test getting org_member for non-existent user
+    with patch('storage.org_member_store.session_maker', session_maker):
+        retrieved_org_member = OrgMemberStore.get_org_member_for_current_org(
+            uuid.uuid4()
+        )
+        assert retrieved_org_member is None
+
+
 def test_add_user_to_org(session_maker):
     # Test adding a user to an org
     with session_maker() as session:
@@ -604,3 +655,180 @@ async def test_get_org_members_paginated_eager_loading(async_session_maker):
         assert member.role is not None
         assert member.role.name == 'owner'
         assert member.role.rank == 10
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_count_no_filter(async_session_maker):
+    """Test get_org_members_count returns correct count without email filter."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        users = [
+            User(id=uuid.uuid4(), current_org_id=org.id, email=f'user{i}@example.com')
+            for i in range(5)
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user.id,
+                role_id=role.id,
+                llm_api_key=f'test-key-{i}',
+                status='active',
+            )
+            for i, user in enumerate(users)
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        count = await OrgMemberStore.get_org_members_count(org_id=org_id)
+
+    # Assert
+    assert count == 5
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_count_with_email_filter(async_session_maker):
+    """Test get_org_members_count filters by email correctly."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        users = [
+            User(id=uuid.uuid4(), current_org_id=org.id, email='alice@example.com'),
+            User(id=uuid.uuid4(), current_org_id=org.id, email='bob@example.com'),
+            User(
+                id=uuid.uuid4(), current_org_id=org.id, email='alice.smith@example.com'
+            ),
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user.id,
+                role_id=role.id,
+                llm_api_key=f'test-key-{i}',
+                status='active',
+            )
+            for i, user in enumerate(users)
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        count = await OrgMemberStore.get_org_members_count(
+            org_id=org_id, email_filter='alice'
+        )
+
+    # Assert
+    assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_with_email_filter(async_session_maker):
+    """Test get_org_members_paginated filters by email correctly."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        users = [
+            User(id=uuid.uuid4(), current_org_id=org.id, email='alice@example.com'),
+            User(id=uuid.uuid4(), current_org_id=org.id, email='bob@example.com'),
+            User(id=uuid.uuid4(), current_org_id=org.id, email='charlie@example.com'),
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user.id,
+                role_id=role.id,
+                llm_api_key=f'test-key-{i}',
+                status='active',
+            )
+            for i, user in enumerate(users)
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        members, has_more = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=10, email_filter='bob'
+        )
+
+    # Assert
+    assert len(members) == 1
+    assert members[0].user.email == 'bob@example.com'
+    assert has_more is False
+
+
+@pytest.mark.asyncio
+async def test_get_org_members_paginated_email_filter_case_insensitive(
+    async_session_maker,
+):
+    """Test email filter is case-insensitive."""
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='admin', rank=1)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='Alice@Example.COM')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    with patch('storage.org_member_store.a_session_maker', async_session_maker):
+        members, has_more = await OrgMemberStore.get_org_members_paginated(
+            org_id=org_id, offset=0, limit=10, email_filter='alice@example'
+        )
+
+    # Assert
+    assert len(members) == 1
+    assert members[0].user.email == 'Alice@Example.COM'

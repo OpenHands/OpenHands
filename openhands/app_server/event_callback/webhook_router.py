@@ -62,7 +62,7 @@ async def valid_sandbox(
     ),
     sandbox_service: SandboxService = sandbox_service_dependency,
 ) -> SandboxInfo:
-    if session_api_key is None:
+    if not session_api_key:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail='X-Session-API-Key header is required'
         )
@@ -144,7 +144,6 @@ async def on_event(
     event_service: EventService = event_service_dependency,
 ) -> Success:
     """Webhook callback for when event stream events occur."""
-
     app_conversation_info = await valid_conversation(
         conversation_id, sandbox_info, app_conversation_info_service
     )

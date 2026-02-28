@@ -18,6 +18,7 @@ from openhands.agent_server.models import (
     ConversationInfo,
     SendMessageRequest,
     StartConversationRequest,
+    TextContent,
 )
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
@@ -78,6 +79,7 @@ from openhands.app_server.utils.llm_metadata import (
 )
 from openhands.experiments.experiment_manager import ExperimentManagerImpl
 from openhands.integrations.provider import ProviderType
+from openhands.integrations.service_types import SuggestedTask
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
 from openhands.sdk.llm import LLM
 from openhands.sdk.plugin import PluginSource
@@ -85,6 +87,7 @@ from openhands.sdk.secret import LookupSecret, SecretValue, StaticSecret
 from openhands.sdk.utils.paging import page_iterator
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 from openhands.server.types import AppMode
+from openhands.storage.data_models.conversation_metadata import ConversationTrigger
 from openhands.tools.preset.default import (
     get_default_tools,
 )
@@ -208,6 +211,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     f'Parent conversation not found: {request.parent_conversation_id}'
                 )
             self._inherit_configuration_from_parent(request, parent_info)
+
+        self._apply_suggested_task(request)
 
         task = AppConversationStartTask(
             created_by_user_id=user_id,
@@ -412,15 +417,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             conversation_info = _conversation_info_type_adapter.validate_python(data)
             conversation_info = [c for c in conversation_info if c]
             return conversation_info
-        except httpx.HTTPStatusError as exc:
-            # The runtime API stops idle sandboxes all the time and they return a 503.
-            # This is normal and should not be logged.
-            if not exc.response or exc.response.status_code != 503:
-                _logger.exception(
-                    f'Error getting conversation status from sandbox {sandbox.id}',
-                    exc_info=True,
-                    stack_info=True,
-                )
+        except httpx.HTTPStatusError:
+            # The runtime API stops idle sandboxes all the time and they return a 404 or a 503.
+            # This is normal and should not be considered an error.
+            _logger.warning(
+                f'Error getting conversation status from sandbox {sandbox.id}',
+                exc_info=True,
+            )
             return []
         except Exception:
             # Not getting a status is not a fatal error - we just mark the conversation as stopped
@@ -568,6 +571,33 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Inherit LLM model from parent if not provided
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
+
+    def _apply_suggested_task(self, request: AppConversationStartRequest) -> None:
+        """Apply suggested task defaults to the start request."""
+        suggested_task: SuggestedTask | None = request.suggested_task
+        if not suggested_task:
+            return
+
+        if request.initial_message is not None:
+            raise ValueError(
+                'initial_message cannot be provided when suggested_task is present'
+            )
+
+        prompt = suggested_task.get_prompt_for_task()
+        if not prompt:
+            raise ValueError(
+                f'Suggested task returned empty prompt for task type {suggested_task.task_type}'
+            )
+        request.initial_message = SendMessageRequest(
+            role='user',
+            content=[TextContent(text=prompt)],
+        )
+        request.trigger = ConversationTrigger.SUGGESTED_TASK
+
+        if not request.selected_repository:
+            request.selected_repository = suggested_task.repo
+        if not request.git_provider:
+            request.git_provider = suggested_task.git_provider
 
     def _compute_plan_path(
         self,
@@ -1251,20 +1281,97 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             f'Successfully updated agent-server conversation {conversation_id} title to "{new_title}"'
         )
 
+    def _validate_repository_update(
+        self,
+        request: AppConversationUpdateRequest,
+        existing_branch: str | None = None,
+    ) -> None:
+        """Validate repository-related fields in the update request.
+
+        Args:
+            request: The update request containing fields to validate
+            existing_branch: The conversation's current branch (if any)
+
+        Raises:
+            ValueError: If validation fails
+        """
+        # Check if repository is being set
+        if 'selected_repository' in request.model_fields_set:
+            repo = request.selected_repository
+            if repo is not None:
+                # Validate repository format (owner/repo)
+                if '/' not in repo or repo.count('/') != 1:
+                    raise ValueError(
+                        f"Invalid repository format: '{repo}'. Expected 'owner/repo'."
+                    )
+
+                # Sanitize: check for dangerous characters
+                if any(c in repo for c in [';', '&', '|', '$', '`', '\n', '\r']):
+                    raise ValueError(f"Invalid characters in repository name: '{repo}'")
+
+                # If setting a repository, branch should also be provided
+                # (either in this request or already exists in conversation)
+                if (
+                    'selected_branch' not in request.model_fields_set
+                    and existing_branch is None
+                ):
+                    _logger.warning(
+                        f'Repository {repo} set without branch in the same request '
+                        'and no existing branch in conversation'
+                    )
+            else:
+                # Repository is being removed (set to null)
+                # Enforce consistency: branch and provider must also be cleared
+                if 'selected_branch' in request.model_fields_set:
+                    if request.selected_branch is not None:
+                        raise ValueError(
+                            'When removing repository, branch must also be cleared'
+                        )
+                if 'git_provider' in request.model_fields_set:
+                    if request.git_provider is not None:
+                        raise ValueError(
+                            'When removing repository, git_provider must also be cleared'
+                        )
+
+        # Validate branch if provided
+        if 'selected_branch' in request.model_fields_set:
+            branch = request.selected_branch
+            if branch is not None:
+                # Sanitize: check for dangerous characters
+                if any(c in branch for c in [';', '&', '|', '$', '`', '\n', '\r', ' ']):
+                    raise ValueError(f"Invalid characters in branch name: '{branch}'")
+
     async def update_app_conversation(
         self, conversation_id: UUID, request: AppConversationUpdateRequest
     ) -> AppConversation | None:
-        """Update an app conversation and return it. Return None if the conversation
-        did not exist.
+        """Update an app conversation and return it.
+
+        Return None if the conversation did not exist.
+
+        Only fields that are explicitly set in the request will be updated.
+        This allows partial updates where only specific fields are modified.
+        Fields can be set to None to clear them (e.g., removing a repository).
+
+        Raises:
+            ValueError: If repository/branch validation fails
         """
         info = await self.app_conversation_info_service.get_app_conversation_info(
             conversation_id
         )
         if info is None:
             return None
-        for field_name in AppConversationUpdateRequest.model_fields:
+
+        # Validate repository-related fields before updating
+        # Pass existing branch to avoid false warnings when only updating repository
+        self._validate_repository_update(request, existing_branch=info.selected_branch)
+
+        # Only update fields that were explicitly provided in the request
+        # This uses Pydantic's model_fields_set to detect which fields were set,
+        # allowing us to distinguish between "not provided" and "explicitly set to None"
+        for field_name in request.model_fields_set:
             value = getattr(request, field_name)
             setattr(info, field_name, value)
+
         info = await self.app_conversation_info_service.save_app_conversation_info(info)
         conversations = await self._build_app_conversations([info])
         return conversations[0]

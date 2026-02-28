@@ -103,11 +103,13 @@ class SetAuthCookieMiddleware:
         keycloak_auth_cookie = request.cookies.get('keycloak_auth')
         auth_header = request.headers.get('Authorization')
         mcp_auth_header = request.headers.get('X-Session-API-Key')
+        api_auth_header = request.headers.get('X-Access-Token')
         accepted_tos: bool | None = False
         if (
             keycloak_auth_cookie is None
             and (auth_header is None or not auth_header.startswith('Bearer '))
             and mcp_auth_header is None
+            and api_auth_header is None
         ):
             raise NoCredentialsError
 
@@ -160,10 +162,10 @@ class SetAuthCookieMiddleware:
             '/api/billing/customer-setup-success',
             '/api/billing/stripe-webhook',
             '/api/email/resend',
+            '/api/organizations/members/invite/accept',
             '/oauth/device/authorize',
             '/oauth/device/token',
             '/api/v1/web-client/config',
-            '/api/v1/webhooks/secrets',
         )
         if path in ignore_paths:
             return False
@@ -172,6 +174,10 @@ class SetAuthCookieMiddleware:
         if path.startswith('/api/shared-conversations') or path.startswith(
             '/api/shared-events'
         ):
+            return False
+
+        # Webhooks access is controlled using separate API keys
+        if path.startswith('/api/v1/webhooks/'):
             return False
 
         is_mcp = path.startswith('/mcp')
