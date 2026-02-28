@@ -19,7 +19,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import { useMigrateUserConsent } from "#/hooks/use-migrate-user-consent";
 import { SetupPaymentModal } from "#/components/features/payment/setup-payment-modal";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
-import { useIsOnTosPage } from "#/hooks/use-is-on-tos-page";
+import { useIsOnIntermediatePage } from "#/hooks/use-is-on-intermediate-page";
 import { useAutoLogin } from "#/hooks/use-auto-login";
 import { useAuthCallback } from "#/hooks/use-auth-callback";
 import { useReoTracking } from "#/hooks/use-reo-tracking";
@@ -69,7 +69,7 @@ export default function MainApp() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
-  const isOnTosPage = useIsOnTosPage();
+  const isOnIntermediatePage = useIsOnIntermediatePage();
   const { data: settings } = useSettings();
   const { migrateUserConsent } = useMigrateUserConsent();
   const { t } = useTranslation();
@@ -97,25 +97,25 @@ export default function MainApp() {
   useSyncPostHogConsent();
 
   React.useEffect(() => {
-    // Don't change language when on TOS page
-    if (!isOnTosPage && settings?.language) {
+    // Don't change language when on intermediate pages (TOS, profile questions)
+    if (!isOnIntermediatePage && settings?.language) {
       i18n.changeLanguage(settings.language);
     }
-  }, [settings?.language, isOnTosPage]);
+  }, [settings?.language, isOnIntermediatePage]);
 
   React.useEffect(() => {
-    // Don't show consent form when on TOS page
-    if (!isOnTosPage) {
+    // Don't show consent form when on intermediate pages
+    if (!isOnIntermediatePage) {
       const consentFormModalIsOpen =
         settings?.user_consents_to_analytics === null;
 
       setConsentFormIsOpen(consentFormModalIsOpen);
     }
-  }, [settings, isOnTosPage]);
+  }, [settings, isOnIntermediatePage]);
 
   React.useEffect(() => {
-    // Don't migrate user consent when on TOS page
-    if (!isOnTosPage) {
+    // Don't migrate user consent when on intermediate pages
+    if (!isOnIntermediatePage) {
       // Migrate user consent to the server if it was previously stored in localStorage
       migrateUserConsent({
         handleAnalyticsWasPresentInLocalStorage: () => {
@@ -123,7 +123,7 @@ export default function MainApp() {
         },
       });
     }
-  }, [isOnTosPage]);
+  }, [isOnIntermediatePage]);
 
   React.useEffect(() => {
     if (settings?.is_new_user && config.data?.app_mode === "saas") {
@@ -178,7 +178,7 @@ export default function MainApp() {
     isAuthLoading ||
     (!isAuthed &&
       !isAuthError &&
-      !isOnTosPage &&
+      !isOnIntermediatePage &&
       config.data?.app_mode === "saas" &&
       !loginMethodExists);
 
@@ -209,7 +209,7 @@ export default function MainApp() {
     !isAuthed &&
     !isAuthError &&
     !isFetchingAuth &&
-    !isOnTosPage &&
+    !isOnIntermediatePage &&
     config.data?.app_mode === "saas" &&
     loginMethodExists;
 

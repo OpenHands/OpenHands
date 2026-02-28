@@ -30,6 +30,10 @@ vi.mock("#/hooks/use-is-on-tos-page", () => ({
   useIsOnTosPage: () => false,
 }));
 
+vi.mock("#/hooks/use-is-on-intermediate-page", () => ({
+  useIsOnIntermediatePage: () => false,
+}));
+
 // Import the Zustand mock to enable automatic store resets
 vi.mock("zustand");
 

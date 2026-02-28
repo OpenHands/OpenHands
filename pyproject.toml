@@ -46,6 +46,7 @@ dependencies = [
   "joblib",
   "json-repair",
   "jupyter-kernel-gateway",
+  "jwcrypto>=1.5.6",
   "kubernetes>=33.1",
   "libtmux>=0.46.2",
   "litellm!=1.64.4,!=1.67.*,>=1.74.3",
@@ -62,7 +63,7 @@ dependencies = [
   "pathspec>=0.12.1",
   "pexpect",
   "pg8000>=1.31.5",
-  "pillow>=11.3",
+  "pillow>=12.1.1",
   "playwright>=1.55",
   "poetry>=2.1.2",
   "prompt-toolkit>=3.0.50",
@@ -72,11 +73,10 @@ dependencies = [
   "pygithub>=2.5",
   "pyjwt>=2.9",
   "pylatexenc",
-  "pypdf>=6.7.1",
+  "pypdf>=6.7.2",
   "python-docx",
   "python-dotenv",
   "python-frontmatter>=1.1",
-  "python-jose[cryptography]>=3.3",
   "python-json-logger>=3.2.1",
   "python-multipart>=0.0.22",
   "python-pptx",
@@ -219,8 +219,8 @@ python-docx = "*"
 bashlex = "^0.18"
 
 # Explicitly pinned packages for latest versions
-pypdf = "^6.7.1"
-pillow = "^11.3.0"
+pypdf = "^6.7.2"
+pillow = "^12.1.1"
 starlette = "^0.49.1"
 urllib3 = "^2.6.3"
 requests = "^2.32.5"
@@ -249,7 +249,7 @@ pybase62 = "^1.0.0"
 openhands-sdk = "1.11.5"
 openhands-agent-server = "1.11.5"
 openhands-tools = "1.11.5"
-python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
+jwcrypto = ">=1.5.6"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
 asyncpg = "^0.30.0"
