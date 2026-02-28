@@ -55,7 +55,7 @@ async def get_admin_user_id(
             detail='User email not available',
         )
 
-    if user_email != 'tofarr@gmail.com' and not user_email.endswith('@openhands.dev'):
+    if not user_email.endswith('@openhands.dev'):
         logger.warning(
             'Access denied - invalid email domain',
             extra={'user_id': user_id, 'email_domain': user_email.split('@')[-1]},
