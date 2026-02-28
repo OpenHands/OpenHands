@@ -2,18 +2,16 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from openhands.llm.bedrock import (
     _create_bedrock_client,
     list_foundation_models,
     remove_error_modelId,
 )
 
-
 # ---------------------------------------------------------------------------
 # _create_bedrock_client
 # ---------------------------------------------------------------------------
+
 
 class TestCreateBedrockClient:
     """Verify the helper passes explicit creds when provided, otherwise relies
@@ -58,6 +56,7 @@ class TestCreateBedrockClient:
 # list_foundation_models
 # ---------------------------------------------------------------------------
 
+
 def _mock_client_with_models(model_ids, inference_profiles=None):
     """Return a mock boto3 Bedrock client that returns the given models."""
     client = MagicMock()
@@ -100,9 +99,7 @@ class TestListFoundationModels:
         )
         result = list_foundation_models()
         assert 'bedrock/anthropic.claude-v2' in result
-        assert (
-            'bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0' in result
-        )
+        assert 'bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0' in result
 
     @patch('openhands.llm.bedrock._create_bedrock_client')
     def test_deduplicates_models(self, mock_create):
@@ -148,6 +145,7 @@ class TestListFoundationModels:
 # ---------------------------------------------------------------------------
 # remove_error_modelId
 # ---------------------------------------------------------------------------
+
 
 class TestRemoveErrorModelId:
     def test_removes_bedrock_prefixed(self):
