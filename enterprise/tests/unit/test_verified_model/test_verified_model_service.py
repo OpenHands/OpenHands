@@ -210,10 +210,7 @@ class TestDeleteVerifiedModel:
     async def test_delete_model(self, _seed_models, async_session_maker):
         async with async_session_maker() as session:
             service = VerifiedModelService(session)
-            assert (
-                await service.delete_verified_model('claude-sonnet', 'openhands')
-                is True
-            )
+            await service.delete_verified_model('claude-sonnet', 'openhands')
 
         async with async_session_maker() as session:
             service = VerifiedModelService(session)
@@ -224,6 +221,5 @@ class TestDeleteVerifiedModel:
     async def test_delete_not_found(self, _seed_models, async_session_maker):
         async with async_session_maker() as session:
             service = VerifiedModelService(session)
-            assert (
-                await service.delete_verified_model('nonexistent', 'openhands') is False
-            )
+            with pytest.raises(ValueError):
+                assert await service.delete_verified_model('nonexistent', 'openhands')
