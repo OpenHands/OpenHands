@@ -59,6 +59,18 @@ describe("extractModelAndProvider", () => {
       separator: "/",
     });
 
+    expect(extractModelAndProvider("gpt-5.2")).toEqual({
+      provider: "openai",
+      model: "gpt-5.2",
+      separator: "/",
+    });
+
+    expect(extractModelAndProvider("gpt-5.2-codex")).toEqual({
+      provider: "openai",
+      model: "gpt-5.2-codex",
+      separator: "/",
+    });
+
     expect(extractModelAndProvider("claude-3-5-sonnet-20240620")).toEqual({
       provider: "anthropic",
       model: "claude-3-5-sonnet-20240620",

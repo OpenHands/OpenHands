@@ -24,7 +24,8 @@ async def get_litellm_models() -> list[str]:
     """Get all models supported by LiteLLM.
 
     This function combines models from litellm and Bedrock, removing any
-    error-prone Bedrock models.
+    error-prone Bedrock models. In SaaS mode, it uses database-backed
+    verified models for dynamic updates without code deployments.
 
     To get the models:
     ```sh
@@ -34,7 +35,29 @@ async def get_litellm_models() -> list[str]:
     Returns:
         list[str]: A sorted list of unique model names.
     """
-    return get_supported_llm_models(config)
+    verified_models = _load_verified_models_from_db()
+    return get_supported_llm_models(config, verified_models)
+
+
+def _load_verified_models_from_db() -> list[str] | None:
+    """Try to load verified models from the database (SaaS mode only).
+
+    Returns:
+        List of model strings like 'provider/model_name' if available, None otherwise.
+    """
+    try:
+        from storage.verified_model_store import VerifiedModelStore
+    except ImportError:
+        return None
+
+    try:
+        db_models = VerifiedModelStore.get_enabled_models()
+        return [f'{m.provider}/{m.model_name}' for m in db_models]
+    except Exception:
+        from openhands.core.logger import openhands_logger as logger
+
+        logger.exception('Failed to load verified models from database')
+        return None
 
 
 @app.get('/agents', response_model=list[str])

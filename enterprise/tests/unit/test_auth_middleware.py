@@ -284,3 +284,85 @@ async def test_middleware_ignores_email_resend_path_no_tos_check(
         assert result == mock_response
         mock_call_next.assert_called_once_with(mock_request)
         # Should not raise TosNotAcceptedError for this path
+
+
+@pytest.mark.asyncio
+async def test_middleware_skips_webhook_endpoints(
+    middleware, mock_request, mock_response
+):
+    """Test middleware skips webhook endpoints (/api/v1/webhooks/*) and doesn't require auth."""
+    # Test various webhook paths
+    webhook_paths = [
+        '/api/v1/webhooks/events',
+        '/api/v1/webhooks/events/123',
+        '/api/v1/webhooks/stats',
+        '/api/v1/webhooks/parent-conversation',
+    ]
+
+    for path in webhook_paths:
+        mock_request.cookies = {}
+        mock_request.url = MagicMock()
+        mock_request.url.hostname = 'localhost'
+        mock_request.url.path = path
+        mock_call_next = AsyncMock(return_value=mock_response)
+
+        # Act
+        result = await middleware(mock_request, mock_call_next)
+
+        # Assert - middleware should skip auth check and call next
+        assert result == mock_response
+        mock_call_next.assert_called_once_with(mock_request)
+
+
+@pytest.mark.asyncio
+async def test_middleware_skips_webhook_secrets_endpoint(
+    middleware, mock_request, mock_response
+):
+    """Test middleware skips the old /api/v1/webhooks/secrets endpoint."""
+    # This was explicitly in ignore_paths but is now handled by the prefix check
+    mock_request.cookies = {}
+    mock_request.url = MagicMock()
+    mock_request.url.hostname = 'localhost'
+    mock_request.url.path = '/api/v1/webhooks/secrets'
+    mock_call_next = AsyncMock(return_value=mock_response)
+
+    # Act
+    result = await middleware(mock_request, mock_call_next)
+
+    # Assert - middleware should skip auth check and call next
+    assert result == mock_response
+    mock_call_next.assert_called_once_with(mock_request)
+
+
+@pytest.mark.asyncio
+async def test_middleware_does_not_skip_similar_non_webhook_paths(
+    middleware, mock_response
+):
+    """Test middleware does NOT skip paths that start with /api/v1/webhook (without 's')."""
+    # These paths should still be processed by the middleware (not skipped)
+    # They start with /api so _should_attach returns True, and since there's no auth,
+    # middleware should return 401 response (it catches NoCredentialsError internally)
+    non_webhook_paths = [
+        '/api/v1/webhook/events',
+        '/api/v1/webhook/something',
+    ]
+
+    for path in non_webhook_paths:
+        # Create a fresh mock request for each test
+        mock_request = MagicMock(spec=Request)
+        mock_request.cookies = {}
+        mock_request.url = MagicMock()
+        mock_request.url.hostname = 'localhost'
+        mock_request.url.path = path
+        mock_request.headers = MagicMock()
+        mock_request.headers.get = MagicMock(side_effect=lambda k: None)
+
+        # Since these paths start with /api, _should_attach returns True
+        # Since there's no auth, middleware catches NoCredentialsError and returns 401
+        mock_call_next = AsyncMock()
+        result = await middleware(mock_request, mock_call_next)
+
+        # Should return a 401 response, not raise an exception
+        assert result.status_code == status.HTTP_401_UNAUTHORIZED
+        # Should NOT call next for non-webhook paths when auth is missing
+        mock_call_next.assert_not_called()

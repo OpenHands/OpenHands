@@ -16,11 +16,11 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 const { DEFAULT_FEATURE_FLAGS, useIsAuthedMock, useConfigMock } = vi.hoisted(
   () => {
     const defaultFeatureFlags = {
-      ENABLE_BILLING: false,
-      HIDE_LLM_SETTINGS: false,
-      ENABLE_JIRA: false,
-      ENABLE_JIRA_DC: false,
-      ENABLE_LINEAR: false,
+      enable_billing: false,
+      hide_llm_settings: false,
+      enable_jira: false,
+      enable_jira_dc: false,
+      enable_linear: false,
     };
 
     return {
@@ -33,8 +33,8 @@ const { DEFAULT_FEATURE_FLAGS, useIsAuthedMock, useConfigMock } = vi.hoisted(
       }),
       useConfigMock: vi.fn().mockReturnValue({
         data: {
-          APP_MODE: "oss",
-          FEATURE_FLAGS: defaultFeatureFlags,
+          app_mode: "oss",
+          feature_flags: defaultFeatureFlags,
         },
         isLoading: false,
       }),
@@ -141,19 +141,24 @@ describe("HomeScreen", () => {
       isError: false,
     });
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "oss", FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS },
+      data: { app_mode: "oss", feature_flags: DEFAULT_FEATURE_FLAGS },
       isLoading: false,
     });
 
     // Mock config to avoid SaaS redirect logic
     vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-      APP_MODE: "oss",
-      GITHUB_CLIENT_ID: "test-client-id",
-      POSTHOG_CLIENT_KEY: "test-posthog-key",
-      PROVIDERS_CONFIGURED: ["github"],
-      AUTH_URL: "https://auth.example.com",
-      FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS,
-    } as Awaited<ReturnType<typeof OptionService.getConfig>>);
+      app_mode: "oss",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github"],
+      auth_url: "https://auth.example.com",
+      feature_flags: DEFAULT_FEATURE_FLAGS,
+      maintenance_start_time: null,
+      recaptcha_site_key: null,
+      faulty_models: [],
+      error_message: null,
+      updated_at: "2024-01-14T10:00:00Z",
+      github_app_slug: null,
+    });
 
     vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
 
@@ -444,18 +449,23 @@ describe("Settings 404", () => {
       isError: false,
     });
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "oss", FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS },
+      data: { app_mode: "oss", feature_flags: DEFAULT_FEATURE_FLAGS },
       isLoading: false,
     });
 
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "oss",
-      GITHUB_CLIENT_ID: "test-client-id",
-      POSTHOG_CLIENT_KEY: "test-posthog-key",
-      PROVIDERS_CONFIGURED: ["github"],
-      AUTH_URL: "https://auth.example.com",
-      FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS,
-    } as Awaited<ReturnType<typeof OptionService.getConfig>>);
+      app_mode: "oss",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github"],
+      auth_url: "https://auth.example.com",
+      feature_flags: DEFAULT_FEATURE_FLAGS,
+      maintenance_start_time: null,
+      recaptcha_site_key: null,
+      faulty_models: [],
+      error_message: null,
+      updated_at: "2024-01-14T10:00:00Z",
+      github_app_slug: null,
+    });
 
     vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
 
@@ -510,14 +520,14 @@ describe("Settings 404", () => {
 
   it("should not open the settings modal if GET /settings fails but is SaaS mode", async () => {
     useConfigMock.mockReturnValue({
-      data: { APP_MODE: "saas", FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS },
+      data: { app_mode: "saas", feature_flags: DEFAULT_FEATURE_FLAGS },
       isLoading: false,
     });
 
-    // @ts-expect-error - we only need APP_MODE for this test
+    // @ts-expect-error - we only need app_mode for this test
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "saas",
-      FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS,
+      app_mode: "saas",
+      feature_flags: DEFAULT_FEATURE_FLAGS,
     });
     const error = createAxiosNotFoundErrorObject();
     getSettingsSpy.mockRejectedValue(error);
@@ -543,20 +553,25 @@ describe("Setup Payment modal", () => {
     });
     useConfigMock.mockReturnValue({
       data: {
-        APP_MODE: "saas",
-        FEATURE_FLAGS: { ...DEFAULT_FEATURE_FLAGS, ENABLE_BILLING: true },
+        app_mode: "saas",
+        feature_flags: { ...DEFAULT_FEATURE_FLAGS, enable_billing: true },
       },
       isLoading: false,
     });
 
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "saas",
-      GITHUB_CLIENT_ID: "test-client-id",
-      POSTHOG_CLIENT_KEY: "test-posthog-key",
-      PROVIDERS_CONFIGURED: ["github"],
-      AUTH_URL: "https://auth.example.com",
-      FEATURE_FLAGS: { ...DEFAULT_FEATURE_FLAGS, ENABLE_BILLING: true },
-    } as Awaited<ReturnType<typeof OptionService.getConfig>>);
+      app_mode: "saas",
+      posthog_client_key: "test-posthog-key",
+      providers_configured: ["github"],
+      auth_url: "https://auth.example.com",
+      feature_flags: { ...DEFAULT_FEATURE_FLAGS, enable_billing: true },
+      maintenance_start_time: null,
+      recaptcha_site_key: null,
+      faulty_models: [],
+      error_message: null,
+      updated_at: "2024-01-14T10:00:00Z",
+      github_app_slug: null,
+    });
 
     vi.spyOn(AuthService, "authenticate").mockResolvedValue(true);
 

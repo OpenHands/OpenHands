@@ -1275,6 +1275,25 @@ def test_opus_45_keeps_temperature_drops_top_p(mock_completion):
 
 
 @patch('openhands.llm.llm.litellm_completion')
+def test_opus_46_keeps_temperature_drops_top_p(mock_completion):
+    mock_completion.return_value = {
+        'choices': [{'message': {'content': 'ok'}}],
+    }
+    config = LLMConfig(
+        model='anthropic/claude-opus-4-6',
+        api_key='k',
+        temperature=0.7,
+        top_p=0.9,
+    )
+    llm = LLM(config, service_id='svc')
+    llm.completion(messages=[{'role': 'user', 'content': 'hi'}])
+    call_kwargs = mock_completion.call_args[1]
+    assert call_kwargs.get('temperature') == 0.7
+    # Anthropic rejects both temperature and top_p together on Opus 4.6; we keep temperature and drop top_p
+    assert 'top_p' not in call_kwargs
+
+
+@patch('openhands.llm.llm.litellm_completion')
 def test_sonnet_4_keeps_temperature_drops_top_p(mock_completion):
     mock_completion.return_value = {
         'choices': [{'message': {'content': 'ok'}}],

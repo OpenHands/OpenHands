@@ -21,11 +21,11 @@ vi.mock("#/hooks/query/use-config", () => ({
 }));
 
 const DEFAULT_FEATURE_FLAGS = {
-  ENABLE_BILLING: false,
-  HIDE_LLM_SETTINGS: false,
-  ENABLE_JIRA: false,
-  ENABLE_JIRA_DC: false,
-  ENABLE_LINEAR: false,
+  enable_billing: false,
+  hide_llm_settings: false,
+  enable_jira: false,
+  enable_jira_dc: false,
+  enable_linear: false,
 };
 
 const RouterStub = createRoutesStub([
@@ -61,9 +61,9 @@ describe("MainApp - Auth refetch behavior", () => {
     });
     useConfigMock.mockReturnValue({
       data: {
-        APP_MODE: "saas",
-        GITHUB_CLIENT_ID: "test-client-id",
-        FEATURE_FLAGS: DEFAULT_FEATURE_FLAGS,
+        app_mode: "saas",
+        github_client_id: "test-client-id",
+        feature_flags: DEFAULT_FEATURE_FLAGS,
       },
       isLoading: false,
     });

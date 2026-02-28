@@ -2,6 +2,7 @@ import axios from "axios";
 import { openHands } from "../open-hands-axios";
 import { ConversationTrigger, GetVSCodeUrlResponse } from "../open-hands.types";
 import { Provider } from "#/types/settings";
+import { SuggestedTask } from "#/utils/types";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import { buildSessionHeaders } from "#/utils/utils";
 import type {
@@ -12,6 +13,7 @@ import type {
   V1AppConversationStartTaskPage,
   V1AppConversation,
   GetSkillsResponse,
+  V1RuntimeConversationInfo,
 } from "./v1-conversation-service.types";
 
 class V1ConversationService {
@@ -60,6 +62,7 @@ class V1ConversationService {
     initialUserMsg?: string,
     selected_branch?: string,
     conversationInstructions?: string,
+    suggestedTask?: SuggestedTask,
     trigger?: ConversationTrigger,
     parent_conversation_id?: string,
     agent_type?: "default" | "plan",
@@ -68,14 +71,15 @@ class V1ConversationService {
       selected_repository: selectedRepository,
       git_provider,
       selected_branch,
+      suggested_task: suggestedTask,
       title: conversationInstructions,
       trigger,
       parent_conversation_id: parent_conversation_id || null,
       agent_type,
     };
 
-    // Add initial message if provided
-    if (initialUserMsg) {
+    // suggested_task implies the backend will construct the initial_message
+    if (!suggestedTask && initialUserMsg) {
       body.initial_message = {
         role: "user",
         content: [
@@ -316,14 +320,47 @@ class V1ConversationService {
   }
 
   /**
+   * Update a V1 conversation's repository settings
+   * @param conversationId The conversation ID
+   * @param repository The repository to attach (e.g., "owner/repo") or null to remove
+   * @param branch The branch to use (optional)
+   * @param gitProvider The git provider (e.g., "github", "gitlab")
+   * @returns Updated conversation info
+   */
+  static async updateConversationRepository(
+    conversationId: string,
+    repository: string | null,
+    branch?: string | null,
+    gitProvider?: string | null,
+  ): Promise<V1AppConversation> {
+    const payload: Record<string, string | null | undefined> = {};
+
+    if (repository !== undefined) {
+      payload.selected_repository = repository;
+    }
+    if (branch !== undefined) {
+      payload.selected_branch = branch;
+    }
+    if (gitProvider !== undefined) {
+      payload.git_provider = gitProvider;
+    }
+
+    const { data } = await openHands.patch<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      payload,
+    );
+    return data;
+  }
+
+  /**
    * Read a file from a specific conversation's sandbox workspace
    * @param conversationId The conversation ID
-   * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/PLAN.md)
+   * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/.agents_tmp/PLAN.md)
    * @returns The content of the file or an empty string if the file doesn't exist
    */
   static async readConversationFile(
     conversationId: string,
-    filePath: string = "/workspace/project/PLAN.md",
+    filePath: string = "/workspace/project/.agents_tmp/PLAN.md",
   ): Promise<string> {
     const params = new URLSearchParams();
     params.append("file_path", filePath);
@@ -358,6 +395,32 @@ class V1ConversationService {
     const { data } = await openHands.get<GetSkillsResponse>(
       `/api/v1/app-conversations/${conversationId}/skills`,
     );
+    return data;
+  }
+
+  /**
+   * Get conversation info directly from the runtime for a V1 conversation
+   * Uses the custom runtime URL from the conversation
+   *
+   * @param conversationId The conversation ID
+   * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
+   * @param sessionApiKey Session API key for authentication (required for V1)
+   * @returns Conversation info from the runtime
+   */
+  static async getRuntimeConversation(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<V1RuntimeConversationInfo> {
+    const url = this.buildRuntimeUrl(
+      conversationUrl,
+      `/api/conversations/${conversationId}`,
+    );
+    const headers = buildSessionHeaders(sessionApiKey);
+
+    const { data } = await axios.get<V1RuntimeConversationInfo>(url, {
+      headers,
+    });
     return data;
   }
 }

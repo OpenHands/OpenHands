@@ -16,6 +16,7 @@ from keycloak.exceptions import (
     KeycloakError,
     KeycloakPostError,
 )
+from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
     BITBUCKET_APP_CLIENT_ID,
     BITBUCKET_APP_CLIENT_SECRET,
@@ -47,6 +48,10 @@ from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_
 from openhands.integrations.service_types import ProviderType
 from openhands.server.types import SessionExpiredError
 from openhands.utils.http_session import httpx_verify_option
+
+# HTTP timeout for external IDP calls (in seconds)
+# This prevents indefinite blocking if an IDP is slow or unresponsive
+IDP_HTTP_TIMEOUT = 15.0
 
 
 def _before_sleep_callback(retry_state: RetryCallState) -> None:
@@ -201,7 +206,9 @@ class TokenManager:
         access_token: str,
         idp: ProviderType,
     ) -> dict[str, str | int]:
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
             base_url = KEYCLOAK_SERVER_URL_EXT if self.external else KEYCLOAK_SERVER_URL
             url = f'{base_url}/realms/{KEYCLOAK_REALM_NAME}/broker/{idp.value}/token'
             headers = {
@@ -360,7 +367,9 @@ class TokenManager:
             'refresh_token': refresh_token,
             'grant_type': 'refresh_token',
         }
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(url, data=payload)
             response.raise_for_status()
             logger.info('Successfully refreshed GitHub token')
@@ -386,7 +395,9 @@ class TokenManager:
             'refresh_token': refresh_token,
             'grant_type': 'refresh_token',
         }
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(url, data=payload)
             response.raise_for_status()
             logger.info('Successfully refreshed GitLab token')
@@ -414,7 +425,9 @@ class TokenManager:
             'refresh_token': refresh_token,
         }
 
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(url, data=data, headers=headers)
             response.raise_for_status()
             logger.info('Successfully refreshed Bitbucket token')
@@ -426,6 +439,8 @@ class TokenManager:
         access_token = data.get('access_token')
         refresh_token = data.get('refresh_token')
         if not access_token or not refresh_token:
+            if data.get('error') == 'bad_refresh_token':
+                raise ExpiredError()
             raise ValueError(
                 'Failed to refresh token: missing access_token or refresh_token in response.'
             )

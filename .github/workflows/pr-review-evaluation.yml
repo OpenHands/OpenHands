@@ -1,0 +1,85 @@
+---
+name: PR Review Evaluation
+
+# This workflow evaluates how well PR review comments were addressed.
+# It runs when a PR is closed to assess review effectiveness.
+#
+# Security note: pull_request_target is safe here because:
+# 1. Only triggers on PR close (not on code changes)
+# 2. Does not checkout PR code - only downloads artifacts from trusted workflow runs
+# 3. Runs evaluation scripts from the extensions repo, not from the PR
+
+on:
+    pull_request_target:
+        types: [closed]
+
+permissions:
+    contents: read
+    pull-requests: read
+
+jobs:
+    evaluate:
+        runs-on: ubuntu-24.04
+        env:
+            PR_NUMBER: ${{ github.event.pull_request.number }}
+            REPO_NAME: ${{ github.repository }}
+            PR_MERGED: ${{ github.event.pull_request.merged }}
+
+        steps:
+            - name: Download review trace artifact
+              id: download-trace
+              uses: dawidd6/action-download-artifact@v6
+              continue-on-error: true
+              with:
+                  workflow: pr-review-by-openhands.yml
+                  name: pr-review-trace-${{ github.event.pull_request.number }}
+                  path: trace-info
+                  search_artifacts: true
+                  if_no_artifact_found: warn
+
+            - name: Check if trace file exists
+              id: check-trace
+              run: |
+                  if [ -f "trace-info/laminar_trace_info.json" ]; then
+                    echo "trace_exists=true" >> $GITHUB_OUTPUT
+                    echo "Found trace file for PR #$PR_NUMBER"
+                  else
+                    echo "trace_exists=false" >> $GITHUB_OUTPUT
+                    echo "No trace file found for PR #$PR_NUMBER - skipping evaluation"
+                  fi
+
+            # Always checkout main branch for security - cannot test script changes in PRs
+            - name: Checkout extensions repository
+              if: steps.check-trace.outputs.trace_exists == 'true'
+              uses: actions/checkout@v5
+              with:
+                  repository: OpenHands/extensions
+                  path: extensions
+
+            - name: Set up Python
+              if: steps.check-trace.outputs.trace_exists == 'true'
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.12'
+
+            - name: Install dependencies
+              if: steps.check-trace.outputs.trace_exists == 'true'
+              run: pip install lmnr
+
+            - name: Run evaluation
+              if: steps.check-trace.outputs.trace_exists == 'true'
+              env:
+                  # Script expects LMNR_PROJECT_API_KEY; org secret is named LMNR_SKILLS_API_KEY
+                  LMNR_PROJECT_API_KEY: ${{ secrets.LMNR_SKILLS_API_KEY }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  python extensions/plugins/pr-review/scripts/evaluate_review.py \
+                      --trace-file trace-info/laminar_trace_info.json
+
+            - name: Upload evaluation logs
+              uses: actions/upload-artifact@v5
+              if: always() && steps.check-trace.outputs.trace_exists == 'true'
+              with:
+                  name: pr-review-evaluation-${{ github.event.pull_request.number }}
+                  path: '*.log'
+                  retention-days: 30

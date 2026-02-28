@@ -516,11 +516,13 @@ class SaasNestedConversationManager(ConversationManager):
                     )
                     raise
 
-    def _get_mcp_config(self, user_id: str) -> MCPConfig | None:
+    async def _get_mcp_config(self, user_id: str) -> MCPConfig | None:
         api_key_store = ApiKeyStore.get_instance()
-        mcp_api_key = api_key_store.retrieve_mcp_api_key(user_id)
+        mcp_api_key = await api_key_store.retrieve_mcp_api_key(user_id)
         if not mcp_api_key:
-            mcp_api_key = api_key_store.create_api_key(user_id, 'MCP_API_KEY', None)
+            mcp_api_key = await api_key_store.create_api_key(
+                user_id, 'MCP_API_KEY', None
+            )
         if not mcp_api_key:
             return None
         web_host = os.environ.get('WEB_HOST', 'app.all-hands.dev')
@@ -547,7 +549,7 @@ class SaasNestedConversationManager(ConversationManager):
             'conversation_id': sid,
         }
 
-        mcp_config = self._get_mcp_config(user_id)
+        mcp_config = await self._get_mcp_config(user_id)
         if mcp_config:
             # Merge with any MCP config from settings
             if settings.mcp_config:
@@ -1136,6 +1138,71 @@ class SaasNestedConversationManager(ConversationManager):
             'last_updated_at': last_updated_at.isoformat() if last_updated_at else None,
         }
         update_conversation_metadata(conversation_id, metadata_content)
+
+    async def list_files(self, sid: str, path: str | None = None) -> list[str]:
+        """List files in the workspace for a conversation.
+
+        Delegates to the nested container's list-files endpoint.
+
+        Args:
+            sid: The session/conversation ID.
+            path: Optional path to list files from. If None, lists from workspace root.
+
+        Returns:
+            A list of file paths.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None or runtime.get('status') != 'running':
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        session_api_key = runtime.get('session_api_key')
+
+        return await self._fetch_list_files_from_nested(
+            sid, nested_url, session_api_key, path
+        )
+
+    async def select_file(self, sid: str, file: str) -> tuple[str | None, str | None]:
+        """Read a file from the workspace via nested container.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None or runtime.get('status') != 'running':
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        session_api_key = runtime.get('session_api_key')
+
+        return await self._fetch_select_file_from_nested(
+            sid, nested_url, session_api_key, file
+        )
+
+    async def upload_files(
+        self, sid: str, files: list[tuple[str, bytes]]
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        """Upload files to the workspace via nested container.
+
+        Raises:
+            ValueError: If the conversation is not running.
+            httpx.HTTPError: If there's an error communicating with the nested runtime.
+        """
+        runtime = await self._get_runtime(sid)
+        if runtime is None or runtime.get('status') != 'running':
+            raise ValueError(f'Conversation {sid} is not running')
+
+        nested_url = self._get_nested_url_for_runtime(runtime['runtime_id'], sid)
+        session_api_key = runtime.get('session_api_key')
+
+        return await self._fetch_upload_files_to_nested(
+            sid, nested_url, session_api_key, files
+        )
 
 
 def _last_updated_at_key(conversation: ConversationMetadata) -> float:

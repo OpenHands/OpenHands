@@ -18,7 +18,7 @@ export const useUserRepositories = (selectedProvider: Provider | null) => {
     enabled:
       (providers || []).length > 0 &&
       !!selectedProvider &&
-      !shouldUseInstallationRepos(selectedProvider, config?.APP_MODE),
+      !shouldUseInstallationRepos(selectedProvider, config?.app_mode),
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
   });

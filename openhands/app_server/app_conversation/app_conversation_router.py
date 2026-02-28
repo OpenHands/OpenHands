@@ -18,6 +18,7 @@ from openhands.app_server.services.httpx_client_injector import (
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
+from openhands.server.dependencies import get_dependencies
 
 # Handle anext compatibility for Python < 3.10
 if sys.version_info >= (3, 10):
@@ -74,7 +75,11 @@ from openhands.app_server.utils.docker_utils import (
 from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
-router = APIRouter(prefix='/app-conversations', tags=['Conversations'])
+# We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
+# is protected. The actual protection is provided by SetAuthCookieMiddleware
+router = APIRouter(
+    prefix='/app-conversations', tags=['Conversations'], dependencies=get_dependencies()
+)
 logger = logging.getLogger(__name__)
 app_conversation_service_dependency = depends_app_conversation_service()
 app_conversation_start_task_service_dependency = (
@@ -186,14 +191,39 @@ async def count_app_conversations(
 
 @router.get('')
 async def batch_get_app_conversations(
-    ids: Annotated[list[UUID], Query()],
+    ids: Annotated[list[str], Query()],
     app_conversation_service: AppConversationService = (
         app_conversation_service_dependency
     ),
 ) -> list[AppConversation | None]:
-    """Get a batch of sandboxed conversations given their ids. Return None for any missing."""
-    assert len(ids) < 100
-    app_conversations = await app_conversation_service.batch_get_app_conversations(ids)
+    """Get a batch of sandboxed conversations given their ids. Return None for any missing.
+
+    Accepts UUIDs as strings (with or without dashes) and converts them internally.
+    Returns 400 Bad Request if any string cannot be converted to a valid UUID.
+    """
+    if len(ids) >= 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Too many ids requested. Maximum is 99.',
+        )
+
+    uuids: list[UUID] = []
+    invalid_ids: list[str] = []
+    for id_str in ids:
+        try:
+            uuids.append(UUID(id_str))
+        except ValueError:
+            invalid_ids.append(id_str)
+
+    if invalid_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Invalid UUID format for ids: {invalid_ids}',
+        )
+
+    app_conversations = await app_conversation_service.batch_get_app_conversations(
+        uuids
+    )
     return app_conversations
 
 
@@ -621,7 +651,6 @@ async def _stream_app_conversation_start(
     user_context: UserContext,
 ) -> AsyncGenerator[str, None]:
     """Stream a json list, item by item."""
-
     # Because the original dependencies are closed after the method returns, we need
     # a new dependency context which will continue intil the stream finishes.
     state = InjectorState()
