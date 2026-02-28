@@ -1,5 +1,9 @@
 import { http, delay, HttpResponse } from "msw";
-import { Conversation, ResultSet } from "#/api/open-hands.types";
+import {
+  Conversation,
+  GetMicroagentsResponse,
+  ResultSet,
+} from "#/api/open-hands.types";
 
 const conversations: Conversation[] = [
   {
@@ -114,5 +118,55 @@ export const CONVERSATION_HANDLERS = [
       return HttpResponse.json(null, { status: 200 });
     }
     return HttpResponse.json(null, { status: 404 });
+  }),
+
+  http.get("/api/conversations/:conversationId/microagents", async () => {
+    const response: GetMicroagentsResponse = {
+      microagents: [
+        {
+          name: "init",
+          type: "agentskills",
+          content: "Initialize an AGENTS.md file for the repository",
+          triggers: ["/init"],
+        },
+        {
+          name: "releasenotes",
+          type: "agentskills",
+          content: "Generate a changelog from the most recent release",
+          triggers: ["/releasenotes"],
+        },
+        {
+          name: "test-runner",
+          type: "agentskills",
+          content: "Run the test suite and report results",
+          triggers: ["/test"],
+        },
+        {
+          name: "code-search",
+          type: "knowledge",
+          content: "Search the codebase semantically",
+          triggers: ["/search"],
+        },
+        {
+          name: "docker",
+          type: "agentskills",
+          content: "Docker usage guide for container environments",
+          triggers: ["docker", "container"],
+        },
+        {
+          name: "github",
+          type: "agentskills",
+          content: "GitHub API interaction guide",
+          triggers: ["github", "git"],
+        },
+        {
+          name: "work_hosts",
+          type: "repo",
+          content: "Available hosts for web applications",
+          triggers: [],
+        },
+      ],
+    };
+    return HttpResponse.json(response);
   }),
 ];

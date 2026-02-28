@@ -4,7 +4,7 @@ import json
 import os
 import re
 import uuid
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import requests
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
@@ -371,9 +371,7 @@ async def create_jira_workspace(request: Request, workspace_data: JiraWorkspaceC
             'prompt': 'consent',
         }
 
-        auth_url = (
-            f"{JIRA_AUTH_URL}?{'&'.join([f'{k}={v}' for k, v in auth_params.items()])}"
-        )
+        auth_url = f'{JIRA_AUTH_URL}?{urlencode(auth_params)}'
 
         return JSONResponse(
             content={
@@ -432,9 +430,7 @@ async def create_workspace_link(request: Request, link_data: JiraLinkCreate):
             'response_type': 'code',
             'prompt': 'consent',
         }
-        auth_url = (
-            f"{JIRA_AUTH_URL}?{'&'.join([f'{k}={v}' for k, v in auth_params.items()])}"
-        )
+        auth_url = f'{JIRA_AUTH_URL}?{urlencode(auth_params)}'
 
         return JSONResponse(
             content={

@@ -9,7 +9,6 @@ import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ChangeAgentContextMenu } from "./change-agent-context-menu";
 import { cn } from "#/utils/utils";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -26,8 +25,6 @@ export function ChangeAgentButton() {
   const webSocketStatus = useUnifiedWebSocketStatus();
 
   const isWebSocketConnected = webSocketStatus === "CONNECTED";
-
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   const { curAgentState } = useAgentState();
 
@@ -83,10 +80,7 @@ export function ChangeAgentButton() {
   }, [isAgentRunning, contextMenuOpen, isWebSocketConnected]);
 
   const isButtonDisabled =
-    isAgentRunning ||
-    isCreatingConversation ||
-    !isWebSocketConnected ||
-    !shouldUsePlanningAgent;
+    isAgentRunning || isCreatingConversation || !isWebSocketConnected;
 
   // Handle Shift + Tab keyboard shortcut to cycle through modes
   useEffect(() => {
@@ -150,10 +144,6 @@ export function ChangeAgentButton() {
     }
     return <LessonPlanIcon width={18} height={18} color="#ffffff" />;
   }, [isExecutionAgent]);
-
-  if (!shouldUsePlanningAgent) {
-    return null;
-  }
 
   return (
     <div className="relative">

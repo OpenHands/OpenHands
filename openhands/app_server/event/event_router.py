@@ -11,8 +11,15 @@ from openhands.app_server.config import depends_event_service
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventKind
 from openhands.sdk import Event
+from openhands.server.dependencies import get_dependencies
 
-router = APIRouter(prefix='/conversation/{conversation_id}/events', tags=['Events'])
+# We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
+# is protected. The actual protection is provided by SetAuthCookieMiddleware
+router = APIRouter(
+    prefix='/conversation/{conversation_id}/events',
+    tags=['Events'],
+    dependencies=get_dependencies(),
+)
 event_service_dependency = depends_event_service()
 
 

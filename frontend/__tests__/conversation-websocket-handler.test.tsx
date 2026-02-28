@@ -358,6 +358,30 @@ describe("Conversation WebSocket Handler", () => {
       });
     });
 
+    it("should show friendly i18n message for budget ConversationErrorEvent", async () => {
+      const mockBudgetConversationError = createMockConversationErrorEvent({
+        detail:
+          "Budget has been exceeded! Current cost: 18.51, Max budget: 18.24",
+      });
+
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.send(JSON.stringify(mockBudgetConversationError));
+        }),
+      );
+
+      renderWithWebSocketContext(<ErrorMessageStoreComponent />);
+
+      expect(screen.getByTestId("error-message")).toHaveTextContent("none");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("error-message")).toHaveTextContent(
+          "STATUS$ERROR_LLM_OUT_OF_CREDITS",
+        );
+      });
+    });
+
     it("should set error message store on WebSocket connection errors", async () => {
       // Simulate a connect-then-fail sequence (the MSW server auto-connects by default).
       // This should surface an error message because the app has previously connected.

@@ -1680,8 +1680,8 @@ async def test_condenser_metrics_included(mock_agent_with_stats, test_event_stre
     assert last_action.llm_metrics is not None
 
     # Verify that both agent and condenser metrics are included
-    assert (
-        last_action.llm_metrics.accumulated_cost == 0.08
+    assert last_action.llm_metrics.accumulated_cost == pytest.approx(
+        0.08
     )  # 0.05 from agent + 0.03 from condenser
 
     # The accumulated token usage should include both agent and condenser metrics

@@ -1,3 +1,4 @@
+import { API_KEYS_HANDLERS } from "./api-keys-handlers";
 import { STRIPE_BILLING_HANDLERS } from "./billing-handlers";
 import { FILE_SERVICE_HANDLERS } from "./file-service-handlers";
 import { TASK_SUGGESTIONS_HANDLERS } from "./task-suggestions-handlers";
@@ -14,6 +15,7 @@ import { FEEDBACK_HANDLERS } from "./feedback-handlers";
 import { ANALYTICS_HANDLERS } from "./analytics-handlers";
 
 export const handlers = [
+  ...API_KEYS_HANDLERS,
   ...STRIPE_BILLING_HANDLERS,
   ...FILE_SERVICE_HANDLERS,
   ...TASK_SUGGESTIONS_HANDLERS,
