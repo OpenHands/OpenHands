@@ -56,6 +56,8 @@ from server.sharing.shared_event_router import (  # noqa: E402
 )
 from server.verified_models.verified_model_router import (  # noqa: E402
     api_router as verified_models_router,
+)
+from server.verified_models.verified_model_router import (  # noqa: E402
     override_llm_models_dependency,
 )
 

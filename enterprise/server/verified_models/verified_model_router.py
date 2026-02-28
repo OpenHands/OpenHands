@@ -108,23 +108,29 @@ async def delete_verified_model(
     return success
 
 
-def get_llm_models_saas_impl_dependency() -> Callable[[Request], Callable[[Request], list[str]]]:
+def get_llm_models_saas_impl_dependency() -> (
+    Callable[[Request], Callable[[Request], list[str]]]
+):
     """Factory that returns the SaaS implementation for the LLM models endpoint.
 
     Override this in saas_server.py via app.dependency_overrides to enable
     database-backed verified models.
     """
+
     async def impl(request: Request) -> list[str]:
         async with get_db_session(request.state, request) as db_session:
             # Prevent circular import
             from openhands.server.shared import config
 
             verified_model_service = VerifiedModelService(db_session)
-            page = await verified_model_service.search_verified_models(enabled_only=True)
+            page = await verified_model_service.search_verified_models(
+                enabled_only=True
+            )
             if page.next_page_id:
                 raise HTTPException('Too many models defined in db')
             verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
             return get_supported_llm_models(config, verified_models)
+
     return impl
 
 
@@ -132,4 +138,6 @@ def get_llm_models_saas_impl_dependency() -> Callable[[Request], Callable[[Reque
 # This must be called after the app is created in saas_server.py
 def override_llm_models_dependency(app):
     """Override the default LLM models implementation with SaaS version."""
-    app.dependency_overrides[public.get_llm_models_impl_dependency] = get_llm_models_saas_impl_dependency
+    app.dependency_overrides[public.get_llm_models_impl_dependency] = (
+        get_llm_models_saas_impl_dependency
+    )
