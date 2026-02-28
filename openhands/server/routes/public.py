@@ -7,9 +7,9 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 
-from typing import Any
+from typing import Any, Callable
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
@@ -19,31 +19,25 @@ from openhands.utils.llm import get_supported_llm_models
 
 app = APIRouter(prefix='/api/options', dependencies=get_dependencies())
 
-
-async def get_llm_models_default_impl(request: Request):
-    """Primary implementation of _get_llm_models_impl, designed to be explicitly
-    overridden in other environments
-
-    This function combines models from litellm and Bedrock, removing any
-    error-prone Bedrock models.
-
-    To get the models:
-    ```sh
-    curl http://localhost:3000/api/litellm-models
-    ```
-
-    Returns:
-        list[str]: A sorted list of unique model names.
+# Dependency factory for LLM models implementation
+# Override this in enterprise/saas mode to use database-backed verified models
+def get_llm_models_impl_dependency() -> Callable[[Request], Callable[[Request], list[str]]]:
+    """Returns a callable that provides the LLM models implementation.
+    
+    Returns a factory that produces the actual implementation function.
+    Override this in enterprise/saas mode via app.dependency_overrides.
     """
-    return get_supported_llm_models(config, [])
-
-
-get_llm_models_impl = get_llm_models_default_impl
+    async def impl(request: Request) -> list[str]:
+        return get_supported_llm_models(config, [])
+    return impl
 
 
 @app.get('/models')
-async def get_litellm_models(request: Request) -> list[str]:
-    return await get_llm_models_impl(request)
+async def get_litellm_models(
+    request: Request,
+    get_models: Callable[[Request], list[str]] = Depends(get_llm_models_impl_dependency),
+) -> list[str]:
+    return await get_models(request)
 
 
 @app.get('/agents', response_model=list[str])

@@ -1,6 +1,6 @@
 """API routes for managing verified LLM models (admin only)."""
 
-from typing import Annotated
+from typing import Annotated, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from server.email_validation import get_admin_user_id
@@ -108,32 +108,28 @@ async def delete_verified_model(
     return success
 
 
-async def get_llm_models_default_impl(request: Request):
-    """Primary implementation of _get_llm_models_impl, designed to be explicitly
-    overridden in other environments
+def get_llm_models_saas_impl_dependency() -> Callable[[Request], Callable[[Request], list[str]]]:
+    """Factory that returns the SaaS implementation for the LLM models endpoint.
 
-    This function combines models from litellm and Bedrock, removing any
-    error-prone Bedrock models.
-
-    To get the models:
-    ```sh
-    curl http://localhost:3000/api/litellm-models
-    ```
-
-    Returns:
-        list[str]: A sorted list of unique model names.
+    Override this in saas_server.py via app.dependency_overrides to enable
+    database-backed verified models.
     """
-    async with get_db_session(request.state, request) as db_session:
-        # Prevent circular import
-        from openhands.server.shared import config
+    async def impl(request: Request) -> list[str]:
+        async with get_db_session(request.state, request) as db_session:
+            # Prevent circular import
+            from openhands.server.shared import config
 
-        verified_model_service = VerifiedModelService(db_session)
-        page = await verified_model_service.search_verified_models(enabled_only=True)
-        if page.next_page_id:
-            raise HTTPException('Too many models defined in db')
-        verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
-        return get_supported_llm_models(config, verified_models)
+            verified_model_service = VerifiedModelService(db_session)
+            page = await verified_model_service.search_verified_models(enabled_only=True)
+            if page.next_page_id:
+                raise HTTPException('Too many models defined in db')
+            verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
+            return get_supported_llm_models(config, verified_models)
+    return impl
 
 
-# Set the public function for getting llm models
-public.get_llm_models_impl = get_llm_models_default_impl
+# Override the default implementation with SaaS implementation
+# This must be called after the app is created in saas_server.py
+def override_llm_models_dependency(app):
+    """Override the default LLM models implementation with SaaS version."""
+    app.dependency_overrides[public.get_llm_models_impl_dependency] = get_llm_models_saas_impl_dependency
