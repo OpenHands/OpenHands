@@ -38,9 +38,19 @@ from server.routes.integration.linear import linear_integration_router  # noqa: 
 from server.routes.integration.slack import slack_router  # noqa: E402
 from server.routes.mcp_patch import patch_mcp_server  # noqa: E402
 from server.routes.oauth_device import oauth_device_router  # noqa: E402
+from server.routes.org_invitations import (  # noqa: E402
+    accept_router as invitation_accept_router,
+)
+from server.routes.org_invitations import (  # noqa: E402
+    invitation_router,
+)
 from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
+from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
+from server.routes.verified_models import (  # noqa: E402
+    api_router as verified_models_router,
+)
 from server.sharing.shared_conversation_router import (  # noqa: E402
     router as shared_conversation_router,
 )
@@ -70,6 +80,7 @@ base_app.include_router(api_router)  # Add additional route for github auth
 base_app.include_router(oauth_router)  # Add additional route for oauth callback
 base_app.include_router(oauth_device_router)  # Add OAuth 2.0 Device Flow routes
 base_app.include_router(saas_user_router)  # Add additional route SAAS user calls
+base_app.include_router(user_app_settings_router)  # Add routes for user app settings
 base_app.include_router(
     billing_router
 )  # Add routes for credit management and Stripe payment integration
@@ -78,7 +89,14 @@ base_app.include_router(shared_event_router)
 
 # Add GitHub integration router only if GITHUB_APP_CLIENT_ID is set
 if GITHUB_APP_CLIENT_ID:
+    # Make sure that the callback processor is loaded here so we don't get an error when deserializing
+    from integrations.github.github_v1_callback_processor import (  # noqa: E402
+        GithubV1CallbackProcessor,
+    )
     from server.routes.integration.github import github_integration_router  # noqa: E402
+
+    # Bludgeon mypy into not deleting my import
+    logger.debug(f'Loaded {GithubV1CallbackProcessor.__name__}')
 
     base_app.include_router(
         github_integration_router
@@ -92,6 +110,11 @@ if GITLAB_APP_CLIENT_ID:
 
 base_app.include_router(api_keys_router)  # Add routes for API key management
 base_app.include_router(org_router)  # Add routes for organization management
+base_app.include_router(
+    verified_models_router
+)  # Add routes for verified models management
+base_app.include_router(invitation_router)  # Add routes for org invitation management
+base_app.include_router(invitation_accept_router)  # Add route for accepting invitations
 add_github_proxy_routes(base_app)
 add_debugging_routes(
     base_app

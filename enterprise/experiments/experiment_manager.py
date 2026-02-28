@@ -28,9 +28,11 @@ class SaaSExperimentManager(ExperimentManager):
             return agent
 
         if EXPERIMENT_SYSTEM_PROMPT_EXPERIMENT:
-            agent = agent.model_copy(
-                update={'system_prompt_filename': 'system_prompt_long_horizon.j2'}
-            )
+            # Skip experiment for planning agents which require their specialized prompt
+            if agent.system_prompt_filename != 'system_prompt_planning.j2':
+                agent = agent.model_copy(
+                    update={'system_prompt_filename': 'system_prompt_long_horizon.j2'}
+                )
 
         return agent
 

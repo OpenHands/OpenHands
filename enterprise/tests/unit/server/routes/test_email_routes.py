@@ -6,8 +6,10 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.email import (
+    EmailUpdate,
     ResendEmailVerificationRequest,
     resend_email_verification,
+    update_email,
     verified_email,
     verify_email,
 )
@@ -116,12 +118,15 @@ async def test_verified_email_default_redirect(mock_request, mock_user_auth):
     """Test verified_email redirects to /settings/user by default."""
     # Arrange
     mock_request.query_params.get.return_value = None
+    mock_user_auth.user_id = 'test-user-id'
 
     # Act
     with (
         patch('server.routes.email.get_user_auth', return_value=mock_user_auth),
         patch('server.routes.email.set_response_cookie') as mock_set_cookie,
+        patch('server.routes.email.UserStore') as mock_user_store,
     ):
+        mock_user_store.update_user_email = AsyncMock()
         result = await verified_email(mock_request)
 
     # Assert
@@ -140,12 +145,15 @@ async def test_verified_email_https_scheme(mock_request, mock_user_auth):
     mock_request.url.hostname = 'example.com'
     mock_request.url.netloc = 'example.com'
     mock_request.query_params.get.return_value = None
+    mock_user_auth.user_id = 'test-user-id'
 
     # Act
     with (
         patch('server.routes.email.get_user_auth', return_value=mock_user_auth),
         patch('server.routes.email.set_response_cookie') as mock_set_cookie,
+        patch('server.routes.email.UserStore') as mock_user_store,
     ):
+        mock_user_store.update_user_email = AsyncMock()
         result = await verified_email(mock_request)
 
     # Assert
@@ -325,6 +333,62 @@ async def test_resend_email_verification_with_is_auth_flow_false(mock_request):
         call_args = mock_keycloak_admin.a_send_verify_email.call_args
         # Verify that verify_email was called with is_auth_flow=False
         assert '/api/email/verified' in call_args.kwargs['redirect_uri']
+
+
+@pytest.mark.asyncio
+async def test_update_email_calls_update_user_email(mock_request, mock_user_auth):
+    """POST /api/email should call UserStore.update_user_email with new email and email_verified=False."""
+    user_id = 'test-user-id'
+    new_email = 'new@example.com'
+    email_data = EmailUpdate(email=new_email)
+
+    mock_keycloak_admin = MagicMock()
+    mock_keycloak_admin.get_user.return_value = {
+        'enabled': True,
+        'username': 'testuser',
+    }
+    mock_keycloak_admin.a_update_user = AsyncMock()
+    mock_user_store = MagicMock()
+    mock_user_store.update_user_email = AsyncMock()
+
+    with (
+        patch(
+            'server.routes.email.get_keycloak_admin', return_value=mock_keycloak_admin
+        ),
+        patch('server.routes.email.get_user_auth', return_value=mock_user_auth),
+        patch('server.routes.email.set_response_cookie'),
+        patch('server.routes.email.verify_email', new_callable=AsyncMock),
+        patch('server.routes.email.UserStore', mock_user_store),
+    ):
+        result = await update_email(
+            email_data=email_data, request=mock_request, user_id=user_id
+        )
+
+    assert result.status_code == status.HTTP_200_OK
+    mock_user_store.update_user_email.assert_awaited_once_with(
+        user_id=user_id, email=new_email, email_verified=False
+    )
+
+
+@pytest.mark.asyncio
+async def test_verified_email_calls_update_user_email(mock_request, mock_user_auth):
+    """GET /api/email/verified should call UserStore.update_user_email with email_verified=True."""
+    mock_user_auth.user_id = 'test-user-id'
+
+    mock_user_store = MagicMock()
+    mock_user_store.update_user_email = AsyncMock()
+
+    with (
+        patch('server.routes.email.get_user_auth', return_value=mock_user_auth),
+        patch('server.routes.email.set_response_cookie'),
+        patch('server.routes.email.UserStore', mock_user_store),
+    ):
+        result = await verified_email(mock_request)
+
+    assert result.status_code == 302
+    mock_user_store.update_user_email.assert_awaited_once_with(
+        user_id='test-user-id', email_verified=True
+    )
 
 
 @pytest.mark.asyncio

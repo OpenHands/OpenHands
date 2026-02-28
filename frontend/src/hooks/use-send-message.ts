@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useWsClient } from "#/context/ws-client-provider";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
+import { useConversationId } from "#/hooks/use-conversation-id";
 import { V1MessageContent } from "#/api/conversation-service/v1-conversation-service.types";
 
 /**
@@ -10,13 +11,19 @@ import { V1MessageContent } from "#/api/conversation-service/v1-conversation-ser
  * - For V1 conversations: Uses native WebSocket via ConversationWebSocketProvider
  */
 export function useSendMessage() {
+  const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const { send: v0Send } = useWsClient();
 
   // Get V1 context (will be null if not in V1 provider)
   const v1Context = useConversationWebSocket();
 
-  const isV1Conversation = conversation?.conversation_version === "V1";
+  // Check if this is a V1 conversation - match logic in useUnifiedWebSocketStatus
+  // Use both ID prefix and conversation_version to handle cases where conversation
+  // data is temporarily undefined during refetch
+  const isV1Conversation =
+    conversationId.startsWith("task-") ||
+    conversation?.conversation_version === "V1";
 
   const send = useCallback(
     async (event: Record<string, unknown>) => {
@@ -64,7 +71,7 @@ export function useSendMessage() {
         v0Send(event);
       }
     },
-    [isV1Conversation, v1Context, v0Send],
+    [isV1Conversation, v1Context, v0Send, conversationId],
   );
 
   return { send };

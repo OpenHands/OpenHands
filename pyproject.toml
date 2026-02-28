@@ -46,6 +46,7 @@ dependencies = [
   "joblib",
   "json-repair",
   "jupyter-kernel-gateway",
+  "jwcrypto>=1.5.6",
   "kubernetes>=33.1",
   "libtmux>=0.46.2",
   "litellm!=1.64.4,!=1.67.*,>=1.74.3",
@@ -54,33 +55,32 @@ dependencies = [
   "numpy",
   "openai==2.8",
   "openhands-aci==0.3.2",
-  "openhands-agent-server==1.9.1",
-  "openhands-sdk==1.9.1",
-  "openhands-tools==1.9.1",
+  "openhands-agent-server==1.11.5",
+  "openhands-sdk==1.11.5",
+  "openhands-tools==1.11.5",
   "opentelemetry-api>=1.33.1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.33.1",
   "pathspec>=0.12.1",
   "pexpect",
   "pg8000>=1.31.5",
-  "pillow>=11.3",
+  "pillow>=12.1.1",
   "playwright>=1.55",
   "poetry>=2.1.2",
   "prompt-toolkit>=3.0.50",
-  "protobuf>=5,<6",
+  "protobuf>=5.29.6,<6",
   "psutil",
   "pybase62>=1",
   "pygithub>=2.5",
   "pyjwt>=2.9",
   "pylatexenc",
-  "pypdf>=6",
+  "pypdf>=6.7.2",
   "python-docx",
   "python-dotenv",
   "python-frontmatter>=1.1",
-  "python-jose[cryptography]>=3.3",
   "python-json-logger>=3.2.1",
-  "python-multipart",
+  "python-multipart>=0.0.22",
   "python-pptx",
-  "python-socketio==5.13",
+  "python-socketio==5.14",
   "pythonnet",
   "pyyaml>=6.0.2",
   "qtconsole>=5.6.1",
@@ -91,7 +91,7 @@ dependencies = [
   "shellingham>=1.5.4",
   "sqlalchemy[asyncio]>=2.0.40",
   "sse-starlette>=3.0.2",
-  "starlette>=0.48",
+  "starlette>=0.49.1",
   "tenacity>=8.5,<10",
   "termcolor",
   "toml",
@@ -139,44 +139,10 @@ runtime = [
   "jupyterlab",
   "notebook",
 ]
-evaluation = [
-  "boto3-stubs[s3]>=1.37.19",
-  "browsergym==0.13.3",
-  "browsergym-miniwob==0.13.3",
-  "browsergym-visualwebarena==0.13.3",
-  "browsergym-webarena==0.13.3",
-  "commit0",
-  "datasets",
-  "evaluate",
-  "func-timeout",
-  "gdown",
-  "joblib",
-  "matplotlib",
-  "multi-swe-bench==0.1.2",
-  "pandas",
-  "pyarrow==21",
-  "retry",
-  "seaborn",
-  "streamlit",
-  "swebench",
-  "swegym",
-  "sympy",
-  "tabulate",
-  "visualswebench",
-  "whatthepatch",
-]
-testgeneval = [
-  "fuzzywuzzy>=0.18",
-  "python-levenshtein>=0.26.1,<0.28",
-  "rouge>=1.0.1",
-  "tree-sitter-python>=0.23.6",
-]
-
-# UV source configuration for git dependencies in evaluation group
 
 [tool.poetry]
 name = "openhands-ai"
-version = "1.2.1"
+version = "1.4.0"
 description = "OpenHands: Code Less, Make More"
 authors = [ "OpenHands" ]
 license = "MIT"
@@ -215,7 +181,7 @@ html2text = "*"
 deprecated = "*"
 pexpect = "*"
 jinja2 = "^3.1.6"
-python-multipart = "*"
+python-multipart = ">=0.0.22"
 tenacity = ">=8.5,<10.0"
 zope-interface = "7.2"
 pathspec = "^0.12.1"
@@ -225,7 +191,7 @@ tornado = ">=6.5"
 python-dotenv = "*"
 rapidfuzz = "^3.9.0"
 whatthepatch = "^1.0.6"
-protobuf = "^5.0.0,<6.0.0"                         # Updated to support newer opentelemetry
+protobuf = ">=5.29.6,<6.0.0"                       # Updated to fix CVE-2026-0994
 opentelemetry-api = "^1.33.1"
 opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 
@@ -233,7 +199,7 @@ libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
 openhands-aci = "0.3.2"
-python-socketio = "5.13.0"
+python-socketio = "5.14.0"
 sse-starlette = "^3.0.2"
 psutil = "*"
 python-json-logger = "^3.2.1"
@@ -253,9 +219,9 @@ python-docx = "*"
 bashlex = "^0.18"
 
 # Explicitly pinned packages for latest versions
-pypdf = "^6.0.0"
-pillow = "^11.3.0"
-starlette = "^0.48.0"
+pypdf = "^6.7.2"
+pillow = "^12.1.1"
+starlette = "^0.49.1"
 urllib3 = "^2.6.3"
 requests = "^2.32.5"
 setuptools = ">=78.1.1"
@@ -280,13 +246,10 @@ e2b-code-interpreter = { version = "^2.0.0", optional = true }
 pybase62 = "^1.0.0"
 
 # V1 dependencies
-#openhands-agent-server = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-agent-server", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
-#openhands-sdk = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-sdk", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
-#openhands-tools = { git = "https://github.com/OpenHands/agent-sdk.git", subdirectory = "openhands-tools", rev = "15f565b8ac38876e40dc05c08e2b04ccaae4a66d" }
-openhands-sdk = "1.9.1"
-openhands-agent-server = "1.9.1"
-openhands-tools = "1.9.1"
-python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
+openhands-sdk = "1.11.5"
+openhands-agent-server = "1.11.5"
+openhands-tools = "1.11.5"
+jwcrypto = ">=1.5.6"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
 asyncpg = "^0.30.0"
@@ -331,44 +294,6 @@ jupyterlab = "*"
 notebook = "*"
 flake8 = "*"
 
-[tool.poetry.group.evaluation]
-optional = true
-
-[tool.poetry.group.evaluation.dependencies]
-streamlit = "*"
-whatthepatch = "*"
-retry = "*"
-evaluate = "*"
-visualswebench = { git = "https://github.com/luolin101/Visual-SWE-bench.git" }
-swegym = { git = "https://github.com/SWE-Gym/SWE-Bench-Package.git" }
-commit0 = "*"
-func_timeout = "*"
-sympy = "*"
-gdown = "*"
-matplotlib = "*"
-seaborn = "*"
-tabulate = "*"
-browsergym = "0.13.3"
-browsergym-webarena = "0.13.3"
-browsergym-miniwob = "0.13.3"
-browsergym-visualwebarena = "0.13.3"
-boto3-stubs = { extras = [ "s3" ], version = "^1.37.19" }
-# transitive dependency, pinned here to avoid conflicts
-pyarrow = "21.0.0"
-datasets = "*"
-joblib = "*"
-swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }
-multi-swe-bench = "0.1.2"
-pandas = "*"
-# tau-bench = { git = "https://github.com/sierra-research/tau-bench.git" }
-# bfcl-eval = "*" # TODO: Verify exact package name/source
-
-[tool.poetry.group.testgeneval.dependencies]
-fuzzywuzzy = "^0.18.0"
-rouge = "^1.0.1"
-python-levenshtein = ">=0.26.1,<0.28.0"
-tree-sitter-python = "^0.23.6"
-
 [tool.poetry-dynamic-versioning]
 enable = true
 style = "semver"
@@ -391,8 +316,3 @@ lint.pydocstyle.convention = "google"
 concurrency = [ "gevent" ]
 relative_files = true
 omit = [ "enterprise/tests/*", "**/test_*" ]
-
-[tool.uv.sources]
-visualswebench = { git = "https://github.com/luolin101/Visual-SWE-bench.git" }
-swegym = { git = "https://github.com/SWE-Gym/SWE-Bench-Package.git" }
-swebench = { git = "https://github.com/ryanhoangt/SWE-bench.git", rev = "fix-modal-patch-eval" }

@@ -9,7 +9,7 @@ export function useApiKeys() {
 
   return useQuery({
     queryKey: [API_KEYS_QUERY_KEY],
-    enabled: config?.APP_MODE === "saas",
+    enabled: config?.app_mode === "saas",
     queryFn: async () => {
       const keys = await ApiKeysClient.getApiKeys();
       return Array.isArray(keys) ? keys : [];

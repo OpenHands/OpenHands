@@ -7,7 +7,6 @@
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
 import os
-import warnings
 
 import uvicorn
 
@@ -15,9 +14,6 @@ from openhands.core.logger import get_uvicorn_json_log_config
 
 
 def main():
-    # Suppress SyntaxWarnings from pydub.utils about invalid escape sequences
-    warnings.filterwarnings('ignore', category=SyntaxWarning, module=r'pydub\.utils')
-
     # When LOG_JSON=1, configure Uvicorn to emit JSON logs for error/access
     log_config = None
     if os.getenv('LOG_JSON', '0') in ('1', 'true', 'True'):

@@ -96,7 +96,7 @@ describe("Settings Screen", () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     // @ts-expect-error - only return app mode
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "oss",
+      app_mode: "oss",
     });
 
     // Clear any existing query data
@@ -122,11 +122,11 @@ describe("Settings Screen", () => {
   });
 
   it("should render the saas navbar", async () => {
-    const saasConfig = { APP_MODE: "saas" };
+    const saasConfig = { app_mode: "saas" };
 
     // Clear any existing query data and set the config
     mockQueryClient.clear();
-    mockQueryClient.setQueryData(["config"], saasConfig);
+    mockQueryClient.setQueryData(["web-client-config"], saasConfig);
 
     const sectionsToInclude = [
       "llm", // LLM settings are now always shown in SaaS mode
@@ -160,7 +160,7 @@ describe("Settings Screen", () => {
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     // @ts-expect-error - only return app mode
     getConfigSpy.mockResolvedValue({
-      APP_MODE: "oss",
+      app_mode: "oss",
     });
 
     // Clear any existing query data

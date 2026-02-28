@@ -1,10 +1,11 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings
+from openhands.storage.data_models.settings import Settings as DataSettings
 
 # Mock the database module before importing
 with patch('storage.database.engine'), patch('storage.database.a_engine'):
@@ -176,3 +177,53 @@ async def test_encryption(settings_store):
         # But we should be able to decrypt it when loading
         loaded_settings = await settings_store.load()
         assert loaded_settings.llm_api_key.get_secret_value() == 'secret_key'
+
+
+@pytest.mark.asyncio
+async def test_ensure_api_key_keeps_valid_key(mock_config):
+    """When the existing key is valid, it should be kept unchanged."""
+    store = SaasSettingsStore('test-user-id-123', MagicMock(), mock_config)
+    existing_key = 'sk-existing-key'
+    item = DataSettings(
+        llm_model='openhands/gpt-4', llm_api_key=SecretStr(existing_key)
+    )
+
+    with patch(
+        'storage.saas_settings_store.LiteLlmManager.verify_existing_key',
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        await store._ensure_api_key(item, 'org-123', openhands_type=True)
+
+        # Key should remain unchanged when it's valid
+        assert item.llm_api_key is not None
+        assert item.llm_api_key.get_secret_value() == existing_key
+
+
+@pytest.mark.asyncio
+async def test_ensure_api_key_generates_new_key_when_verification_fails(
+    mock_config,
+):
+    """When verification fails, a new key should be generated."""
+    store = SaasSettingsStore('test-user-id-123', MagicMock(), mock_config)
+    new_key = 'sk-new-key'
+    item = DataSettings(
+        llm_model='openhands/gpt-4', llm_api_key=SecretStr('sk-invalid-key')
+    )
+
+    with (
+        patch(
+            'storage.saas_settings_store.LiteLlmManager.verify_existing_key',
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            'storage.saas_settings_store.LiteLlmManager.generate_key',
+            new_callable=AsyncMock,
+            return_value=new_key,
+        ),
+    ):
+        await store._ensure_api_key(item, 'org-123', openhands_type=True)
+
+        assert item.llm_api_key is not None
+        assert item.llm_api_key.get_secret_value() == new_key

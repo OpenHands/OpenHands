@@ -101,7 +101,7 @@ async def test_get_credits_success():
         json={
             'user_info': {
                 'spend': 25.50,
-                'litellm_budget_table': {'max_budget': 100.00},
+                'max_budget_in_team': 100.00,
             }
         },
         request=MagicMock(),
@@ -121,7 +121,7 @@ async def test_get_credits_success():
             'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
             return_value={
                 'spend': 25.50,
-                'litellm_budget_table': {'max_budget': 100.00},
+                'max_budget_in_team': 100.00,
             },
         ),
     ):
@@ -163,7 +163,7 @@ async def test_create_checkout_session_stripe_error(
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
             AsyncMock(return_value={'email': 'testy@tester.com'}),
         ),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         await create_checkout_session(
             CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
@@ -204,7 +204,7 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
             AsyncMock(return_value={'email': 'testy@tester.com'}),
         ),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         mock_db_session = MagicMock()
         mock_session_maker.return_value.__enter__.return_value = mock_db_session
@@ -236,8 +236,8 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
             mode='payment',
             payment_method_types=['card'],
             saved_payment_method_options={'payment_method_save': 'enabled'},
-            success_url='http://test.com/api/billing/success?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url='http://test.com/api/billing/cancel?session_id={CHECKOUT_SESSION_ID}',
+            success_url='https://test.com/api/billing/success?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url='https://test.com/api/billing/cancel?session_id={CHECKOUT_SESSION_ID}',
         )
 
         # Verify database session creation
@@ -299,6 +299,8 @@ async def test_success_callback_success():
     mock_billing_session.status = 'in_progress'
     mock_billing_session.user_id = 'mock_user'
 
+    mock_org = MagicMock()
+
     with (
         patch('server.routes.billing.session_maker') as mock_session_maker,
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
@@ -311,7 +313,7 @@ async def test_success_callback_success():
             'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
             return_value={
                 'spend': 25.50,
-                'litellm_budget_table': {'max_budget': 100.00},
+                'max_budget_in_team': 100.00,
             },
         ),
         patch(
@@ -319,7 +321,17 @@ async def test_success_callback_success():
         ) as mock_update_budget,
     ):
         mock_db_session = MagicMock()
+        # First query: BillingSession (query().filter().filter().first())
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
+        # Second query: Org (query().filter().first()) - use side_effect for different return chains
+        mock_query_chain_billing = MagicMock()
+        mock_query_chain_billing.filter.return_value.filter.return_value.first.return_value = mock_billing_session
+        mock_query_chain_org = MagicMock()
+        mock_query_chain_org.filter.return_value.first.return_value = mock_org
+        mock_db_session.query.side_effect = [
+            mock_query_chain_billing,
+            mock_query_chain_org,
+        ]
         mock_session_maker.return_value.__enter__.return_value = mock_db_session
 
         mock_stripe_retrieve.return_value = MagicMock(
@@ -331,14 +343,17 @@ async def test_success_callback_success():
         assert response.status_code == 302
         assert (
             response.headers['location']
-            == 'http://test.com/settings/billing?checkout=success'
+            == 'https://test.com/settings/billing?checkout=success'
         )
 
         # Verify LiteLLM API calls
         mock_update_budget.assert_called_once_with(
             'mock_org_id',
-            125.0,  # 100 + (25.00 from Stripe)
+            125.0,  # 100 + 25.00
         )
+
+        # Verify BYOR export is enabled for the org (updated in same session)
+        assert mock_org.byor_export_enabled is True
 
         # Verify database updates
         assert mock_billing_session.status == 'completed'
@@ -388,6 +403,68 @@ async def test_success_callback_lite_llm_error():
 
 
 @pytest.mark.asyncio
+async def test_success_callback_lite_llm_update_budget_error_rollback():
+    """Test that database changes are not committed when update_team_and_users_budget fails.
+
+    This test verifies that if LiteLlmManager.update_team_and_users_budget raises an exception,
+    the database transaction rolls back.
+    """
+    mock_request = Request(scope={'type': 'http'})
+    mock_request._base_url = URL('http://test.com/')
+
+    mock_billing_session = MagicMock()
+    mock_billing_session.status = 'in_progress'
+    mock_billing_session.user_id = 'mock_user'
+
+    mock_org = MagicMock()
+
+    with (
+        patch('server.routes.billing.session_maker') as mock_session_maker,
+        patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
+        patch(
+            'storage.user_store.UserStore.get_user_by_id_async',
+            new_callable=AsyncMock,
+            return_value=MagicMock(current_org_id='mock_org_id'),
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.get_user_team_info',
+            return_value={
+                'spend': 0,
+                'max_budget_in_team': 0,
+            },
+        ),
+        patch(
+            'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget',
+            side_effect=Exception('LiteLLM API Error'),
+        ),
+    ):
+        mock_db_session = MagicMock()
+        mock_query_chain_billing = MagicMock()
+        mock_query_chain_billing.filter.return_value.filter.return_value.first.return_value = mock_billing_session
+        mock_query_chain_org = MagicMock()
+        mock_query_chain_org.filter.return_value.first.return_value = mock_org
+        mock_db_session.query.side_effect = [
+            mock_query_chain_billing,
+            mock_query_chain_org,
+        ]
+        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+
+        mock_stripe_retrieve.return_value = MagicMock(
+            status='complete',
+            amount_subtotal=1000,  # $10
+            customer='mock_customer_id',
+        )
+
+        with pytest.raises(Exception, match='LiteLLM API Error'):
+            await success_callback('test_session_id', mock_request)
+
+        # Verify no database commit occurred - the transaction should roll back
+        assert mock_billing_session.status == 'in_progress'
+        mock_db_session.merge.assert_not_called()
+        mock_db_session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_cancel_callback_session_not_found():
     """Test cancel callback when billing session is not found."""
     mock_request = Request(scope={'type': 'http'})
@@ -402,7 +479,7 @@ async def test_cancel_callback_session_not_found():
         assert response.status_code == 302
         assert (
             response.headers['location']
-            == 'http://test.com/settings/billing?checkout=cancel'
+            == 'https://test.com/settings/billing?checkout=cancel'
         )
 
         # Verify no database updates occurred
@@ -429,7 +506,7 @@ async def test_cancel_callback_success():
         assert response.status_code == 302
         assert (
             response.headers['location']
-            == 'http://test.com/settings/billing?checkout=cancel'
+            == 'https://test.com/settings/billing?checkout=cancel'
         )
 
         # Verify database updates
@@ -490,7 +567,7 @@ async def test_create_customer_setup_session_success():
             AsyncMock(return_value=mock_customer_info),
         ),
         patch('stripe.checkout.Session.create_async', mock_create),
-        patch('server.routes.billing.validate_saas_environment'),
+        patch('server.routes.billing.validate_billing_enabled'),
     ):
         result = await create_customer_setup_session(mock_request, 'mock_user')
 
@@ -502,6 +579,6 @@ async def test_create_customer_setup_session_success():
             customer='mock-customer-id',
             mode='setup',
             payment_method_types=['card'],
-            success_url='http://test.com/?free_credits=success',
-            cancel_url='http://test.com/',
+            success_url='https://test.com/?setup=success',
+            cancel_url='https://test.com/',
         )
