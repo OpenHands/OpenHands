@@ -186,6 +186,15 @@ class LLM(RetryMixin, DebugMixin):
         elif 'gemini' in self.config.model.lower() and self.config.safety_settings:
             kwargs['safety_settings'] = self.config.safety_settings
 
+        # For Bedrock models with unknown max_output_tokens, remove
+        # max_completion_tokens entirely so the Bedrock API uses the model's
+        # own maximum (which is the safest default for coding agents).
+        if (
+            self.config.model.startswith('bedrock/')
+            and self.config.max_output_tokens is None
+        ):
+            kwargs.pop('max_completion_tokens', None)
+
         # support AWS Bedrock provider
         kwargs['aws_region_name'] = self.config.aws_region_name
         if self.config.aws_access_key_id:
@@ -579,16 +588,17 @@ class LLM(RetryMixin, DebugMixin):
                     self.config.max_output_tokens = self.model_info['max_tokens']
 
         # Bedrock models that are still missing max_output_tokens (e.g. DeepSeek,
-        # Kimi, GLM on Bedrock) would fail with a max_tokens error.  Use a safe
-        # default floor so they can at least produce output.
+        # Kimi, GLM on Bedrock): leave max_output_tokens as None so that
+        # max_completion_tokens is omitted from the request.  The Bedrock API
+        # defaults to the model's own maximum when max_tokens is not provided,
+        # which is the safest behaviour for unknown models.
         if self.config.max_output_tokens is None and self.config.model.startswith(
             'bedrock/'
         ):
-            self.config.max_output_tokens = 4096
             logger.debug(
-                'Bedrock model %s has no known max_output_tokens — defaulting to %d',
+                'Bedrock model %s has no known max_output_tokens — '
+                'omitting so the API uses the model default',
                 self.config.model,
-                self.config.max_output_tokens,
             )
 
         # Initialize function calling using centralized model features

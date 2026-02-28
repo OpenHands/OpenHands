@@ -1554,15 +1554,20 @@ def test_gemini_performance_optimization_end_to_end(mock_completion):
 # ---------------------------------------------------------------------------
 
 
-def test_bedrock_unknown_model_gets_default_max_output_tokens():
-    """Bedrock models not in litellm's cost map should default to 4096."""
+def test_bedrock_unknown_model_omits_max_output_tokens():
+    """Bedrock models not in litellm's cost map should leave max_output_tokens
+    as None so that the Bedrock API uses the model's own maximum."""
     config = LLMConfig(
         model='bedrock/deepseek.deepseek-r1-v1:0',
         api_key='test_key',
         aws_region_name='us-west-2',
     )
     llm = LLM(config, service_id='test-service')
-    assert llm.config.max_output_tokens == 4096
+    # max_output_tokens should remain None — not hardcoded to a low value
+    assert llm.config.max_output_tokens is None
+    # max_completion_tokens should NOT be in the completion kwargs
+    partial_keywords = llm._completion_unwrapped.keywords
+    assert 'max_completion_tokens' not in partial_keywords
 
 
 def test_bedrock_cross_region_model_strips_prefix():
