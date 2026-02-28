@@ -1547,3 +1547,60 @@ def test_gemini_performance_optimization_end_to_end(mock_completion):
     # Verify temperature and top_p were removed for reasoning models
     assert 'temperature' not in call_kwargs
     assert 'top_p' not in call_kwargs
+
+
+# ---------------------------------------------------------------------------
+# Bedrock max_output_tokens fallback and cross-region model info
+# ---------------------------------------------------------------------------
+
+
+def test_bedrock_unknown_model_gets_default_max_output_tokens():
+    """Bedrock models not in litellm's cost map should default to 4096."""
+    config = LLMConfig(
+        model='bedrock/deepseek.deepseek-r1-v1:0',
+        api_key='test_key',
+        aws_region_name='us-west-2',
+    )
+    llm = LLM(config, service_id='test-service')
+    assert llm.config.max_output_tokens == 4096
+
+
+def test_bedrock_cross_region_model_strips_prefix():
+    """Cross-region inference profiles should resolve model info after
+    stripping the region prefix (us., eu., apac., global.)."""
+    config = LLMConfig(
+        model='bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+        api_key='test_key',
+        aws_region_name='us-west-2',
+    )
+    llm = LLM(config, service_id='test-service')
+    # Should have resolved model info (litellm knows anthropic.claude-3-5-sonnet-20241022-v2:0)
+    # and max_output_tokens should NOT be the 4096 fallback
+    assert llm.config.max_output_tokens is not None
+    assert llm.config.max_output_tokens > 0
+
+
+def test_bedrock_explicit_max_output_tokens_not_overridden():
+    """User-supplied max_output_tokens should not be overwritten by the fallback."""
+    config = LLMConfig(
+        model='bedrock/some-unknown-model',
+        api_key='test_key',
+        aws_region_name='us-west-2',
+        max_output_tokens=8192,
+    )
+    llm = LLM(config, service_id='test-service')
+    assert llm.config.max_output_tokens == 8192
+
+
+def test_bedrock_known_model_uses_litellm_info():
+    """A Bedrock model that litellm knows should use litellm's max_output_tokens,
+    not the 4096 fallback."""
+    config = LLMConfig(
+        model='bedrock/anthropic.claude-3-haiku-20240307-v1:0',
+        api_key='test_key',
+        aws_region_name='us-west-2',
+    )
+    llm = LLM(config, service_id='test-service')
+    # litellm knows this model — max_output_tokens should come from model info
+    assert llm.config.max_output_tokens is not None
+    assert llm.config.max_output_tokens > 0

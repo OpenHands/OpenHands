@@ -1,3 +1,4 @@
+import os
 import warnings
 
 import httpx
@@ -223,15 +224,33 @@ def get_supported_llm_models(
     # TODO: for bedrock, this is using the default config
     llm_config: LLMConfig = config.get_llm_config()
     bedrock_model_list: list[str] = []
-    if (
-        llm_config.aws_region_name
-        and llm_config.aws_access_key_id
-        and llm_config.aws_secret_access_key
-    ):
+
+    # Try listing Bedrock models when explicit creds are provided, OR when
+    # aws_region is set, OR when environment hints suggest AWS credentials
+    # are available (IAM role, SSO, AWS_PROFILE, bearer token, etc.).
+    has_explicit_creds = (
+        llm_config.aws_access_key_id and llm_config.aws_secret_access_key
+    )
+    has_aws_env_hints = any(
+        os.environ.get(v)
+        for v in (
+            'AWS_ACCESS_KEY_ID',
+            'AWS_PROFILE',
+            'AWS_ROLE_ARN',
+            'AWS_WEB_IDENTITY_TOKEN_FILE',
+            'AWS_BEARER_TOKEN_BEDROCK',
+            'AWS_DEFAULT_REGION',
+        )
+    )
+    if has_explicit_creds or llm_config.aws_region_name or has_aws_env_hints:
         bedrock_model_list = bedrock.list_foundation_models(
-            llm_config.aws_region_name,
-            llm_config.aws_access_key_id.get_secret_value(),
-            llm_config.aws_secret_access_key.get_secret_value(),
+            aws_region_name=llm_config.aws_region_name,
+            aws_access_key_id=llm_config.aws_access_key_id.get_secret_value()
+            if llm_config.aws_access_key_id
+            else None,
+            aws_secret_access_key=llm_config.aws_secret_access_key.get_secret_value()
+            if llm_config.aws_secret_access_key
+            else None,
         )
     model_list = litellm_model_list_without_bedrock + bedrock_model_list
     for llm_config in config.llms.values():

@@ -505,6 +505,33 @@ class LLM(RetryMixin, DebugMixin):
             # noinspection PyBroadException
             except Exception:
                 pass
+
+        # Bedrock cross-region inference profiles (e.g. bedrock/us.anthropic.claude-*)
+        # and versioned model IDs (e.g. bedrock/model-id:0) are not in litellm's
+        # model cost map.  Strip the region prefix and/or version suffix and retry.
+        if not self.model_info and self.config.model.startswith('bedrock/'):
+            _bedrock_id = self.config.model
+            # Strip cross-region prefix (us., eu., apac., global.)
+            import re
+
+            _stripped = re.sub(
+                r'^bedrock/(us|eu|apac|global)\.',
+                'bedrock/',
+                _bedrock_id,
+            )
+            if _stripped != _bedrock_id:
+                try:
+                    self.model_info = litellm.get_model_info(_stripped)
+                except Exception:
+                    pass
+            # Strip version suffix (:0, :1, etc.)
+            if not self.model_info:
+                _no_version = re.sub(r':\d+$', '', _stripped)
+                if _no_version != _stripped:
+                    try:
+                        self.model_info = litellm.get_model_info(_no_version)
+                    except Exception:
+                        pass
         from openhands.io import json
 
         logger.debug(
@@ -550,6 +577,19 @@ class LLM(RetryMixin, DebugMixin):
                     self.model_info['max_tokens'], int
                 ):
                     self.config.max_output_tokens = self.model_info['max_tokens']
+
+        # Bedrock models that are still missing max_output_tokens (e.g. DeepSeek,
+        # Kimi, GLM on Bedrock) would fail with a max_tokens error.  Use a safe
+        # default floor so they can at least produce output.
+        if self.config.max_output_tokens is None and self.config.model.startswith(
+            'bedrock/'
+        ):
+            self.config.max_output_tokens = 4096
+            logger.debug(
+                'Bedrock model %s has no known max_output_tokens — defaulting to %d',
+                self.config.model,
+                self.config.max_output_tokens,
+            )
 
         # Initialize function calling using centralized model features
         features = get_features(self.config.model)

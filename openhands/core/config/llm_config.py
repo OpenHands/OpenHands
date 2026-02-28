@@ -203,3 +203,6 @@ class LLMConfig(BaseModel):
             )
         if self.aws_region_name:
             os.environ['AWS_REGION_NAME'] = self.aws_region_name
+            # Also set AWS_DEFAULT_REGION for boto3 compatibility — boto3 uses
+            # this env var when no explicit region is passed to the client.
+            os.environ.setdefault('AWS_DEFAULT_REGION', self.aws_region_name)
