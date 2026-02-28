@@ -125,7 +125,10 @@ def get_llm_models_saas_impl_dependency() -> Callable[[Request], Awaitable[list[
                 enabled_only=True
             )
             if page.next_page_id:
-                raise HTTPException('Too many models defined in db')
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Too many models defined in database",
+                )
             verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
             return get_supported_llm_models(config, verified_models)
 
