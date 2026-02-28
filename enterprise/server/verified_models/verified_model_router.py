@@ -1,6 +1,6 @@
 """API routes for managing verified LLM models (admin only)."""
 
-from typing import Annotated, Awaitable, Callable
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from server.email_validation import get_admin_user_id
@@ -108,31 +108,21 @@ async def delete_verified_model(
     return success
 
 
-def get_llm_models_saas_impl_dependency() -> Callable[[Request], Awaitable[list[str]]]:
-    """Factory that returns the SaaS implementation for the LLM models endpoint.
+async def get_llm_models_saas_impl(request: Request) -> list[str]:
+    """SaaS implementation for the LLM models endpoint."""
+    async with get_db_session(request.state, request) as db_session:
+        # Prevent circular import
+        from openhands.server.shared import config
 
-    Override this in saas_server.py via app.dependency_overrides to enable
-    database-backed verified models.
-    """
-
-    async def impl(request: Request) -> list[str]:
-        async with get_db_session(request.state, request) as db_session:
-            # Prevent circular import
-            from openhands.server.shared import config
-
-            verified_model_service = VerifiedModelService(db_session)
-            page = await verified_model_service.search_verified_models(
-                enabled_only=True
+        verified_model_service = VerifiedModelService(db_session)
+        page = await verified_model_service.search_verified_models(enabled_only=True)
+        if page.next_page_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Too many models defined in database',
             )
-            if page.next_page_id:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Too many models defined in database",
-                )
-            verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
-            return get_supported_llm_models(config, verified_models)
-
-    return impl
+        verified_models = [f'{m.provider}/{m.model_name}' for m in page.items]
+        return get_supported_llm_models(config, verified_models)
 
 
 # Override the default implementation with SaaS implementation
@@ -140,5 +130,5 @@ def get_llm_models_saas_impl_dependency() -> Callable[[Request], Awaitable[list[
 def override_llm_models_dependency(app):
     """Override the default LLM models implementation with SaaS version."""
     app.dependency_overrides[public.get_llm_models_impl_dependency] = (
-        get_llm_models_saas_impl_dependency
+        lambda: get_llm_models_saas_impl
     )
