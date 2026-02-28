@@ -1609,3 +1609,22 @@ def test_bedrock_known_model_uses_litellm_info():
     # litellm knows this model — max_output_tokens should come from model info
     assert llm.config.max_output_tokens is not None
     assert llm.config.max_output_tokens > 0
+
+
+def test_bedrock_context_window_as_output_limit_is_reset():
+    """When litellm reports max_output_tokens == max_input_tokens for a Bedrock
+    model, it's returning the context window size, not the actual output limit.
+    This should be reset to None so the Bedrock API uses its own default."""
+    config = LLMConfig(
+        model='bedrock/moonshotai.kimi-k2.5',
+        api_key='test_key',
+        aws_region_name='us-west-2',
+    )
+    llm = LLM(config, service_id='test-service')
+    # litellm reports max_output_tokens=262144 == max_input_tokens=262144
+    # for this model (context window, not output limit).
+    # Our code should detect this and reset to None.
+    assert llm.config.max_output_tokens is None
+    # max_completion_tokens should NOT be in the completion kwargs
+    partial_keywords = llm._completion_unwrapped.keywords
+    assert 'max_completion_tokens' not in partial_keywords

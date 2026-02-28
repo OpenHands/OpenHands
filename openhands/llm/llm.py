@@ -587,19 +587,33 @@ class LLM(RetryMixin, DebugMixin):
                 ):
                     self.config.max_output_tokens = self.model_info['max_tokens']
 
-        # Bedrock models that are still missing max_output_tokens (e.g. DeepSeek,
-        # Kimi, GLM on Bedrock): leave max_output_tokens as None so that
-        # max_completion_tokens is omitted from the request.  The Bedrock API
-        # defaults to the model's own maximum when max_tokens is not provided,
-        # which is the safest behaviour for unknown models.
-        if self.config.max_output_tokens is None and self.config.model.startswith(
-            'bedrock/'
-        ):
-            logger.debug(
-                'Bedrock model %s has no known max_output_tokens — '
-                'omitting so the API uses the model default',
-                self.config.model,
+        # Bedrock models: omit max_output_tokens when it's unknown or when
+        # litellm reports max_output_tokens == max_input_tokens (which means
+        # it's returning the context window size, not the actual output limit).
+        # The Bedrock API defaults to the model's own maximum when max_tokens
+        # is not provided, which is the safest behaviour.
+        if self.config.model.startswith('bedrock/'):
+            _bad_output_limit = (
+                self.config.max_output_tokens is not None
+                and self.config.max_input_tokens is not None
+                and self.config.max_output_tokens == self.config.max_input_tokens
             )
+            if self.config.max_output_tokens is None or _bad_output_limit:
+                if _bad_output_limit:
+                    logger.debug(
+                        'Bedrock model %s: max_output_tokens (%d) equals '
+                        'max_input_tokens — likely context window, not output '
+                        'limit. Omitting so the API uses the model default.',
+                        self.config.model,
+                        self.config.max_output_tokens,
+                    )
+                else:
+                    logger.debug(
+                        'Bedrock model %s has no known max_output_tokens — '
+                        'omitting so the API uses the model default',
+                        self.config.model,
+                    )
+                self.config.max_output_tokens = None
 
         # Initialize function calling using centralized model features
         features = get_features(self.config.model)
