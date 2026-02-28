@@ -136,7 +136,11 @@ export function LoginContent({
   const buttonLabelClasses = "text-sm font-medium leading-5 px-1";
 
   const shouldShownHelperText =
-    emailVerified || hasDuplicatedEmail || recaptchaBlocked || hasInvitation;
+    emailVerified ||
+    hasDuplicatedEmail ||
+    recaptchaBlocked ||
+    hasInvitation ||
+    showBitbucket;
 
   return (
     <div
@@ -171,6 +175,11 @@ export function LoginContent({
           {hasInvitation && (
             <p className="text-sm text-muted-foreground text-center">
               {t(I18nKey.AUTH$INVITATION_PENDING)}
+            </p>
+          )}
+          {showBitbucket && (
+            <p className="text-sm text-white text-center max-w-125">
+              {t(I18nKey.AUTH$BITBUCKET_SIGNUP_DISABLED)}
             </p>
           )}
         </div>
