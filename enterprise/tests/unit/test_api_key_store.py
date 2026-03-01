@@ -250,10 +250,11 @@ async def test_delete_api_key(api_key_store, session_maker, async_session_maker)
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key_not_found(api_key_store):
+async def test_delete_api_key_not_found(api_key_store, async_session_maker):
     """Test deleting a non-existent API key."""
     # Execute
-    result = await api_key_store.delete_api_key('non-existent-key')
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.delete_api_key('non-existent-key')
 
     # Verify
     assert result is False
@@ -445,12 +446,13 @@ async def test_retrieve_api_key_by_name(
 
 
 @pytest.mark.asyncio
-async def test_retrieve_api_key_by_name_not_found(api_key_store, session_maker):
+async def test_retrieve_api_key_by_name_not_found(api_key_store, async_session_maker):
     """Test retrieving an API key by name that doesn't exist."""
     # Execute
-    result = await api_key_store.retrieve_api_key_by_name(
-        'non-existent-user', 'Non Existent Key'
-    )
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.retrieve_api_key_by_name(
+            'non-existent-user', 'Non Existent Key'
+        )
 
     # Verify
     assert result is None
@@ -494,12 +496,13 @@ async def test_delete_api_key_by_name(
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key_by_name_not_found(api_key_store, session_maker):
+async def test_delete_api_key_by_name_not_found(api_key_store, async_session_maker):
     """Test deleting an API key by name that doesn't exist."""
     # Execute
-    result = await api_key_store.delete_api_key_by_name(
-        'non-existent-user', 'Non Existent Key'
-    )
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.delete_api_key_by_name(
+            'non-existent-user', 'Non Existent Key'
+        )
 
     # Verify
     assert result is False
