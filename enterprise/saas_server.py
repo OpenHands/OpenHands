@@ -48,14 +48,17 @@ from server.routes.orgs import org_router  # noqa: E402
 from server.routes.readiness import readiness_router  # noqa: E402
 from server.routes.user import saas_user_router  # noqa: E402
 from server.routes.user_app_settings import user_app_settings_router  # noqa: E402
-from server.routes.verified_models import (  # noqa: E402
-    api_router as verified_models_router,
-)
 from server.sharing.shared_conversation_router import (  # noqa: E402
     router as shared_conversation_router,
 )
 from server.sharing.shared_event_router import (  # noqa: E402
     router as shared_event_router,
+)
+from server.verified_models.verified_model_router import (  # noqa: E402
+    api_router as verified_models_router,
+)
+from server.verified_models.verified_model_router import (  # noqa: E402
+    override_llm_models_dependency,
 )
 
 from openhands.server.app import app as base_app  # noqa: E402
@@ -113,6 +116,11 @@ base_app.include_router(org_router)  # Add routes for organization management
 base_app.include_router(
     verified_models_router
 )  # Add routes for verified models management
+
+# Override the default LLM models implementation with SaaS version
+# This must happen after all routers are included
+override_llm_models_dependency(base_app)
+
 base_app.include_router(invitation_router)  # Add routes for org invitation management
 base_app.include_router(invitation_accept_router)  # Add route for accepting invitations
 add_github_proxy_routes(base_app)

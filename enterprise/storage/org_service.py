@@ -9,6 +9,7 @@ from uuid import UUID as parse_uuid
 from server.constants import ORG_SETTINGS_VERSION, get_default_litellm_model
 from server.routes.org_models import (
     LiteLLMIntegrationError,
+    OrgAppSettingsUpdate,
     OrgAuthorizationError,
     OrgDatabaseError,
     OrgLLMSettingsUpdate,
@@ -952,6 +953,99 @@ class OrgService:
                 extra={'user_id': user_id, 'org_id': str(org_id), 'error': str(e)},
             )
             raise OrgDatabaseError(f'Failed to switch organization: {str(e)}')
+
+    @staticmethod
+    def get_current_org_app_settings(user_id: str) -> Org:
+        """
+        Get organization app settings for the user's current organization.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            Org: The user's current organization
+
+        Raises:
+            OrgNotFoundError: If user has no current organization
+        """
+        logger.info(
+            'Retrieving organization app settings',
+            extra={'user_id': user_id},
+        )
+
+        org = OrgStore.get_current_org_from_keycloak_user_id(user_id)
+        if not org:
+            logger.warning(
+                'Current organization not found for user',
+                extra={'user_id': user_id},
+            )
+            raise OrgNotFoundError('current')
+
+        logger.info(
+            'Successfully retrieved organization app settings',
+            extra={'user_id': user_id, 'org_id': str(org.id)},
+        )
+
+        return org
+
+    @staticmethod
+    def update_current_org_app_settings(
+        user_id: str,
+        update_data: OrgAppSettingsUpdate,
+    ) -> Org:
+        """
+        Update organization app settings for the user's current organization.
+
+        Args:
+            user_id: User ID
+            update_data: App settings update data
+
+        Returns:
+            Org: The updated organization
+
+        Raises:
+            OrgNotFoundError: If user has no current organization
+            OrgDatabaseError: If update fails
+        """
+        logger.info(
+            'Updating organization app settings',
+            extra={'user_id': user_id},
+        )
+
+        org = OrgStore.get_current_org_from_keycloak_user_id(user_id)
+        if not org:
+            logger.warning(
+                'Current organization not found for user',
+                extra={'user_id': user_id},
+            )
+            raise OrgNotFoundError('current')
+
+        update_dict = update_data.model_dump(exclude_unset=True)
+        if not update_dict:
+            logger.info(
+                'No fields to update in app settings',
+                extra={'user_id': user_id, 'org_id': str(org.id)},
+            )
+            return org
+
+        updated_org = OrgStore.update_org(org.id, update_dict)
+        if not updated_org:
+            logger.error(
+                'Failed to update organization app settings',
+                extra={'user_id': user_id, 'org_id': str(org.id)},
+            )
+            raise OrgDatabaseError('Failed to update organization app settings')
+
+        logger.info(
+            'Successfully updated organization app settings',
+            extra={
+                'user_id': user_id,
+                'org_id': str(org.id),
+                'updated_fields': list(update_dict.keys()),
+            },
+        )
+
+        return updated_org
 
     @staticmethod
     async def get_llm_settings_for_current_org(user_id: str) -> Org:

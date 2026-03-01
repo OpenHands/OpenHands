@@ -1,6 +1,13 @@
 from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, Field, SecretStr, StringConstraints
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    SecretStr,
+    StringConstraints,
+    field_validator,
+)
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
@@ -436,3 +443,44 @@ class MeResponse(BaseModel):
             llm_base_url=member.llm_base_url,
             status=member.status,
         )
+
+
+class OrgAppSettingsResponse(BaseModel):
+    """Response model for organization app settings."""
+
+    enable_proactive_conversation_starters: bool = True
+    enable_solvability_analysis: bool | None = None
+    max_budget_per_task: float | None = None
+
+    @classmethod
+    def from_org(cls, org: Org) -> 'OrgAppSettingsResponse':
+        """Create an OrgAppSettingsResponse from an Org entity.
+
+        Args:
+            org: The organization entity
+
+        Returns:
+            OrgAppSettingsResponse with app settings
+        """
+        return cls(
+            enable_proactive_conversation_starters=org.enable_proactive_conversation_starters
+            if org.enable_proactive_conversation_starters is not None
+            else True,
+            enable_solvability_analysis=org.enable_solvability_analysis,
+            max_budget_per_task=org.max_budget_per_task,
+        )
+
+
+class OrgAppSettingsUpdate(BaseModel):
+    """Request model for updating organization app settings."""
+
+    enable_proactive_conversation_starters: bool | None = None
+    enable_solvability_analysis: bool | None = None
+    max_budget_per_task: float | None = None
+
+    @field_validator('max_budget_per_task')
+    @classmethod
+    def validate_max_budget_per_task(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError('max_budget_per_task must be greater than 0')
+        return v

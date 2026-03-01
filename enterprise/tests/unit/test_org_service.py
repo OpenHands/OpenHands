@@ -2027,6 +2027,320 @@ async def test_switch_org_user_not_found():
 
 
 # =============================================================================
+# Tests for App Settings Methods
+# =============================================================================
+
+
+def test_get_current_org_app_settings_success():
+    """
+    GIVEN: User has a current organization
+    WHEN: get_current_org_app_settings is called
+    THEN: Organization is returned with app settings
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=False,
+        max_budget_per_task=10.0,
+    )
+
+    with patch(
+        'storage.org_service.OrgStore.get_current_org_from_keycloak_user_id',
+        return_value=mock_org,
+    ):
+        # Act
+        result = OrgService.get_current_org_app_settings(user_id)
+
+        # Assert
+        assert result is not None
+        assert result.id == org_id
+        assert result.enable_proactive_conversation_starters is True
+        assert result.enable_solvability_analysis is False
+        assert result.max_budget_per_task == 10.0
+
+
+def test_get_current_org_app_settings_no_current_org():
+    """
+    GIVEN: User has no current organization
+    WHEN: get_current_org_app_settings is called
+    THEN: OrgNotFoundError is raised
+    """
+    # Arrange
+    user_id = str(uuid.uuid4())
+
+    with patch(
+        'storage.org_service.OrgStore.get_current_org_from_keycloak_user_id',
+        return_value=None,
+    ):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError) as exc_info:
+            OrgService.get_current_org_app_settings(user_id)
+
+        assert 'current' in str(exc_info.value)
+
+
+def test_update_current_org_app_settings_success():
+    """
+    GIVEN: User has a current organization and valid update data
+    WHEN: update_current_org_app_settings is called
+    THEN: Organization is updated and returned
+    """
+    # Import here to avoid circular dependency in test setup
+    from server.routes.org_models import OrgAppSettingsUpdate
+
+    # Arrange
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=None,
+        max_budget_per_task=None,
+    )
+    updated_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=False,
+        enable_solvability_analysis=True,
+        max_budget_per_task=5.0,
+    )
+
+    update_data = OrgAppSettingsUpdate(
+        enable_proactive_conversation_starters=False,
+        enable_solvability_analysis=True,
+        max_budget_per_task=5.0,
+    )
+
+    with (
+        patch(
+            'storage.org_service.OrgStore.get_current_org_from_keycloak_user_id',
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_service.OrgStore.update_org',
+            return_value=updated_org,
+        ) as mock_update,
+    ):
+        # Act
+        result = OrgService.update_current_org_app_settings(user_id, update_data)
+
+        # Assert
+        assert result is not None
+        assert result.enable_proactive_conversation_starters is False
+        assert result.enable_solvability_analysis is True
+        assert result.max_budget_per_task == 5.0
+        mock_update.assert_called_once_with(
+            org_id,
+            {
+                'enable_proactive_conversation_starters': False,
+                'enable_solvability_analysis': True,
+                'max_budget_per_task': 5.0,
+            },
+        )
+
+
+def test_update_current_org_app_settings_partial_update():
+    """
+    GIVEN: User updates only some app settings
+    WHEN: update_current_org_app_settings is called
+    THEN: Only specified fields are updated
+    """
+    from server.routes.org_models import OrgAppSettingsUpdate
+
+    # Arrange
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=True,
+        max_budget_per_task=10.0,
+    )
+    updated_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=False,
+        enable_solvability_analysis=True,
+        max_budget_per_task=10.0,
+    )
+
+    # Only update one field
+    update_data = OrgAppSettingsUpdate(enable_proactive_conversation_starters=False)
+
+    with (
+        patch(
+            'storage.org_service.OrgStore.get_current_org_from_keycloak_user_id',
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_service.OrgStore.update_org',
+            return_value=updated_org,
+        ) as mock_update,
+    ):
+        # Act
+        result = OrgService.update_current_org_app_settings(user_id, update_data)
+
+        # Assert
+        assert result is not None
+        assert result.enable_proactive_conversation_starters is False
+        # Only the specified field should be in the update dict
+        mock_update.assert_called_once_with(
+            org_id,
+            {'enable_proactive_conversation_starters': False},
+        )
+
+
+def test_update_current_org_app_settings_empty_update():
+    """
+    GIVEN: No fields are specified in update
+    WHEN: update_current_org_app_settings is called
+    THEN: Original org is returned without database update
+    """
+    from server.routes.org_models import OrgAppSettingsUpdate
+
+    # Arrange
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=None,
+        max_budget_per_task=5.0,
+    )
+
+    update_data = OrgAppSettingsUpdate()  # No fields set
+
+    with (
+        patch(
+            'storage.org_service.OrgStore.get_current_org_from_keycloak_user_id',
+            return_value=mock_org,
+        ),
+        patch('storage.org_service.OrgStore.update_org') as mock_update,
+    ):
+        # Act
+        result = OrgService.update_current_org_app_settings(user_id, update_data)
+
+        # Assert
+        assert result is mock_org
+        mock_update.assert_not_called()
+
+
+def test_update_current_org_app_settings_set_to_null():
+    """
+    GIVEN: User explicitly sets max_budget_per_task to null
+    WHEN: update_current_org_app_settings is called
+    THEN: The field is set to null in the update
+    """
+    from server.routes.org_models import OrgAppSettingsUpdate
+
+    # Arrange
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=True,
+        max_budget_per_task=5.0,
+    )
+    updated_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=True,
+        max_budget_per_task=None,
+    )
+
+    # Explicitly set max_budget_per_task to None
+    update_data = OrgAppSettingsUpdate.model_validate({'max_budget_per_task': None})
+
+    with (
+        patch(
+            'storage.org_service.OrgStore.get_current_org_from_keycloak_user_id',
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_service.OrgStore.update_org',
+            return_value=updated_org,
+        ) as mock_update,
+    ):
+        # Act
+        result = OrgService.update_current_org_app_settings(user_id, update_data)
+
+        # Assert
+        assert result.max_budget_per_task is None
+        mock_update.assert_called_once_with(
+            org_id,
+            {'max_budget_per_task': None},
+        )
+
+
+def test_update_current_org_app_settings_no_current_org():
+    """
+    GIVEN: User has no current organization
+    WHEN: update_current_org_app_settings is called
+    THEN: OrgNotFoundError is raised
+    """
+    from server.routes.org_models import OrgAppSettingsUpdate
+
+    # Arrange
+    user_id = str(uuid.uuid4())
+    update_data = OrgAppSettingsUpdate(enable_proactive_conversation_starters=False)
+
+    with patch(
+        'storage.org_service.OrgStore.get_current_org_from_keycloak_user_id',
+        return_value=None,
+    ):
+        # Act & Assert
+        with pytest.raises(OrgNotFoundError) as exc_info:
+            OrgService.update_current_org_app_settings(user_id, update_data)
+
+        assert 'current' in str(exc_info.value)
+
+
+def test_update_current_org_app_settings_database_failure():
+    """
+    GIVEN: Database update fails
+    WHEN: update_current_org_app_settings is called
+    THEN: OrgDatabaseError is raised
+    """
+    from server.routes.org_models import OrgAppSettingsUpdate
+
+    # Arrange
+    user_id = str(uuid.uuid4())
+    org_id = uuid.uuid4()
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        enable_proactive_conversation_starters=True,
+    )
+    update_data = OrgAppSettingsUpdate(enable_proactive_conversation_starters=False)
+
+    with (
+        patch(
+            'storage.org_service.OrgStore.get_current_org_from_keycloak_user_id',
+            return_value=mock_org,
+        ),
+        patch(
+            'storage.org_service.OrgStore.update_org',
+            return_value=None,
+        ),
+    ):
+        # Act & Assert
+        with pytest.raises(OrgDatabaseError) as exc_info:
+            OrgService.update_current_org_app_settings(user_id, update_data)
+
+        assert 'Failed to update organization app settings' in str(exc_info.value)
+
+
+# =============================================================================
 # Tests for LLM Settings methods
 # =============================================================================
 
