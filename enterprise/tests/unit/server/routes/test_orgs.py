@@ -24,6 +24,8 @@ with patch('storage.database.engine', create=True), patch(
         LastOwnerError,
         LiteLLMIntegrationError,
         MeResponse,
+        OrgAppSettingsResponse,
+        OrgAppSettingsUpdate,
         OrgAuthorizationError,
         OrgDatabaseError,
         OrgMemberNotFoundError,
@@ -3424,3 +3426,421 @@ async def test_switch_org_database_error(mock_app_with_get_user_id):
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert 'Failed to switch organization' in response.json()['detail']
+
+
+# =============================================================================
+# Tests for App Settings Endpoints
+# =============================================================================
+
+
+@pytest.fixture
+def mock_member_role():
+    """Create a mock member role for authorization tests."""
+    mock_role = MagicMock()
+    mock_role.name = 'member'
+    return mock_role
+
+
+@pytest.mark.asyncio
+async def test_get_org_app_settings_success(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Authenticated user with MANAGE_APPLICATION_SETTINGS permission
+    WHEN: GET /api/organizations/app is called
+    THEN: App settings are returned with 200 status
+    """
+    # Arrange
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=False,
+        max_budget_per_task=10.0,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role_async',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get('/api/organizations/app')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['enable_proactive_conversation_starters'] is True
+        assert response_data['enable_solvability_analysis'] is False
+        assert response_data['max_budget_per_task'] == 10.0
+
+
+@pytest.mark.asyncio
+async def test_get_org_app_settings_with_null_values(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Organization has null app settings values
+    WHEN: GET /api/organizations/app is called
+    THEN: Default values are returned where applicable
+    """
+    # Arrange
+    # OrgAppSettingsResponse.from_org() handles defaults, so we test the response model
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=True,  # Default when None in Org
+        enable_solvability_analysis=None,
+        max_budget_per_task=None,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role_async',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get('/api/organizations/app')
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        # enable_proactive_conversation_starters defaults to True when None
+        assert response_data['enable_proactive_conversation_starters'] is True
+        assert response_data['enable_solvability_analysis'] is None
+        assert response_data['max_budget_per_task'] is None
+
+
+@pytest.mark.asyncio
+async def test_get_org_app_settings_not_found(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: User has no current organization
+    WHEN: GET /api/organizations/app is called
+    THEN: 404 Not Found error is returned
+    """
+    # Arrange
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role_async',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.get_org_app_settings',
+            AsyncMock(side_effect=OrgNotFoundError('current')),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get('/api/organizations/app')
+
+        # Assert
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert 'not found' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_get_org_app_settings_user_not_member(mock_app_with_get_user_id):
+    """
+    GIVEN: User is not a member of any organization
+    WHEN: GET /api/organizations/app is called
+    THEN: 403 Forbidden error is returned
+    """
+    # Arrange - user has no role (not a member)
+    with patch(
+        'server.auth.authorization.get_user_org_role_async',
+        AsyncMock(return_value=None),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.get('/api/organizations/app')
+
+        # Assert
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'not a member' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_success(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Valid update data and authenticated user
+    WHEN: POST /api/organizations/app is called
+    THEN: Updated app settings are returned with 200 status
+    """
+    # Arrange
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=False,
+        enable_solvability_analysis=True,
+        max_budget_per_task=25.0,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role_async',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ) as mock_update,
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(
+            '/api/organizations/app',
+            json={
+                'enable_proactive_conversation_starters': False,
+                'enable_solvability_analysis': True,
+                'max_budget_per_task': 25.0,
+            },
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['enable_proactive_conversation_starters'] is False
+        assert response_data['enable_solvability_analysis'] is True
+        assert response_data['max_budget_per_task'] == 25.0
+        mock_update.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_partial_update(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Partial update data (only some fields)
+    WHEN: POST /api/organizations/app is called
+    THEN: Only specified fields are updated
+    """
+    # Arrange
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=False,
+        enable_solvability_analysis=True,
+        max_budget_per_task=10.0,  # Unchanged
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role_async',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ) as mock_update,
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act - only updating one field
+        response = client.post(
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        mock_update.assert_called_once()
+        # Verify the update data only contains the specified field
+        call_args = mock_update.call_args
+        update_data = call_args[0][0]  # First positional argument (update_data)
+        assert isinstance(update_data, OrgAppSettingsUpdate)
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_set_null(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Request to set max_budget_per_task to null
+    WHEN: POST /api/organizations/app is called
+    THEN: The field is set to null successfully
+    """
+    # Arrange
+    mock_response = OrgAppSettingsResponse(
+        enable_proactive_conversation_starters=True,
+        enable_solvability_analysis=True,
+        max_budget_per_task=None,
+    )
+
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role_async',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(return_value=mock_response),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act - explicitly setting max_budget_per_task to null
+        response = client.post(
+            '/api/organizations/app',
+            json={'max_budget_per_task': None},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_200_OK
+        response_data = response.json()
+        assert response_data['max_budget_per_task'] is None
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_invalid_max_budget(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Invalid max_budget_per_task value (zero or negative)
+    WHEN: POST /api/organizations/app is called
+    THEN: 422 Validation error is returned
+    """
+    # Arrange
+    with patch(
+        'server.auth.authorization.get_user_org_role_async',
+        AsyncMock(return_value=mock_member_role),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act - negative value
+        response = client.post(
+            '/api/organizations/app',
+            json={'max_budget_per_task': -5.0},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_zero_max_budget(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: max_budget_per_task is set to zero
+    WHEN: POST /api/organizations/app is called
+    THEN: 422 Validation error is returned (must be greater than 0)
+    """
+    # Arrange
+    with patch(
+        'server.auth.authorization.get_user_org_role_async',
+        AsyncMock(return_value=mock_member_role),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act - zero value
+        response = client.post(
+            '/api/organizations/app',
+            json={'max_budget_per_task': 0},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_not_found(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: User has no current organization
+    WHEN: POST /api/organizations/app is called
+    THEN: 404 Not Found error is returned
+    """
+    # Arrange
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role_async',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(side_effect=OrgNotFoundError('current')),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert 'not found' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_database_error(
+    mock_app_with_get_user_id, mock_member_role
+):
+    """
+    GIVEN: Database update fails
+    WHEN: POST /api/organizations/app is called
+    THEN: 500 Internal Server Error is returned
+    """
+    # Arrange
+    with (
+        patch(
+            'server.auth.authorization.get_user_org_role_async',
+            AsyncMock(return_value=mock_member_role),
+        ),
+        patch(
+            'server.routes.orgs.OrgAppSettingsService.update_org_app_settings',
+            AsyncMock(side_effect=Exception('Database connection failed')),
+        ),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert 'unexpected error' in response.json()['detail'].lower()
+
+
+@pytest.mark.asyncio
+async def test_update_org_app_settings_user_not_member(mock_app_with_get_user_id):
+    """
+    GIVEN: User is not a member of any organization
+    WHEN: POST /api/organizations/app is called
+    THEN: 403 Forbidden error is returned
+    """
+    # Arrange - user has no role (not a member)
+    with patch(
+        'server.auth.authorization.get_user_org_role_async',
+        AsyncMock(return_value=None),
+    ):
+        client = TestClient(mock_app_with_get_user_id)
+
+        # Act
+        response = client.post(
+            '/api/organizations/app',
+            json={'enable_proactive_conversation_starters': False},
+        )
+
+        # Assert
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert 'not a member' in response.json()['detail'].lower()

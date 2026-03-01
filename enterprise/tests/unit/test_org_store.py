@@ -1,4 +1,5 @@
 import uuid
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -892,3 +893,98 @@ def test_org_deletion_with_invitations_uses_passive_deletes(
     with session_maker() as session:
         deleted_org = session.query(Org).filter(Org.id == org_id).first()
         assert deleted_org is None
+
+
+# =============================================================================
+# Tests for async LLM settings methods
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_update_org_llm_settings_async_with_llm_api_key():
+    """
+    GIVEN: Organization with members and llm_api_key in update settings
+    WHEN: update_org_llm_settings_async is called
+    THEN: Org fields are updated and llm_api_key is propagated to all members
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    org_id = uuid.uuid4()
+
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        default_llm_model='old-model',
+    )
+
+    llm_settings = OrgLLMSettingsUpdate(
+        default_llm_model='new-model',
+        llm_api_key='new-member-api-key',
+    )
+
+    # Mock the async session and member store
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_org
+    mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    with (
+        patch('storage.org_store.a_session_maker', mock_a_session_maker),
+        patch(
+            'storage.org_member_store.OrgMemberStore.update_all_members_llm_settings_async',
+            AsyncMock(),
+        ) as mock_member_update,
+    ):
+        # Act
+        result = await OrgStore.update_org_llm_settings_async(org_id, llm_settings)
+
+        # Assert - Org is returned
+        assert result is not None
+        assert result.default_llm_model == 'new-model'
+
+        # Assert - Member update was called with correct settings
+        mock_member_update.assert_called_once()
+        call_args = mock_member_update.call_args
+        member_settings = call_args[0][2]  # Third positional arg is member_settings
+        assert member_settings.llm_api_key == 'new-member-api-key'
+        assert member_settings.llm_model == 'new-model'
+
+
+@pytest.mark.asyncio
+async def test_update_org_llm_settings_async_org_not_found():
+    """
+    GIVEN: Non-existent organization ID
+    WHEN: update_org_llm_settings_async is called
+    THEN: Returns None
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    non_existent_org_id = uuid.uuid4()
+    llm_settings = OrgLLMSettingsUpdate(default_llm_model='new-model')
+
+    # Mock the async session to return None for org
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    # Act
+    with patch('storage.org_store.a_session_maker', mock_a_session_maker):
+        result = await OrgStore.update_org_llm_settings_async(
+            non_existent_org_id, llm_settings
+        )
+
+    # Assert
+    assert result is None

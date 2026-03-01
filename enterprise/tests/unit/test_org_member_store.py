@@ -832,3 +832,329 @@ async def test_get_org_members_paginated_email_filter_case_insensitive(
     # Assert
     assert len(members) == 1
     assert members[0].user.email == 'Alice@Example.COM'
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_llm_settings_async_with_llm_api_key(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization with members and llm_api_key in member settings
+    WHEN: update_all_members_llm_settings_async is called with llm_api_key
+    THEN: The llm_api_key is encrypted and stored in _llm_api_key column for all members
+    """
+    from server.routes.org_models import OrgMemberLLMSettings
+    from storage.encrypt_utils import decrypt_value
+
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        users = [
+            User(id=uuid.uuid4(), current_org_id=org.id, email=f'user{i}@example.com')
+            for i in range(2)
+        ]
+        session.add_all(users)
+        await session.flush()
+
+        org_members = [
+            OrgMember(
+                org_id=org.id,
+                user_id=user.id,
+                role_id=role.id,
+                llm_api_key='old-key',
+                status='active',
+            )
+            for user in users
+        ]
+        session.add_all(org_members)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    new_api_key = 'new-test-api-key-12345'
+    member_settings = OrgMemberLLMSettings(llm_api_key=new_api_key)
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_llm_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        updated_members = result.scalars().all()
+
+        assert len(updated_members) == 2
+        for member in updated_members:
+            # Verify the encrypted value can be decrypted to the original
+            decrypted_key = decrypt_value(member._llm_api_key)
+            assert decrypted_key == new_api_key
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization with members
+    WHEN: update_all_members_llm_settings_async is called with non-encrypted fields
+    THEN: The fields are updated directly without encryption
+    """
+    from server.routes.org_models import OrgMemberLLMSettings
+
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='test-key',
+            llm_model='old-model',
+            max_iterations=10,
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act
+    member_settings = OrgMemberLLMSettings(
+        llm_model='new-model',
+        llm_base_url='https://new-url.com',
+        max_iterations=50,
+    )
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_llm_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        updated_member = result.scalars().first()
+
+        assert updated_member.llm_model == 'new-model'
+        assert updated_member.llm_base_url == 'https://new-url.com'
+        assert updated_member.max_iterations == 50
+
+
+@pytest.mark.asyncio
+async def test_update_all_members_llm_settings_async_with_empty_settings(
+    async_session_maker,
+):
+    """
+    GIVEN: Organization with members and empty member settings
+    WHEN: update_all_members_llm_settings_async is called with no fields set
+    THEN: No database update is performed
+    """
+    from server.routes.org_models import OrgMemberLLMSettings
+
+    # Arrange
+    async with async_session_maker() as session:
+        org = Org(name='test-org')
+        session.add(org)
+        await session.flush()
+
+        role = Role(name='member', rank=2)
+        session.add(role)
+        await session.flush()
+
+        user = User(id=uuid.uuid4(), current_org_id=org.id, email='user@example.com')
+        session.add(user)
+        await session.flush()
+
+        org_member = OrgMember(
+            org_id=org.id,
+            user_id=user.id,
+            role_id=role.id,
+            llm_api_key='original-key',
+            llm_model='original-model',
+            status='active',
+        )
+        session.add(org_member)
+        await session.commit()
+        org_id = org.id
+
+    # Act - Empty settings (all None)
+    member_settings = OrgMemberLLMSettings()
+
+    async with async_session_maker() as session:
+        await OrgMemberStore.update_all_members_llm_settings_async(
+            session, org_id, member_settings
+        )
+        await session.commit()
+
+    # Assert - Original values should be unchanged
+    async with async_session_maker() as session:
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(OrgMember).filter(OrgMember.org_id == org_id)
+        )
+        member = result.scalars().first()
+
+        assert member.llm_model == 'original-model'
+        # Original key should still be there (encrypted)
+        assert member._llm_api_key is not None
+
+
+# =============================================================================
+# OrgMemberLLMSettings and OrgLLMSettingsUpdate Model Unit Tests
+# =============================================================================
+
+
+def test_org_member_llm_settings_has_updates_with_llm_api_key():
+    """
+    GIVEN: OrgMemberLLMSettings with only llm_api_key set
+    WHEN: has_updates() is called
+    THEN: Returns True
+    """
+    from server.routes.org_models import OrgMemberLLMSettings
+
+    # Arrange
+    settings = OrgMemberLLMSettings(llm_api_key='test-key')
+
+    # Act
+    result = settings.has_updates()
+
+    # Assert
+    assert result is True
+
+
+def test_org_member_llm_settings_has_updates_empty():
+    """
+    GIVEN: OrgMemberLLMSettings with no fields set
+    WHEN: has_updates() is called
+    THEN: Returns False
+    """
+    from server.routes.org_models import OrgMemberLLMSettings
+
+    # Arrange
+    settings = OrgMemberLLMSettings()
+
+    # Act
+    result = settings.has_updates()
+
+    # Assert
+    assert result is False
+
+
+def test_org_llm_settings_update_apply_to_org_skips_llm_api_key():
+    """
+    GIVEN: OrgLLMSettingsUpdate with llm_api_key and other fields set
+    WHEN: apply_to_org() is called
+    THEN: llm_api_key is NOT applied to org, but other fields are
+    """
+    from unittest.mock import MagicMock
+
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    settings = OrgLLMSettingsUpdate(
+        default_llm_model='claude-3',
+        llm_api_key='should-not-be-applied',
+    )
+    mock_org = MagicMock()
+    mock_org.default_llm_model = None
+
+    # Act
+    settings.apply_to_org(mock_org)
+
+    # Assert
+    assert mock_org.default_llm_model == 'claude-3'
+    # llm_api_key should NOT be set on org (it's member-only)
+    assert (
+        not hasattr(mock_org, 'llm_api_key')
+        or mock_org.llm_api_key != 'should-not-be-applied'
+    )
+
+
+def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
+    """
+    GIVEN: OrgLLMSettingsUpdate with llm_api_key set
+    WHEN: get_member_updates() is called
+    THEN: Returns OrgMemberLLMSettings with llm_api_key included
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    settings = OrgLLMSettingsUpdate(
+        default_llm_model='claude-3',
+        llm_api_key='new-member-key',
+    )
+
+    # Act
+    member_updates = settings.get_member_updates()
+
+    # Assert
+    assert member_updates is not None
+    assert member_updates.llm_api_key == 'new-member-key'
+    assert member_updates.llm_model == 'claude-3'
+
+
+def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
+    """
+    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
+    WHEN: get_member_updates() is called
+    THEN: Returns OrgMemberLLMSettings with llm_api_key (not None)
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    settings = OrgLLMSettingsUpdate(llm_api_key='member-key-only')
+
+    # Act
+    member_updates = settings.get_member_updates()
+
+    # Assert
+    assert member_updates is not None
+    assert member_updates.llm_api_key == 'member-key-only'
+    assert member_updates.llm_model is None
+
+
+def test_org_llm_settings_update_has_updates_with_llm_api_key():
+    """
+    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
+    WHEN: has_updates() is called
+    THEN: Returns True
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    settings = OrgLLMSettingsUpdate(llm_api_key='test-key')
+
+    # Act
+    result = settings.has_updates()
+
+    # Assert
+    assert result is True
