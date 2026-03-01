@@ -12271,6 +12271,22 @@
     "de": "Melden Sie sich an, um Ihre Organisationseinladung anzunehmen",
     "uk": "Увійдіть, щоб прийняти запрошення до організації"
   },
+  "AUTH$BITBUCKET_SIGNUP_DISABLED": {
+    "en": "OpenHands Cloud has temporarily disabled Bitbucket registrations and is only accepting logins from existing users at this time. We recommend registering with GitHub or GitLab instead. We are sorry for the inconvenience.",
+    "ja": "OpenHands Cloudは現在、Bitbucketでの新規登録を一時的に停止しており、既存ユーザーのログインのみ受け付けています。GitHubまたはGitLabでの登録をお勧めします。ご不便をおかけして申し訳ありません。",
+    "zh-CN": "OpenHands Cloud 暂时禁用了 Bitbucket 注册，目前仅接受现有用户登录。我们建议使用 GitHub 或 GitLab 注册。对此带来的不便，我们深表歉意。",
+    "zh-TW": "OpenHands Cloud 暫時停用了 Bitbucket 註冊，目前僅接受現有用戶登入。我們建議使用 GitHub 或 GitLab 註冊。對此帶來的不便，我們深表歉意。",
+    "ko-KR": "OpenHands Cloud는 현재 Bitbucket 등록을 일시적으로 비활성화했으며, 기존 사용자의 로그인만 허용하고 있습니다. GitHub 또는 GitLab으로 등록하시는 것을 권장합니다. 불편을 드려 죄송합니다.",
+    "no": "OpenHands Cloud har midlertidig deaktivert Bitbucket-registreringer og aksepterer kun pålogging fra eksisterende brukere for øyeblikket. Vi anbefaler å registrere deg med GitHub eller GitLab i stedet. Vi beklager ulempen.",
+    "it": "OpenHands Cloud ha temporaneamente disabilitato le registrazioni Bitbucket e al momento accetta solo accessi da utenti esistenti. Ti consigliamo di registrarti con GitHub o GitLab. Ci scusiamo per l'inconveniente.",
+    "pt": "O OpenHands Cloud desativou temporariamente os registros do Bitbucket e está aceitando apenas logins de usuários existentes no momento. Recomendamos registrar-se com GitHub ou GitLab. Pedimos desculpas pelo inconveniente.",
+    "es": "OpenHands Cloud ha deshabilitado temporalmente los registros de Bitbucket y solo acepta inicios de sesión de usuarios existentes en este momento. Recomendamos registrarse con GitHub o GitLab en su lugar. Lamentamos las molestias.",
+    "ar": "قام OpenHands Cloud بتعطيل تسجيلات Bitbucket مؤقتًا ويقبل فقط تسجيل الدخول من المستخدمين الحاليين في الوقت الحالي. نوصي بالتسجيل باستخدام GitHub أو GitLab بدلاً من ذلك. نعتذر عن أي إزعاج.",
+    "fr": "OpenHands Cloud a temporairement désactivé les inscriptions Bitbucket et n'accepte actuellement que les connexions des utilisateurs existants. Nous vous recommandons de vous inscrire avec GitHub ou GitLab à la place. Nous nous excusons pour la gêne occasionnée.",
+    "tr": "OpenHands Cloud, Bitbucket kayıtlarını geçici olarak devre dışı bıraktı ve şu anda yalnızca mevcut kullanıcıların girişlerini kabul ediyor. Bunun yerine GitHub veya GitLab ile kayıt olmanızı öneririz. Verdiğimiz rahatsızlık için özür dileriz.",
+    "de": "OpenHands Cloud hat Bitbucket-Registrierungen vorübergehend deaktiviert und akzeptiert derzeit nur Anmeldungen von bestehenden Benutzern. Wir empfehlen, sich stattdessen mit GitHub oder GitLab zu registrieren. Wir entschuldigen uns für die Unannehmlichkeiten.",
+    "uk": "OpenHands Cloud тимчасово вимкнув реєстрацію через Bitbucket і наразі приймає лише вхід існуючих користувачів. Рекомендуємо зареєструватися через GitHub або GitLab. Вибачте за незручності."
+  },
   "COMMON$TERMS_OF_SERVICE": {
     "en": "Terms of Service",
     "ja": "利用規約",
