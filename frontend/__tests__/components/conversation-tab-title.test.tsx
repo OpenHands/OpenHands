@@ -145,5 +145,81 @@ describe("ConversationTabTitle", () => {
         );
       });
     });
+
+    it("should disable the refresh button while fetching", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const title = "Changes";
+
+      // Create a delayed promise to simulate loading state
+      let resolvePromise: (value: unknown) => void;
+      const delayedPromise = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+
+      vi.mocked(GitService.getGitChanges).mockReturnValue(delayedPromise as Promise<unknown>);
+
+      renderWithProviders(
+        <ConversationTabTitle title={title} conversationKey="editor" />,
+      );
+
+      const refreshButton = screen.getByRole("button");
+
+      // Wait for initial query to complete
+      await waitFor(() => {
+        expect(GitService.getGitChanges).toHaveBeenCalled();
+      });
+
+      // Clear the mock to track refetch calls
+      vi.mocked(GitService.getGitChanges).mockClear();
+
+      // Act - click the refresh button
+      await user.click(refreshButton);
+
+      // Assert - button should be disabled during fetch
+      expect(refreshButton).toBeDisabled();
+      expect(refreshButton).toHaveAttribute("aria-label", "Refreshing changes...");
+
+      // Resolve the promise to clean up
+      resolvePromise!([]);
+    });
+
+    it("should show spinning animation on refresh icon while fetching", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const title = "Changes";
+
+      // Create a delayed promise to simulate loading state
+      let resolvePromise: (value: unknown) => void;
+      const delayedPromise = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+
+      vi.mocked(GitService.getGitChanges).mockReturnValue(delayedPromise as Promise<unknown>);
+
+      renderWithProviders(
+        <ConversationTabTitle title={title} conversationKey="editor" />,
+      );
+
+      const refreshButton = screen.getByRole("button");
+
+      // Wait for initial query to complete
+      await waitFor(() => {
+        expect(GitService.getGitChanges).toHaveBeenCalled();
+      });
+
+      // Clear the mock
+      vi.mocked(GitService.getGitChanges).mockClear();
+
+      // Act - click the refresh button
+      await user.click(refreshButton);
+
+      // Assert - refresh icon should have animate-spin class
+      const refreshIcon = refreshButton.querySelector("svg");
+      expect(refreshIcon).toHaveClass("animate-spin");
+
+      // Resolve the promise to clean up
+      resolvePromise!([]);
+    });
   });
 });
