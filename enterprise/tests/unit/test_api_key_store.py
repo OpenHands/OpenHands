@@ -88,7 +88,7 @@ async def test_create_api_key(
 
 @pytest.mark.asyncio
 async def test_validate_api_key_valid(
-    api_key_store, session_maker, async_session_maker
+    api_key_store, async_session_maker
 ):
     """Test validating a valid API key."""
     # Setup - create an API key in the database
@@ -96,7 +96,7 @@ async def test_validate_api_key_valid(
     org_id = uuid.uuid4()
     api_key_value = 'test-api-key'
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key_record = ApiKey(
             key=api_key_value,
             user_id=user_id,
@@ -105,7 +105,7 @@ async def test_validate_api_key_valid(
             expires_at=None,
         )
         session.add(key_record)
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -125,7 +125,7 @@ async def test_validate_api_key_expired(
     org_id = uuid.uuid4()
     api_key_value = 'test-expired-key'
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key_record = ApiKey(
             key=api_key_value,
             user_id=user_id,
@@ -134,7 +134,7 @@ async def test_validate_api_key_expired(
             expires_at=datetime.now(UTC) - timedelta(days=1),
         )
         session.add(key_record)
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -154,7 +154,7 @@ async def test_validate_api_key_expired_timezone_naive(
     org_id = uuid.uuid4()
     api_key_value = 'test-expired-naive-key'
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key_record = ApiKey(
             key=api_key_value,
             user_id=user_id,
@@ -164,7 +164,7 @@ async def test_validate_api_key_expired_timezone_naive(
             expires_at=datetime.now() - timedelta(days=1),
         )
         session.add(key_record)
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -184,7 +184,7 @@ async def test_validate_api_key_valid_timezone_naive(
     org_id = uuid.uuid4()
     api_key_value = 'test-valid-naive-key'
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key_record = ApiKey(
             key=api_key_value,
             user_id=user_id,
@@ -194,7 +194,7 @@ async def test_validate_api_key_valid_timezone_naive(
             expires_at=datetime.now() + timedelta(days=1),
         )
         session.add(key_record)
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -216,14 +216,14 @@ async def test_validate_api_key_not_found(api_key_store, async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key(api_key_store, session_maker, async_session_maker):
+async def test_delete_api_key(api_key_store, async_session_maker):
     """Test deleting an API key."""
     # Setup - create an API key in the database
     user_id = str(uuid.uuid4())
     org_id = uuid.uuid4()
     api_key_value = 'test-delete-key'
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key_record = ApiKey(
             key=api_key_value,
             user_id=user_id,
@@ -231,7 +231,7 @@ async def test_delete_api_key(api_key_store, session_maker, async_session_maker)
             name='Test Key',
         )
         session.add(key_record)
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -261,13 +261,13 @@ async def test_delete_api_key_not_found(api_key_store, async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key_by_id(api_key_store, session_maker, async_session_maker):
+async def test_delete_api_key_by_id(api_key_store, async_session_maker):
     """Test deleting an API key by ID."""
     # Setup - create an API key in the database
     user_id = str(uuid.uuid4())
     org_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key_record = ApiKey(
             key='test-delete-by-id-key',
             user_id=user_id,
@@ -275,7 +275,7 @@ async def test_delete_api_key_by_id(api_key_store, session_maker, async_session_
             name='Test Key',
         )
         session.add(key_record)
-        session.commit()
+        await session.commit()
         key_id = key_record.id
 
     # Execute - patch a_session_maker to use test's async session maker
@@ -304,7 +304,7 @@ async def test_list_api_keys(
     now = datetime.now(UTC)
 
     # Create API keys in the database
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key1 = ApiKey(
             key='test-key-1',
             user_id=user_id,
@@ -332,7 +332,7 @@ async def test_list_api_keys(
             created_at=now,
         )
         session.add_all([key1, key2, mcp_key])
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -357,7 +357,7 @@ async def test_retrieve_mcp_api_key(
     now = datetime.now(UTC)
 
     # Create API keys in the database
-    with session_maker() as session:
+    async with async_session_maker() as session:
         other_key = ApiKey(
             key='test-other-key',
             user_id=user_id,
@@ -373,7 +373,7 @@ async def test_retrieve_mcp_api_key(
             created_at=now,
         )
         session.add_all([other_key, mcp_key])
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -396,7 +396,7 @@ async def test_retrieve_mcp_api_key_not_found(
     now = datetime.now(UTC)
 
     # Create only non-MCP keys in the database
-    with session_maker() as session:
+    async with async_session_maker() as session:
         other_key = ApiKey(
             key='test-other-key',
             user_id=user_id,
@@ -405,7 +405,7 @@ async def test_retrieve_mcp_api_key_not_found(
             created_at=now,
         )
         session.add(other_key)
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -427,7 +427,7 @@ async def test_retrieve_api_key_by_name(
     key_name = 'Test Key'
     key_value = 'test-key-by-name'
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key_record = ApiKey(
             key=key_value,
             user_id=user_id,
@@ -435,7 +435,7 @@ async def test_retrieve_api_key_by_name(
             name=key_name,
         )
         session.add(key_record)
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
@@ -469,7 +469,7 @@ async def test_delete_api_key_by_name(
     key_name = 'Test Key to Delete'
     key_value = 'test-delete-by-name'
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         key_record = ApiKey(
             key=key_value,
             user_id=user_id,
@@ -477,7 +477,7 @@ async def test_delete_api_key_by_name(
             name=key_name,
         )
         session.add(key_record)
-        session.commit()
+        await session.commit()
 
     # Execute - patch a_session_maker to use test's async session maker
     with patch('storage.api_key_store.a_session_maker', async_session_maker):
