@@ -3,7 +3,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from storage.api_key import ApiKey
 from storage.api_key_store import ApiKeyStore
 
@@ -57,7 +56,9 @@ def test_generate_api_key(api_key_store):
 
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
-async def test_create_api_key(mock_get_user, api_key_store, async_session_maker, mock_user):
+async def test_create_api_key(
+    mock_get_user, api_key_store, async_session_maker, mock_user
+):
     """Test creating an API key."""
     # Setup
     user_id = str(uuid.uuid4())

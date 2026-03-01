@@ -5,13 +5,11 @@ Tests the async database operations for organization app settings.
 """
 
 import uuid
-from unittest.mock import patch
 
 import pytest
+from server.routes.org_models import OrgAppSettingsUpdate
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
-from server.routes.org_models import OrgAppSettingsUpdate
 from storage.base import Base
 from storage.org import Org
 from storage.org_app_settings_store import OrgAppSettingsStore

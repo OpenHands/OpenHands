@@ -8,10 +8,9 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from server.routes.org_models import OrgLLMSettingsUpdate
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
-from server.routes.org_models import OrgLLMSettingsUpdate
 from storage.base import Base
 from storage.org import Org
 from storage.org_llm_settings_store import OrgLLMSettingsStore

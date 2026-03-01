@@ -11,7 +11,6 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
-
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
@@ -43,7 +42,6 @@ from server.routes.orgs import (
 from storage.org import Org
 
 from openhands.server.user_auth import get_user_id
-
 
 # Test user ID constant (must be a valid UUID string)
 TEST_USER_ID = str(uuid.uuid4())

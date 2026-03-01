@@ -15,7 +15,6 @@ from openhands.core.logger import openhands_logger as logger
 
 @dataclass
 class ApiKeyStore:
-
     API_KEY_PREFIX = 'sk-oh-'
 
     def generate_api_key(self, length: int = 32) -> str:

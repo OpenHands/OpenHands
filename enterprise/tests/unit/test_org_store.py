@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
-
 from storage.org import Org
 from storage.org_invitation import OrgInvitation
 from storage.org_member import OrgMember

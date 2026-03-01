@@ -1,15 +1,13 @@
 import uuid
-import os
 from datetime import datetime
 from uuid import UUID
 
-from openhands.utils.async_utils import call_async_from_sync
 import pytest
 from server.constants import ORG_SETTINGS_VERSION
 from server.verified_models.verified_model_service import (
     StoredVerifiedModel,  # noqa: F401
 )
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -47,7 +45,9 @@ def db_path(tmp_path):
 @pytest.fixture
 def engine(db_path):
     """Create a sync engine with tables using file-based DB."""
-    engine = create_engine(f'sqlite:///{db_path}', connect_args={'check_same_thread': False})
+    engine = create_engine(
+        f'sqlite:///{db_path}', connect_args={'check_same_thread': False}
+    )
     Base.metadata.create_all(engine)
     return engine
 
@@ -64,13 +64,14 @@ def async_engine(db_path):
         f'sqlite+aiosqlite:///{db_path}',
         connect_args={'check_same_thread': False},
     )
-    
+
     async def create_tables():
         async with async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    
+
     # Run the async function synchronously
     import asyncio
+
     asyncio.run(create_tables())
     return async_engine
 
