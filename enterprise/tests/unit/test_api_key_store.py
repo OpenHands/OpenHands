@@ -88,7 +88,7 @@ async def test_create_api_key(
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_valid(api_key_store, session_maker):
+async def test_validate_api_key_valid(api_key_store, session_maker, async_session_maker):
     """Test validating a valid API key."""
     # Setup - create an API key in the database
     user_id = str(uuid.uuid4())
@@ -106,15 +106,16 @@ async def test_validate_api_key_valid(api_key_store, session_maker):
         session.add(key_record)
         session.commit()
 
-    # Execute
-    result = await api_key_store.validate_api_key(api_key_value)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
 
     # Verify
     assert result == user_id
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_expired(api_key_store, session_maker):
+async def test_validate_api_key_expired(api_key_store, session_maker, async_session_maker):
     """Test validating an expired API key."""
     # Setup - create an expired API key in the database
     user_id = str(uuid.uuid4())
@@ -132,15 +133,16 @@ async def test_validate_api_key_expired(api_key_store, session_maker):
         session.add(key_record)
         session.commit()
 
-    # Execute
-    result = await api_key_store.validate_api_key(api_key_value)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
 
     # Verify
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_expired_timezone_naive(api_key_store, session_maker):
+async def test_validate_api_key_expired_timezone_naive(api_key_store, session_maker, async_session_maker):
     """Test validating an expired API key with timezone-naive datetime from database."""
     # Setup - create an expired API key with timezone-naive datetime
     user_id = str(uuid.uuid4())
@@ -159,15 +161,16 @@ async def test_validate_api_key_expired_timezone_naive(api_key_store, session_ma
         session.add(key_record)
         session.commit()
 
-    # Execute
-    result = await api_key_store.validate_api_key(api_key_value)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
 
     # Verify
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_valid_timezone_naive(api_key_store, session_maker):
+async def test_validate_api_key_valid_timezone_naive(api_key_store, session_maker, async_session_maker):
     """Test validating a valid API key with timezone-naive datetime from database."""
     # Setup - create a valid API key with timezone-naive datetime (future date)
     user_id = str(uuid.uuid4())
@@ -186,8 +189,9 @@ async def test_validate_api_key_valid_timezone_naive(api_key_store, session_make
         session.add(key_record)
         session.commit()
 
-    # Execute
-    result = await api_key_store.validate_api_key(api_key_value)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.validate_api_key(api_key_value)
 
     # Verify
     assert result == user_id
@@ -204,7 +208,7 @@ async def test_validate_api_key_not_found(api_key_store):
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key(api_key_store, session_maker):
+async def test_delete_api_key(api_key_store, session_maker, async_session_maker):
     """Test deleting an API key."""
     # Setup - create an API key in the database
     user_id = str(uuid.uuid4())
@@ -221,14 +225,15 @@ async def test_delete_api_key(api_key_store, session_maker):
         session.add(key_record)
         session.commit()
 
-    # Execute
-    result = await api_key_store.delete_api_key(api_key_value)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.delete_api_key(api_key_value)
 
     # Verify
     assert result is True
 
     # Verify it was deleted from the database
-    with session_maker() as session:
+    async with async_session_maker() as session:
         from sqlalchemy import select
 
         result_db = await session.execute(
@@ -249,7 +254,7 @@ async def test_delete_api_key_not_found(api_key_store):
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key_by_id(api_key_store, session_maker):
+async def test_delete_api_key_by_id(api_key_store, session_maker, async_session_maker):
     """Test deleting an API key by ID."""
     # Setup - create an API key in the database
     user_id = str(uuid.uuid4())
@@ -266,14 +271,15 @@ async def test_delete_api_key_by_id(api_key_store, session_maker):
         session.commit()
         key_id = key_record.id
 
-    # Execute
-    result = await api_key_store.delete_api_key_by_id(key_id)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.delete_api_key_by_id(key_id)
 
     # Verify
     assert result is True
 
     # Verify it was deleted from the database
-    with session_maker() as session:
+    async with async_session_maker() as session:
         from sqlalchemy import select
 
         result_db = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
@@ -283,7 +289,7 @@ async def test_delete_api_key_by_id(api_key_store, session_maker):
 
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
-async def test_list_api_keys(mock_get_user, api_key_store, session_maker, mock_user):
+async def test_list_api_keys(mock_get_user, api_key_store, session_maker, async_session_maker, mock_user):
     """Test listing API keys for a user."""
     # Setup
     user_id = str(uuid.uuid4())
@@ -321,8 +327,9 @@ async def test_list_api_keys(mock_get_user, api_key_store, session_maker, mock_u
         session.add_all([key1, key2, mcp_key])
         session.commit()
 
-    # Execute
-    result = await api_key_store.list_api_keys(user_id)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.list_api_keys(user_id)
 
     # Verify
     mock_get_user.assert_called_once_with(user_id)
@@ -334,7 +341,7 @@ async def test_list_api_keys(mock_get_user, api_key_store, session_maker, mock_u
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
 async def test_retrieve_mcp_api_key(
-    mock_get_user, api_key_store, session_maker, mock_user
+    mock_get_user, api_key_store, session_maker, async_session_maker, mock_user
 ):
     """Test retrieving MCP API key for a user."""
     # Setup
@@ -361,8 +368,9 @@ async def test_retrieve_mcp_api_key(
         session.add_all([other_key, mcp_key])
         session.commit()
 
-    # Execute
-    result = await api_key_store.retrieve_mcp_api_key(user_id)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.retrieve_mcp_api_key(user_id)
 
     # Verify
     mock_get_user.assert_called_once_with(user_id)
@@ -372,7 +380,7 @@ async def test_retrieve_mcp_api_key(
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
 async def test_retrieve_mcp_api_key_not_found(
-    mock_get_user, api_key_store, session_maker, mock_user
+    mock_get_user, api_key_store, session_maker, async_session_maker, mock_user
 ):
     """Test retrieving MCP API key when none exists."""
     # Setup
@@ -392,8 +400,9 @@ async def test_retrieve_mcp_api_key_not_found(
         session.add(other_key)
         session.commit()
 
-    # Execute
-    result = await api_key_store.retrieve_mcp_api_key(user_id)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.retrieve_mcp_api_key(user_id)
 
     # Verify
     mock_get_user.assert_called_once_with(user_id)
@@ -401,7 +410,7 @@ async def test_retrieve_mcp_api_key_not_found(
 
 
 @pytest.mark.asyncio
-async def test_retrieve_api_key_by_name(api_key_store, session_maker):
+async def test_retrieve_api_key_by_name(api_key_store, session_maker, async_session_maker):
     """Test retrieving an API key by name."""
     # Setup
     user_id = str(uuid.uuid4())
@@ -419,8 +428,9 @@ async def test_retrieve_api_key_by_name(api_key_store, session_maker):
         session.add(key_record)
         session.commit()
 
-    # Execute
-    result = await api_key_store.retrieve_api_key_by_name(user_id, key_name)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.retrieve_api_key_by_name(user_id, key_name)
 
     # Verify
     assert result == key_value
@@ -439,7 +449,7 @@ async def test_retrieve_api_key_by_name_not_found(api_key_store, session_maker):
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key_by_name(api_key_store, session_maker):
+async def test_delete_api_key_by_name(api_key_store, session_maker, async_session_maker):
     """Test deleting an API key by name."""
     # Setup
     user_id = str(uuid.uuid4())
@@ -457,14 +467,15 @@ async def test_delete_api_key_by_name(api_key_store, session_maker):
         session.add(key_record)
         session.commit()
 
-    # Execute
-    result = await api_key_store.delete_api_key_by_name(user_id, key_name)
+    # Execute - patch a_session_maker to use test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        result = await api_key_store.delete_api_key_by_name(user_id, key_name)
 
     # Verify
     assert result is True
 
     # Verify it was deleted from the database
-    with session_maker() as session:
+    async with async_session_maker() as session:
         from sqlalchemy import select
 
         result_db = await session.execute(
