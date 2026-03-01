@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
-from sqlalchemy.orm import sessionmaker
 from storage.api_key import ApiKey
-from storage.database import a_session_maker, session_maker
+from storage.database import a_session_maker
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
@@ -16,7 +15,6 @@ from openhands.core.logger import openhands_logger as logger
 
 @dataclass
 class ApiKeyStore:
-    session_maker: sessionmaker
 
     API_KEY_PREFIX = 'sk-oh-'
 
@@ -176,4 +174,4 @@ class ApiKeyStore:
     def get_instance(cls) -> ApiKeyStore:
         """Get an instance of the ApiKeyStore."""
         logger.debug('api_key_store.get_instance')
-        return ApiKeyStore(session_maker)
+        return ApiKeyStore()

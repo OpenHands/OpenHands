@@ -4,12 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Mock the database module before importing ApiKeyStore
-with patch('storage.database.engine', create=True), patch(
-    'storage.database.a_engine', create=True
-):
-    from storage.api_key import ApiKey
-    from storage.api_key_store import ApiKeyStore
+from storage.api_key import ApiKey
+from storage.api_key_store import ApiKeyStore
 
 
 @pytest.fixture
@@ -21,8 +17,8 @@ def mock_user():
 
 
 @pytest.fixture
-def api_key_store(session_maker):
-    return ApiKeyStore(session_maker)
+def api_key_store():
+    return ApiKeyStore()
 
 
 @pytest.fixture

@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from uuid import UUID
 
+from openhands.utils.async_utils import call_async_from_sync
 import pytest
 from server.constants import ORG_SETTINGS_VERSION
 from server.verified_models.verified_model_service import (
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import sessionmaker
 
 # Anything not loaded here may not have a table created for it.
+from storage.api_key import ApiKey  # noqa: F401
 from storage.base import Base
 from storage.billing_session import BillingSession
 from storage.conversation_work import ConversationWork
@@ -47,10 +49,16 @@ def session_maker(engine):
     return sessionmaker(bind=engine)
 
 
+async def _async_create_all(engine):
+    with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 @pytest.fixture
 def async_engine():
     """Create an async in-memory SQLite engine for testing."""
     engine = create_async_engine('sqlite+aiosqlite:///:memory:')
+    call_async_from_sync(_async_create_all, 15, engine)
     return engine
 
 
