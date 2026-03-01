@@ -162,7 +162,7 @@ class DockerSandboxService(SandboxService):
                         ExposedUrl(
                             name=exposed_port.name,
                             url=url,
-                            port=host_port,
+                            port=exposed_port.container_port,
                         )
                     )
             else:
@@ -193,7 +193,7 @@ class DockerSandboxService(SandboxService):
                                     ExposedUrl(
                                         name=matching_port.name,
                                         url=url,
-                                        port=host_port,
+                                        port=matching_port.container_port,
                                     )
                                 )
 
@@ -387,7 +387,7 @@ class DockerSandboxService(SandboxService):
             for exposed_port in self.exposed_ports:
                 host_port = self._find_unused_port()
                 port_mappings[exposed_port.container_port] = host_port
-                env_vars[exposed_port.name] = str(host_port)
+                env_vars[exposed_port.name] = str(exposed_port.container_port)
 
         # Prepare labels
         labels = {

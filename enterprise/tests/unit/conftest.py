@@ -4,6 +4,9 @@ from uuid import UUID
 
 import pytest
 from server.constants import ORG_SETTINGS_VERSION
+from server.verified_models.verified_model_service import (
+    StoredVerifiedModel,  # noqa: F401
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from storage.base import Base
@@ -25,7 +28,6 @@ from storage.stored_conversation_metadata_saas import (
 from storage.stored_offline_token import StoredOfflineToken
 from storage.stripe_customer import StripeCustomer
 from storage.user import User
-from storage.verified_model import VerifiedModel  # noqa: F401
 
 
 @pytest.fixture
