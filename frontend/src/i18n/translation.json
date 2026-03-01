@@ -11631,6 +11631,38 @@
     "de": "Keine Aufgaben verfügbar",
     "uk": "Немає доступних завдань"
   },
+  "TASKS$CONNECT_GIT_PROVIDER": {
+    "en": "Connect a Git provider to see suggested tasks from your repositories",
+    "ja": "リポジトリから推奨タスクを表示するには Git プロバイダーを接続してください",
+    "zh-CN": "连接 Git 提供商以查看来自您仓库的建议任务",
+    "zh-TW": "連接 Git 提供商以查看來自您存儲庫的建議任務",
+    "ko-KR": "저장소의 추천 작업을 볼 수 있도록 Git 공급자를 연결하세요",
+    "no": "Koble til en Git-leverandør for å se foreslåtte oppgaver fra dine repositorier",
+    "it": "Connetti un provider Git per vedere le attività suggerite dai tuoi repository",
+    "pt": "Conecte um provedor Git para ver tarefas sugeridas dos seus repositórios",
+    "es": "Conecta un proveedor de Git para ver tareas sugeridas de tus repositorios",
+    "ar": "اتصل بموفر Git لرؤية المهام المقترحة من مستودعاتك",
+    "fr": "Connectez un fournisseur Git pour voir les tâches suggérées de vos dépôts",
+    "tr": "Depolarınızdan önerilen görevleri görmek için bir Git sağlayıcısı bağlayın",
+    "de": "Verbinden Sie einen Git-Anbieter, um vorgeschlagene Aufgaben aus Ihren Repositories anzuzeigen",
+    "uk": "Підключіть постачальника Git, щоб бачити запропоновані завдання з ваших репозиторіїв"
+  },
+  "TASKS$GO_TO_SETTINGS": {
+    "en": "Go to Settings",
+    "ja": "設定に移動",
+    "zh-CN": "前往设置",
+    "zh-TW": "前往設定",
+    "ko-KR": "설정으로 이동",
+    "no": "Gå til innstillinger",
+    "it": "Vai alle impostazioni",
+    "pt": "Ir para configurações",
+    "es": "Ir a configuración",
+    "ar": "الانتقال إلى الإعدادات",
+    "fr": "Aller aux paramètres",
+    "tr": "Ayarlara git",
+    "de": "Zu den Einstellungen gehen",
+    "uk": "Перейти до налаштувань"
+  },
   "TASKS$TASK_SUGGESTIONS_INFO": {
     "en": "Task suggestions information",
     "ja": "タスク提案情報",

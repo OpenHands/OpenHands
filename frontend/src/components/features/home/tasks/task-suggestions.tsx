@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import { TaskGroup } from "./task-group";
 import { useSuggestedTasks } from "#/hooks/query/use-suggested-tasks";
+import { useConfig } from "#/hooks/query/use-config";
+import { useUserProviders } from "#/hooks/use-user-providers";
 import { TaskSuggestionsSkeleton } from "./task-suggestions-skeleton";
 import { cn, getDisplayedTaskGroups, getTotalTaskCount } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
@@ -15,6 +18,8 @@ export function TaskSuggestions({ filterFor }: TaskSuggestionsProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const { data: tasks, isLoading } = useSuggestedTasks();
+  const { data: config } = useConfig();
+  const { providers } = useUserProviders();
 
   const suggestedTasks = filterFor
     ? tasks?.filter(
@@ -41,6 +46,11 @@ export function TaskSuggestions({ filterFor }: TaskSuggestionsProps) {
     setIsExpanded((prev) => !prev);
   };
 
+  // Check if in OSS mode with no Git providers configured
+  const isOSS = config?.app_mode === "oss";
+  const hasNoProviders = providers.length === 0;
+  const showConnectProviderMessage = isOSS && hasNoProviders;
+
   return (
     <section
       data-testid="task-suggestions"
@@ -64,9 +74,25 @@ export function TaskSuggestions({ filterFor }: TaskSuggestionsProps) {
           </div>
         )}
         {!hasSuggestedTasks && !isLoading && (
-          <span className="text-xs leading-4 text-white font-medium px-[14px]">
-            {t(I18nKey.TASKS$NO_TASKS_AVAILABLE)}
-          </span>
+          <div className="px-[14px]">
+            {showConnectProviderMessage ? (
+              <div className="flex flex-col gap-3">
+                <span className="text-xs leading-4 text-white font-medium">
+                  {t(I18nKey.TASKS$CONNECT_GIT_PROVIDER)}
+                </span>
+                <Link
+                  to="/settings/integrations"
+                  className="text-xs leading-4 text-primary hover:underline"
+                >
+                  {t(I18nKey.TASKS$GO_TO_SETTINGS)}
+                </Link>
+              </div>
+            ) : (
+              <span className="text-xs leading-4 text-white font-medium">
+                {t(I18nKey.TASKS$NO_TASKS_AVAILABLE)}
+              </span>
+            )}
+          </div>
         )}
 
         {!isLoading &&
