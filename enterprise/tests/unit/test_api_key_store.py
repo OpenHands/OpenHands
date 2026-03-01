@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # Mock the database module before importing ApiKeyStore
 with patch('storage.database.engine', create=True), patch(
     'storage.database.a_engine', create=True
@@ -79,6 +78,7 @@ async def test_create_api_key(mock_get_user, api_key_store, session_maker, mock_
     # Verify the ApiKey was created in the database
     with session_maker() as session:
         from sqlalchemy import select
+
         result_db = await session.execute(
             select(ApiKey).filter(ApiKey.user_id == user_id)
         )
@@ -231,6 +231,7 @@ async def test_delete_api_key(api_key_store, session_maker):
     # Verify it was deleted from the database
     with session_maker() as session:
         from sqlalchemy import select
+
         result_db = await session.execute(
             select(ApiKey).filter(ApiKey.key == api_key_value)
         )
@@ -275,9 +276,8 @@ async def test_delete_api_key_by_id(api_key_store, session_maker):
     # Verify it was deleted from the database
     with session_maker() as session:
         from sqlalchemy import select
-        result_db = await session.execute(
-            select(ApiKey).filter(ApiKey.id == key_id)
-        )
+
+        result_db = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
         api_key = result_db.scalars().first()
         assert api_key is None
 
@@ -334,7 +334,9 @@ async def test_list_api_keys(mock_get_user, api_key_store, session_maker, mock_u
 
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
-async def test_retrieve_mcp_api_key(mock_get_user, api_key_store, session_maker, mock_user):
+async def test_retrieve_mcp_api_key(
+    mock_get_user, api_key_store, session_maker, mock_user
+):
     """Test retrieving MCP API key for a user."""
     # Setup
     user_id = str(uuid.uuid4())
@@ -370,7 +372,9 @@ async def test_retrieve_mcp_api_key(mock_get_user, api_key_store, session_maker,
 
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
-async def test_retrieve_mcp_api_key_not_found(mock_get_user, api_key_store, session_maker, mock_user):
+async def test_retrieve_mcp_api_key_not_found(
+    mock_get_user, api_key_store, session_maker, mock_user
+):
     """Test retrieving MCP API key when none exists."""
     # Setup
     user_id = str(uuid.uuid4())
@@ -427,7 +431,9 @@ async def test_retrieve_api_key_by_name(api_key_store, session_maker):
 async def test_retrieve_api_key_by_name_not_found(api_key_store, session_maker):
     """Test retrieving an API key by name that doesn't exist."""
     # Execute
-    result = await api_key_store.retrieve_api_key_by_name('non-existent-user', 'Non Existent Key')
+    result = await api_key_store.retrieve_api_key_by_name(
+        'non-existent-user', 'Non Existent Key'
+    )
 
     # Verify
     assert result is None
@@ -461,6 +467,7 @@ async def test_delete_api_key_by_name(api_key_store, session_maker):
     # Verify it was deleted from the database
     with session_maker() as session:
         from sqlalchemy import select
+
         result_db = await session.execute(
             select(ApiKey).filter(ApiKey.key == key_value)
         )
@@ -472,7 +479,9 @@ async def test_delete_api_key_by_name(api_key_store, session_maker):
 async def test_delete_api_key_by_name_not_found(api_key_store, session_maker):
     """Test deleting an API key by name that doesn't exist."""
     # Execute
-    result = await api_key_store.delete_api_key_by_name('non-existent-user', 'Non Existent Key')
+    result = await api_key_store.delete_api_key_by_name(
+        'non-existent-user', 'Non Existent Key'
+    )
 
     # Verify
     assert result is False

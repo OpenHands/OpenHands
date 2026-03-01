@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 from storage.api_key import ApiKey
 from storage.database import a_session_maker, session_maker
@@ -62,9 +61,7 @@ class ApiKeyStore:
         now = datetime.now(UTC)
 
         async with a_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).filter(ApiKey.key == api_key)
-            )
+            result = await session.execute(select(ApiKey).filter(ApiKey.key == api_key))
             key_record = result.scalars().first()
 
             if not key_record:
@@ -94,9 +91,7 @@ class ApiKeyStore:
     async def delete_api_key(self, api_key: str) -> bool:
         """Delete an API key by the key value."""
         async with a_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).filter(ApiKey.key == api_key)
-            )
+            result = await session.execute(select(ApiKey).filter(ApiKey.key == api_key))
             key_record = result.scalars().first()
 
             if not key_record:
@@ -110,9 +105,7 @@ class ApiKeyStore:
     async def delete_api_key_by_id(self, key_id: int) -> bool:
         """Delete an API key by its ID."""
         async with a_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).filter(ApiKey.id == key_id)
-            )
+            result = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
             key_record = result.scalars().first()
 
             if not key_record:
@@ -158,9 +151,7 @@ class ApiKeyStore:
         """Retrieve an API key by name for a specific user."""
         async with a_session_maker() as session:
             result = await session.execute(
-                select(ApiKey).filter(
-                    ApiKey.user_id == user_id, ApiKey.name == name
-                )
+                select(ApiKey).filter(ApiKey.user_id == user_id, ApiKey.name == name)
             )
             key_record = result.scalars().first()
             return key_record.key if key_record else None
@@ -169,9 +160,7 @@ class ApiKeyStore:
         """Delete an API key by name for a specific user."""
         async with a_session_maker() as session:
             result = await session.execute(
-                select(ApiKey).filter(
-                    ApiKey.user_id == user_id, ApiKey.name == name
-                )
+                select(ApiKey).filter(ApiKey.user_id == user_id, ApiKey.name == name)
             )
             key_record = result.scalars().first()
 

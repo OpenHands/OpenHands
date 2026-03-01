@@ -50,16 +50,6 @@ class OrgStore:
         return OrgStore._validate_org_version(org)
 
     @staticmethod
-    async def get_org_by_id_async(org_id: UUID) -> Org | None:
-        """Get organization by ID (async version)."""
-        async with a_session_maker() as session:
-            from sqlalchemy import select
-
-            result = await session.execute(select(Org).filter(Org.id == org_id))
-            org = result.scalars().first()
-        return OrgStore._validate_org_version(org)
-
-    @staticmethod
     def get_current_org_from_keycloak_user_id(keycloak_user_id: str) -> Org | None:
         with session_maker() as session:
             user = (
