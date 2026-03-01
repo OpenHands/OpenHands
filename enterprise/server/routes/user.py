@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
@@ -42,6 +43,7 @@ from openhands.server.user_auth import (
 
 saas_user_router = APIRouter(prefix='/api/user', dependencies=get_dependencies())
 token_manager = TokenManager()
+logger = logging.getLogger(__name__)
 
 
 @saas_user_router.get('/installations', response_model=list[str])
@@ -51,14 +53,18 @@ async def saas_get_user_installations(
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
 ):
+    logger.info('trace_saas_get_user_installations_1')
     if not provider_tokens:
+        logger.info('trace_saas_get_user_installations_2')
         retval = await _check_idp(
             access_token=access_token,
             default_value=[],
         )
+        logger.info('trace_saas_get_user_installations_3')
         if retval is not None:
             return retval
 
+    logger.info('trace_saas_get_user_installations_4')
     return await get_user_installations(
         provider=provider,
         provider_tokens=provider_tokens,
@@ -78,14 +84,19 @@ async def saas_get_user_repositories(
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
 ) -> list[Repository] | JSONResponse:
+    logger.info('trace_saas_get_user_repositories_1')
     if not provider_tokens:
+        logger.info('trace_saas_get_user_repositories_2')
         retval = await _check_idp(
             access_token=access_token,
             default_value=[],
         )
+        logger.info('trace_saas_get_user_repositories_3')
         if retval is not None:
+            logger.info('trace_saas_get_user_repositories_4')
             return retval
 
+    logger.info('trace_saas_get_user_repositories_5')
     return await get_user_repositories(
         sort=sort,
         selected_provider=selected_provider,
@@ -364,11 +375,13 @@ async def _check_idp(
             content='User is not authenticated.',
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
+    logger.info('trace_check_idp_1')
     user_info = (
         user_info
         if user_info
         else await token_manager.get_user_info(access_token.get_secret_value())
     )
+    logger.info('trace_check_idp_2')
     if not user_info:
         return JSONResponse(
             content='Failed to retrieve user_info.',
@@ -384,9 +397,11 @@ async def _check_idp(
         idp, _ = idp.rsplit(':', 1)
 
     # Will return empty dict if IDP doesn't support provider tokens
+    logger.info('trace_check_idp_3')
     if not await token_manager.get_idp_tokens_from_keycloak(
         access_token.get_secret_value(), ProviderType(idp)
     ):
+        logger.info('trace_check_idp_4')
         return default_value
-
+    logger.info('trace_check_idp_5')
     return None
