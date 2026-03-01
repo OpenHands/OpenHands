@@ -39,22 +39,8 @@ class BillingService {
       "/api/billing/credits",
     );
     return data.credits;
-  }
 
-  /**
-   * Get the user's subscription access information
-   * @returns The user's subscription access details or null if not available
-   */
-
-  /**
-   * Create a subscription checkout session for subscribing to a plan
-   * @returns The redirect URL for the subscription checkout session
-   */
-
-  /**
-   * Cancel the user's subscription
-   * @returns The response indicating the result of the cancellation request
-   */
+ }
 }
 
 export default BillingService;

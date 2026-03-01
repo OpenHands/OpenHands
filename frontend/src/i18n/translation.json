@@ -9183,38 +9183,7 @@
     "de": "Abonnement kündigen",
     "uk": "Скасувати підписку"
   },
-  "PAYMENT$CANCEL_SUBSCRIPTION_MESSAGE": {
-    "en": "Are you sure you want to cancel your subscription? You will lose access to premium features at the end of your current billing period.",
-    "ja": "サブスクリプションをキャンセルしてもよろしいですか？現在の請求期間の終了時にプレミアム機能へのアクセスを失います。",
-    "zh-CN": "您确定要取消订阅吗？您将在当前计费周期结束时失去对高级功能的访问权限。",
-    "zh-TW": "您確定要取消訂閱嗎？您將在當前計費週期結束時失去對高級功能的訪問權限。",
-    "ko-KR": "구독을 취소하시겠습니까? 현재 결제 기간이 끝나면 프리미엄 기능에 대한 액세스를 잃게 됩니다.",
-    "no": "Er du sikker på at du vil avbryte abonnementet? Du vil miste tilgang til premium-funksjoner ved slutten av gjeldende faktureringsperiode.",
-    "it": "Sei sicuro di voler annullare l'abbonamento? Perderai l'accesso alle funzionalità premium alla fine del periodo di fatturazione corrente.",
-    "pt": "Tem certeza de que deseja cancelar sua assinatura? Você perderá o acesso aos recursos premium no final do período de cobrança atual.",
-    "es": "¿Estás seguro de que quieres cancelar tu suscripción? Perderás el acceso a las funciones premium al final de tu período de facturación actual.",
-    "ar": "هل أنت متأكد من أنك تريد إلغاء اشتراكك؟ ستفقد الوصول إلى الميزات المميزة في نهاية فترة الفوترة الحالية.",
-    "fr": "Êtes-vous sûr de vouloir annuler votre abonnement ? Vous perdrez l'accès aux fonctionnalités premium à la fin de votre période de facturation actuelle.",
-    "tr": "Aboneliğinizi iptal etmek istediğinizden emin misiniz? Mevcut faturalama döneminizin sonunda premium özelliklere erişiminizi kaybedeceksiniz.",
-    "de": "Sind Sie sicher, dass Sie Ihr Abonnement kündigen möchten? Sie verlieren den Zugang zu Premium-Funktionen am Ende Ihres aktuellen Abrechnungszeitraums.",
-    "uk": "Ві впевнені, що хочете скасувати підписку? Ви втратите доступ до преміум-функцій наприкінці поточного розрахункового періоду."
-  },
-  "PAYMENT$CANCEL_SUBSCRIPTION_MESSAGE_WITH_DATE": {
-    "en": "Are you sure you want to cancel your subscription? You will lose access to premium features on {{date}}.",
-    "ja": "サブスクリプションをキャンセルしてもよろしいですか？{{date}}にプレミアム機能へのアクセスを失います。",
-    "zh-CN": "您确定要取消订阅吗？您将在{{date}}失去对高级功能的访问权限。",
-    "zh-TW": "您確定要取消訂閱嗎？您將在{{date}}失去對高級功能的訪問權限。",
-    "ko-KR": "구독을 취소하시겠습니까? {{date}}에 프리미엄 기능에 대한 액세스를 잃게 됩니다.",
-    "no": "Er du sikker på at du vil avbryte abonnementet? Du vil miste tilgang til premium-funksjoner {{date}}.",
-    "it": "Sei sicuro di voler annullare l'abbonamento? Perderai l'accesso alle funzionalità premium il {{date}}.",
-    "pt": "Tem certeza de que deseja cancelar sua assinatura? Você perderá o acesso aos recursos premium em {{date}}.",
-    "es": "¿Estás seguro de que quieres cancelar tu suscripción? Perderás el acceso a las funciones premium el {{date}}.",
-    "ar": "هل أنت متأكد من أنك تريد إلغاء اشتراكك؟ ستفقد الوصول إلى الميزات المميزة في {{date}}.",
-    "fr": "Êtes-vous sûr de vouloir annuler votre abonnement ? Vous perdrez l'accès aux fonctionnalités premium le {{date}}.",
-    "tr": "Aboneliğinizi iptal etmek istediğinizden emin misiniz? {{date}} tarihinde premium özelliklere erişiminizi kaybedeceksiniz.",
-    "de": "Sind Sie sicher, dass Sie Ihr Abonnement kündigen möchten? Sie verlieren den Zugang zu Premium-Funktionen am {{date}}.",
-    "uk": "Ви впевнені, що хочете скасувати підписку? Ви втратите доступ до преміум-функцій {{date}}."
-  },
+
   "PAYMENT$SUBSCRIPTION_CANCELLED": {
     "en": "Subscription cancelled successfully",
     "ja": "サブスクリプションが正常にキャンセルされました",
@@ -9231,22 +9200,7 @@
     "de": "Abonnement erfolgreich gekündigt",
     "uk": "Підписку успішно скасовано"
   },
-  "PAYMENT$SUBSCRIPTION_CANCELLED_EXPIRES": {
-    "en": "Your subscription has been cancelled and will expire on {{date}}",
-    "ja": "サブスクリプションはキャンセルされ、{{date}}に期限切れになります",
-    "zh-CN": "您的订阅已取消，将于{{date}}到期",
-    "zh-TW": "您的訂閱已取消，將於{{date}}到期",
-    "ko-KR": "구독이 취소되었으며 {{date}}에 만료됩니다",
-    "no": "Abonnementet ditt er avbrutt og utløper {{date}}",
-    "it": "Il tuo abbonamento è stato annullato e scadrà il {{date}}",
-    "pt": "Sua assinatura foi cancelada e expirará em {{date}}",
-    "es": "Tu suscripción ha sido cancelada y expirará el {{date}}",
-    "ar": "تم إلغاء اشتراكك وسينتهي في {{date}}",
-    "fr": "Votre abonnement a été annulé et expirera le {{date}}",
-    "tr": "Aboneliğiniz iptal edildi ve {{date}} tarihinde sona erecek",
-    "de": "Ihr Abonnement wurde gekündigt und läuft am {{date}} ab",
-    "uk": "Ваша підписка скасована і закінчиться {{date}}"
-  },
+
   "PAYMENT$NEXT_BILLING_DATE": {
     "en": "Next billing date: {{date}}",
     "ja": "次回請求日: {{date}}",
