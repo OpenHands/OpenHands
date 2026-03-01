@@ -13,7 +13,6 @@ from server.constants import (
 from server.routes.org_models import OrgAppSettingsUpdate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 from storage.org import Org
 from storage.user import User
 
@@ -35,9 +34,7 @@ class OrgAppSettingsStore:
         """
         # Get user with their current_org_id
         result = await self.db_session.execute(
-            select(User)
-            .options(joinedload(User.org_members))
-            .filter(User.id == UUID(user_id))
+            select(User).filter(User.id == UUID(user_id))
         )
         user = result.scalars().first()
 
