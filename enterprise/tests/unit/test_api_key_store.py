@@ -87,9 +87,7 @@ async def test_create_api_key(
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_valid(
-    api_key_store, async_session_maker
-):
+async def test_validate_api_key_valid(api_key_store, async_session_maker):
     """Test validating a valid API key."""
     # Setup - create an API key in the database
     user_id = str(uuid.uuid4())
