@@ -280,7 +280,7 @@ async def saas_user_auth_from_bearer(request: Request) -> SaasUserAuth | None:
             return None
 
         api_key_store = ApiKeyStore.get_instance()
-        user_id = api_key_store.validate_api_key(api_key)
+        user_id = await api_key_store.validate_api_key(api_key)
         if not user_id:
             return None
         offline_token = await token_manager.load_offline_token(user_id)

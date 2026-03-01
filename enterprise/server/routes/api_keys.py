@@ -251,7 +251,7 @@ async def delete_api_key(
             )
 
         # Delete the key
-        success = api_key_store.delete_api_key_by_id(key_id)
+        success = await api_key_store.delete_api_key_by_id(key_id)
 
         if not success:
             raise HTTPException(

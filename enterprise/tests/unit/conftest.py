@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import sessionmaker
 
 # Anything not loaded here may not have a table created for it.
+from storage.api_key import ApiKey
 from storage.base import Base
 from storage.billing_session import BillingSession
 from storage.conversation_work import ConversationWork
