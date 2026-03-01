@@ -39,8 +39,7 @@ class BillingService {
       "/api/billing/credits",
     );
     return data.credits;
-
- }
+  }
 }
 
 export default BillingService;
