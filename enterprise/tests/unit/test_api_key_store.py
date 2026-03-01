@@ -57,22 +57,24 @@ def test_generate_api_key(api_key_store):
 
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
-async def test_create_api_key(mock_get_user, api_key_store, session_maker, mock_user):
+async def test_create_api_key(mock_get_user, api_key_store, async_session_maker, mock_user):
     """Test creating an API key."""
     # Setup
     user_id = str(uuid.uuid4())
     name = 'Test Key'
     mock_get_user.return_value = mock_user
 
-    # Execute
-    result = await api_key_store.create_api_key(user_id, name)
+    # Patch a_session_maker in the api_key_store module to use the test's async session maker
+    with patch('storage.api_key_store.a_session_maker', async_session_maker):
+        # Execute
+        result = await api_key_store.create_api_key(user_id, name)
 
     # Verify
     assert result.startswith('sk-oh-')
     mock_get_user.assert_called_once_with(user_id)
 
-    # Verify the ApiKey was created in the database
-    with session_maker() as session:
+    # Verify the ApiKey was created in the database using async session
+    async with async_session_maker() as session:
         from sqlalchemy import select
 
         result_db = await session.execute(

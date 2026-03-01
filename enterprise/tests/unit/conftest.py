@@ -1,4 +1,5 @@
 import uuid
+import os
 from datetime import datetime
 from uuid import UUID
 
@@ -8,7 +9,7 @@ from server.constants import ORG_SETTINGS_VERSION
 from server.verified_models.verified_model_service import (
     StoredVerifiedModel,  # noqa: F401
 )
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -37,9 +38,16 @@ from storage.stripe_customer import StripeCustomer
 from storage.user import User
 
 
+@pytest.fixture(scope='function')
+def db_path(tmp_path):
+    """Create a unique temp file path for each test."""
+    return str(tmp_path / 'test.db')
+
+
 @pytest.fixture
-def engine():
-    engine = create_engine('sqlite:///:memory:')
+def engine(db_path):
+    """Create a sync engine with tables using file-based DB."""
+    engine = create_engine(f'sqlite:///{db_path}', connect_args={'check_same_thread': False})
     Base.metadata.create_all(engine)
     return engine
 
@@ -49,17 +57,22 @@ def session_maker(engine):
     return sessionmaker(bind=engine)
 
 
-async def _async_create_all(engine):
-    with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
 @pytest.fixture
-def async_engine():
-    """Create an async in-memory SQLite engine for testing."""
-    engine = create_async_engine('sqlite+aiosqlite:///:memory:')
-    call_async_from_sync(_async_create_all, 15, engine)
-    return engine
+def async_engine(db_path):
+    """Create an async engine using the SAME file-based database."""
+    async_engine = create_async_engine(
+        f'sqlite+aiosqlite:///{db_path}',
+        connect_args={'check_same_thread': False},
+    )
+    
+    async def create_tables():
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    
+    # Run the async function synchronously
+    import asyncio
+    asyncio.run(create_tables())
+    return async_engine
 
 
 @pytest.fixture
@@ -70,9 +83,6 @@ async def async_session_maker(async_engine):
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    # Create all tables
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
     return async_session_maker
 
 
