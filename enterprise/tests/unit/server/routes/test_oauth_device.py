@@ -16,8 +16,15 @@ from storage.device_code import DeviceCode
 
 @pytest.fixture
 def mock_device_code_store():
-    """Mock device code store."""
-    return MagicMock()
+    """Mock device code store with async methods."""
+    mock = MagicMock()
+    mock.create_device_code = AsyncMock()
+    mock.get_by_device_code = AsyncMock()
+    mock.get_by_user_code = AsyncMock()
+    mock.authorize_device_code = AsyncMock()
+    mock.deny_device_code = AsyncMock()
+    mock.update_poll_time = AsyncMock()
+    return mock
 
 
 @pytest.fixture
@@ -54,7 +61,7 @@ class TestDeviceAuthorization:
             expires_at=datetime.now(UTC) + timedelta(minutes=10),
             current_interval=5,  # Default interval
         )
-        mock_store.create_device_code.return_value = mock_device
+        mock_store.create_device_code = AsyncMock(return_value=mock_device)
 
         result = await device_authorization(mock_request)
 
@@ -76,7 +83,7 @@ class TestDeviceAuthorization:
             expires_at=datetime.now(UTC) + timedelta(minutes=10),
             current_interval=15,  # Increased interval from previous rate limiting
         )
-        mock_store.create_device_code.return_value = mock_device
+        mock_store.create_device_code = AsyncMock(return_value=mock_device)
 
         result = await device_authorization(mock_request)
 
@@ -113,10 +120,10 @@ class TestDeviceToken:
             mock_device.status = status
             # Mock rate limiting - return False (not too fast) and default interval
             mock_device.check_rate_limit.return_value = (False, 5)
-            mock_store.get_by_device_code.return_value = mock_device
-            mock_store.update_poll_time.return_value = True
+            mock_store.get_by_device_code = AsyncMock(return_value=mock_device)
+            mock_store.update_poll_time = AsyncMock(return_value=True)
         else:
-            mock_store.get_by_device_code.return_value = None
+            mock_store.get_by_device_code = AsyncMock(return_value=None)
 
         result = await device_token(device_code=device_code)
 
@@ -142,8 +149,8 @@ class TestDeviceToken:
         )
         # Mock rate limiting - return False (not too fast) and default interval
         mock_device.check_rate_limit.return_value = (False, 5)
-        mock_store.get_by_device_code.return_value = mock_device
-        mock_store.update_poll_time.return_value = True
+        mock_store.get_by_device_code = AsyncMock(return_value=mock_device)
+        mock_store.update_poll_time = AsyncMock(return_value=True)
 
         # Mock API key retrieval - use AsyncMock for async method
         mock_api_key_store = MagicMock()
@@ -178,7 +185,7 @@ class TestDeviceVerificationAuthenticated:
         self, mock_store, mock_api_key_class
     ):
         """Test verification with invalid device code."""
-        mock_store.get_by_user_code.return_value = None
+        mock_store.get_by_user_code = AsyncMock(return_value=None)
 
         with pytest.raises(HTTPException):
             await device_verification_authenticated(
@@ -191,7 +198,7 @@ class TestDeviceVerificationAuthenticated:
         """Test verification with already processed device code."""
         mock_device = MagicMock()
         mock_device.is_pending.return_value = False
-        mock_store.get_by_user_code.return_value = mock_device
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
 
         with pytest.raises(HTTPException):
             await device_verification_authenticated(
@@ -205,8 +212,8 @@ class TestDeviceVerificationAuthenticated:
         # Mock device code
         mock_device = MagicMock()
         mock_device.is_pending.return_value = True
-        mock_store.get_by_user_code.return_value = mock_device
-        mock_store.authorize_device_code.return_value = True
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+        mock_store.authorize_device_code = AsyncMock(return_value=True)
 
         # Mock API key store with async create_api_key
         mock_api_key_store = MagicMock()
@@ -250,15 +257,17 @@ class TestDeviceVerificationAuthenticated:
         mock_device2.is_pending.return_value = True
 
         # Configure mock store to return appropriate device for each user_code
-        def get_by_user_code_side_effect(user_code):
+        async def get_by_user_code_side_effect(user_code):
             if user_code == device1_code:
                 return mock_device1
             elif user_code == device2_code:
                 return mock_device2
             return None
 
-        mock_store.get_by_user_code.side_effect = get_by_user_code_side_effect
-        mock_store.authorize_device_code.return_value = True
+        mock_store.get_by_user_code = AsyncMock(
+            side_effect=get_by_user_code_side_effect
+        )
+        mock_store.authorize_device_code = AsyncMock(return_value=True)
 
         # Authenticate first device
         result1 = await device_verification_authenticated(
@@ -307,8 +316,8 @@ class TestDeviceTokenRateLimiting:
             last_poll_time=None,  # First poll
             current_interval=5,
         )
-        mock_store.get_by_device_code.return_value = mock_device
-        mock_store.update_poll_time.return_value = True
+        mock_store.get_by_device_code = AsyncMock(return_value=mock_device)
+        mock_store.update_poll_time = AsyncMock(return_value=True)
 
         device_code = 'test_device_code'
         result = await device_token(device_code=device_code)
@@ -338,8 +347,8 @@ class TestDeviceTokenRateLimiting:
             last_poll_time=last_poll,
             current_interval=5,
         )
-        mock_store.get_by_device_code.return_value = mock_device
-        mock_store.update_poll_time.return_value = True
+        mock_store.get_by_device_code = AsyncMock(return_value=mock_device)
+        mock_store.update_poll_time = AsyncMock(return_value=True)
 
         device_code = 'test_device_code'
         result = await device_token(device_code=device_code)
@@ -369,8 +378,8 @@ class TestDeviceTokenRateLimiting:
             last_poll_time=last_poll,
             current_interval=5,
         )
-        mock_store.get_by_device_code.return_value = mock_device
-        mock_store.update_poll_time.return_value = True
+        mock_store.get_by_device_code = AsyncMock(return_value=mock_device)
+        mock_store.update_poll_time = AsyncMock(return_value=True)
 
         device_code = 'test_device_code'
         result = await device_token(device_code=device_code)
@@ -401,8 +410,8 @@ class TestDeviceTokenRateLimiting:
             last_poll_time=last_poll,
             current_interval=15,  # Already increased from previous slow_down
         )
-        mock_store.get_by_device_code.return_value = mock_device
-        mock_store.update_poll_time.return_value = True
+        mock_store.get_by_device_code = AsyncMock(return_value=mock_device)
+        mock_store.update_poll_time = AsyncMock(return_value=True)
 
         device_code = 'test_device_code'
         result = await device_token(device_code=device_code)
@@ -432,8 +441,8 @@ class TestDeviceTokenRateLimiting:
             last_poll_time=last_poll,
             current_interval=58,  # Near maximum of 60
         )
-        mock_store.get_by_device_code.return_value = mock_device
-        mock_store.update_poll_time.return_value = True
+        mock_store.get_by_device_code = AsyncMock(return_value=mock_device)
+        mock_store.update_poll_time = AsyncMock(return_value=True)
 
         device_code = 'test_device_code'
         result = await device_token(device_code=device_code)
@@ -459,8 +468,8 @@ class TestDeviceTokenRateLimiting:
             last_poll_time=last_poll,
             current_interval=5,
         )
-        mock_store.get_by_device_code.return_value = mock_device
-        mock_store.update_poll_time.return_value = True
+        mock_store.get_by_device_code = AsyncMock(return_value=mock_device)
+        mock_store.update_poll_time = AsyncMock(return_value=True)
 
         device_code = 'test_device_code'
         result = await device_token(device_code=device_code)
@@ -489,8 +498,10 @@ class TestDeviceVerificationTransactionIntegrity:
         # Mock device code
         mock_device = MagicMock()
         mock_device.is_pending.return_value = True
-        mock_store.get_by_user_code.return_value = mock_device
-        mock_store.authorize_device_code.return_value = False  # Authorization fails
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+        mock_store.authorize_device_code = AsyncMock(
+            return_value=False
+        )  # Authorization fails
 
         # Mock API key store with async create_api_key
         mock_api_key_store = MagicMock()
@@ -521,9 +532,11 @@ class TestDeviceVerificationTransactionIntegrity:
         # Mock device code
         mock_device = MagicMock()
         mock_device.is_pending.return_value = True
-        mock_store.get_by_user_code.return_value = mock_device
-        mock_store.authorize_device_code.return_value = True  # Authorization succeeds
-        mock_store.deny_device_code.return_value = True  # Cleanup succeeds
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+        mock_store.authorize_device_code = AsyncMock(
+            return_value=True
+        )  # Authorization succeeds
+        mock_store.deny_device_code = AsyncMock(return_value=True)  # Cleanup succeeds
 
         # Mock API key store to fail on creation (async)
         mock_api_key_store = MagicMock()
@@ -561,10 +574,12 @@ class TestDeviceVerificationTransactionIntegrity:
         # Mock device code
         mock_device = MagicMock()
         mock_device.is_pending.return_value = True
-        mock_store.get_by_user_code.return_value = mock_device
-        mock_store.authorize_device_code.return_value = True  # Authorization succeeds
-        mock_store.deny_device_code.side_effect = Exception(
-            'Cleanup failed'
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+        mock_store.authorize_device_code = AsyncMock(
+            return_value=True
+        )  # Authorization succeeds
+        mock_store.deny_device_code = AsyncMock(
+            side_effect=Exception('Cleanup failed')
         )  # Cleanup fails
 
         # Mock API key store to fail on creation (async)
@@ -597,8 +612,11 @@ class TestDeviceVerificationTransactionIntegrity:
         # Mock device code
         mock_device = MagicMock()
         mock_device.is_pending.return_value = True
-        mock_store.get_by_user_code.return_value = mock_device
-        mock_store.authorize_device_code.return_value = True  # Authorization succeeds
+        mock_store.get_by_user_code = AsyncMock(return_value=mock_device)
+        mock_store.authorize_device_code = AsyncMock(
+            return_value=True
+        )  # Authorization succeeds
+        mock_store.deny_device_code = AsyncMock()
 
         # Mock API key store with async create_api_key
         mock_api_key_store = MagicMock()

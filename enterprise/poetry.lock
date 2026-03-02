@@ -1591,6 +1591,9 @@ files = [
     {file = "cryptography-46.0.5-pp311-pypy311_pp73-macosx_11_0_arm64.whl", hash = "sha256:3b4995dc971c9fb83c25aa44cf45f02ba86f71ee600d81091c2f0cbae116b06c"},
     {file = "cryptography-46.0.5-pp311-pypy311_pp73-manylinux_2_28_aarch64.whl", hash = "sha256:bc84e875994c3b445871ea7181d424588171efec3e185dced958dad9e001950a"},
     {file = "cryptography-46.0.5-pp311-pypy311_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:2ae6971afd6246710480e3f15824ed3029a60fc16991db250034efd0b9fb4356"},
+    {file = "cryptography-46.0.5-pp311-pypy311_pp73-manylinux_2_34_aarch64.whl", hash = "sha256:d861ee9e76ace6cf36a6a89b959ec08e7bc2493ee39d07ffe5acb23ef46d27da"},
+    {file = "cryptography-46.0.5-pp311-pypy311_pp73-manylinux_2_34_x86_64.whl", hash = "sha256:2b7a67c9cd56372f3249b39699f2ad479f6991e62ea15800973b956f4b73e257"},
+    {file = "cryptography-46.0.5-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:8456928655f856c6e1533ff59d5be76578a7157224dbd9ce6872f25055ab9ab7"},
     {file = "cryptography-46.0.5.tar.gz", hash = "sha256:abace499247268e3757271b2f1e244b36b06f8515cf27c4d49468fc9eb16e93d"},
 ]
 
@@ -6168,23 +6171,23 @@ opentelemetry-exporter-otlp-proto-grpc = ">=1.33.1"
 pathspec = ">=0.12.1"
 pexpect = "*"
 pg8000 = ">=1.31.5"
-pillow = ">=11.3"
+pillow = ">=12.1.1"
 playwright = ">=1.55"
 poetry = ">=2.1.2"
 prompt-toolkit = ">=3.0.50"
-protobuf = ">=5,<6"
+protobuf = ">=5.29.6,<6"
 psutil = "*"
 pybase62 = ">=1"
 pygithub = ">=2.5"
 pyjwt = ">=2.9"
 pylatexenc = "*"
-pypdf = ">=6"
+pypdf = ">=6.7.2"
 python-docx = "*"
 python-dotenv = "*"
 python-frontmatter = ">=1.1"
 python-jose = {version = ">=3.3", extras = ["cryptography"]}
 python-json-logger = ">=3.2.1"
-python-multipart = "*"
+python-multipart = ">=0.0.22"
 python-pptx = "*"
 python-socketio = "5.14"
 pythonnet = "*"
@@ -6197,7 +6200,7 @@ setuptools = ">=78.1.1"
 shellingham = ">=1.5.4"
 sqlalchemy = {version = ">=2.0.40", extras = ["asyncio"]}
 sse-starlette = ">=3.0.2"
-starlette = ">=0.48"
+starlette = ">=0.49.1"
 tenacity = ">=8.5,<10"
 termcolor = "*"
 toml = "*"
@@ -11961,7 +11964,7 @@ description = "Python for Window Extensions"
 optional = false
 python-versions = "*"
 groups = ["main"]
-markers = "platform_system == \"Windows\" or sys_platform == \"win32\""
+markers = "sys_platform == \"win32\" or platform_system == \"Windows\""
 files = [
     {file = "pywin32-311-cp310-cp310-win32.whl", hash = "sha256:d03ff496d2a0cd4a5893504789d4a15399133fe82517455e78bad62efbb7f0a3"},
     {file = "pywin32-311-cp310-cp310-win_amd64.whl", hash = "sha256:797c2772017851984b97180b0bebe4b620bb86328e8a884bb626156295a63b3b"},
@@ -14909,4 +14912,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "1cad6029269393af67155e930c72eae2c03da02e4b3a3699823f6168c14a4218"
+content-hash = "ef037f6d6085d26166d35c56ce266439f8f1a4fea90bc43ccf15cfeaf116cae5"
