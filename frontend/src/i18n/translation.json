@@ -11553,6 +11553,56 @@
     "de": "Ein Repository auswählen",
     "uk": "Вибрати репозиторій"
   },
+  "TASKS$NO_GIT_PROVIDERS_TITLE": {
+    "en": "Connect a Git provider",
+    "ja": "Gitプロバイダーを接続",
+    "zh-CN": "连接 Git 提供商",
+    "zh-TW": "連接 Git 提供商",
+    "ko-KR": "Git 제공자 연결",
+    "no": "Koble til en Git-leverandør",
+    "ar": "قم بتوصيل موفر Git",
+    "de": "Git-Anbieter verbinden",
+    "fr": "Connecter un fournisseur Git",
+    "it": "Collega un provider Git",
+    "pt": "Conectar um provedor Git",
+    "es": "Conectar un proveedor Git",
+    "tr": "Git sağlayıcısını bağla",
+    "uk": "Підключити постачальник Git"
+  },
+
+  "TASKS$NO_GIT_PROVIDERS_DESCRIPTION": {
+    "en": "Connect a Git provider to see suggested tasks from your repositories.",
+    "ja": "Gitプロバイダーを接続して、リポジトリからの提案タスクを表示します。",
+    "zh-CN": "连接 Git 提供商以查看来自存储库的建议任务。",
+    "zh-TW": "連接 Git 提供商以查看來自存儲庫的建議任務。",
+    "ko-KR": "Git 제공자를 연결하여 저장소의 추천 작업을 확인하세요.",
+    "no": "Koble til en Git-leverandør for å se foreslåtte oppgaver fra dine repositorier.",
+    "ar": "قم بتوصيل موفر Git لرؤية المهام المقترحة من مستودعاتك.",
+    "de": "Verbinde einen Git-Anbieter, um vorgeschlagene Aufgaben aus deinen Repositories zu sehen.",
+    "fr": "Connectez un fournisseur Git pour voir les tâches suggérées depuis vos dépôts.",
+    "it": "Collega un provider Git per vedere le attività suggerite dai tuoi repository.",
+    "pt": "Conecte um provedor Git para ver tarefas sugeridas dos seus repositórios.",
+    "es": "Conecta un proveedor Git para ver tareas sugeridas de tus repositorios.",
+    "tr": "Depolarınızdan önerilen görevleri görmek için bir Git sağlayıcısı bağlayın.",
+    "uk": "Підключіть постачальник Git, щоб бачити запропоновані завдання з ваших репозиторіїв."
+  },
+
+  "TASKS$NO_GIT_PROVIDERS_CTA": {
+    "en": "Go to Integrations",
+    "ja": "統合へ移動",
+    "zh-CN": "前往集成",
+    "zh-TW": "前往整合",
+    "ko-KR": "통합으로 이동",
+    "no": "Gå til integrasjoner",
+    "ar": "الانتقال إلى التكاملات",
+    "de": "Zu Integrationen",
+    "fr": "Aller aux intégrations",
+    "it": "Vai alle integrazioni",
+    "pt": "Ir para integrações",
+    "es": "Ir a integraciones",
+    "tr": "Entegrasyonlara git",
+    "uk": "Перейти до інтеграцій"
+  },
   "TASKS$SUGGESTED_TASKS": {
     "en": "Suggested Tasks",
     "ja": "推奨タスク",

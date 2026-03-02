@@ -1,15 +1,13 @@
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+from storage.saas_conversation_store import SaasConversationStore
+from storage.user import User
 
+from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.storage.data_models.conversation_metadata import ConversationMetadata
-
-# Mock the database module before importing
-with patch('storage.database.engine'), patch('storage.database.a_engine'):
-    from storage.saas_conversation_store import SaasConversationStore
-    from storage.user import User
 
 
 @pytest.fixture(autouse=True)
@@ -166,3 +164,53 @@ async def test_exists(session_maker):
     assert not await store.exists('exists-test')
     await store.save_metadata(metadata)
     assert await store.exists('exists-test')
+
+
+class TestGetInstance:
+    """Tests for SaasConversationStore.get_instance method.
+
+    The get_instance method uses async UserStore.get_user_by_id_async because
+    callers now use asyncio.run_coroutine_threadsafe() to dispatch to the main
+    event loop where asyncpg connections work properly.
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_instance_uses_async_get_user_by_id(self):
+        """Verify get_instance calls the async get_user_by_id_async for proper event loop handling."""
+        # Arrange
+        user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
+        mock_user = MagicMock(spec=User)
+        mock_user.current_org_id = UUID(user_id)
+        mock_config = MagicMock(spec=OpenHandsConfig)
+
+        with patch(
+            'storage.saas_conversation_store.UserStore.get_user_by_id_async',
+            AsyncMock(return_value=mock_user),
+        ) as mock_async_get_user, patch(
+            'storage.saas_conversation_store.session_maker'
+        ):
+            # Act
+            store = await SaasConversationStore.get_instance(mock_config, user_id)
+
+            # Assert
+            mock_async_get_user.assert_called_once_with(user_id)
+            assert store.user_id == user_id
+            assert store.org_id == mock_user.current_org_id
+
+    @pytest.mark.asyncio
+    async def test_get_instance_handles_none_user(self):
+        """Verify get_instance handles case when user is not found."""
+        # Arrange
+        user_id = '5594c7b6-f959-4b81-92e9-b09c206f5081'
+        mock_config = MagicMock(spec=OpenHandsConfig)
+
+        with patch(
+            'storage.saas_conversation_store.UserStore.get_user_by_id_async',
+            AsyncMock(return_value=None),
+        ), patch('storage.saas_conversation_store.session_maker'):
+            # Act
+            store = await SaasConversationStore.get_instance(mock_config, user_id)
+
+            # Assert
+            assert store.user_id == user_id
+            assert store.org_id is None

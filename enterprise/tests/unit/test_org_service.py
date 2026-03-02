@@ -9,23 +9,18 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-# Mock the database module before importing OrgService
-with patch('storage.database.engine', create=True), patch(
-    'storage.database.a_engine', create=True
-):
-    from server.routes.org_models import (
-        LiteLLMIntegrationError,
-        OrgAuthorizationError,
-        OrgDatabaseError,
-        OrgNameExistsError,
-        OrgNotFoundError,
-    )
-    from storage.org import Org
-    from storage.org_member import OrgMember
-    from storage.org_service import OrgService
-    from storage.role import Role
-    from storage.user import User
+from server.routes.org_models import (
+    LiteLLMIntegrationError,
+    OrgAuthorizationError,
+    OrgDatabaseError,
+    OrgNameExistsError,
+    OrgNotFoundError,
+)
+from storage.org import Org
+from storage.org_member import OrgMember
+from storage.org_service import OrgService
+from storage.role import Role
+from storage.user import User
 
 
 @pytest.fixture

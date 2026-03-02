@@ -4,17 +4,12 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
-# Mock the database module before importing OrgMemberStore
-with patch('storage.database.engine', create=True), patch(
-    'storage.database.a_engine', create=True
-):
-    from storage.base import Base
-    from storage.org import Org
-    from storage.org_member import OrgMember
-    from storage.org_member_store import OrgMemberStore
-    from storage.role import Role
-    from storage.user import User
+from storage.base import Base
+from storage.org import Org
+from storage.org_member import OrgMember
+from storage.org_member_store import OrgMemberStore
+from storage.role import Role
+from storage.user import User
 
 
 @pytest.fixture

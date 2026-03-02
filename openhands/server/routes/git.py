@@ -89,7 +89,6 @@ async def get_user_repositories(
             external_auth_token=access_token,
             external_auth_id=user_id,
         )
-
         try:
             return await client.get_repositories(
                 sort,

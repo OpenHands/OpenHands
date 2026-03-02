@@ -42,11 +42,11 @@ async def store_repositories_in_db(repos: list[Repository], user_id: str) -> Non
     try:
         # Store repositories in the repos table
         repo_store = RepositoryStore.get_instance(config)
-        repo_store.store_projects(stored_repos)
+        await repo_store.store_projects(stored_repos)
 
         # Store user-repository mappings in the user-repos table
         user_repo_store = UserRepositoryMapStore.get_instance(config)
-        user_repo_store.store_user_repo_mappings(user_repos)
+        await user_repo_store.store_user_repo_mappings(user_repos)
 
         logger.info(f'Saved repos for user {user_id}')
     except Exception:
