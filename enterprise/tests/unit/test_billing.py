@@ -154,7 +154,8 @@ async def test_create_checkout_session_stripe_error(
             'stripe.checkout.Session.create_async',
             AsyncMock(side_effect=Exception('Stripe API Error')),
         ),
-        patch('integrations.stripe_service.session_maker', session_maker),
+        patch('server.routes.billing.a_session_maker') as mock_session_maker,
+        patch('integrations.stripe_service.a_session_maker') as mock_stripe_session_maker,
         patch(
             'storage.org_store.OrgStore.get_current_org_from_keycloak_user_id',
             return_value=mock_org,
@@ -165,6 +166,10 @@ async def test_create_checkout_session_stripe_error(
         ),
         patch('server.routes.billing.validate_billing_enabled'),
     ):
+        mock_db_session = MagicMock()
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
+        mock_stripe_session_maker.return_value.__aenter__.return_value = mock_db_session
+
         await create_checkout_session(
             CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
         )
@@ -194,8 +199,8 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
             'stripe.Customer.search_async', AsyncMock(return_value=MagicMock(data=[]))
         ),
         patch('stripe.checkout.Session.create_async', mock_create),
-        patch('server.routes.billing.session_maker') as mock_session_maker,
-        patch('integrations.stripe_service.session_maker', session_maker),
+        patch('server.routes.billing.a_session_maker') as mock_session_maker,
+        patch('integrations.stripe_service.a_session_maker') as mock_stripe_session_maker,
         patch(
             'storage.org_store.OrgStore.get_current_org_from_keycloak_user_id',
             return_value=mock_org,
@@ -207,7 +212,8 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
         patch('server.routes.billing.validate_billing_enabled'),
     ):
         mock_db_session = MagicMock()
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
+        mock_stripe_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         result = await create_checkout_session(
             CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
@@ -251,10 +257,10 @@ async def test_success_callback_session_not_found():
     mock_request = Request(scope={'type': 'http'})
     mock_request._base_url = URL('http://test.com/')
 
-    with patch('server.routes.billing.session_maker') as mock_session_maker:
+    with patch('server.routes.billing.a_session_maker') as mock_session_maker:
         mock_db_session = MagicMock()
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = None
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
         with pytest.raises(HTTPException) as exc_info:
             await success_callback('test_session_id', mock_request)
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -273,12 +279,12 @@ async def test_success_callback_stripe_incomplete():
     mock_billing_session.user_id = 'mock_user'
 
     with (
-        patch('server.routes.billing.session_maker') as mock_session_maker,
+        patch('server.routes.billing.a_session_maker') as mock_session_maker,
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
     ):
         mock_db_session = MagicMock()
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         mock_stripe_retrieve.return_value = MagicMock(status='pending')
 
@@ -302,7 +308,7 @@ async def test_success_callback_success():
     mock_org = MagicMock()
 
     with (
-        patch('server.routes.billing.session_maker') as mock_session_maker,
+        patch('server.routes.billing.a_session_maker') as mock_session_maker,
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id_async',
@@ -332,7 +338,7 @@ async def test_success_callback_success():
             mock_query_chain_billing,
             mock_query_chain_org,
         ]
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         mock_stripe_retrieve.return_value = MagicMock(
             status='complete', amount_subtotal=2500, customer='mock_customer_id'
@@ -373,7 +379,7 @@ async def test_success_callback_lite_llm_error():
     mock_billing_session.user_id = 'mock_user'
 
     with (
-        patch('server.routes.billing.session_maker') as mock_session_maker,
+        patch('server.routes.billing.a_session_maker') as mock_session_maker,
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id_async',
@@ -387,7 +393,7 @@ async def test_success_callback_lite_llm_error():
     ):
         mock_db_session = MagicMock()
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         mock_stripe_retrieve.return_value = MagicMock(
             status='complete', amount_subtotal=2500
@@ -419,7 +425,7 @@ async def test_success_callback_lite_llm_update_budget_error_rollback():
     mock_org = MagicMock()
 
     with (
-        patch('server.routes.billing.session_maker') as mock_session_maker,
+        patch('server.routes.billing.a_session_maker') as mock_session_maker,
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id_async',
@@ -447,7 +453,7 @@ async def test_success_callback_lite_llm_update_budget_error_rollback():
             mock_query_chain_billing,
             mock_query_chain_org,
         ]
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         mock_stripe_retrieve.return_value = MagicMock(
             status='complete',
@@ -470,10 +476,10 @@ async def test_cancel_callback_session_not_found():
     mock_request = Request(scope={'type': 'http'})
     mock_request._base_url = URL('http://test.com/')
 
-    with patch('server.routes.billing.session_maker') as mock_session_maker:
+    with patch('server.routes.billing.a_session_maker') as mock_session_maker:
         mock_db_session = MagicMock()
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = None
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         response = await cancel_callback('test_session_id', mock_request)
         assert response.status_code == 302
@@ -496,10 +502,10 @@ async def test_cancel_callback_success():
     mock_billing_session = MagicMock()
     mock_billing_session.status = 'in_progress'
 
-    with patch('server.routes.billing.session_maker') as mock_session_maker:
+    with patch('server.routes.billing.a_session_maker') as mock_session_maker:
         mock_db_session = MagicMock()
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        mock_session_maker.return_value.__enter__.return_value = mock_db_session
+        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         response = await cancel_callback('test_session_id', mock_request)
 

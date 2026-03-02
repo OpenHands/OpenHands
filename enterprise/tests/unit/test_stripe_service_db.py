@@ -95,7 +95,7 @@ async def test_find_customer_id_by_user_id_checks_db_first(
     mock_org.id = test_org_id
 
     with (
-        patch('integrations.stripe_service.session_maker', session_maker),
+        patch('integrations.stripe_service.a_session_maker', session_maker),
         patch('storage.org_store.session_maker', session_maker),
         patch('integrations.stripe_service.call_sync_from_async') as mock_call_sync,
     ):
@@ -129,7 +129,7 @@ async def test_find_customer_id_by_user_id_falls_back_to_stripe(
     mock_org.id = test_org_id
 
     with (
-        patch('integrations.stripe_service.session_maker', session_maker),
+        patch('integrations.stripe_service.a_session_maker', session_maker),
         patch('storage.org_store.session_maker', session_maker),
         patch('stripe.Customer.search_async', mock_search),
         patch('integrations.stripe_service.call_sync_from_async') as mock_call_sync,
@@ -166,7 +166,7 @@ async def test_create_customer_stores_id_in_db(session_maker, test_org_and_user)
     mock_org.contact_email = 'testy@tester.com'
 
     with (
-        patch('integrations.stripe_service.session_maker', session_maker),
+        patch('integrations.stripe_service.a_session_maker', session_maker),
         patch('storage.org_store.session_maker', session_maker),
         patch('stripe.Customer.search_async', mock_search),
         patch('stripe.Customer.create_async', mock_create_async),

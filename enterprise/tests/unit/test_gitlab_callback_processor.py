@@ -112,7 +112,7 @@ class TestGitlabCallbackProcessor:
         'server.conversation_callback_processor.gitlab_callback_processor.conversation_manager'
     )
     @patch(
-        'server.conversation_callback_processor.gitlab_callback_processor.session_maker'
+        'server.conversation_callback_processor.gitlab_callback_processor.a_session_maker'
     )
     async def test_call_with_send_summary_instruction(
         self,
@@ -163,7 +163,7 @@ class TestGitlabCallbackProcessor:
         'server.conversation_callback_processor.gitlab_callback_processor.asyncio.create_task'
     )
     @patch(
-        'server.conversation_callback_processor.gitlab_callback_processor.session_maker'
+        'server.conversation_callback_processor.gitlab_callback_processor.a_session_maker'
     )
     async def test_call_with_extract_summary(
         self,

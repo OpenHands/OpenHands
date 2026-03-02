@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from storage.database import session_maker
+from storage.database import a_session_maker
 from storage.jira_conversation import JiraConversation
 from storage.jira_user import JiraUser
 from storage.jira_workspace import JiraWorkspace
@@ -35,10 +35,10 @@ class JiraIntegrationStore:
             status=status,
         )
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             session.add(workspace)
-            session.commit()
-            session.refresh(workspace)
+            await session.commit()
+            await session.refresh(workspace)
 
         logger.info(f'[Jira] Created workspace {workspace.name}')
         return workspace
@@ -53,7 +53,7 @@ class JiraIntegrationStore:
         status: Optional[str] = None,
     ) -> JiraWorkspace:
         """Update an existing Jira workspace with encrypted sensitive data."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # Find existing workspace by ID
             workspace = (
                 session.query(JiraWorkspace).filter(JiraWorkspace.id == id).first()
@@ -77,8 +77,8 @@ class JiraIntegrationStore:
             if status is not None:
                 workspace.status = status
 
-            session.commit()
-            session.refresh(workspace)
+            await session.commit()
+            await session.refresh(workspace)
 
         logger.info(f'[Jira] Updated workspace {workspace.name}')
         return workspace
@@ -99,10 +99,10 @@ class JiraIntegrationStore:
             status=status,
         )
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             session.add(jira_user)
-            session.commit()
-            session.refresh(jira_user)
+            await session.commit()
+            await session.refresh(jira_user)
 
         logger.info(
             f'[Jira] Created user {jira_user.id} for workspace {jira_workspace_id}'
@@ -111,7 +111,7 @@ class JiraIntegrationStore:
 
     async def get_workspace_by_id(self, workspace_id: int) -> Optional[JiraWorkspace]:
         """Retrieve workspace by ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraWorkspace)
                 .filter(JiraWorkspace.id == workspace_id)
@@ -120,7 +120,7 @@ class JiraIntegrationStore:
 
     async def get_workspace_by_name(self, workspace_name: str) -> JiraWorkspace | None:
         """Retrieve workspace by name."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraWorkspace)
                 .filter(JiraWorkspace.name == workspace_name.lower())
@@ -131,7 +131,7 @@ class JiraIntegrationStore:
         self, keycloak_user_id: str
     ) -> Optional[JiraUser]:
         """Get Jira user by Keycloak user ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraUser)
                 .filter(
@@ -145,7 +145,7 @@ class JiraIntegrationStore:
         self, keycloak_user_id: str, jira_workspace_id: int
     ) -> Optional[JiraUser]:
         """Get Jira user by Keycloak user ID and workspace ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraUser)
                 .filter(
@@ -159,7 +159,7 @@ class JiraIntegrationStore:
         self, jira_user_id: str, jira_workspace_id: int
     ) -> Optional[JiraUser]:
         """Get Jira user by Keycloak user ID and workspace ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraUser)
                 .filter(
@@ -174,7 +174,7 @@ class JiraIntegrationStore:
         self, keycloak_user_id: str, status: str
     ) -> JiraUser:
         """Update Jira user integration status."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             jira_user = (
                 session.query(JiraUser)
                 .filter(JiraUser.keycloak_user_id == keycloak_user_id)
@@ -187,15 +187,15 @@ class JiraIntegrationStore:
                 )
 
             jira_user.status = status
-            session.commit()
-            session.refresh(jira_user)
+            await session.commit()
+            await session.refresh(jira_user)
 
             logger.info(f'[Jira] Updated user {keycloak_user_id} status to {status}')
             return jira_user
 
     async def deactivate_workspace(self, workspace_id: int):
         """Deactivate the workspace and all user links for a given workspace."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             users = (
                 session.query(JiraUser)
                 .filter(
@@ -218,21 +218,21 @@ class JiraIntegrationStore:
                 workspace.status = 'inactive'
                 session.add(workspace)
 
-            session.commit()
+            await session.commit()
 
         logger.info(f'[Jira] Deactivated all user links for workspace {workspace_id}')
 
     async def create_conversation(self, jira_conversation: JiraConversation) -> None:
         """Create a new Jira conversation record."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             session.add(jira_conversation)
-            session.commit()
+            await session.commit()
 
     async def get_user_conversations_by_issue_id(
         self, issue_id: str, jira_user_id: int
     ) -> JiraConversation | None:
         """Get a Jira conversation by issue ID and jira user ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraConversation)
                 .filter(

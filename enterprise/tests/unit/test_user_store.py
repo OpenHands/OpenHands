@@ -84,7 +84,7 @@ async def test_create_default_settings_with_litellm(session_maker, mock_litellm_
     # Test that UserStore.create_default_settings works with LiteLLM
     with (
         patch('integrations.stripe_service.session_maker', session_maker),
-        patch('storage.user_store.session_maker', session_maker),
+        patch('storage.user_store.a_session_maker', session_maker),
         patch('storage.org_store.session_maker', session_maker),
         patch(
             'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
@@ -119,7 +119,7 @@ def test_get_user_by_id(session_maker):
         user_id = user.id
 
     # Test retrieval
-    with patch('storage.user_store.session_maker', session_maker):
+    with patch('storage.user_store.a_session_maker', session_maker):
         retrieved_user = UserStore.get_user_by_id(test_user_id)
         assert retrieved_user is not None
         assert retrieved_user.id == user_id
@@ -139,7 +139,7 @@ def test_list_users(session_maker):
         session.commit()
 
     # Test listing
-    with patch('storage.user_store.session_maker', session_maker):
+    with patch('storage.user_store.a_session_maker', session_maker):
         users = UserStore.list_users()
         assert len(users) >= 2
         user_ids = [user.id for user in users]
@@ -196,7 +196,7 @@ async def test_migrate_user_contact_name_uses_name_claim():
     mock_user_settings.user_version = 1
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch(
             'storage.user_store.decrypt_legacy_model',
             return_value={'keycloak_user_id': user_id},
@@ -236,7 +236,7 @@ async def test_migrate_user_contact_name_uses_given_family_names():
     mock_user_settings.user_version = 1
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch(
             'storage.user_store.decrypt_legacy_model',
             return_value={'keycloak_user_id': user_id},
@@ -274,7 +274,7 @@ async def test_migrate_user_contact_name_falls_back_to_username():
     mock_user_settings.user_version = 1
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch(
             'storage.user_store.decrypt_legacy_model',
             return_value={'keycloak_user_id': user_id},
@@ -317,7 +317,7 @@ async def test_create_user_contact_name_uses_name_claim():
     mock_sm.return_value.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch.object(
             UserStore,
             'create_default_settings',
@@ -351,7 +351,7 @@ async def test_create_user_contact_name_uses_given_family_names():
     mock_sm.return_value.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch.object(
             UserStore,
             'create_default_settings',
@@ -382,7 +382,7 @@ async def test_create_user_contact_name_falls_back_to_username():
     mock_sm.return_value.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch.object(
             UserStore,
             'create_default_settings',
@@ -430,7 +430,7 @@ async def test_create_user_sets_email_from_user_info():
     mock_role.id = 1
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch.object(
             UserStore,
             'create_default_settings',
@@ -482,7 +482,7 @@ async def test_create_user_handles_missing_email_verified():
     mock_role.id = 1
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch.object(
             UserStore,
             'create_default_settings',
@@ -783,7 +783,7 @@ async def test_create_user_sets_email_verified_false_from_user_info():
     mock_role.id = 1
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch.object(
             UserStore,
             'create_default_settings',
@@ -822,7 +822,7 @@ async def test_create_user_preserves_org_contact_email():
     mock_sm.return_value.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch('storage.user_store.session_maker', mock_sm),
+        patch('storage.user_store.a_session_maker', mock_sm),
         patch.object(
             UserStore,
             'create_default_settings',
@@ -854,7 +854,7 @@ def test_update_current_org_success(session_maker):
         session.commit()
 
     # Act
-    with patch('storage.user_store.session_maker', session_maker):
+    with patch('storage.user_store.a_session_maker', session_maker):
         result = UserStore.update_current_org(user_id, new_org_id)
 
     # Assert
@@ -873,7 +873,7 @@ def test_update_current_org_user_not_found(session_maker):
     org_id = uuid.uuid4()
 
     # Act
-    with patch('storage.user_store.session_maker', session_maker):
+    with patch('storage.user_store.a_session_maker', session_maker):
         result = UserStore.update_current_org(user_id, org_id)
 
     # Assert

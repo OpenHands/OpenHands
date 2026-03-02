@@ -34,7 +34,7 @@ from server.services.org_invitation_service import (
     OrgInvitationService,
     UserAlreadyMemberError,
 )
-from storage.database import session_maker
+from storage.database import a_session_maker
 from storage.user import User
 from storage.user_store import UserStore
 
@@ -610,17 +610,17 @@ async def accept_tos(request: Request):
 
     # Update user settings with TOS acceptance
     accepted_tos: datetime = datetime.now(timezone.utc)
-    with session_maker() as session:
+    async with a_session_maker() as session:
         user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
         if not user:
-            session.rollback()
+            await session.rollback()
             logger.error('User for {user_id} not found.')
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={'error': 'User does not exist'},
             )
         user.accepted_tos = accepted_tos
-        session.commit()
+        await session.commit()
 
         logger.info(f'User {user_id} accepted TOS')
 

@@ -621,7 +621,7 @@ async def test_keycloak_callback_allowed_email_domain(mock_request):
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
         patch('server.routes.auth.user_verifier') as mock_verifier,
-        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_session = MagicMock()
@@ -686,7 +686,7 @@ async def test_keycloak_callback_domain_blocking_inactive(mock_request):
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
         patch('server.routes.auth.user_verifier') as mock_verifier,
-        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_session = MagicMock()
@@ -749,7 +749,7 @@ async def test_keycloak_callback_missing_email(mock_request):
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
         patch('server.routes.auth.user_verifier') as mock_verifier,
-        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_session = MagicMock()
@@ -898,7 +898,7 @@ async def test_keycloak_callback_duplicate_check_exception(mock_request):
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
-        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
@@ -959,7 +959,7 @@ async def test_keycloak_callback_no_duplicate_email(mock_request):
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
-        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
@@ -1022,7 +1022,7 @@ async def test_keycloak_callback_no_email_in_user_info(mock_request):
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
-        patch('server.routes.auth.session_maker') as mock_session_maker,
+        patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         # Arrange
@@ -1174,7 +1174,7 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.user_verifier') as mock_verifier,
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
-            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
@@ -1325,7 +1325,7 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
             patch('server.routes.auth.user_verifier') as mock_verifier,
-            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
@@ -1414,7 +1414,7 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
             patch('server.routes.auth.user_verifier') as mock_verifier,
-            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
@@ -1500,7 +1500,7 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
             patch('server.routes.auth.user_verifier') as mock_verifier,
-            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
@@ -1585,7 +1585,7 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
             patch('server.routes.auth.user_verifier') as mock_verifier,
-            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
@@ -1666,7 +1666,7 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', ''),
             patch('server.routes.auth.user_verifier') as mock_verifier,
-            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
@@ -1734,7 +1734,7 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.user_verifier') as mock_verifier,
-            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
@@ -1808,7 +1808,7 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.user_verifier') as mock_verifier,
-            patch('server.routes.auth.session_maker') as mock_session_maker,
+            patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),

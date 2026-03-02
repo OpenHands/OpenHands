@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from storage.database import session_maker
+from storage.database import a_session_maker
 from storage.jira_dc_conversation import JiraDcConversation
 from storage.jira_dc_user import JiraDcUser
 from storage.jira_dc_workspace import JiraDcWorkspace
@@ -24,7 +24,7 @@ class JiraDcIntegrationStore:
     ) -> JiraDcWorkspace:
         """Create a new Jira DC workspace with encrypted sensitive data."""
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             workspace = JiraDcWorkspace(
                 name=name.lower(),
                 admin_user_id=admin_user_id,
@@ -34,8 +34,8 @@ class JiraDcIntegrationStore:
                 status=status,
             )
             session.add(workspace)
-            session.commit()
-            session.refresh(workspace)
+            await session.commit()
+            await session.refresh(workspace)
         logger.info(f'[Jira DC] Created workspace {workspace.name}')
         return workspace
 
@@ -48,7 +48,7 @@ class JiraDcIntegrationStore:
         status: Optional[str] = None,
     ) -> JiraDcWorkspace:
         """Update an existing Jira DC workspace with encrypted sensitive data."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # Find existing workspace by ID
             workspace = (
                 session.query(JiraDcWorkspace).filter(JiraDcWorkspace.id == id).first()
@@ -69,8 +69,8 @@ class JiraDcIntegrationStore:
             if status is not None:
                 workspace.status = status
 
-            session.commit()
-            session.refresh(workspace)
+            await session.commit()
+            await session.refresh(workspace)
 
         logger.info(f'[Jira DC] Updated workspace {workspace.name}')
         return workspace
@@ -91,10 +91,10 @@ class JiraDcIntegrationStore:
             status=status,
         )
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             session.add(jira_dc_user)
-            session.commit()
-            session.refresh(jira_dc_user)
+            await session.commit()
+            await session.refresh(jira_dc_user)
 
         logger.info(
             f'[Jira DC] Created user {jira_dc_user.id} for workspace {jira_dc_workspace_id}'
@@ -103,7 +103,7 @@ class JiraDcIntegrationStore:
 
     async def get_workspace_by_id(self, workspace_id: int) -> Optional[JiraDcWorkspace]:
         """Retrieve workspace by ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraDcWorkspace)
                 .filter(JiraDcWorkspace.id == workspace_id)
@@ -114,7 +114,7 @@ class JiraDcIntegrationStore:
         self, workspace_name: str
     ) -> Optional[JiraDcWorkspace]:
         """Retrieve workspace by name."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraDcWorkspace)
                 .filter(JiraDcWorkspace.name == workspace_name.lower())
@@ -126,7 +126,7 @@ class JiraDcIntegrationStore:
     ) -> Optional[JiraDcUser]:
         """Retrieve user by Keycloak user ID."""
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraDcUser)
                 .filter(
@@ -140,7 +140,7 @@ class JiraDcIntegrationStore:
         self, keycloak_user_id: str, jira_dc_workspace_id: int
     ) -> Optional[JiraDcUser]:
         """Get Jira DC user by Keycloak user ID and workspace ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraDcUser)
                 .filter(
@@ -154,7 +154,7 @@ class JiraDcIntegrationStore:
         self, jira_dc_user_id: str, jira_dc_workspace_id: int
     ) -> Optional[JiraDcUser]:
         """Get Jira DC user by Keycloak user ID and workspace ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraDcUser)
                 .filter(
@@ -169,7 +169,7 @@ class JiraDcIntegrationStore:
         self, keycloak_user_id: str, jira_dc_workspace_id: int
     ) -> Optional[JiraDcUser]:
         """Get Jira DC user by Keycloak user ID and workspace ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraDcUser)
                 .filter(
@@ -185,7 +185,7 @@ class JiraDcIntegrationStore:
     ) -> JiraDcUser:
         """Update the status of a Jira DC user mapping."""
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             user = (
                 session.query(JiraDcUser)
                 .filter(JiraDcUser.keycloak_user_id == keycloak_user_id)
@@ -198,14 +198,14 @@ class JiraDcIntegrationStore:
                 )
 
             user.status = status
-            session.commit()
-            session.refresh(user)
+            await session.commit()
+            await session.refresh(user)
             logger.info(f'[Jira DC] Updated user {keycloak_user_id} status to {status}')
             return user
 
     async def deactivate_workspace(self, workspace_id: int):
         """Deactivate the workspace and all user links for a given workspace."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             users = (
                 session.query(JiraDcUser)
                 .filter(
@@ -228,7 +228,7 @@ class JiraDcIntegrationStore:
                 workspace.status = 'inactive'
                 session.add(workspace)
 
-            session.commit()
+            await session.commit()
 
         logger.info(
             f'[Jira DC] Deactivated all user links for workspace {workspace_id}'
@@ -238,15 +238,15 @@ class JiraDcIntegrationStore:
         self, jira_dc_conversation: JiraDcConversation
     ) -> None:
         """Create a new Jira DC conversation record."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             session.add(jira_dc_conversation)
-            session.commit()
+            await session.commit()
 
     async def get_user_conversations_by_issue_id(
         self, issue_id: str, jira_dc_user_id: int
     ) -> JiraDcConversation | None:
         """Get a Jira DC conversation by issue ID and jira dc user ID."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             return (
                 session.query(JiraDcConversation)
                 .filter(
