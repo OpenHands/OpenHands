@@ -22,6 +22,7 @@ from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
+    get_user_not_found_message,
 )
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
@@ -126,6 +127,40 @@ class GithubManager(Manager):
 
             return False
 
+    async def _send_user_not_found_message(self, message: Message, username: str):
+        """Send a message to the user informing them they need to create an OpenHands account.
+
+        Args:
+            message: The incoming GitHub webhook message
+            username: The GitHub username to mention in the response
+        """
+        payload = message.message.get('payload', {})
+        installation_id = message.message['installation']
+        repo_obj = payload['repository']
+        full_repo_name = self._get_full_repo_name(repo_obj)
+
+        # Get installation token to post the comment
+        installation_token = self._get_installation_access_token(installation_id)
+
+        # Determine the issue/PR number based on the event type
+        issue_number = None
+        if 'issue' in payload:
+            issue_number = payload['issue']['number']
+        elif 'pull_request' in payload:
+            issue_number = payload['pull_request']['number']
+
+        if not issue_number:
+            logger.warning(
+                f'[GitHub] Could not determine issue/PR number to send user not found message for {username}'
+            )
+            return
+
+        # Post the comment
+        with Github(auth=Auth.Token(installation_token)) as github_client:
+            repo = github_client.get_repo(full_repo_name)
+            issue = repo.get_issue(number=issue_number)
+            issue.create_comment(get_user_not_found_message(username))
+
     async def is_job_requested(self, message: Message) -> bool:
         self._confirm_incoming_source_type(message)
 
@@ -179,9 +214,20 @@ class GithubManager(Manager):
         if await self.is_job_requested(message):
             payload = message.message.get('payload', {})
             user_id = payload['sender']['id']
+            username = payload['sender']['login']
             keycloak_user_id = await self.token_manager.get_user_id_from_idp_user_id(
                 user_id, ProviderType.GITHUB
             )
+
+            # Check if the user has an OpenHands account
+            if not keycloak_user_id:
+                logger.warning(
+                    f'[GitHub] User {username} (id={user_id}) not found in Keycloak. '
+                    f'User must create an OpenHands account first.'
+                )
+                await self._send_user_not_found_message(message, username)
+                return
+
             github_view = await GithubFactory.create_github_view_from_payload(
                 message, keycloak_user_id
             )
