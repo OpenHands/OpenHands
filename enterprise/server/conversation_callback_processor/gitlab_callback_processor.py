@@ -14,7 +14,7 @@ from storage.conversation_callback import (
     ConversationCallback,
     ConversationCallbackProcessor,
 )
-from storage.database import session_maker
+from storage.database import a_session_maker
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema.agent import AgentState
@@ -111,9 +111,9 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
                 self.send_summary_instruction = False
                 callback.set_processor(self)
                 callback.updated_at = datetime.now()
-                with session_maker() as session:
+                async with a_session_maker() as session:
                     session.merge(callback)
-                    session.commit()
+                    await session.commit()
                 return
 
             # Extract the summary from the event store
@@ -132,9 +132,9 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
             # Mark callback as completed status
             callback.status = CallbackStatus.COMPLETED
             callback.updated_at = datetime.now()
-            with session_maker() as session:
+            async with a_session_maker() as session:
                 session.merge(callback)
-                session.commit()
+                await session.commit()
 
         except Exception as e:
             logger.exception(

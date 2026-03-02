@@ -10,8 +10,9 @@ from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from sqlalchemy.orm import joinedload, sessionmaker
-from storage.database import session_maker
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -23,26 +24,24 @@ from storage.user_store import UserStore
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings
 from openhands.storage.settings.settings_store import SettingsStore
-from openhands.utils.async_utils import call_sync_from_async
 from openhands.utils.llm import is_openhands_model
 
 
 @dataclass
 class SaasSettingsStore(SettingsStore):
     user_id: str
-    session_maker: sessionmaker
     config: OpenHandsConfig
     ENCRYPT_VALUES = ['llm_api_key', 'llm_api_key_for_byor', 'search_api_key']
 
-    def _get_user_settings_by_keycloak_id(
+    async def _get_user_settings_by_keycloak_id_async(
         self, keycloak_user_id: str, session=None
     ) -> UserSettings | None:
         """
-        Get UserSettings by keycloak_user_id.
+        Get UserSettings by keycloak_user_id (async version).
 
         Args:
             keycloak_user_id: The keycloak user ID to search for
-            session: Optional existing database session. If not provided, creates a new one.
+            session: Optional existing async database session. If not provided, creates a new one.
 
         Returns:
             UserSettings object if found, None otherwise
@@ -50,27 +49,26 @@ class SaasSettingsStore(SettingsStore):
         if not keycloak_user_id:
             return None
 
-        def _get_settings():
-            if session:
-                # Use provided session
-                return (
-                    session.query(UserSettings)
-                    .filter(UserSettings.keycloak_user_id == keycloak_user_id)
-                    .first()
+        if session:
+            # Use provided session
+            result = await session.execute(
+                select(UserSettings).filter(
+                    UserSettings.keycloak_user_id == keycloak_user_id
                 )
-            else:
-                # Create new session
-                with self.session_maker() as new_session:
-                    return (
-                        new_session.query(UserSettings)
-                        .filter(UserSettings.keycloak_user_id == keycloak_user_id)
-                        .first()
+            )
+            return result.scalars().first()
+        else:
+            # Create new session
+            async with a_session_maker() as new_session:
+                result = await new_session.execute(
+                    select(UserSettings).filter(
+                        UserSettings.keycloak_user_id == keycloak_user_id
                     )
-
-        return _get_settings()
+                )
+                return result.scalars().first()
 
     async def load(self) -> Settings | None:
-        user = await call_sync_from_async(UserStore.get_user_by_id, self.user_id)
+        user = await UserStore.get_user_by_id_async(self.user_id)
         if not user:
             logger.error(f'User not found for ID {self.user_id}')
             return None
@@ -83,7 +81,7 @@ class SaasSettingsStore(SettingsStore):
                 break
         if not org_member or not org_member.llm_api_key:
             return None
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id_async(org_id)
         if not org:
             logger.error(
                 f'Org not found for ID {org_id} as the current org for user {self.user_id}'
@@ -122,21 +120,22 @@ class SaasSettingsStore(SettingsStore):
         return settings
 
     async def store(self, item: Settings):
-        with self.session_maker() as session:
+        async with a_session_maker() as session:
             if not item:
                 return None
-            user = (
-                session.query(User)
+            result = await session.execute(
+                select(User)
                 .options(joinedload(User.org_members))
                 .filter(User.id == uuid.UUID(self.user_id))
-            ).first()
+            )
+            user = result.scalars().first()
 
             if not user:
                 # Check if we need to migrate from user_settings
                 user_settings = None
-                with session_maker() as session:
-                    user_settings = self._get_user_settings_by_keycloak_id(
-                        self.user_id, session
+                async with a_session_maker() as new_session:
+                    user_settings = await self._get_user_settings_by_keycloak_id_async(
+                        self.user_id, new_session
                     )
                 if user_settings:
                     user = await UserStore.migrate_user(self.user_id, user_settings)
@@ -154,7 +153,8 @@ class SaasSettingsStore(SettingsStore):
             if not org_member or not org_member.llm_api_key:
                 return None
 
-            org: Org = session.query(Org).filter(Org.id == org_id).first()
+            result = await session.execute(select(Org).filter(Org.id == org_id))
+            org = result.scalars().first()
             if not org:
                 logger.error(
                     f'Org not found for ID {org_id} as the current org for user {self.user_id}'
@@ -173,7 +173,7 @@ class SaasSettingsStore(SettingsStore):
                     if hasattr(model, key):
                         setattr(model, key, value)
 
-            session.commit()
+            await session.commit()
 
     @classmethod
     async def get_instance(
@@ -182,7 +182,7 @@ class SaasSettingsStore(SettingsStore):
         user_id: str,  # type: ignore[override]
     ) -> SaasSettingsStore:
         logger.debug(f'saas_settings_store.get_instance::{user_id}')
-        return SaasSettingsStore(user_id, session_maker, config)
+        return SaasSettingsStore(user_id, config)
 
     def _should_encrypt(self, key):
         return key in self.ENCRYPT_VALUES

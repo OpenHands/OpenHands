@@ -99,6 +99,20 @@ from openhands.tools.preset.planning import (
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
+# Planning agent instruction to prevent "Ready to proceed?" behavior
+PLANNING_AGENT_INSTRUCTION = """<IMPORTANT_PLANNING_BOUNDARIES>
+You are a Planning Agent that can ONLY create plans - you CANNOT execute code or make changes.
+
+After you finalize the plan in PLAN.md:
+- Do NOT ask "Ready to proceed?" or offer to execute the plan
+- Do NOT attempt to run any implementation commands
+- Instead, inform the user they have two options to proceed:
+  1. Click the **Build** button below the plan preview - this will automatically switch to the code agent and instruct it to execute the plan
+  2. Switch to the code agent manually (click the agent selector button or press Shift+Tab), then send a message instructing it to execute the plan
+
+Your role ends when the plan is finalized. Implementation is handled by the code agent.
+</IMPORTANT_PLANNING_BOUNDARIES>"""
+
 
 @dataclass
 class LiveStatusAppConversationService(AppConversationServiceBase):
@@ -504,6 +518,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # Update the listener with sandbox info
         task.status = AppConversationStartTaskStatus.WAITING_FOR_SANDBOX
         task.sandbox_id = sandbox.id
+
+        # Log sandbox assignment for observability
+        conversation_id_str = (
+            str(task.request.conversation_id)
+            if task.request.conversation_id is not None
+            else 'unknown'
+        )
+        _logger.info(
+            f'Assigned sandbox {sandbox.id} to conversation {conversation_id_str}'
+        )
+
         yield task
 
         # Resume if paused
@@ -953,9 +978,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 mcp_config=mcp_config,
             )
 
+        # Prepare system message suffix based on agent type
+        effective_system_message_suffix = system_message_suffix
+        if agent_type == AgentType.PLAN:
+            # Prepend planning-specific instruction to prevent "Ready to proceed?" behavior
+            if system_message_suffix:
+                effective_system_message_suffix = (
+                    f'{PLANNING_AGENT_INSTRUCTION}\n\n{system_message_suffix}'
+                )
+            else:
+                effective_system_message_suffix = PLANNING_AGENT_INSTRUCTION
+
         # Add agent context
         agent_context = AgentContext(
-            system_message_suffix=system_message_suffix, secrets=secrets
+            system_message_suffix=effective_system_message_suffix, secrets=secrets
         )
         agent = agent.model_copy(update={'agent_context': agent_context})
 

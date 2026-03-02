@@ -15,9 +15,13 @@ from server.routes.org_models import (
     LiteLLMIntegrationError,
     MemberUpdateError,
     MeResponse,
+    OrgAppSettingsResponse,
+    OrgAppSettingsUpdate,
     OrgAuthorizationError,
     OrgCreate,
     OrgDatabaseError,
+    OrgLLMSettingsResponse,
+    OrgLLMSettingsUpdate,
     OrgMemberNotFoundError,
     OrgMemberPage,
     OrgMemberResponse,
@@ -30,6 +34,14 @@ from server.routes.org_models import (
     OrphanedUserError,
     RoleNotFoundError,
 )
+from server.services.org_app_settings_service import (
+    OrgAppSettingsService,
+    OrgAppSettingsServiceInjector,
+)
+from server.services.org_llm_settings_service import (
+    OrgLLMSettingsService,
+    OrgLLMSettingsServiceInjector,
+)
 from server.services.org_member_service import OrgMemberService
 from storage.org_service import OrgService
 from storage.user_store import UserStore
@@ -39,6 +51,13 @@ from openhands.server.user_auth import get_user_id
 
 # Initialize API router
 org_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
+
+# Create injector instance and dependency for LLM settings
+_org_llm_settings_injector = OrgLLMSettingsServiceInjector()
+org_llm_settings_service_dependency = Depends(_org_llm_settings_injector.depends)
+# Create injector instance and dependency at module level
+_org_app_settings_injector = OrgAppSettingsServiceInjector()
+org_app_settings_service_dependency = Depends(_org_app_settings_injector.depends)
 
 
 @org_router.get('', response_model=OrgPage)
@@ -194,6 +213,195 @@ async def create_org(
         logger.exception(
             'Unexpected error creating organization',
             extra={'user_id': user_id, 'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.get(
+    '/llm',
+    response_model=OrgLLMSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.VIEW_LLM_SETTINGS))],
+)
+async def get_org_llm_settings(
+    service: OrgLLMSettingsService = org_llm_settings_service_dependency,
+) -> OrgLLMSettingsResponse:
+    """Get LLM settings for the user's current organization.
+
+    This endpoint retrieves the LLM configuration settings for the
+    authenticated user's current organization. All organization members
+    can view these settings.
+
+    Args:
+        service: OrgLLMSettingsService (injected by dependency)
+
+    Returns:
+        OrgLLMSettingsResponse: The organization's LLM settings
+
+    Raises:
+        HTTPException: 401 if not authenticated
+        HTTPException: 403 if not a member of any organization
+        HTTPException: 404 if current organization not found
+        HTTPException: 500 if retrieval fails
+    """
+    try:
+        return await service.get_org_llm_settings()
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.exception(
+            'Error getting organization LLM settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve LLM settings',
+        )
+
+
+@org_router.post(
+    '/llm',
+    response_model=OrgLLMSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.EDIT_LLM_SETTINGS))],
+)
+async def update_org_llm_settings(
+    settings: OrgLLMSettingsUpdate,
+    service: OrgLLMSettingsService = org_llm_settings_service_dependency,
+) -> OrgLLMSettingsResponse:
+    """Update LLM settings for the user's current organization.
+
+    This endpoint updates the LLM configuration settings for the
+    authenticated user's current organization. Only admins and owners
+    can update these settings.
+
+    Args:
+        settings: The LLM settings to update (only non-None fields are updated)
+        service: OrgLLMSettingsService (injected by dependency)
+
+    Returns:
+        OrgLLMSettingsResponse: The updated organization's LLM settings
+
+    Raises:
+        HTTPException: 401 if not authenticated
+        HTTPException: 403 if user lacks EDIT_LLM_SETTINGS permission
+        HTTPException: 404 if current organization not found
+        HTTPException: 500 if update fails
+    """
+    try:
+        return await service.update_org_llm_settings(settings)
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except OrgDatabaseError as e:
+        logger.error(
+            'Database error updating LLM settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update LLM settings',
+        )
+    except Exception as e:
+        logger.exception(
+            'Error updating organization LLM settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update LLM settings',
+        )
+
+
+@org_router.get(
+    '/app',
+    response_model=OrgAppSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
+)
+async def get_org_app_settings(
+    service: OrgAppSettingsService = org_app_settings_service_dependency,
+) -> OrgAppSettingsResponse:
+    """Get organization app settings for the user's current organization.
+
+    This endpoint retrieves application settings for the authenticated user's
+    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
+    which is granted to all organization members (member, admin, and owner roles).
+
+    Args:
+        service: OrgAppSettingsService (injected by dependency)
+
+    Returns:
+        OrgAppSettingsResponse: The organization app settings
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
+        HTTPException: 404 if current organization not found
+    """
+    try:
+        return await service.get_org_app_settings()
+    except OrgNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Current organization not found',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error retrieving organization app settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.post(
+    '/app',
+    response_model=OrgAppSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
+)
+async def update_org_app_settings(
+    update_data: OrgAppSettingsUpdate,
+    service: OrgAppSettingsService = org_app_settings_service_dependency,
+) -> OrgAppSettingsResponse:
+    """Update organization app settings for the user's current organization.
+
+    This endpoint updates application settings for the authenticated user's
+    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
+    which is granted to all organization members (member, admin, and owner roles).
+
+    Args:
+        update_data: App settings update data
+        service: OrgAppSettingsService (injected by dependency)
+
+    Returns:
+        OrgAppSettingsResponse: The updated organization app settings
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
+        HTTPException: 404 if current organization not found
+        HTTPException: 422 if validation errors occur (handled by FastAPI)
+        HTTPException: 500 if update fails
+    """
+    try:
+        return await service.update_org_app_settings(update_data)
+    except OrgNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Current organization not found',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error updating organization app settings',
+            extra={'error': str(e)},
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

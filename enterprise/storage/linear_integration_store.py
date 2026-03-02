@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from storage.database import session_maker
+from sqlalchemy import select
+from storage.database import a_session_maker
 from storage.linear_conversation import LinearConversation
 from storage.linear_user import LinearUser
 from storage.linear_workspace import LinearWorkspace
@@ -35,10 +36,10 @@ class LinearIntegrationStore:
             status=status,
         )
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             session.add(workspace)
-            session.commit()
-            session.refresh(workspace)
+            await session.commit()
+            await session.refresh(workspace)
 
         logger.info(f'[Linear] Created workspace {workspace.name}')
         return workspace
@@ -53,11 +54,12 @@ class LinearIntegrationStore:
         status: Optional[str] = None,
     ) -> LinearWorkspace:
         """Update an existing Linear workspace with encrypted sensitive data."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # Find existing workspace by ID
-            workspace = (
-                session.query(LinearWorkspace).filter(LinearWorkspace.id == id).first()
+            result = await session.execute(
+                select(LinearWorkspace).where(LinearWorkspace.id == id)
             )
+            workspace = result.scalar_one_or_none()
 
             if not workspace:
                 raise ValueError(f'Workspace with ID "{id}" not found')
@@ -77,8 +79,8 @@ class LinearIntegrationStore:
             if status is not None:
                 workspace.status = status
 
-            session.commit()
-            session.refresh(workspace)
+            await session.commit()
+            await session.refresh(workspace)
 
         logger.info(f'[Linear] Updated workspace {workspace.name}')
         return workspace
@@ -98,10 +100,10 @@ class LinearIntegrationStore:
             status=status,
         )
 
-        with session_maker() as session:
+        async with a_session_maker() as session:
             session.add(linear_user)
-            session.commit()
-            session.refresh(linear_user)
+            await session.commit()
+            await session.refresh(linear_user)
 
         logger.info(
             f'[Linear] Created user {linear_user.id} for workspace {linear_workspace_id}'
@@ -110,77 +112,75 @@ class LinearIntegrationStore:
 
     async def get_workspace_by_id(self, workspace_id: int) -> Optional[LinearWorkspace]:
         """Retrieve workspace by ID."""
-        with session_maker() as session:
-            return (
-                session.query(LinearWorkspace)
-                .filter(LinearWorkspace.id == workspace_id)
-                .first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(LinearWorkspace).where(LinearWorkspace.id == workspace_id)
             )
+            return result.scalar_one_or_none()
 
     async def get_workspace_by_name(
         self, workspace_name: str
     ) -> Optional[LinearWorkspace]:
         """Retrieve workspace by name."""
-        with session_maker() as session:
-            return (
-                session.query(LinearWorkspace)
-                .filter(LinearWorkspace.name == workspace_name.lower())
-                .first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(LinearWorkspace).where(
+                    LinearWorkspace.name == workspace_name.lower()
+                )
             )
+            return result.scalar_one_or_none()
 
     async def get_user_by_active_workspace(
         self, keycloak_user_id: str
     ) -> LinearUser | None:
         """Get Linear user by Keycloak user ID."""
-        with session_maker() as session:
-            return (
-                session.query(LinearUser)
-                .filter(
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(LinearUser).where(
                     LinearUser.keycloak_user_id == keycloak_user_id,
                     LinearUser.status == 'active',
                 )
-                .first()
             )
+            return result.scalar_one_or_none()
 
     async def get_user_by_keycloak_id_and_workspace(
         self, keycloak_user_id: str, linear_workspace_id: int
     ) -> Optional[LinearUser]:
         """Get Linear user by Keycloak user ID and workspace ID."""
-        with session_maker() as session:
-            return (
-                session.query(LinearUser)
-                .filter(
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(LinearUser).where(
                     LinearUser.keycloak_user_id == keycloak_user_id,
                     LinearUser.linear_workspace_id == linear_workspace_id,
                 )
-                .first()
             )
+            return result.scalar_one_or_none()
 
     async def get_active_user(
         self, linear_user_id: str, linear_workspace_id: int
     ) -> Optional[LinearUser]:
         """Get Linear user by Keycloak user ID and workspace ID."""
-        with session_maker() as session:
-            return (
-                session.query(LinearUser)
-                .filter(
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(LinearUser).where(
                     LinearUser.linear_user_id == linear_user_id,
                     LinearUser.linear_workspace_id == linear_workspace_id,
                     LinearUser.status == 'active',
                 )
-                .first()
             )
+            return result.scalar_one_or_none()
 
     async def update_user_integration_status(
         self, keycloak_user_id: str, status: str
     ) -> LinearUser:
         """Update Linear user integration status."""
-        with session_maker() as session:
-            linear_user = (
-                session.query(LinearUser)
-                .filter(LinearUser.keycloak_user_id == keycloak_user_id)
-                .first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(LinearUser).where(
+                    LinearUser.keycloak_user_id == keycloak_user_id
+                )
             )
+            linear_user = result.scalar_one_or_none()
 
             if not linear_user:
                 raise ValueError(
@@ -188,38 +188,36 @@ class LinearIntegrationStore:
                 )
 
             linear_user.status = status
-            session.commit()
-            session.refresh(linear_user)
+            await session.commit()
+            await session.refresh(linear_user)
 
             logger.info(f'[Linear] Updated user {keycloak_user_id} status to {status}')
             return linear_user
 
     async def deactivate_workspace(self, workspace_id: int):
         """Deactivate the workspace and all user links for a given workspace."""
-        with session_maker() as session:
-            users = (
-                session.query(LinearUser)
-                .filter(
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(LinearUser).where(
                     LinearUser.linear_workspace_id == workspace_id,
                     LinearUser.status == 'active',
                 )
-                .all()
             )
+            users = result.scalars().all()
 
             for user in users:
                 user.status = 'inactive'
                 session.add(user)
 
-            workspace = (
-                session.query(LinearWorkspace)
-                .filter(LinearWorkspace.id == workspace_id)
-                .first()
+            result = await session.execute(
+                select(LinearWorkspace).where(LinearWorkspace.id == workspace_id)
             )
+            workspace = result.scalar_one_or_none()
             if workspace:
                 workspace.status = 'inactive'
                 session.add(workspace)
 
-            session.commit()
+            await session.commit()
 
         logger.info(f'[Jira] Deactivated all user links for workspace {workspace_id}')
 
@@ -227,23 +225,22 @@ class LinearIntegrationStore:
         self, linear_conversation: LinearConversation
     ) -> None:
         """Create a new Linear conversation record."""
-        with session_maker() as session:
+        async with a_session_maker() as session:
             session.add(linear_conversation)
-            session.commit()
+            await session.commit()
 
     async def get_user_conversations_by_issue_id(
         self, issue_id: str, linear_user_id: int
     ) -> LinearConversation | None:
         """Get a Linear conversation by issue ID and linear user ID."""
-        with session_maker() as session:
-            return (
-                session.query(LinearConversation)
-                .filter(
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(LinearConversation).where(
                     LinearConversation.issue_id == issue_id,
                     LinearConversation.linear_user_id == linear_user_id,
                 )
-                .first()
             )
+            return result.scalar_one_or_none()
 
     @classmethod
     def get_instance(cls) -> LinearIntegrationStore:

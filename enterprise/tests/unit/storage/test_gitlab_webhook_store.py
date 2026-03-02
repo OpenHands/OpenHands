@@ -9,16 +9,35 @@ from storage.base import Base
 from storage.gitlab_webhook import GitlabWebhook
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
+# Use module-scoped engine to share database across fixtures
+_test_engine = None
 
-@pytest.fixture
-async def async_engine():
-    """Create an async SQLite engine for testing."""
+
+@pytest.fixture(scope='function')
+def event_loop():
+    """Create an instance of the default event loop for each test case."""
+    import asyncio
+
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture(scope='function')
+async def async_engine(event_loop):
+    """Create an async SQLite engine for testing.
+
+    This fixture creates an in-memory SQLite database and ensures
+    all tables are created before tests run.
+    """
+    global _test_engine
     engine = create_async_engine(
         'sqlite+aiosqlite:///:memory:',
         poolclass=StaticPool,
         connect_args={'check_same_thread': False},
         echo=False,
     )
+    _test_engine = engine
 
     # Create all tables
     async with engine.begin() as conn:
@@ -29,7 +48,7 @@ async def async_engine():
     await engine.dispose()
 
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 async def async_session_maker(async_engine):
     """Create an async session maker for testing."""
     return async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
@@ -37,8 +56,21 @@ async def async_session_maker(async_engine):
 
 @pytest.fixture
 async def webhook_store(async_session_maker):
-    """Create a GitlabWebhookStore instance for testing."""
-    return GitlabWebhookStore(a_session_maker=async_session_maker)
+    """Create a GitlabWebhookStore instance for testing.
+
+    This fixture injects the test's async_session_maker to ensure
+    the store uses the same in-memory database as the test fixtures.
+    """
+    # Import here to avoid circular imports
+
+    store = GitlabWebhookStore()
+
+    # Inject the test session maker - this needs to replace the module-level import
+    import storage.gitlab_webhook_store as store_module
+
+    store_module.a_session_maker = async_session_maker
+
+    return store
 
 
 @pytest.fixture
@@ -102,7 +134,7 @@ class TestGetWebhookByResourceOnly:
 
     @pytest.mark.asyncio
     async def test_get_project_webhook_by_resource_only(
-        self, webhook_store, async_session_maker, sample_webhooks
+        self, webhook_store, sample_webhooks
     ):
         """Test getting a project webhook by resource ID without user_id filter."""
         # Arrange

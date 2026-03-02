@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy.orm import sessionmaker
-from storage.database import session_maker
+from sqlalchemy import select
+from storage.database import a_session_maker
 from storage.stored_repository import StoredRepository
 
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -11,12 +11,11 @@ from openhands.core.config.openhands_config import OpenHandsConfig
 
 @dataclass
 class RepositoryStore:
-    session_maker: sessionmaker
     config: OpenHandsConfig
 
-    def store_projects(self, repositories: list[StoredRepository]) -> None:
+    async def store_projects(self, repositories: list[StoredRepository]) -> None:
         """
-        Store repositories in database
+        Store repositories in database (async version)
 
         1. Make sure to store repositories if its ID doesn't exist
         2. If repository ID already exists, make sure to only update the repo is_public and repo_name fields
@@ -26,17 +25,15 @@ class RepositoryStore:
         if not repositories:
             return
 
-        with self.session_maker() as session:
+        async with a_session_maker() as session:
             # Extract all repo_ids to check
             repo_ids = [r.repo_id for r in repositories]
 
             # Get all existing repositories in a single query
-            existing_repos = {
-                r.repo_id: r
-                for r in session.query(StoredRepository).filter(
-                    StoredRepository.repo_id.in_(repo_ids)
-                )
-            }
+            result = await session.execute(
+                select(StoredRepository).filter(StoredRepository.repo_id.in_(repo_ids))
+            )
+            existing_repos = {r.repo_id: r for r in result.scalars().all()}
 
             # Process all repositories
             for repo in repositories:
@@ -50,9 +47,9 @@ class RepositoryStore:
                     session.add(repo)
 
             # Commit all changes
-            session.commit()
+            await session.commit()
 
     @classmethod
     def get_instance(cls, config: OpenHandsConfig) -> RepositoryStore:
         """Get an instance of the UserRepositoryStore."""
-        return RepositoryStore(session_maker, config)
+        return RepositoryStore(config)

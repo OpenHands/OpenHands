@@ -8,7 +8,7 @@ from openhands.server.settings import Settings
 from openhands.storage.data_models.settings import Settings as DataSettings
 
 # Mock the database module before importing
-with patch('storage.database.engine'), patch('storage.database.a_engine'):
+with patch('storage.database.a_session_maker'):
     from server.constants import (
         LITE_LLM_API_URL,
     )
@@ -26,19 +26,21 @@ def mock_config():
 
 
 @pytest.fixture
-def settings_store(session_maker, mock_config):
-    store = SaasSettingsStore(
-        '5594c7b6-f959-4b81-92e9-b09c206f5081', session_maker, mock_config
-    )
+def settings_store(async_session_maker, mock_config):
+    store = SaasSettingsStore('5594c7b6-f959-4b81-92e9-b09c206f5081', mock_config)
+    store.a_session_maker = async_session_maker
 
     # Patch the load method to read from UserSettings table directly (for testing)
     async def patched_load():
-        with store.session_maker() as session:
-            user_settings = (
-                session.query(UserSettings)
-                .filter(UserSettings.keycloak_user_id == store.user_id)
-                .first()
+        async with store.a_session_maker() as session:
+            from sqlalchemy import select
+
+            result = await session.execute(
+                select(UserSettings).filter(
+                    UserSettings.keycloak_user_id == store.user_id
+                )
             )
+            user_settings = result.scalars().first()
             if not user_settings:
                 # Return default settings
                 return Settings(
@@ -74,29 +76,31 @@ def settings_store(session_maker, mock_config):
             if 'secrets_store' in item_dict:
                 del item_dict['secrets_store']
 
+            # Encrypt the data before storing
+            store._encrypt_kwargs(item_dict)
+
             # Continue with the original implementation
-            with store.session_maker() as session:
-                existing = None
-                if item_dict:
-                    store._encrypt_kwargs(item_dict)
-                    query = session.query(UserSettings).filter(
+            from sqlalchemy import select
+
+            async with store.a_session_maker() as session:
+                result = await session.execute(
+                    select(UserSettings).filter(
                         UserSettings.keycloak_user_id == store.user_id
                     )
-
-                    # First check if we have an existing entry in the new table
-                    existing = query.first()
+                )
+                existing = result.scalars().first()
 
                 if existing:
                     # Update existing entry
                     for key, value in item_dict.items():
                         if key in existing.__class__.__table__.columns:
                             setattr(existing, key, value)
-                    session.merge(existing)
+                    await session.merge(existing)
                 else:
                     item_dict['keycloak_user_id'] = store.user_id
                     settings = UserSettings(**item_dict)
                     session.add(settings)
-                session.commit()
+                await session.commit()
 
     # Replace the methods with our patched versions
     store.store = patched_store
@@ -125,25 +129,26 @@ async def test_store_and_load_keycloak_user(settings_store):
     assert loaded_settings.agent == 'smith'
 
     # Verify it was stored in user_settings table with keycloak_user_id
-    with settings_store.session_maker() as session:
-        stored = (
-            session.query(UserSettings)
-            .filter(
+    from sqlalchemy import select
+
+    async with settings_store.a_session_maker() as session:
+        result = await session.execute(
+            select(UserSettings).filter(
                 UserSettings.keycloak_user_id == '550e8400-e29b-41d4-a716-446655440000'
             )
-            .first()
         )
+        stored = result.scalars().first()
         assert stored is not None
         assert stored.agent == 'smith'
 
 
 @pytest.mark.asyncio
-async def test_load_returns_default_when_not_found(settings_store, session_maker):
+async def test_load_returns_default_when_not_found(settings_store, async_session_maker):
     file_store = MagicMock()
     file_store.read.side_effect = FileNotFoundError()
 
     with (
-        patch('storage.saas_settings_store.session_maker', session_maker),
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
     ):
         loaded_settings = await settings_store.load()
         assert loaded_settings is not None
@@ -164,14 +169,15 @@ async def test_encryption(settings_store):
         email_verified=True,
     )
     await settings_store.store(settings)
-    with settings_store.session_maker() as session:
-        stored = (
-            session.query(UserSettings)
-            .filter(
+    from sqlalchemy import select
+
+    async with settings_store.a_session_maker() as session:
+        result = await session.execute(
+            select(UserSettings).filter(
                 UserSettings.keycloak_user_id == '5594c7b6-f959-4b81-92e9-b09c206f5081'
             )
-            .first()
         )
+        stored = result.scalars().first()
         # The stored key should be encrypted
         assert stored.llm_api_key != 'secret_key'
         # But we should be able to decrypt it when loading
@@ -182,7 +188,7 @@ async def test_encryption(settings_store):
 @pytest.mark.asyncio
 async def test_ensure_api_key_keeps_valid_key(mock_config):
     """When the existing key is valid, it should be kept unchanged."""
-    store = SaasSettingsStore('test-user-id-123', MagicMock(), mock_config)
+    store = SaasSettingsStore('test-user-id-123', mock_config)
     existing_key = 'sk-existing-key'
     item = DataSettings(
         llm_model='openhands/gpt-4', llm_api_key=SecretStr(existing_key)
@@ -205,7 +211,7 @@ async def test_ensure_api_key_generates_new_key_when_verification_fails(
     mock_config,
 ):
     """When verification fails, a new key should be generated."""
-    store = SaasSettingsStore('test-user-id-123', MagicMock(), mock_config)
+    store = SaasSettingsStore('test-user-id-123', mock_config)
     new_key = 'sk-new-key'
     item = DataSettings(
         llm_model='openhands/gpt-4', llm_api_key=SecretStr('sk-invalid-key')
