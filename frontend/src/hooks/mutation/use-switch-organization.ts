@@ -18,6 +18,8 @@ export const useSwitchOrganization = () => {
       setOrganizationId(orgId);
       // Invalidate settings for the new org context
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      // Invalidate conversations to fetch data for the new org context
+      queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     },
   });
 };
