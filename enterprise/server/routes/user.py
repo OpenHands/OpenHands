@@ -1,4 +1,3 @@
-import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
@@ -43,7 +42,6 @@ from openhands.server.user_auth import (
 
 saas_user_router = APIRouter(prefix='/api/user', dependencies=get_dependencies())
 token_manager = TokenManager()
-logger = logging.getLogger(__name__)
 
 
 @saas_user_router.get('/installations', response_model=list[str])
