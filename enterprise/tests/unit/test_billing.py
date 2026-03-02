@@ -26,18 +26,6 @@ from storage.stripe_customer import Base as StripeCustomerBase
 
 
 @pytest.fixture
-def engine():
-    engine = create_engine('sqlite:///:memory:')
-    StripeCustomerBase.metadata.create_all(engine)
-    return engine
-
-
-@pytest.fixture
-def session_maker(engine):
-    return sessionmaker(bind=engine)
-
-
-@pytest.fixture
 def mock_request():
     """Create a mock request object with proper URL structure for testing."""
     return Request(
@@ -134,7 +122,7 @@ async def test_get_credits_success():
 
 @pytest.mark.asyncio
 async def test_create_checkout_session_stripe_error(
-    session_maker, mock_checkout_request
+    async_session_maker, mock_checkout_request
 ):
     """Test handling of Stripe API errors."""
 
@@ -153,10 +141,6 @@ async def test_create_checkout_session_stripe_error(
     mock_result.scalar_one_or_none.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    @asynccontextmanager
-    async def mock_session_maker():
-        yield mock_db_session
-
     with (
         pytest.raises(Exception, match='Stripe API Error'),
         patch('stripe.Customer.create_async', mock_customer_create),
@@ -167,10 +151,10 @@ async def test_create_checkout_session_stripe_error(
             'stripe.checkout.Session.create_async',
             AsyncMock(side_effect=Exception('Stripe API Error')),
         ),
-        patch('server.routes.billing.a_session_maker', mock_session_maker),
-        patch('integrations.stripe_service.a_session_maker', mock_session_maker),
-        patch('storage.database.a_session_maker', mock_session_maker),
-        patch('storage.org_store.a_session_maker', mock_session_maker),
+        patch('server.routes.billing.a_session_maker', async_session_maker),
+        patch('integrations.stripe_service.a_session_maker', async_session_maker),
+        patch('storage.database.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch(
             'storage.org_store.OrgStore.get_current_org_from_keycloak_user_id',
             return_value=mock_org,
