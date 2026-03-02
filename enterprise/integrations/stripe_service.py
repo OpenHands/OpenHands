@@ -17,11 +17,9 @@ stripe.api_key = STRIPE_API_KEY
 
 async def find_customer_id_by_org_id(org_id: UUID) -> str | None:
     async with a_session_maker() as session:
-        stripe_customer = (
-            session.query(StripeCustomer)
-            .filter(StripeCustomer.org_id == org_id)
-            .first()
-        )
+        stmt = select(StripeCustomer).where(StripeCustomer.org_id == org_id)
+        result = await session.execute(stmt)
+        stripe_customer = result.scalar_one_or_none()
         if stripe_customer:
             return stripe_customer.stripe_customer_id
 
@@ -83,7 +81,7 @@ async def find_or_create_customer_by_user_id(user_id: str) -> dict | None:
                 stripe_customer_id=customer.id,
             )
         )
-        session.commit()
+        await session.commit()
 
     logger.info(
         'created_customer',
