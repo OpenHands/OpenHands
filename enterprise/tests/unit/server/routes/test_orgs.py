@@ -11,43 +11,37 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.testclient import TestClient
+from server.email_validation import get_admin_user_id
+from server.routes.org_models import (
+    CannotModifySelfError,
+    InsufficientPermissionError,
+    InvalidRoleError,
+    LastOwnerError,
+    LiteLLMIntegrationError,
+    MeResponse,
+    OrgAppSettingsResponse,
+    OrgAppSettingsUpdate,
+    OrgAuthorizationError,
+    OrgDatabaseError,
+    OrgMemberNotFoundError,
+    OrgMemberPage,
+    OrgMemberResponse,
+    OrgMemberUpdate,
+    OrgNameExistsError,
+    OrgNotFoundError,
+    OrphanedUserError,
+    RoleNotFoundError,
+)
+from server.routes.orgs import (
+    get_me,
+    get_org_members,
+    org_router,
+    remove_org_member,
+    update_org_member,
+)
+from storage.org import Org
 
-# Mock database before imports
-with patch('storage.database.engine', create=True), patch(
-    'storage.database.a_engine', create=True
-):
-    from server.email_validation import get_admin_user_id
-    from server.routes.org_models import (
-        CannotModifySelfError,
-        InsufficientPermissionError,
-        InvalidRoleError,
-        LastOwnerError,
-        LiteLLMIntegrationError,
-        MeResponse,
-        OrgAppSettingsResponse,
-        OrgAppSettingsUpdate,
-        OrgAuthorizationError,
-        OrgDatabaseError,
-        OrgMemberNotFoundError,
-        OrgMemberPage,
-        OrgMemberResponse,
-        OrgMemberUpdate,
-        OrgNameExistsError,
-        OrgNotFoundError,
-        OrphanedUserError,
-        RoleNotFoundError,
-    )
-    from server.routes.orgs import (
-        get_me,
-        get_org_members,
-        org_router,
-        remove_org_member,
-        update_org_member,
-    )
-    from storage.org import Org
-
-    from openhands.server.user_auth import get_user_id
-
+from openhands.server.user_auth import get_user_id
 
 # Test user ID constant (must be a valid UUID string)
 TEST_USER_ID = str(uuid.uuid4())

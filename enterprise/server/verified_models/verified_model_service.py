@@ -2,6 +2,10 @@
 
 from dataclasses import dataclass
 
+from server.verified_models.verified_model_models import (
+    VerifiedModel,
+    VerifiedModelPage,
+)
 from sqlalchemy import (
     Boolean,
     Column,
@@ -18,10 +22,6 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.base import Base
 
-from enterprise.server.verified_models.verified_model_models import (
-    VerifiedModel,
-    VerifiedModelPage,
-)
 from openhands.app_server.config import depends_db_session
 from openhands.core.logger import openhands_logger as logger
 

@@ -5,17 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
-
-# Mock the database module before importing OrgStore
-with patch('storage.database.engine', create=True), patch(
-    'storage.database.a_engine', create=True
-):
-    from storage.org import Org
-    from storage.org_invitation import OrgInvitation
-    from storage.org_member import OrgMember
-    from storage.org_store import OrgStore
-    from storage.role import Role
-    from storage.user import User
+from storage.org import Org
+from storage.org_invitation import OrgInvitation
+from storage.org_member import OrgMember
+from storage.org_store import OrgStore
+from storage.role import Role
+from storage.user import User
 
 from openhands.storage.data_models.settings import Settings
 

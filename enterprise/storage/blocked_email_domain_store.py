@@ -1,14 +1,12 @@
 from dataclasses import dataclass
 
 from sqlalchemy import text
-from sqlalchemy.orm import sessionmaker
+from storage.database import a_session_maker
 
 
 @dataclass
 class BlockedEmailDomainStore:
-    session_maker: sessionmaker
-
-    def is_domain_blocked(self, domain: str) -> bool:
+    async def is_domain_blocked(self, domain: str) -> bool:
         """Check if a domain is blocked by querying the database directly.
 
         This method uses SQL to efficiently check if the domain matches any blocked pattern:
@@ -21,9 +19,9 @@ class BlockedEmailDomainStore:
         Returns:
             True if the domain is blocked, False otherwise
         """
-        with self.session_maker() as session:
+        async with a_session_maker() as session:
             # SQL query that handles both TLD patterns and full domain patterns
-            # TLD patterns (starting with '.'): check if domain ends with the pattern
+            # TLD patterns (starting with '.'): check if domain ends with it (case-insensitive)
             # Full domain patterns: check for exact match or subdomain match
             # All comparisons are case-insensitive using LOWER() to ensure consistent matching
             query = text("""
@@ -41,5 +39,5 @@ class BlockedEmailDomainStore:
                         ))
                 )
             """)
-            result = session.execute(query, {'domain': domain}).scalar()
-            return bool(result)
+            result = await session.execute(query, {'domain': domain})
+            return bool(result.scalar())
