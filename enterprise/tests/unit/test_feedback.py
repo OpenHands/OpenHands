@@ -45,9 +45,7 @@ async def test_submit_feedback():
         yield mock_session
 
     # Mock a_session_maker
-    with patch(
-        'server.routes.feedback.a_session_maker', mock_a_session_maker
-    ):
+    with patch('server.routes.feedback.a_session_maker', mock_a_session_maker):
         # Call the function
         result = await submit_conversation_feedback(feedback_data)
 
@@ -100,9 +98,7 @@ async def test_invalid_rating():
             yield mock_session
 
         # Mock a_session_maker
-        with patch(
-            'server.routes.feedback.a_session_maker', mock_a_session_maker
-        ):
+        with patch('server.routes.feedback.a_session_maker', mock_a_session_maker):
             # Call the function and expect an exception
             with pytest.raises(HTTPException) as excinfo:
                 await submit_conversation_feedback(feedback_data)
