@@ -37,8 +37,7 @@ class JiraDcCallbackProcessor(ConversationCallbackProcessor):
     base_api_url: str
 
     async def _send_comment_to_jira_dc(self, message: str) -> None:
-        """
-        Send a comment to Jira DC issue.
+        """Send a comment to Jira DC issue.
 
         Args:
             message: The message content to send to Jira DC
@@ -61,8 +60,9 @@ class JiraDcCallbackProcessor(ConversationCallbackProcessor):
                 workspace.svc_acc_api_key
             )
 
+            # Send comment directly as a string
             await jira_dc_manager.send_message(
-                jira_dc_manager.create_outgoing_message(msg=message),
+                message,
                 issue_key=self.issue_key,
                 base_api_url=self.base_api_url,
                 svc_acc_api_key=api_key,
