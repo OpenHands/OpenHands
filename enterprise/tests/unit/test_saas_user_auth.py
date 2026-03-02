@@ -370,7 +370,7 @@ async def test_saas_user_auth_from_bearer_success():
         patch('server.auth.saas_user_auth.token_manager') as mock_token_manager,
     ):
         mock_api_key_store = MagicMock()
-        mock_api_key_store.validate_api_key.return_value = 'test_user_id'
+        mock_api_key_store.validate_api_key = AsyncMock(return_value='test_user_id')
         mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
 
         mock_token_manager.load_offline_token = AsyncMock(return_value=offline_token)
@@ -406,7 +406,7 @@ async def test_saas_user_auth_from_bearer_invalid_api_key():
 
     with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
         mock_api_key_store = MagicMock()
-        mock_api_key_store.validate_api_key.return_value = None
+        mock_api_key_store.validate_api_key = AsyncMock(return_value=None)
         mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
 
         result = await saas_user_auth_from_bearer(mock_request)
@@ -702,7 +702,7 @@ async def test_saas_user_auth_from_signed_token_blocked_domain(mock_config):
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked.return_value = True
+        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=True)
 
         # Act & Assert
         with pytest.raises(AuthError) as exc_info:
@@ -731,7 +731,7 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked.return_value = False
+        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)
@@ -764,7 +764,7 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked.return_value = False
+        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)

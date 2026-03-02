@@ -102,15 +102,16 @@ Browsing Agent Safety:
 
 ### Gray Swan
 
-The Gray Swan Security Analyzer integrates with [Gray Swan AI's Cygnal API](https://docs.grayswan.ai/monitor-requests/monitor) to provide advanced AI safety monitoring for OpenHands agents.
+The Gray Swan Security Analyzer integrates with [Gray Swan AI's Cygnal API](https://docs.grayswan.ai/cygnal/monitor-requests) to provide advanced AI safety monitoring for OpenHands agents.
 
 #### Getting Started
 To get started with the Gray Swan security analyzer (powered by Cygnal):
 
-1. Navigate to [the Gray Swan platform](https://platform.grayswan.ai) and create an account if you don't already have one
-2. Create a Gray Swan API key.
-3. If you just want to use Cygnal's default protections, you can move to the next section.
-4. If you want **even more** custom protection, you can create your own policy [here](https://platform.grayswan.ai/policies). Policies are composed of rules, which require a short title, e.g. "Git Operations", and then the rule itself, e.g. "The agent should never push code directly to the main branch".
+1. Existing Gray Swan customers should already have access to the platform.
+2. New users should [request a demo](https://hubs.ly/Q03-sX2z0) to get onboarded and receive API credentials.
+3. During onboarding, Gray Swan can also provide custom policy recommendations and integration support.
+4. If you just want to use Cygnal's default protections, you can move to the next section.
+5. If you want **even more** custom protection, you can create your own policy [here](https://platform.grayswan.ai/policies). Policies are composed of rules, which require a short title, e.g. "Git Operations", and then the rule itself, e.g. "The agent should never push code directly to the main branch".
 
 #### OpenHands Configuration:
 

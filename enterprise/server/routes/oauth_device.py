@@ -181,7 +181,7 @@ async def device_token(device_code: str = Form(...)):
             # Retrieve the specific API key for this device using the user_code
             api_key_store = ApiKeyStore.get_instance()
             device_key_name = f'{API_KEY_NAME} ({device_code_entry.user_code})'
-            device_api_key = api_key_store.retrieve_api_key_by_name(
+            device_api_key = await api_key_store.retrieve_api_key_by_name(
                 device_code_entry.keycloak_user_id, device_key_name
             )
 
@@ -272,7 +272,7 @@ async def device_verification_authenticated(
         try:
             # Create a unique API key for this device using user_code in the name
             device_key_name = f'{API_KEY_NAME} ({user_code})'
-            api_key_store.create_api_key(
+            await api_key_store.create_api_key(
                 user_id,
                 name=device_key_name,
                 expires_at=datetime.now(UTC) + KEY_EXPIRATION_TIME,

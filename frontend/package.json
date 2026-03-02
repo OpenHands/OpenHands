@@ -1,6 +1,6 @@
 {
   "name": "openhands-frontend",
-  "version": "1.2.1",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,7 +17,7 @@
     "@uidotdev/usehooks": "^2.4.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "axios": "^1.13.2",
+    "axios": "^1.13.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "downshift": "^9.0.13",

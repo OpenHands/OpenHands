@@ -18,6 +18,7 @@ from openhands.core.logger import openhands_logger as logger
 class AssessmentResult:
     """Result of a reCAPTCHA Enterprise assessment."""
 
+    name: str
     score: float
     valid: bool
     action_valid: bool
@@ -63,6 +64,7 @@ class RecaptchaService:
         user_ip: str,
         user_agent: str,
         email: str | None = None,
+        user_id: str | None = None,
     ) -> AssessmentResult:
         """Create a reCAPTCHA Enterprise assessment.
 
@@ -72,6 +74,7 @@ class RecaptchaService:
             user_ip: The user's IP address.
             user_agent: The user's browser user agent.
             email: Optional email for Account Defender hashing.
+            user_id: Optional Keycloak user ID for logging correlation.
 
         Returns:
             AssessmentResult with score, validity, and allowed status.
@@ -99,6 +102,10 @@ class RecaptchaService:
         request.parent = f'projects/{self.project_id}'
 
         response = self.client.create_assessment(request)
+
+        # Capture assessment name for potential annotation later
+        # Format: projects/{project_id}/assessments/{assessment_id}
+        assessment_name = response.name
 
         token_properties = response.token_properties
         risk_analysis = response.risk_analysis
@@ -129,6 +136,7 @@ class RecaptchaService:
         logger.info(
             'recaptcha_assessment',
             extra={
+                'assessment_name': assessment_name,
                 'score': score,
                 'valid': valid,
                 'action_valid': action_valid,
@@ -137,10 +145,13 @@ class RecaptchaService:
                 'has_suspicious_labels': has_suspicious_labels,
                 'allowed': allowed,
                 'user_ip': user_ip,
+                'user_id': user_id,
+                'email': email,
             },
         )
 
         return AssessmentResult(
+            name=assessment_name,
             score=score,
             valid=valid,
             action_valid=action_valid,

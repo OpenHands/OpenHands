@@ -105,7 +105,8 @@ class AppConversationService(ABC):
         self, conversation_id: UUID, request: AppConversationUpdateRequest
     ) -> AppConversation | None:
         """Update an app conversation and return it. Return None if the conversation
-        did not exist."""
+        did not exist.
+        """
 
     @abstractmethod
     async def delete_app_conversation(self, conversation_id: UUID) -> bool:

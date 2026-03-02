@@ -7,7 +7,7 @@
 export const generateAuthUrl = (
   identityProvider: string,
   requestUrl: URL,
-  authUrl?: string,
+  authUrl?: string | null,
 ) => {
   // Use HTTPS protocol unless the host is localhost
   const protocol =
