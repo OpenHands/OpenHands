@@ -123,12 +123,15 @@ class SaaSGitHubService(GitHubService):
         return node_id
 
     async def get_paginated_repos(self, page, per_page, sort, installation_id):
+        logger.info('trace_get_paginated_repos_1')
         repositories = await super().get_paginated_repos(
             page, per_page, sort, installation_id
         )
+        logger.info('trace_get_paginated_repos_2')
         asyncio.create_task(
             store_repositories_in_db(repositories, self.external_auth_id)
         )
+        logger.info('trace_get_paginated_repos_3')
         return repositories
 
     async def get_all_repositories(

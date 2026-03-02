@@ -1,4 +1,3 @@
-import uuid
 from unittest.mock import patch
 
 import pytest
@@ -42,9 +41,7 @@ async def test_store_projects_new_repositories(repository_store, async_session_m
     )
 
     # Execute - patch a_session_maker to use test's async session maker
-    with patch(
-        'storage.repository_store.a_session_maker', async_session_maker
-    ):
+    with patch('storage.repository_store.a_session_maker', async_session_maker):
         await repository_store.store_projects([repo1, repo2])
 
     # Verify the repositories were stored
@@ -82,9 +79,7 @@ async def test_store_projects_update_existing(repository_store, async_session_ma
         is_public=False,  # Changed from True
     )
 
-    with patch(
-        'storage.repository_store.a_session_maker', async_session_maker
-    ):
+    with patch('storage.repository_store.a_session_maker', async_session_maker):
         await repository_store.store_projects([updated_repo])
 
     # Verify the repository was updated
@@ -99,7 +94,9 @@ async def test_store_projects_update_existing(repository_store, async_session_ma
 
 
 @pytest.mark.asyncio
-async def test_store_projects_mixed_new_and_existing(repository_store, async_session_maker):
+async def test_store_projects_mixed_new_and_existing(
+    repository_store, async_session_maker
+):
     """Test storing a mix of new and existing repositories."""
     # Setup - create one existing repository
     existing_repo = StoredRepository(
@@ -126,9 +123,7 @@ async def test_store_projects_mixed_new_and_existing(repository_store, async_ses
         ),
     ]
 
-    with patch(
-        'storage.repository_store.a_session_maker', async_session_maker
-    ):
+    with patch('storage.repository_store.a_session_maker', async_session_maker):
         await repository_store.store_projects(repos_to_store)
 
     # Verify results

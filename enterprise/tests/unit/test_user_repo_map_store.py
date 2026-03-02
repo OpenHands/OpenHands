@@ -45,9 +45,7 @@ async def test_store_user_repo_mappings_new_mappings(
     )
 
     # Execute - patch a_session_maker to use test's async session maker
-    with patch(
-        'storage.user_repo_map_store.a_session_maker', async_session_maker
-    ):
+    with patch('storage.user_repo_map_store.a_session_maker', async_session_maker):
         await user_repo_map_store.store_user_repo_mappings([mapping1, mapping2])
 
     # Verify the mappings were stored
@@ -89,9 +87,7 @@ async def test_store_user_repo_mappings_update_existing(
         admin=True,  # Changed from False
     )
 
-    with patch(
-        'storage.user_repo_map_store.a_session_maker', async_session_maker
-    ):
+    with patch('storage.user_repo_map_store.a_session_maker', async_session_maker):
         await user_repo_map_store.store_user_repo_mappings([updated_mapping])
 
     # Verify the mapping was updated
@@ -139,9 +135,7 @@ async def test_store_user_repo_mappings_mixed_new_and_existing(
         ),
     ]
 
-    with patch(
-        'storage.user_repo_map_store.a_session_maker', async_session_maker
-    ):
+    with patch('storage.user_repo_map_store.a_session_maker', async_session_maker):
         await user_repo_map_store.store_user_repo_mappings(mappings_to_store)
 
     # Verify results
@@ -177,17 +171,13 @@ async def test_store_user_repo_mappings_different_users(
         UserRepositoryMap(user_id=user_id2, repo_id='github##123', admin=False),
     ]
 
-    with patch(
-        'storage.user_repo_map_store.a_session_maker', async_session_maker
-    ):
+    with patch('storage.user_repo_map_store.a_session_maker', async_session_maker):
         await user_repo_map_store.store_user_repo_mappings(mappings)
 
     # Verify results
     async with async_session_maker() as session:
         result = await session.execute(
-            select(UserRepositoryMap).filter(
-                UserRepositoryMap.repo_id == 'github##123'
-            )
+            select(UserRepositoryMap).filter(UserRepositoryMap.repo_id == 'github##123')
         )
         mappings = result.scalars().all()
         assert len(mappings) == 2
