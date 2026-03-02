@@ -399,3 +399,135 @@ class TestUpdateActiveWorkingSeconds:
             assert conversation_work.seconds == 23.0
             assert conversation_work.conversation_id == conversation_id
             assert conversation_work.user_id == user_id
+
+
+class TestInvokeConversationCallbacks:
+    """Tests for invoke_conversation_callbacks function.
+
+    This function uses async database sessions (a_session_maker) to query
+    and invoke callbacks for a conversation.
+    """
+
+    @pytest.fixture
+    def mock_observation(self):
+        """Create a mock AgentStateChangedObservation."""
+
+        observation = Mock(spec=AgentStateChangedObservation)
+        observation.agent_state = AgentState.FINISHED
+        return observation
+
+    @pytest.fixture
+    def create_mock_async_session(self):
+        """Factory to create properly mocked async session context manager."""
+        from contextlib import asynccontextmanager
+        from unittest.mock import AsyncMock
+
+        def _create(callbacks_list):
+            mock_session = Mock()
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.return_value = callbacks_list
+            mock_session.execute = AsyncMock(return_value=mock_result)
+            mock_session.commit = AsyncMock(return_value=None)
+
+            @asynccontextmanager
+            async def mock_context_manager():
+                yield mock_session
+
+            return mock_context_manager, mock_session
+
+        return _create
+
+    @pytest.mark.asyncio
+    async def test_invoke_callbacks_with_active_callbacks(
+        self, mock_observation, create_mock_async_session
+    ):
+        """Test that active callbacks are invoked successfully."""
+        from unittest.mock import AsyncMock
+
+        # Arrange
+        conversation_id = 'test_conversation_callbacks'
+        mock_processor = AsyncMock(return_value=None)
+
+        # Create a mock callback
+        mock_callback = Mock()
+        mock_callback.id = 1
+        mock_callback.processor_type = 'test_processor'
+        mock_callback.get_processor.return_value = mock_processor
+
+        mock_context_manager, mock_session = create_mock_async_session([mock_callback])
+
+        # Act
+        with patch(
+            'server.utils.conversation_callback_utils.a_session_maker',
+            mock_context_manager,
+        ):
+            from server.utils.conversation_callback_utils import (
+                invoke_conversation_callbacks,
+            )
+
+            await invoke_conversation_callbacks(conversation_id, mock_observation)
+
+        # Assert
+        mock_callback.get_processor.assert_called_once()
+        mock_processor.assert_called_once_with(mock_callback, mock_observation)
+
+    @pytest.mark.asyncio
+    async def test_invoke_callbacks_with_no_active_callbacks(
+        self, mock_observation, create_mock_async_session
+    ):
+        """Test behavior when no active callbacks exist."""
+        # Arrange
+        conversation_id = 'test_no_callbacks'
+
+        mock_context_manager, mock_session = create_mock_async_session([])
+
+        # Act
+        with patch(
+            'server.utils.conversation_callback_utils.a_session_maker',
+            mock_context_manager,
+        ):
+            from server.utils.conversation_callback_utils import (
+                invoke_conversation_callbacks,
+            )
+
+            await invoke_conversation_callbacks(conversation_id, mock_observation)
+
+        # Assert - should complete without errors
+        mock_session.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_invoke_callbacks_handles_processor_exception(
+        self, mock_observation, create_mock_async_session
+    ):
+        """Test that processor exceptions are caught and callback status is updated."""
+        from unittest.mock import AsyncMock
+
+        # Arrange
+        conversation_id = 'test_callback_error'
+        mock_processor = AsyncMock(side_effect=Exception('Processor error'))
+
+        mock_callback = Mock()
+        mock_callback.id = 1
+        mock_callback.processor_type = 'failing_processor'
+        mock_callback.get_processor.return_value = mock_processor
+        mock_callback.status = 'active'
+
+        mock_context_manager, mock_session = create_mock_async_session([mock_callback])
+
+        # Act
+        with patch(
+            'server.utils.conversation_callback_utils.a_session_maker',
+            mock_context_manager,
+        ), patch('server.utils.conversation_callback_utils.logger') as mock_logger:
+            from server.utils.conversation_callback_utils import (
+                invoke_conversation_callbacks,
+            )
+            from storage.conversation_callback import CallbackStatus
+
+            await invoke_conversation_callbacks(conversation_id, mock_observation)
+
+            # Assert - callback status should be set to ERROR
+            assert mock_callback.status == CallbackStatus.ERROR
+            mock_logger.error.assert_called_once()
+            error_call = mock_logger.error.call_args
+            assert error_call[0][0] == 'callback_invocation_failed'
