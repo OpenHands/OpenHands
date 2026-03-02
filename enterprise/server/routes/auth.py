@@ -35,6 +35,7 @@ from server.services.org_invitation_service import (
     UserAlreadyMemberError,
 )
 from storage.database import a_session_maker
+from sqlalchemy import select
 from storage.user import User
 from storage.user_store import UserStore
 
@@ -611,7 +612,10 @@ async def accept_tos(request: Request):
     # Update user settings with TOS acceptance
     accepted_tos: datetime = datetime.now(timezone.utc)
     async with a_session_maker() as session:
-        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+        result = await session.execute(
+            select(User).where(User.id == uuid.UUID(user_id))
+        )
+        user = result.scalar_one_or_none()
         if not user:
             await session.rollback()
             logger.error('User for {user_id} not found.')

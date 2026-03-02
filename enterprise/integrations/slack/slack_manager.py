@@ -1,6 +1,7 @@
 import re
 
 import jwt
+from sqlalchemy import select
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
 from integrations.slack.slack_types import SlackViewInterface, StartingConvoException
@@ -64,11 +65,10 @@ class SlackManager(Manager):
         # We get the user and correlate them back to a user in OpenHands - if we can
         slack_user = None
         async with a_session_maker() as session:
-            slack_user = (
-                session.query(SlackUser)
-                .filter(SlackUser.slack_user_id == slack_user_id)
-                .first()
+            result = await session.execute(
+                select(SlackUser).where(SlackUser.slack_user_id == slack_user_id)
             )
+            slack_user = result.scalar_one_or_none()
 
             # slack_view.slack_to_openhands_user = slack_user # attach user auth info to view
 

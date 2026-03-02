@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.slack_conversation import SlackConversation
 
@@ -15,14 +16,13 @@ class SlackConversationStore:
         Both parameters are required to match for a conversation to be returned.
         """
         async with a_session_maker() as session:
-            conversation = (
-                session.query(SlackConversation)
-                .filter(SlackConversation.channel_id == channel_id)
-                .filter(SlackConversation.parent_id == parent_id)
-                .first()
+            result = await session.execute(
+                select(SlackConversation).where(
+                    SlackConversation.channel_id == channel_id,
+                    SlackConversation.parent_id == parent_id,
+                )
             )
-
-            return conversation
+            return result.scalar_one_or_none()
 
     async def create_slack_conversation(
         self, slack_converstion: SlackConversation

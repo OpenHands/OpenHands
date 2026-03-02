@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
+from sqlalchemy import select
 from server.constants import STRIPE_API_KEY
 from server.logger import logger
 from starlette.datastructures import URL
@@ -108,14 +109,15 @@ async def get_subscription_access(
     """Get details of the currently valid subscription for the user."""
     async with a_session_maker() as session:
         now = datetime.now(UTC)
-        subscription_access = (
-            session.query(SubscriptionAccess)
-            .filter(SubscriptionAccess.status == 'ACTIVE')
-            .filter(SubscriptionAccess.user_id == user_id)
-            .filter(SubscriptionAccess.start_at <= now)
-            .filter(SubscriptionAccess.end_at >= now)
-            .first()
+        result = await session.execute(
+            select(SubscriptionAccess).where(
+                SubscriptionAccess.status == 'ACTIVE',
+                SubscriptionAccess.user_id == user_id,
+                SubscriptionAccess.start_at <= now,
+                SubscriptionAccess.end_at >= now,
+            )
         )
+        subscription_access = result.scalar_one_or_none()
         if not subscription_access:
             return None
         return SubscriptionAccessResponse(
@@ -216,12 +218,13 @@ async def create_checkout_session(
 async def success_callback(session_id: str, request: Request):
     # We can't use the auth cookie because of SameSite=strict
     async with a_session_maker() as session:
-        billing_session = (
-            session.query(BillingSession)
-            .filter(BillingSession.id == session_id)
-            .filter(BillingSession.status == 'in_progress')
-            .first()
+        result = await session.execute(
+            select(BillingSession).where(
+                BillingSession.id == session_id,
+                BillingSession.status == 'in_progress',
+            )
         )
+        billing_session = result.scalar_one_or_none()
 
         if billing_session is None:
             # Hopefully this never happens - we get a redirect from stripe where the session does not exist
@@ -254,7 +257,10 @@ async def success_callback(session_id: str, request: Request):
     )
 
     async with a_session_maker() as session:
-        org = session.query(Org).filter(Org.id == user.current_org_id).first()
+        result = await session.execute(
+            select(Org).where(Org.id == user.current_org_id)
+        )
+        org = result.scalar_one_or_none()
         new_max_budget = max_budget + add_credits
 
         await LiteLlmManager.update_team_and_users_budget(
@@ -291,12 +297,13 @@ async def success_callback(session_id: str, request: Request):
 @billing_router.get('/cancel')
 async def cancel_callback(session_id: str, request: Request):
     async with a_session_maker() as session:
-        billing_session = (
-            session.query(BillingSession)
-            .filter(BillingSession.id == session_id)
-            .filter(BillingSession.status == 'in_progress')
-            .first()
+        result = await session.execute(
+            select(BillingSession).where(
+                BillingSession.id == session_id,
+                BillingSession.status == 'in_progress',
+            )
         )
+        billing_session = result.scalar_one_or_none()
         if billing_session:
             logger.info(
                 'stripe_checkout_cancel',

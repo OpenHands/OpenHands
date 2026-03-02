@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.jira_conversation import JiraConversation
 from storage.jira_user import JiraUser
@@ -55,9 +56,10 @@ class JiraIntegrationStore:
         """Update an existing Jira workspace with encrypted sensitive data."""
         async with a_session_maker() as session:
             # Find existing workspace by ID
-            workspace = (
-                session.query(JiraWorkspace).filter(JiraWorkspace.id == id).first()
+            result = await session.execute(
+                select(JiraWorkspace).where(JiraWorkspace.id == id)
             )
+            workspace = result.scalar_one_or_none()
 
             if not workspace:
                 raise ValueError(f'Workspace with ID "{id}" not found')
@@ -112,74 +114,68 @@ class JiraIntegrationStore:
     async def get_workspace_by_id(self, workspace_id: int) -> Optional[JiraWorkspace]:
         """Retrieve workspace by ID."""
         async with a_session_maker() as session:
-            return (
-                session.query(JiraWorkspace)
-                .filter(JiraWorkspace.id == workspace_id)
-                .first()
+            result = await session.execute(
+                select(JiraWorkspace).where(JiraWorkspace.id == workspace_id)
             )
+            return result.scalar_one_or_none()
 
     async def get_workspace_by_name(self, workspace_name: str) -> JiraWorkspace | None:
         """Retrieve workspace by name."""
         async with a_session_maker() as session:
-            return (
-                session.query(JiraWorkspace)
-                .filter(JiraWorkspace.name == workspace_name.lower())
-                .first()
+            result = await session.execute(
+                select(JiraWorkspace).where(JiraWorkspace.name == workspace_name.lower())
             )
+            return result.scalar_one_or_none()
 
     async def get_user_by_active_workspace(
         self, keycloak_user_id: str
     ) -> Optional[JiraUser]:
         """Get Jira user by Keycloak user ID."""
         async with a_session_maker() as session:
-            return (
-                session.query(JiraUser)
-                .filter(
+            result = await session.execute(
+                select(JiraUser).where(
                     JiraUser.keycloak_user_id == keycloak_user_id,
                     JiraUser.status == 'active',
                 )
-                .first()
             )
+            return result.scalar_one_or_none()
 
     async def get_user_by_keycloak_id_and_workspace(
         self, keycloak_user_id: str, jira_workspace_id: int
     ) -> Optional[JiraUser]:
         """Get Jira user by Keycloak user ID and workspace ID."""
         async with a_session_maker() as session:
-            return (
-                session.query(JiraUser)
-                .filter(
+            result = await session.execute(
+                select(JiraUser).where(
                     JiraUser.keycloak_user_id == keycloak_user_id,
                     JiraUser.jira_workspace_id == jira_workspace_id,
                 )
-                .first()
             )
+            return result.scalar_one_or_none()
 
     async def get_active_user(
         self, jira_user_id: str, jira_workspace_id: int
     ) -> Optional[JiraUser]:
         """Get Jira user by Keycloak user ID and workspace ID."""
         async with a_session_maker() as session:
-            return (
-                session.query(JiraUser)
-                .filter(
+            result = await session.execute(
+                select(JiraUser).where(
                     JiraUser.jira_user_id == jira_user_id,
                     JiraUser.jira_workspace_id == jira_workspace_id,
                     JiraUser.status == 'active',
                 )
-                .first()
             )
+            return result.scalar_one_or_none()
 
     async def update_user_integration_status(
         self, keycloak_user_id: str, status: str
     ) -> JiraUser:
         """Update Jira user integration status."""
         async with a_session_maker() as session:
-            jira_user = (
-                session.query(JiraUser)
-                .filter(JiraUser.keycloak_user_id == keycloak_user_id)
-                .first()
+            result = await session.execute(
+                select(JiraUser).where(JiraUser.keycloak_user_id == keycloak_user_id)
             )
+            jira_user = result.scalar_one_or_none()
 
             if not jira_user:
                 raise ValueError(
@@ -196,24 +192,22 @@ class JiraIntegrationStore:
     async def deactivate_workspace(self, workspace_id: int):
         """Deactivate the workspace and all user links for a given workspace."""
         async with a_session_maker() as session:
-            users = (
-                session.query(JiraUser)
-                .filter(
+            result = await session.execute(
+                select(JiraUser).where(
                     JiraUser.jira_workspace_id == workspace_id,
                     JiraUser.status == 'active',
                 )
-                .all()
             )
+            users = result.scalars().all()
 
             for user in users:
                 user.status = 'inactive'
                 session.add(user)
 
-            workspace = (
-                session.query(JiraWorkspace)
-                .filter(JiraWorkspace.id == workspace_id)
-                .first()
+            result = await session.execute(
+                select(JiraWorkspace).where(JiraWorkspace.id == workspace_id)
             )
+            workspace = result.scalar_one_or_none()
             if workspace:
                 workspace.status = 'inactive'
                 session.add(workspace)
@@ -233,14 +227,13 @@ class JiraIntegrationStore:
     ) -> JiraConversation | None:
         """Get a Jira conversation by issue ID and jira user ID."""
         async with a_session_maker() as session:
-            return (
-                session.query(JiraConversation)
-                .filter(
+            result = await session.execute(
+                select(JiraConversation).where(
                     JiraConversation.issue_id == issue_id,
                     JiraConversation.jira_user_id == jira_user_id,
                 )
-                .first()
             )
+            return result.scalar_one_or_none()
 
     @classmethod
     def get_instance(cls) -> JiraIntegrationStore:
