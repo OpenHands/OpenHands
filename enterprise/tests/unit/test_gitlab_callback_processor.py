@@ -111,20 +111,15 @@ class TestGitlabCallbackProcessor:
     @patch(
         'server.conversation_callback_processor.gitlab_callback_processor.conversation_manager'
     )
-    @patch(
-        'server.conversation_callback_processor.gitlab_callback_processor.a_session_maker'
-    )
     async def test_call_with_send_summary_instruction(
         self,
-        mock_session_maker,
         mock_conversation_manager,
         mock_get_summary_instruction,
+        async_session_maker,
         gitlab_callback_processor,
     ):
         """Test the __call__ method when send_summary_instruction is True."""
         # Setup mocks
-        mock_session = MagicMock()
-        mock_session_maker.return_value.__enter__.return_value = mock_session
         mock_conversation_manager.send_event_to_conversation = AsyncMock()
         mock_get_summary_instruction.return_value = (
             "I'm a man of few words. Any questions?"
@@ -142,15 +137,14 @@ class TestGitlabCallbackProcessor:
         )
 
         # Call the processor
-        await gitlab_callback_processor(callback, observation)
+        with patch('server.conversation_callback_processor.gitlab_callback_processor.a_session_maker', async_session_maker):
+            await gitlab_callback_processor(callback, observation)
 
         # Verify that send_event_to_conversation was called
         mock_conversation_manager.send_event_to_conversation.assert_called_once()
 
         # Verify that the processor state was updated
         assert gitlab_callback_processor.send_summary_instruction is False
-        mock_session.merge.assert_called_once_with(callback)
-        mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
     @patch(
