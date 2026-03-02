@@ -249,7 +249,7 @@ class GithubManager(Manager):
         )
 
         try:
-            msg_info = None
+            msg_info: str = ''
 
             try:
                 user_info = github_view.user_info
