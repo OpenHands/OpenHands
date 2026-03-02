@@ -112,7 +112,7 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
                 callback.set_processor(self)
                 callback.updated_at = datetime.now()
                 async with a_session_maker() as session:
-                    await session.merge(callback)
+                    session.merge(callback)
                     await session.commit()
                 return
 
@@ -133,7 +133,7 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
             callback.status = CallbackStatus.COMPLETED
             callback.updated_at = datetime.now()
             async with a_session_maker() as session:
-                await session.merge(callback)
+                session.merge(callback)
                 await session.commit()
 
         except Exception as e:
