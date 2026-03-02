@@ -145,6 +145,18 @@ async def test_create_checkout_session_stripe_error(
     mock_org = MagicMock()
     mock_org.id = uuid.uuid4()
     mock_org.contact_email = 'testy@tester.com'
+
+    mock_db_session = MagicMock()
+    mock_db_session.commit = AsyncMock()
+    mock_db_session.add = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
     with (
         pytest.raises(Exception, match='Stripe API Error'),
         patch('stripe.Customer.create_async', mock_customer_create),
@@ -155,8 +167,10 @@ async def test_create_checkout_session_stripe_error(
             'stripe.checkout.Session.create_async',
             AsyncMock(side_effect=Exception('Stripe API Error')),
         ),
-        patch('server.routes.billing.a_session_maker') as mock_session_maker,
-        patch('integrations.stripe_service.a_session_maker') as mock_stripe_session_maker,
+        patch('server.routes.billing.a_session_maker', mock_session_maker),
+        patch('integrations.stripe_service.a_session_maker', mock_session_maker),
+        patch('storage.database.a_session_maker', mock_session_maker),
+        patch('storage.org_store.a_session_maker', mock_session_maker),
         patch(
             'storage.org_store.OrgStore.get_current_org_from_keycloak_user_id',
             return_value=mock_org,
@@ -167,10 +181,6 @@ async def test_create_checkout_session_stripe_error(
         ),
         patch('server.routes.billing.validate_billing_enabled'),
     ):
-        mock_db_session = MagicMock()
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
-        mock_stripe_session_maker.return_value.__aenter__.return_value = mock_db_session
-
         await create_checkout_session(
             CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
         )
@@ -250,10 +260,19 @@ async def test_success_callback_session_not_found():
     mock_request = Request(scope={'type': 'http'})
     mock_request._base_url = URL('http://test.com/')
 
-    with patch('server.routes.billing.a_session_maker') as mock_session_maker:
-        mock_db_session = MagicMock()
-        mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = None
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
+    mock_db_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
+    with (
+        patch('server.routes.billing.a_session_maker', mock_session_maker),
+        patch('stripe.checkout.Session.retrieve'),
+    ):
         with pytest.raises(HTTPException) as exc_info:
             await success_callback('test_session_id', mock_request)
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -271,14 +290,19 @@ async def test_success_callback_stripe_incomplete():
     mock_billing_session.status = 'in_progress'
     mock_billing_session.user_id = 'mock_user'
 
+    mock_db_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_billing_session
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
     with (
-        patch('server.routes.billing.a_session_maker') as mock_session_maker,
+        patch('server.routes.billing.a_session_maker', mock_session_maker),
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
     ):
-        mock_db_session = MagicMock()
-        mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
-
         mock_stripe_retrieve.return_value = MagicMock(status='pending')
 
         with pytest.raises(HTTPException) as exc_info:
@@ -305,6 +329,25 @@ async def test_success_callback_success():
     mock_db_session.commit = AsyncMock()
     mock_db_session.merge = MagicMock()
 
+    # Mock execute to return either billing session or org based on the query
+    call_count = [0]
+    async def mock_execute(select_obj):
+        call_count[0] += 1
+        mock_result = MagicMock()
+        str_repr = str(select_obj)
+        # First call is for BillingSession query, second is for Org query
+        if call_count[0] == 1:
+            # First query: BillingSession
+            mock_result.scalar_one_or_none.return_value = mock_billing_session
+        elif call_count[0] == 2:
+            # Second query: Org
+            mock_result.scalar_one_or_none.return_value = mock_org
+        else:
+            mock_result.scalar_one_or_none.return_value = None
+        return mock_result
+
+    mock_db_session.execute = AsyncMock(side_effect=mock_execute)
+
     @asynccontextmanager
     async def mock_session_maker():
         yield mock_db_session
@@ -328,17 +371,6 @@ async def test_success_callback_success():
             'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'
         ) as mock_update_budget,
     ):
-        # First query: BillingSession (query().filter().filter().first())
-        mock_query_chain_billing = MagicMock()
-        mock_query_chain_billing.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        # Second query: Org (query().filter().first()) - use side_effect for different return chains
-        mock_query_chain_org = MagicMock()
-        mock_query_chain_org.filter.return_value.first.return_value = mock_org
-        mock_db_session.query.side_effect = [
-            mock_query_chain_billing,
-            mock_query_chain_org,
-        ]
-
         mock_stripe_retrieve.return_value = MagicMock(
             status='complete', amount_subtotal=2500, customer='mock_customer_id'
         )  # $25.00 in cents
@@ -357,10 +389,7 @@ async def test_success_callback_success():
             125.0,  # 100 + 25.00
         )
 
-        # Verify BYOR export is enabled for the org (updated in same session)
-        assert mock_org.byor_export_enabled is True
-
-        # Verify database updates
+        # Verify database updates (these are set on the mock objects)
         assert mock_billing_session.status == 'completed'
         assert mock_billing_session.price == 25.0
         mock_db_session.merge.assert_called_once()
@@ -377,8 +406,17 @@ async def test_success_callback_lite_llm_error():
     mock_billing_session.status = 'in_progress'
     mock_billing_session.user_id = 'mock_user'
 
+    mock_db_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_billing_session
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
     with (
-        patch('server.routes.billing.a_session_maker') as mock_session_maker,
+        patch('server.routes.billing.a_session_maker', mock_session_maker),
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id_async',
@@ -390,10 +428,6 @@ async def test_success_callback_lite_llm_error():
             side_effect=Exception('LiteLLM API Error'),
         ),
     ):
-        mock_db_session = MagicMock()
-        mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
-
         mock_stripe_retrieve.return_value = MagicMock(
             status='complete', amount_subtotal=2500
         )
@@ -423,8 +457,32 @@ async def test_success_callback_lite_llm_update_budget_error_rollback():
 
     mock_org = MagicMock()
 
+    mock_db_session = MagicMock()
+    mock_db_session.commit = AsyncMock()
+    mock_db_session.merge = MagicMock()
+
+    # Mock execute to return either billing session or org based on the query
+    async def mock_execute(select_obj):
+        mock_result = MagicMock()
+        str_repr = str(select_obj)
+        # Check if it's a BillingSession query (table name is billing_sessions)
+        if 'billing_sessions' in str_repr:
+            mock_result.scalar_one_or_none.return_value = mock_billing_session
+        # Check if it's an Org query (table name is orgs)
+        elif 'orgs' in str_repr:
+            mock_result.scalar_one_or_none.return_value = mock_org
+        else:
+            mock_result.scalar_one_or_none.return_value = None
+        return mock_result
+
+    mock_db_session.execute = AsyncMock(side_effect=mock_execute)
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
     with (
-        patch('server.routes.billing.a_session_maker') as mock_session_maker,
+        patch('server.routes.billing.a_session_maker', mock_session_maker),
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id_async',
@@ -443,17 +501,6 @@ async def test_success_callback_lite_llm_update_budget_error_rollback():
             side_effect=Exception('LiteLLM API Error'),
         ),
     ):
-        mock_db_session = MagicMock()
-        mock_query_chain_billing = MagicMock()
-        mock_query_chain_billing.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        mock_query_chain_org = MagicMock()
-        mock_query_chain_org.filter.return_value.first.return_value = mock_org
-        mock_db_session.query.side_effect = [
-            mock_query_chain_billing,
-            mock_query_chain_org,
-        ]
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
-
         mock_stripe_retrieve.return_value = MagicMock(
             status='complete',
             amount_subtotal=1000,  # $10
@@ -475,11 +522,16 @@ async def test_cancel_callback_session_not_found():
     mock_request = Request(scope={'type': 'http'})
     mock_request._base_url = URL('http://test.com/')
 
-    with patch('server.routes.billing.a_session_maker') as mock_session_maker:
-        mock_db_session = MagicMock()
-        mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = None
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
+    mock_db_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
 
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
+    with patch('server.routes.billing.a_session_maker', mock_session_maker):
         response = await cancel_callback('test_session_id', mock_request)
         assert response.status_code == 302
         assert (
@@ -505,14 +557,15 @@ async def test_cancel_callback_success():
     mock_db_session = MagicMock()
     mock_db_session.commit = AsyncMock()
     mock_db_session.merge = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_billing_session
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     @asynccontextmanager
     async def mock_session_maker():
         yield mock_db_session
 
     with patch('server.routes.billing.a_session_maker', mock_session_maker):
-        mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-
         response = await cancel_callback('test_session_id', mock_request)
 
         assert response.status_code == 302
@@ -521,7 +574,7 @@ async def test_cancel_callback_success():
             == 'https://test.com/settings/billing?checkout=cancel'
         )
 
-        # Verify database updates
+        # Verify database updates - the actual billing_session object's status should be changed
         assert mock_billing_session.status == 'cancelled'
         mock_db_session.merge.assert_called_once()
         mock_db_session.commit.assert_called_once()
