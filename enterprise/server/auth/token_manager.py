@@ -38,7 +38,7 @@ from server.auth.keycloak_manager import get_keycloak_admin, get_keycloak_openid
 from server.config import get_config
 from server.logger import logger
 from sqlalchemy import String as SQLString
-from sqlalchemy import type_coerce
+from sqlalchemy import select, type_coerce
 from storage.auth_token_store import AuthTokenStore
 from storage.database import a_session_maker
 from storage.github_app_installation import GithubAppInstallation
@@ -790,8 +790,6 @@ class TokenManager:
             installation_id: GitHub installation ID (integer or string)
             installation_token: The token to store
         """
-        from sqlalchemy import select
-
         async with a_session_maker() as session:
             # Ensure installation_id is a string
             str_installation_id = str(installation_id)
@@ -823,8 +821,6 @@ class TokenManager:
         Returns:
             The decrypted token if found, None otherwise
         """
-        from sqlalchemy import select
-
         async with a_session_maker() as session:
             # Ensure installation_id is a string and use type_coerce
             str_installation_id = str(installation_id)

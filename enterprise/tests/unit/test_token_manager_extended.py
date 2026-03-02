@@ -464,8 +464,6 @@ class TestOrgTokenMethods:
         # Store
         stored_encrypted_token = None
 
-        mock_installation_store = MagicMock()
-
         def capture_add(obj):
             nonlocal stored_encrypted_token
             stored_encrypted_token = obj.encrypted_token
@@ -478,7 +476,9 @@ class TestOrgTokenMethods:
         mock_session_store.commit = AsyncMock()
 
         mock_context_manager_store = AsyncMock()
-        mock_context_manager_store.__aenter__ = AsyncMock(return_value=mock_session_store)
+        mock_context_manager_store.__aenter__ = AsyncMock(
+            return_value=mock_session_store
+        )
         mock_context_manager_store.__aexit__ = AsyncMock(return_value=None)
 
         with patch(
@@ -496,7 +496,9 @@ class TestOrgTokenMethods:
 
         mock_session_load = AsyncMock()
         mock_result_load = MagicMock()
-        mock_result_load.scalars.return_value.first.return_value = mock_installation_load
+        mock_result_load.scalars.return_value.first.return_value = (
+            mock_installation_load
+        )
         mock_session_load.execute = AsyncMock(return_value=mock_result_load)
 
         mock_context_manager_load = AsyncMock()
