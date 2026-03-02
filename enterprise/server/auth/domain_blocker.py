@@ -1,5 +1,4 @@
 from storage.blocked_email_domain_store import BlockedEmailDomainStore
-from storage.database import session_maker
 
 from openhands.core.logger import openhands_logger as logger
 
@@ -23,7 +22,7 @@ class DomainBlocker:
             logger.debug(f'Error extracting domain from email: {email}', exc_info=True)
             return None
 
-    def is_domain_blocked(self, email: str) -> bool:
+    async def is_domain_blocked(self, email: str) -> bool:
         """Check if email domain is blocked by querying the database directly via SQL.
 
         Supports blocking:
@@ -45,7 +44,7 @@ class DomainBlocker:
 
         try:
             # Query database directly via SQL to check if domain is blocked
-            is_blocked = self.store.is_domain_blocked(domain)
+            is_blocked = await self.store.is_domain_blocked(domain)
 
             if is_blocked:
                 logger.warning(f'Email domain {domain} is blocked for email: {email}')
@@ -63,5 +62,5 @@ class DomainBlocker:
 
 
 # Initialize store and domain blocker
-_store = BlockedEmailDomainStore(session_maker=session_maker)
+_store = BlockedEmailDomainStore()
 domain_blocker = DomainBlocker(store=_store)

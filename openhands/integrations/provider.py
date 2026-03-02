@@ -246,7 +246,6 @@ class ProviderHandler:
         """
         Get repositories from providers
         """
-
         if selected_provider:
             if not page or not per_page:
                 raise ValueError('Failed to provider params for paginating repos')

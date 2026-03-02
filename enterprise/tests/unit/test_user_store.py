@@ -639,6 +639,204 @@ async def test_backfill_contact_name_preserves_custom_value(session_maker):
         assert org.contact_name == 'Custom Corp Name'
 
 
+# --- Tests for backfill_user_email on login ---
+# Existing users created before the email capture fix may have NULL
+# email in the User table. The backfill sets User.email from the IDP
+# when the user next logs in, but preserves manual changes (non-NULL).
+
+
+@pytest.mark.asyncio
+async def test_backfill_user_email_sets_email_when_null(session_maker):
+    """When User.email is NULL, backfill_user_email should set it from user_info."""
+    user_id = str(uuid.uuid4())
+    with session_maker() as session:
+        org = Org(
+            id=uuid.UUID(user_id),
+            name=f'user_{user_id}_org',
+            contact_email='jdoe@example.com',
+        )
+        session.add(org)
+        user = User(
+            id=uuid.UUID(user_id),
+            current_org_id=org.id,
+            email=None,
+            email_verified=None,
+        )
+        session.add(user)
+        session.commit()
+
+    user_info = {
+        'email': 'jdoe@example.com',
+        'email_verified': True,
+    }
+
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
+        await UserStore.backfill_user_email(user_id, user_info)
+
+    with session_maker() as session:
+        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+        assert user.email == 'jdoe@example.com'
+        assert user.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_backfill_user_email_does_not_overwrite_existing(session_maker):
+    """When User.email is already set, backfill_user_email should NOT overwrite it."""
+    user_id = str(uuid.uuid4())
+    with session_maker() as session:
+        org = Org(
+            id=uuid.UUID(user_id),
+            name=f'user_{user_id}_org',
+            contact_email='original@example.com',
+        )
+        session.add(org)
+        user = User(
+            id=uuid.UUID(user_id),
+            current_org_id=org.id,
+            email='custom@example.com',
+            email_verified=True,
+        )
+        session.add(user)
+        session.commit()
+
+    user_info = {
+        'email': 'different@example.com',
+        'email_verified': False,
+    }
+
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
+        await UserStore.backfill_user_email(user_id, user_info)
+
+    with session_maker() as session:
+        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+        assert user.email == 'custom@example.com'
+        assert user.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_backfill_user_email_sets_verified_when_null(session_maker):
+    """When User.email is set but email_verified is NULL, backfill should set email_verified."""
+    user_id = str(uuid.uuid4())
+    with session_maker() as session:
+        org = Org(
+            id=uuid.UUID(user_id),
+            name=f'user_{user_id}_org',
+            contact_email='jdoe@example.com',
+        )
+        session.add(org)
+        user = User(
+            id=uuid.UUID(user_id),
+            current_org_id=org.id,
+            email='jdoe@example.com',
+            email_verified=None,
+        )
+        session.add(user)
+        session.commit()
+
+    user_info = {
+        'email': 'different@example.com',
+        'email_verified': True,
+    }
+
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
+        await UserStore.backfill_user_email(user_id, user_info)
+
+    with session_maker() as session:
+        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+        # email should NOT be overwritten since it's non-NULL
+        assert user.email == 'jdoe@example.com'
+        # email_verified should be set since it was NULL
+        assert user.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_create_user_sets_email_verified_false_from_user_info():
+    """When user_info has email_verified=False, create_user() should set User.email_verified=False."""
+    user_id = str(uuid.uuid4())
+    user_info = {
+        'preferred_username': 'jsmith',
+        'email': 'jsmith@example.com',
+        'email_verified': False,
+    }
+
+    mock_session = MagicMock()
+    mock_sm = MagicMock()
+    mock_sm.return_value.__enter__ = MagicMock(return_value=mock_session)
+    mock_sm.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_settings = Settings(
+        language='en',
+        llm_api_key=SecretStr('test-key'),
+        llm_base_url='http://test.url',
+    )
+
+    mock_role = MagicMock()
+    mock_role.id = 1
+
+    with (
+        patch('storage.user_store.session_maker', mock_sm),
+        patch.object(
+            UserStore,
+            'create_default_settings',
+            new_callable=AsyncMock,
+            return_value=mock_settings,
+        ),
+        patch('storage.user_store.RoleStore.get_role_by_name', return_value=mock_role),
+        patch(
+            'storage.org_member_store.OrgMemberStore.get_kwargs_from_settings',
+            return_value={'llm_model': None, 'llm_base_url': None},
+        ),
+    ):
+        mock_session.commit.side_effect = _StopAfterUserCreation
+        with pytest.raises(_StopAfterUserCreation):
+            await UserStore.create_user(user_id, user_info)
+
+    user = mock_session.add.call_args_list[1][0][0]
+    assert isinstance(user, User)
+    assert user.email == 'jsmith@example.com'
+    assert user.email_verified is False
+
+
+@pytest.mark.asyncio
+async def test_create_user_preserves_org_contact_email():
+    """create_user() must still set Org.contact_email (no regression)."""
+    user_id = str(uuid.uuid4())
+    user_info = {
+        'preferred_username': 'jdoe',
+        'email': 'jdoe@example.com',
+        'email_verified': True,
+    }
+
+    mock_session = MagicMock()
+    mock_sm = MagicMock()
+    mock_sm.return_value.__enter__ = MagicMock(return_value=mock_session)
+    mock_sm.return_value.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch('storage.user_store.session_maker', mock_sm),
+        patch.object(
+            UserStore,
+            'create_default_settings',
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ):
+        await UserStore.create_user(user_id, user_info)
+
+    org = mock_session.add.call_args_list[0][0][0]
+    assert isinstance(org, Org)
+    assert org.contact_email == 'jdoe@example.com'
+
+
 def test_update_current_org_success(session_maker):
     """
     GIVEN: User exists in database
@@ -680,3 +878,100 @@ def test_update_current_org_user_not_found(session_maker):
 
     # Assert
     assert result is None
+
+
+# --- Tests for update_user_email ---
+# update_user_email() should unconditionally overwrite User.email and/or email_verified.
+# Unlike backfill_user_email(), it does not check for NULL before writing.
+
+
+@pytest.mark.asyncio
+async def test_update_user_email_overwrites_existing(session_maker):
+    """update_user_email() should overwrite existing email and email_verified values."""
+    user_id = str(uuid.uuid4())
+    with session_maker() as session:
+        org = Org(
+            id=uuid.UUID(user_id),
+            name=f'user_{user_id}_org',
+            contact_email='old@example.com',
+        )
+        session.add(org)
+        user = User(
+            id=uuid.UUID(user_id),
+            current_org_id=org.id,
+            email='old@example.com',
+            email_verified=True,
+        )
+        session.add(user)
+        session.commit()
+
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
+        await UserStore.update_user_email(
+            user_id, email='new@example.com', email_verified=False
+        )
+
+    with session_maker() as session:
+        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+        assert user.email == 'new@example.com'
+        assert user.email_verified is False
+
+
+@pytest.mark.asyncio
+async def test_update_user_email_updates_only_email_verified(session_maker):
+    """update_user_email() with email=None should only update email_verified."""
+    user_id = str(uuid.uuid4())
+    with session_maker() as session:
+        org = Org(
+            id=uuid.UUID(user_id),
+            name=f'user_{user_id}_org',
+            contact_email='keep@example.com',
+        )
+        session.add(org)
+        user = User(
+            id=uuid.UUID(user_id),
+            current_org_id=org.id,
+            email='keep@example.com',
+            email_verified=False,
+        )
+        session.add(user)
+        session.commit()
+
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
+        await UserStore.update_user_email(user_id, email_verified=True)
+
+    with session_maker() as session:
+        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+        assert user.email == 'keep@example.com'
+        assert user.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_update_user_email_noop_when_both_none():
+    """update_user_email() with both args None should not open a session."""
+    user_id = str(uuid.uuid4())
+    mock_session_maker = MagicMock()
+
+    with patch('storage.user_store.a_session_maker', mock_session_maker):
+        await UserStore.update_user_email(user_id, email=None, email_verified=None)
+
+    mock_session_maker.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_user_email_missing_user_returns_without_error(session_maker):
+    """update_user_email() with a non-existent user_id should return without error."""
+    user_id = str(uuid.uuid4())
+
+    with patch(
+        'storage.user_store.a_session_maker',
+        _wrap_sync_as_async_session_maker(session_maker),
+    ):
+        await UserStore.update_user_email(
+            user_id, email='new@example.com', email_verified=False
+        )

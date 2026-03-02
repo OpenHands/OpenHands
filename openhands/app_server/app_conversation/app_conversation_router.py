@@ -18,6 +18,7 @@ from openhands.app_server.services.httpx_client_injector import (
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext
+from openhands.server.dependencies import get_dependencies
 
 # Handle anext compatibility for Python < 3.10
 if sys.version_info >= (3, 10):
@@ -74,7 +75,11 @@ from openhands.app_server.utils.docker_utils import (
 from openhands.sdk.context.skills import KeywordTrigger, TaskTrigger
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
-router = APIRouter(prefix='/app-conversations', tags=['Conversations'])
+# We use the get_dependencies method here to signal to the OpenAPI docs that this endpoint
+# is protected. The actual protection is provided by SetAuthCookieMiddleware
+router = APIRouter(
+    prefix='/app-conversations', tags=['Conversations'], dependencies=get_dependencies()
+)
 logger = logging.getLogger(__name__)
 app_conversation_service_dependency = depends_app_conversation_service()
 app_conversation_start_task_service_dependency = (

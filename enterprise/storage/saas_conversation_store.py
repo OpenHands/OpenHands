@@ -234,6 +234,10 @@ class SaasConversationStore(ConversationStore):
         cls, config: OpenHandsConfig, user_id: str | None
     ) -> ConversationStore:
         # user_id should not be None in SaaS, should we raise?
-        user = await UserStore.get_user_by_id_async(user_id)
+        # Use sync version because this method can be called from call_async_from_sync
+        # (e.g., from _create_conversation_update_callback in standalone_conversation_manager.py)
+        # which creates a new event loop. Using async DB operations in that context would
+        # cause asyncpg connection errors since connections are tied to the original event loop.
+        user = UserStore.get_user_by_id(user_id)
         org_id = user.current_org_id if user else None
         return SaasConversationStore(str(user_id), org_id, session_maker)
