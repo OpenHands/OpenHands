@@ -308,10 +308,11 @@ async def jira_events(
             logger.info(f'Processing new Jira webhook event: {signature}')
             redis_client.setex(key, 300, '1')
 
-        # Process the webhook
+        # Process the webhook in background after returning response.
+        # Note: For async functions, BackgroundTasks runs them in the same event loop
+        # (not a thread pool), so asyncpg connections work correctly.
         message_payload = {'payload': payload}
         message = Message(source=SourceType.JIRA, message=message_payload)
-
         background_tasks.add_task(jira_manager.receive_message, message)
 
         return JSONResponse({'success': True})
