@@ -155,9 +155,9 @@ class ProactiveConversationStore:
 
     @classmethod
     async def get_instance(cls) -> ProactiveConversationStore:
-        """Get an instance of the GitlabWebhookStore.
+        """Get an instance of the ProactiveConversationStore.
 
         Returns:
-            An instance of GitlabWebhookStore
+            An instance of ProactiveConversationStore
         """
         return ProactiveConversationStore()
