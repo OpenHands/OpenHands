@@ -388,5 +388,4 @@ async def _check_idp(
         access_token.get_secret_value(), ProviderType(idp)
     ):
         return default_value
-
     return None

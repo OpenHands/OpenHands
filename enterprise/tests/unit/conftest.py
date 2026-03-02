@@ -8,10 +8,16 @@ from server.verified_models.verified_model_service import (
     StoredVerifiedModel,  # noqa: F401
 )
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import sessionmaker
-from storage.base import Base
 
 # Anything not loaded here may not have a table created for it.
+from storage.api_key import ApiKey  # noqa: F401
+from storage.base import Base
 from storage.billing_session import BillingSession
 from storage.conversation_work import ConversationWork
 from storage.device_code import DeviceCode  # noqa: F401
@@ -30,9 +36,18 @@ from storage.stripe_customer import StripeCustomer
 from storage.user import User
 
 
+@pytest.fixture(scope='function')
+def db_path(tmp_path):
+    """Create a unique temp file path for each test."""
+    return str(tmp_path / 'test.db')
+
+
 @pytest.fixture
-def engine():
-    engine = create_engine('sqlite:///:memory:')
+def engine(db_path):
+    """Create a sync engine with tables using file-based DB."""
+    engine = create_engine(
+        f'sqlite:///{db_path}', connect_args={'check_same_thread': False}
+    )
     Base.metadata.create_all(engine)
     return engine
 
@@ -40,6 +55,36 @@ def engine():
 @pytest.fixture
 def session_maker(engine):
     return sessionmaker(bind=engine)
+
+
+@pytest.fixture
+def async_engine(db_path):
+    """Create an async engine using the SAME file-based database."""
+    async_engine = create_async_engine(
+        f'sqlite+aiosqlite:///{db_path}',
+        connect_args={'check_same_thread': False},
+    )
+
+    async def create_tables():
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    # Run the async function synchronously
+    import asyncio
+
+    asyncio.run(create_tables())
+    return async_engine
+
+
+@pytest.fixture
+async def async_session_maker(async_engine):
+    """Create an async session maker bound to the async engine."""
+    async_session_maker = async_sessionmaker(
+        bind=async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    return async_session_maker
 
 
 def add_minimal_fixtures(session_maker):

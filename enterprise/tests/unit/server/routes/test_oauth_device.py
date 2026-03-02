@@ -145,9 +145,11 @@ class TestDeviceToken:
         mock_store.get_by_device_code.return_value = mock_device
         mock_store.update_poll_time.return_value = True
 
-        # Mock API key retrieval
+        # Mock API key retrieval - use AsyncMock for async method
         mock_api_key_store = MagicMock()
-        mock_api_key_store.retrieve_api_key_by_name.return_value = 'test-api-key'
+        mock_api_key_store.retrieve_api_key_by_name = AsyncMock(
+            return_value='test-api-key'
+        )
         mock_api_key_class.get_instance.return_value = mock_api_key_store
 
         result = await device_token(device_code=device_code)

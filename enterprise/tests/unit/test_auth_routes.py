@@ -595,7 +595,7 @@ async def test_keycloak_callback_blocked_email_domain(mock_request):
         mock_user_store.backfill_user_email = AsyncMock()
 
         mock_domain_blocker.is_active.return_value = True
-        mock_domain_blocker.is_domain_blocked.return_value = True
+        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=True)
 
         # Act
         result = await keycloak_callback(
@@ -660,7 +660,7 @@ async def test_keycloak_callback_allowed_email_domain(mock_request):
         mock_user_store.backfill_user_email = AsyncMock()
 
         mock_domain_blocker.is_active.return_value = True
-        mock_domain_blocker.is_domain_blocked.return_value = False
+        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -725,7 +725,7 @@ async def test_keycloak_callback_domain_blocking_inactive(mock_request):
         mock_user_store.backfill_user_email = AsyncMock()
 
         mock_domain_blocker.is_active.return_value = False
-        mock_domain_blocker.is_domain_blocked.return_value = False
+        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -1221,7 +1221,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1284,7 +1284,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_user_store.backfill_contact_name = AsyncMock()
             mock_user_store.backfill_user_email = AsyncMock()
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1371,7 +1371,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1460,7 +1460,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1546,7 +1546,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1631,7 +1631,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1713,7 +1713,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Act
             await keycloak_callback(
@@ -1781,7 +1781,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Act
             await keycloak_callback(code='test_code', state=state, request=mock_request)
@@ -1855,7 +1855,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             mock_recaptcha_service.create_assessment.side_effect = Exception(
                 'Service error'
@@ -1924,7 +1924,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_user_store.backfill_contact_name = AsyncMock()
             mock_user_store.backfill_user_email = AsyncMock()
 
-            mock_domain_blocker.is_domain_blocked.return_value = False
+            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
