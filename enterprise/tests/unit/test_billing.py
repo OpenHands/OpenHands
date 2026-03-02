@@ -1,4 +1,5 @@
 import uuid
+from contextlib import asynccontextmanager
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -176,7 +177,7 @@ async def test_create_checkout_session_stripe_error(
 
 
 @pytest.mark.asyncio
-async def test_create_checkout_session_success(session_maker, mock_checkout_request):
+async def test_create_checkout_session_success(mock_checkout_request):
     """Test successful creation of checkout session."""
 
     mock_session = MagicMock()
@@ -185,36 +186,28 @@ async def test_create_checkout_session_success(session_maker, mock_checkout_requ
     mock_create = AsyncMock(return_value=mock_session)
     mock_create.return_value = mock_session
 
-    mock_customer = stripe.Customer(
-        id='mock-customer', metadata={'user_id': 'mock-user'}
-    )
-    mock_customer_create = AsyncMock(return_value=mock_customer)
-    mock_org = MagicMock()
-    mock_org_id = uuid.uuid4()
-    mock_org.id = mock_org_id
-    mock_org.contact_email = 'testy@tester.com'
+    # Mock customer info that would be returned by find_or_create_customer_by_user_id
+    mock_customer_info = {'customer_id': 'mock-customer', 'org_id': uuid.uuid4()}
+
+    # Create an async context manager mock for the database session
+    mock_db_session = MagicMock()
+    mock_db_session.commit = AsyncMock()
+    mock_db_session.add = MagicMock()
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
     with (
-        patch('stripe.Customer.create_async', mock_customer_create),
-        patch(
-            'stripe.Customer.search_async', AsyncMock(return_value=MagicMock(data=[]))
-        ),
         patch('stripe.checkout.Session.create_async', mock_create),
-        patch('server.routes.billing.a_session_maker') as mock_session_maker,
-        patch('integrations.stripe_service.a_session_maker') as mock_stripe_session_maker,
+        patch('server.routes.billing.a_session_maker', mock_session_maker),
+        patch('integrations.stripe_service.a_session_maker', mock_session_maker),
         patch(
-            'storage.org_store.OrgStore.get_current_org_from_keycloak_user_id',
-            return_value=mock_org,
-        ),
-        patch(
-            'server.auth.token_manager.TokenManager.get_user_info_from_user_id',
-            AsyncMock(return_value={'email': 'testy@tester.com'}),
+            'integrations.stripe_service.find_or_create_customer_by_user_id',
+            AsyncMock(return_value=mock_customer_info),
         ),
         patch('server.routes.billing.validate_billing_enabled'),
     ):
-        mock_db_session = MagicMock()
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
-        mock_stripe_session_maker.return_value.__aenter__.return_value = mock_db_session
-
         result = await create_checkout_session(
             CreateCheckoutSessionRequest(amount=25), mock_checkout_request, 'mock_user'
         )
@@ -307,8 +300,17 @@ async def test_success_callback_success():
 
     mock_org = MagicMock()
 
+    # Create an async context manager mock for the database session
+    mock_db_session = MagicMock()
+    mock_db_session.commit = AsyncMock()
+    mock_db_session.merge = MagicMock()
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
     with (
-        patch('server.routes.billing.a_session_maker') as mock_session_maker,
+        patch('server.routes.billing.a_session_maker', mock_session_maker),
         patch('stripe.checkout.Session.retrieve') as mock_stripe_retrieve,
         patch(
             'storage.user_store.UserStore.get_user_by_id_async',
@@ -326,19 +328,16 @@ async def test_success_callback_success():
             'storage.lite_llm_manager.LiteLlmManager.update_team_and_users_budget'
         ) as mock_update_budget,
     ):
-        mock_db_session = MagicMock()
         # First query: BillingSession (query().filter().filter().first())
-        mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        # Second query: Org (query().filter().first()) - use side_effect for different return chains
         mock_query_chain_billing = MagicMock()
         mock_query_chain_billing.filter.return_value.filter.return_value.first.return_value = mock_billing_session
+        # Second query: Org (query().filter().first()) - use side_effect for different return chains
         mock_query_chain_org = MagicMock()
         mock_query_chain_org.filter.return_value.first.return_value = mock_org
         mock_db_session.query.side_effect = [
             mock_query_chain_billing,
             mock_query_chain_org,
         ]
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         mock_stripe_retrieve.return_value = MagicMock(
             status='complete', amount_subtotal=2500, customer='mock_customer_id'
@@ -502,10 +501,17 @@ async def test_cancel_callback_success():
     mock_billing_session = MagicMock()
     mock_billing_session.status = 'in_progress'
 
-    with patch('server.routes.billing.a_session_maker') as mock_session_maker:
-        mock_db_session = MagicMock()
+    # Create an async context manager mock for the database session
+    mock_db_session = MagicMock()
+    mock_db_session.commit = AsyncMock()
+    mock_db_session.merge = MagicMock()
+
+    @asynccontextmanager
+    async def mock_session_maker():
+        yield mock_db_session
+
+    with patch('server.routes.billing.a_session_maker', mock_session_maker):
         mock_db_session.query.return_value.filter.return_value.filter.return_value.first.return_value = mock_billing_session
-        mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
         response = await cancel_callback('test_session_id', mock_request)
 
