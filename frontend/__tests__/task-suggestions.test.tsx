@@ -38,7 +38,7 @@ describe("TaskSuggestions empty states", () => {
 
   it("OSS mode + no providers → shows Git provider empty state", () => {
     (useConfig as any).mockReturnValue({
-      data: { APP_MODE: "oss" },
+      data: { app_mode: "oss" },
     });
 
     (useUserProviders as any).mockReturnValue({
@@ -58,7 +58,7 @@ describe("TaskSuggestions empty states", () => {
 
   it("OSS mode + providers exist but no tasks → shows no tasks message", () => {
     (useConfig as any).mockReturnValue({
-      data: { APP_MODE: "oss" },
+      data: { app_mode: "oss" },
     });
 
     (useUserProviders as any).mockReturnValue({
