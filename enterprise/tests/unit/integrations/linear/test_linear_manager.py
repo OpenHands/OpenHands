@@ -1049,7 +1049,9 @@ class TestSendMessage:
 
         linear_manager._query_api = AsyncMock(return_value=mock_response)
 
-        result = await linear_manager.send_message('Test message', 'issue_id', 'api_key')
+        result = await linear_manager.send_message(
+            'Test message', 'issue_id', 'api_key'
+        )
 
         assert result == mock_response
         linear_manager._query_api.assert_called_once()
