@@ -274,9 +274,8 @@ class TestSendMessage:
                 return_value=mock_response
             )
 
-            message = Message(source=SourceType.JIRA, message='Test message')
             result = await jira_manager.send_message(
-                message,
+                'Test message',
                 'PROJ-123',
                 'cloud-123',
                 'service@test.com',
