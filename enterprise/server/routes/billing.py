@@ -233,30 +233,29 @@ async def success_callback(session_id: str, request: Request):
             )
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-    stripe_session = stripe.checkout.Session.retrieve(session_id)
-    if stripe_session.status != 'complete':
-        # Hopefully this never happens - we get a redirect from stripe where the payment is not yet complete
-        # (Or somebody tried to manually build the URL)
-        logger.error(
-            'payment_not_complete',
-            extra={
-                'checkout_session_id': session_id,
-                'stripe_customer_id': stripe_session.customer,
-            },
+        stripe_session = stripe.checkout.Session.retrieve(session_id)
+        if stripe_session.status != 'complete':
+            # Hopefully this never happens - we get a redirect from stripe where the payment is not yet complete
+            # (Or somebody tried to manually build the URL)
+            logger.error(
+                'payment_not_complete',
+                extra={
+                    'checkout_session_id': session_id,
+                    'stripe_customer_id': stripe_session.customer,
+                },
+            )
+            raise HTTPException(status.HTTP_400_BAD_REQUEST)
+
+        user = await UserStore.get_user_by_id_async(billing_session.user_id)
+        user_team_info = await LiteLlmManager.get_user_team_info(
+            billing_session.user_id, str(user.current_org_id)
         )
-        raise HTTPException(status.HTTP_400_BAD_REQUEST)
+        amount_subtotal = stripe_session.amount_subtotal or 0
+        add_credits = amount_subtotal / 100
+        max_budget, _ = LiteLlmManager.get_budget_from_team_info(
+            user_team_info, billing_session.user_id, str(user.current_org_id)
+        )
 
-    user = await UserStore.get_user_by_id_async(billing_session.user_id)
-    user_team_info = await LiteLlmManager.get_user_team_info(
-        billing_session.user_id, str(user.current_org_id)
-    )
-    amount_subtotal = stripe_session.amount_subtotal or 0
-    add_credits = amount_subtotal / 100
-    max_budget, _ = LiteLlmManager.get_budget_from_team_info(
-        user_team_info, billing_session.user_id, str(user.current_org_id)
-    )
-
-    async with a_session_maker() as session:
         result = await session.execute(select(Org).where(Org.id == user.current_org_id))
         org = result.scalar_one_or_none()
         new_max_budget = max_budget + add_credits
