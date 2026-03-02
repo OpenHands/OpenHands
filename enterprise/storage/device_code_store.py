@@ -11,8 +11,6 @@ from sqlalchemy.exc import IntegrityError
 from storage.database import a_session_maker
 from storage.device_code import DeviceCode
 
-from openhands.core.logger import openhands_logger as logger
-
 
 class DeviceCodeStore:
     """Store for managing OAuth 2.0 device codes."""
