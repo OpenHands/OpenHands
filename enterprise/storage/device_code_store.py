@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import secrets
 import string
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -15,7 +14,6 @@ from storage.device_code import DeviceCode
 from openhands.core.logger import openhands_logger as logger
 
 
-@dataclass
 class DeviceCodeStore:
     """Store for managing OAuth 2.0 device codes."""
 
