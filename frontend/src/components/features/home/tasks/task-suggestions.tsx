@@ -23,7 +23,7 @@ export function TaskSuggestions({ filterFor }: TaskSuggestionsProps) {
   const { data: tasks, isLoading } = useSuggestedTasks();
   const { providers } = useUserProviders();
 
-  const isOSS = config?.APP_MODE === "oss";
+  const isOSS = config?.app_mode === "oss";
   const hasNoProviders = isOSS && providers.length === 0;
 
   const suggestedTasks = filterFor
