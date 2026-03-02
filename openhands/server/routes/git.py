@@ -83,15 +83,12 @@ async def get_user_repositories(
     access_token: SecretStr | None = Depends(get_access_token),
     user_id: str | None = Depends(get_user_id),
 ) -> list[Repository] | JSONResponse:
-    logger.info('trace_get_user_repositories_1')
     if provider_tokens:
-        logger.info('trace_get_user_repositories_2')
         client = ProviderHandler(
             provider_tokens=provider_tokens,
             external_auth_token=access_token,
             external_auth_id=user_id,
         )
-        logger.info('trace_get_user_repositories_3')
         try:
             return await client.get_repositories(
                 sort,

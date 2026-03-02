@@ -246,32 +246,24 @@ class ProviderHandler:
         """
         Get repositories from providers
         """
-        logger.info('trace_get_repositories_1')
         if selected_provider:
             if not page or not per_page:
                 raise ValueError('Failed to provider params for paginating repos')
 
-            logger.info('trace_get_repositories_2')
             service = self.get_service(selected_provider)
-            logger.info('trace_get_repositories_3')
             return await service.get_paginated_repos(
                 page, per_page, sort, installation_id
             )
 
-        logger.info('trace_get_repositories_4')
         all_repos: list[Repository] = []
         for provider in self.provider_tokens:
             try:
-                logger.info('trace_get_repositories_5')
                 service = self.get_service(provider)
-                logger.info('trace_get_repositories_6')
                 service_repos = await service.get_all_repositories(sort, app_mode)
-                logger.info('trace_get_repositories_7')
                 all_repos.extend(service_repos)
             except Exception as e:
                 logger.warning(f'Error fetching repos from {provider}: {e}')
 
-        logger.info('trace_get_repositories_8')
         return all_repos
 
     async def get_suggested_tasks(self) -> list[SuggestedTask]:
