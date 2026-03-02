@@ -234,7 +234,6 @@ class TestSlackCallbackProcessor:
         mock_slack_user = MagicMock()
         mock_saas_user_auth = MagicMock()
         mock_slack_view = MagicMock()
-        mock_outgoing_message = MagicMock()
 
         # Mock the authenticate_user method on slack_manager
         mock_slack_manager.authenticate_user = AsyncMock(
@@ -247,9 +246,6 @@ class TestSlackCallbackProcessor:
         ) as mock_slack_factory:
             mock_slack_factory.create_slack_view_from_payload.return_value = (
                 mock_slack_view
-            )
-            mock_slack_manager.create_outgoing_message.return_value = (
-                mock_outgoing_message
             )
             mock_slack_manager.send_message = AsyncMock()
 
@@ -283,12 +279,9 @@ class TestSlackCallbackProcessor:
             )
             assert message_call.message['team_id'] == slack_callback_processor.team_id
 
-            # Verify the slack manager methods were called correctly
-            mock_slack_manager.create_outgoing_message.assert_called_once_with(
-                'Test message'
-            )
+            # Verify send_message was called with the string directly
             mock_slack_manager.send_message.assert_called_once_with(
-                mock_outgoing_message, mock_slack_view
+                'Test message', mock_slack_view
             )
 
     @patch('server.conversation_callback_processor.slack_callback_processor.logger')

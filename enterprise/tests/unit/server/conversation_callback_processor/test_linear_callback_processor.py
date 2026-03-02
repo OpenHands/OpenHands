@@ -32,7 +32,6 @@ async def test_send_comment_to_linear_success(mock_linear_manager, processor):
     )
     mock_linear_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
     mock_linear_manager.send_message = AsyncMock()
-    mock_linear_manager.create_outgoing_message.return_value = MagicMock()
 
     # Action
     await processor._send_comment_to_linear('This is a summary.')
@@ -125,7 +124,6 @@ async def test_call_sends_summary_to_linear(
         return_value=mock_workspace
     )
     mock_linear_manager.send_message = AsyncMock()
-    mock_linear_manager.create_outgoing_message.return_value = MagicMock()
 
     with patch(
         'server.conversation_callback_processor.linear_callback_processor.asyncio.create_task'
@@ -200,7 +198,6 @@ async def test_send_comment_to_linear_api_error(mock_linear_manager, processor):
     )
     mock_linear_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
     mock_linear_manager.send_message = AsyncMock(side_effect=Exception('API Error'))
-    mock_linear_manager.create_outgoing_message.return_value = MagicMock()
 
     # Action - should not raise exception, but handle it gracefully
     await processor._send_comment_to_linear('This is a summary.')
@@ -328,20 +325,15 @@ async def test_send_comment_to_linear_message_construction(
     )
     mock_linear_manager.token_manager.decrypt_text.return_value = 'decrypted_key'
     mock_linear_manager.send_message = AsyncMock()
-    mock_outgoing_message = MagicMock()
-    mock_linear_manager.create_outgoing_message.return_value = mock_outgoing_message
 
     test_message = 'This is a test summary message.'
 
     # Action
     await processor._send_comment_to_linear(test_message)
 
-    # Assert
-    mock_linear_manager.create_outgoing_message.assert_called_once_with(
-        msg=test_message
-    )
+    # Assert - send_message now receives the string directly
     mock_linear_manager.send_message.assert_called_once_with(
-        mock_outgoing_message,
+        test_message,
         'TEST-123',  # issue_id
         'decrypted_key',  # api_key
     )
@@ -383,7 +375,6 @@ async def test_call_creates_background_task_for_sending(
         return_value=mock_workspace
     )
     mock_linear_manager.send_message = AsyncMock()
-    mock_linear_manager.create_outgoing_message.return_value = MagicMock()
 
     with patch(
         'server.conversation_callback_processor.linear_callback_processor.asyncio.create_task'
