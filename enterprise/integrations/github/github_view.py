@@ -152,9 +152,7 @@ class GithubIssue(ResolverViewInterface):
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
-        secrets_store = SaasSecretsStore(
-            self.user_info.keycloak_user_id, get_config()
-        )
+        secrets_store = SaasSecretsStore(self.user_info.keycloak_user_id, get_config())
         user_secrets = await secrets_store.load()
 
         return user_secrets.custom_secrets if user_secrets else None
