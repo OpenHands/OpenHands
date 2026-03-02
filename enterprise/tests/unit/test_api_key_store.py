@@ -114,9 +114,7 @@ async def test_validate_api_key_valid(api_key_store, async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_expired(
-    api_key_store, async_session_maker
-):
+async def test_validate_api_key_expired(api_key_store, async_session_maker):
     """Test validating an expired API key."""
     # Setup - create an expired API key in the database
     user_id = str(uuid.uuid4())
@@ -415,9 +413,7 @@ async def test_retrieve_mcp_api_key_not_found(
 
 
 @pytest.mark.asyncio
-async def test_retrieve_api_key_by_name(
-    api_key_store, async_session_maker
-):
+async def test_retrieve_api_key_by_name(api_key_store, async_session_maker):
     """Test retrieving an API key by name."""
     # Setup
     user_id = str(uuid.uuid4())
@@ -457,9 +453,7 @@ async def test_retrieve_api_key_by_name_not_found(api_key_store, async_session_m
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key_by_name(
-    api_key_store, async_session_maker
-):
+async def test_delete_api_key_by_name(api_key_store, async_session_maker):
     """Test deleting an API key by name."""
     # Setup
     user_id = str(uuid.uuid4())

@@ -19,10 +19,7 @@ from server.routes.billing import (
     has_payment_method,
     success_callback,
 )
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from starlette.datastructures import URL
-from storage.stripe_customer import Base as StripeCustomerBase
 
 
 @pytest.fixture
@@ -315,10 +312,10 @@ async def test_success_callback_success():
 
     # Mock execute to return either billing session or org based on the query
     call_count = [0]
+
     async def mock_execute(select_obj):
         call_count[0] += 1
         mock_result = MagicMock()
-        str_repr = str(select_obj)
         # First call is for BillingSession query, second is for Org query
         if call_count[0] == 1:
             # First query: BillingSession

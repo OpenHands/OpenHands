@@ -9,9 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from integrations import stripe_service
 from pydantic import BaseModel
-from sqlalchemy import select
 from server.constants import STRIPE_API_KEY
 from server.logger import logger
+from sqlalchemy import select
 from starlette.datastructures import URL
 from storage.billing_session import BillingSession
 from storage.database import a_session_maker
@@ -257,9 +257,7 @@ async def success_callback(session_id: str, request: Request):
     )
 
     async with a_session_maker() as session:
-        result = await session.execute(
-            select(Org).where(Org.id == user.current_org_id)
-        )
+        result = await session.execute(select(Org).where(Org.id == user.current_org_id))
         org = result.scalar_one_or_none()
         new_max_budget = max_budget + add_credits
 

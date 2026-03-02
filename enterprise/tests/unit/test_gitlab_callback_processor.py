@@ -2,7 +2,7 @@
 Tests for the GitlabCallbackProcessor.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from integrations.gitlab.gitlab_view import GitlabIssueComment
@@ -137,7 +137,10 @@ class TestGitlabCallbackProcessor:
         )
 
         # Call the processor
-        with patch('server.conversation_callback_processor.gitlab_callback_processor.a_session_maker', async_session_maker):
+        with patch(
+            'server.conversation_callback_processor.gitlab_callback_processor.a_session_maker',
+            async_session_maker,
+        ):
             await gitlab_callback_processor(callback, observation)
 
         # Verify that send_event_to_conversation was called
@@ -185,7 +188,10 @@ class TestGitlabCallbackProcessor:
         )
 
         # Call the processor
-        with patch('server.conversation_callback_processor.gitlab_callback_processor.a_session_maker', async_session_maker):
+        with patch(
+            'server.conversation_callback_processor.gitlab_callback_processor.a_session_maker',
+            async_session_maker,
+        ):
             await gitlab_callback_processor(callback, observation)
 
         # Verify that extract_summary_from_conversation_manager was called

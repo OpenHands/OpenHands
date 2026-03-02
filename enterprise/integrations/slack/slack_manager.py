@@ -1,7 +1,6 @@
 import re
 
 import jwt
-from sqlalchemy import select
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
 from integrations.slack.slack_types import SlackViewInterface, StartingConvoException
@@ -23,6 +22,7 @@ from server.constants import SLACK_CLIENT_ID
 from server.utils.conversation_callback_utils import register_callback_processor
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.web.async_client import AsyncWebClient
+from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.slack_user import SlackUser
 

@@ -62,7 +62,9 @@ async def test_find_customer_id_by_user_id_checks_db_first(
     """Test that find_customer_id_by_user_id checks the database first"""
 
     # Add test org and user to the db
-    test_user_id, test_org_id = add_test_org_and_user(session_maker_with_minimal_fixtures)
+    test_user_id, test_org_id = add_test_org_and_user(
+        session_maker_with_minimal_fixtures
+    )
 
     # Create stripe customer in the db
     async with async_session_maker() as session:
@@ -104,7 +106,9 @@ async def test_find_customer_id_by_user_id_falls_back_to_stripe(
     """Test that find_customer_id_by_user_id falls back to Stripe if not found in the database"""
 
     # Add test org and user to the db
-    test_user_id, test_org_id = add_test_org_and_user(session_maker_with_minimal_fixtures)
+    test_user_id, test_org_id = add_test_org_and_user(
+        session_maker_with_minimal_fixtures
+    )
 
     # Set up the mock for stripe.Customer.search_async
     mock_customer = stripe.Customer(id='cus_test123')
@@ -143,7 +147,9 @@ async def test_create_customer_stores_id_in_db(
     """Test that create_customer stores the customer ID in the database"""
 
     # Add test org and user to the db
-    test_user_id, test_org_id = add_test_org_and_user(session_maker_with_minimal_fixtures)
+    test_user_id, test_org_id = add_test_org_and_user(
+        session_maker_with_minimal_fixtures
+    )
 
     # Set up the mock for stripe.Customer.search_async and create_async
     mock_search = AsyncMock(return_value=MagicMock(data=[]))
@@ -160,7 +166,10 @@ async def test_create_customer_stores_id_in_db(
         patch('stripe.Customer.search_async', mock_search),
         patch('stripe.Customer.create_async', mock_create_async),
         patch('integrations.stripe_service.call_sync_from_async') as mock_call_sync,
-        patch('integrations.stripe_service.find_customer_id_by_org_id', new_callable=AsyncMock) as mock_find_customer,
+        patch(
+            'integrations.stripe_service.find_customer_id_by_org_id',
+            new_callable=AsyncMock,
+        ) as mock_find_customer,
     ):
         # Mock the call_sync_from_async to return the org
         mock_call_sync.return_value = mock_org
@@ -176,6 +185,7 @@ async def test_create_customer_stores_id_in_db(
     # Verify that the stripe customer was stored in the db
     async with async_session_maker() as session:
         from sqlalchemy import select
+
         stmt = select(StripeCustomer).where(
             StripeCustomer.keycloak_user_id == str(test_user_id)
         )

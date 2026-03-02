@@ -34,8 +34,8 @@ from server.services.org_invitation_service import (
     OrgInvitationService,
     UserAlreadyMemberError,
 )
-from storage.database import a_session_maker
 from sqlalchemy import select
+from storage.database import a_session_maker
 from storage.user import User
 from storage.user_store import UserStore
 

@@ -10,13 +10,10 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import select
 from storage.org import Org
-from storage.org_member import OrgMember
-from storage.role import Role
 from storage.user import User
 from storage.user_store import UserStore
 
 from openhands.storage.data_models.settings import Settings
-
 
 # --- Fixtures ---
 
@@ -138,12 +135,8 @@ async def test_get_user_by_id_async_user_not_found(async_session_maker):
     with patch('storage.user_store.a_session_maker', async_session_maker):
         # Mock the lock functions to avoid Redis dependency
         with (
-            patch.object(
-                UserStore, '_acquire_user_creation_lock', return_value=True
-            ),
-            patch.object(
-                UserStore, '_release_user_creation_lock', return_value=True
-            ),
+            patch.object(UserStore, '_acquire_user_creation_lock', return_value=True),
+            patch.object(UserStore, '_release_user_creation_lock', return_value=True),
         ):
             result = await UserStore.get_user_by_id_async(non_existent_id)
 
@@ -671,7 +664,6 @@ def test_has_custom_settings_empty_model():
 def test_create_user_settings_from_entities():
     """Test creating UserSettings from OrgMember, User, and Org entities."""
     user_id = str(uuid.uuid4())
-    org_id = uuid.uuid4()
 
     # Create mock entities
     org_member = MagicMock()

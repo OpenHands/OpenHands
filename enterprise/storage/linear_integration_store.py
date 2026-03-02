@@ -124,7 +124,9 @@ class LinearIntegrationStore:
         """Retrieve workspace by name."""
         async with a_session_maker() as session:
             result = await session.execute(
-                select(LinearWorkspace).where(LinearWorkspace.name == workspace_name.lower())
+                select(LinearWorkspace).where(
+                    LinearWorkspace.name == workspace_name.lower()
+                )
             )
             return result.scalar_one_or_none()
 
@@ -174,7 +176,9 @@ class LinearIntegrationStore:
         """Update Linear user integration status."""
         async with a_session_maker() as session:
             result = await session.execute(
-                select(LinearUser).where(LinearUser.keycloak_user_id == keycloak_user_id)
+                select(LinearUser).where(
+                    LinearUser.keycloak_user_id == keycloak_user_id
+                )
             )
             linear_user = result.scalar_one_or_none()
 
