@@ -22,6 +22,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
+    PLANNING_AGENT_INSTRUCTION,
     LiveStatusAppConversationService,
 )
 from openhands.app_server.sandbox.sandbox_models import (
@@ -900,6 +901,135 @@ class TestLiveStatusAppConversationService:
             mock_create_condenser.assert_called_once_with(
                 mock_llm, AgentType.DEFAULT, self.mock_user.condenser_max_size
             )
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.format_plan_structure'
+    )
+    def test_create_agent_with_context_planning_agent_applies_instruction(
+        self, mock_format_plan, mock_create_condenser, mock_get_tools
+    ):
+        """Test _create_agent_with_context applies PLANNING_AGENT_INSTRUCTION for plan agents."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model_copy.return_value = mock_llm
+        mock_get_tools.return_value = []
+        mock_condenser = Mock()
+        mock_create_condenser.return_value = mock_condenser
+        mock_format_plan.return_value = 'test_plan_structure'
+        mcp_config = {}
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+        ) as mock_agent_class:
+            mock_agent_instance = Mock()
+            mock_agent_instance.model_copy.return_value = mock_agent_instance
+            mock_agent_class.return_value = mock_agent_instance
+
+            self.service._create_agent_with_context(
+                mock_llm,
+                AgentType.PLAN,
+                None,  # No existing suffix
+                mcp_config,
+                self.mock_user.condenser_max_size,
+            )
+
+            # Assert - verify model_copy was called with agent_context containing planning instruction
+            model_copy_call = mock_agent_instance.model_copy.call_args
+            agent_context = model_copy_call[1]['update']['agent_context']
+            assert agent_context.system_message_suffix == PLANNING_AGENT_INSTRUCTION
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_planning_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.format_plan_structure'
+    )
+    def test_create_agent_with_context_planning_agent_prepends_to_existing_suffix(
+        self, mock_format_plan, mock_create_condenser, mock_get_tools
+    ):
+        """Test _create_agent_with_context prepends planning instruction to existing suffix."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model_copy.return_value = mock_llm
+        mock_get_tools.return_value = []
+        mock_condenser = Mock()
+        mock_create_condenser.return_value = mock_condenser
+        mock_format_plan.return_value = 'test_plan_structure'
+        mcp_config = {}
+        existing_suffix = 'Custom user instruction from integration'
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+        ) as mock_agent_class:
+            mock_agent_instance = Mock()
+            mock_agent_instance.model_copy.return_value = mock_agent_instance
+            mock_agent_class.return_value = mock_agent_instance
+
+            self.service._create_agent_with_context(
+                mock_llm,
+                AgentType.PLAN,
+                existing_suffix,
+                mcp_config,
+                self.mock_user.condenser_max_size,
+            )
+
+            # Assert - verify planning instruction is prepended to existing suffix
+            model_copy_call = mock_agent_instance.model_copy.call_args
+            agent_context = model_copy_call[1]['update']['agent_context']
+            assert agent_context.system_message_suffix.startswith(
+                PLANNING_AGENT_INSTRUCTION
+            )
+            assert existing_suffix in agent_context.system_message_suffix
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.get_default_tools'
+    )
+    @patch(
+        'openhands.app_server.app_conversation.app_conversation_service_base.AppConversationServiceBase._create_condenser'
+    )
+    def test_create_agent_with_context_default_agent_no_planning_instruction(
+        self, mock_create_condenser, mock_get_tools
+    ):
+        """Test _create_agent_with_context does NOT add planning instruction for default agent."""
+        # Arrange
+        mock_llm = Mock(spec=LLM)
+        mock_llm.model_copy.return_value = mock_llm
+        mock_get_tools.return_value = []
+        mock_condenser = Mock()
+        mock_create_condenser.return_value = mock_condenser
+        mcp_config = {}
+
+        # Act
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.Agent'
+        ) as mock_agent_class:
+            mock_agent_instance = Mock()
+            mock_agent_instance.model_copy.return_value = mock_agent_instance
+            mock_agent_class.return_value = mock_agent_instance
+
+            self.service._create_agent_with_context(
+                mock_llm,
+                AgentType.DEFAULT,
+                None,
+                mcp_config,
+                self.mock_user.condenser_max_size,
+            )
+
+            # Assert - verify no planning instruction for default agent
+            model_copy_call = mock_agent_instance.model_copy.call_args
+            agent_context = model_copy_call[1]['update']['agent_context']
+            assert agent_context.system_message_suffix is None
 
     @pytest.mark.asyncio
     @patch(
