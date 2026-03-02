@@ -7,7 +7,6 @@ from typing import Awaitable, Callable, Dict
 from server.auth.auth_error import TokenRefreshError
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import sessionmaker
 from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
 
@@ -27,7 +26,6 @@ LOCK_TIMEOUT_SECONDS = 5
 class AuthTokenStore:
     keycloak_user_id: str
     idp: ProviderType
-    a_session_maker: sessionmaker
 
     @property
     def identity_provider_value(self) -> str:
@@ -73,7 +71,7 @@ class AuthTokenStore:
             access_token_expires_at: Expiration time for access token (seconds since epoch)
             refresh_token_expires_at: Expiration time for refresh token (seconds since epoch)
         """
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             async with session.begin():  # Explicitly start a transaction
                 result = await session.execute(
                     select(AuthTokens).where(
@@ -138,7 +136,7 @@ class AuthTokenStore:
                 a 401 response to prompt the user to re-authenticate.
         """
         # FAST PATH: Check without lock first to avoid unnecessary lock contention
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             result = await session.execute(
                 select(AuthTokens).filter(
                     AuthTokens.keycloak_user_id == self.keycloak_user_id,
@@ -167,7 +165,7 @@ class AuthTokenStore:
 
         # SLOW PATH: Token needs refresh, acquire lock
         try:
-            async with self.a_session_maker() as session:
+            async with a_session_maker() as session:
                 async with session.begin():
                     # Set a lock timeout to prevent indefinite blocking
                     # This ensures we don't hold connections forever if something goes wrong
@@ -300,6 +298,4 @@ class AuthTokenStore:
         logger.debug(f'auth_token_store.get_instance::{keycloak_user_id}')
         if keycloak_user_id:
             keycloak_user_id = str(keycloak_user_id)
-        return AuthTokenStore(
-            keycloak_user_id=keycloak_user_id, idp=idp, a_session_maker=a_session_maker
-        )
+        return AuthTokenStore(keycloak_user_id=keycloak_user_id, idp=idp)

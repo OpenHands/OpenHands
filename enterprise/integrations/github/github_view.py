@@ -24,7 +24,6 @@ from jinja2 import Environment
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from server.config import get_config
-from storage.database import session_maker
 from storage.org_store import OrgStore
 from storage.proactive_conversation_store import ProactiveConversationStore
 from storage.saas_secrets_store import SaasSecretsStore
@@ -153,9 +152,7 @@ class GithubIssue(ResolverViewInterface):
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
-        secrets_store = SaasSecretsStore(
-            self.user_info.keycloak_user_id, session_maker, get_config()
-        )
+        secrets_store = SaasSecretsStore(self.user_info.keycloak_user_id, get_config())
         user_secrets = await secrets_store.load()
 
         return user_secrets.custom_secrets if user_secrets else None

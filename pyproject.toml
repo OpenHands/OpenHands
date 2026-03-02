@@ -46,6 +46,7 @@ dependencies = [
   "joblib",
   "json-repair",
   "jupyter-kernel-gateway",
+  "jwcrypto>=1.5.6",
   "kubernetes>=33.1",
   "libtmux>=0.46.2",
   "litellm!=1.64.4,!=1.67.*,>=1.74.3",
@@ -76,7 +77,6 @@ dependencies = [
   "python-docx",
   "python-dotenv",
   "python-frontmatter>=1.1",
-  "python-jose[cryptography]>=3.3",
   "python-json-logger>=3.2.1",
   "python-multipart>=0.0.22",
   "python-pptx",
@@ -249,7 +249,7 @@ pybase62 = "^1.0.0"
 openhands-sdk = "1.11.5"
 openhands-agent-server = "1.11.5"
 openhands-tools = "1.11.5"
-python-jose = { version = ">=3.3", extras = [ "cryptography" ] }
+jwcrypto = ">=1.5.6"
 sqlalchemy = { extras = [ "asyncio" ], version = "^2.0.40" }
 pg8000 = "^1.31.5"
 asyncpg = "^0.30.0"

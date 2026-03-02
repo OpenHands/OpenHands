@@ -29,8 +29,16 @@ def mock_user():
 
 
 @pytest.fixture
-def secrets_store(session_maker, mock_config):
-    return SaasSecretsStore('user-id', session_maker, mock_config)
+def secrets_store(async_session_maker, mock_config):
+    # Inject the test session maker into the store module
+    import storage.saas_secrets_store as store_module
+
+    store_module.a_session_maker = async_session_maker
+
+    store = SaasSecretsStore('user-id', mock_config)
+    # Also add it as an attribute for tests that need direct access
+    store.a_session_maker = async_session_maker
+    return store
 
 
 class TestSaasSecretsStore:
@@ -107,13 +115,15 @@ class TestSaasSecretsStore:
         await secrets_store.store(user_secrets)
 
         # Verify the data is encrypted in the database
-        with secrets_store.session_maker() as session:
-            stored = (
-                session.query(StoredCustomSecrets)
+        from sqlalchemy import select
+
+        async with secrets_store.a_session_maker() as session:
+            result = await session.execute(
+                select(StoredCustomSecrets)
                 .filter(StoredCustomSecrets.keycloak_user_id == 'user-id')
                 .filter(StoredCustomSecrets.org_id == mock_user.current_org_id)
-                .first()
             )
+            stored = result.scalars().first()
 
             # The sensitive data should be encrypted
             assert stored.secret_value != 'sensitive_token'

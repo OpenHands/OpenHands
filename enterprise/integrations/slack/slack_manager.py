@@ -22,7 +22,8 @@ from server.constants import SLACK_CLIENT_ID
 from server.utils.conversation_callback_utils import register_callback_processor
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.web.async_client import AsyncWebClient
-from storage.database import session_maker
+from sqlalchemy import select
+from storage.database import a_session_maker
 from storage.slack_user import SlackUser
 
 from openhands.core.logger import openhands_logger as logger
@@ -63,12 +64,11 @@ class SlackManager(Manager):
     ) -> tuple[SlackUser | None, UserAuth | None]:
         # We get the user and correlate them back to a user in OpenHands - if we can
         slack_user = None
-        with session_maker() as session:
-            slack_user = (
-                session.query(SlackUser)
-                .filter(SlackUser.slack_user_id == slack_user_id)
-                .first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(SlackUser).where(SlackUser.slack_user_id == slack_user_id)
             )
+            slack_user = result.scalar_one_or_none()
 
             # slack_view.slack_to_openhands_user = slack_user # attach user auth info to view
 

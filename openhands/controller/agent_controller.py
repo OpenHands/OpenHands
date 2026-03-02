@@ -64,11 +64,14 @@ from openhands.events.action import (
     AgentFinishAction,
     AgentRejectAction,
     BrowseInteractiveAction,
+    BrowseURLAction,
     ChangeAgentStateAction,
     CmdRunAction,
     FileEditAction,
     FileReadAction,
+    FileWriteAction,
     IPythonRunCellAction,
+    MCPAction,
     MessageAction,
     NullAction,
     SystemMessageAction,
@@ -977,8 +980,11 @@ class AgentController:
                 type(action) is CmdRunAction
                 or type(action) is IPythonRunCellAction
                 or type(action) is BrowseInteractiveAction
+                or type(action) is BrowseURLAction
                 or type(action) is FileEditAction
                 or type(action) is FileReadAction
+                or type(action) is FileWriteAction
+                or type(action) is MCPAction
             ):
                 # Handle security risk analysis using the dedicated method
                 await self._handle_security_analyzer(action)

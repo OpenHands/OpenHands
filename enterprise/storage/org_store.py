@@ -10,10 +10,10 @@ from server.constants import (
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
 )
-from server.routes.org_models import OrphanedUserError
-from sqlalchemy import text
+from server.routes.org_models import OrgLLMSettingsUpdate, OrphanedUserError
+from sqlalchemy import select, text
 from sqlalchemy.orm import joinedload
-from storage.database import session_maker
+from storage.database import a_session_maker, session_maker
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org import Org
 from storage.org_member import OrgMember
@@ -386,3 +386,47 @@ class OrgStore:
                     extra={'org_id': str(org_id), 'error': str(e)},
                 )
                 raise
+
+    @staticmethod
+    async def get_org_by_id_async(org_id: UUID) -> Org | None:
+        """Get organization by ID (async version)."""
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.id == org_id))
+            org = result.scalars().first()
+        return OrgStore._validate_org_version(org) if org else None
+
+    @staticmethod
+    async def update_org_llm_settings_async(
+        org_id: UUID,
+        llm_settings: OrgLLMSettingsUpdate,
+    ) -> Org | None:
+        """Update organization LLM settings and propagate to members (async version).
+
+        Args:
+            org_id: Organization ID
+            llm_settings: Typed LLM settings update model
+
+        Returns:
+            Updated Org or None if not found
+        """
+        from storage.org_member_store import OrgMemberStore
+
+        async with a_session_maker() as session:
+            result = await session.execute(select(Org).filter(Org.id == org_id))
+            org = result.scalars().first()
+            if not org:
+                return None
+
+            # Apply updates to org
+            llm_settings.apply_to_org(org)
+
+            # Propagate relevant settings to all org members
+            member_updates = llm_settings.get_member_updates()
+            if member_updates:
+                await OrgMemberStore.update_all_members_llm_settings_async(
+                    session, org_id, member_updates
+                )
+
+            await session.commit()
+            await session.refresh(org)
+            return org
