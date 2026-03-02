@@ -64,14 +64,16 @@ async def test_create_default_settings_no_org_id():
 
 
 @pytest.mark.asyncio
-async def test_create_default_settings_require_org(session_maker, mock_stripe):
+async def test_create_default_settings_require_org(session_maker, async_session_maker, mock_stripe):
     # Mock stripe_service.has_payment_method to return False
     with (
         patch(
             'stripe.Customer.list_payment_methods_async',
             AsyncMock(return_value=MagicMock(data=[])),
         ),
-        patch('integrations.stripe_service.session_maker', session_maker),
+        patch('integrations.stripe_service.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.session_maker', session_maker),
     ):
         settings = await UserStore.create_default_settings(
             'test-org-id', 'test-user-id'
