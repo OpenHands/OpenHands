@@ -80,26 +80,10 @@ ENABLE_V1_SLACK_RESOLVER = (
 )
 
 
-def _get_templates_dir() -> str:
-    """Get the absolute path to the resolver templates directory."""
-    env_path = os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
-    if env_path:
-        return env_path
-
-    # Calculate absolute path based on openhands module location
-    import openhands
-
-    templates_dir = os.path.join(
-        os.path.dirname(os.path.abspath(openhands.__file__)),
-        'integrations',
-        'templates',
-        'resolver',
-    )
-    # Ensure trailing separator for string concatenation in managers
-    return templates_dir + os.sep
-
-
-OPENHANDS_RESOLVER_TEMPLATES_DIR = _get_templates_dir()
+OPENHANDS_RESOLVER_TEMPLATES_DIR = (
+    os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
+    or 'openhands/integrations/templates/resolver/'
+)
 jinja_env = Environment(loader=FileSystemLoader(OPENHANDS_RESOLVER_TEMPLATES_DIR))
 
 
