@@ -1591,6 +1591,9 @@ files = [
     {file = "cryptography-46.0.5-pp311-pypy311_pp73-macosx_11_0_arm64.whl", hash = "sha256:3b4995dc971c9fb83c25aa44cf45f02ba86f71ee600d81091c2f0cbae116b06c"},
     {file = "cryptography-46.0.5-pp311-pypy311_pp73-manylinux_2_28_aarch64.whl", hash = "sha256:bc84e875994c3b445871ea7181d424588171efec3e185dced958dad9e001950a"},
     {file = "cryptography-46.0.5-pp311-pypy311_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:2ae6971afd6246710480e3f15824ed3029a60fc16991db250034efd0b9fb4356"},
+    {file = "cryptography-46.0.5-pp311-pypy311_pp73-manylinux_2_34_aarch64.whl", hash = "sha256:d861ee9e76ace6cf36a6a89b959ec08e7bc2493ee39d07ffe5acb23ef46d27da"},
+    {file = "cryptography-46.0.5-pp311-pypy311_pp73-manylinux_2_34_x86_64.whl", hash = "sha256:2b7a67c9cd56372f3249b39699f2ad479f6991e62ea15800973b956f4b73e257"},
+    {file = "cryptography-46.0.5-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:8456928655f856c6e1533ff59d5be76578a7157224dbd9ce6872f25055ab9ab7"},
     {file = "cryptography-46.0.5.tar.gz", hash = "sha256:abace499247268e3757271b2f1e244b36b06f8515cf27c4d49468fc9eb16e93d"},
 ]
 
@@ -2075,25 +2078,6 @@ files = [
     {file = "durationpy-0.10-py3-none-any.whl", hash = "sha256:3b41e1b601234296b4fb368338fdcd3e13e0b4fb5b67345948f4f2bf9868b286"},
     {file = "durationpy-0.10.tar.gz", hash = "sha256:1fa6893409a6e739c9c72334fc65cca1f355dbdd93405d30f726deb5bde42fba"},
 ]
-
-[[package]]
-name = "ecdsa"
-version = "0.19.1"
-description = "ECDSA cryptographic signature library (pure python)"
-optional = false
-python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,>=2.6"
-groups = ["main"]
-files = [
-    {file = "ecdsa-0.19.1-py2.py3-none-any.whl", hash = "sha256:30638e27cf77b7e15c4c4cc1973720149e1033827cfd00661ca5c8cc0cdb24c3"},
-    {file = "ecdsa-0.19.1.tar.gz", hash = "sha256:478cba7b62555866fcb3bb3fe985e06decbdb68ef55713c4e5ab98c57d508e61"},
-]
-
-[package.dependencies]
-six = ">=1.9.0"
-
-[package.extras]
-gmpy = ["gmpy"]
-gmpy2 = ["gmpy2"]
 
 [[package]]
 name = "email-validator"
@@ -6152,6 +6136,7 @@ jinja2 = ">=3.1.6"
 joblib = "*"
 json-repair = "*"
 jupyter-kernel-gateway = "*"
+jwcrypto = ">=1.5.6"
 kubernetes = ">=33.1"
 libtmux = ">=0.46.2"
 litellm = ">=1.74.3"
@@ -6168,23 +6153,22 @@ opentelemetry-exporter-otlp-proto-grpc = ">=1.33.1"
 pathspec = ">=0.12.1"
 pexpect = "*"
 pg8000 = ">=1.31.5"
-pillow = ">=11.3"
+pillow = ">=12.1.1"
 playwright = ">=1.55"
 poetry = ">=2.1.2"
 prompt-toolkit = ">=3.0.50"
-protobuf = ">=5,<6"
+protobuf = ">=5.29.6,<6"
 psutil = "*"
 pybase62 = ">=1"
 pygithub = ">=2.5"
 pyjwt = ">=2.9"
 pylatexenc = "*"
-pypdf = ">=6"
+pypdf = ">=6.7.2"
 python-docx = "*"
 python-dotenv = "*"
 python-frontmatter = ">=1.1"
-python-jose = {version = ">=3.3", extras = ["cryptography"]}
 python-json-logger = ">=3.2.1"
-python-multipart = "*"
+python-multipart = ">=0.0.22"
 python-pptx = "*"
 python-socketio = "5.14"
 pythonnet = "*"
@@ -6197,7 +6181,7 @@ setuptools = ">=78.1.1"
 shellingham = ">=1.5.4"
 sqlalchemy = {version = ">=2.0.40", extras = ["asyncio"]}
 sse-starlette = ">=3.0.2"
-starlette = ">=0.48"
+starlette = ">=0.49.1"
 tenacity = ">=8.5,<10"
 termcolor = "*"
 toml = "*"
@@ -11817,30 +11801,6 @@ docs = ["sphinx"]
 test = ["mypy", "pyaml", "pytest", "toml", "types-PyYAML", "types-toml"]
 
 [[package]]
-name = "python-jose"
-version = "3.5.0"
-description = "JOSE implementation in Python"
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "python_jose-3.5.0-py2.py3-none-any.whl", hash = "sha256:abd1202f23d34dfad2c3d28cb8617b90acf34132c7afd60abd0b0b7d3cb55771"},
-    {file = "python_jose-3.5.0.tar.gz", hash = "sha256:fb4eaa44dbeb1c26dcc69e4bd7ec54a1cb8dd64d3b4d81ef08d90ff453f2b01b"},
-]
-
-[package.dependencies]
-cryptography = {version = ">=3.4.0", optional = true, markers = "extra == \"cryptography\""}
-ecdsa = "!=0.15"
-pyasn1 = ">=0.5.0"
-rsa = ">=4.0,<4.1.1 || >4.1.1,<4.4 || >4.4,<5.0"
-
-[package.extras]
-cryptography = ["cryptography (>=3.4.0)"]
-pycrypto = ["pycrypto (>=2.6.0,<2.7.0)"]
-pycryptodome = ["pycryptodome (>=3.3.1,<4.0.0)"]
-test = ["pytest", "pytest-cov"]
-
-[[package]]
 name = "python-json-logger"
 version = "3.3.0"
 description = "JSON Log Formatter for the Python Logging Package"
@@ -11961,7 +11921,7 @@ description = "Python for Window Extensions"
 optional = false
 python-versions = "*"
 groups = ["main"]
-markers = "platform_system == \"Windows\" or sys_platform == \"win32\""
+markers = "sys_platform == \"win32\" or platform_system == \"Windows\""
 files = [
     {file = "pywin32-311-cp310-cp310-win32.whl", hash = "sha256:d03ff496d2a0cd4a5893504789d4a15399133fe82517455e78bad62efbb7f0a3"},
     {file = "pywin32-311-cp310-cp310-win_amd64.whl", hash = "sha256:797c2772017851984b97180b0bebe4b620bb86328e8a884bb626156295a63b3b"},
