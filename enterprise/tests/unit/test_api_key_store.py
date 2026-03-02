@@ -114,9 +114,7 @@ async def test_validate_api_key_valid(api_key_store, async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_validate_api_key_expired(
-    api_key_store, session_maker, async_session_maker
-):
+async def test_validate_api_key_expired(api_key_store, async_session_maker):
     """Test validating an expired API key."""
     # Setup - create an expired API key in the database
     user_id = str(uuid.uuid4())
@@ -144,7 +142,7 @@ async def test_validate_api_key_expired(
 
 @pytest.mark.asyncio
 async def test_validate_api_key_expired_timezone_naive(
-    api_key_store, session_maker, async_session_maker
+    api_key_store, async_session_maker
 ):
     """Test validating an expired API key with timezone-naive datetime from database."""
     # Setup - create an expired API key with timezone-naive datetime
@@ -174,7 +172,7 @@ async def test_validate_api_key_expired_timezone_naive(
 
 @pytest.mark.asyncio
 async def test_validate_api_key_valid_timezone_naive(
-    api_key_store, session_maker, async_session_maker
+    api_key_store, async_session_maker
 ):
     """Test validating a valid API key with timezone-naive datetime from database."""
     # Setup - create a valid API key with timezone-naive datetime (future date)
@@ -293,7 +291,7 @@ async def test_delete_api_key_by_id(api_key_store, async_session_maker):
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
 async def test_list_api_keys(
-    mock_get_user, api_key_store, session_maker, async_session_maker, mock_user
+    mock_get_user, api_key_store, async_session_maker, mock_user
 ):
     """Test listing API keys for a user."""
     # Setup
@@ -346,7 +344,7 @@ async def test_list_api_keys(
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
 async def test_retrieve_mcp_api_key(
-    mock_get_user, api_key_store, session_maker, async_session_maker, mock_user
+    mock_get_user, api_key_store, async_session_maker, mock_user
 ):
     """Test retrieving MCP API key for a user."""
     # Setup
@@ -385,7 +383,7 @@ async def test_retrieve_mcp_api_key(
 @pytest.mark.asyncio
 @patch('storage.api_key_store.UserStore.get_user_by_id_async')
 async def test_retrieve_mcp_api_key_not_found(
-    mock_get_user, api_key_store, session_maker, async_session_maker, mock_user
+    mock_get_user, api_key_store, async_session_maker, mock_user
 ):
     """Test retrieving MCP API key when none exists."""
     # Setup
@@ -415,9 +413,7 @@ async def test_retrieve_mcp_api_key_not_found(
 
 
 @pytest.mark.asyncio
-async def test_retrieve_api_key_by_name(
-    api_key_store, session_maker, async_session_maker
-):
+async def test_retrieve_api_key_by_name(api_key_store, async_session_maker):
     """Test retrieving an API key by name."""
     # Setup
     user_id = str(uuid.uuid4())
@@ -457,9 +453,7 @@ async def test_retrieve_api_key_by_name_not_found(api_key_store, async_session_m
 
 
 @pytest.mark.asyncio
-async def test_delete_api_key_by_name(
-    api_key_store, session_maker, async_session_maker
-):
+async def test_delete_api_key_by_name(api_key_store, async_session_maker):
     """Test deleting an API key by name."""
     # Setup
     user_id = str(uuid.uuid4())
