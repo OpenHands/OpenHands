@@ -168,9 +168,3 @@ class DeviceCodeStore:
             await session.commit()
 
             return True
-
-    @classmethod
-    def get_instance(cls) -> DeviceCodeStore:
-        """Get an instance of the DeviceCodeStore."""
-        logger.debug('device_code_store.get_instance')
-        return DeviceCodeStore()

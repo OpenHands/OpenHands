@@ -53,7 +53,7 @@ class DeviceTokenErrorResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 oauth_device_router = APIRouter(prefix='/oauth/device')
-device_code_store = DeviceCodeStore.get_instance()
+device_code_store = DeviceCodeStore()
 
 
 # ---------------------------------------------------------------------------
