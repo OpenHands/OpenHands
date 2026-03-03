@@ -20,6 +20,7 @@ from openhands.integrations.service_types import ProviderType
 from openhands.llm.llm import LLM
 from openhands.resolver.interfaces.azure_devops import AzureDevOpsIssueHandler
 from openhands.resolver.interfaces.bitbucket import BitbucketIssueHandler
+from openhands.resolver.interfaces.bitbucket_data_center import BitbucketDCIssueHandler
 from openhands.resolver.interfaces.forgejo import ForgejoIssueHandler
 from openhands.resolver.interfaces.github import GithubIssueHandler
 from openhands.resolver.interfaces.gitlab import GitlabIssueHandler
@@ -310,6 +311,13 @@ def send_pull_request(
             ),
             None,
         )
+    elif platform == ProviderType.BITBUCKET_DATA_CENTER:
+        handler = ServiceContextIssue(
+            BitbucketDCIssueHandler(
+                issue.owner, issue.repo, token, username, base_domain
+            ),
+            None,
+        )
     elif platform == ProviderType.FORGEJO:
         handler = ServiceContextIssue(
             ForgejoIssueHandler(issue.owner, issue.repo, token, username, base_domain),
@@ -416,6 +424,14 @@ def send_pull_request(
                 'target_branch': base_branch,
                 'draft': pr_type == 'draft',
             }
+        elif platform == ProviderType.BITBUCKET_DATA_CENTER:
+            data = {
+                'title': final_pr_title,
+                'description': pr_body,
+                'source_branch': head_branch,
+                'target_branch': base_branch,
+                'draft': pr_type == 'draft',
+            }
         elif platform == ProviderType.FORGEJO:
             data = {
                 'title': final_pr_title,
@@ -476,6 +492,7 @@ def update_existing_pull_request(
             ProviderType.AZURE_DEVOPS: 'dev.azure.com',
             ProviderType.BITBUCKET: 'bitbucket.org',
             ProviderType.FORGEJO: 'codeberg.org',
+            ProviderType.BITBUCKET_DATA_CENTER: 'bitbucket.example.com',
         }.get(platform, 'github.com')
 
     handler = None
@@ -499,6 +516,13 @@ def update_existing_pull_request(
     elif platform == ProviderType.BITBUCKET:
         handler = ServiceContextIssue(
             BitbucketIssueHandler(
+                issue.owner, issue.repo, token, username, base_domain
+            ),
+            llm_config,
+        )
+    elif platform == ProviderType.BITBUCKET_DATA_CENTER:
+        handler = ServiceContextIssue(
+            BitbucketDCIssueHandler(
                 issue.owner, issue.repo, token, username, base_domain
             ),
             llm_config,
@@ -606,6 +630,12 @@ def process_single_issue(
             else 'gitlab.com'
             if platform == ProviderType.GITLAB
             else 'dev.azure.com'
+            if platform == ProviderType.AZURE_DEVOPS
+            else 'bitbucket.org'
+            if platform == ProviderType.BITBUCKET
+            else 'bitbucket.example.com'
+            if platform == ProviderType.BITBUCKET_DATA_CENTER
+            else 'github.com'
         )
     if not resolver_output.success and not send_on_failure:
         logger.info(
