@@ -1275,7 +1275,9 @@ class TestOrgMemberServiceRemoveOrgMember:
             # Assert
             assert success is True
             assert error is None
-            mock_update_org.assert_awaited_once_with(str(target_user_id), target_user_id)
+            mock_update_org.assert_awaited_once_with(
+                str(target_user_id), target_user_id
+            )
 
     @pytest.mark.asyncio
     async def test_remove_member_does_not_update_current_org_id_when_not_matching(
