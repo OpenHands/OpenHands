@@ -446,3 +446,5 @@ class GitlabFactory:
                 previous_comments=[],
                 is_mr=True,
             )
+
+        raise ValueError(f'Unhandled GitLab webhook event: {message}')
