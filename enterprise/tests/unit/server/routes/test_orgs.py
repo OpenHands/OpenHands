@@ -519,7 +519,7 @@ async def test_list_user_orgs_success(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([mock_org], None),
+            AsyncMock(return_value=([mock_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -573,7 +573,7 @@ async def test_list_user_orgs_returns_current_org_id(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([current_org, other_org], None),
+            AsyncMock(return_value=([current_org, other_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -618,7 +618,7 @@ async def test_list_user_orgs_with_pagination(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([org1, org2], '2'),
+            AsyncMock(return_value=([org1, org2], '2')),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -653,7 +653,7 @@ async def test_list_user_orgs_empty(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([], None),
+            AsyncMock(return_value=([], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -720,7 +720,7 @@ async def test_list_user_orgs_service_error(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            side_effect=Exception('Database error'),
+            AsyncMock(side_effect=Exception('Database error')),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -786,7 +786,7 @@ async def test_list_user_orgs_personal_org_identified(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([personal_org], None),
+            AsyncMock(return_value=([personal_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -825,7 +825,7 @@ async def test_list_user_orgs_team_org_identified(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([team_org], None),
+            AsyncMock(return_value=([team_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -874,7 +874,7 @@ async def test_list_user_orgs_mixed_personal_and_team(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([personal_org, team_org], None),
+            AsyncMock(return_value=([personal_org, team_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
@@ -946,7 +946,7 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
         ),
         patch(
             'server.routes.orgs.OrgService.get_user_orgs_paginated',
-            return_value=([mock_org], None),
+            AsyncMock(return_value=([mock_org], None)),
         ),
     ):
         client = TestClient(mock_app_list)
