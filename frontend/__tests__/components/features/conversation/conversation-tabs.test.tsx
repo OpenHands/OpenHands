@@ -88,6 +88,30 @@ describe("ConversationTabs localStorage behavior", () => {
       const parsed = JSON.parse(storedState!);
       expect(parsed.unpinnedTabs).toContain("terminal");
     });
+
+    it("should hide a tab after unpinning it from context menu", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      const user = userEvent.setup();
+
+      render(
+        <>
+          <ConversationTabs />
+          <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />
+        </>,
+        { wrapper: createWrapper(REAL_CONVERSATION_ID) },
+      );
+
+      expect(
+        screen.getByTestId("conversation-tab-terminal"),
+      ).toBeInTheDocument();
+
+      const terminalItem = screen.getByText("COMMON$TERMINAL");
+      await user.click(terminalItem);
+
+      expect(
+        screen.queryByTestId("conversation-tab-terminal"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("hook integration", () => {
