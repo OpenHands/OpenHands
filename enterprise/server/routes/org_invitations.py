@@ -1,5 +1,6 @@
 """API routes for organization invitations."""
 
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -91,8 +92,11 @@ async def create_invitation(
             },
         )
 
+        successful_responses = await asyncio.gather(
+            *[InvitationResponse.from_invitation(inv) for inv in successful]
+        )
         return BatchInvitationResponse(
-            successful=[InvitationResponse.from_invitation(inv) for inv in successful],
+            successful=list(successful_responses),
             failed=[
                 InvitationFailure(email=email, error=error) for email, error in failed
             ],

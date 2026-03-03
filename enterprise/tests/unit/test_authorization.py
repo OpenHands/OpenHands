@@ -336,7 +336,8 @@ class TestHasPermission:
 class TestGetUserOrgRole:
     """Tests for get_user_org_role function."""
 
-    def test_returns_role_when_member_exists(self):
+    @pytest.mark.asyncio
+    async def test_returns_role_when_member_exists(self):
         """
         GIVEN: User is a member of organization with role
         WHEN: get_user_org_role is called
@@ -353,18 +354,21 @@ class TestGetUserOrgRole:
 
         with (
             patch(
-                'server.auth.authorization.OrgMemberStore.get_org_member',
+                'server.auth.authorization.OrgMemberStore.get_org_member_async',
+                new_callable=AsyncMock,
                 return_value=mock_org_member,
             ),
             patch(
                 'server.auth.authorization.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
                 return_value=mock_role,
             ),
         ):
-            result = get_user_org_role(user_id, org_id)
+            result = await get_user_org_role(user_id, org_id)
             assert result == mock_role
 
-    def test_returns_none_when_not_member(self):
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_member(self):
         """
         GIVEN: User is not a member of organization
         WHEN: get_user_org_role is called
@@ -374,17 +378,19 @@ class TestGetUserOrgRole:
         org_id = uuid4()
 
         with patch(
-            'server.auth.authorization.OrgMemberStore.get_org_member',
+            'server.auth.authorization.OrgMemberStore.get_org_member_async',
+            new_callable=AsyncMock,
             return_value=None,
         ):
-            result = get_user_org_role(user_id, org_id)
+            result = await get_user_org_role(user_id, org_id)
             assert result is None
 
-    def test_returns_role_when_org_id_is_none(self):
+    @pytest.mark.asyncio
+    async def test_returns_role_when_org_id_is_none(self):
         """
         GIVEN: User with a current organization
         WHEN: get_user_org_role is called with org_id=None
-        THEN: Role object is returned using get_org_member_for_current_org
+        THEN: Role object is returned using get_org_member_for_current_org_async
         """
         user_id = str(uuid4())
 
@@ -396,23 +402,27 @@ class TestGetUserOrgRole:
 
         with (
             patch(
-                'server.auth.authorization.OrgMemberStore.get_org_member_for_current_org',
+                'server.auth.authorization.OrgMemberStore.get_org_member_for_current_org_async',
+                new_callable=AsyncMock,
                 return_value=mock_org_member,
             ) as mock_get_current,
             patch(
-                'server.auth.authorization.OrgMemberStore.get_org_member',
+                'server.auth.authorization.OrgMemberStore.get_org_member_async',
+                new_callable=AsyncMock,
             ) as mock_get_org_member,
             patch(
                 'server.auth.authorization.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
                 return_value=mock_role,
             ),
         ):
-            result = get_user_org_role(user_id, None)
+            result = await get_user_org_role(user_id, None)
             assert result == mock_role
             mock_get_current.assert_called_once()
             mock_get_org_member.assert_not_called()
 
-    def test_returns_none_when_org_id_is_none_and_no_current_org(self):
+    @pytest.mark.asyncio
+    async def test_returns_none_when_org_id_is_none_and_no_current_org(self):
         """
         GIVEN: User with no current organization membership
         WHEN: get_user_org_role is called with org_id=None
@@ -421,10 +431,11 @@ class TestGetUserOrgRole:
         user_id = str(uuid4())
 
         with patch(
-            'server.auth.authorization.OrgMemberStore.get_org_member_for_current_org',
+            'server.auth.authorization.OrgMemberStore.get_org_member_for_current_org_async',
+            new_callable=AsyncMock,
             return_value=None,
         ):
-            result = get_user_org_role(user_id, None)
+            result = await get_user_org_role(user_id, None)
             assert result is None
 
 

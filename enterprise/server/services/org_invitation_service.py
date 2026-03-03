@@ -91,7 +91,7 @@ class OrgInvitationService:
                 'You are not a member of this organization'
             )
 
-        inviter_role = RoleStore.get_role_by_id(inviter_member.role_id)
+        inviter_role = await RoleStore.get_role_by_id(inviter_member.role_id)
         if not inviter_role or inviter_role.name not in [ROLE_OWNER, ROLE_ADMIN]:
             raise InsufficientPermissionError('Only owners and admins can invite users')
 
@@ -101,7 +101,7 @@ class OrgInvitationService:
             raise InsufficientPermissionError('Only owners can invite with owner role')
 
         # Get the target role
-        target_role = RoleStore.get_role_by_name(role_name_lower)
+        target_role = await RoleStore.get_role_by_name(role_name_lower)
         if not target_role:
             raise ValueError(f'Invalid role: {role_name}')
 
@@ -196,13 +196,13 @@ class OrgInvitationService:
                 'Cannot invite users to a personal workspace'
             )
 
-        inviter_member = OrgMemberStore.get_org_member(org_id, inviter_id)
+        inviter_member = await OrgMemberStore.get_org_member_async(org_id, inviter_id)
         if not inviter_member:
             raise InsufficientPermissionError(
                 'You are not a member of this organization'
             )
 
-        inviter_role = RoleStore.get_role_by_id(inviter_member.role_id)
+        inviter_role = await RoleStore.get_role_by_id(inviter_member.role_id)
         if not inviter_role or inviter_role.name not in [ROLE_OWNER, ROLE_ADMIN]:
             raise InsufficientPermissionError('Only owners and admins can invite users')
 
@@ -210,7 +210,7 @@ class OrgInvitationService:
         if role_name_lower == ROLE_OWNER and inviter_role.name != ROLE_OWNER:
             raise InsufficientPermissionError('Only owners can invite with owner role')
 
-        target_role = RoleStore.get_role_by_name(role_name_lower)
+        target_role = await RoleStore.get_role_by_name(role_name_lower)
         if not target_role:
             raise ValueError(f'Invalid role: {role_name}')
 

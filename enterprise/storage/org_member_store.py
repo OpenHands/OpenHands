@@ -122,6 +122,15 @@ class OrgMemberStore:
             return session.query(OrgMember).filter(OrgMember.org_id == org_id).all()
 
     @staticmethod
+    async def get_org_members_async(org_id: UUID) -> list[OrgMember]:
+        """Get all users in an organization (async version)."""
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgMember).filter(OrgMember.org_id == org_id)
+            )
+            return list(result.scalars().all())
+
+    @staticmethod
     def update_org_member(org_member: OrgMember) -> None:
         """Update an organization-member relationship."""
         with session_maker() as session:
@@ -152,6 +161,30 @@ class OrgMemberStore:
             return org_member
 
     @staticmethod
+    async def update_user_role_in_org_async(
+        org_id: UUID, user_id: UUID, role_id: int, status: Optional[str] = None
+    ) -> Optional[OrgMember]:
+        """Update user's role in an organization (async version)."""
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgMember).filter(
+                    OrgMember.org_id == org_id, OrgMember.user_id == user_id
+                )
+            )
+            org_member = result.scalars().first()
+
+            if not org_member:
+                return None
+
+            org_member.role_id = role_id
+            if status is not None:
+                org_member.status = status
+
+            await session.commit()
+            await session.refresh(org_member)
+            return org_member
+
+    @staticmethod
     def remove_user_from_org(org_id: UUID, user_id: UUID) -> bool:
         """Remove a user from an organization."""
         with session_maker() as session:
@@ -166,6 +199,24 @@ class OrgMemberStore:
 
             session.delete(org_member)
             session.commit()
+            return True
+
+    @staticmethod
+    async def remove_user_from_org_async(org_id: UUID, user_id: UUID) -> bool:
+        """Remove a user from an organization (async version)."""
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(OrgMember).filter(
+                    OrgMember.org_id == org_id, OrgMember.user_id == user_id
+                )
+            )
+            org_member = result.scalars().first()
+
+            if not org_member:
+                return False
+
+            await session.delete(org_member)
+            await session.commit()
             return True
 
     @staticmethod

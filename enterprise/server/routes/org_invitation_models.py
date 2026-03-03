@@ -76,7 +76,7 @@ class InvitationResponse(BaseModel):
     inviter_email: str | None = None
 
     @classmethod
-    def from_invitation(
+    async def from_invitation(
         cls,
         invitation: OrgInvitation,
         inviter_email: str | None = None,
@@ -94,7 +94,7 @@ class InvitationResponse(BaseModel):
         if invitation.role:
             role_name = invitation.role.name
         elif invitation.role_id:
-            role = RoleStore.get_role_by_id(invitation.role_id)
+            role = await RoleStore.get_role_by_id(invitation.role_id)
             role_name = role.name if role else ''
 
         return cls(

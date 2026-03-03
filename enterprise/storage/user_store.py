@@ -87,7 +87,7 @@ class UserStore:
             user.email_verified = user_info.get('email_verified')
             session.add(user)
 
-            role = RoleStore.get_role_by_name('owner')
+            role = await RoleStore.get_role_by_name('owner')
 
             from storage.org_member_store import OrgMemberStore
 
@@ -264,7 +264,7 @@ class UserStore:
                 'user_store:migrate_user:calling_get_role_by_name',
                 extra={'user_id': user_id},
             )
-            role = await RoleStore.get_role_by_name_async('owner')
+            role = await RoleStore.get_role_by_name('owner')
             logger.debug(
                 'user_store:migrate_user:done_get_role_by_name',
                 extra={'user_id': user_id},
@@ -824,6 +824,32 @@ class UserStore:
             user.current_org_id = org_id
             session.commit()
             session.refresh(user)
+            return user
+
+    @staticmethod
+    async def update_current_org_async(user_id: str, org_id: UUID) -> Optional[User]:
+        """Update the user's current organization (async version).
+
+        Args:
+            user_id: The user's ID (Keycloak user ID)
+            org_id: The organization ID to set as current
+
+        Returns:
+            User: The updated user object, or None if user not found
+        """
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .filter(User.id == uuid.UUID(user_id))
+                .with_for_update()
+            )
+            user = result.scalars().first()
+            if not user:
+                return None
+
+            user.current_org_id = org_id
+            await session.commit()
+            await session.refresh(user)
             return user
 
     @staticmethod
