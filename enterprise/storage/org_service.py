@@ -31,7 +31,7 @@ class OrgService:
     """Service for handling organization-related operations."""
 
     @staticmethod
-    def validate_name_uniqueness(name: str) -> None:
+    async def validate_name_uniqueness(name: str) -> None:
         """
         Validate that organization name is unique.
 
@@ -41,7 +41,7 @@ class OrgService:
         Raises:
             OrgNameExistsError: If organization name already exists
         """
-        existing_org = OrgStore.get_org_by_name(name)
+        existing_org = await OrgStore.get_org_by_name(name)
         if existing_org is not None:
             raise OrgNameExistsError(name)
 
@@ -214,7 +214,7 @@ class OrgService:
         )
 
         # Step 1: Validate name uniqueness (fails early, no cleanup needed)
-        OrgService.validate_name_uniqueness(name)
+        await OrgService.validate_name_uniqueness(name)
 
         # Step 2: Generate organization ID
         org_id = uuid4()
@@ -304,7 +304,7 @@ class OrgService:
             OrgDatabaseError: If database operations fail
         """
         try:
-            persisted_org = OrgStore.persist_org_with_owner(org, org_member)
+            persisted_org = await OrgStore.persist_org_with_owner(org, org_member)
             return persisted_org
 
         except Exception as e:
@@ -535,7 +535,7 @@ class OrgService:
         )
 
         # Validate organization exists
-        existing_org = OrgStore.get_org_by_id(org_id)
+        existing_org = await OrgStore.get_org_by_id(org_id)
         if not existing_org:
             raise ValueError(f'Organization with ID {org_id} not found')
 
@@ -555,7 +555,7 @@ class OrgService:
         # Check if name is being updated and validate uniqueness
         if update_data.name is not None:
             # Check if new name conflicts with another org
-            existing_org_with_name = OrgStore.get_org_by_name(update_data.name)
+            existing_org_with_name = await OrgStore.get_org_by_name(update_data.name)
             if (
                 existing_org_with_name is not None
                 and existing_org_with_name.id != org_id
@@ -608,7 +608,7 @@ class OrgService:
 
         # Perform the update
         try:
-            updated_org = OrgStore.update_org(org_id, update_dict)
+            updated_org = await OrgStore.update_org(org_id, update_dict)
             if not updated_org:
                 raise OrgDatabaseError('Failed to update organization in database')
 
@@ -683,7 +683,7 @@ class OrgService:
             return None
 
     @staticmethod
-    def get_user_orgs_paginated(
+    async def get_user_orgs_paginated(
         user_id: str, page_id: str | None = None, limit: int = 100
     ):
         """
@@ -706,7 +706,7 @@ class OrgService:
         user_uuid = parse_uuid(user_id)
 
         # Fetch organizations from store
-        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+        orgs, next_page_id = await OrgStore.get_user_orgs_paginated(
             user_id=user_uuid, page_id=page_id, limit=limit
         )
 
@@ -754,7 +754,7 @@ class OrgService:
             raise OrgNotFoundError(str(org_id))
 
         # Retrieve organization
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             logger.error(
                 'Organization not found despite valid membership',
@@ -774,7 +774,7 @@ class OrgService:
         return org
 
     @staticmethod
-    def verify_owner_authorization(user_id: str, org_id: UUID) -> None:
+    async def verify_owner_authorization(user_id: str, org_id: UUID) -> None:
         """
         Verify that the user is the owner of the organization.
 
@@ -787,7 +787,7 @@ class OrgService:
             OrgAuthorizationError: If user is not authorized to delete
         """
         # Check if organization exists
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             raise OrgNotFoundError(str(org_id))
 
@@ -835,7 +835,7 @@ class OrgService:
         )
 
         # Step 1: Verify user authorization
-        OrgService.verify_owner_authorization(user_id, org_id)
+        await OrgService.verify_owner_authorization(user_id, org_id)
 
         # Step 2: Perform database cascade deletion with LiteLLM cleanup in transaction
         try:
@@ -879,7 +879,7 @@ class OrgService:
         if not user or not user.current_org_id:
             return False
 
-        org = OrgStore.get_org_by_id(user.current_org_id)
+        org = await OrgStore.get_org_by_id(user.current_org_id)
         if not org:
             return False
 
@@ -913,7 +913,7 @@ class OrgService:
         )
 
         # Step 1: Check if organization exists
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             raise OrgNotFoundError(str(org_id))
 
