@@ -167,9 +167,17 @@ async def test_get_user_info(token_manager):
 @pytest.mark.asyncio
 async def test_get_user_info_empty_token(token_manager):
     """Test handling of empty token when getting user info."""
-    user_info = await token_manager.get_user_info('')
+    from keycloak.exceptions import KeycloakAuthenticationError
 
-    assert user_info == {}
+    with patch('server.auth.token_manager.get_keycloak_openid') as mock_keycloak:
+        mock_keycloak.return_value.a_userinfo = AsyncMock(
+            side_effect=KeycloakAuthenticationError('Invalid token')
+        )
+
+        with pytest.raises(KeycloakAuthenticationError):
+            await token_manager.get_user_info('')
+
+        mock_keycloak.return_value.a_userinfo.assert_called_once_with('')
 
 
 @pytest.mark.asyncio
