@@ -3,7 +3,6 @@ from datetime import datetime
 
 from integrations.gitlab.gitlab_manager import GitlabManager
 from integrations.gitlab.gitlab_view import GitlabViewType
-from integrations.models import Message, SourceType
 from integrations.utils import (
     extract_summary_from_conversation_manager,
     get_summary_instruction,
@@ -28,8 +27,7 @@ gitlab_manager = GitlabManager(token_manager)
 
 
 class GitlabCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to GitLab.
+    """Processor for sending conversation summaries to GitLab.
 
     This processor is used to send summaries of conversations to GitLab
     when agent state changes occur.
@@ -39,22 +37,18 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
     send_summary_instruction: bool = True
 
     async def _send_message_to_gitlab(self, message: str) -> None:
-        """
-        Send a message to GitLab.
+        """Send a message to GitLab.
 
         Args:
             message: The message content to send to GitLab
         """
         try:
-            # Create a message object for GitHub
-            message_obj = Message(source=SourceType.OPENHANDS, message=message)
-
             # Get the token manager
             token_manager = TokenManager()
             gitlab_manager = GitlabManager(token_manager)
 
-            # Send the message
-            await gitlab_manager.send_message(message_obj, self.gitlab_view)
+            # Send the message directly as a string
+            await gitlab_manager.send_message(message, self.gitlab_view)
 
             logger.info(
                 f'[GitLab] Sent summary message to {self.gitlab_view.full_repo_name}#{self.gitlab_view.issue_number}'
