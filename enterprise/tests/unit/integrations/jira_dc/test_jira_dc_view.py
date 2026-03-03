@@ -20,7 +20,9 @@ class TestJiraDcNewConversationView:
 
     async def test_get_instructions(self, new_conversation_view, mock_jinja_env):
         """Test _get_instructions method"""
-        instructions, user_msg = await new_conversation_view._get_instructions(mock_jinja_env)
+        instructions, user_msg = await new_conversation_view._get_instructions(
+            mock_jinja_env
+        )
 
         assert instructions == 'Test Jira DC instructions template'
         assert 'PROJ-123' in user_msg

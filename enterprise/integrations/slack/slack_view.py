@@ -242,7 +242,9 @@ class SlackNewConversationView(SlackViewInterface):
         self, jinja: Environment, provider_tokens, user_secrets
     ) -> None:
         """Create conversation using the legacy V0 system."""
-        user_instructions, conversation_instructions = await self._get_instructions(jinja)
+        user_instructions, conversation_instructions = await self._get_instructions(
+            jinja
+        )
 
         # Determine git provider from repository
         git_provider = None
@@ -273,7 +275,9 @@ class SlackNewConversationView(SlackViewInterface):
 
     async def _create_v1_conversation(self, jinja: Environment) -> None:
         """Create conversation using the new V1 app conversation system."""
-        user_instructions, conversation_instructions = await self._get_instructions(jinja)
+        user_instructions, conversation_instructions = await self._get_instructions(
+            jinja
+        )
 
         # Create the initial message request
         initial_message = SendMessageRequest(
