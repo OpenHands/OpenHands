@@ -1255,7 +1255,8 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
-                'server.services.org_member_service.UserStore.update_current_org'
+                'server.services.org_member_service.UserStore.update_current_org',
+                new_callable=AsyncMock,
             ) as mock_update_org,
         ):
             mock_get_member.side_effect = [
@@ -1274,7 +1275,7 @@ class TestOrgMemberServiceRemoveOrgMember:
             # Assert
             assert success is True
             assert error is None
-            mock_update_org.assert_called_once_with(str(target_user_id), target_user_id)
+            mock_update_org.assert_awaited_once_with(str(target_user_id), target_user_id)
 
     @pytest.mark.asyncio
     async def test_remove_member_does_not_update_current_org_id_when_not_matching(
@@ -1311,7 +1312,8 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
-                'server.services.org_member_service.UserStore.update_current_org'
+                'server.services.org_member_service.UserStore.update_current_org',
+                new_callable=AsyncMock,
             ) as mock_update_org,
         ):
             mock_get_member.side_effect = [
@@ -1330,7 +1332,7 @@ class TestOrgMemberServiceRemoveOrgMember:
             # Assert
             assert success is True
             assert error is None
-            mock_update_org.assert_not_called()
+            mock_update_org.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_remove_member_succeeds_when_user_not_found_after_removal(
@@ -1363,7 +1365,8 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
-                'server.services.org_member_service.UserStore.update_current_org'
+                'server.services.org_member_service.UserStore.update_current_org',
+                new_callable=AsyncMock,
             ) as mock_update_org,
         ):
             mock_get_member.side_effect = [
@@ -1382,7 +1385,7 @@ class TestOrgMemberServiceRemoveOrgMember:
             # Assert
             assert success is True
             assert error is None
-            mock_update_org.assert_not_called()
+            mock_update_org.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_successful_removal_calls_litellm_remove_user_from_team(

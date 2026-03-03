@@ -221,7 +221,7 @@ class OrgMemberService:
         user = await UserStore.get_user_by_id(str(target_user_id))
         if user and user.current_org_id == org_id:
             # Set current_org_id to personal workspace (org.id == user.id)
-            UserStore.update_current_org(str(target_user_id), target_user_id)
+            await UserStore.update_current_org(str(target_user_id), target_user_id)
 
         # If database removal succeeded, also remove from LiteLLM team
         try:

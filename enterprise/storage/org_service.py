@@ -929,7 +929,7 @@ class OrgService:
 
         # Step 3: Update user's current_org_id
         try:
-            updated_user = UserStore.update_current_org(user_id, org_id)
+            updated_user = await UserStore.update_current_org(user_id, org_id)
             if not updated_user:
                 raise OrgDatabaseError('User not found')
 
