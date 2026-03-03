@@ -40,6 +40,7 @@ def mock_gitlab_view():
         comment_body='sdfs',
         discussion_id='test_discussion',
         confidential=False,
+        v1_enabled=False,
     )
 
 
