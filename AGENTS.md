@@ -165,7 +165,7 @@ Each integration follows a consistent pattern with service classes, storage mode
 
 **Import Patterns:**
 - Use relative imports without `enterprise.` prefix in enterprise code
-- Example: `from storage.database import session_maker` not `from enterprise.storage.database import session_maker`
+- Example: `from storage.database import a_session_maker` not `from enterprise.storage.database import a_session_maker`
 - This ensures code works in both OpenHands and enterprise contexts
 
 **Test Structure:**
