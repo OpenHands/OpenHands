@@ -1027,7 +1027,7 @@ async def test_get_org_success(mock_app_with_get_user_id, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1067,7 +1067,7 @@ async def test_get_org_user_not_member(mock_app_with_get_user_id):
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app_with_get_user_id)
@@ -1092,7 +1092,7 @@ async def test_get_org_not_found(mock_app_with_get_user_id, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1167,7 +1167,7 @@ async def test_get_org_unexpected_error(mock_app_with_get_user_id, mock_owner_ro
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1218,7 +1218,7 @@ async def test_get_org_personal_workspace():
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
@@ -1260,7 +1260,7 @@ async def test_get_org_team_workspace(mock_app_with_get_user_id, mock_owner_role
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1305,7 +1305,7 @@ async def test_get_org_with_credits_none(mock_app_with_get_user_id, mock_owner_r
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1354,7 +1354,7 @@ async def test_get_org_sensitive_fields_not_exposed(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1404,7 +1404,7 @@ async def test_delete_org_success(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1439,7 +1439,7 @@ async def test_delete_org_not_found(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1469,7 +1469,7 @@ async def test_delete_org_not_owner(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1503,7 +1503,7 @@ async def test_delete_org_not_member(mock_app):
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app)
@@ -1528,7 +1528,7 @@ async def test_delete_org_database_failure(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1558,7 +1558,7 @@ async def test_delete_org_unexpected_error(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1606,7 +1606,7 @@ async def test_delete_org_unauthorized(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1636,7 +1636,7 @@ async def test_delete_org_orphaned_users(mock_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1708,7 +1708,7 @@ async def test_update_org_personal_workspace_preserved():
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
@@ -1769,7 +1769,7 @@ async def test_update_org_team_workspace_preserved():
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ),
         patch(
@@ -1809,7 +1809,7 @@ async def test_update_org_not_found(mock_update_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1845,7 +1845,7 @@ async def test_update_org_permission_denied_non_member(mock_update_app):
 
     # When user is not a member, get_user_org_role returns None
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         async with httpx.AsyncClient(
@@ -1876,7 +1876,7 @@ async def test_update_org_permission_denied_llm_settings(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1917,7 +1917,7 @@ async def test_update_org_duplicate_name_returns_409(mock_update_app, mock_owner
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1951,7 +1951,7 @@ async def test_update_org_database_error(mock_update_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -1985,7 +1985,7 @@ async def test_update_org_unexpected_error(mock_update_app, mock_owner_role):
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_owner_role),
         ),
         patch(
@@ -2041,7 +2041,7 @@ async def test_update_org_invalid_field_values(mock_update_app, mock_owner_role)
     update_data = {'default_max_iterations': -1}  # Invalid: must be > 0
 
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
@@ -2068,7 +2068,7 @@ async def test_update_org_empty_name_returns_422(mock_update_app, mock_owner_rol
     update_data = {'name': '   '}
 
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
@@ -2095,7 +2095,7 @@ async def test_update_org_invalid_email_format(mock_update_app, mock_owner_role)
     update_data = {'contact_email': 'invalid-email'}  # Missing @
 
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_owner_role),
     ):
         async with httpx.AsyncClient(
@@ -3464,7 +3464,7 @@ async def test_get_org_app_settings_success(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
@@ -3504,7 +3504,7 @@ async def test_get_org_app_settings_with_null_values(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
@@ -3538,7 +3538,7 @@ async def test_get_org_app_settings_not_found(
     # Arrange
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
@@ -3565,7 +3565,7 @@ async def test_get_org_app_settings_user_not_member(mock_app_with_get_user_id):
     """
     # Arrange - user has no role (not a member)
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app_with_get_user_id)
@@ -3596,7 +3596,7 @@ async def test_update_org_app_settings_success(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
@@ -3643,7 +3643,7 @@ async def test_update_org_app_settings_partial_update(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
@@ -3686,7 +3686,7 @@ async def test_update_org_app_settings_set_null(
 
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
@@ -3719,7 +3719,7 @@ async def test_update_org_app_settings_invalid_max_budget(
     """
     # Arrange
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_member_role),
     ):
         client = TestClient(mock_app_with_get_user_id)
@@ -3745,7 +3745,7 @@ async def test_update_org_app_settings_zero_max_budget(
     """
     # Arrange
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=mock_member_role),
     ):
         client = TestClient(mock_app_with_get_user_id)
@@ -3772,7 +3772,7 @@ async def test_update_org_app_settings_not_found(
     # Arrange
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
@@ -3805,7 +3805,7 @@ async def test_update_org_app_settings_database_error(
     # Arrange
     with (
         patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_member_role),
         ),
         patch(
@@ -3835,7 +3835,7 @@ async def test_update_org_app_settings_user_not_member(mock_app_with_get_user_id
     """
     # Arrange - user has no role (not a member)
     with patch(
-        'server.auth.authorization.get_user_org_role_async',
+        'server.auth.authorization.get_user_org_role',
         AsyncMock(return_value=None),
     ):
         client = TestClient(mock_app_with_get_user_id)
