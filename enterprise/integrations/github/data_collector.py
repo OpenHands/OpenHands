@@ -31,15 +31,15 @@ file_store = get_file_store(config.file_store, config.file_store_path)
 
 
 COLLECT_GITHUB_INTERACTIONS = (
-    os.getenv('COLLECT_GITHUB_INTERACTIONS', 'false') == 'true'
+    os.getenv("COLLECT_GITHUB_INTERACTIONS", "false") == "true"
 )
 
 
 class TriggerType(str, Enum):
-    ISSUE_LABEL = 'issue-label'
-    ISSUE_COMMENT = 'issue-coment'
-    PR_COMMENT_MACRO = 'label'
-    INLINE_PR_COMMENT_MACRO = 'inline-label'
+    ISSUE_LABEL = "issue-label"
+    ISSUE_COMMENT = "issue-coment"
+    PR_COMMENT_MACRO = "label"
+    INLINE_PR_COMMENT_MACRO = "inline-label"
 
 
 class GitHubDataCollector:
@@ -79,10 +79,10 @@ class GitHubDataCollector:
 
     def __init__(self):
         self.file_store = file_store
-        self.issues_path = 'github_data/issue-{}-{}/data.json'
-        self.matching_pr_path = 'github_data/pr-{}-{}/data.json'
+        self.issues_path = "github_data/issue-{}-{}/data.json"
+        self.matching_pr_path = "github_data/pr-{}-{}/data.json"
         # self.full_saved_pr_path = 'github_data/prs/{}-{}/data.json'
-        self.full_saved_pr_path = 'prs/github/{}-{}/data.json'
+        self.full_saved_pr_path = "prs/github/{}-{}/data.json"
         self.github_integration = GithubIntegration(
             auth=Auth.AppAuth(GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY)
         )
@@ -103,7 +103,7 @@ class GitHubDataCollector:
             return await gh_client.get_repository_node_id(repo_id)
         except Exception:
             # Fallback to old format if REST API fails
-            node_string = f'010:Repository{repo_id}'
+            node_string = f"010:Repository{repo_id}"
             return base64.b64encode(node_string.encode()).decode()
 
     def _create_file_name(
@@ -112,7 +112,7 @@ class GitHubDataCollector:
         suffix = path.format(repo_id, number)
 
         if conversation_id:
-            return f'{get_conversation_dir(conversation_id)}{suffix}'
+            return f"{get_conversation_dir(conversation_id)}{suffix}"
 
         return suffix
 
@@ -124,13 +124,13 @@ class GitHubDataCollector:
 
     def _check_openhands_author(self, name, login) -> bool:
         return (
-            name == 'openhands'
-            or login == 'openhands'
-            or login == 'openhands-agent'
-            or login == 'openhands-ai'
-            or login == 'openhands-staging'
-            or login == 'openhands-exp'
-            or (login and 'openhands' in login.lower())
+            name == "openhands"
+            or login == "openhands"
+            or login == "openhands-agent"
+            or login == "openhands-ai"
+            or login == "openhands-staging"
+            or login == "openhands-exp"
+            or (login and "openhands" in login.lower())
         )
 
     def _get_issue_comments(
@@ -150,10 +150,10 @@ class GitHubDataCollector:
 
                 for comment in issue.get_comments():
                     comment_data = {
-                        'id': comment.id,
-                        'body': comment.body,
-                        'created_at': comment.created_at.isoformat(),
-                        'user': comment.user.login,
+                        "id": comment.id,
+                        "body": comment.body,
+                        "created_at": comment.created_at.isoformat(),
+                        "user": comment.user.login,
                     }
 
                     # If we find a comment containing conversation_id, stop collecting comments
@@ -200,11 +200,11 @@ class GitHubDataCollector:
             conversation_id=conversation_id,
         )
 
-        payload_data = github_view.raw_payload.message.get('payload', {})
-        isssue_details = payload_data.get('issue', {})
-        is_repo_private = payload_data.get('repository', {}).get('private', 'true')
-        title = isssue_details.get('title', '')
-        body = isssue_details.get('body', '')
+        payload_data = github_view.raw_payload.message.get("payload", {})
+        isssue_details = payload_data.get("issue", {})
+        is_repo_private = payload_data.get("repository", {}).get("private", "true")
+        title = isssue_details.get("title", "")
+        body = isssue_details.get("body", "")
 
         # Get comments for the issue
         comments = self._get_issue_comments(
@@ -215,23 +215,23 @@ class GitHubDataCollector:
         )
 
         data = {
-            'trigger': trigger_type,
-            'metadata': {
-                'user': github_view.user_info.username,
-                'repo_name': github_view.full_repo_name,
-                'is_repo_private': is_repo_private,
-                'number': issue_number,
+            "trigger": trigger_type,
+            "metadata": {
+                "user": github_view.user_info.username,
+                "repo_name": github_view.full_repo_name,
+                "is_repo_private": is_repo_private,
+                "number": issue_number,
             },
-            'contents': {
-                'title': title,
-                'body': body,
-                'comments': comments,
+            "contents": {
+                "title": title,
+                "body": body,
+                "comments": comments,
             },
         }
 
         self._save_data(file_name, data)
         logger.info(
-            f'[Github]: Saved issue #{issue_number} for {github_view.full_repo_name}'
+            f"[Github]: Saved issue #{issue_number} for {github_view.full_repo_name}"
         )
 
     def _get_pr_commits(self, installation_id: str, repo_name: str, pr_number: int):
@@ -243,9 +243,9 @@ class GitHubDataCollector:
 
             for commit in pr.get_commits():
                 commit_data = {
-                    'sha': commit.sha,
-                    'authors': commit.author.login if commit.author else None,
-                    'committed_date': commit.commit.committer.date.isoformat()
+                    "sha": commit.sha,
+                    "authors": commit.author.login if commit.author else None,
+                    "committed_date": commit.commit.committer.date.isoformat()
                     if commit.commit and commit.commit.committer
                     else None,
                 }
@@ -256,45 +256,45 @@ class GitHubDataCollector:
     def _extract_repo_metadata(self, repo_data: dict) -> dict:
         """Extract repository metadata from GraphQL response"""
         return {
-            'name': repo_data.get('name'),
-            'owner': repo_data.get('owner', {}).get('login'),
-            'languages': [
-                lang['name'] for lang in repo_data.get('languages', {}).get('nodes', [])
+            "name": repo_data.get("name"),
+            "owner": repo_data.get("owner", {}).get("login"),
+            "languages": [
+                lang["name"] for lang in repo_data.get("languages", {}).get("nodes", [])
             ],
         }
 
     def _process_commits_page(self, pr_data: dict, commits: list) -> None:
         """Process commits from a single GraphQL page"""
-        commit_nodes = pr_data.get('commits', {}).get('nodes', [])
+        commit_nodes = pr_data.get("commits", {}).get("nodes", [])
         for commit_node in commit_nodes:
-            commit = commit_node['commit']
-            author_info = commit.get('author', {})
+            commit = commit_node["commit"]
+            author_info = commit.get("author", {})
             commit_data = {
-                'sha': commit['oid'],
-                'message': commit['message'],
-                'committed_date': commit.get('committedDate'),
-                'author': {
-                    'name': author_info.get('name'),
-                    'email': author_info.get('email'),
-                    'github_login': author_info.get('user', {}).get('login'),
+                "sha": commit["oid"],
+                "message": commit["message"],
+                "committed_date": commit.get("committedDate"),
+                "author": {
+                    "name": author_info.get("name"),
+                    "email": author_info.get("email"),
+                    "github_login": author_info.get("user", {}).get("login"),
                 },
-                'stats': {
-                    'additions': commit.get('additions', 0),
-                    'deletions': commit.get('deletions', 0),
-                    'changed_files': commit.get('changedFiles', 0),
+                "stats": {
+                    "additions": commit.get("additions", 0),
+                    "deletions": commit.get("deletions", 0),
+                    "changed_files": commit.get("changedFiles", 0),
                 },
             }
             commits.append(commit_data)
 
     def _process_pr_comments_page(self, pr_data: dict, pr_comments: list) -> None:
         """Process PR comments from a single GraphQL page"""
-        comment_nodes = pr_data.get('comments', {}).get('nodes', [])
+        comment_nodes = pr_data.get("comments", {}).get("nodes", [])
         for comment in comment_nodes:
             comment_data = {
-                'author': comment.get('author', {}).get('login'),
-                'body': comment.get('body'),
-                'created_at': comment.get('createdAt'),
-                'type': 'pr_comment',
+                "author": comment.get("author", {}).get("login"),
+                "body": comment.get("body"),
+                "created_at": comment.get("createdAt"),
+                "type": "pr_comment",
             }
             pr_comments.append(comment_data)
 
@@ -302,27 +302,27 @@ class GitHubDataCollector:
         self, pr_data: dict, review_comments: list
     ) -> None:
         """Process reviews and review comments from a single GraphQL page"""
-        review_nodes = pr_data.get('reviews', {}).get('nodes', [])
+        review_nodes = pr_data.get("reviews", {}).get("nodes", [])
         for review in review_nodes:
             # Add the review itself if it has a body
-            if review.get('body', '').strip():
+            if review.get("body", "").strip():
                 review_data = {
-                    'author': review.get('author', {}).get('login'),
-                    'body': review.get('body'),
-                    'created_at': review.get('createdAt'),
-                    'state': review.get('state'),
-                    'type': 'review',
+                    "author": review.get("author", {}).get("login"),
+                    "body": review.get("body"),
+                    "created_at": review.get("createdAt"),
+                    "state": review.get("state"),
+                    "type": "review",
                 }
                 review_comments.append(review_data)
 
             # Add individual review comments
-            review_comment_nodes = review.get('comments', {}).get('nodes', [])
+            review_comment_nodes = review.get("comments", {}).get("nodes", [])
             for review_comment in review_comment_nodes:
                 review_comment_data = {
-                    'author': review_comment.get('author', {}).get('login'),
-                    'body': review_comment.get('body'),
-                    'created_at': review_comment.get('createdAt'),
-                    'type': 'review_comment',
+                    "author": review_comment.get("author", {}).get("login"),
+                    "body": review_comment.get("body"),
+                    "created_at": review_comment.get("createdAt"),
+                    "type": "review_comment",
                 }
                 review_comments.append(review_comment_data)
 
@@ -336,12 +336,12 @@ class GitHubDataCollector:
 
         # Count commits by OpenHands (check both name and login)
         for commit in commits:
-            author = commit.get('author', {})
-            author_name = author.get('name', '').lower()
+            author = commit.get("author", {})
+            author_name = author.get("name", "").lower()
             author_login = (
-                author.get('github_login', '').lower()
-                if author.get('github_login')
-                else ''
+                author.get("github_login", "").lower()
+                if author.get("github_login")
+                else ""
             )
 
             if self._check_openhands_author(author_name, author_login):
@@ -350,20 +350,20 @@ class GitHubDataCollector:
         # Count review comments by OpenHands
         for review_comment in review_comments:
             author_login = (
-                review_comment.get('author', '').lower()
-                if review_comment.get('author')
-                else ''
+                review_comment.get("author", "").lower()
+                if review_comment.get("author")
+                else ""
             )
-            author_name = ''  # Initialize to avoid reference before assignment
+            author_name = ""  # Initialize to avoid reference before assignment
             if self._check_openhands_author(author_name, author_login):
                 openhands_review_comment_count += 1
 
         # Count general PR comments by OpenHands
         for pr_comment in pr_comments:
             author_login = (
-                pr_comment.get('author', '').lower() if pr_comment.get('author') else ''
+                pr_comment.get("author", "").lower() if pr_comment.get("author") else ""
             )
-            author_name = ''  # Initialize to avoid reference before assignment
+            author_name = ""  # Initialize to avoid reference before assignment
             if self._check_openhands_author(author_name, author_login):
                 openhands_general_comment_count += 1
 
@@ -386,35 +386,35 @@ class GitHubDataCollector:
     ) -> dict:
         """Build the final data structure for JSON storage"""
 
-        is_merged = pr_data['merged']
+        is_merged = pr_data["merged"]
         merged_by = None
         merge_commit_sha = None
         if is_merged:
-            merged_by = (pr_data.get('mergedBy') or {}).get('login')
-            merge_commit_sha = (pr_data.get('mergeCommit') or {}).get('oid')
+            merged_by = (pr_data.get("mergedBy") or {}).get("login")
+            merge_commit_sha = (pr_data.get("mergeCommit") or {}).get("oid")
 
         return {
-            'repo_metadata': self._extract_repo_metadata(repo_data),
-            'pr_metadata': {
-                'username': (pr_data.get('author') or {}).get('login'),
-                'number': pr_data.get('number'),
-                'title': pr_data.get('title'),
-                'body': pr_data.get('body'),
-                'comments': pr_comments,
+            "repo_metadata": self._extract_repo_metadata(repo_data),
+            "pr_metadata": {
+                "username": (pr_data.get("author") or {}).get("login"),
+                "number": pr_data.get("number"),
+                "title": pr_data.get("title"),
+                "body": pr_data.get("body"),
+                "comments": pr_comments,
             },
-            'commits': commits,
-            'review_comments': review_comments,
-            'merge_status': {
-                'merged': pr_data.get('merged'),
-                'merged_by': merged_by,
-                'state': pr_data.get('state'),
-                'merge_commit_sha': merge_commit_sha,
+            "commits": commits,
+            "review_comments": review_comments,
+            "merge_status": {
+                "merged": pr_data.get("merged"),
+                "merged_by": merged_by,
+                "state": pr_data.get("state"),
+                "merge_commit_sha": merge_commit_sha,
             },
-            'openhands_stats': {
-                'num_commits': openhands_commit_count,
-                'num_review_comments': openhands_review_comment_count,
-                'num_general_comments': openhands_general_comment_count,
-                'helped_author': openhands_commit_count > 0,
+            "openhands_stats": {
+                "num_commits": openhands_commit_count,
+                "num_review_comments": openhands_review_comment_count,
+                "num_general_comments": openhands_general_comment_count,
+                "helped_author": openhands_commit_count > 0,
             },
         }
 
@@ -442,7 +442,7 @@ class GitHubDataCollector:
             installation_token = self._get_installation_access_token(installation_id)
         except Exception as e:
             logger.warning(
-                f'Failed to generate token for {openhands_pr.repo_name}: {e}'
+                f"Failed to generate token for {openhands_pr.repo_name}: {e}"
             )
             return
 
@@ -466,22 +466,22 @@ class GitHubDataCollector:
         # Fetch all data with pagination
         while True:
             variables = {
-                'nodeId': node_id,
-                'pr_number': pr_number,
-                'commits_after': commits_after,
-                'comments_after': comments_after,
-                'reviews_after': reviews_after,
+                "nodeId": node_id,
+                "pr_number": pr_number,
+                "commits_after": commits_after,
+                "comments_after": comments_after,
+                "reviews_after": reviews_after,
             }
 
             try:
                 result = await gh_client.execute_graphql_query(
                     PR_QUERY_BY_NODE_ID, variables
                 )
-                if not result.get('data', {}).get('node', {}).get('pullRequest'):
+                if not result.get("data", {}).get("node", {}).get("pullRequest"):
                     break
 
-                pr_data = result['data']['node']['pullRequest']
-                repo_data = result['data']['node']
+                pr_data = result["data"]["node"]["pullRequest"]
+                repo_data = result["data"]["node"]
 
                 # Process data from this page using modular methods
                 self._process_commits_page(pr_data, commits)
@@ -490,39 +490,39 @@ class GitHubDataCollector:
 
                 # Check pagination for all three types
                 has_more_commits = (
-                    pr_data.get('commits', {})
-                    .get('pageInfo', {})
-                    .get('hasNextPage', False)
+                    pr_data.get("commits", {})
+                    .get("pageInfo", {})
+                    .get("hasNextPage", False)
                 )
                 has_more_comments = (
-                    pr_data.get('comments', {})
-                    .get('pageInfo', {})
-                    .get('hasNextPage', False)
+                    pr_data.get("comments", {})
+                    .get("pageInfo", {})
+                    .get("hasNextPage", False)
                 )
                 has_more_reviews = (
-                    pr_data.get('reviews', {})
-                    .get('pageInfo', {})
-                    .get('hasNextPage', False)
+                    pr_data.get("reviews", {})
+                    .get("pageInfo", {})
+                    .get("hasNextPage", False)
                 )
 
                 # Update cursors
                 if has_more_commits:
                     commits_after = (
-                        pr_data.get('commits', {}).get('pageInfo', {}).get('endCursor')
+                        pr_data.get("commits", {}).get("pageInfo", {}).get("endCursor")
                     )
                 else:
                     commits_after = None
 
                 if has_more_comments:
                     comments_after = (
-                        pr_data.get('comments', {}).get('pageInfo', {}).get('endCursor')
+                        pr_data.get("comments", {}).get("pageInfo", {}).get("endCursor")
                     )
                 else:
                     comments_after = None
 
                 if has_more_reviews:
                     reviews_after = (
-                        pr_data.get('reviews', {}).get('pageInfo', {}).get('endCursor')
+                        pr_data.get("reviews", {}).get("pageInfo", {}).get("endCursor")
                     )
                 else:
                     reviews_after = None
@@ -532,7 +532,7 @@ class GitHubDataCollector:
                     break
 
             except Exception:
-                logger.warning('Error fetching PR data', exc_info=True)
+                logger.warning("Error fetching PR data", exc_info=True)
                 return
 
         if not pr_data or not repo_data:
@@ -546,10 +546,10 @@ class GitHubDataCollector:
         ) = self._count_openhands_activity(commits, review_comments, pr_comments)
 
         logger.info(
-            f'[Github]: PR #{pr_number} - OpenHands commits: {openhands_commit_count}, review comments: {openhands_review_comment_count}, general comments: {openhands_general_comment_count}'
+            f"[Github]: PR #{pr_number} - OpenHands commits: {openhands_commit_count}, review comments: {openhands_review_comment_count}, general comments: {openhands_general_comment_count}"
         )
         logger.info(
-            f'[Github]: PR #{pr_number} - Total collected: {len(commits)} commits, {len(pr_comments)} PR comments, {len(review_comments)} review comments'
+            f"[Github]: PR #{pr_number} - Total collected: {len(commits)} commits, {len(pr_comments)} PR comments, {len(review_comments)} review comments"
         )
 
         # Build final data structure using modular method
@@ -569,7 +569,7 @@ class GitHubDataCollector:
         openhands_helped_author = openhands_commit_count > 0
 
         # Update the PR with OpenHands statistics
-        update_success = store.update_pr_openhands_stats(
+        update_success = await store.update_pr_openhands_stats(
             repo_id=repo_id,
             pr_number=pr_number,
             original_updated_at=openhands_pr.updated_at,
@@ -581,7 +581,7 @@ class GitHubDataCollector:
 
         if not update_success:
             logger.warning(
-                f'[Github]: Failed to update OpenHands stats for PR #{pr_number} in repo {repo_id} - PR may have been modified concurrently'
+                f"[Github]: Failed to update OpenHands stats for PR #{pr_number} in repo {repo_id} - PR may have been modified concurrently"
             )
 
         # Save to file
@@ -593,12 +593,12 @@ class GitHubDataCollector:
         )
         self._save_data(file_name, data)
         logger.info(
-            f'[Github]: Saved full PR #{pr_number} for repo {repo_id} with OpenHands stats: commits={openhands_commit_count}, reviews={openhands_review_comment_count}, general_comments={openhands_general_comment_count}, helped={openhands_helped_author}'
+            f"[Github]: Saved full PR #{pr_number} for repo {repo_id} with OpenHands stats: commits={openhands_commit_count}, reviews={openhands_review_comment_count}, general_comments={openhands_general_comment_count}, helped={openhands_helped_author}"
         )
 
     def _check_for_conversation_url(self, body):
         conversation_pattern = re.search(
-            rf'https://{HOST}/conversations/([a-zA-Z0-9-]+)(?:\s|[.,;!?)]|$)', body
+            rf"https://{HOST}/conversations/([a-zA-Z0-9-]+)(?:\s|[.,;!?)]|$)", body
         )
         if conversation_pattern:
             return conversation_pattern.group(1)
@@ -609,38 +609,38 @@ class GitHubDataCollector:
         """
         Check if PR was closed (regardless of conversation URL)
         """
-        action = payload.get('action', '')
-        return action == 'closed' and 'pull_request' in payload
+        action = payload.get("action", "")
+        return action == "closed" and "pull_request" in payload
 
-    def _track_closed_or_merged_pr(self, payload):
+    async def _track_closed_or_merged_pr(self, payload):
         """
         Track PR closed/merged event
         """
 
-        repo_id = str(payload['repository']['id'])
-        pr_number = payload['number']
-        installation_id = str(payload['installation']['id'])
-        private = payload['repository']['private']
-        repo_name = payload['repository']['full_name']
+        repo_id = str(payload["repository"]["id"])
+        pr_number = payload["number"]
+        installation_id = str(payload["installation"]["id"])
+        private = payload["repository"]["private"]
+        repo_name = payload["repository"]["full_name"]
 
-        pr_data = payload['pull_request']
+        pr_data = payload["pull_request"]
 
         # Extract PR metrics
-        num_reviewers = len(pr_data.get('requested_reviewers', []))
-        num_commits = pr_data.get('commits', 0)
-        num_review_comments = pr_data.get('review_comments', 0)
-        num_general_comments = pr_data.get('comments', 0)
-        num_changed_files = pr_data.get('changed_files', 0)
-        num_additions = pr_data.get('additions', 0)
-        num_deletions = pr_data.get('deletions', 0)
-        merged = pr_data.get('merged', False)
+        num_reviewers = len(pr_data.get("requested_reviewers", []))
+        num_commits = pr_data.get("commits", 0)
+        num_review_comments = pr_data.get("review_comments", 0)
+        num_general_comments = pr_data.get("comments", 0)
+        num_changed_files = pr_data.get("changed_files", 0)
+        num_additions = pr_data.get("additions", 0)
+        num_deletions = pr_data.get("deletions", 0)
+        merged = pr_data.get("merged", False)
 
         # Extract closed_at timestamp
         # Example: "closed_at":"2025-06-19T21:19:36Z"
-        closed_at_str = pr_data.get('closed_at')
-        created_at = pr_data.get('created_at')
+        closed_at_str = pr_data.get("closed_at")
+        created_at = pr_data.get("created_at")
 
-        closed_at = datetime.fromisoformat(closed_at_str.replace('Z', '+00:00'))
+        closed_at = datetime.fromisoformat(closed_at_str.replace("Z", "+00:00"))
 
         # Determine status based on whether it was merged
         status = PRStatus.MERGED if merged else PRStatus.CLOSED
@@ -671,17 +671,17 @@ class GitHubDataCollector:
             num_general_comments=num_general_comments,
         )
 
-        store.insert_pr(pr)
-        logger.info(f'Tracked PR {status}: {repo_id}#{pr_number}')
+        await store.insert_pr(pr)
+        logger.info(f"Tracked PR {status}: {repo_id}#{pr_number}")
 
-    def process_payload(self, message: Message):
+    async def process_payload(self, message: Message):
         if not COLLECT_GITHUB_INTERACTIONS:
             return
 
-        raw_payload = message.message.get('payload', {})
+        raw_payload = message.message.get("payload", {})
 
         if self._is_pr_closed_or_merged(raw_payload):
-            self._track_closed_or_merged_pr(raw_payload)
+            await self._track_closed_or_merged_pr(raw_payload)
 
     async def save_data(self, github_view: ResolverViewInterface):
         if not COLLECT_GITHUB_INTERACTIONS:
