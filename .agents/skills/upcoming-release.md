@@ -13,9 +13,9 @@ anything.
 
 Once you have received the two SHAs:
 1. Run the `.github/scripts/find_prs_between_commits.py` script from the repository root directory with the `--json` flag. The **first SHA** should be the older commit (current release), and the **second SHA** should be the newer commit (what's being released).
-2. Exclude PRs that are chores, dependency updates, adding logs, refactors.
-3. Split the PRs in these categories:
+2. Do not show PRs that are chores, dependency updates, adding logs, refactors.
+3. From the remaining PRs, split them into these categories:
    - Features
    - Bug fixes
    - Security/CVE fixes
-   - Everything else
+   - Other
