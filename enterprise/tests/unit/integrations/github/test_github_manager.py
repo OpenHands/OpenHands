@@ -297,7 +297,6 @@ class TestGithubManagerUserNotFound:
         )
 
         # Mock user having write access (so is_job_requested returns True)
-        mock_collaborator = MagicMock()
         mock_repo.get_collaborator_permission.return_value = 'write'
 
         # Token manager returns None for keycloak_user_id (user hasn't created an account)
@@ -605,5 +604,5 @@ class TestGetUserNotFoundMessageIntegration:
     def test_message_is_friendly_and_informative(self):
         """Test that the message is friendly and explains the situation."""
         message = get_user_not_found_message('testuser')
-        assert "it looks like" in message.lower()
+        assert 'it looks like' in message.lower()
         assert "haven't created an openhands account" in message.lower()
