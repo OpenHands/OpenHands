@@ -875,7 +875,7 @@ class OrgService:
         Returns:
             bool: True if BYOR export is enabled, False otherwise
         """
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
         if not user or not user.current_org_id:
             return False
 

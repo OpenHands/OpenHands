@@ -197,7 +197,7 @@ async def keycloak_callback(
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
     keycloak_user_id = user_info['sub']
-    user = await UserStore.get_user_by_id_async(keycloak_user_id)
+    user = await UserStore.get_user_by_id(keycloak_user_id)
     if not user:
         return _html_response(
             title='Failed to authenticate.',

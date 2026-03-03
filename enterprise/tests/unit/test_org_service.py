@@ -1870,7 +1870,7 @@ async def test_check_byor_export_enabled_returns_true_when_enabled():
 
     with (
         patch(
-            'storage.org_service.UserStore.get_user_by_id_async',
+            'storage.org_service.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -1905,7 +1905,7 @@ async def test_check_byor_export_enabled_returns_false_when_disabled():
 
     with (
         patch(
-            'storage.org_service.UserStore.get_user_by_id_async',
+            'storage.org_service.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -1932,7 +1932,7 @@ async def test_check_byor_export_enabled_returns_false_when_user_not_found():
     user_id = 'nonexistent-user'
 
     with patch(
-        'storage.org_service.UserStore.get_user_by_id_async',
+        'storage.org_service.UserStore.get_user_by_id',
         AsyncMock(return_value=None),
     ):
         # Act
@@ -1956,7 +1956,7 @@ async def test_check_byor_export_enabled_returns_false_when_no_current_org():
     mock_user.current_org_id = None
 
     with patch(
-        'storage.org_service.UserStore.get_user_by_id_async',
+        'storage.org_service.UserStore.get_user_by_id',
         AsyncMock(return_value=mock_user),
     ):
         # Act
@@ -1982,7 +1982,7 @@ async def test_check_byor_export_enabled_returns_false_when_org_not_found():
 
     with (
         patch(
-            'storage.org_service.UserStore.get_user_by_id_async',
+            'storage.org_service.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(

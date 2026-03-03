@@ -120,7 +120,7 @@ async def saas_get_user(
         email = user_info.get('email') if user_info else None
         sub = user_info.get('sub') if user_info else ''
         if sub:
-            db_user = await UserStore.get_user_by_id_async(sub)
+            db_user = await UserStore.get_user_by_id(sub)
             if db_user and db_user.email is not None:
                 email = db_user.email
 

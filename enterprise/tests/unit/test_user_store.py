@@ -101,11 +101,11 @@ async def test_create_default_settings_with_litellm(mock_litellm_api):
     assert settings.llm_base_url == 'http://test.url'
 
 
-# --- Tests for get_user_by_id_async ---
+# --- Tests for get_user_by_id ---
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_id_async_existing_user(async_session_maker):
+async def test_get_user_by_id_existing_user(async_session_maker):
     """Test retrieving an existing user by ID."""
     user_id = uuid.uuid4()
     org_id = uuid.uuid4()
@@ -120,7 +120,7 @@ async def test_get_user_by_id_async_existing_user(async_session_maker):
 
     # Test retrieval with patched session maker
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_id_async(str(user_id))
+        result = await UserStore.get_user_by_id(str(user_id))
 
     assert result is not None
     assert result.id == user_id
@@ -128,8 +128,8 @@ async def test_get_user_by_id_async_existing_user(async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_id_async_user_not_found(async_session_maker):
-    """Test that get_user_by_id_async returns None for non-existent user."""
+async def test_get_user_by_id_user_not_found(async_session_maker):
+    """Test that get_user_by_id returns None for non-existent user."""
     non_existent_id = str(uuid.uuid4())
 
     with patch('storage.user_store.a_session_maker', async_session_maker):
@@ -138,16 +138,16 @@ async def test_get_user_by_id_async_user_not_found(async_session_maker):
             patch.object(UserStore, '_acquire_user_creation_lock', return_value=True),
             patch.object(UserStore, '_release_user_creation_lock', return_value=True),
         ):
-            result = await UserStore.get_user_by_id_async(non_existent_id)
+            result = await UserStore.get_user_by_id(non_existent_id)
 
     assert result is None
 
 
-# --- Tests for get_user_by_email_async ---
+# --- Tests for get_user_by_email ---
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_email_async_existing_user(async_session_maker):
+async def test_get_user_by_email_existing_user(async_session_maker):
     """Test retrieving a user by email."""
     user_id = uuid.uuid4()
     org_id = uuid.uuid4()
@@ -163,7 +163,7 @@ async def test_get_user_by_email_async_existing_user(async_session_maker):
 
     # Test retrieval
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_email_async(email)
+        result = await UserStore.get_user_by_email(email)
 
     assert result is not None
     assert result.id == user_id
@@ -171,28 +171,28 @@ async def test_get_user_by_email_async_existing_user(async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_email_async_not_found(async_session_maker):
-    """Test that get_user_by_email_async returns None for non-existent email."""
+async def test_get_user_by_email_not_found(async_session_maker):
+    """Test that get_user_by_email returns None for non-existent email."""
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_email_async('nonexistent@example.com')
+        result = await UserStore.get_user_by_email('nonexistent@example.com')
 
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_email_async_empty_email(async_session_maker):
-    """Test that get_user_by_email_async returns None for empty email."""
+async def test_get_user_by_email_empty_email(async_session_maker):
+    """Test that get_user_by_email returns None for empty email."""
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_email_async('')
+        result = await UserStore.get_user_by_email('')
 
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_email_async_none_email(async_session_maker):
-    """Test that get_user_by_email_async returns None for None email."""
+async def test_get_user_by_email_none_email(async_session_maker):
+    """Test that get_user_by_email returns None for None email."""
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_email_async(None)
+        result = await UserStore.get_user_by_email(None)
 
     assert result is None
 

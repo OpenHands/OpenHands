@@ -106,7 +106,7 @@ class OrgInvitationService:
             raise ValueError(f'Invalid role: {role_name}')
 
         # Step 5: Check if user is already a member (by email)
-        existing_user = await UserStore.get_user_by_email_async(email)
+        existing_user = await UserStore.get_user_by_email(email)
         if existing_user:
             existing_member = await OrgMemberStore.get_org_member(
                 org_id, existing_user.id
@@ -308,7 +308,7 @@ class OrgInvitationService:
             raise InvitationExpiredError('Invitation has expired')
 
         # Step 2.5: Verify user email matches invitation email
-        user = await UserStore.get_user_by_id_async(str(user_id))
+        user = await UserStore.get_user_by_id(str(user_id))
         if not user:
             raise InvitationInvalidError('User not found')
 

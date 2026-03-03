@@ -718,7 +718,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -767,7 +767,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -815,7 +815,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -967,7 +967,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -1149,7 +1149,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -1251,7 +1251,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -1307,7 +1307,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -1359,7 +1359,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -1411,7 +1411,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -1465,7 +1465,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_remove,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -1632,7 +1632,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_update,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -1693,7 +1693,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_update,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -1752,7 +1752,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_update,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -1815,7 +1815,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_update,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch.object(
@@ -2036,7 +2036,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -2253,7 +2253,7 @@ class TestOrgMemberServiceGetMe:
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -2340,7 +2340,7 @@ class TestOrgMemberServiceGetMe:
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.UserStore.get_user_by_id_async',
+                'server.services.org_member_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):

@@ -44,7 +44,7 @@ def secrets_store(async_session_maker, mock_config):
 class TestSaasSecretsStore:
     @pytest.mark.asyncio
     @patch(
-        'storage.saas_secrets_store.UserStore.get_user_by_id_async',
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
         new_callable=AsyncMock,
     )
     async def test_store_and_load(self, mock_get_user, secrets_store, mock_user):
@@ -84,7 +84,7 @@ class TestSaasSecretsStore:
 
     @pytest.mark.asyncio
     @patch(
-        'storage.saas_secrets_store.UserStore.get_user_by_id_async',
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
         new_callable=AsyncMock,
     )
     async def test_encryption_decryption(self, mock_get_user, secrets_store, mock_user):
@@ -186,7 +186,7 @@ class TestSaasSecretsStore:
 
     @pytest.mark.asyncio
     @patch(
-        'storage.saas_secrets_store.UserStore.get_user_by_id_async',
+        'storage.saas_secrets_store.UserStore.get_user_by_id',
         new_callable=AsyncMock,
     )
     async def test_update_existing_secrets(

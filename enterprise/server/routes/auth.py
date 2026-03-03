@@ -203,7 +203,7 @@ async def keycloak_callback(
 
     email = user_info.get('email')
     user_id = user_info['sub']
-    user = await UserStore.get_user_by_id_async(user_id)
+    user = await UserStore.get_user_by_id(user_id)
     if not user:
         user = await UserStore.create_user(user_id, user_info)
     else:

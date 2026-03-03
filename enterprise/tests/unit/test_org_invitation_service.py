@@ -70,7 +70,7 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
             ) as mock_is_expired,
             patch(
-                'server.services.org_invitation_service.UserStore.get_user_by_id_async',
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
         ):
@@ -106,7 +106,7 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
             ) as mock_is_expired,
             patch(
-                'server.services.org_invitation_service.UserStore.get_user_by_id_async',
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -174,7 +174,7 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
             ) as mock_is_expired,
             patch(
-                'server.services.org_invitation_service.UserStore.get_user_by_id_async',
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
@@ -220,7 +220,7 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.OrgInvitationStore.is_token_expired'
             ) as mock_is_expired,
             patch(
-                'server.services.org_invitation_service.UserStore.get_user_by_id_async',
+                'server.services.org_invitation_service.UserStore.get_user_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(

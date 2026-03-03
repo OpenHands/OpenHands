@@ -68,7 +68,7 @@ class SaasSettingsStore(SettingsStore):
                 return result.scalars().first()
 
     async def load(self) -> Settings | None:
-        user = await UserStore.get_user_by_id_async(self.user_id)
+        user = await UserStore.get_user_by_id(self.user_id)
         if not user:
             logger.error(f'User not found for ID {self.user_id}')
             return None

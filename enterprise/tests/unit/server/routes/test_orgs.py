@@ -514,7 +514,7 @@ async def test_list_user_orgs_success(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -568,7 +568,7 @@ async def test_list_user_orgs_returns_current_org_id(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -613,7 +613,7 @@ async def test_list_user_orgs_with_pagination(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -648,7 +648,7 @@ async def test_list_user_orgs_empty(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -715,7 +715,7 @@ async def test_list_user_orgs_service_error(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -781,7 +781,7 @@ async def test_list_user_orgs_personal_org_identified(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -820,7 +820,7 @@ async def test_list_user_orgs_team_org_identified(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -869,7 +869,7 @@ async def test_list_user_orgs_mixed_personal_and_team(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(
@@ -941,7 +941,7 @@ async def test_list_user_orgs_all_fields_present(mock_app_list):
 
     with (
         patch(
-            'server.routes.orgs.UserStore.get_user_by_id_async',
+            'server.routes.orgs.UserStore.get_user_by_id',
             AsyncMock(return_value=mock_user),
         ),
         patch(

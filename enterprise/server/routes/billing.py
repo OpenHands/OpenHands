@@ -90,7 +90,7 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    user = await UserStore.get_user_by_id_async(user_id)
+    user = await UserStore.get_user_by_id(user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail='User not found')
     user_team_info = await LiteLlmManager.get_user_team_info(
@@ -248,7 +248,7 @@ async def success_callback(session_id: str, request: Request):
             )
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-        user = await UserStore.get_user_by_id_async(billing_session.user_id)
+        user = await UserStore.get_user_by_id(billing_session.user_id)
         if user is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail='User not found')
         user_team_info = await LiteLlmManager.get_user_team_info(
