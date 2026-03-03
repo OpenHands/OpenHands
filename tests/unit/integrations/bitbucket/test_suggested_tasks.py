@@ -1,4 +1,3 @@
-from typing import List
 from unittest.mock import AsyncMock
 
 import pytest
@@ -40,7 +39,7 @@ async def test_get_suggested_tasks_returns_open_issues_across_repositories(
 ) -> None:
     """Open Bitbucket issues should be converted into SuggestedTask instances."""
     # Arrange: two repositories the user can access
-    repos: List[Repository] = [
+    repos: list[Repository] = [
         _make_repo('workspace-one/repo-one'),
         _make_repo('workspace-two/repo-two'),
     ]
@@ -107,7 +106,7 @@ async def test_get_suggested_tasks_skips_repositories_without_full_name(
     bitbucket_service: BitBucketService,
 ) -> None:
     """Repositories missing a full_name should be ignored."""
-    repos: List[Repository] = [
+    repos: list[Repository] = [
         _make_repo('workspace/repo'),
         _make_repo(None),
     ]
@@ -152,7 +151,7 @@ async def test_get_suggested_tasks_skips_repositories_with_issue_fetch_failures(
     bitbucket_service: BitBucketService,
 ) -> None:
     """Errors fetching issues for a particular repository should not abort the whole call."""
-    repos: List[Repository] = [
+    repos: list[Repository] = [
         _make_repo('workspace/failing-repo'),
         _make_repo('workspace/working-repo'),
     ]
@@ -175,4 +174,3 @@ async def test_get_suggested_tasks_skips_repositories_with_issue_fetch_failures(
     assert task.repo == 'workspace/working-repo'
     assert task.issue_number == 42
     assert task.title == 'Working issue'
-

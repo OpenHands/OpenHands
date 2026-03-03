@@ -296,11 +296,11 @@ class BitBucketReposMixin(BitBucketMixinBase):
             issues_url = f'{self.BASE_URL}/repositories/{repo_full_name}/issues'
 
             # Only consider issues that are currently open. Bitbucket issue states can vary
-            # slightly (e.g. \"new\", \"open\"), so we filter defensively here.
+            # slightly (e.g. "new", "open"), so we filter defensively here.
             params = {
                 'pagelen': MAX_ISSUES_PER_REPO,
                 'sort': '-updated_on',
-                'q': 'state = \"new\" OR state = \"open\"',
+                'q': 'state = "new" OR state = "open"',
             }
 
             try:
@@ -318,6 +318,12 @@ class BitBucketReposMixin(BitBucketMixinBase):
             for issue in issues:
                 issue_id = issue.get('id')
                 title = issue.get('title', '')
+                state = (issue.get('state') or '').lower()
+
+                # As an extra safeguard, ignore issues that are not currently open even if
+                # the remote filtering returns additional states.
+                if state not in {'new', 'open'}:
+                    continue
 
                 # Ensure we have the minimal fields required to build a SuggestedTask.
                 if issue_id is None or title is None:
