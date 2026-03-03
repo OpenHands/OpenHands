@@ -1196,19 +1196,51 @@ class TestGetSandboxBySessionApiKey:
 class TestUtilityFunctions:
     """Test cases for utility functions."""
 
-    def test_build_service_url(self):
-        """Test _build_service_url function."""
+    def test_build_service_url_subdomain_mode(self):
+        """Test _build_service_url function with subdomain-based routing."""
         from openhands.app_server.sandbox.remote_sandbox_service import (
             _build_service_url,
         )
 
-        # Test HTTPS URL
-        result = _build_service_url('https://sandbox.example.com/path', 'vscode')
+        # Test HTTPS URL with path (subdomain mode)
+        result = _build_service_url(
+            'https://sandbox.example.com/path', 'vscode', 'runtime-123'
+        )
         assert result == 'https://vscode-sandbox.example.com/path'
 
-        # Test HTTP URL
-        result = _build_service_url('http://localhost:8000', 'work-1')
-        assert result == 'http://work-1-localhost:8000'
+        # Test HTTP URL without path (subdomain mode)
+        result = _build_service_url(
+            'http://localhost:8000', 'work-1', 'different-runtime'
+        )
+        assert result == 'http://work-1-localhost:8000/'
+
+        # Test URL with empty path (subdomain mode)
+        result = _build_service_url('https://sandbox.example.com', 'work-2', 'some-id')
+        assert result == 'https://work-2-sandbox.example.com/'
+
+    def test_build_service_url_path_mode(self):
+        """Test _build_service_url function with path-based routing."""
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _build_service_url,
+        )
+
+        # Test path-based routing where URL path starts with /{runtime_id}
+        result = _build_service_url(
+            'https://sandbox.example.com/runtime-123', 'vscode', 'runtime-123'
+        )
+        assert result == 'https://sandbox.example.com/runtime-123/vscode'
+
+        # Test path-based routing with work-1
+        result = _build_service_url(
+            'https://sandbox.example.com/my-runtime-id', 'work-1', 'my-runtime-id'
+        )
+        assert result == 'https://sandbox.example.com/my-runtime-id/work-1'
+
+        # Test path-based routing with work-2
+        result = _build_service_url(
+            'http://localhost:8080/abc-xyz-123', 'work-2', 'abc-xyz-123'
+        )
+        assert result == 'http://localhost:8080/abc-xyz-123/work-2'
 
     def test_hash_session_api_key(self):
         """Test _hash_session_api_key function."""

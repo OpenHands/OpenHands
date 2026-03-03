@@ -30,7 +30,7 @@ class V1GitService {
 
   /**
    * Get git changes for a V1 conversation
-   * Uses the agent server endpoint: GET /api/git/changes/{path}
+   * Uses the agent server endpoint: GET /api/git/changes?path={path}
    * Maps V1 status types (ADDED, DELETED, etc.) to V0 format (A, D, etc.)
    *
    * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
@@ -43,15 +43,14 @@ class V1GitService {
     sessionApiKey: string | null | undefined,
     path: string,
   ): Promise<GitChange[]> {
-    const encodedPath = encodeURIComponent(path);
-    const url = this.buildRuntimeUrl(
-      conversationUrl,
-      `/api/git/changes/${encodedPath}`,
-    );
+    const url = this.buildRuntimeUrl(conversationUrl, `/api/git/changes`);
     const headers = buildSessionHeaders(sessionApiKey);
 
     // V1 API returns V1GitChangeStatus types, we need to map them to V0 format
-    const { data } = await axios.get<V1GitChange[]>(url, { headers });
+    const { data } = await axios.get<V1GitChange[]>(url, {
+      headers,
+      params: { path },
+    });
 
     // Validate response is an array (could be HTML error page if runtime is dead)
     if (!Array.isArray(data)) {
@@ -69,7 +68,7 @@ class V1GitService {
 
   /**
    * Get git change diff for a specific file in a V1 conversation
-   * Uses the agent server endpoint: GET /api/git/diff/{path}
+   * Uses the agent server endpoint: GET /api/git/diff?path={path}
    *
    * @param conversationUrl The conversation URL (e.g., "http://localhost:54928/api/conversations/...")
    * @param sessionApiKey Session API key for authentication (required for V1)
@@ -81,14 +80,13 @@ class V1GitService {
     sessionApiKey: string | null | undefined,
     path: string,
   ): Promise<GitChangeDiff> {
-    const encodedPath = encodeURIComponent(path);
-    const url = this.buildRuntimeUrl(
-      conversationUrl,
-      `/api/git/diff/${encodedPath}`,
-    );
+    const url = this.buildRuntimeUrl(conversationUrl, `/api/git/diff`);
     const headers = buildSessionHeaders(sessionApiKey);
 
-    const { data } = await axios.get<GitChangeDiff>(url, { headers });
+    const { data } = await axios.get<GitChangeDiff>(url, {
+      headers,
+      params: { path },
+    });
     return data;
   }
 }
