@@ -170,7 +170,7 @@ class GitlabManager(Manager[GitlabViewType]):
                 f'[GitLab] Unsupported view type: {type(gitlab_view).__name__}'
             )
 
-    async def start_job(self, gitlab_view: GitlabViewType):
+    async def start_job(self, gitlab_view: GitlabViewType) -> None:
         """
         Start a job for the GitLab view.
 

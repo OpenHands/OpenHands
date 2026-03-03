@@ -319,7 +319,7 @@ class GithubManager(Manager[GithubViewType]):
             logger.warning('Unsupported location')
             return
 
-    async def start_job(self, github_view: GithubViewType):
+    async def start_job(self, github_view: GithubViewType) -> None:
         """Kick off a job with openhands agent.
 
         1. Get user credential

@@ -303,7 +303,7 @@ class SlackManager(Manager[SlackViewInterface]):
 
         return True
 
-    async def start_job(self, slack_view: SlackViewInterface):
+    async def start_job(self, slack_view: SlackViewInterface) -> None:
         # Importing here prevents circular import
         from server.conversation_callback_processor.slack_callback_processor import (
             SlackCallbackProcessor,

@@ -343,7 +343,7 @@ class LinearManager(Manager[LinearViewInterface]):
             logger.error(f'[Linear] Error in is_job_requested: {str(e)}')
             return False
 
-    async def start_job(self, linear_view: LinearViewInterface):
+    async def start_job(self, linear_view: LinearViewInterface) -> None:
         """Start a Linear job/conversation."""
         # Import here to prevent circular import
         from server.conversation_callback_processor.linear_callback_processor import (
