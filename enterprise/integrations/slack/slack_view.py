@@ -42,7 +42,6 @@ from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationTrigger,
 )
-from openhands.utils.async_utils import GENERAL_TIMEOUT
 
 # =================================================
 # SECTION: Slack view types

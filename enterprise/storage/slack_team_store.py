@@ -30,9 +30,7 @@ class SlackTeamStore:
         """
         slack_team = SlackTeam(team_id=team_id, bot_access_token=bot_access_token)
         async with a_session_maker() as session:
-            await session.execute(
-                delete(SlackTeam).where(SlackTeam.team_id == team_id)
-            )
+            await session.execute(delete(SlackTeam).where(SlackTeam.team_id == team_id))
             session.add(slack_team)
             await session.commit()
         return slack_team
