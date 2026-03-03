@@ -97,22 +97,7 @@ class OrgMemberStore:
     async def update_org_member(org_member: OrgMember) -> None:
         """Update an organization-member relationship."""
         async with a_session_maker() as session:
-            await session.execute(
-                update(OrgMember)
-                .where(
-                    OrgMember.org_id == org_member.org_id,
-                    OrgMember.user_id == org_member.user_id,
-                )
-                .values(
-                    role_id=org_member.role_id,
-                    _llm_api_key=org_member._llm_api_key,
-                    max_iterations=org_member.max_iterations,
-                    llm_model=org_member.llm_model,
-                    _llm_api_key_for_byor=org_member._llm_api_key_for_byor,
-                    llm_base_url=org_member.llm_base_url,
-                    status=org_member.status,
-                )
-            )
+            await session.merge(org_member)
             await session.commit()
 
     @staticmethod
