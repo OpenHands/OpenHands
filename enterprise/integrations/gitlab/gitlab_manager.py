@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from types import MappingProxyType
+from typing import cast
 
 from integrations.gitlab.gitlab_view import (
     GitlabFactory,
@@ -17,7 +20,6 @@ from integrations.utils import (
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
 )
-from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
@@ -34,7 +36,7 @@ from openhands.server.types import (
 from openhands.storage.data_models.secrets import Secrets
 
 
-class GitlabManager(Manager['GitlabViewType']):
+class GitlabManager(Manager[GitlabViewType]):
     def __init__(self, token_manager: TokenManager, data_collector: None = None):
         self.token_manager = token_manager
 
@@ -68,11 +70,11 @@ class GitlabManager(Manager['GitlabViewType']):
             logger.warning(f'Got invalid keyloak user id for GitLab User {user_id}')
             return False
 
-        # Importing here prevents circular import
+        # GitLabServiceImpl returns SaaSGitLabService in enterprise context
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
-            external_auth_id=keycloak_user_id
+        gitlab_service = cast(
+            SaaSGitLabService, GitLabServiceImpl(external_auth_id=keycloak_user_id)
         )
 
         return await gitlab_service.user_has_write_access(project_id)
@@ -131,36 +133,36 @@ class GitlabManager(Manager['GitlabViewType']):
         """
         keycloak_user_id = gitlab_view.user_info.keycloak_user_id
 
-        # Importing here prevents circular import
+        # GitLabServiceImpl returns SaaSGitLabService in enterprise context
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
-            external_auth_id=keycloak_user_id
+        gitlab_service = cast(
+            SaaSGitLabService, GitLabServiceImpl(external_auth_id=keycloak_user_id)
         )
 
         if isinstance(gitlab_view, GitlabInlineMRComment) or isinstance(
             gitlab_view, GitlabMRComment
         ):
             await gitlab_service.reply_to_mr(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                gitlab_view.discussion_id,
-                message,
+                project_id=str(gitlab_view.project_id),
+                merge_request_iid=str(gitlab_view.issue_number),
+                discussion_id=gitlab_view.discussion_id,
+                body=message,
             )
 
         elif isinstance(gitlab_view, GitlabIssueComment):
             await gitlab_service.reply_to_issue(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                gitlab_view.discussion_id,
-                message,
+                project_id=str(gitlab_view.project_id),
+                issue_number=str(gitlab_view.issue_number),
+                discussion_id=gitlab_view.discussion_id,
+                body=message,
             )
         elif isinstance(gitlab_view, GitlabIssue):
             await gitlab_service.reply_to_issue(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                None,  # no discussion id, issue is tagged
-                message,
+                project_id=str(gitlab_view.project_id),
+                issue_number=str(gitlab_view.issue_number),
+                discussion_id=None,  # no discussion id, issue is tagged
+                body=message,
             )
         else:
             logger.warning(
@@ -180,8 +182,6 @@ class GitlabManager(Manager['GitlabViewType']):
         )
 
         try:
-            msg_info: str = ''
-
             try:
                 user_info = gitlab_view.user_info
 
@@ -214,18 +214,8 @@ class GitlabManager(Manager['GitlabViewType']):
                     )
                 )
 
-                # Initialize conversation and get metadata (similar to GitHub)
-                convo_metadata = await gitlab_view.initialize_new_conversation()
-
-                saas_user_auth = await get_saas_user_auth(
-                    gitlab_view.user_info.keycloak_user_id, self.token_manager
-                )
-
                 await gitlab_view.create_new_conversation(
-                    self.jinja_env,
-                    secret_store.provider_tokens,
-                    convo_metadata,
-                    saas_user_auth,
+                    self.jinja_env, secret_store.provider_tokens
                 )
 
                 conversation_id = gitlab_view.conversation_id
@@ -234,19 +224,18 @@ class GitlabManager(Manager['GitlabViewType']):
                     f'[GitLab] Created conversation {conversation_id} for user {user_info.username}'
                 )
 
-                if not gitlab_view.v1_enabled:
-                    # Create a GitlabCallbackProcessor for this conversation
-                    processor = GitlabCallbackProcessor(
-                        gitlab_view=gitlab_view,
-                        send_summary_instruction=True,
-                    )
+                # Create a GitlabCallbackProcessor for this conversation
+                processor = GitlabCallbackProcessor(
+                    gitlab_view=gitlab_view,
+                    send_summary_instruction=True,
+                )
 
-                    # Register the callback processor
-                    register_callback_processor(conversation_id, processor)
+                # Register the callback processor
+                register_callback_processor(conversation_id, processor)
 
-                    logger.info(
-                        f'[GitLab] Created callback processor for conversation {conversation_id}'
-                    )
+                logger.info(
+                    f'[GitLab] Created callback processor for conversation {conversation_id}'
+                )
 
                 conversation_link = CONVERSATION_URL.format(conversation_id)
                 msg_info = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
