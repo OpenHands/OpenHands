@@ -186,10 +186,16 @@ class GithubManager(Manager):
             return
 
         # Post the comment
-        with Github(auth=Auth.Token(installation_token)) as github_client:
-            repo = github_client.get_repo(full_repo_name)
-            issue = repo.get_issue(number=issue_number)
-            issue.create_comment(get_user_not_found_message(username))
+        try:
+            with Github(auth=Auth.Token(installation_token)) as github_client:
+                repo = github_client.get_repo(full_repo_name)
+                issue = repo.get_issue(number=issue_number)
+                issue.create_comment(get_user_not_found_message(username))
+        except Exception as e:
+            logger.error(
+                f'[GitHub] Failed to send user not found message to {username} '
+                f'on {full_repo_name}#{issue_number}: {e}'
+            )
 
     async def is_job_requested(self, message: Message) -> bool:
         self._confirm_incoming_source_type(message)
