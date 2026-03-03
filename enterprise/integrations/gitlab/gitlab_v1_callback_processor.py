@@ -82,7 +82,7 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
                 if self.gitlab_view_data.get('keycloak_user_id'):
                     await self._post_summary_to_gitlab(
                         f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
+                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)}) '
                         'for more information.'
                     )
             except Exception as post_error:
