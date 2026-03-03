@@ -4,6 +4,7 @@ import json
 import os
 import re
 import uuid
+from typing import cast
 from urllib.parse import urlencode, urlparse
 
 import requests
@@ -332,7 +333,7 @@ async def jira_events(
 async def create_jira_workspace(request: Request, workspace_data: JiraWorkspaceCreate):
     """Create a new Jira workspace registration."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
 
@@ -396,7 +397,7 @@ async def create_jira_workspace(request: Request, workspace_data: JiraWorkspaceC
 async def create_workspace_link(request: Request, link_data: JiraLinkCreate):
     """Register a user mapping to a Jira workspace."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
 
@@ -597,7 +598,7 @@ async def jira_callback(request: Request, code: str, state: str):
 async def get_current_workspace_link(request: Request):
     """Get current user's Jira integration details."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
 
         user = await jira_manager.integration_store.get_user_by_active_workspace(
@@ -650,7 +651,7 @@ async def get_current_workspace_link(request: Request):
 async def unlink_workspace(request: Request):
     """Unlink user from Jira integration by setting status to inactive."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
 
         user = await jira_manager.integration_store.get_user_by_active_workspace(
@@ -706,7 +707,7 @@ async def validate_workspace_integration(request: Request, workspace_name: str):
                 detail='workspace_name can only contain alphanumeric characters, hyphens, underscores, and periods',
             )
 
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_email = await user_auth.get_user_email()
         if not user_email:
             raise HTTPException(

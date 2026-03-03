@@ -4,7 +4,9 @@ This module contains reusable functions and classes for installing GitLab webhoo
 that can be used by both the cron job and API routes.
 """
 
-from typing import cast
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from integrations.types import GitLabResourceType
@@ -13,7 +15,9 @@ from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 from storage.gitlab_webhook_store import GitlabWebhookStore
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.service_types import GitService
+
+if TYPE_CHECKING:
+    from integrations.gitlab.gitlab_service import SaaSGitLabService
 
 # Webhook configuration constants
 WEBHOOK_NAME = 'OpenHands Resolver'
@@ -35,7 +39,7 @@ class BreakLoopException(Exception):
 
 
 async def verify_webhook_conditions(
-    gitlab_service: type[GitService],
+    gitlab_service: SaaSGitLabService,
     resource_type: GitLabResourceType,
     resource_id: str,
     webhook_store: GitlabWebhookStore,
@@ -52,10 +56,6 @@ async def verify_webhook_conditions(
         webhook_store: Webhook store instance
         webhook: Webhook object to verify
     """
-    from integrations.gitlab.gitlab_service import SaaSGitLabService
-
-    gitlab_service = cast(type[SaaSGitLabService], gitlab_service)
-
     # Check if resource exists
     does_resource_exist, status = await gitlab_service.check_resource_exists(
         resource_type, resource_id
@@ -106,7 +106,9 @@ async def verify_webhook_conditions(
         does_webhook_exist_on_resource,
         status,
     ) = await gitlab_service.check_webhook_exists_on_resource(
-        resource_type, resource_id, GITLAB_WEBHOOK_URL
+        resource_type=resource_type,
+        resource_id=resource_id,
+        webhook_url=GITLAB_WEBHOOK_URL,
     )
 
     logger.info(
@@ -131,7 +133,7 @@ async def verify_webhook_conditions(
 
 
 async def install_webhook_on_resource(
-    gitlab_service: type[GitService],
+    gitlab_service: SaaSGitLabService,
     resource_type: GitLabResourceType,
     resource_id: str,
     webhook_store: GitlabWebhookStore,
@@ -150,10 +152,6 @@ async def install_webhook_on_resource(
     Returns:
         Tuple of (webhook_id, status)
     """
-    from integrations.gitlab.gitlab_service import SaaSGitLabService
-
-    gitlab_service = cast(type[SaaSGitLabService], gitlab_service)
-
     webhook_secret = f'{webhook.user_id}-{str(uuid4())}'
     webhook_uuid = f'{str(uuid4())}'
 

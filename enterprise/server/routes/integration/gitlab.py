@@ -329,6 +329,12 @@ async def reinstall_gitlab_webhook(
                 resource_type, resource_id
             )
 
+        if not webhook:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Failed to create or fetch webhook record',
+            )
+
         # Verify conditions and install webhook
         try:
             await verify_webhook_conditions(

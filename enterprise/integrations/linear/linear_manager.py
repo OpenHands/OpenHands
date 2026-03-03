@@ -39,7 +39,7 @@ from openhands.server.user_auth.user_auth import UserAuth
 from openhands.utils.http_session import httpx_verify_option
 
 
-class LinearManager(Manager):
+class LinearManager(Manager[LinearViewInterface]):
     def __init__(self, token_manager: TokenManager):
         self.token_manager = token_manager
         self.integration_store = LinearIntegrationStore.get_instance()

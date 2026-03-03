@@ -45,7 +45,7 @@ authorize_url_generator = AuthorizeUrlGenerator(
 )
 
 
-class SlackManager(Manager):
+class SlackManager(Manager[SlackViewInterface]):
     def __init__(self, token_manager):
         self.token_manager = token_manager
         self.login_link = (
