@@ -94,7 +94,7 @@ class ApiKeyStore:
             if not key_record:
                 return False
 
-            await session.delete(key_record)
+            session.delete(key_record)
             await session.commit()
 
             return True
@@ -108,7 +108,7 @@ class ApiKeyStore:
             if not key_record:
                 return False
 
-            await session.delete(key_record)
+            session.delete(key_record)
             await session.commit()
 
             return True
@@ -164,7 +164,7 @@ class ApiKeyStore:
             if not key_record:
                 return False
 
-            await session.delete(key_record)
+            session.delete(key_record)
             await session.commit()
 
             return True

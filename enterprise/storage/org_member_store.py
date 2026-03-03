@@ -138,7 +138,7 @@ class OrgMemberStore:
             if not org_member:
                 return False
 
-            await session.delete(org_member)
+            session.delete(org_member)
             await session.commit()
             return True
 
