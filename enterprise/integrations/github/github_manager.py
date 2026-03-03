@@ -154,7 +154,7 @@ class GithubManager(Manager):
 
         return None
 
-    async def _send_user_not_found_message(self, message: Message, username: str):
+    def _send_user_not_found_message(self, message: Message, username: str):
         """Send a message to the user informing them they need to create an OpenHands account.
 
         This method handles all supported trigger types:
@@ -255,7 +255,7 @@ class GithubManager(Manager):
                     f'[GitHub] User {username} (id={user_id}) not found in Keycloak. '
                     f'User must create an OpenHands account first.'
                 )
-                await self._send_user_not_found_message(message, username)
+                self._send_user_not_found_message(message, username)
                 return
 
             github_view = await GithubFactory.create_github_view_from_payload(
