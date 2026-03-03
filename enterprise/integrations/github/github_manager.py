@@ -193,7 +193,7 @@ class GithubManager(Manager):
                 github_view.installation_id
             )
             # Store the installation token
-            self.token_manager.store_org_token(
+            await self.token_manager.store_org_token(
                 github_view.installation_id, installation_token
             )
             # Add eyes reaction to acknowledge we've read the request
