@@ -19,3 +19,4 @@ Once you have received the two SHAs:
    - Bug fixes
    - Security/CVE fixes
    - Other
+4. The output should list the PRs under their category, including the PR number with a brief description of the PR.
