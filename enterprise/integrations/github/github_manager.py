@@ -10,6 +10,7 @@ from integrations.github.github_view import (
     GithubIssue,
     GithubIssueComment,
     GithubPRComment,
+    GithubViewType,
 )
 from integrations.manager import Manager
 from integrations.models import (
@@ -43,7 +44,7 @@ from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.async_utils import call_sync_from_async
 
 
-class GithubManager(Manager):
+class GithubManager(Manager[GithubViewType]):
     def __init__(
         self, token_manager: TokenManager, data_collector: GitHubDataCollector
     ):
@@ -193,14 +194,20 @@ class GithubManager(Manager):
                 github_view.installation_id
             )
             # Store the installation token
-            self.token_manager.store_org_token(
+            await self.token_manager.store_org_token(
                 github_view.installation_id, installation_token
             )
             # Add eyes reaction to acknowledge we've read the request
             self._add_reaction(github_view, 'eyes', installation_token)
             await self.start_job(github_view)
 
-    async def send_message(self, message: Message, github_view: ResolverViewInterface):
+    async def send_message(self, message: str, github_view: ResolverViewInterface):
+        """Send a message to GitHub.
+
+        Args:
+            message: The message content to send (plain text string)
+            github_view: The GitHub view object containing issue/PR/comment info
+        """
         installation_token = self.token_manager.load_org_token(
             github_view.installation_id
         )
@@ -208,14 +215,12 @@ class GithubManager(Manager):
             logger.warning('Missing installation token')
             return
 
-        outgoing_message = message.message
-
         if isinstance(github_view, GithubInlinePRComment):
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
                 pr = repo.get_pull(github_view.issue_number)
                 pr.create_review_comment_reply(
-                    comment_id=github_view.comment_id, body=outgoing_message
+                    comment_id=github_view.comment_id, body=message
                 )
 
         elif (
@@ -226,13 +231,13 @@ class GithubManager(Manager):
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
                 issue = repo.get_issue(number=github_view.issue_number)
-                issue.create_comment(outgoing_message)
+                issue.create_comment(message)
 
         else:
             logger.warning('Unsupported location')
             return
 
-    async def start_job(self, github_view: ResolverViewInterface):
+    async def start_job(self, github_view: GithubViewType):
         """Kick off a job with openhands agent.
 
         1. Get user credential
@@ -245,7 +250,7 @@ class GithubManager(Manager):
         )
 
         try:
-            msg_info = None
+            msg_info: str = ''
 
             try:
                 user_info = github_view.user_info
@@ -361,15 +366,13 @@ class GithubManager(Manager):
 
                 msg_info = get_session_expired_message(user_info.username)
 
-            msg = self.create_outgoing_message(msg_info)
-            await self.send_message(msg, github_view)
+            await self.send_message(msg_info, github_view)
 
         except Exception:
             logger.exception('[Github]: Error starting job')
-            msg = self.create_outgoing_message(
-                msg='Uh oh! There was an unexpected error starting the job :('
+            await self.send_message(
+                'Uh oh! There was an unexpected error starting the job :(', github_view
             )
-            await self.send_message(msg, github_view)
 
         try:
             await self.data_collector.save_data(github_view)

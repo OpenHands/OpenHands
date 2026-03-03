@@ -10,10 +10,6 @@ import { useConversationStore } from "#/stores/conversation-store";
 const TASK_CONVERSATION_ID = "task-ec03fb2ab8604517b24af632b058c2fd";
 const REAL_CONVERSATION_ID = "conv-abc123";
 
-vi.mock("#/utils/feature-flags", () => ({
-  USE_PLANNING_AGENT: () => false,
-}));
-
 let mockConversationId = TASK_CONVERSATION_ID;
 
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -92,6 +88,30 @@ describe("ConversationTabs localStorage behavior", () => {
       const parsed = JSON.parse(storedState!);
       expect(parsed.unpinnedTabs).toContain("terminal");
     });
+
+    it("should hide a tab after unpinning it from context menu", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      const user = userEvent.setup();
+
+      render(
+        <>
+          <ConversationTabs />
+          <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />
+        </>,
+        { wrapper: createWrapper(REAL_CONVERSATION_ID) },
+      );
+
+      expect(
+        screen.getByTestId("conversation-tab-terminal"),
+      ).toBeInTheDocument();
+
+      const terminalItem = screen.getByText("COMMON$TERMINAL");
+      await user.click(terminalItem);
+
+      expect(
+        screen.queryByTestId("conversation-tab-terminal"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("hook integration", () => {
@@ -120,9 +140,7 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Verify localStorage was updated
       const storedState = JSON.parse(
-        localStorage.getItem(
-          `conversation-state-${REAL_CONVERSATION_ID}`,
-        )!,
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("terminal");
       expect(storedState.rightPanelShown).toBe(true);
@@ -152,9 +170,7 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Verify localStorage was updated
       const storedState = JSON.parse(
-        localStorage.getItem(
-          `conversation-state-${REAL_CONVERSATION_ID}`,
-        )!,
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.rightPanelShown).toBe(false);
     });
@@ -184,9 +200,7 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Verify localStorage was updated
       const storedState = JSON.parse(
-        localStorage.getItem(
-          `conversation-state-${REAL_CONVERSATION_ID}`,
-        )!,
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("browser");
     });

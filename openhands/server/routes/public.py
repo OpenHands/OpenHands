@@ -6,9 +6,10 @@
 # Unless you are working on deprecation, please avoid extending this legacy file and consult the V1 codepaths above.
 # Tag: Legacy-V0
 # This module belongs to the old V0 web server. The V1 application server lives under openhands/app_server/.
+
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
 
 from openhands.controller.agent import Agent
 from openhands.security.options import SecurityAnalyzers
@@ -19,22 +20,21 @@ from openhands.utils.llm import get_supported_llm_models
 app = APIRouter(prefix='/api/options', dependencies=get_dependencies())
 
 
-@app.get('/models', response_model=list[str])
-async def get_litellm_models() -> list[str]:
-    """Get all models supported by LiteLLM.
+async def get_llm_models_dependency(request: Request) -> list[str]:
+    """Returns a callable that provides the LLM models implementation.
 
-    This function combines models from litellm and Bedrock, removing any
-    error-prone Bedrock models.
-
-    To get the models:
-    ```sh
-    curl http://localhost:3000/api/litellm-models
-    ```
-
-    Returns:
-        list[str]: A sorted list of unique model names.
+    Returns a factory that produces the actual implementation function.
+    Override this in enterprise/saas mode via app.dependency_overrides.
     """
-    return get_supported_llm_models(config)
+
+    return get_supported_llm_models(config, [])
+
+
+@app.get('/models')
+async def get_litellm_models(
+    models: list[str] = Depends(get_llm_models_dependency),
+) -> list[str]:
+    return models
 
 
 @app.get('/agents', response_model=list[str])

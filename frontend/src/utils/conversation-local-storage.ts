@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   ConversationTab,
   ConversationMode,
@@ -7,6 +7,12 @@ import type {
 export const LOCAL_STORAGE_KEYS = {
   CONVERSATION_STATE: "conversation-state",
 } as const;
+
+const CONVERSATION_STATE_UPDATED_EVENT = "conversation-state-updated";
+
+type ConversationStateUpdatedDetail = {
+  conversationId: string;
+};
 
 /**
  * Consolidated conversation state stored in a single localStorage key.
@@ -71,6 +77,14 @@ export function setConversationState(
     const currentState = getConversationState(conversationId);
     const newState = { ...currentState, ...updates };
     localStorage.setItem(key, JSON.stringify(newState));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent<ConversationStateUpdatedDetail>(
+          CONVERSATION_STATE_UPDATED_EVENT,
+          { detail: { conversationId } },
+        ),
+      );
+    }
   } catch (err) {
     console.warn("Failed to set conversation localStorage", err);
   }
@@ -80,6 +94,14 @@ export function clearConversationLocalStorage(conversationId: string) {
   try {
     const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
     localStorage.removeItem(key);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent<ConversationStateUpdatedDetail>(
+          CONVERSATION_STATE_UPDATED_EVENT,
+          { detail: { conversationId } },
+        ),
+      );
+    }
   } catch (err) {
     console.warn(
       "Failed to clear conversation localStorage",
@@ -104,8 +126,49 @@ export function useConversationLocalStorageState(conversationId: string): {
     getConversationState(conversationId),
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+
+    const syncState = () => {
+      setState(getConversationState(conversationId));
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === key) {
+        syncState();
+      }
+    };
+
+    const handleConversationStateUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<ConversationStateUpdatedDetail>;
+      if (customEvent.detail?.conversationId === conversationId) {
+        syncState();
+      }
+    };
+
+    // Ensure this hook reflects latest state for the current conversation ID.
+    syncState();
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(
+      CONVERSATION_STATE_UPDATED_EVENT,
+      handleConversationStateUpdated,
+    );
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(
+        CONVERSATION_STATE_UPDATED_EVENT,
+        handleConversationStateUpdated,
+      );
+    };
+  }, [conversationId]);
+
   const updateState = (updates: Partial<ConversationState>) => {
-    setState((prev) => ({ ...prev, ...updates }));
     setConversationState(conversationId, updates);
   };
 

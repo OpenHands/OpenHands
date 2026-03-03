@@ -41,8 +41,6 @@ from openhands.storage.data_models.conversation_status import ConversationStatus
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
 from openhands.utils.async_utils import (
-    GENERAL_TIMEOUT,
-    call_async_from_sync,
     call_sync_from_async,
     run_in_loop,
     wait_all,
@@ -370,7 +368,11 @@ class StandaloneConversationManager(ConversationManager):
             session.agent_session.event_stream.subscribe(
                 EventStreamSubscriber.SERVER,
                 self._create_conversation_update_callback(
-                    user_id, sid, settings, session.llm_registry
+                    user_id,
+                    sid,
+                    settings,
+                    session.llm_registry,
+                    asyncio.get_running_loop(),
                 ),
                 UPDATED_AT_CALLBACK_ID,
             )
@@ -618,23 +620,28 @@ class StandaloneConversationManager(ConversationManager):
         conversation_id: str,
         settings: Settings,
         llm_registry: LLMRegistry,
+        loop: asyncio.AbstractEventLoop,
     ) -> Callable:
         def callback(event, *args, **kwargs):
-            call_async_from_sync(
-                self._update_conversation_for_event,
-                GENERAL_TIMEOUT,
-                user_id,
-                conversation_id,
-                settings,
-                llm_registry,
-                event,
-            )
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._update_conversation_for_event(
+                        user_id,
+                        conversation_id,
+                        settings,
+                        llm_registry,
+                        event,
+                    ),
+                    loop,
+                )
+            except Exception as e:
+                logger.error(f'Error in conversation update callback: {e}')
 
         return callback
 
     async def _update_conversation_for_event(
         self,
-        user_id: str,
+        user_id: str | None,
         conversation_id: str,
         settings: Settings,
         llm_registry: LLMRegistry,

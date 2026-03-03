@@ -24,7 +24,6 @@ from jinja2 import Environment
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 from server.auth.token_manager import TokenManager
 from server.config import get_config
-from storage.database import session_maker
 from storage.org_store import OrgStore
 from storage.proactive_conversation_store import ProactiveConversationStore
 from storage.saas_secrets_store import SaasSecretsStore
@@ -73,7 +72,6 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
         This function checks both the global environment variable kill switch AND
         the user's individual setting. Both must be true for the function to return true.
     """
-
     # If no user ID is provided, we can't check user settings
     if not user_id:
         return False
@@ -82,13 +80,10 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     if not ENABLE_PROACTIVE_CONVERSATION_STARTERS:
         return False
 
-    def _get_setting():
-        org = OrgStore.get_current_org_from_keycloak_user_id(user_id)
-        if not org:
-            return False
-        return bool(org.enable_proactive_conversation_starters)
-
-    return await call_sync_from_async(_get_setting)
+    org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
+    if not org:
+        return False
+    return bool(org.enable_proactive_conversation_starters)
 
 
 # =================================================
@@ -153,9 +148,7 @@ class GithubIssue(ResolverViewInterface):
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
-        secrets_store = SaasSecretsStore(
-            self.user_info.keycloak_user_id, session_maker, get_config()
-        )
+        secrets_store = SaasSecretsStore(self.user_info.keycloak_user_id, get_config())
         user_secrets = await secrets_store.load()
 
         return user_secrets.custom_secrets if user_secrets else None

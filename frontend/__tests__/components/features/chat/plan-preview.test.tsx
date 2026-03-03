@@ -27,11 +27,6 @@ function renderPlanPreview(ui: React.ReactElement) {
   );
 }
 
-// Mock the feature flag to always return true (not testing feature flag behavior)
-vi.mock("#/utils/feature-flags", () => ({
-  USE_PLANNING_AGENT: vi.fn(() => true),
-}));
-
 // Mock i18n - need to preserve initReactI18next and I18nextProvider for test-utils
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
@@ -92,19 +87,21 @@ describe("PlanPreview", () => {
   });
 
   it("should render nothing when planContent is null", () => {
-    renderPlanPreview(<PlanPreview planContent={null} />);
+    // Arrange & Act
+    const { container } = renderPlanPreview(<PlanPreview planContent={null} />);
 
-    const contentDiv = screen.getByTestId("plan-preview-content");
-    expect(contentDiv).toBeInTheDocument();
-    expect(contentDiv.textContent?.trim() || "").toBe("");
+    // Assert
+    expect(container.firstChild).toBeNull();
   });
 
   it("should render nothing when planContent is undefined", () => {
-    renderPlanPreview(<PlanPreview planContent={undefined} />);
+    // Arrange & Act
+    const { container } = renderPlanPreview(
+      <PlanPreview planContent={undefined} />,
+    );
 
-    const contentDiv = screen.getByTestId("plan-preview-content");
-    expect(contentDiv).toBeInTheDocument();
-    expect(contentDiv.textContent?.trim() || "").toBe("");
+    // Assert
+    expect(container.firstChild).toBeNull();
   });
 
   it("should render markdown content when planContent is provided", () => {

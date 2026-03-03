@@ -18,17 +18,17 @@ def _get_db_session_injector():
     return _config.db_session
 
 
-def session_maker():
+def session_maker(**kwargs):
     db_session_injector = _get_db_session_injector()
-    session_maker = db_session_injector.get_session_maker()
-    return session_maker()
+    factory = db_session_injector.get_session_maker()
+    return factory(**kwargs)
 
 
 @contextlib.asynccontextmanager
-async def a_session_maker():
+async def a_session_maker(**kwargs):
     db_session_injector = _get_db_session_injector()
-    a_session_maker = await db_session_injector.get_async_session_maker()
-    async with a_session_maker() as session:
+    factory = await db_session_injector.get_async_session_maker()
+    async with factory(**kwargs) as session:
         yield session
 
 

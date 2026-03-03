@@ -145,9 +145,9 @@ class TestSlackV1CallbackProcessor:
         """Test that processor handles double callback correctly and processes both times."""
         conversation_id = uuid4()
 
-        # Mock SlackTeamStore
+        # Mock SlackTeamStore (async method)
         mock_store = MagicMock()
-        mock_store.get_team_bot_token.return_value = 'xoxb-test-token'
+        mock_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
         mock_slack_team_store.return_value = mock_store
 
         # Mock successful summary generation
@@ -208,9 +208,9 @@ class TestSlackV1CallbackProcessor:
         """Test successful end-to-end callback execution."""
         conversation_id = uuid4()
 
-        # Mock SlackTeamStore
+        # Mock SlackTeamStore (async method)
         mock_store = MagicMock()
-        mock_store.get_team_bot_token.return_value = 'xoxb-test-token'
+        mock_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
         mock_slack_team_store.return_value = mock_store
 
         # Mock summary instruction
@@ -287,9 +287,9 @@ class TestSlackV1CallbackProcessor:
         expected_error,
     ):
         """Test error handling when bot access token is missing or empty."""
-        # Mock SlackTeamStore to return the test token
+        # Mock SlackTeamStore to return the test token (async method)
         mock_store = MagicMock()
-        mock_store.get_team_bot_token.return_value = bot_token
+        mock_store.get_team_bot_token = AsyncMock(return_value=bot_token)
         mock_slack_team_store.return_value = mock_store
 
         # Mock successful summary generation
@@ -327,9 +327,9 @@ class TestSlackV1CallbackProcessor:
         expected_error,
     ):
         """Test error handling for various Slack API errors."""
-        # Mock SlackTeamStore
+        # Mock SlackTeamStore (async method)
         mock_store = MagicMock()
-        mock_store.get_team_bot_token.return_value = 'xoxb-test-token'
+        mock_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
         mock_slack_team_store.return_value = mock_store
 
         # Mock successful summary generation
@@ -392,9 +392,9 @@ class TestSlackV1CallbackProcessor:
         """Test error handling for various agent server errors."""
         conversation_id = uuid4()
 
-        # Mock SlackTeamStore
+        # Mock SlackTeamStore (async method)
         mock_store = MagicMock()
-        mock_store.get_team_bot_token.return_value = 'xoxb-test-token'
+        mock_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
         mock_slack_team_store.return_value = mock_store
 
         # Mock summary instruction

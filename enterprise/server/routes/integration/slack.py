@@ -31,7 +31,8 @@ from server.logger import logger
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.signature import SignatureVerifier
 from slack_sdk.web.async_client import AsyncWebClient
-from storage.database import session_maker
+from sqlalchemy import delete
+from storage.database import a_session_maker
 from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
@@ -218,9 +219,9 @@ async def keycloak_callback(
 
     # Retrieve bot token
     if team_id and bot_access_token:
-        slack_team_store.create_team(team_id, bot_access_token)
+        await slack_team_store.create_team(team_id, bot_access_token)
     else:
-        bot_access_token = slack_team_store.get_team_bot_token(team_id)
+        bot_access_token = await slack_team_store.get_team_bot_token(team_id)
 
     if not bot_access_token:
         logger.error(
@@ -239,15 +240,15 @@ async def keycloak_callback(
         slack_display_name=slack_display_name,
     )
 
-    with session_maker(expire_on_commit=False) as session:
+    async with a_session_maker(expire_on_commit=False) as session:
         # First delete any existing tokens
-        session.query(SlackUser).filter(
-            SlackUser.slack_user_id == slack_user_id
-        ).delete()
+        await session.execute(
+            delete(SlackUser).where(SlackUser.slack_user_id == slack_user_id)
+        )
 
         # Store the token
         session.add(slack_user)
-        session.commit()
+        await session.commit()
 
     message = Message(source=SourceType.SLACK, message=payload)
 

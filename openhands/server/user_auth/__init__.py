@@ -1,4 +1,5 @@
-from fastapi import Request
+from fastapi import Depends, Request
+from fastapi.security import APIKeyHeader
 from pydantic import SecretStr
 
 from openhands.integrations.provider import PROVIDER_TOKEN_TYPE
@@ -21,7 +22,15 @@ async def get_access_token(request: Request) -> SecretStr | None:
     return access_token
 
 
-async def get_user_id(request: Request) -> str | None:
+async def get_user_id(
+    request: Request,
+    api_key_header: str | None = Depends(
+        APIKeyHeader(name='X-Access-Token', auto_error=False)
+    ),
+) -> str | None:
+    """Get the current user_id. Used for dependency injection - the
+    api key header is used here to signal the requirement in OpenAPI
+    docs"""
     user_auth = await get_user_auth(request)
     user_id = await user_auth.get_user_id()
     return user_id

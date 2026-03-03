@@ -42,7 +42,7 @@ from openhands.server.user_auth.user_auth import UserAuth
 from openhands.utils.http_session import httpx_verify_option
 
 
-class JiraDcManager(Manager):
+class JiraDcManager(Manager[JiraDcViewInterface]):
     def __init__(self, token_manager: TokenManager):
         self.token_manager = token_manager
         self.integration_store = JiraDcIntegrationStore.get_instance()
@@ -418,7 +418,7 @@ class JiraDcManager(Manager):
                 jira_dc_view.jira_dc_workspace.svc_acc_api_key
             )
             await self.send_message(
-                self.create_outgoing_message(msg=msg_info),
+                msg_info,
                 issue_key=jira_dc_view.job_context.issue_key,
                 base_api_url=jira_dc_view.job_context.base_api_url,
                 svc_acc_api_key=api_key,
@@ -456,12 +456,19 @@ class JiraDcManager(Manager):
         return title, description
 
     async def send_message(
-        self, message: Message, issue_key: str, base_api_url: str, svc_acc_api_key: str
+        self, message: str, issue_key: str, base_api_url: str, svc_acc_api_key: str
     ):
-        """Send message/comment to Jira DC issue."""
+        """Send message/comment to Jira DC issue.
+
+        Args:
+            message: The message content to send (plain text string)
+            issue_key: The Jira issue key (e.g., 'PROJ-123')
+            base_api_url: The base API URL for the Jira DC instance
+            svc_acc_api_key: Service account API key for authentication
+        """
         url = f'{base_api_url}/rest/api/2/issue/{issue_key}/comment'
         headers = {'Authorization': f'Bearer {svc_acc_api_key}'}
-        data = {'body': message.message}
+        data = {'body': message}
         async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
@@ -481,7 +488,7 @@ class JiraDcManager(Manager):
         try:
             api_key = self.token_manager.decrypt_text(workspace.svc_acc_api_key)
             await self.send_message(
-                self.create_outgoing_message(msg=error_msg),
+                error_msg,
                 issue_key=job_context.issue_key,
                 base_api_url=job_context.base_api_url,
                 svc_acc_api_key=api_key,
@@ -502,7 +509,7 @@ class JiraDcManager(Manager):
             )
 
             await self.send_message(
-                self.create_outgoing_message(msg=comment_msg),
+                comment_msg,
                 issue_key=jira_dc_view.job_context.issue_key,
                 base_api_url=jira_dc_view.job_context.base_api_url,
                 svc_acc_api_key=api_key,

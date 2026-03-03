@@ -14,6 +14,8 @@ from openhands.runtime.utils.system_stats import get_system_info
 def add_health_endpoints(app: FastAPI):
     @app.get('/alive')
     async def alive():
+        """Endpoint for liveness probes. If this responds then the server is
+        considered alive."""
         return {'status': 'ok'}
 
     @app.get('/health')
@@ -23,3 +25,11 @@ def add_health_endpoints(app: FastAPI):
     @app.get('/server_info')
     async def get_server_info():
         return get_system_info()
+
+    @app.get('/ready')
+    async def ready() -> str:
+        """Endpoint for readiness probes. For now this is functionally the same as
+        the liveness probe, but should be need to establish further invariants in
+        the future, having a separate endpoint will mean we don't need to change
+        client code."""
+        return 'OK'

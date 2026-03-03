@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
+from typing import Any, Generic, TypeVar
 
 from integrations.models import Message, SourceType
 
+# TypeVar for view types - each manager subclass specifies its own view type
+ViewT = TypeVar('ViewT')
 
-class Manager(ABC):
+
+class Manager(ABC, Generic[ViewT]):
     manager_type: SourceType
 
     @abstractmethod
@@ -12,14 +16,21 @@ class Manager(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def send_message(self, message: Message):
-        "Send message to integration from Openhands server"
+    def send_message(self, message: str, *args: Any, **kwargs: Any):
+        """Send message to integration from OpenHands server.
+
+        Args:
+            message: The message content to send (plain text string).
+        """
         raise NotImplementedError
 
     @abstractmethod
-    def start_job(self):
-        "Kick off a job with openhands agent"
-        raise NotImplementedError
+    def start_job(self, view: ViewT) -> None:
+        """Kick off a job with openhands agent.
 
-    def create_outgoing_message(self, msg: str | dict, ephemeral: bool = False):
-        return Message(source=SourceType.OPENHANDS, message=msg, ephemeral=ephemeral)
+        Args:
+            view: Integration-specific view object containing job context.
+                  Each manager subclass accepts its own view type
+                  (e.g., SlackViewInterface, JiraViewInterface, etc.)
+        """
+        raise NotImplementedError

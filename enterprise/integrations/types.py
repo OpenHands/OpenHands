@@ -38,7 +38,7 @@ class ResolverViewInterface(SummaryExtractionTracker):
     is_public_repo: bool
     raw_payload: dict
 
-    def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
+    async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         "Instructions passed when conversation is first initialized"
         raise NotImplementedError()
 

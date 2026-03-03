@@ -28,7 +28,7 @@ class SaasConversationValidator(ConversationValidator):
 
             # Validate the API key and get the user_id
             api_key_store = ApiKeyStore.get_instance()
-            user_id = api_key_store.validate_api_key(api_key)
+            user_id = await api_key_store.validate_api_key(api_key)
 
             if not user_id:
                 logger.warning('Invalid API key')
