@@ -51,7 +51,7 @@ class OrgMemberService:
             raise OrgMemberNotFoundError(str(org_id), str(user_id))
 
         # Resolve role name from role_id
-        role = await RoleStore.get_role_by_id_async(org_member.role_id)
+        role = await RoleStore.get_role_by_id(org_member.role_id)
         if role is None:
             raise RoleNotFoundError(org_member.role_id)
 
@@ -195,10 +195,8 @@ class OrgMemberService:
         if not target_membership:
             return False, 'member_not_found'
 
-        requester_role = await RoleStore.get_role_by_id_async(
-            requester_membership.role_id
-        )
-        target_role = await RoleStore.get_role_by_id_async(target_membership.role_id)
+        requester_role = await RoleStore.get_role_by_id(requester_membership.role_id)
+        target_role = await RoleStore.get_role_by_id(target_membership.role_id)
 
         if not requester_role or not target_role:
             return False, 'role_not_found'
@@ -300,10 +298,8 @@ class OrgMemberService:
             raise OrgMemberNotFoundError(str(org_id), str(target_user_id))
 
         # Get roles
-        requester_role = await RoleStore.get_role_by_id_async(
-            requester_membership.role_id
-        )
-        target_role = await RoleStore.get_role_by_id_async(target_membership.role_id)
+        requester_role = await RoleStore.get_role_by_id(requester_membership.role_id)
+        target_role = await RoleStore.get_role_by_id(target_membership.role_id)
 
         if not requester_role:
             raise RoleNotFoundError(requester_membership.role_id)
@@ -323,7 +319,7 @@ class OrgMemberService:
             )
 
         # Validate new role exists
-        new_role = await RoleStore.get_role_by_name_async(new_role_name.lower())
+        new_role = await RoleStore.get_role_by_name(new_role_name.lower())
         if not new_role:
             raise InvalidRoleError(new_role_name)
 
@@ -406,7 +402,7 @@ class OrgMemberService:
         owners = []
         for m in members:
             # Use role_id (column) instead of role (relationship) to avoid DetachedInstanceError
-            role = await RoleStore.get_role_by_id_async(m.role_id)
+            role = await RoleStore.get_role_by_id(m.role_id)
             if role and role.name == ROLE_OWNER:
                 owners.append(m)
         return len(owners) == 1 and str(owners[0].user_id) == str(user_id)

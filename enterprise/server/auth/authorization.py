@@ -179,7 +179,7 @@ async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
     if not org_member:
         return None
 
-    return await RoleStore.get_role_by_id_async(org_member.role_id)
+    return await RoleStore.get_role_by_id(org_member.role_id)
 
 
 def get_role_permissions(role_name: str) -> frozenset[Permission]:

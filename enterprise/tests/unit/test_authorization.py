@@ -359,7 +359,7 @@ class TestGetUserOrgRole:
                 return_value=mock_org_member,
             ),
             patch(
-                'server.auth.authorization.RoleStore.get_role_by_id_async',
+                'server.auth.authorization.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
                 return_value=mock_role,
             ),
@@ -411,7 +411,7 @@ class TestGetUserOrgRole:
                 new_callable=AsyncMock,
             ) as mock_get_org_member,
             patch(
-                'server.auth.authorization.RoleStore.get_role_by_id_async',
+                'server.auth.authorization.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
                 return_value=mock_role,
             ),

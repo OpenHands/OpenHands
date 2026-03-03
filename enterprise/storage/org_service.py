@@ -130,7 +130,7 @@ class OrgService:
                 setattr(org, key, value)
 
     @staticmethod
-    def get_owner_role():
+    async def get_owner_role():
         """
         Get the owner role from the database.
 
@@ -140,7 +140,7 @@ class OrgService:
         Raises:
             Exception: If owner role not found
         """
-        owner_role = RoleStore.get_role_by_name('owner')
+        owner_role = await RoleStore.get_role_by_name('owner')
         if not owner_role:
             raise Exception('Owner role not found in database')
         return owner_role
@@ -237,7 +237,7 @@ class OrgService:
             OrgService.apply_litellm_settings_to_org(org, settings)
 
             # Step 6: Get owner role and create member entity
-            owner_role = OrgService.get_owner_role()
+            owner_role = await OrgService.get_owner_role()
             org_member = OrgService.create_org_member_entity(
                 org_id=org_id,
                 user_id=user_id,
@@ -420,7 +420,7 @@ class OrgService:
                 return False
 
             # Get the role details
-            role = await RoleStore.get_role_by_id_async(org_member.role_id)
+            role = await RoleStore.get_role_by_id(org_member.role_id)
             if not role:
                 return False
 
@@ -797,7 +797,7 @@ class OrgService:
             raise OrgAuthorizationError('User is not a member of this organization')
 
         # Check if user has owner role
-        role = await RoleStore.get_role_by_id_async(org_member.role_id)
+        role = await RoleStore.get_role_by_id(org_member.role_id)
         if not role or role.name != 'owner':
             raise OrgAuthorizationError(
                 'Only organization owners can delete organizations'

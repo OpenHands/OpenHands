@@ -710,7 +710,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -759,7 +759,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -807,7 +807,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -922,7 +922,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
         ):
@@ -959,7 +959,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1011,7 +1011,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
         ):
@@ -1053,7 +1053,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
         ):
@@ -1090,7 +1090,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1137,7 +1137,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1195,7 +1195,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1243,7 +1243,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1299,7 +1299,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1351,7 +1351,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1403,7 +1403,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1457,7 +1457,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1510,7 +1510,7 @@ class TestOrgMemberServiceRemoveOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -1620,11 +1620,11 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_name_async',
+                'server.services.org_member_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
             ) as mock_get_role_by_name,
             patch(
@@ -1681,11 +1681,11 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_name_async',
+                'server.services.org_member_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
             ) as mock_get_role_by_name,
             patch(
@@ -1740,11 +1740,11 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_name_async',
+                'server.services.org_member_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
             ) as mock_get_role_by_name,
             patch(
@@ -1803,11 +1803,11 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_name_async',
+                'server.services.org_member_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
             ) as mock_get_role_by_name,
             patch(
@@ -1934,11 +1934,11 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_name_async',
+                'server.services.org_member_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
             ) as mock_get_role_by_name,
         ):
@@ -1977,11 +1977,11 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_name_async',
+                'server.services.org_member_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
             ) as mock_get_role_by_name,
             patch(
@@ -2032,7 +2032,7 @@ class TestOrgMemberServiceUpdateOrgMember:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -2134,7 +2134,7 @@ class TestOrgMemberServiceIsLastOwner:
                 new_callable=AsyncMock,
             ) as mock_get_members,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
         ):
@@ -2166,7 +2166,7 @@ class TestOrgMemberServiceIsLastOwner:
                 new_callable=AsyncMock,
             ) as mock_get_members,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
         ):
@@ -2194,7 +2194,7 @@ class TestOrgMemberServiceIsLastOwner:
                 new_callable=AsyncMock,
             ) as mock_get_members,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
         ):
@@ -2249,7 +2249,7 @@ class TestOrgMemberServiceGetMe:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(
@@ -2308,7 +2308,7 @@ class TestOrgMemberServiceGetMe:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
         ):
@@ -2336,7 +2336,7 @@ class TestOrgMemberServiceGetMe:
                 new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
-                'server.services.org_member_service.RoleStore.get_role_by_id_async',
+                'server.services.org_member_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
             ) as mock_get_role,
             patch(

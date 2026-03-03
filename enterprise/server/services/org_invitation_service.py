@@ -91,7 +91,7 @@ class OrgInvitationService:
                 'You are not a member of this organization'
             )
 
-        inviter_role = await RoleStore.get_role_by_id_async(inviter_member.role_id)
+        inviter_role = await RoleStore.get_role_by_id(inviter_member.role_id)
         if not inviter_role or inviter_role.name not in [ROLE_OWNER, ROLE_ADMIN]:
             raise InsufficientPermissionError('Only owners and admins can invite users')
 
@@ -101,7 +101,7 @@ class OrgInvitationService:
             raise InsufficientPermissionError('Only owners can invite with owner role')
 
         # Get the target role
-        target_role = await RoleStore.get_role_by_name_async(role_name_lower)
+        target_role = await RoleStore.get_role_by_name(role_name_lower)
         if not target_role:
             raise ValueError(f'Invalid role: {role_name}')
 
@@ -204,7 +204,7 @@ class OrgInvitationService:
                 'You are not a member of this organization'
             )
 
-        inviter_role = await RoleStore.get_role_by_id_async(inviter_member.role_id)
+        inviter_role = await RoleStore.get_role_by_id(inviter_member.role_id)
         if not inviter_role or inviter_role.name not in [ROLE_OWNER, ROLE_ADMIN]:
             raise InsufficientPermissionError('Only owners and admins can invite users')
 
@@ -212,7 +212,7 @@ class OrgInvitationService:
         if role_name_lower == ROLE_OWNER and inviter_role.name != ROLE_OWNER:
             raise InsufficientPermissionError('Only owners can invite with owner role')
 
-        target_role = await RoleStore.get_role_by_name_async(role_name_lower)
+        target_role = await RoleStore.get_role_by_name(role_name_lower)
         if not target_role:
             raise ValueError(f'Invalid role: {role_name}')
 

@@ -327,12 +327,12 @@ class TestCreateInvitationsBatch:
                 return_value=mock_inviter_member,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_id_async',
+                'server.services.org_invitation_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_name_async',
+                'server.services.org_invitation_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
                 return_value=mock_member_role,
             ),
@@ -383,12 +383,12 @@ class TestCreateInvitationsBatch:
                 return_value=mock_inviter_member,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_id_async',
+                'server.services.org_invitation_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_name_async',
+                'server.services.org_invitation_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
                 return_value=mock_member_role,
             ),
@@ -452,12 +452,12 @@ class TestCreateInvitationsBatch:
                 return_value=mock_inviter_member,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_id_async',
+                'server.services.org_invitation_service.RoleStore.get_role_by_id',
                 new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_name_async',
+                'server.services.org_invitation_service.RoleStore.get_role_by_name',
                 new_callable=AsyncMock,
                 return_value=None,  # Invalid role
             ),
