@@ -29,7 +29,7 @@ class TestGithubManagerUserNotFound:
     def mock_data_collector(self):
         """Create a mock data collector."""
         data_collector = MagicMock()
-        data_collector.process_payload = MagicMock()
+        data_collector.process_payload = AsyncMock()
         return data_collector
 
     @pytest.fixture

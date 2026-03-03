@@ -42,7 +42,6 @@ from openhands.server.types import (
     SessionExpiredError,
 )
 from openhands.storage.data_models.secrets import Secrets
-from openhands.utils.async_utils import call_sync_from_async
 
 
 class GithubManager(Manager[GithubViewType]):
@@ -242,7 +241,7 @@ class GithubManager(Manager[GithubViewType]):
     async def receive_message(self, message: Message):
         self._confirm_incoming_source_type(message)
         try:
-            await call_sync_from_async(self.data_collector.process_payload, message)
+            await self.data_collector.process_payload(message)
         except Exception:
             logger.warning(
                 '[Github]: Error processing payload for gh interaction', exc_info=True

@@ -102,7 +102,7 @@ class AuthTokenStore:
     async def load_tokens(
         self,
         check_expiration_and_refresh: Callable[
-            [ProviderType, str, int, int], Awaitable[Dict[str, str | int]]
+            [ProviderType, str, int, int], Awaitable[Dict[str, str | int] | None]
         ]
         | None = None,
     ) -> Dict[str, str | int] | None:
