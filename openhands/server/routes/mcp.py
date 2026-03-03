@@ -12,6 +12,9 @@ from openhands.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketServiceImpl
+from openhands.integrations.bitbucket_data_center.bitbucket_dc_service import (
+    BitbucketDCServiceImpl,
+)
 from openhands.integrations.github.github_service import GithubServiceImpl
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 from openhands.integrations.provider import ProviderToken
@@ -61,16 +64,20 @@ async def save_pr_metadata(
 
     pull_pattern = r'pull/(\d+)'
     merge_request_pattern = r'merge_requests/(\d+)'
+    pull_requests_pattern = r'pull-requests/(\d+)'
 
     # Check if the tool_result contains the PR number
     pr_number = None
     match_pull = re.search(pull_pattern, tool_result)
     match_merge_request = re.search(merge_request_pattern, tool_result)
+    match_pull_requests = re.search(pull_requests_pattern, tool_result)
 
     if match_pull:
         pr_number = int(match_pull.group(1))
     elif match_merge_request:
         pr_number = int(match_merge_request.group(1))
+    elif match_pull_requests:
+        pr_number = int(match_pull_requests.group(1))
 
     if pr_number:
         logger.info(f'Saving PR number: {pr_number} for conversation {conversation_id}')
@@ -274,6 +281,73 @@ async def create_bitbucket_pr(
 
     try:
         response = await bitbucket_service.create_pr(
+            repo_name=repo_name,
+            source_branch=source_branch,
+            target_branch=target_branch,
+            title=title,
+            body=description,
+        )
+
+        if conversation_id:
+            await save_pr_metadata(user_id, conversation_id, response)
+
+    except Exception as e:
+        error = f'Error creating pull request: {e}'
+        logger.error(error)
+        raise ToolError(str(error))
+
+    return response
+
+
+@mcp_server.tool()
+async def create_bitbucket_data_center_pr(
+    repo_name: Annotated[
+        str, Field(description='Bitbucket Data Center repository (PROJECT/repo_slug)')
+    ],
+    source_branch: Annotated[str, Field(description='Source branch on repo')],
+    target_branch: Annotated[str, Field(description='Target branch on repo')],
+    title: Annotated[
+        str,
+        Field(
+            description='PR Title. Start title with `DRAFT:` or `WIP:` if applicable.'
+        ),
+    ],
+    description: Annotated[str | None, Field(description='PR description')],
+) -> str:
+    """Open a PR in Bitbucket Data Center"""
+    logger.info('Calling OpenHands MCP create_bitbucket_data_center_pr')
+
+    request = get_http_request()
+    headers = request.headers
+    conversation_id = headers.get('X-OpenHands-ServerConversation-ID', None)
+
+    provider_tokens = await get_provider_tokens(request)
+    access_token = await get_access_token(request)
+    user_id = await get_user_id(request)
+
+    bitbucket_dc_token = (
+        provider_tokens.get(ProviderType.BITBUCKET_DATA_CENTER, ProviderToken())
+        if provider_tokens
+        else ProviderToken()
+    )
+
+    bitbucket_dc_service = BitbucketDCServiceImpl(
+        user_id=bitbucket_dc_token.user_id,
+        external_auth_id=user_id,
+        external_auth_token=access_token,
+        token=bitbucket_dc_token.token,
+        base_domain=bitbucket_dc_token.host,
+    )
+
+    try:
+        description = await get_conversation_link(
+            bitbucket_dc_service, conversation_id, description or ''
+        )
+    except Exception as e:
+        logger.warning(f'Failed to append conversation link: {e}')
+
+    try:
+        response = await bitbucket_dc_service.create_pr(
             repo_name=repo_name,
             source_branch=source_branch,
             target_branch=target_branch,
