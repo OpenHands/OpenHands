@@ -27,7 +27,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-}
 
       # --- Auth ---
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-develop.test.build.one}
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
 
       # --- Sandbox / Runtime ---
@@ -44,7 +44,7 @@ services:
       - AGENT_SERVER_IMAGE_TAG=${AGENT_SERVER_IMAGE_TAG:-}
 
       # --- Env vars forwarded into sandbox containers (OH_SANDBOX_FWD__ prefix is stripped) ---
-      - OH_SANDBOX_FWD__AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one}
+      - OH_SANDBOX_FWD__AUTH_URL=${BETTER_AUTH_URL:-https://auth-develop.test.build.one}
       - OH_SANDBOX_FWD__BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
       - OH_SANDBOX_FWD__B1_SYSTEM_USER_PASSWORD=${B1_SYSTEM_USER_PASSWORD:-}
       - OH_SANDBOX_FWD__OPENAI_API_KEY=${OPENAI_API_KEY:-}

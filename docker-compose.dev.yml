@@ -7,7 +7,7 @@ services:
     container_name: openhands-dev
     hostname: openhands-app
     environment:
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://auth-develop.test.build.one}
       - CODESPACE_NAME=${CODESPACE_NAME:-}
       - GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN=${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}
       - CODESPACE_GITHUB_TOKEN=${GITHUB_TOKEN:-}
@@ -27,10 +27,10 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-}
       - LOG_LEVEL=${LOG_LEVEL:-WARNING}
       # --- Env vars forwarded into sandbox containers (OH_SANDBOX_FWD__ prefix is stripped) ---
-      - OH_SANDBOX_FWD__AUTH_URL=${BETTER_AUTH_URL:-https://auth-next.test.build.one}
+      - OH_SANDBOX_FWD__AUTH_URL=${BETTER_AUTH_URL:-https://auth-develop.test.build.one}
       - OH_SANDBOX_FWD__BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
-      - OH_SANDBOX_FWD__B1_AUTOMATION_HUB_EMAIL=${B1_AUTOMATION_HUB_EMAIL:-}
-      - OH_SANDBOX_FWD__B1_AUTOMATION_HUB_PASSWORD=${B1_AUTOMATION_HUB_PASSWORD:-}
+      - OH_SANDBOX_FWD__B1_SYSTEM_USER_EMAIL=${B1_SYSTEM_USER_EMAIL:-system@build.one}
+      - OH_SANDBOX_FWD__B1_SYSTEM_USER_PASSWORD=${B1_SYSTEM_USER_PASSWORD:-}
       - OH_SANDBOX_FWD__OPENAI_API_KEY=${OPENAI_API_KEY:-}
     ports:
       - "3000:3000"
