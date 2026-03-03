@@ -4,6 +4,7 @@ import hashlib
 import json
 import time
 from base64 import b64encode
+from typing import NotRequired, TypedDict, cast
 from urllib.parse import parse_qs
 
 import httpx
@@ -48,6 +49,24 @@ from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_
 from openhands.integrations.service_types import ProviderType
 from openhands.server.types import SessionExpiredError
 from openhands.utils.http_session import httpx_verify_option
+
+
+class KeycloakUserInfo(TypedDict):
+    """TypedDict for Keycloak UserInfo endpoint response.
+
+    Based on OIDC standard claims. 'sub' is always required per OIDC spec.
+    """
+
+    sub: str
+    name: NotRequired[str]
+    given_name: NotRequired[str]
+    family_name: NotRequired[str]
+    preferred_username: NotRequired[str]
+    email: NotRequired[str]
+    email_verified: NotRequired[bool]
+    picture: NotRequired[str]
+    attributes: NotRequired[dict[str, list[str]]]
+
 
 # HTTP timeout for external IDP calls (in seconds)
 # This prevents indefinite blocking if an IDP is slow or unresponsive
@@ -141,22 +160,21 @@ class TokenManager:
                 new_keycloak_tokens['refresh_token'],
             )
 
-    # UserInfo from Keycloak return a dictionary with the following format:
-    # {
-    # 'sub': '248289761001',
-    # 'name': 'Jane Doe',
-    # 'given_name': 'Jane',
-    # 'family_name': 'Doe',
-    # 'preferred_username': 'j.doe',
-    # 'email': 'janedoe@example.com',
-    # 'picture': 'http://example.com/janedoe/me.jpg'
-    # 'github_id': '354322532'
-    # }
-    async def get_user_info(self, access_token: str) -> dict:
-        if not access_token:
-            return {}
+    async def get_user_info(self, access_token: str) -> KeycloakUserInfo:
+        """Get user info from Keycloak userinfo endpoint.
+
+        Args:
+            access_token: A valid Keycloak access token
+
+        Returns:
+            KeycloakUserInfo with user claims. 'sub' is always present per OIDC spec.
+
+        Raises:
+            KeycloakAuthenticationError: If the token is invalid
+        """
         user_info = await get_keycloak_openid(self.external).a_userinfo(access_token)
-        return user_info
+        # a_userinfo returns dict from Keycloak; 'sub' is always present per OIDC spec
+        return cast(KeycloakUserInfo, user_info)
 
     @retry(
         stop=stop_after_attempt(2),
@@ -270,7 +288,7 @@ class TokenManager:
     ) -> str:
         # Get user info to determine user_id and idp
         user_info = await self.get_user_info(access_token=access_token)
-        user_id = user_info.get('sub')
+        user_id = user_info['sub']
         username = user_info.get('preferred_username')
         logger.info(f'Getting token for user {username} and IDP {idp}')
         token_store = await AuthTokenStore.get_instance(
