@@ -127,8 +127,41 @@ class GithubManager(Manager):
 
             return False
 
+    def _get_issue_number_from_payload(self, message: Message) -> int | None:
+        """Extract issue/PR number from a GitHub webhook payload.
+
+        Supports all event types that can trigger jobs:
+        - Labeled issues: payload['issue']['number']
+        - Issue comments: payload['issue']['number']
+        - PR comments: payload['issue']['number'] (PRs are accessed via issue endpoint)
+        - Inline PR comments: payload['pull_request']['number']
+
+        Args:
+            message: The incoming GitHub webhook message
+
+        Returns:
+            The issue/PR number, or None if not found
+        """
+        payload = message.message.get('payload', {})
+
+        # Labeled issues, issue comments, and PR comments all have 'issue' in payload
+        if 'issue' in payload:
+            return payload['issue']['number']
+
+        # Inline PR comments have 'pull_request' directly in payload
+        if 'pull_request' in payload:
+            return payload['pull_request']['number']
+
+        return None
+
     async def _send_user_not_found_message(self, message: Message, username: str):
         """Send a message to the user informing them they need to create an OpenHands account.
+
+        This method handles all supported trigger types:
+        - Labeled issues (action='labeled' with openhands label)
+        - Issue comments (comment containing @openhands)
+        - PR comments (comment containing @openhands on a PR)
+        - Inline PR review comments (comment containing @openhands)
 
         Args:
             message: The incoming GitHub webhook message
@@ -143,15 +176,12 @@ class GithubManager(Manager):
         installation_token = self._get_installation_access_token(installation_id)
 
         # Determine the issue/PR number based on the event type
-        issue_number = None
-        if 'issue' in payload:
-            issue_number = payload['issue']['number']
-        elif 'pull_request' in payload:
-            issue_number = payload['pull_request']['number']
+        issue_number = self._get_issue_number_from_payload(message)
 
         if not issue_number:
             logger.warning(
-                f'[GitHub] Could not determine issue/PR number to send user not found message for {username}'
+                f'[GitHub] Could not determine issue/PR number to send user not found message for {username}. '
+                f'Payload keys: {list(payload.keys())}'
             )
             return
 

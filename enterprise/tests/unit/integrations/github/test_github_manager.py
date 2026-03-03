@@ -4,6 +4,7 @@ Tests for the GithubManager class.
 Covers:
 - User not found scenario when a GitHub user hasn't created an OpenHands account
 - Sign-up message posting to GitHub issues/PRs
+- All supported trigger types: labeled issues, issue comments, PR comments, inline PR comments
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -32,8 +33,8 @@ class TestGithubManagerUserNotFound:
         return data_collector
 
     @pytest.fixture
-    def github_issue_message(self):
-        """Create a sample GitHub issue message with an @openhands mention."""
+    def github_issue_comment_message(self):
+        """Create a sample GitHub issue comment message with an @openhands mention."""
         return Message(
             source=SourceType.GITHUB,
             message={
@@ -58,9 +59,42 @@ class TestGithubManagerUserNotFound:
             },
         )
 
+    # Alias for backward compatibility with existing tests
     @pytest.fixture
-    def github_pr_message(self):
-        """Create a sample GitHub PR message with an @openhands mention."""
+    def github_issue_message(self, github_issue_comment_message):
+        """Alias for github_issue_comment_message for backward compatibility."""
+        return github_issue_comment_message
+
+    @pytest.fixture
+    def github_labeled_issue_message(self):
+        """Create a sample GitHub labeled issue message (when openhands label is added)."""
+        return Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 12345,
+                'payload': {
+                    'action': 'labeled',
+                    'sender': {
+                        'id': 67890,
+                        'login': 'labeluser',
+                    },
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
+                    },
+                    'issue': {
+                        'number': 55,
+                    },
+                    'label': {
+                        'name': 'openhands',
+                    },
+                },
+            },
+        )
+
+    @pytest.fixture
+    def github_pr_comment_message(self):
+        """Create a sample GitHub PR comment message (comment on a PR, accessed via issue endpoint)."""
         return Message(
             source=SourceType.GITHUB,
             message={
@@ -69,7 +103,37 @@ class TestGithubManagerUserNotFound:
                     'action': 'created',
                     'sender': {
                         'id': 67890,
-                        'login': 'pruser',
+                        'login': 'prcommentuser',
+                    },
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
+                    },
+                    'issue': {
+                        'number': 77,
+                        'pull_request': {
+                            'url': 'https://api.github.com/repos/test-owner/test-repo/pulls/77',
+                        },
+                    },
+                    'comment': {
+                        'body': '@openhands please review this PR',
+                    },
+                },
+            },
+        )
+
+    @pytest.fixture
+    def github_inline_pr_comment_message(self):
+        """Create a sample GitHub inline PR review comment message."""
+        return Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 12345,
+                'payload': {
+                    'action': 'created',
+                    'sender': {
+                        'id': 67890,
+                        'login': 'inlineuser',
                     },
                     'repository': {
                         'owner': {'login': 'test-owner'},
@@ -77,13 +141,26 @@ class TestGithubManagerUserNotFound:
                     },
                     'pull_request': {
                         'number': 100,
+                        'head': {
+                            'ref': 'feature-branch',
+                        },
                     },
                     'comment': {
-                        'body': '@openhands review this PR',
+                        'id': 12345,
+                        'node_id': 'PRRC_abc123',
+                        'body': '@openhands fix this code',
+                        'path': 'src/main.py',
+                        'line': 42,
                     },
                 },
             },
         )
+
+    # Alias for backward compatibility
+    @pytest.fixture
+    def github_pr_message(self, github_inline_pr_comment_message):
+        """Alias for github_inline_pr_comment_message for backward compatibility."""
+        return github_inline_pr_comment_message
 
     @pytest.mark.asyncio
     @patch('integrations.github.github_manager.Auth')
@@ -289,6 +366,226 @@ class TestGithubManagerUserNotFound:
         assert 'Could not determine issue/PR number' in str(
             mock_logger.warning.call_args
         )
+
+    @pytest.mark.asyncio
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.Github')
+    async def test_send_user_not_found_message_for_labeled_issue(
+        self,
+        mock_github_class,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+        github_labeled_issue_message,
+    ):
+        """Test that a sign-up message is sent for labeled issue events."""
+        # Set up mocks
+        mock_github_instance = MagicMock()
+        mock_github_class.return_value.__enter__ = MagicMock(
+            return_value=mock_github_instance
+        )
+        mock_github_class.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_repo = MagicMock()
+        mock_issue = MagicMock()
+        mock_github_instance.get_repo.return_value = mock_repo
+        mock_repo.get_issue.return_value = mock_issue
+
+        mock_integration_instance = MagicMock()
+        mock_github_integration.return_value = mock_integration_instance
+        mock_integration_instance.get_access_token.return_value = MagicMock(
+            token='fake-token'
+        )
+
+        # Create manager and call the method
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+
+        await manager._send_user_not_found_message(
+            github_labeled_issue_message, 'labeluser'
+        )
+
+        # Verify the comment was posted with correct issue number
+        mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
+        mock_repo.get_issue.assert_called_once_with(number=55)
+
+        # Verify the comment contains the expected sign-up message
+        mock_issue.create_comment.assert_called_once()
+        comment_text = mock_issue.create_comment.call_args[0][0]
+        assert '@labeluser' in comment_text
+        assert "haven't created an OpenHands account" in comment_text
+        assert 'sign up' in comment_text.lower()
+
+    @pytest.mark.asyncio
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.Github')
+    async def test_send_user_not_found_message_for_pr_comment_via_issue_endpoint(
+        self,
+        mock_github_class,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+        github_pr_comment_message,
+    ):
+        """Test that a sign-up message is sent for PR comments (accessed via issue endpoint)."""
+        # Set up mocks
+        mock_github_instance = MagicMock()
+        mock_github_class.return_value.__enter__ = MagicMock(
+            return_value=mock_github_instance
+        )
+        mock_github_class.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_repo = MagicMock()
+        mock_issue = MagicMock()
+        mock_github_instance.get_repo.return_value = mock_repo
+        mock_repo.get_issue.return_value = mock_issue
+
+        mock_integration_instance = MagicMock()
+        mock_github_integration.return_value = mock_integration_instance
+        mock_integration_instance.get_access_token.return_value = MagicMock(
+            token='fake-token'
+        )
+
+        # Create manager and call the method
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+
+        await manager._send_user_not_found_message(
+            github_pr_comment_message, 'prcommentuser'
+        )
+
+        # Verify the comment was posted with correct PR number (from issue.number)
+        mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
+        mock_repo.get_issue.assert_called_once_with(number=77)
+
+        # Verify the comment contains the expected sign-up message
+        mock_issue.create_comment.assert_called_once()
+        comment_text = mock_issue.create_comment.call_args[0][0]
+        assert '@prcommentuser' in comment_text
+        assert "haven't created an OpenHands account" in comment_text
+        assert 'sign up' in comment_text.lower()
+
+
+class TestGetIssueNumberFromPayload:
+    """Test cases for the _get_issue_number_from_payload helper method."""
+
+    @pytest.fixture
+    def mock_token_manager(self):
+        """Create a mock token manager."""
+        token_manager = MagicMock()
+        return token_manager
+
+    @pytest.fixture
+    def mock_data_collector(self):
+        """Create a mock data collector."""
+        data_collector = MagicMock()
+        return data_collector
+
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    def test_extracts_issue_number_from_issue_payload(
+        self,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+    ):
+        """Test extraction from payload with 'issue' key (labeled issues, issue comments, PR comments)."""
+        message = Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 12345,
+                'payload': {
+                    'issue': {'number': 42},
+                    'repository': {'owner': {'login': 'owner'}, 'name': 'repo'},
+                },
+            },
+        )
+
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+        result = manager._get_issue_number_from_payload(message)
+
+        assert result == 42
+
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    def test_extracts_pr_number_from_pull_request_payload(
+        self,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+    ):
+        """Test extraction from payload with 'pull_request' key (inline PR comments)."""
+        message = Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 12345,
+                'payload': {
+                    'pull_request': {'number': 100},
+                    'repository': {'owner': {'login': 'owner'}, 'name': 'repo'},
+                },
+            },
+        )
+
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+        result = manager._get_issue_number_from_payload(message)
+
+        assert result == 100
+
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    def test_prefers_issue_over_pull_request_when_both_present(
+        self,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+    ):
+        """Test that issue takes precedence over pull_request (edge case)."""
+        message = Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 12345,
+                'payload': {
+                    'issue': {'number': 42},
+                    'pull_request': {'number': 100},
+                    'repository': {'owner': {'login': 'owner'}, 'name': 'repo'},
+                },
+            },
+        )
+
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+        result = manager._get_issue_number_from_payload(message)
+
+        assert result == 42
+
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    def test_returns_none_when_no_issue_or_pr(
+        self,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+    ):
+        """Test that None is returned when neither issue nor pull_request is in payload."""
+        message = Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 12345,
+                'payload': {
+                    'repository': {'owner': {'login': 'owner'}, 'name': 'repo'},
+                },
+            },
+        )
+
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+        result = manager._get_issue_number_from_payload(message)
+
+        assert result is None
 
 
 class TestGetUserNotFoundMessageIntegration:
