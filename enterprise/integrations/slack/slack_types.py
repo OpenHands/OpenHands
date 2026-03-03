@@ -24,7 +24,7 @@ class SlackViewInterface(SummaryExtractionTracker, ABC):
     v1_enabled: bool
 
     @abstractmethod
-    def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
+    async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Instructions passed when conversation is first initialized"""
         pass
 
