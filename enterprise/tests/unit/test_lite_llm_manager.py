@@ -1100,9 +1100,7 @@ class TestLiteLlmManager:
                     mock_org_member.org_id = 'test-ord-id'
                     mock_org_member.llm_api_key = 'test-api-key'
                     mock_user.org_members = [mock_org_member]
-                    mock_user_store.get_user_by_id = AsyncMock(
-                        return_value=mock_user
-                    )
+                    mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
 
                     result = await LiteLlmManager._get_key_info(
                         mock_http_client, 'test-ord-id', 'test-user-id'
