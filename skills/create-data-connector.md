@@ -428,7 +428,7 @@ Required attributes:
 | `rowsToBatch` | `50` |
 | `fetchMode` | `"REPLACE"` |
 
-Use `mcp__B1__update_blueprint` to create each DataSource object, and `mcp__B1__Patch_Blueprint` to set attributes.
+Use `mcp__B1_Blueprint__update_blueprint` to create each DataSource object, and `mcp__B1_Blueprint__Patch_Blueprint` to set attributes.
 
 ---
 
@@ -438,10 +438,10 @@ Use `mcp__B1__update_blueprint` to create each DataSource object, and `mcp__B1__
 
 If requested:
 
-1. Search for grid/search screen templates in the Samples module using `mcp__B1__query_blueprint`
-2. Use `mcp__B1__Create_Screen_from_Template` with the chosen template and DataSource
+1. Search for grid/search screen templates in the Samples module using `mcp__B1_Blueprint__query_blueprint`
+2. Use `mcp__B1_Blueprint__Create_Screen_from_Template` with the chosen template and DataSource
 3. Map placeholder fields to actual resource fields
-4. Export with `mcp__B1__Export_Blueprint_Objects` and preview
+4. Export with `mcp__B1_Blueprint__Export_Blueprint_Objects` and preview
 
 ---
 

@@ -457,22 +457,28 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     def _add_environment_mcp_server(
         self, mcp_servers: dict[str, Any], environment_url: str
     ) -> None:
-        """Add a remote environment as an MCP server.
+        """Add remote environment MCP servers.
 
-        The environment URL is added as an HTTP MCP server so the agent can
-        interact with the remote environment through MCP tools.
+        The environment URL is used to register multiple MCP servers so the
+        agent can interact with the remote environment through MCP tools.
 
         Args:
-            mcp_servers: Dictionary to add the server to
+            mcp_servers: Dictionary to add the servers to
             environment_url: Base URL of the remote environment
         """
         environment_url = environment_url.rstrip('/')
-        mcp_servers['environment'] = {
-            'url': f'{environment_url}/service/swat/mcp/blueprint-dev',
+        mcp_servers['environment-blueprint'] = {
+            'url': f'{environment_url}/service/swat/mcp/blueprint/dev',
+            'transport': 'http',
+        }
+        mcp_servers['environment-knowledge'] = {
+            'url': f'{environment_url}/service/swat/mcp/knowledge/dev',
             'transport': 'http',
         }
         _logger.info(
-            f'Added environment MCP server: {environment_url}/service/swat/mcp/blueprint-dev'
+            f'Added environment MCP servers: '
+            f'{environment_url}/service/swat/mcp/blueprint/dev, '
+            f'{environment_url}/service/swat/mcp/knowledge/dev'
         )
 
     async def _build_app_conversations(
