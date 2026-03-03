@@ -32,7 +32,8 @@ if TYPE_CHECKING:
 HOST = WEB_HOST
 # ---- DO NOT REMOVE ----
 
-HOST_URL = f'https://{HOST}' if 'localhost' not in HOST else f'http://{HOST}'
+IS_LOCAL_DEPLOYMENT = 'localhost' in HOST
+HOST_URL = f'https://{HOST}' if not IS_LOCAL_DEPLOYMENT else f'http://{HOST}'
 GITHUB_WEBHOOK_URL = f'{HOST_URL}/integration/github/events'
 GITLAB_WEBHOOK_URL = f'{HOST_URL}/integration/gitlab/events'
 conversation_prefix = 'conversations/{}'
