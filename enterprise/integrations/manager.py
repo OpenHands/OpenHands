@@ -1,10 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from integrations.models import Message, SourceType
 
+# TypeVar for view types - each manager subclass specifies its own view type
+ViewT = TypeVar('ViewT')
 
-class Manager(ABC):
+
+class Manager(ABC, Generic[ViewT]):
     manager_type: SourceType
 
     @abstractmethod
@@ -22,7 +25,7 @@ class Manager(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def start_job(self, view: Any) -> Any:
+    async def start_job(self, view: ViewT) -> None:
         """Kick off a job with openhands agent.
 
         Args:

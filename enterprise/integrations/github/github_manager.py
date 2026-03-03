@@ -43,7 +43,7 @@ from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.async_utils import call_sync_from_async
 
 
-class GithubManager(Manager):
+class GithubManager(Manager['ResolverViewInterface']):
     def __init__(
         self, token_manager: TokenManager, data_collector: GitHubDataCollector
     ):
