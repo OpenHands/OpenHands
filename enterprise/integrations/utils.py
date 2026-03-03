@@ -78,6 +78,11 @@ ENABLE_V1_SLACK_RESOLVER = (
     os.getenv('ENABLE_V1_SLACK_RESOLVER', 'false').lower() == 'true'
 )
 
+# Toggle for V1 GitLab resolver feature
+ENABLE_V1_GITLAB_RESOLVER = (
+    os.getenv('ENABLE_V1_GITLAB_RESOLVER', 'false').lower() == 'true'
+)
+
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (
     os.getenv('OPENHANDS_RESOLVER_TEMPLATES_DIR')
     or 'openhands/integrations/templates/resolver/'
