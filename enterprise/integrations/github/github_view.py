@@ -72,7 +72,6 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
         This function checks both the global environment variable kill switch AND
         the user's individual setting. Both must be true for the function to return true.
     """
-
     # If no user ID is provided, we can't check user settings
     if not user_id:
         return False
@@ -81,13 +80,10 @@ async def get_user_proactive_conversation_setting(user_id: str | None) -> bool:
     if not ENABLE_PROACTIVE_CONVERSATION_STARTERS:
         return False
 
-    def _get_setting():
-        org = OrgStore.get_current_org_from_keycloak_user_id(user_id)
-        if not org:
-            return False
-        return bool(org.enable_proactive_conversation_starters)
-
-    return await call_sync_from_async(_get_setting)
+    org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
+    if not org:
+        return False
+    return bool(org.enable_proactive_conversation_starters)
 
 
 # =================================================

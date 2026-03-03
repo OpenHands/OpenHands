@@ -610,7 +610,7 @@ async def accept_tos(request: Request):
     redirect_url = body.get('redirect_url', str(request.base_url))
 
     # Update user settings with TOS acceptance
-    accepted_tos: datetime = datetime.now(timezone.utc)
+    accepted_tos: datetime = datetime.now(timezone.utc).replace(tzinfo=None)
     async with a_session_maker() as session:
         result = await session.execute(
             select(User).where(User.id == uuid.UUID(user_id))

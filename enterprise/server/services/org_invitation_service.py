@@ -73,7 +73,7 @@ class OrgInvitationService:
         )
 
         # Step 1: Validate organization exists
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             raise ValueError(f'Organization {org_id} not found')
 
@@ -187,7 +187,7 @@ class OrgInvitationService:
         )
 
         # Step 1: Validate permissions upfront (shared for all emails)
-        org = OrgStore.get_org_by_id(org_id)
+        org = await OrgStore.get_org_by_id(org_id)
         if not org:
             raise ValueError(f'Organization {org_id} not found')
 

@@ -84,10 +84,13 @@ async def test_find_customer_id_by_user_id_checks_db_first(
     with (
         patch('integrations.stripe_service.a_session_maker', async_session_maker),
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('integrations.stripe_service.call_sync_from_async') as mock_call_sync,
+        patch(
+            'integrations.stripe_service.OrgStore.get_current_org_from_keycloak_user_id',
+            new_callable=AsyncMock,
+        ) as mock_get_org,
     ):
-        # Mock the call_sync_from_async to return the org
-        mock_call_sync.return_value = mock_org
+        # Mock the async method to return the org
+        mock_get_org.return_value = mock_org
 
         # Call the function
         result = await find_customer_id_by_user_id(str(test_user_id))
@@ -95,8 +98,8 @@ async def test_find_customer_id_by_user_id_checks_db_first(
         # Verify the result
         assert result == 'cus_test123'
 
-        # Verify that call_sync_from_async was called with the correct function
-        mock_call_sync.assert_called_once()
+        # Verify that OrgStore.get_current_org_from_keycloak_user_id was called
+        mock_get_org.assert_called_once_with(str(test_user_id))
 
 
 @pytest.mark.asyncio
@@ -122,10 +125,13 @@ async def test_find_customer_id_by_user_id_falls_back_to_stripe(
         patch('integrations.stripe_service.a_session_maker', async_session_maker),
         patch('storage.org_store.a_session_maker', async_session_maker),
         patch('stripe.Customer.search_async', mock_search),
-        patch('integrations.stripe_service.call_sync_from_async') as mock_call_sync,
+        patch(
+            'integrations.stripe_service.OrgStore.get_current_org_from_keycloak_user_id',
+            new_callable=AsyncMock,
+        ) as mock_get_org,
     ):
-        # Mock the call_sync_from_async to return the org
-        mock_call_sync.return_value = mock_org
+        # Mock the async method to return the org
+        mock_get_org.return_value = mock_org
 
         # Call the function
         result = await find_customer_id_by_user_id(str(test_user_id))
@@ -165,14 +171,17 @@ async def test_create_customer_stores_id_in_db(
         patch('storage.org_store.a_session_maker', async_session_maker),
         patch('stripe.Customer.search_async', mock_search),
         patch('stripe.Customer.create_async', mock_create_async),
-        patch('integrations.stripe_service.call_sync_from_async') as mock_call_sync,
+        patch(
+            'integrations.stripe_service.OrgStore.get_current_org_from_keycloak_user_id',
+            new_callable=AsyncMock,
+        ) as mock_get_org,
         patch(
             'integrations.stripe_service.find_customer_id_by_org_id',
             new_callable=AsyncMock,
         ) as mock_find_customer,
     ):
-        # Mock the call_sync_from_async to return the org
-        mock_call_sync.return_value = mock_org
+        # Mock the async method to return the org
+        mock_get_org.return_value = mock_org
         # Mock find_customer_id_by_org_id to return None (force creation path)
         mock_find_customer.return_value = None
 

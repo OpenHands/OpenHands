@@ -11,6 +11,7 @@ from server.auth.auth_error import AuthError
 from server.auth.saas_user_auth import SaasUserAuth
 from server.routes.auth import (
     _extract_recaptcha_state,
+    accept_tos,
     authenticate,
     keycloak_callback,
     keycloak_offline_callback,
@@ -1996,3 +1997,50 @@ async def test_keycloak_callback_calls_backfill_user_email_for_existing_user(
         mock_user_store.backfill_user_email.assert_called_once_with(
             'test_user_id', user_info
         )
+
+
+@pytest.mark.asyncio
+async def test_accept_tos_stores_timezone_naive_datetime(mock_request):
+    """Test that accept_tos stores a timezone-naive datetime for database compatibility."""
+    # Arrange
+    test_user_id = '12345678-1234-5678-1234-567812345678'
+
+    mock_user = MagicMock()
+    mock_user.id = test_user_id
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_user
+
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
+
+    mock_session_context = AsyncMock()
+    mock_session_context.__aenter__.return_value = mock_session
+    mock_session_context.__aexit__.return_value = None
+
+    mock_user_auth = MagicMock(spec=SaasUserAuth)
+    mock_user_auth.get_access_token = AsyncMock(
+        return_value=SecretStr('test_access_token')
+    )
+    mock_user_auth.refresh_token = SecretStr('test_refresh_token')
+    mock_user_auth.get_user_id = AsyncMock(return_value=test_user_id)
+
+    mock_request.json = AsyncMock(return_value={'redirect_url': 'http://example.com'})
+
+    with (
+        patch(
+            'server.routes.auth.get_user_auth', AsyncMock(return_value=mock_user_auth)
+        ),
+        patch('server.routes.auth.a_session_maker', return_value=mock_session_context),
+        patch('server.routes.auth.set_response_cookie'),
+    ):
+        # Act
+        result = await accept_tos(mock_request)
+
+        # Assert
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == status.HTTP_200_OK
+        # The datetime assigned to user.accepted_tos must be timezone-naive
+        # (compatible with TIMESTAMP WITHOUT TIME ZONE database column)
+        assert mock_user.accepted_tos.tzinfo is None

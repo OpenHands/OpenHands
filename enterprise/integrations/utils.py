@@ -21,7 +21,6 @@ from openhands.events.event_store_abc import EventStoreABC
 from openhands.events.observation.agent import AgentStateChangedObservation
 from openhands.integrations.service_types import Repository
 from openhands.storage.data_models.conversation_status import ConversationStatus
-from openhands.utils.async_utils import call_sync_from_async
 
 if TYPE_CHECKING:
     from openhands.server.conversation_manager.conversation_manager import (
@@ -122,9 +121,7 @@ async def get_user_v1_enabled_setting(user_id: str | None) -> bool:
     if not user_id:
         return False
 
-    org = await call_sync_from_async(
-        OrgStore.get_current_org_from_keycloak_user_id, user_id
-    )
+    org = await OrgStore.get_current_org_from_keycloak_user_id(user_id)
 
     if not org or org.v1_enabled is None:
         return False
