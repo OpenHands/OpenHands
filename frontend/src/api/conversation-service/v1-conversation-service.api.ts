@@ -320,6 +320,39 @@ class V1ConversationService {
   }
 
   /**
+   * Update a V1 conversation's repository settings
+   * @param conversationId The conversation ID
+   * @param repository The repository to attach (e.g., "owner/repo") or null to remove
+   * @param branch The branch to use (optional)
+   * @param gitProvider The git provider (e.g., "github", "gitlab")
+   * @returns Updated conversation info
+   */
+  static async updateConversationRepository(
+    conversationId: string,
+    repository: string | null,
+    branch?: string | null,
+    gitProvider?: string | null,
+  ): Promise<V1AppConversation> {
+    const payload: Record<string, string | null | undefined> = {};
+
+    if (repository !== undefined) {
+      payload.selected_repository = repository;
+    }
+    if (branch !== undefined) {
+      payload.selected_branch = branch;
+    }
+    if (gitProvider !== undefined) {
+      payload.git_provider = gitProvider;
+    }
+
+    const { data } = await openHands.patch<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      payload,
+    );
+    return data;
+  }
+
+  /**
    * Read a file from a specific conversation's sandbox workspace
    * @param conversationId The conversation ID
    * @param filePath Path to the file to read within the sandbox workspace (defaults to /workspace/project/.agents_tmp/PLAN.md)

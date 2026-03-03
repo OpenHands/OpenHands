@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from integrations.types import GitLabResourceType
 from sqlalchemy import and_, asc, select, text, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import sessionmaker
 from storage.database import a_session_maker
 from storage.gitlab_webhook import GitlabWebhook
 
@@ -14,8 +13,6 @@ from openhands.core.logger import openhands_logger as logger
 
 @dataclass
 class GitlabWebhookStore:
-    a_session_maker: sessionmaker = a_session_maker
-
     @staticmethod
     def determine_resource_type(
         webhook: GitlabWebhook,
@@ -44,7 +41,7 @@ class GitlabWebhookStore:
         if not project_details:
             return
 
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             async with session.begin():
                 # Convert GitlabWebhook objects to dictionaries for the insert
                 # Using __dict__ and filtering out SQLAlchemy internal attributes and 'id'
@@ -88,7 +85,7 @@ class GitlabWebhookStore:
         """
 
         resource_type, resource_id = GitlabWebhookStore.determine_resource_type(webhook)
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             async with session.begin():
                 stmt = (
                     update(GitlabWebhook).where(GitlabWebhook.project_id == resource_id)
@@ -122,7 +119,7 @@ class GitlabWebhookStore:
             },
         )
 
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             async with session.begin():
                 # Create query based on the identifier provided
                 if resource_type == GitLabResourceType.PROJECT:
@@ -185,7 +182,7 @@ class GitlabWebhookStore:
             List of GitlabWebhook objects that need processing
         """
 
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             query = (
                 select(GitlabWebhook)
                 .where(GitlabWebhook.webhook_exists.is_(False))
@@ -201,7 +198,7 @@ class GitlabWebhookStore:
         """
         Get's webhook secret given the webhook uuid and admin keycloak user id
         """
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             query = (
                 select(GitlabWebhook)
                 .where(
@@ -235,7 +232,7 @@ class GitlabWebhookStore:
         Returns:
             GitlabWebhook object if found, None otherwise
         """
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             if resource_type == GitLabResourceType.PROJECT:
                 query = select(GitlabWebhook).where(
                     GitlabWebhook.project_id == resource_id
@@ -263,7 +260,7 @@ class GitlabWebhookStore:
         Returns:
             Tuple of (project_webhook_map, group_webhook_map)
         """
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             project_webhook_map = {}
             group_webhook_map = {}
 
@@ -303,7 +300,7 @@ class GitlabWebhookStore:
         Returns:
             True if webhook was reset, False if not found
         """
-        async with self.a_session_maker() as session:
+        async with a_session_maker() as session:
             async with session.begin():
                 if resource_type == GitLabResourceType.PROJECT:
                     update_statement = (
@@ -348,4 +345,4 @@ class GitlabWebhookStore:
         Returns:
             An instance of GitlabWebhookStore
         """
-        return GitlabWebhookStore(a_session_maker)
+        return GitlabWebhookStore()

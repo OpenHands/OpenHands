@@ -5,20 +5,16 @@ import string
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import update
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select, update
 from storage.api_key import ApiKey
-from storage.database import session_maker
+from storage.database import a_session_maker
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.utils.async_utils import call_sync_from_async
 
 
 @dataclass
 class ApiKeyStore:
-    session_maker: sessionmaker
-
     API_KEY_PREFIX = 'sk-oh-'
 
     def generate_api_key(self, length: int = 32) -> str:
@@ -43,22 +39,8 @@ class ApiKeyStore:
         api_key = self.generate_api_key()
         user = await UserStore.get_user_by_id_async(user_id)
         org_id = user.current_org_id
-        await call_sync_from_async(
-            self._store_api_key, user_id, org_id, api_key, name, expires_at
-        )
 
-        return api_key
-
-    def _store_api_key(
-        self,
-        user_id: str,
-        org_id: str,
-        api_key: str,
-        name: str | None,
-        expires_at: datetime | None = None,
-    ) -> None:
-        """Store an existing API key in the database."""
-        with self.session_maker() as session:
+        async with a_session_maker() as session:
             key_record = ApiKey(
                 key=api_key,
                 user_id=user_id,
@@ -67,14 +49,17 @@ class ApiKeyStore:
                 expires_at=expires_at,
             )
             session.add(key_record)
-            session.commit()
+            await session.commit()
 
-    def validate_api_key(self, api_key: str) -> str | None:
+        return api_key
+
+    async def validate_api_key(self, api_key: str) -> str | None:
         """Validate an API key and return the associated user_id if valid."""
         now = datetime.now(UTC)
 
-        with self.session_maker() as session:
-            key_record = session.query(ApiKey).filter(ApiKey.key == api_key).first()
+        async with a_session_maker() as session:
+            result = await session.execute(select(ApiKey).filter(ApiKey.key == api_key))
+            key_record = result.scalars().first()
 
             if not key_record:
                 return None
@@ -91,38 +76,40 @@ class ApiKeyStore:
                     return None
 
             # Update last_used_at timestamp
-            session.execute(
+            await session.execute(
                 update(ApiKey)
                 .where(ApiKey.id == key_record.id)
                 .values(last_used_at=now)
             )
-            session.commit()
+            await session.commit()
 
             return key_record.user_id
 
-    def delete_api_key(self, api_key: str) -> bool:
+    async def delete_api_key(self, api_key: str) -> bool:
         """Delete an API key by the key value."""
-        with self.session_maker() as session:
-            key_record = session.query(ApiKey).filter(ApiKey.key == api_key).first()
+        async with a_session_maker() as session:
+            result = await session.execute(select(ApiKey).filter(ApiKey.key == api_key))
+            key_record = result.scalars().first()
 
             if not key_record:
                 return False
 
-            session.delete(key_record)
-            session.commit()
+            await session.delete(key_record)
+            await session.commit()
 
             return True
 
-    def delete_api_key_by_id(self, key_id: int) -> bool:
+    async def delete_api_key_by_id(self, key_id: int) -> bool:
         """Delete an API key by its ID."""
-        with self.session_maker() as session:
-            key_record = session.query(ApiKey).filter(ApiKey.id == key_id).first()
+        async with a_session_maker() as session:
+            result = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
+            key_record = result.scalars().first()
 
             if not key_record:
                 return False
 
-            session.delete(key_record)
-            session.commit()
+            await session.delete(key_record)
+            await session.commit()
 
             return True
 
@@ -130,64 +117,55 @@ class ApiKeyStore:
         """List all API keys for a user."""
         user = await UserStore.get_user_by_id_async(user_id)
         org_id = user.current_org_id
-        return await call_sync_from_async(self._list_api_keys_from_db, user_id, org_id)
 
-    def _list_api_keys_from_db(self, user_id: str, org_id: str) -> list[ApiKey]:
-        with self.session_maker() as session:
-            keys: list[ApiKey] = (
-                session.query(ApiKey)
-                .filter(ApiKey.user_id == user_id)
-                .filter(ApiKey.org_id == org_id)
-                .all()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey).filter(
+                    ApiKey.user_id == user_id, ApiKey.org_id == org_id
+                )
             )
-
+            keys = result.scalars().all()
             return [key for key in keys if key.name != 'MCP_API_KEY']
 
     async def retrieve_mcp_api_key(self, user_id: str) -> str | None:
         user = await UserStore.get_user_by_id_async(user_id)
         org_id = user.current_org_id
-        return await call_sync_from_async(
-            self._retrieve_mcp_api_key_from_db, user_id, org_id
-        )
 
-    def _retrieve_mcp_api_key_from_db(self, user_id: str, org_id: str) -> str | None:
-        with self.session_maker() as session:
-            keys: list[ApiKey] = (
-                session.query(ApiKey)
-                .filter(ApiKey.user_id == user_id)
-                .filter(ApiKey.org_id == org_id)
-                .all()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey).filter(
+                    ApiKey.user_id == user_id, ApiKey.org_id == org_id
+                )
             )
+            keys = result.scalars().all()
             for key in keys:
                 if key.name == 'MCP_API_KEY':
                     return key.key
 
         return None
 
-    def retrieve_api_key_by_name(self, user_id: str, name: str) -> str | None:
+    async def retrieve_api_key_by_name(self, user_id: str, name: str) -> str | None:
         """Retrieve an API key by name for a specific user."""
-        with self.session_maker() as session:
-            key_record = (
-                session.query(ApiKey)
-                .filter(ApiKey.user_id == user_id, ApiKey.name == name)
-                .first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey).filter(ApiKey.user_id == user_id, ApiKey.name == name)
             )
+            key_record = result.scalars().first()
             return key_record.key if key_record else None
 
-    def delete_api_key_by_name(self, user_id: str, name: str) -> bool:
+    async def delete_api_key_by_name(self, user_id: str, name: str) -> bool:
         """Delete an API key by name for a specific user."""
-        with self.session_maker() as session:
-            key_record = (
-                session.query(ApiKey)
-                .filter(ApiKey.user_id == user_id, ApiKey.name == name)
-                .first()
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey).filter(ApiKey.user_id == user_id, ApiKey.name == name)
             )
+            key_record = result.scalars().first()
 
             if not key_record:
                 return False
 
-            session.delete(key_record)
-            session.commit()
+            await session.delete(key_record)
+            await session.commit()
 
             return True
 
@@ -195,4 +173,4 @@ class ApiKeyStore:
     def get_instance(cls) -> ApiKeyStore:
         """Get an instance of the ApiKeyStore."""
         logger.debug('api_key_store.get_instance')
-        return ApiKeyStore(session_maker)
+        return ApiKeyStore()

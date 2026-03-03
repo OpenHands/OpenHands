@@ -34,7 +34,8 @@ from server.services.org_invitation_service import (
     OrgInvitationService,
     UserAlreadyMemberError,
 )
-from storage.database import session_maker
+from sqlalchemy import select
+from storage.database import a_session_maker
 from storage.user import User
 from storage.user_store import UserStore
 
@@ -208,6 +209,7 @@ async def keycloak_callback(
     else:
         # Existing user — gradually backfill contact_name if it still has a username-style value
         await UserStore.backfill_contact_name(user_id, user_info)
+        await UserStore.backfill_user_email(user_id, user_info)
 
     if not user:
         logger.error(f'Failed to authenticate user {user_info["preferred_username"]}')
@@ -269,7 +271,7 @@ async def keycloak_callback(
             # Fail open - continue with login if reCAPTCHA service unavailable
 
     # Check if email domain is blocked
-    if email and domain_blocker.is_domain_blocked(email):
+    if email and await domain_blocker.is_domain_blocked(email):
         logger.warning(
             f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
         )
@@ -549,7 +551,10 @@ async def keycloak_offline_callback(code: str, state: str, request: Request):
         user_id=user_info['sub'], offline_token=keycloak_refresh_token
     )
 
-    return RedirectResponse(state if state else request.base_url, status_code=302)
+    redirect_url, _, _ = _extract_oauth_state(state)
+    return RedirectResponse(
+        redirect_url if redirect_url else request.base_url, status_code=302
+    )
 
 
 @oauth_router.get('/github/callback')
@@ -606,17 +611,20 @@ async def accept_tos(request: Request):
 
     # Update user settings with TOS acceptance
     accepted_tos: datetime = datetime.now(timezone.utc)
-    with session_maker() as session:
-        user = session.query(User).filter(User.id == uuid.UUID(user_id)).first()
+    async with a_session_maker() as session:
+        result = await session.execute(
+            select(User).where(User.id == uuid.UUID(user_id))
+        )
+        user = result.scalar_one_or_none()
         if not user:
-            session.rollback()
+            await session.rollback()
             logger.error('User for {user_id} not found.')
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={'error': 'User does not exist'},
             )
         user.accepted_tos = accepted_tos
-        session.commit()
+        await session.commit()
 
         logger.info(f'User {user_id} accepted TOS')
 

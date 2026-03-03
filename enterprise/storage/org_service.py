@@ -3,6 +3,7 @@ Service class for managing organization operations.
 Separates business logic from route handlers.
 """
 
+from typing import NoReturn
 from uuid import UUID, uuid4
 from uuid import UUID as parse_uuid
 
@@ -325,7 +326,7 @@ class OrgService:
         user_id: str,
         original_error: Exception,
         error_message: str,
-    ) -> None:
+    ) -> NoReturn:
         """
         Handle failure by cleaning up LiteLLM resources and raising appropriate error.
 

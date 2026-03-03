@@ -172,7 +172,7 @@ class ProviderHandler:
                 exceptions.append((provider, e))
                 continue
         for provider, exc in exceptions:
-            logger.error(
+            logger.warning(
                 f'Failed to get user from provider {provider}: {exc}',
                 exc_info=(type(exc), exc, exc.__traceback__),
             )
@@ -246,7 +246,6 @@ class ProviderHandler:
         """
         Get repositories from providers
         """
-
         if selected_provider:
             if not page or not per_page:
                 raise ValueError('Failed to provider params for paginating repos')

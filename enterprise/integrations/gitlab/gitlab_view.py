@@ -6,7 +6,6 @@ from integrations.utils import HOST, get_oh_labels, has_exact_mention
 from jinja2 import Environment
 from server.auth.token_manager import TokenManager
 from server.config import get_config
-from storage.database import session_maker
 from storage.saas_secrets_store import SaasSecretsStore
 
 from openhands.core.logger import openhands_logger as logger
@@ -78,9 +77,7 @@ class GitlabIssue(ResolverViewInterface):
         return user_instructions, conversation_instructions
 
     async def _get_user_secrets(self):
-        secrets_store = SaasSecretsStore(
-            self.user_info.keycloak_user_id, session_maker, get_config()
-        )
+        secrets_store = SaasSecretsStore(self.user_info.keycloak_user_id, get_config())
         user_secrets = await secrets_store.load()
 
         return user_secrets.custom_secrets if user_secrets else None
@@ -449,3 +446,5 @@ class GitlabFactory:
                 previous_comments=[],
                 is_mr=True,
             )
+
+        raise ValueError(f'Unhandled GitLab webhook event: {message}')

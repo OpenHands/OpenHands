@@ -56,15 +56,31 @@ export const setStyleHeightPx = (el: HTMLElement, height: number): void => {
 };
 
 /**
- * Detect if the user is on a mobile device
- * @returns True if the user is on a mobile device, false otherwise
+ * Detect if the user is on a mobile device.
+ * Touch support alone is not sufficient — touchscreen laptops have touch
+ * but use a mouse/trackpad as primary input. We check that the primary
+ * pointing device is coarse (finger) to avoid false positives.
  */
-export const isMobileDevice = (): boolean =>
-  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent,
-  ) ||
-  "ontouchstart" in window ||
-  navigator.maxTouchPoints > 0;
+export const isMobileDevice = (): boolean => {
+  if (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent,
+    )
+  )
+    return true;
+
+  const hasTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  if (!hasTouch) return false;
+
+  // If matchMedia is available, check whether the primary pointer is fine
+  // (mouse/trackpad). Touchscreen laptops report fine, real mobile devices don't.
+  if (typeof window.matchMedia === "function") {
+    return !window.matchMedia("(pointer: fine)").matches;
+  }
+
+  // Fallback: touch present but no matchMedia — assume mobile
+  return true;
+};
 
 /**
  * Checks if the current domain is the production domain

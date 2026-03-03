@@ -1,19 +1,16 @@
 import uuid
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
-
-# Mock the database module before importing OrgStore
-with patch('storage.database.engine', create=True), patch(
-    'storage.database.a_engine', create=True
-):
-    from storage.org import Org
-    from storage.org_member import OrgMember
-    from storage.org_store import OrgStore
-    from storage.role import Role
-    from storage.user import User
+from storage.org import Org
+from storage.org_invitation import OrgInvitation
+from storage.org_member import OrgMember
+from storage.org_store import OrgStore
+from storage.role import Role
+from storage.user import User
 
 from openhands.storage.data_models.settings import Settings
 
@@ -806,3 +803,183 @@ def test_orphaned_user_error_contains_user_ids():
     assert error.user_ids == user_ids
     assert '2 user(s)' in str(error)
     assert 'no remaining organization' in str(error)
+
+
+def test_org_deletion_with_invitations_uses_passive_deletes(
+    session_maker, mock_litellm_api
+):
+    """
+    GIVEN: Organization has associated invitations with non-nullable org_id foreign key
+    WHEN: Organization is deleted via SQLAlchemy session.delete()
+    THEN: Deletion succeeds without NOT NULL constraint violation
+          (passive_deletes=True defers to database CASCADE instead of setting org_id to NULL)
+
+    This test verifies the fix for the bug where SQLAlchemy would try to
+    SET org_id=NULL on org_invitation before deleting the org, causing:
+    "NOT NULL constraint failed: org_invitation.org_id"
+
+    With passive_deletes=True on the relationship, SQLAlchemy defers to the
+    database's CASCADE constraint instead of trying to nullify the foreign key.
+
+    Note: SQLite doesn't enforce CASCADE by default, so we only verify that
+    the deletion succeeds. In production (PostgreSQL), CASCADE handles cleanup.
+    """
+    from datetime import datetime, timedelta
+
+    # Arrange
+    org_id = uuid.uuid4()
+    other_org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        # Create role first (required for invitation)
+        role = Role(id=1, name='owner', rank=1)
+        session.add(role)
+        session.flush()
+
+        # Create organization to be deleted
+        org = Org(id=org_id, name='test-org-with-invitations')
+        session.add(org)
+        session.flush()
+
+        # Create a second org for the user's current_org_id
+        # (to avoid the user.current_org_id constraint issue during deletion)
+        other_org = Org(id=other_org_id, name='other-org')
+        session.add(other_org)
+        session.flush()
+
+        # Create user with current_org pointing to the OTHER org (not the one being deleted)
+        user = User(id=user_id, current_org_id=other_org_id)
+        session.add(user)
+        session.flush()
+
+        # Create invitation associated with the organization to be deleted
+        invitation = OrgInvitation(
+            token='test-invitation-token-12345',
+            org_id=org_id,
+            email='invitee@example.com',
+            role_id=1,
+            inviter_id=user_id,
+            status='pending',
+            created_at=datetime.now(),
+            expires_at=datetime.now() + timedelta(days=7),
+        )
+        session.add(invitation)
+        session.commit()
+
+        # Verify invitation was created
+        invitation_count = session.query(OrgInvitation).filter_by(org_id=org_id).count()
+        assert invitation_count == 1
+
+    # Act - Delete organization via SQLAlchemy (this is what triggered the bug)
+    # Without passive_deletes=True, SQLAlchemy would try to SET org_id=NULL
+    # which violates the NOT NULL constraint on org_invitation.org_id
+    with session_maker() as session:
+        org = session.query(Org).filter(Org.id == org_id).first()
+        assert org is not None
+
+        # This should NOT raise IntegrityError with passive_deletes=True
+        # Previously this would fail with:
+        # "NOT NULL constraint failed: org_invitation.org_id"
+        session.delete(org)
+        session.commit()  # Success indicates passive_deletes=True is working
+
+    # Assert - Organization should be deleted
+    with session_maker() as session:
+        deleted_org = session.query(Org).filter(Org.id == org_id).first()
+        assert deleted_org is None
+
+
+# =============================================================================
+# Tests for async LLM settings methods
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_update_org_llm_settings_async_with_llm_api_key():
+    """
+    GIVEN: Organization with members and llm_api_key in update settings
+    WHEN: update_org_llm_settings_async is called
+    THEN: Org fields are updated and llm_api_key is propagated to all members
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    org_id = uuid.uuid4()
+
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        default_llm_model='old-model',
+    )
+
+    llm_settings = OrgLLMSettingsUpdate(
+        default_llm_model='new-model',
+        llm_api_key='new-member-api-key',
+    )
+
+    # Mock the async session and member store
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_org
+    mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    with (
+        patch('storage.org_store.a_session_maker', mock_a_session_maker),
+        patch(
+            'storage.org_member_store.OrgMemberStore.update_all_members_llm_settings_async',
+            AsyncMock(),
+        ) as mock_member_update,
+    ):
+        # Act
+        result = await OrgStore.update_org_llm_settings_async(org_id, llm_settings)
+
+        # Assert - Org is returned
+        assert result is not None
+        assert result.default_llm_model == 'new-model'
+
+        # Assert - Member update was called with correct settings
+        mock_member_update.assert_called_once()
+        call_args = mock_member_update.call_args
+        member_settings = call_args[0][2]  # Third positional arg is member_settings
+        assert member_settings.llm_api_key == 'new-member-api-key'
+        assert member_settings.llm_model == 'new-model'
+
+
+@pytest.mark.asyncio
+async def test_update_org_llm_settings_async_org_not_found():
+    """
+    GIVEN: Non-existent organization ID
+    WHEN: update_org_llm_settings_async is called
+    THEN: Returns None
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    non_existent_org_id = uuid.uuid4()
+    llm_settings = OrgLLMSettingsUpdate(default_llm_model='new-model')
+
+    # Mock the async session to return None for org
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    # Act
+    with patch('storage.org_store.a_session_maker', mock_a_session_maker):
+        result = await OrgStore.update_org_llm_settings_async(
+            non_existent_org_id, llm_settings
+        )
+
+    # Assert
+    assert result is None

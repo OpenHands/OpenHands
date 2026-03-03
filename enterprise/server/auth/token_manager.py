@@ -38,9 +38,9 @@ from server.auth.keycloak_manager import get_keycloak_admin, get_keycloak_openid
 from server.config import get_config
 from server.logger import logger
 from sqlalchemy import String as SQLString
-from sqlalchemy import type_coerce
+from sqlalchemy import select, type_coerce
 from storage.auth_token_store import AuthTokenStore
-from storage.database import session_maker
+from storage.database import a_session_maker
 from storage.github_app_installation import GithubAppInstallation
 from storage.offline_token_store import OfflineTokenStore
 from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
@@ -48,6 +48,10 @@ from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_
 from openhands.integrations.service_types import ProviderType
 from openhands.server.types import SessionExpiredError
 from openhands.utils.http_session import httpx_verify_option
+
+# HTTP timeout for external IDP calls (in seconds)
+# This prevents indefinite blocking if an IDP is slow or unresponsive
+IDP_HTTP_TIMEOUT = 15.0
 
 
 def _before_sleep_callback(retry_state: RetryCallState) -> None:
@@ -202,7 +206,9 @@ class TokenManager:
         access_token: str,
         idp: ProviderType,
     ) -> dict[str, str | int]:
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
             base_url = KEYCLOAK_SERVER_URL_EXT if self.external else KEYCLOAK_SERVER_URL
             url = f'{base_url}/realms/{KEYCLOAK_REALM_NAME}/broker/{idp.value}/token'
             headers = {
@@ -361,7 +367,9 @@ class TokenManager:
             'refresh_token': refresh_token,
             'grant_type': 'refresh_token',
         }
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(url, data=payload)
             response.raise_for_status()
             logger.info('Successfully refreshed GitHub token')
@@ -387,7 +395,9 @@ class TokenManager:
             'refresh_token': refresh_token,
             'grant_type': 'refresh_token',
         }
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(url, data=payload)
             response.raise_for_status()
             logger.info('Successfully refreshed GitLab token')
@@ -415,7 +425,9 @@ class TokenManager:
             'refresh_token': refresh_token,
         }
 
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=IDP_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(url, data=data, headers=headers)
             response.raise_for_status()
             logger.info('Successfully refreshed Bitbucket token')
@@ -771,25 +783,24 @@ class TokenManager:
                 exc_info=True,
             )
 
-    def store_org_token(self, installation_id: int, installation_token: str):
+    async def store_org_token(self, installation_id: int, installation_token: str):
         """Store a GitHub App installation token.
 
         Args:
             installation_id: GitHub installation ID (integer or string)
             installation_token: The token to store
         """
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # Ensure installation_id is a string
             str_installation_id = str(installation_id)
             # Use type_coerce to ensure SQLAlchemy treats the parameter as a string
-            installation = (
-                session.query(GithubAppInstallation)
-                .filter(
+            result = await session.execute(
+                select(GithubAppInstallation).filter(
                     GithubAppInstallation.installation_id
                     == type_coerce(str_installation_id, SQLString)
                 )
-                .first()
             )
+            installation = result.scalars().first()
             if installation:
                 installation.encrypted_token = self.encrypt_text(installation_token)
             else:
@@ -799,9 +810,9 @@ class TokenManager:
                         encrypted_token=self.encrypt_text(installation_token),
                     )
                 )
-            session.commit()
+            await session.commit()
 
-    def load_org_token(self, installation_id: int) -> str | None:
+    async def load_org_token(self, installation_id: int) -> str | None:
         """Load a GitHub App installation token.
 
         Args:
@@ -810,17 +821,16 @@ class TokenManager:
         Returns:
             The decrypted token if found, None otherwise
         """
-        with session_maker() as session:
+        async with a_session_maker() as session:
             # Ensure installation_id is a string and use type_coerce
             str_installation_id = str(installation_id)
-            installation = (
-                session.query(GithubAppInstallation)
-                .filter(
+            result = await session.execute(
+                select(GithubAppInstallation).filter(
                     GithubAppInstallation.installation_id
                     == type_coerce(str_installation_id, SQLString)
                 )
-                .first()
             )
+            installation = result.scalars().first()
             if not installation:
                 return None
             token = self.decrypt_text(installation.encrypted_token)

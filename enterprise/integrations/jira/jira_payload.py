@@ -212,8 +212,6 @@ class JiraPayloadParser:
             missing.append('issue.id')
         if not issue_key:
             missing.append('issue.key')
-        if not user_email:
-            missing.append('user.emailAddress')
         if not display_name:
             missing.append('user.displayName')
         if not account_id:

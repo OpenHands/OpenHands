@@ -486,3 +486,180 @@ class TestSaasSQLAppConversationInfoService:
         # Count should be 0 in org2
         count_org2 = await user1_service_org2.count_app_conversation_info()
         assert count_org2 == 0
+
+
+class TestSaasSQLAppConversationInfoServiceAdminContext:
+    """Test suite for SaasSQLAppConversationInfoService with ADMIN context."""
+
+    @pytest.mark.asyncio
+    async def test_admin_context_returns_unfiltered_data(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that ADMIN context returns unfiltered data (no user/org filtering)."""
+        # Create conversations for different users
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create conversations for user1 in org1
+        for i in range(3):
+            conv = AppConversationInfo(
+                id=uuid4(),
+                created_by_user_id=str(USER1_ID),
+                sandbox_id=f'sandbox_user1_{i}',
+                title=f'User1 Conversation {i}',
+            )
+            await user1_service.save_app_conversation_info(conv)
+
+        # Now create an ADMIN service
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        # ADMIN should see ALL conversations (unfiltered)
+        admin_page = await admin_service.search_app_conversation_info()
+        assert (
+            len(admin_page.items) == 3
+        ), 'ADMIN context should see all conversations without filtering'
+
+        # ADMIN count should return total count (3)
+        admin_count = await admin_service.count_app_conversation_info()
+        assert (
+            admin_count == 3
+        ), 'ADMIN context should count all conversations without filtering'
+
+    @pytest.mark.asyncio
+    async def test_admin_context_can_access_any_conversation(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that ADMIN context can access any conversation regardless of owner."""
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Create a conversation as user1
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        conv = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='sandbox_user1',
+            title='User1 Private Conversation',
+        )
+        await user1_service.save_app_conversation_info(conv)
+
+        # Create a service as user2 in org2 - should not see user1's conversation
+        user2_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER2_ID)),
+        )
+
+        user2_page = await user2_service.search_app_conversation_info()
+        assert len(user2_page.items) == 0, 'User2 should not see User1 conversation'
+
+        # But ADMIN should see ALL conversations including user1's
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        admin_page = await admin_service.search_app_conversation_info()
+        assert len(admin_page.items) == 1
+        assert admin_page.items[0].id == conv.id
+
+        # ADMIN should also be able to get specific conversation by ID
+        admin_get_conv = await admin_service.get_app_conversation_info(conv.id)
+        assert admin_get_conv is not None
+        assert admin_get_conv.id == conv.id
+
+    @pytest.mark.asyncio
+    async def test_secure_select_admin_bypasses_filtering(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that _secure_select returns unfiltered query for ADMIN context."""
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Create an ADMIN service
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        # Get the secure select query
+        query = await admin_service._secure_select()
+
+        # Convert query to string to verify NO filters are present
+        query_str = str(query.compile(compile_kwargs={'literal_binds': True}))
+
+        # For ADMIN, there should be no user_id or org_id filtering
+        # The query should not contain filters for user_id or org_id
+        assert str(USER1_ID) not in query_str.replace(
+            '-', ''
+        ), 'ADMIN context should not filter by user_id'
+        assert str(USER2_ID) not in query_str.replace(
+            '-', ''
+        ), 'ADMIN context should not filter by user_id'
+
+    @pytest.mark.asyncio
+    async def test_regular_user_context_filters_correctly(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        """Test that regular user context properly filters data (control test)."""
+        from openhands.app_server.user.specifiy_user_context import ADMIN
+
+        # Create conversations for different users
+        user1_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+
+        # Create 3 conversations for user1
+        for i in range(3):
+            conv = AppConversationInfo(
+                id=uuid4(),
+                created_by_user_id=str(USER1_ID),
+                sandbox_id=f'sandbox_user1_{i}',
+                title=f'User1 Conversation {i}',
+            )
+            await user1_service.save_app_conversation_info(conv)
+
+        # Create 2 conversations for user2
+        user2_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER2_ID)),
+        )
+
+        for i in range(2):
+            conv = AppConversationInfo(
+                id=uuid4(),
+                created_by_user_id=str(USER2_ID),
+                sandbox_id=f'sandbox_user2_{i}',
+                title=f'User2 Conversation {i}',
+            )
+            await user2_service.save_app_conversation_info(conv)
+
+        # User1 should only see their 3 conversations
+        user1_page = await user1_service.search_app_conversation_info()
+        assert len(user1_page.items) == 3
+
+        # User2 should only see their 2 conversations
+        user2_page = await user2_service.search_app_conversation_info()
+        assert len(user2_page.items) == 2
+
+        # But ADMIN should see all 5 conversations
+        admin_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=ADMIN,
+        )
+
+        admin_page = await admin_service.search_app_conversation_info()
+        assert len(admin_page.items) == 5
