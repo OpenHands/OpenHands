@@ -497,7 +497,7 @@ async def get_me(
 
     try:
         user_uuid = UUID(user_id)
-        return OrgMemberService.get_me(org_id, user_uuid)
+        return await OrgMemberService.get_me(org_id, user_uuid)
 
     except OrgMemberNotFoundError:
         raise HTTPException(

@@ -2008,6 +2008,7 @@ async def test_switch_org_success():
         patch('storage.org_service.OrgService.is_org_member', return_value=True),
         patch(
             'storage.org_service.UserStore.update_current_org',
+            new_callable=AsyncMock,
             return_value=mock_updated_user,
         ),
     ):
@@ -2099,7 +2100,7 @@ async def test_switch_org_user_not_found():
             return_value=mock_org,
         ),
         patch('storage.org_service.OrgService.is_org_member', return_value=True),
-        patch('storage.org_service.UserStore.update_current_org', return_value=None),
+        patch('storage.org_service.UserStore.update_current_org', new_callable=AsyncMock, return_value=None),
     ):
         # Act & Assert
         with pytest.raises(OrgDatabaseError) as exc_info:
