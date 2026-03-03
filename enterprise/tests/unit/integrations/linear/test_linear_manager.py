@@ -802,7 +802,7 @@ class TestStartJob:
         # Should send error message about re-login
         linear_manager.send_message.assert_called_once()
         call_args = linear_manager.send_message.call_args[0]
-        assert 'Please re-login' in call_args[0].message
+        assert 'Please re-login' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_start_job_llm_authentication_error(
@@ -828,7 +828,7 @@ class TestStartJob:
         # Should send error message about LLM API key
         linear_manager.send_message.assert_called_once()
         call_args = linear_manager.send_message.call_args[0]
-        assert 'valid LLM API key' in call_args[0].message
+        assert 'valid LLM API key' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_start_job_session_expired_error(
@@ -854,8 +854,8 @@ class TestStartJob:
         # Should send error message about session expired
         linear_manager.send_message.assert_called_once()
         call_args = linear_manager.send_message.call_args[0]
-        assert 'session has expired' in call_args[0].message
-        assert 'login again' in call_args[0].message
+        assert 'session has expired' in call_args[0]
+        assert 'login again' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_start_job_unexpected_error(
@@ -881,7 +881,7 @@ class TestStartJob:
         # Should send generic error message
         linear_manager.send_message.assert_called_once()
         call_args = linear_manager.send_message.call_args[0]
-        assert 'unexpected error' in call_args[0].message
+        assert 'unexpected error' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_start_job_send_message_fails(
@@ -1049,8 +1049,9 @@ class TestSendMessage:
 
         linear_manager._query_api = AsyncMock(return_value=mock_response)
 
-        message = Message(source=SourceType.LINEAR, message='Test message')
-        result = await linear_manager.send_message(message, 'issue_id', 'api_key')
+        result = await linear_manager.send_message(
+            'Test message', 'issue_id', 'api_key'
+        )
 
         assert result == mock_response
         linear_manager._query_api.assert_called_once()
@@ -1114,7 +1115,7 @@ class TestSendRepoSelectionComment:
 
         linear_manager.send_message.assert_called_once()
         call_args = linear_manager.send_message.call_args[0]
-        assert 'which repository to work with' in call_args[0].message
+        assert 'which repository to work with' in call_args[0]
 
     @pytest.mark.asyncio
     async def test_send_repo_selection_comment_send_fails(
