@@ -116,13 +116,8 @@ class GitlabIssue(ResolverViewInterface):
         return user_secrets.custom_secrets if user_secrets else None
 
     async def initialize_new_conversation(self) -> ConversationMetadata:
-        self.v1_enabled = await is_v1_enabled_for_gitlab_resolver(
-            self.user_info.keycloak_user_id
-        )
-
-        logger.info(
-            f'[GitLab V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'
-        )
+        # v1_enabled is already set at construction time in the factory method
+        # This is the source of truth for the conversation type
         if self.v1_enabled:
             # Create dummy conversation metadata
             # Don't save to conversation store
@@ -152,9 +147,7 @@ class GitlabIssue(ResolverViewInterface):
         conversation_metadata: ConversationMetadata,
         saas_user_auth: UserAuth,
     ):
-        logger.info(
-            f'[GitLab V1]: User flag found for {self.user_info.keycloak_user_id} is {self.v1_enabled}'
-        )
+        # v1_enabled is already set at construction time in the factory method
         if self.v1_enabled:
             # Use V1 app conversation service
             await self._create_v1_conversation(
@@ -467,6 +460,12 @@ class GitlabFactory:
             user_id=user_id, username=username, keycloak_user_id=keycloak_user_id
         )
 
+        # Check v1_enabled at construction time - this is the source of truth
+        v1_enabled = await is_v1_enabled_for_gitlab_resolver(keycloak_user_id)
+        logger.info(
+            f'[GitLab V1]: User flag found for {keycloak_user_id} is {v1_enabled}'
+        )
+
         if GitlabFactory.is_labeled_issue(message):
             issue_iid = payload['object_attributes']['iid']
 
@@ -488,7 +487,7 @@ class GitlabFactory:
                 description='',
                 previous_comments=[],
                 is_mr=False,
-                v1_enabled=False,
+                v1_enabled=v1_enabled,
             )
 
         elif GitlabFactory.is_issue_comment(message):
@@ -519,7 +518,7 @@ class GitlabFactory:
                 description='',
                 previous_comments=[],
                 is_mr=False,
-                v1_enabled=False,
+                v1_enabled=v1_enabled,
             )
 
         elif GitlabFactory.is_mr_comment(message):
@@ -552,7 +551,7 @@ class GitlabFactory:
                 description='',
                 previous_comments=[],
                 is_mr=True,
-                v1_enabled=False,
+                v1_enabled=v1_enabled,
             )
 
         elif GitlabFactory.is_mr_comment(message, inline=True):
@@ -593,7 +592,7 @@ class GitlabFactory:
                 description='',
                 previous_comments=[],
                 is_mr=True,
-                v1_enabled=False,
+                v1_enabled=v1_enabled,
             )
 
         raise ValueError(f'Unhandled GitLab webhook event: {message}')
