@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
@@ -12,6 +13,7 @@ from integrations.utils import (
     get_user_v1_enabled_setting,
 )
 from jinja2 import Environment
+from openhands.utils.async_utils import GENERAL_TIMEOUT
 from slack_sdk import WebClient
 from storage.slack_conversation import SlackConversation
 from storage.slack_conversation_store import SlackConversationStore
@@ -594,8 +596,9 @@ class SlackFactory:
                 v1_enabled=False,
             )
 
-        conversation = await SlackFactory.determine_if_updating_existing_conversation(
-            message,
+        conversation = await asyncio.wait_for(
+            SlackFactory.determine_if_updating_existing_conversation(message),
+            timeout=GENERAL_TIMEOUT
         )
         if conversation:
             logger.info(
