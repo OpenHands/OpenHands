@@ -34,6 +34,12 @@ export const useAutoLogin = () => {
     authUrl: config?.auth_url,
   });
 
+  const bitbucketDataCenterUrl = useAuthUrl({
+    appMode: config?.app_mode || null,
+    identityProvider: "bitbucket_data_center",
+    authUrl: config?.auth_url,
+  });
+
   const enterpriseSsoUrl = useAuthUrl({
     appMode: config?.app_mode || null,
     identityProvider: "enterprise_sso",
@@ -69,6 +75,8 @@ export const useAutoLogin = () => {
       authUrl = gitlabAuthUrl;
     } else if (loginMethod === LoginMethod.BITBUCKET) {
       authUrl = bitbucketAuthUrl;
+    } else if (loginMethod === LoginMethod.BITBUCKET_DATA_CENTER) {
+      authUrl = bitbucketDataCenterUrl;
     } else if (loginMethod === LoginMethod.ENTERPRISE_SSO) {
       authUrl = enterpriseSsoUrl;
     }

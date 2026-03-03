@@ -22,6 +22,9 @@ from openhands.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl,
 )
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketServiceImpl
+from openhands.integrations.bitbucket_data_center.bitbucket_dc_service import (
+    BitbucketDCServiceImpl,
+)
 from openhands.integrations.forgejo.forgejo_service import ForgejoServiceImpl
 from openhands.integrations.github.github_service import GithubServiceImpl
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
@@ -128,6 +131,7 @@ class ProviderHandler:
             ProviderType.GITHUB: GithubServiceImpl,
             ProviderType.GITLAB: GitLabServiceImpl,
             ProviderType.BITBUCKET: BitBucketServiceImpl,
+            ProviderType.BITBUCKET_DATA_CENTER: BitbucketDCServiceImpl,
             ProviderType.FORGEJO: ForgejoServiceImpl,
             ProviderType.AZURE_DEVOPS: AzureDevOpsServiceImpl,
         }
@@ -219,6 +223,18 @@ class ProviderHandler:
             return await service.get_installations()
         except Exception as e:
             logger.warning(f'Failed to get bitbucket workspaces {e}')
+
+        return []
+
+    async def get_bitbucket_dc_projects(self) -> list[str]:
+        service = cast(
+            InstallationsService,
+            self.get_service(ProviderType.BITBUCKET_DATA_CENTER),
+        )
+        try:
+            return await service.get_installations()
+        except Exception as e:
+            logger.warning(f'Failed to get bitbucket data center projects {e}')
 
         return []
 
@@ -341,8 +357,9 @@ class ProviderHandler:
     def _is_repository_url(self, query: str, provider: ProviderType) -> bool:
         """Check if the query is a repository URL."""
         custom_host = self.provider_tokens[provider].host
-        custom_host_exists = custom_host and custom_host in query
-        default_host_exists = self.PROVIDER_DOMAINS[provider] in query
+        custom_host_exists = bool(custom_host and custom_host in query)
+        default_domain = self.PROVIDER_DOMAINS.get(provider)
+        default_host_exists = default_domain is not None and default_domain in query
 
         return query.startswith(('http://', 'https://')) and (
             custom_host_exists or default_host_exists
@@ -673,7 +690,7 @@ class ProviderHandler:
         provider = repository.git_provider
         repo_name = repository.full_name
 
-        domain = self.PROVIDER_DOMAINS[provider]
+        domain = self.PROVIDER_DOMAINS.get(provider, '')
 
         # If provider tokens are provided, use the host from the token if available
         # Note: For Azure DevOps, don't use the host field as it may contain org/project path
@@ -724,6 +741,24 @@ class ProviderHandler:
                     else:
                         # Access token format: use x-token-auth
                         remote_url = f'{protocol}://x-token-auth:{token_value}@{domain}/{repo_name}.git'
+                elif provider == ProviderType.BITBUCKET_DATA_CENTER:
+                    # DC uses HTTP Basic auth — token must be in username:token format
+                    project, repo_slug = (
+                        repo_name.split('/', 1)
+                        if '/' in repo_name
+                        else (repo_name, repo_name)
+                    )
+                    scm_path = f'scm/{project.lower()}/{repo_slug}.git'
+                    # Percent-encode each credential part so special characters
+                    # (e.g. @, #, /) don't break the URL.
+                    if ':' in token_value:
+                        dc_user, dc_pass = token_value.split(':', 1)
+                        url_creds = (
+                            f'{quote(dc_user, safe="")}:{quote(dc_pass, safe="")}'
+                        )
+                    else:
+                        url_creds = f'x-token-auth:{quote(token_value, safe="")}'
+                    remote_url = f'{protocol}://{url_creds}@{domain}/{scm_path}'
                 elif provider == ProviderType.AZURE_DEVOPS:
                     # Azure DevOps uses PAT with Basic auth
                     # Format: https://{anything}:{PAT}@dev.azure.com/{org}/{project}/_git/{repo}

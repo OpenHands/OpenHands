@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, cast
 
 import jwt
 from fastapi import Request, Response, status
@@ -19,7 +19,7 @@ from server.routes.auth import (
 )
 
 from openhands.core.logger import openhands_logger as logger
-from openhands.server.user_auth.user_auth import AuthType, get_user_auth
+from openhands.server.user_auth.user_auth import AuthType, UserAuth, get_user_auth
 from openhands.server.utils import config
 
 
@@ -97,7 +97,10 @@ class SetAuthCookieMiddleware:
             return response
 
     def _get_user_auth(self, request: Request) -> SaasUserAuth | None:
-        return getattr(request.state, 'user_auth', None)
+        user_auth: UserAuth | None = getattr(request.state, 'user_auth', None)
+        if user_auth is None:
+            return None
+        return cast(SaasUserAuth, user_auth)
 
     def _check_tos(self, request: Request):
         keycloak_auth_cookie = request.cookies.get('keycloak_auth')
@@ -187,7 +190,7 @@ class SetAuthCookieMiddleware:
     async def _logout(self, request: Request):
         # Log out of keycloak - this prevents issues where you did not log in with the idp you believe you used
         try:
-            user_auth: SaasUserAuth = await get_user_auth(request)
+            user_auth = cast(SaasUserAuth, await get_user_auth(request))
             if user_auth and user_auth.refresh_token:
                 await token_manager.logout(user_auth.refresh_token.get_secret_value())
         except Exception:

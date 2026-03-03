@@ -219,9 +219,9 @@ async def keycloak_callback(
 
     # Retrieve bot token
     if team_id and bot_access_token:
-        slack_team_store.create_team(team_id, bot_access_token)
+        await slack_team_store.create_team(team_id, bot_access_token)
     else:
-        bot_access_token = slack_team_store.get_team_bot_token(team_id)
+        bot_access_token = await slack_team_store.get_team_bot_token(team_id)
 
     if not bot_access_token:
         logger.error(

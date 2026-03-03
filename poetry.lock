@@ -6181,14 +6181,14 @@ openapi-schema-validator = ">=0.6.0,<0.7.0"
 
 [[package]]
 name = "openhands-aci"
-version = "0.3.2"
+version = "0.3.3"
 description = "An Agent-Computer Interface (ACI) designed for software development agents OpenHands."
 optional = false
 python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_aci-0.3.2-py3-none-any.whl", hash = "sha256:a3ff6fe3dd50124598b8bc3aff8d9742d6e75f933f7e7635a9d0b37d45eb826e"},
-    {file = "openhands_aci-0.3.2.tar.gz", hash = "sha256:df7b64df6acb70b45b23e88c13508e7af8f27725bed30c3e88691a0f3d1f7a44"},
+    {file = "openhands_aci-0.3.3-py3-none-any.whl", hash = "sha256:35795a4d6f5939290f74b26190d5b4cd7477b06ffb7c7f0b505166739461d651"},
+    {file = "openhands_aci-0.3.3.tar.gz", hash = "sha256:567fc65bb881e3ea56c987f4251c8f703d3c88fae99402b46ea7dcc48d85adb2"},
 ]
 
 [package.dependencies]
@@ -6211,7 +6211,6 @@ puremagic = ">=1.28"
 pydantic = ">=2.11.3,<3.0.0"
 pydub = ">=0.25.1,<0.26.0"
 pypdf = ">=5.1.0"
-pypdf2 = ">=3.0.1,<4.0.0"
 python-pptx = ">=1.0.2,<2.0.0"
 rapidfuzz = ">=3.13.0,<4.0.0"
 requests = ">=2.32.3"
@@ -11410,25 +11409,6 @@ full = ["Pillow (>=8.0.0)", "cryptography"]
 image = ["Pillow (>=8.0.0)"]
 
 [[package]]
-name = "pypdf2"
-version = "3.0.1"
-description = "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files"
-optional = false
-python-versions = ">=3.6"
-groups = ["main"]
-files = [
-    {file = "PyPDF2-3.0.1.tar.gz", hash = "sha256:a74408f69ba6271f71b9352ef4ed03dc53a31aa404d29b5d31f53bfecfee1440"},
-    {file = "pypdf2-3.0.1-py3-none-any.whl", hash = "sha256:d16e4205cfee272fbdc0568b68d82be796540b1537508cef59388f839c191928"},
-]
-
-[package.extras]
-crypto = ["PyCryptodome"]
-dev = ["black", "flit", "pip-tools", "pre-commit (<2.18.0)", "pytest-cov", "wheel"]
-docs = ["myst_parser", "sphinx", "sphinx_rtd_theme"]
-full = ["Pillow", "PyCryptodome"]
-image = ["Pillow"]
-
-[[package]]
 name = "pyperclip"
 version = "1.11.0"
 description = "A cross-platform clipboard module for Python. (Only handles plain text for now.)"
@@ -14676,4 +14656,4 @@ third-party-runtimes = ["daytona", "e2b-code-interpreter", "modal", "runloop-api
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "1353c2f30d46d205c369736ead67515e81041ec5e0af4534c52a57d4b2307da2"
+content-hash = "3976934d4a0d1759399dc90318e580ce68b7beb8a8b494c465ee29893e1a1c1e"

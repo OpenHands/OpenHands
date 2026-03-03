@@ -88,9 +88,9 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
     # Slack helpers
     # -------------------------------------------------------------------------
 
-    def _get_bot_access_token(self):
+    async def _get_bot_access_token(self) -> str | None:
         slack_team_store = SlackTeamStore.get_instance()
-        bot_access_token = slack_team_store.get_team_bot_token(
+        bot_access_token = await slack_team_store.get_team_bot_token(
             self.slack_view_data['team_id']
         )
 
@@ -98,7 +98,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
     async def _post_summary_to_slack(self, summary: str) -> None:
         """Post a summary message to the configured Slack channel."""
-        bot_access_token = self._get_bot_access_token()
+        bot_access_token = await self._get_bot_access_token()
         if not bot_access_token:
             raise RuntimeError('Missing Slack bot access token')
 
