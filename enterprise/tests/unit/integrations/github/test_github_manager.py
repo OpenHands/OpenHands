@@ -38,22 +38,22 @@ class TestGithubManagerUserNotFound:
         return Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "action": "created",
-                    "sender": {
-                        "id": 67890,
-                        "login": "testuser",
+                'installation': 12345,
+                'payload': {
+                    'action': 'created',
+                    'sender': {
+                        'id': 67890,
+                        'login': 'testuser',
                     },
-                    "repository": {
-                        "owner": {"login": "test-owner"},
-                        "name": "test-repo",
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
                     },
-                    "issue": {
-                        "number": 42,
+                    'issue': {
+                        'number': 42,
                     },
-                    "comment": {
-                        "body": "@openhands please help with this issue",
+                    'comment': {
+                        'body': '@openhands please help with this issue',
                     },
                 },
             },
@@ -71,22 +71,22 @@ class TestGithubManagerUserNotFound:
         return Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "action": "labeled",
-                    "sender": {
-                        "id": 67890,
-                        "login": "labeluser",
+                'installation': 12345,
+                'payload': {
+                    'action': 'labeled',
+                    'sender': {
+                        'id': 67890,
+                        'login': 'labeluser',
                     },
-                    "repository": {
-                        "owner": {"login": "test-owner"},
-                        "name": "test-repo",
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
                     },
-                    "issue": {
-                        "number": 55,
+                    'issue': {
+                        'number': 55,
                     },
-                    "label": {
-                        "name": "openhands",
+                    'label': {
+                        'name': 'openhands',
                     },
                 },
             },
@@ -98,25 +98,25 @@ class TestGithubManagerUserNotFound:
         return Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "action": "created",
-                    "sender": {
-                        "id": 67890,
-                        "login": "prcommentuser",
+                'installation': 12345,
+                'payload': {
+                    'action': 'created',
+                    'sender': {
+                        'id': 67890,
+                        'login': 'prcommentuser',
                     },
-                    "repository": {
-                        "owner": {"login": "test-owner"},
-                        "name": "test-repo",
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
                     },
-                    "issue": {
-                        "number": 77,
-                        "pull_request": {
-                            "url": "https://api.github.com/repos/test-owner/test-repo/pulls/77",
+                    'issue': {
+                        'number': 77,
+                        'pull_request': {
+                            'url': 'https://api.github.com/repos/test-owner/test-repo/pulls/77',
                         },
                     },
-                    "comment": {
-                        "body": "@openhands please review this PR",
+                    'comment': {
+                        'body': '@openhands please review this PR',
                     },
                 },
             },
@@ -128,29 +128,29 @@ class TestGithubManagerUserNotFound:
         return Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "action": "created",
-                    "sender": {
-                        "id": 67890,
-                        "login": "inlineuser",
+                'installation': 12345,
+                'payload': {
+                    'action': 'created',
+                    'sender': {
+                        'id': 67890,
+                        'login': 'inlineuser',
                     },
-                    "repository": {
-                        "owner": {"login": "test-owner"},
-                        "name": "test-repo",
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
                     },
-                    "pull_request": {
-                        "number": 100,
-                        "head": {
-                            "ref": "feature-branch",
+                    'pull_request': {
+                        'number': 100,
+                        'head': {
+                            'ref': 'feature-branch',
                         },
                     },
-                    "comment": {
-                        "id": 12345,
-                        "node_id": "PRRC_abc123",
-                        "body": "@openhands fix this code",
-                        "path": "src/main.py",
-                        "line": 42,
+                    'comment': {
+                        'id': 12345,
+                        'node_id': 'PRRC_abc123',
+                        'body': '@openhands fix this code',
+                        'path': 'src/main.py',
+                        'line': 42,
                     },
                 },
             },
@@ -162,9 +162,9 @@ class TestGithubManagerUserNotFound:
         """Alias for github_inline_pr_comment_message for backward compatibility."""
         return github_inline_pr_comment_message
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
-    @patch("integrations.github.github_manager.Github")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.Github')
     def test_send_user_not_found_message_for_issue(
         self,
         mock_github_class,
@@ -190,29 +190,29 @@ class TestGithubManagerUserNotFound:
         mock_integration_instance = MagicMock()
         mock_github_integration.return_value = mock_integration_instance
         mock_integration_instance.get_access_token.return_value = MagicMock(
-            token="fake-token"
+            token='fake-token'
         )
 
         # Create manager and call the method
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        manager._send_user_not_found_message(github_issue_message, "testuser")
+        manager._send_user_not_found_message(github_issue_message, 'testuser')
 
         # Verify the comment was posted
-        mock_github_instance.get_repo.assert_called_once_with("test-owner/test-repo")
+        mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
         mock_repo.get_issue.assert_called_once_with(number=42)
 
         # Verify the comment contains the expected sign-up message
         mock_issue.create_comment.assert_called_once()
         comment_text = mock_issue.create_comment.call_args[0][0]
-        assert "@testuser" in comment_text
+        assert '@testuser' in comment_text
         assert "haven't created an OpenHands account" in comment_text
-        assert "sign up" in comment_text.lower()
+        assert 'sign up' in comment_text.lower()
         assert HOST_URL in comment_text
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
-    @patch("integrations.github.github_manager.Github")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.Github')
     def test_send_user_not_found_message_for_pr(
         self,
         mock_github_class,
@@ -238,28 +238,28 @@ class TestGithubManagerUserNotFound:
         mock_integration_instance = MagicMock()
         mock_github_integration.return_value = mock_integration_instance
         mock_integration_instance.get_access_token.return_value = MagicMock(
-            token="fake-token"
+            token='fake-token'
         )
 
         # Create manager and call the method
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        manager._send_user_not_found_message(github_pr_message, "pruser")
+        manager._send_user_not_found_message(github_pr_message, 'pruser')
 
         # Verify the comment was posted with PR number
-        mock_github_instance.get_repo.assert_called_once_with("test-owner/test-repo")
+        mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
         mock_repo.get_issue.assert_called_once_with(number=100)
 
         # Verify the comment contains the expected sign-up message
         mock_issue.create_comment.assert_called_once()
         comment_text = mock_issue.create_comment.call_args[0][0]
-        assert "@pruser" in comment_text
+        assert '@pruser' in comment_text
         assert "haven't created an OpenHands account" in comment_text
 
     @pytest.mark.asyncio
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
-    @patch("integrations.github.github_manager.Github")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.Github')
     async def test_receive_message_sends_user_not_found_when_keycloak_user_id_is_none(
         self,
         mock_github_class,
@@ -285,7 +285,7 @@ class TestGithubManagerUserNotFound:
         mock_integration_instance = MagicMock()
         mock_github_integration.return_value = mock_integration_instance
         mock_integration_instance.get_access_token.return_value = MagicMock(
-            token="fake-token"
+            token='fake-token'
         )
         mock_integration_instance.get_github_for_installation.return_value.__enter__ = (
             MagicMock(return_value=mock_github_instance)
@@ -295,7 +295,7 @@ class TestGithubManagerUserNotFound:
         )
 
         # Mock user having write access (so is_job_requested returns True)
-        mock_repo.get_collaborator_permission.return_value = "write"
+        mock_repo.get_collaborator_permission.return_value = 'write'
 
         # Token manager returns None for keycloak_user_id (user hasn't created an account)
         mock_token_manager.get_user_id_from_idp_user_id = AsyncMock(return_value=None)
@@ -312,13 +312,13 @@ class TestGithubManagerUserNotFound:
         # Verify the sign-up message was posted
         mock_issue.create_comment.assert_called_once()
         comment_text = mock_issue.create_comment.call_args[0][0]
-        assert "@testuser" in comment_text
+        assert '@testuser' in comment_text
         assert "haven't created an OpenHands account" in comment_text
-        assert "sign up" in comment_text.lower()
+        assert 'sign up' in comment_text.lower()
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
-    @patch("integrations.github.github_manager.logger")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.logger')
     def test_send_user_not_found_message_logs_warning_when_no_issue_number(
         self,
         mock_logger,
@@ -331,23 +331,23 @@ class TestGithubManagerUserNotFound:
         mock_integration_instance = MagicMock()
         mock_github_integration.return_value = mock_integration_instance
         mock_integration_instance.get_access_token.return_value = MagicMock(
-            token="fake-token"
+            token='fake-token'
         )
 
         # Create a message without issue or pull_request
         message_without_issue = Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "action": "created",
-                    "sender": {
-                        "id": 67890,
-                        "login": "testuser",
+                'installation': 12345,
+                'payload': {
+                    'action': 'created',
+                    'sender': {
+                        'id': 67890,
+                        'login': 'testuser',
                     },
-                    "repository": {
-                        "owner": {"login": "test-owner"},
-                        "name": "test-repo",
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
                     },
                 },
             },
@@ -355,17 +355,17 @@ class TestGithubManagerUserNotFound:
 
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        manager._send_user_not_found_message(message_without_issue, "testuser")
+        manager._send_user_not_found_message(message_without_issue, 'testuser')
 
         # Verify warning was logged
         mock_logger.warning.assert_called_once()
-        assert "Could not determine issue/PR number" in str(
+        assert 'Could not determine issue/PR number' in str(
             mock_logger.warning.call_args
         )
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
-    @patch("integrations.github.github_manager.Github")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.Github')
     def test_send_user_not_found_message_for_labeled_issue(
         self,
         mock_github_class,
@@ -391,28 +391,28 @@ class TestGithubManagerUserNotFound:
         mock_integration_instance = MagicMock()
         mock_github_integration.return_value = mock_integration_instance
         mock_integration_instance.get_access_token.return_value = MagicMock(
-            token="fake-token"
+            token='fake-token'
         )
 
         # Create manager and call the method
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        manager._send_user_not_found_message(github_labeled_issue_message, "labeluser")
+        manager._send_user_not_found_message(github_labeled_issue_message, 'labeluser')
 
         # Verify the comment was posted with correct issue number
-        mock_github_instance.get_repo.assert_called_once_with("test-owner/test-repo")
+        mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
         mock_repo.get_issue.assert_called_once_with(number=55)
 
         # Verify the comment contains the expected sign-up message
         mock_issue.create_comment.assert_called_once()
         comment_text = mock_issue.create_comment.call_args[0][0]
-        assert "@labeluser" in comment_text
+        assert '@labeluser' in comment_text
         assert "haven't created an OpenHands account" in comment_text
-        assert "sign up" in comment_text.lower()
+        assert 'sign up' in comment_text.lower()
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
-    @patch("integrations.github.github_manager.Github")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.Github')
     def test_send_user_not_found_message_for_pr_comment_via_issue_endpoint(
         self,
         mock_github_class,
@@ -438,24 +438,24 @@ class TestGithubManagerUserNotFound:
         mock_integration_instance = MagicMock()
         mock_github_integration.return_value = mock_integration_instance
         mock_integration_instance.get_access_token.return_value = MagicMock(
-            token="fake-token"
+            token='fake-token'
         )
 
         # Create manager and call the method
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        manager._send_user_not_found_message(github_pr_comment_message, "prcommentuser")
+        manager._send_user_not_found_message(github_pr_comment_message, 'prcommentuser')
 
         # Verify the comment was posted with correct PR number (from issue.number)
-        mock_github_instance.get_repo.assert_called_once_with("test-owner/test-repo")
+        mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
         mock_repo.get_issue.assert_called_once_with(number=77)
 
         # Verify the comment contains the expected sign-up message
         mock_issue.create_comment.assert_called_once()
         comment_text = mock_issue.create_comment.call_args[0][0]
-        assert "@prcommentuser" in comment_text
+        assert '@prcommentuser' in comment_text
         assert "haven't created an OpenHands account" in comment_text
-        assert "sign up" in comment_text.lower()
+        assert 'sign up' in comment_text.lower()
 
 
 class TestGetIssueNumberFromPayload:
@@ -473,8 +473,8 @@ class TestGetIssueNumberFromPayload:
         data_collector = MagicMock()
         return data_collector
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
     def test_extracts_issue_number_from_issue_payload(
         self,
         mock_github_integration,
@@ -486,10 +486,10 @@ class TestGetIssueNumberFromPayload:
         message = Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "issue": {"number": 42},
-                    "repository": {"owner": {"login": "owner"}, "name": "repo"},
+                'installation': 12345,
+                'payload': {
+                    'issue': {'number': 42},
+                    'repository': {'owner': {'login': 'owner'}, 'name': 'repo'},
                 },
             },
         )
@@ -499,8 +499,8 @@ class TestGetIssueNumberFromPayload:
 
         assert result == 42
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
     def test_extracts_pr_number_from_pull_request_payload(
         self,
         mock_github_integration,
@@ -512,10 +512,10 @@ class TestGetIssueNumberFromPayload:
         message = Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "pull_request": {"number": 100},
-                    "repository": {"owner": {"login": "owner"}, "name": "repo"},
+                'installation': 12345,
+                'payload': {
+                    'pull_request': {'number': 100},
+                    'repository': {'owner': {'login': 'owner'}, 'name': 'repo'},
                 },
             },
         )
@@ -525,8 +525,8 @@ class TestGetIssueNumberFromPayload:
 
         assert result == 100
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
     def test_prefers_issue_over_pull_request_when_both_present(
         self,
         mock_github_integration,
@@ -538,11 +538,11 @@ class TestGetIssueNumberFromPayload:
         message = Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "issue": {"number": 42},
-                    "pull_request": {"number": 100},
-                    "repository": {"owner": {"login": "owner"}, "name": "repo"},
+                'installation': 12345,
+                'payload': {
+                    'issue': {'number': 42},
+                    'pull_request': {'number': 100},
+                    'repository': {'owner': {'login': 'owner'}, 'name': 'repo'},
                 },
             },
         )
@@ -552,8 +552,8 @@ class TestGetIssueNumberFromPayload:
 
         assert result == 42
 
-    @patch("integrations.github.github_manager.Auth")
-    @patch("integrations.github.github_manager.GithubIntegration")
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
     def test_returns_none_when_no_issue_or_pr(
         self,
         mock_github_integration,
@@ -565,9 +565,9 @@ class TestGetIssueNumberFromPayload:
         message = Message(
             source=SourceType.GITHUB,
             message={
-                "installation": 12345,
-                "payload": {
-                    "repository": {"owner": {"login": "owner"}, "name": "repo"},
+                'installation': 12345,
+                'payload': {
+                    'repository': {'owner': {'login': 'owner'}, 'name': 'repo'},
                 },
             },
         )
@@ -583,17 +583,17 @@ class TestGetUserNotFoundMessageIntegration:
 
     def test_message_mentions_openhands_cloud(self):
         """Test that the message directs users to OpenHands Cloud."""
-        message = get_user_not_found_message("testuser")
-        assert "OpenHands Cloud" in message
+        message = get_user_not_found_message('testuser')
+        assert 'OpenHands Cloud' in message
 
     def test_message_contains_actionable_instruction(self):
         """Test that the message tells users to sign up."""
-        message = get_user_not_found_message("testuser")
-        assert "sign up" in message.lower()
-        assert "try again" in message.lower()
+        message = get_user_not_found_message('testuser')
+        assert 'sign up' in message.lower()
+        assert 'try again' in message.lower()
 
     def test_message_is_friendly_and_informative(self):
         """Test that the message is friendly and explains the situation."""
-        message = get_user_not_found_message("testuser")
-        assert "it looks like" in message.lower()
+        message = get_user_not_found_message('testuser')
+        assert 'it looks like' in message.lower()
         assert "haven't created an openhands account" in message.lower()

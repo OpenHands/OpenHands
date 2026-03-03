@@ -100,7 +100,7 @@ class OpenhandsPRStore:
 
             if not pr:
                 # Current PR snapshot is stale
-                logger.warning("Did not find PR {pr_number} for repo {repo_id}")
+                logger.warning('Did not find PR {pr_number} for repo {repo_id}')
                 return False
 
             # Check if the updated_at timestamp has changed (indicating concurrent modification)

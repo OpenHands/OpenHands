@@ -24,7 +24,7 @@ async def get_unprocessed_prs() -> list[OpenhandsPR]:
         List of OpenhandsPR objects that need processing
     """
     unprocessed_prs = await store.get_unprocessed_prs(PROCESS_AMOUNT, MAX_RETRIES)
-    logger.info(f"Retrieved {len(unprocessed_prs)} unprocessed PRs for enrichment")
+    logger.info(f'Retrieved {len(unprocessed_prs)} unprocessed PRs for enrichment')
     return unprocessed_prs
 
 
@@ -33,7 +33,7 @@ async def process_pr(pr: OpenhandsPR):
     Process a single PR to enrich its data.
     """
 
-    logger.info(f"Processing PR #{pr.pr_number} from repo {pr.repo_name}")
+    logger.info(f'Processing PR #{pr.pr_number} from repo {pr.repo_name}')
     await data_collector.save_full_pr(pr)
     await store.increment_process_attempts(pr.repo_id, pr.pr_number)
 
@@ -42,26 +42,26 @@ async def main():
     """
     Main function to retrieve and process unprocessed PRs.
     """
-    logger.info("Starting PR data enrichment process")
+    logger.info('Starting PR data enrichment process')
 
     # Get unprocessed PRs
     unprocessed_prs = await get_unprocessed_prs()
-    logger.info(f"Found {len(unprocessed_prs)} PRs to process")
+    logger.info(f'Found {len(unprocessed_prs)} PRs to process')
 
     # Process each PR
     for pr in unprocessed_prs:
         try:
             await process_pr(pr)
             logger.info(
-                f"Successfully processed PR #{pr.pr_number} from repo {pr.repo_name}"
+                f'Successfully processed PR #{pr.pr_number} from repo {pr.repo_name}'
             )
         except Exception as e:
             logger.exception(
-                f"Error processing PR #{pr.pr_number} from repo {pr.repo_name}: {str(e)}"
+                f'Error processing PR #{pr.pr_number} from repo {pr.repo_name}: {str(e)}'
             )
 
-    logger.info("PR data enrichment process completed")
+    logger.info('PR data enrichment process completed')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())
