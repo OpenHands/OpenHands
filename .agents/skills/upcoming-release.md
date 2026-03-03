@@ -1,5 +1,6 @@
+---
 name: upcoming-release
-description: Generate a summary of PRs that are including in the upcoming release.
+description: Generate a concise summary of PRs included in the upcoming release.
 triggers:
 - /upcoming-release
 ---
@@ -11,5 +12,10 @@ released. The user must provide these. If the user does not provide these, ask t
 anything.
 
 Once you have received the two SHAs:
-1. Run the `.github/scripts/find_prs_between_commits.py` script from the repository root directory. The **first SHA** should be the older commit (current release), and the **second SHA** should be the newer commit (what's being released).
-2. Summarize what is part of these PRs. Present the results in markdown format, grouped by: Added Features, Fixed Bugs, and Other. Include the PR numbers in your summary.
+1. Run the `.github/scripts/find_prs_between_commits.py` script from the repository root directory with the `--json` flag. The **first SHA** should be the older commit (current release), and the **second SHA** should be the newer commit (what's being released).
+2. Exclude PRs that are chores, dependency updates, adding logs, refactors.
+3. Split the PRs in these categories:
+   - Features
+   - Bug fixes
+   - Security/CVE fixes
+   - Everything else
