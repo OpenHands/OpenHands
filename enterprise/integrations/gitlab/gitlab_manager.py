@@ -33,7 +33,7 @@ from openhands.server.types import (
 from openhands.storage.data_models.secrets import Secrets
 
 
-class GitlabManager(Manager['GitlabViewType']):
+class GitlabManager(Manager[GitlabViewType]):
     def __init__(self, token_manager: TokenManager, data_collector: None = None):
         self.token_manager = token_manager
 
