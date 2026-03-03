@@ -79,7 +79,7 @@ class ApiKeyStore:
             await session.execute(
                 update(ApiKey)
                 .where(ApiKey.id == key_record.id)
-                .values(last_used_at=now)
+                .values(last_used_at=now.replace(tzinfo=None))
             )
             await session.commit()
 
