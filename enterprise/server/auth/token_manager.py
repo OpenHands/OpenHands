@@ -174,7 +174,11 @@ class TokenManager:
         """
         user_info = await get_keycloak_openid(self.external).a_userinfo(access_token)
         # a_userinfo returns dict from Keycloak; 'sub' is always present per OIDC spec
-        return cast(KeycloakUserInfo, user_info)
+user_info = await get_keycloak_openid(self.external).a_userinfo(access_token)
+# Validate required OIDC claim is present
+if "sub" not in user_info:
+    raise KeycloakAuthenticationError("Missing required 'sub' claim in user info")
+return cast(KeycloakUserInfo, user_info)
 
     @retry(
         stop=stop_after_attempt(2),
