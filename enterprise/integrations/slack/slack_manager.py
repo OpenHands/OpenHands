@@ -181,7 +181,7 @@ class SlackManager(Manager):
         )
 
         try:
-            slack_view = SlackFactory.create_slack_view_from_payload(
+            slack_view = await SlackFactory.create_slack_view_from_payload(
                 message, slack_user, saas_user_auth
             )
         except Exception as e:

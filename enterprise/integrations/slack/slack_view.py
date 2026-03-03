@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
@@ -42,7 +43,7 @@ from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationTrigger,
 )
-from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
+from openhands.utils.async_utils import GENERAL_TIMEOUT
 
 # =================================================
 # SECTION: Slack view types
@@ -553,7 +554,8 @@ class SlackFactory:
             channel_id, thread_ts
         )
 
-    def create_slack_view_from_payload(
+    @staticmethod
+    async def create_slack_view_from_payload(
         message: Message, slack_user: SlackUser | None, saas_user_auth: UserAuth | None
     ):
         payload = message.message
@@ -564,7 +566,7 @@ class SlackFactory:
         team_id = payload['team_id']
         user_msg = payload.get('user_msg')
 
-        bot_access_token = slack_team_store.get_team_bot_token(team_id)
+        bot_access_token = await slack_team_store.get_team_bot_token(team_id)
         if not bot_access_token:
             logger.error(
                 'Did not find slack team',
@@ -594,10 +596,9 @@ class SlackFactory:
                 v1_enabled=False,
             )
 
-        conversation: SlackConversation | None = call_async_from_sync(
-            SlackFactory.determine_if_updating_existing_conversation,
-            GENERAL_TIMEOUT,
-            message,
+        conversation = await asyncio.wait_for(
+            SlackFactory.determine_if_updating_existing_conversation(message),
+            timeout=GENERAL_TIMEOUT,
         )
         if conversation:
             logger.info(
