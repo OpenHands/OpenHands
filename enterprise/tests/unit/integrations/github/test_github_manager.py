@@ -162,11 +162,10 @@ class TestGithubManagerUserNotFound:
         """Alias for github_inline_pr_comment_message for backward compatibility."""
         return github_inline_pr_comment_message
 
-    @pytest.mark.asyncio
     @patch('integrations.github.github_manager.Auth')
     @patch('integrations.github.github_manager.GithubIntegration')
     @patch('integrations.github.github_manager.Github')
-    async def test_send_user_not_found_message_for_issue(
+    def test_send_user_not_found_message_for_issue(
         self,
         mock_github_class,
         mock_github_integration,
@@ -197,7 +196,7 @@ class TestGithubManagerUserNotFound:
         # Create manager and call the method
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        await manager._send_user_not_found_message(github_issue_message, 'testuser')
+        manager._send_user_not_found_message(github_issue_message, 'testuser')
 
         # Verify the comment was posted
         mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
@@ -211,11 +210,10 @@ class TestGithubManagerUserNotFound:
         assert 'sign up' in comment_text.lower()
         assert HOST_URL in comment_text
 
-    @pytest.mark.asyncio
     @patch('integrations.github.github_manager.Auth')
     @patch('integrations.github.github_manager.GithubIntegration')
     @patch('integrations.github.github_manager.Github')
-    async def test_send_user_not_found_message_for_pr(
+    def test_send_user_not_found_message_for_pr(
         self,
         mock_github_class,
         mock_github_integration,
@@ -246,7 +244,7 @@ class TestGithubManagerUserNotFound:
         # Create manager and call the method
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        await manager._send_user_not_found_message(github_pr_message, 'pruser')
+        manager._send_user_not_found_message(github_pr_message, 'pruser')
 
         # Verify the comment was posted with PR number
         mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
@@ -318,11 +316,10 @@ class TestGithubManagerUserNotFound:
         assert "haven't created an OpenHands account" in comment_text
         assert 'sign up' in comment_text.lower()
 
-    @pytest.mark.asyncio
     @patch('integrations.github.github_manager.Auth')
     @patch('integrations.github.github_manager.GithubIntegration')
     @patch('integrations.github.github_manager.logger')
-    async def test_send_user_not_found_message_logs_warning_when_no_issue_number(
+    def test_send_user_not_found_message_logs_warning_when_no_issue_number(
         self,
         mock_logger,
         mock_github_integration,
@@ -358,7 +355,7 @@ class TestGithubManagerUserNotFound:
 
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        await manager._send_user_not_found_message(message_without_issue, 'testuser')
+        manager._send_user_not_found_message(message_without_issue, 'testuser')
 
         # Verify warning was logged
         mock_logger.warning.assert_called_once()
@@ -366,11 +363,10 @@ class TestGithubManagerUserNotFound:
             mock_logger.warning.call_args
         )
 
-    @pytest.mark.asyncio
     @patch('integrations.github.github_manager.Auth')
     @patch('integrations.github.github_manager.GithubIntegration')
     @patch('integrations.github.github_manager.Github')
-    async def test_send_user_not_found_message_for_labeled_issue(
+    def test_send_user_not_found_message_for_labeled_issue(
         self,
         mock_github_class,
         mock_github_integration,
@@ -401,9 +397,7 @@ class TestGithubManagerUserNotFound:
         # Create manager and call the method
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        await manager._send_user_not_found_message(
-            github_labeled_issue_message, 'labeluser'
-        )
+        manager._send_user_not_found_message(github_labeled_issue_message, 'labeluser')
 
         # Verify the comment was posted with correct issue number
         mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
@@ -416,11 +410,10 @@ class TestGithubManagerUserNotFound:
         assert "haven't created an OpenHands account" in comment_text
         assert 'sign up' in comment_text.lower()
 
-    @pytest.mark.asyncio
     @patch('integrations.github.github_manager.Auth')
     @patch('integrations.github.github_manager.GithubIntegration')
     @patch('integrations.github.github_manager.Github')
-    async def test_send_user_not_found_message_for_pr_comment_via_issue_endpoint(
+    def test_send_user_not_found_message_for_pr_comment_via_issue_endpoint(
         self,
         mock_github_class,
         mock_github_integration,
@@ -451,9 +444,7 @@ class TestGithubManagerUserNotFound:
         # Create manager and call the method
         manager = GithubManager(mock_token_manager, mock_data_collector)
 
-        await manager._send_user_not_found_message(
-            github_pr_comment_message, 'prcommentuser'
-        )
+        manager._send_user_not_found_message(github_pr_comment_message, 'prcommentuser')
 
         # Verify the comment was posted with correct PR number (from issue.number)
         mock_github_instance.get_repo.assert_called_once_with('test-owner/test-repo')
