@@ -193,7 +193,7 @@ class GithubManager(Manager):
                 github_view.installation_id
             )
             # Store the installation token
-            self.token_manager.store_org_token(
+            await self.token_manager.store_org_token(
                 github_view.installation_id, installation_token
             )
             # Add eyes reaction to acknowledge we've read the request
@@ -201,7 +201,7 @@ class GithubManager(Manager):
             await self.start_job(github_view)
 
     async def send_message(self, message: Message, github_view: ResolverViewInterface):
-        installation_token = self.token_manager.load_org_token(
+        installation_token = await self.token_manager.load_org_token(
             github_view.installation_id
         )
         if not installation_token:

@@ -515,6 +515,10 @@ class RemoteSandboxService(SandboxService):
             # Hack - result doesn't contain this
             runtime_data['pod_status'] = 'pending'
 
+            # Log runtime assignment for observability
+            runtime_id = runtime_data.get('runtime_id', 'unknown')
+            _logger.info(f'Started sandbox {sandbox_id} with runtime_id={runtime_id}')
+
             return self._to_sandbox_info(stored_sandbox, runtime_data)
 
         except httpx.HTTPError as e:
