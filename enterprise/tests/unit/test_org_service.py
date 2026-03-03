@@ -76,7 +76,7 @@ async def test_validate_name_uniqueness_with_unique_name(async_session_maker):
     # Act & Assert - should not raise
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker'),
+        patch('storage.org_member_store.a_session_maker'),
         patch('storage.role_store.session_maker'),
     ):
         await OrgService.validate_name_uniqueness(unique_name)
@@ -591,7 +591,10 @@ async def test_get_org_by_id_success(session_maker, owner_role):
     )
 
     with (
-        patch('storage.org_service.OrgMemberStore.get_org_member') as mock_get_member,
+        patch(
+            'storage.org_service.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
+        ) as mock_get_member,
         patch(
             'storage.org_service.OrgStore.get_org_by_id',
             new_callable=AsyncMock,
@@ -624,6 +627,7 @@ async def test_get_org_by_id_user_not_member():
 
     with patch(
         'storage.org_service.OrgMemberStore.get_org_member',
+        new_callable=AsyncMock,
         return_value=None,
     ):
         # Act & Assert
@@ -656,6 +660,7 @@ async def test_get_org_by_id_org_not_found():
     with (
         patch(
             'storage.org_service.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
             return_value=mock_org_member,
         ),
         patch(
@@ -834,10 +839,13 @@ async def test_verify_owner_authorization_success(session_maker, owner_role):
         ),
         patch(
             'storage.org_service.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
             return_value=mock_org_member,
         ),
         patch(
-            'storage.org_service.RoleStore.get_role_by_id', return_value=mock_owner_role
+            'storage.org_service.RoleStore.get_role_by_id_async',
+            new_callable=AsyncMock,
+            return_value=mock_owner_role,
         ),
     ):
         # Act & Assert - should not raise
@@ -891,7 +899,11 @@ async def test_verify_owner_authorization_user_not_member(session_maker, owner_r
             new_callable=AsyncMock,
             return_value=mock_org,
         ),
-        patch('storage.org_service.OrgMemberStore.get_org_member', return_value=None),
+        patch(
+            'storage.org_service.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         # Act & Assert
         with pytest.raises(OrgAuthorizationError) as exc_info:
@@ -934,9 +946,14 @@ async def test_verify_owner_authorization_user_not_owner(session_maker):
         ),
         patch(
             'storage.org_service.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
             return_value=mock_org_member,
         ),
-        patch('storage.org_service.RoleStore.get_role_by_id', return_value=admin_role),
+        patch(
+            'storage.org_service.RoleStore.get_role_by_id_async',
+            new_callable=AsyncMock,
+            return_value=admin_role,
+        ),
     ):
         # Act & Assert
         with pytest.raises(OrgAuthorizationError) as exc_info:
@@ -1118,7 +1135,7 @@ async def test_update_org_with_permissions_success_non_llm_fields(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act
@@ -1181,7 +1198,7 @@ async def test_update_org_with_permissions_success_llm_fields_admin(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act
@@ -1243,7 +1260,7 @@ async def test_update_org_with_permissions_success_llm_fields_owner(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act
@@ -1306,7 +1323,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act
@@ -1366,7 +1383,7 @@ async def test_update_org_with_permissions_empty_update(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act
@@ -1401,7 +1418,7 @@ async def test_update_org_with_permissions_org_not_found(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act & Assert
@@ -1449,7 +1466,7 @@ async def test_update_org_with_permissions_non_member(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act & Assert
@@ -1507,7 +1524,7 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act & Assert
@@ -1567,7 +1584,7 @@ async def test_update_org_with_permissions_database_error(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.OrgStore.update_org',
@@ -1622,7 +1639,7 @@ async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.OrgStore.get_org_by_id',
@@ -1675,7 +1692,7 @@ async def test_update_org_with_permissions_same_name_allowed(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.OrgStore.get_org_by_id',
@@ -1753,7 +1770,7 @@ async def test_update_org_with_permissions_only_llm_fields(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act
@@ -1817,7 +1834,7 @@ async def test_update_org_with_permissions_only_non_llm_fields(
 
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
+        patch('storage.org_member_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
         # Act

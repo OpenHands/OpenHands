@@ -3031,6 +3031,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3066,6 +3067,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3086,6 +3088,7 @@ class TestGetMeEndpoint:
         """
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=OrgMemberNotFoundError(str(test_org_id), 'user-id'),
         ):
             client = TestClient(mock_me_app)
@@ -3131,6 +3134,7 @@ class TestGetMeEndpoint:
         """
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=RuntimeError('Database connection failed'),
         ):
             client = TestClient(mock_me_app)
@@ -3157,6 +3161,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3185,6 +3190,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3210,6 +3216,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             client = TestClient(mock_me_app)
@@ -3230,6 +3237,7 @@ class TestGetMeEndpoint:
         """
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=RoleNotFoundError(role_id=999),
         ):
             client = TestClient(mock_me_app)
@@ -3250,6 +3258,7 @@ class TestGetMeEndpoint:
 
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             return_value=me_response,
         ):
             result = await get_me(org_id=test_org_id, user_id=test_user_id)
@@ -3266,6 +3275,7 @@ class TestGetMeEndpoint:
         """Test direct function call to get_me raises HTTPException on member not found."""
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=OrgMemberNotFoundError(str(test_org_id), test_user_id),
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -3281,6 +3291,7 @@ class TestGetMeEndpoint:
         """Test direct function call to get_me raises HTTPException on role not found."""
         with patch(
             'server.routes.orgs.OrgMemberService.get_me',
+            new_callable=AsyncMock,
             side_effect=RoleNotFoundError(role_id=999),
         ):
             with pytest.raises(HTTPException) as exc_info:

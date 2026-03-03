@@ -113,14 +113,16 @@ class TestAcceptInvitationEmailValidation:
                 'server.services.org_invitation_service.TokenManager'
             ) as mock_token_manager_class,
             patch(
-                'server.services.org_invitation_service.OrgMemberStore.get_org_member'
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
                 'server.services.org_invitation_service.OrgService.create_litellm_integration',
                 new_callable=AsyncMock,
             ) as mock_create_litellm,
             patch(
-                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org'
+                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org',
+                new_callable=AsyncMock,
             ),
             patch(
                 'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
@@ -222,14 +224,16 @@ class TestAcceptInvitationEmailValidation:
                 new_callable=AsyncMock,
             ) as mock_get_user,
             patch(
-                'server.services.org_invitation_service.OrgMemberStore.get_org_member'
+                'server.services.org_invitation_service.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
             ) as mock_get_member,
             patch(
                 'server.services.org_invitation_service.OrgService.create_litellm_integration',
                 new_callable=AsyncMock,
             ) as mock_create_litellm,
             patch(
-                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org'
+                'server.services.org_invitation_service.OrgMemberStore.add_user_to_org',
+                new_callable=AsyncMock,
             ),
             patch(
                 'server.services.org_invitation_service.OrgInvitationStore.update_invitation_status',
@@ -323,11 +327,13 @@ class TestCreateInvitationsBatch:
                 return_value=mock_inviter_member,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                'server.services.org_invitation_service.RoleStore.get_role_by_id_async',
+                new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                'server.services.org_invitation_service.RoleStore.get_role_by_name_async',
+                new_callable=AsyncMock,
                 return_value=mock_member_role,
             ),
             patch.object(
@@ -377,11 +383,13 @@ class TestCreateInvitationsBatch:
                 return_value=mock_inviter_member,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                'server.services.org_invitation_service.RoleStore.get_role_by_id_async',
+                new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                'server.services.org_invitation_service.RoleStore.get_role_by_name_async',
+                new_callable=AsyncMock,
                 return_value=mock_member_role,
             ),
             patch.object(
@@ -444,11 +452,13 @@ class TestCreateInvitationsBatch:
                 return_value=mock_inviter_member,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_id',
+                'server.services.org_invitation_service.RoleStore.get_role_by_id_async',
+                new_callable=AsyncMock,
                 return_value=mock_owner_role,
             ),
             patch(
-                'server.services.org_invitation_service.RoleStore.get_role_by_name',
+                'server.services.org_invitation_service.RoleStore.get_role_by_name_async',
+                new_callable=AsyncMock,
                 return_value=None,  # Invalid role
             ),
         ):

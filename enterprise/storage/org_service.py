@@ -398,7 +398,7 @@ class OrgService:
             return e
 
     @staticmethod
-    def has_admin_or_owner_role(user_id: str, org_id: UUID) -> bool:
+    async def has_admin_or_owner_role(user_id: str, org_id: UUID) -> bool:
         """
         Check if user has admin or owner role in the specified organization.
 
@@ -415,12 +415,12 @@ class OrgService:
 
             # Get the user's membership in this organization
             # Note: The type annotation says int but the actual column is UUID
-            org_member = OrgMemberStore.get_org_member(org_id, user_uuid)
+            org_member = await OrgMemberStore.get_org_member(org_id, user_uuid)
             if not org_member:
                 return False
 
             # Get the role details
-            role = RoleStore.get_role_by_id(org_member.role_id)
+            role = await RoleStore.get_role_by_id_async(org_member.role_id)
             if not role:
                 return False
 
@@ -440,7 +440,7 @@ class OrgService:
             return False
 
     @staticmethod
-    def is_org_member(user_id: str, org_id: UUID) -> bool:
+    async def is_org_member(user_id: str, org_id: UUID) -> bool:
         """
         Check if user is a member of the specified organization.
 
@@ -453,7 +453,7 @@ class OrgService:
         """
         try:
             user_uuid = parse_uuid(user_id)
-            org_member = OrgMemberStore.get_org_member(org_id, user_uuid)
+            org_member = await OrgMemberStore.get_org_member(org_id, user_uuid)
             return org_member is not None
         except Exception as e:
             logger.warning(
@@ -540,7 +540,7 @@ class OrgService:
             raise ValueError(f'Organization with ID {org_id} not found')
 
         # Check if user is a member of this organization
-        if not OrgService.is_org_member(user_id, org_id):
+        if not await OrgService.is_org_member(user_id, org_id):
             logger.warning(
                 'Non-member attempted to update organization',
                 extra={
@@ -574,7 +574,7 @@ class OrgService:
         llm_fields_being_updated = OrgService._has_llm_settings_updates(update_data)
         if llm_fields_being_updated:
             # Verify user has admin or owner role
-            has_permission = OrgService.has_admin_or_owner_role(user_id, org_id)
+            has_permission = await OrgService.has_admin_or_owner_role(user_id, org_id)
             if not has_permission:
                 logger.warning(
                     'User attempted to update LLM settings without permission',
@@ -745,7 +745,7 @@ class OrgService:
         )
 
         # Verify user is a member of the organization
-        org_member = OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
+        org_member = await OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
         if not org_member:
             logger.warning(
                 'User is not a member of organization or organization does not exist',
@@ -792,12 +792,12 @@ class OrgService:
             raise OrgNotFoundError(str(org_id))
 
         # Check if user is a member of the organization
-        org_member = OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
+        org_member = await OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
         if not org_member:
             raise OrgAuthorizationError('User is not a member of this organization')
 
         # Check if user has owner role
-        role = RoleStore.get_role_by_id(org_member.role_id)
+        role = await RoleStore.get_role_by_id_async(org_member.role_id)
         if not role or role.name != 'owner':
             raise OrgAuthorizationError(
                 'Only organization owners can delete organizations'
@@ -918,7 +918,7 @@ class OrgService:
             raise OrgNotFoundError(str(org_id))
 
         # Step 2: Validate user is a member of the organization
-        if not OrgService.is_org_member(user_id, org_id):
+        if not await OrgService.is_org_member(user_id, org_id):
             logger.warning(
                 'User attempted to switch to organization they are not a member of',
                 extra={'user_id': user_id, 'org_id': str(org_id)},

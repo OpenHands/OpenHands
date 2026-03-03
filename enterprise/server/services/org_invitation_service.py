@@ -85,13 +85,13 @@ class OrgInvitationService:
             )
 
         # Step 3: Check inviter is a member and has permission
-        inviter_member = OrgMemberStore.get_org_member(org_id, inviter_id)
+        inviter_member = await OrgMemberStore.get_org_member(org_id, inviter_id)
         if not inviter_member:
             raise InsufficientPermissionError(
                 'You are not a member of this organization'
             )
 
-        inviter_role = RoleStore.get_role_by_id(inviter_member.role_id)
+        inviter_role = await RoleStore.get_role_by_id_async(inviter_member.role_id)
         if not inviter_role or inviter_role.name not in [ROLE_OWNER, ROLE_ADMIN]:
             raise InsufficientPermissionError('Only owners and admins can invite users')
 
@@ -101,14 +101,16 @@ class OrgInvitationService:
             raise InsufficientPermissionError('Only owners can invite with owner role')
 
         # Get the target role
-        target_role = RoleStore.get_role_by_name(role_name_lower)
+        target_role = await RoleStore.get_role_by_name_async(role_name_lower)
         if not target_role:
             raise ValueError(f'Invalid role: {role_name}')
 
         # Step 5: Check if user is already a member (by email)
         existing_user = await UserStore.get_user_by_email_async(email)
         if existing_user:
-            existing_member = OrgMemberStore.get_org_member(org_id, existing_user.id)
+            existing_member = await OrgMemberStore.get_org_member(
+                org_id, existing_user.id
+            )
             if existing_member:
                 raise UserAlreadyMemberError(
                     'User is already a member of this organization'
@@ -196,13 +198,13 @@ class OrgInvitationService:
                 'Cannot invite users to a personal workspace'
             )
 
-        inviter_member = OrgMemberStore.get_org_member(org_id, inviter_id)
+        inviter_member = await OrgMemberStore.get_org_member(org_id, inviter_id)
         if not inviter_member:
             raise InsufficientPermissionError(
                 'You are not a member of this organization'
             )
 
-        inviter_role = RoleStore.get_role_by_id(inviter_member.role_id)
+        inviter_role = await RoleStore.get_role_by_id_async(inviter_member.role_id)
         if not inviter_role or inviter_role.name not in [ROLE_OWNER, ROLE_ADMIN]:
             raise InsufficientPermissionError('Only owners and admins can invite users')
 
@@ -210,7 +212,7 @@ class OrgInvitationService:
         if role_name_lower == ROLE_OWNER and inviter_role.name != ROLE_OWNER:
             raise InsufficientPermissionError('Only owners can invite with owner role')
 
-        target_role = RoleStore.get_role_by_name(role_name_lower)
+        target_role = await RoleStore.get_role_by_name_async(role_name_lower)
         if not target_role:
             raise ValueError(f'Invalid role: {role_name}')
 
@@ -336,7 +338,9 @@ class OrgInvitationService:
             raise EmailMismatchError()
 
         # Step 3: Check if user is already a member
-        existing_member = OrgMemberStore.get_org_member(invitation.org_id, user_id)
+        existing_member = await OrgMemberStore.get_org_member(
+            invitation.org_id, user_id
+        )
         if existing_member:
             raise UserAlreadyMemberError(
                 'You are already a member of this organization'
@@ -369,7 +373,7 @@ class OrgInvitationService:
         org_member_kwargs.pop('llm_model', None)
         org_member_kwargs.pop('llm_base_url', None)
 
-        OrgMemberStore.add_user_to_org(
+        await OrgMemberStore.add_user_to_org(
             org_id=invitation.org_id,
             user_id=user_id,
             role_id=invitation.role_id,

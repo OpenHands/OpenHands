@@ -49,7 +49,7 @@ async def store_byor_key_in_db(user_id: str, key: str) -> None:
     if not current_org_member:
         return None
     current_org_member.llm_api_key_for_byor = key
-    OrgMemberStore.update_org_member(current_org_member)
+    await OrgMemberStore.update_org_member(current_org_member)
 
 
 async def generate_byor_key(user_id: str) -> str | None:

@@ -157,9 +157,9 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
 }
 
 
-def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
+async def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
     """
-    Get the user's role in an organization (synchronous version).
+    Get the user's role in an organization.
 
     Args:
         user_id: User ID (string that will be converted to UUID)
@@ -171,36 +171,11 @@ def get_user_org_role(user_id: str, org_id: UUID | None) -> Role | None:
     from uuid import UUID as parse_uuid
 
     if org_id is None:
-        org_member = OrgMemberStore.get_org_member_for_current_org(parse_uuid(user_id))
-    else:
-        org_member = OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
-    if not org_member:
-        return None
-
-    return RoleStore.get_role_by_id(org_member.role_id)
-
-
-async def get_user_org_role_async(user_id: str, org_id: UUID | None) -> Role | None:
-    """
-    Get the user's role in an organization (async version).
-
-    Args:
-        user_id: User ID (string that will be converted to UUID)
-        org_id: Organization ID, or None to use the user's current organization
-
-    Returns:
-        Role object if user is a member, None otherwise
-    """
-    from uuid import UUID as parse_uuid
-
-    if org_id is None:
-        org_member = await OrgMemberStore.get_org_member_for_current_org_async(
+        org_member = await OrgMemberStore.get_org_member_for_current_org(
             parse_uuid(user_id)
         )
     else:
-        org_member = await OrgMemberStore.get_org_member_async(
-            org_id, parse_uuid(user_id)
-        )
+        org_member = await OrgMemberStore.get_org_member(org_id, parse_uuid(user_id))
     if not org_member:
         return None
 
@@ -274,7 +249,7 @@ def require_permission(permission: Permission):
                 detail='User not authenticated',
             )
 
-        user_role = await get_user_org_role_async(user_id, org_id)
+        user_role = await get_user_org_role(user_id, org_id)
 
         if not user_role:
             logger.warning(
