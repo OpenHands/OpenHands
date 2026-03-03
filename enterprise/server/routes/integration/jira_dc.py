@@ -22,7 +22,6 @@ from server.auth.constants import (
     JIRA_DC_CLIENT_SECRET,
     JIRA_DC_ENABLE_OAUTH,
 )
-from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
 from server.constants import WEB_HOST
 from storage.redis import create_redis_client
@@ -276,7 +275,7 @@ async def create_jira_dc_workspace(
 ):
     """Create a new Jira DC workspace registration."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = await get_user_auth(request)
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
 
@@ -399,7 +398,7 @@ async def create_jira_dc_workspace(
 async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):
     """Register a user mapping to a Jira DC workspace."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = await get_user_auth(request)
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
 
@@ -589,7 +588,7 @@ async def jira_dc_callback(request: Request, code: str, state: str):
 async def get_current_workspace_link(request: Request):
     """Get current user's Jira DC integration details."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = await get_user_auth(request)
         user_id = await user_auth.get_user_id()
 
         user = await jira_dc_manager.integration_store.get_user_by_active_workspace(
@@ -641,7 +640,7 @@ async def get_current_workspace_link(request: Request):
 async def unlink_workspace(request: Request):
     """Unlink user from Jira DC integration by setting status to inactive."""
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = await get_user_auth(request)
         user_id = await user_auth.get_user_id()
 
         user = await jira_dc_manager.integration_store.get_user_by_active_workspace(

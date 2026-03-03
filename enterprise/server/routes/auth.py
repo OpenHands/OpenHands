@@ -3,7 +3,7 @@ import json
 import uuid
 import warnings
 from datetime import datetime, timezone
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal, Optional, cast
 from urllib.parse import quote
 from uuid import UUID as parse_uuid
 
@@ -591,7 +591,7 @@ async def authenticate(request: Request):
 
 @api_router.post('/accept_tos')
 async def accept_tos(request: Request):
-    user_auth: SaasUserAuth = await get_user_auth(request)
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
     access_token = await user_auth.get_access_token()
     refresh_token = user_auth.refresh_token
     user_id = await user_auth.get_user_id()
@@ -660,7 +660,7 @@ async def logout(request: Request):
 
     # Try to properly logout from Keycloak, but don't fail if it doesn't work
     try:
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         if user_auth and user_auth.refresh_token:
             refresh_token = user_auth.refresh_token.get_secret_value()
             await token_manager.logout(refresh_token)

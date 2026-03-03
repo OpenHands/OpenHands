@@ -1,4 +1,5 @@
 import re
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -67,7 +68,7 @@ async def update_email(
             user_id=user_id, email=email, email_verified=False
         )
 
-        user_auth: SaasUserAuth = await get_user_auth(request)
+        user_auth = cast(SaasUserAuth, await get_user_auth(request))
         await user_auth.refresh()  # refresh so access token has updated email
         user_auth.email = email
         user_auth.email_verified = False
@@ -146,7 +147,7 @@ async def resend_email_verification(
 
 @api_router.get('/verified')
 async def verified_email(request: Request):
-    user_auth: SaasUserAuth = await get_user_auth(request)
+    user_auth = cast(SaasUserAuth, await get_user_auth(request))
     await user_auth.refresh()  # refresh so access token has updated email
     user_auth.email_verified = True
     await UserStore.update_user_email(user_id=user_auth.user_id, email_verified=True)
