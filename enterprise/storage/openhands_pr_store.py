@@ -11,7 +11,6 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.service_types import ProviderType
 
 
-@dataclass
 class OpenhandsPRStore:
     async def insert_pr(self, pr: OpenhandsPR) -> None:
         """
