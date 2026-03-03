@@ -1068,9 +1068,7 @@ class SaasNestedConversationManager(ConversationManager):
                     # Loop has been shut down, exit gracefully
                     return
 
-    async def _poll_agent_loop_events(
-        self, agent_loop_info: AgentLoopInfo
-    ):
+    async def _poll_agent_loop_events(self, agent_loop_info: AgentLoopInfo):
         """This method is typically only run in localhost, where the webhook callbacks from the remote runtime are unavailable"""
         if agent_loop_info.status != ConversationStatus.RUNNING:
             return
