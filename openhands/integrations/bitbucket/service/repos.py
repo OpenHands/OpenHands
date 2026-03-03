@@ -2,8 +2,14 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
+from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.bitbucket.service.base import BitBucketMixinBase
-from openhands.integrations.service_types import Repository, SuggestedTask
+from openhands.integrations.service_types import (
+    ProviderType,
+    Repository,
+    SuggestedTask,
+    TaskType,
+)
 from openhands.server.types import AppMode
 
 
@@ -257,6 +263,82 @@ class BitBucketReposMixin(BitBucketMixinBase):
         return repositories
 
     async def get_suggested_tasks(self) -> list[SuggestedTask]:
-        """Get suggested tasks for the authenticated user across all repositories."""
-        # TODO: implemented suggested tasks
-        return []
+        """Get suggested tasks for the authenticated user across all repositories.
+
+        Current implementation surfaces open issues from repositories the user can access.
+        This mirrors the behavior of other providers by returning concrete, actionable
+        work items rather than every open pull request.
+        """
+        tasks: list[SuggestedTask] = []
+
+        # Avoid unbounded traversal in large workspaces
+        MAX_REPOS = 50
+        MAX_ISSUES_PER_REPO = 20
+
+        try:
+            # Use the same sort semantics as other repository listing operations so that
+            # the most recently updated repositories are considered first.
+            repositories = await self.get_all_repositories(
+                sort='updated', app_mode=AppMode.OPENHANDS
+            )
+        except Exception:
+            logger.warning(
+                'bitbucket:get_suggested_tasks:failed_to_list_repositories',
+                exc_info=True,
+            )
+            return []
+
+        for repo in repositories[:MAX_REPOS]:
+            repo_full_name = getattr(repo, 'full_name', None)
+            if not repo_full_name:
+                continue
+
+            issues_url = f'{self.BASE_URL}/repositories/{repo_full_name}/issues'
+
+            # Only consider issues that are currently open. Bitbucket issue states can vary
+            # slightly (e.g. \"new\", \"open\"), so we filter defensively here.
+            params = {
+                'pagelen': MAX_ISSUES_PER_REPO,
+                'sort': '-updated_on',
+                'q': 'state = \"new\" OR state = \"open\"',
+            }
+
+            try:
+                issues = await self._fetch_paginated_data(
+                    issues_url, params, MAX_ISSUES_PER_REPO
+                )
+            except Exception:
+                logger.warning(
+                    'bitbucket:get_suggested_tasks:failed_to_list_issues',
+                    extra={'repository': repo_full_name},
+                    exc_info=True,
+                )
+                continue
+
+            for issue in issues:
+                issue_id = issue.get('id')
+                title = issue.get('title', '')
+
+                # Ensure we have the minimal fields required to build a SuggestedTask.
+                if issue_id is None or title is None:
+                    continue
+
+                try:
+                    tasks.append(
+                        SuggestedTask(
+                            git_provider=ProviderType.BITBUCKET,
+                            task_type=TaskType.OPEN_ISSUE,
+                            repo=str(repo_full_name),
+                            issue_number=int(issue_id),
+                            title=str(title),
+                        )
+                    )
+                except Exception:
+                    # Skip entries that cannot be coerced into the expected types
+                    logger.warning(
+                        'bitbucket:get_suggested_tasks:failed_to_build_task',
+                        extra={'repository': repo_full_name, 'issue_id': issue_id},
+                        exc_info=True,
+                    )
+
+        return tasks
