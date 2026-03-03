@@ -105,7 +105,7 @@ async def list_user_orgs(
         )
 
         # Fetch organizations from service layer
-        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+        orgs, next_page_id = await OrgService.get_user_orgs_paginated(
             user_id=user_id,
             page_id=page_id,
             limit=limit,

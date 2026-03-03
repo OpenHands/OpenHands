@@ -63,7 +63,8 @@ def owner_role(session_maker):
     return role
 
 
-def test_validate_name_uniqueness_with_unique_name(session_maker):
+@pytest.mark.asyncio
+async def test_validate_name_uniqueness_with_unique_name(async_session_maker):
     """
     GIVEN: A unique organization name
     WHEN: validate_name_uniqueness is called
@@ -74,14 +75,15 @@ def test_validate_name_uniqueness_with_unique_name(session_maker):
 
     # Act & Assert - should not raise
     with (
-        patch('storage.org_store.session_maker', session_maker),
-        patch('storage.org_member_store.session_maker', session_maker),
-        patch('storage.role_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+        patch('storage.org_member_store.session_maker'),
+        patch('storage.role_store.session_maker'),
     ):
-        OrgService.validate_name_uniqueness(unique_name)
+        await OrgService.validate_name_uniqueness(unique_name)
 
 
-def test_validate_name_uniqueness_with_duplicate_name(session_maker):
+@pytest.mark.asyncio
+async def test_validate_name_uniqueness_with_duplicate_name():
     """
     GIVEN: An organization name that already exists
     WHEN: validate_name_uniqueness is called
@@ -94,18 +96,19 @@ def test_validate_name_uniqueness_with_duplicate_name(session_maker):
     # Mock OrgStore.get_org_by_name to return the existing org
     with patch(
         'storage.org_service.OrgStore.get_org_by_name',
+        new_callable=AsyncMock,
         return_value=existing_org,
     ):
         # Act & Assert
         with pytest.raises(OrgNameExistsError) as exc_info:
-            OrgService.validate_name_uniqueness(existing_name)
+            await OrgService.validate_name_uniqueness(existing_name)
 
         assert existing_name in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_create_org_with_owner_success(
-    session_maker, owner_role, mock_litellm_api
+    session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
     """
     GIVEN: Valid organization data and user ID
@@ -128,7 +131,7 @@ async def test_create_org_with_owner_success(
     mock_settings = {'team_id': 'test-team', 'user_id': str(user_id)}
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.UserStore.create_default_settings',
@@ -178,7 +181,7 @@ async def test_create_org_with_owner_success(
 
 @pytest.mark.asyncio
 async def test_create_org_with_owner_duplicate_name(
-    session_maker, owner_role, mock_litellm_api
+    session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
     """
     GIVEN: An organization name that already exists
@@ -196,7 +199,7 @@ async def test_create_org_with_owner_duplicate_name(
 
     # Act & Assert
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.UserStore.create_default_settings',
@@ -217,7 +220,7 @@ async def test_create_org_with_owner_duplicate_name(
 
 @pytest.mark.asyncio
 async def test_create_org_with_owner_litellm_failure(
-    session_maker, owner_role, mock_litellm_api
+    session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
     """
     GIVEN: LiteLLM integration fails
@@ -229,7 +232,7 @@ async def test_create_org_with_owner_litellm_failure(
 
     # Mock LiteLLM failure
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch(
             'storage.org_service.UserStore.create_default_settings',
             AsyncMock(return_value=None),
@@ -252,7 +255,7 @@ async def test_create_org_with_owner_litellm_failure(
 
 @pytest.mark.asyncio
 async def test_create_org_with_owner_database_failure_triggers_cleanup(
-    session_maker, owner_role, mock_litellm_api
+    session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
     """
     GIVEN: Database persistence fails after LiteLLM integration succeeds
@@ -272,7 +275,7 @@ async def test_create_org_with_owner_database_failure_triggers_cleanup(
     mock_settings = {'team_id': 'test-team', 'user_id': user_id}
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.UserStore.create_default_settings',
@@ -311,7 +314,7 @@ async def test_create_org_with_owner_database_failure_triggers_cleanup(
 
 @pytest.mark.asyncio
 async def test_create_org_with_owner_entity_creation_failure_triggers_cleanup(
-    session_maker, owner_role, mock_litellm_api
+    session_maker, async_session_maker, owner_role, mock_litellm_api
 ):
     """
     GIVEN: Entity creation fails after LiteLLM integration succeeds
@@ -325,7 +328,7 @@ async def test_create_org_with_owner_entity_creation_failure_triggers_cleanup(
     mock_settings = {'team_id': 'test-team', 'user_id': user_id}
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch(
             'storage.org_service.UserStore.create_default_settings',
             AsyncMock(return_value=mock_settings),
@@ -589,7 +592,10 @@ async def test_get_org_by_id_success(session_maker, owner_role):
 
     with (
         patch('storage.org_service.OrgMemberStore.get_org_member') as mock_get_member,
-        patch('storage.org_service.OrgStore.get_org_by_id') as mock_get_org,
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+        ) as mock_get_org,
     ):
         mock_get_member.return_value = mock_org_member
         mock_get_org.return_value = mock_org
@@ -652,7 +658,11 @@ async def test_get_org_by_id_org_not_found():
             'storage.org_service.OrgMemberStore.get_org_member',
             return_value=mock_org_member,
         ),
-        patch('storage.org_service.OrgStore.get_org_by_id', return_value=None),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         # Act & Assert
         with pytest.raises(OrgNotFoundError) as exc_info:
@@ -661,7 +671,10 @@ async def test_get_org_by_id_org_not_found():
         assert str(org_id) in str(exc_info.value)
 
 
-def test_get_user_orgs_paginated_success(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_success(
+    session_maker, async_session_maker, mock_litellm_api
+):
     """
     GIVEN: User has organizations in database
     WHEN: get_user_orgs_paginated is called with valid user_id
@@ -685,8 +698,8 @@ def test_get_user_orgs_paginated_success(session_maker, mock_litellm_api):
         session.commit()
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, next_page_id = await OrgService.get_user_orgs_paginated(
             user_id=str(user_id), page_id=None, limit=10
         )
 
@@ -696,7 +709,10 @@ def test_get_user_orgs_paginated_success(session_maker, mock_litellm_api):
     assert next_page_id is None
 
 
-def test_get_user_orgs_paginated_with_pagination(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_with_pagination(
+    session_maker, async_session_maker, mock_litellm_api
+):
     """
     GIVEN: User has multiple organizations
     WHEN: get_user_orgs_paginated is called with page_id and limit
@@ -730,8 +746,8 @@ def test_get_user_orgs_paginated_with_pagination(session_maker, mock_litellm_api
         session.commit()
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, next_page_id = await OrgService.get_user_orgs_paginated(
             user_id=str(user_id), page_id='0', limit=2
         )
 
@@ -742,7 +758,8 @@ def test_get_user_orgs_paginated_with_pagination(session_maker, mock_litellm_api
     assert next_page_id == '2'
 
 
-def test_get_user_orgs_paginated_empty_results(session_maker):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_empty_results(async_session_maker):
     """
     GIVEN: User has no organizations
     WHEN: get_user_orgs_paginated is called
@@ -752,8 +769,8 @@ def test_get_user_orgs_paginated_empty_results(session_maker):
     user_id = str(uuid.uuid4())
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, next_page_id = await OrgService.get_user_orgs_paginated(
             user_id=user_id, page_id=None, limit=10
         )
 
@@ -762,7 +779,8 @@ def test_get_user_orgs_paginated_empty_results(session_maker):
     assert next_page_id is None
 
 
-def test_get_user_orgs_paginated_invalid_user_id_format():
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_invalid_user_id_format():
     """
     GIVEN: Invalid user_id format (not a valid UUID string)
     WHEN: get_user_orgs_paginated is called
@@ -773,12 +791,13 @@ def test_get_user_orgs_paginated_invalid_user_id_format():
 
     # Act & Assert
     with pytest.raises(ValueError):
-        OrgService.get_user_orgs_paginated(
+        await OrgService.get_user_orgs_paginated(
             user_id=invalid_user_id, page_id=None, limit=10
         )
 
 
-def test_verify_owner_authorization_success(session_maker, owner_role):
+@pytest.mark.asyncio
+async def test_verify_owner_authorization_success(session_maker, owner_role):
     """
     GIVEN: User is owner of the organization
     WHEN: verify_owner_authorization is called
@@ -808,7 +827,11 @@ def test_verify_owner_authorization_success(session_maker, owner_role):
     mock_owner_role.id = 1
 
     with (
-        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
         patch(
             'storage.org_service.OrgMemberStore.get_org_member',
             return_value=mock_org_member,
@@ -818,10 +841,11 @@ def test_verify_owner_authorization_success(session_maker, owner_role):
         ),
     ):
         # Act & Assert - should not raise
-        OrgService.verify_owner_authorization(user_id, org_id)
+        await OrgService.verify_owner_authorization(user_id, org_id)
 
 
-def test_verify_owner_authorization_org_not_found():
+@pytest.mark.asyncio
+async def test_verify_owner_authorization_org_not_found():
     """
     GIVEN: Organization does not exist
     WHEN: verify_owner_authorization is called
@@ -831,15 +855,20 @@ def test_verify_owner_authorization_org_not_found():
     org_id = uuid.uuid4()
     user_id = str(uuid.uuid4())
 
-    with patch('storage.org_service.OrgStore.get_org_by_id', return_value=None):
+    with patch(
+        'storage.org_service.OrgStore.get_org_by_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
         # Act & Assert
         with pytest.raises(OrgNotFoundError) as exc_info:
-            OrgService.verify_owner_authorization(user_id, org_id)
+            await OrgService.verify_owner_authorization(user_id, org_id)
 
         assert str(org_id) in str(exc_info.value)
 
 
-def test_verify_owner_authorization_user_not_member(session_maker, owner_role):
+@pytest.mark.asyncio
+async def test_verify_owner_authorization_user_not_member(session_maker, owner_role):
     """
     GIVEN: User is not a member of the organization
     WHEN: verify_owner_authorization is called
@@ -857,17 +886,22 @@ def test_verify_owner_authorization_user_not_member(session_maker, owner_role):
     )
 
     with (
-        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
         patch('storage.org_service.OrgMemberStore.get_org_member', return_value=None),
     ):
         # Act & Assert
         with pytest.raises(OrgAuthorizationError) as exc_info:
-            OrgService.verify_owner_authorization(user_id, org_id)
+            await OrgService.verify_owner_authorization(user_id, org_id)
 
         assert 'not a member' in str(exc_info.value)
 
 
-def test_verify_owner_authorization_user_not_owner(session_maker):
+@pytest.mark.asyncio
+async def test_verify_owner_authorization_user_not_owner(session_maker):
     """
     GIVEN: User is member but not owner (admin role)
     WHEN: verify_owner_authorization is called
@@ -893,7 +927,11 @@ def test_verify_owner_authorization_user_not_owner(session_maker):
     admin_role = Role(id=2, name='admin', rank=20)
 
     with (
-        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
         patch(
             'storage.org_service.OrgMemberStore.get_org_member',
             return_value=mock_org_member,
@@ -902,7 +940,7 @@ def test_verify_owner_authorization_user_not_owner(session_maker):
     ):
         # Act & Assert
         with pytest.raises(OrgAuthorizationError) as exc_info:
-            OrgService.verify_owner_authorization(user_id, org_id)
+            await OrgService.verify_owner_authorization(user_id, org_id)
 
         assert 'Only organization owners' in str(exc_info.value)
 
@@ -1034,7 +1072,9 @@ async def test_delete_org_with_cleanup_unexpected_none_result(
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_success_non_llm_fields(session_maker):
+async def test_update_org_with_permissions_success_non_llm_fields(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Valid organization update with non-LLM fields and user is a member
     WHEN: update_org_with_permissions is called
@@ -1077,7 +1117,7 @@ async def test_update_org_with_permissions_success_non_llm_fields(session_maker)
     )
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1096,7 +1136,9 @@ async def test_update_org_with_permissions_success_non_llm_fields(session_maker)
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_success_llm_fields_admin(session_maker):
+async def test_update_org_with_permissions_success_llm_fields_admin(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Valid organization update with LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
@@ -1138,7 +1180,7 @@ async def test_update_org_with_permissions_success_llm_fields_admin(session_make
     )
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1156,7 +1198,9 @@ async def test_update_org_with_permissions_success_llm_fields_admin(session_make
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_success_llm_fields_owner(session_maker):
+async def test_update_org_with_permissions_success_llm_fields_owner(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Valid organization update with LLM fields and user has owner role
     WHEN: update_org_with_permissions is called
@@ -1198,7 +1242,7 @@ async def test_update_org_with_permissions_success_llm_fields_owner(session_make
     )
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1216,7 +1260,9 @@ async def test_update_org_with_permissions_success_llm_fields_owner(session_make
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_success_mixed_fields_admin(session_maker):
+async def test_update_org_with_permissions_success_mixed_fields_admin(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Valid organization update with both LLM and non-LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
@@ -1259,7 +1305,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(session_ma
     )
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1278,7 +1324,9 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(session_ma
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_empty_update(session_maker):
+async def test_update_org_with_permissions_empty_update(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Update request with no fields (all None)
     WHEN: update_org_with_permissions is called
@@ -1317,7 +1365,7 @@ async def test_update_org_with_permissions_empty_update(session_maker):
     update_data = OrgUpdate()  # All fields None
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1335,7 +1383,9 @@ async def test_update_org_with_permissions_empty_update(session_maker):
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_org_not_found(session_maker):
+async def test_update_org_with_permissions_org_not_found(
+    session_maker, async_session_maker
+):
     """
     GIVEN: Organization ID does not exist
     WHEN: update_org_with_permissions is called
@@ -1350,7 +1400,7 @@ async def test_update_org_with_permissions_org_not_found(session_maker):
     update_data = OrgUpdate(contact_name='Jane Doe')
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1366,7 +1416,9 @@ async def test_update_org_with_permissions_org_not_found(session_maker):
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_non_member(session_maker):
+async def test_update_org_with_permissions_non_member(
+    session_maker, async_session_maker
+):
     """
     GIVEN: User is not a member of the organization
     WHEN: update_org_with_permissions is called
@@ -1396,7 +1448,7 @@ async def test_update_org_with_permissions_non_member(session_maker):
     update_data = OrgUpdate(contact_name='Jane Doe')
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1413,6 +1465,7 @@ async def test_update_org_with_permissions_non_member(session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_with_permissions_llm_fields_insufficient_permission(
+    async_session_maker,
     session_maker,
 ):
     """
@@ -1453,7 +1506,7 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
     update_data = OrgUpdate(default_llm_model='claude-opus-4-5-20251101')
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1472,7 +1525,9 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_database_error(session_maker):
+async def test_update_org_with_permissions_database_error(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Database update operation fails
     WHEN: update_org_with_permissions is called
@@ -1511,11 +1566,12 @@ async def test_update_org_with_permissions_database_error(session_maker):
     update_data = OrgUpdate(contact_name='Jane Doe')
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.OrgStore.update_org',
+            new_callable=AsyncMock,
             return_value=None,  # Simulate database failure
         ),
     ):
@@ -1532,6 +1588,7 @@ async def test_update_org_with_permissions_database_error(session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists_error(
+    async_session_maker,
     session_maker,
 ):
     """
@@ -1564,16 +1621,18 @@ async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists
     update_data = OrgUpdate(name=duplicate_name)
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
             return_value=mock_current_org,
         ),
         patch('storage.org_service.OrgService.is_org_member', return_value=True),
         patch(
             'storage.org_service.OrgStore.get_org_by_name',
+            new_callable=AsyncMock,
             return_value=mock_org_with_name,
         ),
     ):
@@ -1589,7 +1648,9 @@ async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_same_name_allowed(session_maker):
+async def test_update_org_with_permissions_same_name_allowed(
+    session_maker, async_session_maker
+):
     """
     GIVEN: User updates org with name unchanged (same as current org name)
     WHEN: update_org_with_permissions is called
@@ -1613,20 +1674,23 @@ async def test_update_org_with_permissions_same_name_allowed(session_maker):
     update_data = OrgUpdate(name=current_name)
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
             return_value=mock_org,
         ),
         patch('storage.org_service.OrgService.is_org_member', return_value=True),
         patch(
             'storage.org_service.OrgStore.get_org_by_name',
+            new_callable=AsyncMock,
             return_value=mock_org,
         ),
         patch(
             'storage.org_service.OrgStore.update_org',
+            new_callable=AsyncMock,
             return_value=mock_org,
         ),
     ):
@@ -1643,7 +1707,9 @@ async def test_update_org_with_permissions_same_name_allowed(session_maker):
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_only_llm_fields(session_maker):
+async def test_update_org_with_permissions_only_llm_fields(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Update request contains only LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
@@ -1686,7 +1752,7 @@ async def test_update_org_with_permissions_only_llm_fields(session_maker):
     )
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1705,7 +1771,9 @@ async def test_update_org_with_permissions_only_llm_fields(session_maker):
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_only_non_llm_fields(session_maker):
+async def test_update_org_with_permissions_only_non_llm_fields(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Update request contains only non-LLM fields and user is a member
     WHEN: update_org_with_permissions is called
@@ -1748,7 +1816,7 @@ async def test_update_org_with_permissions_only_non_llm_fields(session_maker):
     )
 
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.session_maker', session_maker),
         patch('storage.role_store.session_maker', session_maker),
     ):
@@ -1790,6 +1858,7 @@ async def test_check_byor_export_enabled_returns_true_when_enabled():
         ),
         patch(
             'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
             return_value=mock_org,
         ),
     ):
@@ -1824,6 +1893,7 @@ async def test_check_byor_export_enabled_returns_false_when_disabled():
         ),
         patch(
             'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
             return_value=mock_org,
         ),
     ):
@@ -1900,6 +1970,7 @@ async def test_check_byor_export_enabled_returns_false_when_org_not_found():
         ),
         patch(
             'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
             return_value=None,
         ),
     ):
@@ -1929,7 +2000,11 @@ async def test_switch_org_success():
     mock_updated_user = User(id=uuid.UUID(user_id), current_org_id=org_id)
 
     with (
-        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
         patch('storage.org_service.OrgService.is_org_member', return_value=True),
         patch(
             'storage.org_service.UserStore.update_current_org',
@@ -1956,7 +2031,11 @@ async def test_switch_org_org_not_found():
     org_id = uuid.uuid4()
     user_id = str(uuid.uuid4())
 
-    with patch('storage.org_service.OrgStore.get_org_by_id', return_value=None):
+    with patch(
+        'storage.org_service.OrgStore.get_org_by_id',
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
         # Act & Assert
         with pytest.raises(OrgNotFoundError) as exc_info:
             await OrgService.switch_org(user_id, org_id)
@@ -1982,7 +2061,11 @@ async def test_switch_org_user_not_member():
     )
 
     with (
-        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
         patch('storage.org_service.OrgService.is_org_member', return_value=False),
     ):
         # Act & Assert
@@ -2010,7 +2093,11 @@ async def test_switch_org_user_not_found():
     )
 
     with (
-        patch('storage.org_service.OrgStore.get_org_by_id', return_value=mock_org),
+        patch(
+            'storage.org_service.OrgStore.get_org_by_id',
+            new_callable=AsyncMock,
+            return_value=mock_org,
+        ),
         patch('storage.org_service.OrgService.is_org_member', return_value=True),
         patch('storage.org_service.UserStore.update_current_org', return_value=None),
     ):
