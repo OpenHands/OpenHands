@@ -26,8 +26,7 @@ slack_manager = SlackManager(token_manager)
 
 
 class SlackCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to Slack.
+    """Processor for sending conversation summaries to Slack.
 
     This processor is used to send summaries of conversations to Slack channels
     when agent state changes occur.
@@ -41,14 +40,13 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
     last_user_msg_id: int | None = None
 
     async def _send_message_to_slack(self, message: str) -> None:
-        """
-        Send a message to Slack using the conversation_manager's send_to_event_stream method.
+        """Send a message to Slack.
 
         Args:
             message: The message content to send to Slack
         """
         try:
-            # Create a message object for Slack
+            # Create a message object for Slack view creation (incoming message format)
             message_obj = Message(
                 source=SourceType.SLACK,
                 message={
@@ -67,9 +65,8 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
             slack_view = SlackFactory.create_slack_view_from_payload(
                 message_obj, slack_user, saas_user_auth
             )
-            await slack_manager.send_message(
-                slack_manager.create_outgoing_message(message), slack_view
-            )
+            # Send the message directly as a string
+            await slack_manager.send_message(message, slack_view)
 
             logger.info(
                 f'[Slack] Sent summary message to channel {self.channel_id} '

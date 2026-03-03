@@ -121,12 +121,11 @@ class GitlabManager(Manager):
         # Check if the user has write access to the repository
         return has_write_access
 
-    async def send_message(self, message: Message, gitlab_view: ResolverViewInterface):
-        """
-        Send a message to GitLab based on the view type.
+    async def send_message(self, message: str, gitlab_view: ResolverViewInterface):
+        """Send a message to GitLab based on the view type.
 
         Args:
-            message: The message to send
+            message: The message content to send (plain text string)
             gitlab_view: The GitLab view object containing issue/PR/comment info
         """
         keycloak_user_id = gitlab_view.user_info.keycloak_user_id
@@ -138,8 +137,6 @@ class GitlabManager(Manager):
             external_auth_id=keycloak_user_id
         )
 
-        outgoing_message = message.message
-
         if isinstance(gitlab_view, GitlabInlineMRComment) or isinstance(
             gitlab_view, GitlabMRComment
         ):
@@ -147,7 +144,7 @@ class GitlabManager(Manager):
                 gitlab_view.project_id,
                 gitlab_view.issue_number,
                 gitlab_view.discussion_id,
-                message.message,
+                message,
             )
 
         elif isinstance(gitlab_view, GitlabIssueComment):
@@ -155,14 +152,14 @@ class GitlabManager(Manager):
                 gitlab_view.project_id,
                 gitlab_view.issue_number,
                 gitlab_view.discussion_id,
-                outgoing_message,
+                message,
             )
         elif isinstance(gitlab_view, GitlabIssue):
             await gitlab_service.reply_to_issue(
                 gitlab_view.project_id,
                 gitlab_view.issue_number,
                 None,  # no discussion id, issue is tagged
-                outgoing_message,
+                message,
             )
         else:
             logger.warning(
@@ -262,12 +259,10 @@ class GitlabManager(Manager):
                 msg_info = get_session_expired_message(user_info.username)
 
             # Send the acknowledgment message
-            msg = self.create_outgoing_message(msg_info)
-            await self.send_message(msg, gitlab_view)
+            await self.send_message(msg_info, gitlab_view)
 
         except Exception as e:
             logger.exception(f'[GitLab] Error starting job: {str(e)}')
-            msg = self.create_outgoing_message(
-                msg='Uh oh! There was an unexpected error starting the job :('
+            await self.send_message(
+                'Uh oh! There was an unexpected error starting the job :(', gitlab_view
             )
-            await self.send_message(msg, gitlab_view)
