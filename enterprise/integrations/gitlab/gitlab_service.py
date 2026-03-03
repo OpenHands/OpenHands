@@ -185,6 +185,10 @@ class SaaSGitLabService(GitLabService):
             users_personal_projects: List of personal projects owned by the user
             repositories: List of Repository objects to store
         """
+        if not self.external_auth_id:
+            logger.warning('Cannot store repository data: external_auth_id is not set')
+            return
+
         try:
             # First, add owned projects and groups to the database
             await self.add_owned_projects_and_groups_to_db(users_personal_projects)
