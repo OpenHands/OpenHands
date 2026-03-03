@@ -53,9 +53,9 @@ class SetAuthCookieMiddleware:
                 )
 
                 # On re-authentication (token refresh), kick off background sync for GitLab repos
-                schedule_gitlab_repo_sync(
-                    await user_auth.get_user_id(),
-                )
+                user_id = await user_auth.get_user_id()
+                if user_id:
+                    schedule_gitlab_repo_sync(user_id)
 
             if (
                 self._should_attach(request)

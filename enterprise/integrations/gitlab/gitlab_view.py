@@ -303,7 +303,7 @@ class GitlabFactory:
     @staticmethod
     async def create_gitlab_view_from_payload(
         message: Message, token_manager: TokenManager
-    ) -> ResolverViewInterface:
+    ) -> GitlabViewType:
         payload = message.message['payload']
         installation_id = message.message['installation_id']
         user = payload['user']

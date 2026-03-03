@@ -10,6 +10,7 @@ from integrations.github.github_view import (
     GithubIssue,
     GithubIssueComment,
     GithubPRComment,
+    GithubViewType,
 )
 from integrations.manager import Manager
 from integrations.models import (
@@ -43,7 +44,7 @@ from openhands.storage.data_models.secrets import Secrets
 from openhands.utils.async_utils import call_sync_from_async
 
 
-class GithubManager(Manager):
+class GithubManager(Manager[GithubViewType]):
     def __init__(
         self, token_manager: TokenManager, data_collector: GitHubDataCollector
     ):
@@ -236,7 +237,7 @@ class GithubManager(Manager):
             logger.warning('Unsupported location')
             return
 
-    async def start_job(self, github_view: ResolverViewInterface):
+    async def start_job(self, github_view: GithubViewType):
         """Kick off a job with openhands agent.
 
         1. Get user credential

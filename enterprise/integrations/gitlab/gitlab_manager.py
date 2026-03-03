@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from types import MappingProxyType
+from typing import cast
 
 from integrations.gitlab.gitlab_view import (
     GitlabFactory,
@@ -33,7 +36,7 @@ from openhands.server.types import (
 from openhands.storage.data_models.secrets import Secrets
 
 
-class GitlabManager(Manager):
+class GitlabManager(Manager[GitlabViewType]):
     def __init__(self, token_manager: TokenManager, data_collector: None = None):
         self.token_manager = token_manager
 
@@ -67,11 +70,11 @@ class GitlabManager(Manager):
             logger.warning(f'Got invalid keyloak user id for GitLab User {user_id}')
             return False
 
-        # Importing here prevents circular import
+        # GitLabServiceImpl returns SaaSGitLabService in enterprise context
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
-            external_auth_id=keycloak_user_id
+        gitlab_service = cast(
+            SaaSGitLabService, GitLabServiceImpl(external_auth_id=keycloak_user_id)
         )
 
         return await gitlab_service.user_has_write_access(project_id)
@@ -130,36 +133,36 @@ class GitlabManager(Manager):
         """
         keycloak_user_id = gitlab_view.user_info.keycloak_user_id
 
-        # Importing here prevents circular import
+        # GitLabServiceImpl returns SaaSGitLabService in enterprise context
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
-            external_auth_id=keycloak_user_id
+        gitlab_service = cast(
+            SaaSGitLabService, GitLabServiceImpl(external_auth_id=keycloak_user_id)
         )
 
         if isinstance(gitlab_view, GitlabInlineMRComment) or isinstance(
             gitlab_view, GitlabMRComment
         ):
             await gitlab_service.reply_to_mr(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                gitlab_view.discussion_id,
-                message,
+                project_id=str(gitlab_view.project_id),
+                merge_request_iid=str(gitlab_view.issue_number),
+                discussion_id=gitlab_view.discussion_id,
+                body=message,
             )
 
         elif isinstance(gitlab_view, GitlabIssueComment):
             await gitlab_service.reply_to_issue(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                gitlab_view.discussion_id,
-                message,
+                project_id=str(gitlab_view.project_id),
+                issue_number=str(gitlab_view.issue_number),
+                discussion_id=gitlab_view.discussion_id,
+                body=message,
             )
         elif isinstance(gitlab_view, GitlabIssue):
             await gitlab_service.reply_to_issue(
-                gitlab_view.project_id,
-                gitlab_view.issue_number,
-                None,  # no discussion id, issue is tagged
-                message,
+                project_id=str(gitlab_view.project_id),
+                issue_number=str(gitlab_view.issue_number),
+                discussion_id=None,  # no discussion id, issue is tagged
+                body=message,
             )
         else:
             logger.warning(
