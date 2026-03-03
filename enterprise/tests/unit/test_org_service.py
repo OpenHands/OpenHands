@@ -1199,7 +1199,7 @@ async def test_update_org_with_permissions_success_llm_fields_admin(
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.a_session_maker', async_session_maker),
-        patch('storage.role_store.session_maker', session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
     ):
         # Act
         result = await OrgService.update_org_with_permissions(
@@ -1261,7 +1261,7 @@ async def test_update_org_with_permissions_success_llm_fields_owner(
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.a_session_maker', async_session_maker),
-        patch('storage.role_store.session_maker', session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
     ):
         # Act
         result = await OrgService.update_org_with_permissions(
@@ -1324,7 +1324,7 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.a_session_maker', async_session_maker),
-        patch('storage.role_store.session_maker', session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
     ):
         # Act
         result = await OrgService.update_org_with_permissions(
@@ -1771,7 +1771,7 @@ async def test_update_org_with_permissions_only_llm_fields(
     with (
         patch('storage.org_store.a_session_maker', async_session_maker),
         patch('storage.org_member_store.a_session_maker', async_session_maker),
-        patch('storage.role_store.session_maker', session_maker),
+        patch('storage.role_store.a_session_maker', async_session_maker),
     ):
         # Act
         result = await OrgService.update_org_with_permissions(
