@@ -54,7 +54,7 @@ dependencies = [
   "memory-profiler>=0.61",
   "numpy",
   "openai==2.8",
-  "openhands-aci==0.3.2",
+  "openhands-aci==0.3.3",
   "openhands-agent-server==1.11.5",
   "openhands-sdk==1.11.5",
   "openhands-tools==1.11.5",
@@ -198,7 +198,7 @@ opentelemetry-exporter-otlp-proto-grpc = "^1.33.1"
 libtmux = ">=0.46.2"
 pygithub = "^2.5.0"
 joblib = "*"
-openhands-aci = "0.3.2"
+openhands-aci = "0.3.3"
 python-socketio = "5.14.0"
 sse-starlette = "^3.0.2"
 psutil = "*"
