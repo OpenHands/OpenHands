@@ -3,6 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 import pytest
+from server.auth.token_manager import KeycloakUserInfo
 from server.constants import ORG_SETTINGS_VERSION
 from server.verified_models.verified_model_service import (
     StoredVerifiedModel,  # noqa: F401
@@ -34,6 +35,26 @@ from storage.stored_conversation_metadata_saas import (
 from storage.stored_offline_token import StoredOfflineToken
 from storage.stripe_customer import StripeCustomer
 from storage.user import User
+
+
+@pytest.fixture
+def create_keycloak_user_info():
+    """Fixture that returns a factory function to create KeycloakUserInfo models.
+
+    Usage:
+        def test_example(create_keycloak_user_info):
+            user_info = create_keycloak_user_info(sub='user123', email='test@example.com')
+    """
+
+    def _create(**kwargs) -> KeycloakUserInfo:
+        defaults = {
+            'sub': 'test_user_id',
+            'preferred_username': 'test_user',
+        }
+        defaults.update(kwargs)
+        return KeycloakUserInfo(**defaults)
+
+    return _create
 
 
 @pytest.fixture(scope='function')
