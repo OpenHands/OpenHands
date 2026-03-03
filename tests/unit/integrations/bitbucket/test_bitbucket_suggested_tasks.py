@@ -27,7 +27,6 @@ def _make_repo(full_name: str | None) -> Repository:
     truthiness) but keeps the Repository model valid.
     """
     safe_full_name = full_name or ''
-    name = safe_full_name.split('/', 1)[1] if safe_full_name else ''
     return Repository(
         id='repo-id',
         full_name=safe_full_name,
@@ -182,4 +181,3 @@ async def test_get_suggested_tasks_skips_repositories_with_issue_fetch_failures(
     assert task.repo == 'workspace/working-repo'
     assert task.issue_number == 42
     assert task.title == 'Working issue'
-
