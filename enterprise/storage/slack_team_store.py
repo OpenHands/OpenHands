@@ -32,6 +32,7 @@ class SlackTeamStore:
             # Store the token
             session.add(slack_team)
             session.commit()
+        return slack_team
 
     @classmethod
     def get_instance(cls):

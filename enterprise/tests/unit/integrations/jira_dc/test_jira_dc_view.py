@@ -18,9 +18,11 @@ from openhands.core.schema.agent import AgentState
 class TestJiraDcNewConversationView:
     """Tests for JiraDcNewConversationView"""
 
-    def test_get_instructions(self, new_conversation_view, mock_jinja_env):
+    async def test_get_instructions(self, new_conversation_view, mock_jinja_env):
         """Test _get_instructions method"""
-        instructions, user_msg = new_conversation_view._get_instructions(mock_jinja_env)
+        instructions, user_msg = await new_conversation_view._get_instructions(
+            mock_jinja_env
+        )
 
         assert instructions == 'Test Jira DC instructions template'
         assert 'PROJ-123' in user_msg
@@ -83,9 +85,9 @@ class TestJiraDcNewConversationView:
 class TestJiraDcExistingConversationView:
     """Tests for JiraDcExistingConversationView"""
 
-    def test_get_instructions(self, existing_conversation_view, mock_jinja_env):
+    async def test_get_instructions(self, existing_conversation_view, mock_jinja_env):
         """Test _get_instructions method"""
-        instructions, user_msg = existing_conversation_view._get_instructions(
+        instructions, user_msg = await existing_conversation_view._get_instructions(
             mock_jinja_env
         )
 
