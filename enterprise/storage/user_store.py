@@ -839,9 +839,7 @@ class UserStore:
         """
         async with a_session_maker() as session:
             result = await session.execute(
-                select(User)
-                .filter(User.id == uuid.UUID(user_id))
-                .with_for_update()
+                select(User).filter(User.id == uuid.UUID(user_id)).with_for_update()
             )
             user = result.scalars().first()
             if not user:

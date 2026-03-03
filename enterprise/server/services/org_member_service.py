@@ -221,13 +221,13 @@ class OrgMemberService:
         user = await UserStore.get_user_by_id_async(str(target_user_id))
         if user and user.current_org_id == org_id:
             # Set current_org_id to personal workspace (org.id == user.id)
-            await UserStore.update_current_org_async(str(target_user_id), target_user_id)
+            await UserStore.update_current_org_async(
+                str(target_user_id), target_user_id
+            )
 
         # Also remove from LiteLLM team
         try:
-            await LiteLlmManager.remove_user_from_team(
-                str(target_user_id), str(org_id)
-            )
+            await LiteLlmManager.remove_user_from_team(str(target_user_id), str(org_id))
             logger.info(
                 'Successfully removed user from LiteLLM team',
                 extra={

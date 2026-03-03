@@ -792,7 +792,9 @@ class OrgService:
             raise OrgNotFoundError(str(org_id))
 
         # Check if user is a member of the organization
-        org_member = await OrgMemberStore.get_org_member_async(org_id, parse_uuid(user_id))
+        org_member = await OrgMemberStore.get_org_member_async(
+            org_id, parse_uuid(user_id)
+        )
         if not org_member:
             raise OrgAuthorizationError('User is not a member of this organization')
 

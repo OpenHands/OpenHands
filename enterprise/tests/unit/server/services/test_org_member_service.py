@@ -207,13 +207,20 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_invalid_page_id_negative_returns_error(
-        self, org_id, current_user_id, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        requester_membership_owner,
+        async_session_maker,
     ):
         """Test that negative page_id returns error."""
         # Arrange
-        with patch(
-            'server.services.org_member_service.OrgMemberStore.get_org_member'
-        ) as mock_get_member:
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+        ):
             mock_get_member.return_value = requester_membership_owner
 
             # Act
@@ -231,13 +238,20 @@ class TestOrgMemberServiceGetOrgMembers:
 
     @pytest.mark.asyncio
     async def test_invalid_page_id_non_integer_returns_error(
-        self, org_id, current_user_id, requester_membership_owner
+        self,
+        org_id,
+        current_user_id,
+        requester_membership_owner,
+        async_session_maker,
     ):
         """Test that non-integer page_id returns error."""
         # Arrange
-        with patch(
-            'server.services.org_member_service.OrgMemberStore.get_org_member'
-        ) as mock_get_member:
+        with (
+            patch(
+                'server.services.org_member_service.OrgMemberStore.get_org_member'
+            ) as mock_get_member,
+            patch('storage.org_member_store.a_session_maker', async_session_maker),
+        ):
             mock_get_member.return_value = requester_membership_owner
 
             # Act
