@@ -13,7 +13,6 @@ from integrations.utils import (
     get_user_v1_enabled_setting,
 )
 from jinja2 import Environment
-from openhands.utils.async_utils import GENERAL_TIMEOUT
 from slack_sdk import WebClient
 from storage.slack_conversation import SlackConversation
 from storage.slack_conversation_store import SlackConversationStore
@@ -44,6 +43,7 @@ from openhands.server.user_auth.user_auth import UserAuth
 from openhands.storage.data_models.conversation_metadata import (
     ConversationTrigger,
 )
+from openhands.utils.async_utils import GENERAL_TIMEOUT
 
 # =================================================
 # SECTION: Slack view types
@@ -598,7 +598,7 @@ class SlackFactory:
 
         conversation = await asyncio.wait_for(
             SlackFactory.determine_if_updating_existing_conversation(message),
-            timeout=GENERAL_TIMEOUT
+            timeout=GENERAL_TIMEOUT,
         )
         if conversation:
             logger.info(
