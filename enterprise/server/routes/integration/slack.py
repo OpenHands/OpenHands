@@ -171,7 +171,7 @@ async def keycloak_callback(
         state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
     )
     slack_user_id = payload['slack_user_id']
-    bot_access_token = payload['bot_access_token']
+    bot_access_token: str | None = payload['bot_access_token']
     team_id = payload['team_id']
 
     # Retrieve the keycloak_user_id

@@ -394,6 +394,9 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
             self.conversation_id, conversation_init_data, user_id
         )
 
+        if agent_loop_info.event_store is None:
+            raise StartingConvoException('Event store not available')
+
         final_agent_observation = get_final_agent_observation(
             agent_loop_info.event_store
         )
@@ -550,6 +553,8 @@ class SlackFactory:
             return None
 
         # thread_ts in slack payloads in the parent's (root level msg's) message ID
+        if channel_id is None:
+            return None
         return await slack_conversation_store.get_slack_conversation(
             channel_id, thread_ts
         )
@@ -578,15 +583,15 @@ class SlackFactory:
             raise Exception('Did not find slack team')
 
         # Determine if this is a known slack user by openhands
-        if not slack_user or not saas_user_auth or not channel_id:
+        if not slack_user or not saas_user_auth or not channel_id or not message_ts:
             return SlackUnkownUserView(
                 bot_access_token=bot_access_token,
                 user_msg=user_msg,
                 slack_user_id=slack_user_id,
                 slack_to_openhands_user=slack_user,
                 saas_user_auth=saas_user_auth,
-                channel_id=channel_id,
-                message_ts=message_ts,
+                channel_id=channel_id or '',
+                message_ts=message_ts or '',
                 thread_ts=thread_ts,
                 selected_repo=None,
                 should_extract=False,
@@ -595,6 +600,10 @@ class SlackFactory:
                 team_id=team_id,
                 v1_enabled=False,
             )
+
+        # At this point, we've verified slack_user, saas_user_auth, channel_id, and message_ts are set
+        assert channel_id is not None
+        assert message_ts is not None
 
         conversation = await asyncio.wait_for(
             SlackFactory.determine_if_updating_existing_conversation(message),

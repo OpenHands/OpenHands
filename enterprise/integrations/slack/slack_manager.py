@@ -267,7 +267,7 @@ class SlackManager(Manager[SlackViewInterface]):
                 slack_view.saas_user_auth
             )
             match, repos = self.filter_potential_repos_by_user_msg(
-                slack_view.user_msg, user_repos
+                slack_view.user_msg or '', user_repos
             )
 
             # User mentioned a matching repo is their message, start job without repo selection form
@@ -305,7 +305,9 @@ class SlackManager(Manager[SlackViewInterface]):
 
         try:
             msg_info = None
-            user_info: SlackUser = slack_view.slack_to_openhands_user
+            user_info = slack_view.slack_to_openhands_user
+            if user_info is None:
+                raise ValueError('slack_to_openhands_user is required to start a job')
             try:
                 logger.info(
                     f'[Slack] Starting job for user {user_info.slack_display_name} (id={user_info.slack_user_id})',
