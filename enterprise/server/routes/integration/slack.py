@@ -196,7 +196,7 @@ async def keycloak_callback(
         )
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
-    keycloak_user_id = user_info['sub']
+    keycloak_user_id = user_info.sub
     user = await UserStore.get_user_by_id_async(keycloak_user_id)
     if not user:
         return _html_response(
@@ -208,7 +208,7 @@ async def keycloak_callback(
     # These tokens are offline access tokens - store them!
     await token_manager.store_offline_token(keycloak_user_id, keycloak_refresh_token)
 
-    idp: str = user_info.get('identity_provider', ProviderType.GITHUB)
+    idp: str = user_info.identity_provider or ProviderType.GITHUB.value
     idp_type = 'oidc'
     if ':' in idp:
         idp, idp_type = idp.rsplit(':', 1)

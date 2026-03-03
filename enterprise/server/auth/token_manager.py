@@ -4,7 +4,6 @@ import hashlib
 import json
 import time
 from base64 import b64encode
-from typing import NotRequired, TypedDict, cast
 from urllib.parse import parse_qs
 
 import httpx
@@ -17,6 +16,7 @@ from keycloak.exceptions import (
     KeycloakError,
     KeycloakPostError,
 )
+from pydantic import BaseModel
 from server.auth.auth_error import ExpiredError
 from server.auth.constants import (
     BITBUCKET_APP_CLIENT_ID,
@@ -51,21 +51,27 @@ from openhands.server.types import SessionExpiredError
 from openhands.utils.http_session import httpx_verify_option
 
 
-class KeycloakUserInfo(TypedDict):
-    """TypedDict for Keycloak UserInfo endpoint response.
+class KeycloakUserInfo(BaseModel):
+    """Pydantic model for Keycloak UserInfo endpoint response.
 
     Based on OIDC standard claims. 'sub' is always required per OIDC spec.
+    Additional fields from Keycloak are captured via model_config extra='allow'.
     """
 
+    model_config = {'extra': 'allow'}
+
     sub: str
-    name: NotRequired[str]
-    given_name: NotRequired[str]
-    family_name: NotRequired[str]
-    preferred_username: NotRequired[str]
-    email: NotRequired[str]
-    email_verified: NotRequired[bool]
-    picture: NotRequired[str]
-    attributes: NotRequired[dict[str, list[str]]]
+    name: str | None = None
+    given_name: str | None = None
+    family_name: str | None = None
+    preferred_username: str | None = None
+    email: str | None = None
+    email_verified: bool | None = None
+    picture: str | None = None
+    attributes: dict[str, list[str]] | None = None
+    identity_provider: str | None = None
+    company: str | None = None
+    roles: list[str] | None = None
 
 
 # HTTP timeout for external IDP calls (in seconds)
@@ -171,14 +177,11 @@ class TokenManager:
 
         Raises:
             KeycloakAuthenticationError: If the token is invalid
+            ValidationError: If the response is missing the required 'sub' field
         """
         user_info = await get_keycloak_openid(self.external).a_userinfo(access_token)
-        # Validate required OIDC claim is present
-        if 'sub' not in user_info:
-            raise KeycloakAuthenticationError(
-                "Missing required 'sub' claim in user info"
-            )
-        return cast(KeycloakUserInfo, user_info)
+        # Pydantic validation will raise ValidationError if 'sub' is missing
+        return KeycloakUserInfo.model_validate(user_info)
 
     @retry(
         stop=stop_after_attempt(2),
@@ -292,8 +295,8 @@ class TokenManager:
     ) -> str:
         # Get user info to determine user_id and idp
         user_info = await self.get_user_info(access_token=access_token)
-        user_id = user_info['sub']
-        username = user_info.get('preferred_username')
+        user_id = user_info.sub
+        username = user_info.preferred_username
         logger.info(f'Getting token for user {username} and IDP {idp}')
         token_store = await AuthTokenStore.get_instance(
             keycloak_user_id=user_id, idp=idp
