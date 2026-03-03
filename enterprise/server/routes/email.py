@@ -79,7 +79,8 @@ async def update_email(
         # need to set auth cookie to the new tokens
         if user_auth.access_token is None:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail='Access token not found'
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='Access token not found',
             )
         set_response_cookie(
             request=request,

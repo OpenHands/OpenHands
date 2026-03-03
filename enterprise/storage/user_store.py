@@ -89,7 +89,7 @@ class UserStore:
 
             role = RoleStore.get_role_by_name('owner')
             if role is None:
-                raise ValueError("Owner role not found in database")
+                raise ValueError('Owner role not found in database')
 
             from storage.org_member_store import OrgMemberStore
 
@@ -272,7 +272,7 @@ class UserStore:
                 extra={'user_id': user_id},
             )
             if role is None:
-                raise ValueError("Owner role not found in database")
+                raise ValueError('Owner role not found in database')
 
             from storage.org_member_store import OrgMemberStore
 
