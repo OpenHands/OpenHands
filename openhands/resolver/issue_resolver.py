@@ -141,6 +141,8 @@ class IssueResolver:
                 if platform == ProviderType.GITLAB
                 else 'bitbucket.org'
                 if platform == ProviderType.BITBUCKET
+                else 'bitbucket.example.com'
+                if platform == ProviderType.BITBUCKET_DATA_CENTER
                 else 'dev.azure.com'
             )
 

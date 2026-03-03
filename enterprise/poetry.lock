@@ -2080,25 +2080,6 @@ files = [
 ]
 
 [[package]]
-name = "ecdsa"
-version = "0.19.1"
-description = "ECDSA cryptographic signature library (pure python)"
-optional = false
-python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,>=2.6"
-groups = ["main"]
-files = [
-    {file = "ecdsa-0.19.1-py2.py3-none-any.whl", hash = "sha256:30638e27cf77b7e15c4c4cc1973720149e1033827cfd00661ca5c8cc0cdb24c3"},
-    {file = "ecdsa-0.19.1.tar.gz", hash = "sha256:478cba7b62555866fcb3bb3fe985e06decbdb68ef55713c4e5ab98c57d508e61"},
-]
-
-[package.dependencies]
-six = ">=1.9.0"
-
-[package.extras]
-gmpy = ["gmpy"]
-gmpy2 = ["gmpy2"]
-
-[[package]]
 name = "email-validator"
 version = "2.3.0"
 description = "A robust email address syntax and deliverability validation library."
@@ -6051,14 +6032,14 @@ numpy = {version = ">=2,<2.3.0", markers = "python_version >= \"3.9\""}
 
 [[package]]
 name = "openhands-aci"
-version = "0.3.2"
+version = "0.3.3"
 description = "An Agent-Computer Interface (ACI) designed for software development agents OpenHands."
 optional = false
 python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "openhands_aci-0.3.2-py3-none-any.whl", hash = "sha256:a3ff6fe3dd50124598b8bc3aff8d9742d6e75f933f7e7635a9d0b37d45eb826e"},
-    {file = "openhands_aci-0.3.2.tar.gz", hash = "sha256:df7b64df6acb70b45b23e88c13508e7af8f27725bed30c3e88691a0f3d1f7a44"},
+    {file = "openhands_aci-0.3.3-py3-none-any.whl", hash = "sha256:35795a4d6f5939290f74b26190d5b4cd7477b06ffb7c7f0b505166739461d651"},
+    {file = "openhands_aci-0.3.3.tar.gz", hash = "sha256:567fc65bb881e3ea56c987f4251c8f703d3c88fae99402b46ea7dcc48d85adb2"},
 ]
 
 [package.dependencies]
@@ -6081,7 +6062,6 @@ puremagic = ">=1.28"
 pydantic = ">=2.11.3,<3.0.0"
 pydub = ">=0.25.1,<0.26.0"
 pypdf = ">=5.1.0"
-pypdf2 = ">=3.0.1,<4.0.0"
 python-pptx = ">=1.0.2,<2.0.0"
 rapidfuzz = ">=3.13.0,<4.0.0"
 requests = ">=2.32.3"
@@ -6155,6 +6135,7 @@ jinja2 = ">=3.1.6"
 joblib = "*"
 json-repair = "*"
 jupyter-kernel-gateway = "*"
+jwcrypto = ">=1.5.6"
 kubernetes = ">=33.1"
 libtmux = ">=0.46.2"
 litellm = ">=1.74.3"
@@ -6162,7 +6143,7 @@ lmnr = ">=0.7.20"
 memory-profiler = ">=0.61"
 numpy = "*"
 openai = "2.8"
-openhands-aci = "0.3.2"
+openhands-aci = "0.3.3"
 openhands-agent-server = "1.11.5"
 openhands-sdk = "1.11.5"
 openhands-tools = "1.11.5"
@@ -6185,7 +6166,6 @@ pypdf = ">=6.7.2"
 python-docx = "*"
 python-dotenv = "*"
 python-frontmatter = ">=1.1"
-python-jose = {version = ">=3.3", extras = ["cryptography"]}
 python-json-logger = ">=3.2.1"
 python-multipart = ">=0.0.22"
 python-pptx = "*"
@@ -11592,25 +11572,6 @@ full = ["Pillow (>=8.0.0)", "cryptography"]
 image = ["Pillow (>=8.0.0)"]
 
 [[package]]
-name = "pypdf2"
-version = "3.0.1"
-description = "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files"
-optional = false
-python-versions = ">=3.6"
-groups = ["main"]
-files = [
-    {file = "PyPDF2-3.0.1.tar.gz", hash = "sha256:a74408f69ba6271f71b9352ef4ed03dc53a31aa404d29b5d31f53bfecfee1440"},
-    {file = "pypdf2-3.0.1-py3-none-any.whl", hash = "sha256:d16e4205cfee272fbdc0568b68d82be796540b1537508cef59388f839c191928"},
-]
-
-[package.extras]
-crypto = ["PyCryptodome"]
-dev = ["black", "flit", "pip-tools", "pre-commit (<2.18.0)", "pytest-cov", "wheel"]
-docs = ["myst_parser", "sphinx", "sphinx_rtd_theme"]
-full = ["Pillow", "PyCryptodome"]
-image = ["Pillow"]
-
-[[package]]
 name = "pyperclip"
 version = "1.11.0"
 description = "A cross-platform clipboard module for Python. (Only handles plain text for now.)"
@@ -11818,30 +11779,6 @@ PyYAML = "*"
 [package.extras]
 docs = ["sphinx"]
 test = ["mypy", "pyaml", "pytest", "toml", "types-PyYAML", "types-toml"]
-
-[[package]]
-name = "python-jose"
-version = "3.5.0"
-description = "JOSE implementation in Python"
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "python_jose-3.5.0-py2.py3-none-any.whl", hash = "sha256:abd1202f23d34dfad2c3d28cb8617b90acf34132c7afd60abd0b0b7d3cb55771"},
-    {file = "python_jose-3.5.0.tar.gz", hash = "sha256:fb4eaa44dbeb1c26dcc69e4bd7ec54a1cb8dd64d3b4d81ef08d90ff453f2b01b"},
-]
-
-[package.dependencies]
-cryptography = {version = ">=3.4.0", optional = true, markers = "extra == \"cryptography\""}
-ecdsa = "!=0.15"
-pyasn1 = ">=0.5.0"
-rsa = ">=4.0,<4.1.1 || >4.1.1,<4.4 || >4.4,<5.0"
-
-[package.extras]
-cryptography = ["cryptography (>=3.4.0)"]
-pycrypto = ["pycrypto (>=2.6.0,<2.7.0)"]
-pycryptodome = ["pycryptodome (>=3.3.1,<4.0.0)"]
-test = ["pytest", "pytest-cov"]
 
 [[package]]
 name = "python-json-logger"

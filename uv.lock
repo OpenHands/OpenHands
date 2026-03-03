@@ -1225,18 +1225,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ecdsa"
-version = "0.19.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "six" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c0/1f/924e3caae75f471eae4b26bd13b698f6af2c44279f67af317439c2f4c46a/ecdsa-0.19.1.tar.gz", hash = "sha256:478cba7b62555866fcb3bb3fe985e06decbdb68ef55713c4e5ab98c57d508e61", size = 201793, upload-time = "2025-03-13T11:52:43.25Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/a3/460c57f094a4a165c84a1341c373b0a4f5ec6ac244b998d5021aade89b77/ecdsa-0.19.1-py2.py3-none-any.whl", hash = "sha256:30638e27cf77b7e15c4c4cc1973720149e1033827cfd00661ca5c8cc0cdb24c3", size = 150607, upload-time = "2025-03-13T11:52:41.757Z" },
-]
-
-[[package]]
 name = "email-validator"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2657,6 +2645,19 @@ wheels = [
 ]
 
 [[package]]
+name = "jwcrypto"
+version = "1.5.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e1/db/870e5d5fb311b0bcf049630b5ba3abca2d339fd5e13ba175b4c13b456d08/jwcrypto-1.5.6.tar.gz", hash = "sha256:771a87762a0c081ae6166958a954f80848820b2ab066937dc8b8379d65b1b039", size = 87168, upload-time = "2024-03-06T19:58:31.831Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/58/4a1880ea64032185e9ae9f63940c9327c6952d5584ea544a8f66972f2fda/jwcrypto-1.5.6-py3-none-any.whl", hash = "sha256:150d2b0ebbdb8f40b77f543fb44ffd2baeff48788be71f67f03566692fd55789", size = 92520, upload-time = "2024-03-06T19:58:29.765Z" },
+]
+
+[[package]]
 name = "keyring"
 version = "25.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3564,7 +3565,7 @@ wheels = [
 
 [[package]]
 name = "openhands-aci"
-version = "0.3.2"
+version = "0.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -3586,7 +3587,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydub" },
     { name = "pypdf" },
-    { name = "pypdf2" },
     { name = "python-pptx" },
     { name = "rapidfuzz" },
     { name = "requests" },
@@ -3597,9 +3597,9 @@ dependencies = [
     { name = "xlrd" },
     { name = "youtube-transcript-api" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/d3/bc218623dcf3a6d72e2e47627ff2f30cf46eece83f77d81cab00bef23286/openhands_aci-0.3.2.tar.gz", hash = "sha256:df7b64df6acb70b45b23e88c13508e7af8f27725bed30c3e88691a0f3d1f7a44", size = 78318, upload-time = "2025-08-21T09:47:36.866Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/02/f82be4fd3b079bd12d53cc3083811535ed01e1b528b02f9571b9e5e04f9e/openhands_aci-0.3.3.tar.gz", hash = "sha256:567fc65bb881e3ea56c987f4251c8f703d3c88fae99402b46ea7dcc48d85adb2", size = 78525, upload-time = "2026-02-27T20:38:26.3Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/ae/4c3d5e334a79d64e2266785f12ddb88861b18ed0f03c103828981b445d46/openhands_aci-0.3.2-py3-none-any.whl", hash = "sha256:a3ff6fe3dd50124598b8bc3aff8d9742d6e75f933f7e7635a9d0b37d45eb826e", size = 95467, upload-time = "2025-08-21T09:47:35.962Z" },
+    { url = "https://files.pythonhosted.org/packages/82/50/7821e227e3d613741f233d07526da7e3dc558bc8e4143c016c110e2222d7/openhands_aci-0.3.3-py3-none-any.whl", hash = "sha256:35795a4d6f5939290f74b26190d5b4cd7477b06ffb7c7f0b505166739461d651", size = 95623, upload-time = "2026-02-27T20:38:27.348Z" },
 ]
 
 [[package]]
@@ -3652,6 +3652,7 @@ dependencies = [
     { name = "joblib" },
     { name = "json-repair" },
     { name = "jupyter-kernel-gateway" },
+    { name = "jwcrypto" },
     { name = "kubernetes" },
     { name = "libtmux" },
     { name = "litellm" },
@@ -3682,7 +3683,6 @@ dependencies = [
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "python-frontmatter" },
-    { name = "python-jose", extra = ["cryptography"] },
     { name = "python-json-logger" },
     { name = "python-multipart" },
     { name = "python-pptx" },
@@ -3774,6 +3774,7 @@ requires-dist = [
     { name = "joblib" },
     { name = "json-repair" },
     { name = "jupyter-kernel-gateway" },
+    { name = "jwcrypto", specifier = ">=1.5.6" },
     { name = "kubernetes", specifier = ">=33.1" },
     { name = "libtmux", specifier = ">=0.46.2" },
     { name = "litellm", specifier = ">=1.74.3" },
@@ -3782,7 +3783,7 @@ requires-dist = [
     { name = "modal", marker = "extra == 'third-party-runtimes'", specifier = ">=0.66.26,<1.2" },
     { name = "numpy" },
     { name = "openai", specifier = "==2.8" },
-    { name = "openhands-aci", specifier = "==0.3.2" },
+    { name = "openhands-aci", specifier = "==0.3.3" },
     { name = "openhands-agent-server", specifier = "==1.11.5" },
     { name = "openhands-sdk", specifier = "==1.11.5" },
     { name = "openhands-tools", specifier = "==1.11.5" },
@@ -3805,7 +3806,6 @@ requires-dist = [
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "python-frontmatter", specifier = ">=1.1" },
-    { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3" },
     { name = "python-json-logger", specifier = ">=3.2.1" },
     { name = "python-multipart", specifier = ">=0.0.22" },
     { name = "python-pptx" },
@@ -7322,15 +7322,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pypdf2"
-version = "3.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9f/bb/18dc3062d37db6c491392007dfd1a7f524bb95886eb956569ac38a23a784/PyPDF2-3.0.1.tar.gz", hash = "sha256:a74408f69ba6271f71b9352ef4ed03dc53a31aa404d29b5d31f53bfecfee1440", size = 227419, upload-time = "2022-12-31T10:36:13.13Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8e/5e/c86a5643653825d3c913719e788e41386bee415c2b87b4f955432f2de6b2/pypdf2-3.0.1-py3-none-any.whl", hash = "sha256:d16e4205cfee272fbdc0568b68d82be796540b1537508cef59388f839c191928", size = 232572, upload-time = "2022-12-31T10:36:10.327Z" },
-]
-
-[[package]]
 name = "pyperclip"
 version = "1.11.0"
 source = { registry = "https://pypi.org/simple" }
@@ -7513,25 +7504,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/96/de/910fa208120314a12f9a88ea63e03707261692af782c99283f1a2c8a5e6f/python-frontmatter-1.1.0.tar.gz", hash = "sha256:7118d2bd56af9149625745c58c9b51fb67e8d1294a0c76796dafdc72c36e5f6d", size = 16256, upload-time = "2024-01-16T18:50:04.052Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/49/87/3c8da047b3ec5f99511d1b4d7a5bc72d4b98751c7e78492d14dc736319c5/python_frontmatter-1.1.0-py3-none-any.whl", hash = "sha256:335465556358d9d0e6c98bbeb69b1c969f2a4a21360587b9873bfc3b213407c1", size = 9834, upload-time = "2024-01-16T18:50:00.911Z" },
-]
-
-[[package]]
-name = "python-jose"
-version = "3.5.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "ecdsa" },
-    { name = "pyasn1" },
-    { name = "rsa" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c6/77/3a1c9039db7124eb039772b935f2244fbb73fc8ee65b9acf2375da1c07bf/python_jose-3.5.0.tar.gz", hash = "sha256:fb4eaa44dbeb1c26dcc69e4bd7ec54a1cb8dd64d3b4d81ef08d90ff453f2b01b", size = 92726, upload-time = "2025-05-28T17:31:54.288Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/c3/0bd11992072e6a1c513b16500a5d07f91a24017c5909b02c72c62d7ad024/python_jose-3.5.0-py2.py3-none-any.whl", hash = "sha256:abd1202f23d34dfad2c3d28cb8617b90acf34132c7afd60abd0b0b7d3cb55771", size = 34624, upload-time = "2025-05-28T17:31:52.802Z" },
-]
-
-[package.optional-dependencies]
-cryptography = [
-    { name = "cryptography" },
 ]
 
 [[package]]

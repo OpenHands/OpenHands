@@ -59,6 +59,12 @@ export function LoginContent({
     authUrl,
   });
 
+  const bitbucketDataCenterAuthUrl = useAuthUrl({
+    appMode: appMode || null,
+    identityProvider: "bitbucket_data_center",
+    authUrl,
+  });
+
   const handleAuthRedirect = async (
     redirectUrl: string,
     provider: Provider,
@@ -115,6 +121,12 @@ export function LoginContent({
     }
   };
 
+  const handleBitbucketDataCenterAuth = () => {
+    if (bitbucketDataCenterAuthUrl) {
+      handleAuthRedirect(bitbucketDataCenterAuthUrl, "bitbucket_data_center");
+    }
+  };
+
   const showGithub =
     providersConfigured &&
     providersConfigured.length > 0 &&
@@ -127,6 +139,10 @@ export function LoginContent({
     providersConfigured &&
     providersConfigured.length > 0 &&
     providersConfigured.includes("bitbucket");
+  const showBitbucketDataCenter =
+    providersConfigured &&
+    providersConfigured.length > 0 &&
+    providersConfigured.includes("bitbucket_data_center");
 
   const noProvidersConfigured =
     !providersConfigured || providersConfigured.length === 0;
@@ -227,6 +243,21 @@ export function LoginContent({
                 <BitbucketLogo width={14} height={14} className="shrink-0" />
                 <span className={buttonLabelClasses}>
                   {t(I18nKey.BITBUCKET$CONNECT_TO_BITBUCKET)}
+                </span>
+              </button>
+            )}
+
+            {showBitbucketDataCenter && (
+              <button
+                type="button"
+                onClick={handleBitbucketDataCenterAuth}
+                className={`${buttonBaseClasses} bg-[#2684FF] text-white`}
+              >
+                <BitbucketLogo width={14} height={14} className="shrink-0" />
+                <span className={buttonLabelClasses}>
+                  {t(
+                    I18nKey.BITBUCKET_DATA_CENTER$CONNECT_TO_BITBUCKET_DATA_CENTER,
+                  )}
                 </span>
               </button>
             )}

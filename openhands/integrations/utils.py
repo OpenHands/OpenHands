@@ -5,6 +5,9 @@ from openhands.integrations.azure_devops.azure_devops_service import (
     AzureDevOpsServiceImpl as AzureDevOpsService,
 )
 from openhands.integrations.bitbucket.bitbucket_service import BitBucketService
+from openhands.integrations.bitbucket_data_center.bitbucket_dc_service import (
+    BitbucketDCService,
+)
 from openhands.integrations.forgejo.forgejo_service import ForgejoService
 from openhands.integrations.github.github_service import GitHubService
 from openhands.integrations.gitlab.gitlab_service import GitLabService
@@ -14,7 +17,7 @@ from openhands.integrations.provider import ProviderType
 async def validate_provider_token(
     token: SecretStr, base_domain: str | None = None
 ) -> ProviderType | None:
-    """Determine whether a token is for GitHub, GitLab, Bitbucket, or Azure DevOps by attempting to get user info from the services.
+    """Determine whether a token is for GitHub, GitLab, Bitbucket, Bitbucket Data Center, or Azure DevOps by attempting to get user info from the services.
 
     Args:
         token: The token to check
@@ -69,6 +72,18 @@ async def validate_provider_token(
     except Exception as e:
         bitbucket_error = e
 
+    # Try Bitbucket Data Center if a base_domain was provided (always self-hosted)
+    bitbucket_dc_error = None
+    if base_domain:
+        try:
+            bitbucket_dc_service = BitbucketDCService(
+                token=token, base_domain=base_domain
+            )
+            await bitbucket_dc_service.verify_access()
+            return ProviderType.BITBUCKET_DATA_CENTER
+        except Exception as e:
+            bitbucket_dc_error = e
+
     # Try Azure DevOps last
     azure_devops_error = None
     try:
@@ -79,7 +94,7 @@ async def validate_provider_token(
         azure_devops_error = e
 
     logger.debug(
-        f'Failed to validate token: {github_error} \n {gitlab_error} \n {forgejo_error} \n {bitbucket_error} \n {azure_devops_error}'
+        f'Failed to validate token: {github_error} \n {gitlab_error} \n {forgejo_error} \n {bitbucket_error} \n {bitbucket_dc_error} \n {azure_devops_error}'
     )
 
     return None
