@@ -22,6 +22,12 @@ class Manager(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def start_job(self):
-        "Kick off a job with openhands agent"
+    async def start_job(self, view: Any) -> Any:
+        """Kick off a job with openhands agent.
+
+        Args:
+            view: Integration-specific view object containing job context.
+                  Each manager subclass accepts its own view type
+                  (e.g., SlackViewInterface, JiraViewInterface, etc.)
+        """
         raise NotImplementedError
