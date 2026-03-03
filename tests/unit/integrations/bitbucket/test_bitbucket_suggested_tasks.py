@@ -20,16 +20,24 @@ def bitbucket_service() -> BitBucketService:
 
 
 def _make_repo(full_name: str | None) -> Repository:
-    """Helper to construct a minimal Repository instance for tests."""
+    """Helper to construct a minimal Repository instance for tests.
+
+    When full_name is None we substitute an empty string, which is still treated
+    as "missing" by the Bitbucket suggested task code (because it checks
+    truthiness) but keeps the Repository model valid.
+    """
+    safe_full_name = full_name or ''
+    name = safe_full_name.split('/', 1)[1] if safe_full_name else ''
     return Repository(
         id='repo-id',
-        full_name=full_name,
-        name=full_name.split('/', 1)[1] if full_name else '',
-        owner=OwnerType.USER,
+        full_name=safe_full_name,
         git_provider=ProviderType.BITBUCKET,
         is_public=True,
-        clone_url=f'https://bitbucket.org/{full_name}.git' if full_name else '',
-        html_url=f'https://bitbucket.org/{full_name}' if full_name else '',
+        stargazers_count=None,
+        link_header=None,
+        pushed_at=None,
+        owner_type=OwnerType.USER,
+        main_branch=None,
     )
 
 
@@ -174,3 +182,4 @@ async def test_get_suggested_tasks_skips_repositories_with_issue_fetch_failures(
     assert task.repo == 'workspace/working-repo'
     assert task.issue_number == 42
     assert task.title == 'Working issue'
+
