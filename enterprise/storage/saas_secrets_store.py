@@ -53,6 +53,8 @@ class SaasSecretsStore(SecretsStore):
 
     async def store(self, item: Secrets):
         user = await UserStore.get_user_by_id_async(self.user_id)
+        if user is None:
+            raise ValueError(f"User not found: {self.user_id}")
         org_id = user.current_org_id
 
         async with a_session_maker() as session:
