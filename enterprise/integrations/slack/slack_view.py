@@ -82,7 +82,7 @@ class SlackUnkownUserView(SlackMessageView):
 @dataclass
 class SlackNewConversationView(SlackViewInterface):
     bot_access_token: str
-    user_msg: str | None
+    user_msg: str
     slack_user_id: str
     slack_to_openhands_user: SlackUser
     saas_user_auth: UserAuth
@@ -586,6 +586,9 @@ class SlackFactory:
             )
 
         # At this point, we've verified slack_user, saas_user_auth, channel_id, and message_ts are set
+        # user_msg should always be present in Slack payloads
+        if not user_msg:
+            raise ValueError('user_msg is required but was not provided in payload')
         assert channel_id is not None
         assert message_ts is not None
 

@@ -273,7 +273,7 @@ class SlackManager(Manager[SlackViewInterface]):
                 slack_view.saas_user_auth
             )
             match, repos = self.filter_potential_repos_by_user_msg(
-                slack_view.user_msg or '', user_repos
+                slack_view.user_msg, user_repos
             )
 
             # User mentioned a matching repo is their message, start job without repo selection form

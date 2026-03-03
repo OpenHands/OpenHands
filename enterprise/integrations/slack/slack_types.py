@@ -29,7 +29,7 @@ class SlackViewInterface(SlackMessageView, SummaryExtractionTracker, ABC):
     for users who have linked their Slack account to OpenHands.
     """
 
-    user_msg: str | None
+    user_msg: str
     slack_to_openhands_user: SlackUser
     saas_user_auth: UserAuth
     selected_repo: str | None
