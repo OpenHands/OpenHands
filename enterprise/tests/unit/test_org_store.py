@@ -444,7 +444,7 @@ async def test_persist_org_with_owner_with_multiple_fields(
 
 
 @pytest.mark.asyncio
-async def test_delete_org_cascade_success(session_maker, mock_litellm_api):
+async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api):
     """
     GIVEN: Valid organization with associated data
     WHEN: delete_org_cascade is called
@@ -460,18 +460,11 @@ async def test_delete_org_cascade_success(session_maker, mock_litellm_api):
         contact_name='John Doe',
         contact_email='john@example.com',
     )
+    async with async_session_maker() as session:
+        session.add(expected_org)
+        await session.commit()
 
-    # Mock delete_org_cascade to avoid database schema constraints
-    async def mock_delete_org_cascade(org_id_param):
-        # Verify the method was called with correct parameter
-        assert org_id_param == org_id
-
-        # Return the organization object (simulating successful deletion)
-        return expected_org
-
-    with patch(
-        'storage.org_store.OrgStore.delete_org_cascade', mock_delete_org_cascade
-    ):
+    with patch('storage.org_store.a_session_maker', async_session_maker):
         # Act
         result = await OrgStore.delete_org_cascade(org_id)
 

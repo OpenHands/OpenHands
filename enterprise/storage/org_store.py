@@ -370,7 +370,7 @@ class OrgStore:
                 )
 
                 # 5. Finally delete the organization
-                await session.delete(org)
+                session.delete(org)
 
                 # 6. Clean up LiteLLM team before committing transaction
                 logger.info(
