@@ -1072,7 +1072,9 @@ async def test_delete_org_with_cleanup_unexpected_none_result(
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_success_non_llm_fields(session_maker):
+async def test_update_org_with_permissions_success_non_llm_fields(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Valid organization update with non-LLM fields and user is a member
     WHEN: update_org_with_permissions is called
@@ -1134,7 +1136,9 @@ async def test_update_org_with_permissions_success_non_llm_fields(session_maker)
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_success_llm_fields_admin(session_maker):
+async def test_update_org_with_permissions_success_llm_fields_admin(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Valid organization update with LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
@@ -1194,7 +1198,9 @@ async def test_update_org_with_permissions_success_llm_fields_admin(session_make
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_success_llm_fields_owner(session_maker):
+async def test_update_org_with_permissions_success_llm_fields_owner(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Valid organization update with LLM fields and user has owner role
     WHEN: update_org_with_permissions is called
@@ -1254,7 +1260,9 @@ async def test_update_org_with_permissions_success_llm_fields_owner(session_make
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_success_mixed_fields_admin(session_maker):
+async def test_update_org_with_permissions_success_mixed_fields_admin(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Valid organization update with both LLM and non-LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
@@ -1316,7 +1324,9 @@ async def test_update_org_with_permissions_success_mixed_fields_admin(session_ma
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_empty_update(session_maker):
+async def test_update_org_with_permissions_empty_update(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Update request with no fields (all None)
     WHEN: update_org_with_permissions is called
@@ -1455,6 +1465,7 @@ async def test_update_org_with_permissions_non_member(
 
 @pytest.mark.asyncio
 async def test_update_org_with_permissions_llm_fields_insufficient_permission(
+    async_session_maker,
     session_maker,
 ):
     """
@@ -1514,7 +1525,9 @@ async def test_update_org_with_permissions_llm_fields_insufficient_permission(
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_database_error(session_maker):
+async def test_update_org_with_permissions_database_error(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Database update operation fails
     WHEN: update_org_with_permissions is called
@@ -1558,8 +1571,8 @@ async def test_update_org_with_permissions_database_error(session_maker):
         patch('storage.role_store.session_maker', session_maker),
         patch(
             'storage.org_service.OrgStore.update_org',
-new_callable=AsyncMock,
-return_value=None,  # Simulate database failure
+            new_callable=AsyncMock,
+            return_value=None,  # Simulate database failure
         ),
     ):
         # Act & Assert
@@ -1575,6 +1588,7 @@ async def test_update_org_with_permissions_database_error(session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists_error(
+    async_session_maker,
     session_maker,
 ):
     """
@@ -1618,8 +1632,8 @@ async def test_update_org_with_permissions_duplicate_name_raises_org_name_exists
         patch('storage.org_service.OrgService.is_org_member', return_value=True),
         patch(
             'storage.org_service.OrgStore.get_org_by_name',
-new_callable=AsyncMock,
-return_value=mock_org_with_name,
+            new_callable=AsyncMock,
+            return_value=mock_org_with_name,
         ),
     ):
         # Act & Assert
@@ -1693,7 +1707,9 @@ async def test_update_org_with_permissions_same_name_allowed(
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_only_llm_fields(session_maker):
+async def test_update_org_with_permissions_only_llm_fields(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Update request contains only LLM fields and user has admin role
     WHEN: update_org_with_permissions is called
@@ -1755,7 +1771,9 @@ async def test_update_org_with_permissions_only_llm_fields(session_maker):
 
 
 @pytest.mark.asyncio
-async def test_update_org_with_permissions_only_non_llm_fields(session_maker):
+async def test_update_org_with_permissions_only_non_llm_fields(
+    async_session_maker, session_maker
+):
     """
     GIVEN: Update request contains only non-LLM fields and user is a member
     WHEN: update_org_with_permissions is called
