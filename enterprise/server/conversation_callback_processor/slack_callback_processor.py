@@ -62,7 +62,7 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
             slack_user, saas_user_auth = await slack_manager.authenticate_user(
                 self.slack_user_id
             )
-            slack_view = SlackFactory.create_slack_view_from_payload(
+            slack_view = await SlackFactory.create_slack_view_from_payload(
                 message_obj, slack_user, saas_user_auth
             )
             # Send the message directly as a string

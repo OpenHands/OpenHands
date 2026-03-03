@@ -240,12 +240,12 @@ class TestSlackCallbackProcessor:
             return_value=(mock_slack_user, mock_saas_user_auth)
         )
 
-        # Mock the SlackFactory
+        # Mock the SlackFactory (async method)
         with patch(
             'server.conversation_callback_processor.slack_callback_processor.SlackFactory'
         ) as mock_slack_factory:
-            mock_slack_factory.create_slack_view_from_payload.return_value = (
-                mock_slack_view
+            mock_slack_factory.create_slack_view_from_payload = AsyncMock(
+                return_value=mock_slack_view
             )
             mock_slack_manager.send_message = AsyncMock()
 
