@@ -733,7 +733,7 @@ class GithubFactory:
     @staticmethod
     async def create_github_view_from_payload(
         message: Message, keycloak_user_id: str
-    ) -> ResolverViewInterface:
+    ) -> GithubViewType:
         """Create the appropriate class (GithubIssue or GithubPRComment) based on the payload.
         Also return metadata about the event (e.g., action type).
         """
