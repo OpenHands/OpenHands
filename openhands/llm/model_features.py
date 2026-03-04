@@ -137,7 +137,7 @@ PROMPT_CACHE_PATTERNS: list[str] = [
     'claude-opus-4*',
     # GLM series - verified via litellm config
     'glm-4*',
-    'glm-5',
+    'glm-5*',
 ]
 
 SUPPORTS_STOP_WORDS_FALSE_PATTERNS: list[str] = [
