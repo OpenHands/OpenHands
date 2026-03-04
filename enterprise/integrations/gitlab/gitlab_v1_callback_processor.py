@@ -3,7 +3,8 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from integrations.utils import CONVERSATION_URL, get_summary_instruction
+from integrations.utils import get_summary_instruction
+from integrations.v1_utils import handle_callback_error
 from pydantic import Field
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
@@ -75,20 +76,15 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.exception('[GitLab V1] Error processing callback: %s', e)
-
-            # Only try to post error to GitLab if we have basic requirements
-            try:
-                if self.gitlab_view_data.get('keycloak_user_id'):
-                    await self._post_summary_to_gitlab(
-                        f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)}) '
-                        'for more information.'
-                    )
-            except Exception as post_error:
-                _logger.warning(
-                    '[GitLab V1] Failed to post error message to GitLab: %s', post_error
-                )
+            can_post_error = bool(self.gitlab_view_data.get('keycloak_user_id'))
+            await handle_callback_error(
+                error=e,
+                conversation_id=conversation_id,
+                service_name='GitLab',
+                service_logger=_logger,
+                can_post_error=can_post_error,
+                post_error_func=self._post_summary_to_gitlab,
+            )
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
@@ -149,8 +145,8 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f'{agent_server_url.rstrip("/")}'
-            f'/api/conversations/{conversation_id}/ask_agent'
+            f"{agent_server_url.rstrip('/')}"
+            f"/api/conversations/{conversation_id}/ask_agent"
         )
         headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
