@@ -69,13 +69,13 @@ async def verify_gitlab_signature(
         raise HTTPException(status_code=403, detail='Required payload headers missing!')
 
     if IS_LOCAL_DEPLOYMENT:
-        webhook_secret = 'localdeploymentwebhooktesttoken'
+        webhook_secret: str | None = 'localdeploymentwebhooktesttoken'
     else:
         webhook_secret = await webhook_store.get_webhook_secret(
             webhook_uuid=webhook_uuid, user_id=user_id
         )
 
-    if header_webhook_secret != webhook_secret:
+    if not webhook_secret or header_webhook_secret != webhook_secret:
         raise HTTPException(status_code=403, detail="Request signatures didn't match!")
 
 
