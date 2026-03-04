@@ -3,11 +3,8 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from integrations.utils import CONVERSATION_URL, get_summary_instruction
-from integrations.v1_utils import (
-    BUDGET_EXCEEDED_USER_MESSAGE,
-    is_budget_exceeded_error,
-)
+from integrations.utils import get_summary_instruction
+from integrations.v1_utils import handle_callback_error
 from pydantic import Field
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
@@ -49,12 +46,12 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
             return None
 
         # Only act when execution has finished
-        if not (event.key == 'execution_status' and event.value == 'finished'):
+        if not (event.key == "execution_status" and event.value == "finished"):
             return None
 
-        _logger.info('[GitLab V1] Callback agent state was %s', event)
+        _logger.info("[GitLab V1] Callback agent state was %s", event)
         _logger.info(
-            '[GitLab V1] Should request summary: %s', self.should_request_summary
+            "[GitLab V1] Should request summary: %s", self.should_request_summary
         )
 
         if not self.should_request_summary:
@@ -63,11 +60,11 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
         self.should_request_summary = False
 
         try:
-            _logger.info(f'[GitLab V1] Requesting summary {conversation_id}')
+            _logger.info(f"[GitLab V1] Requesting summary {conversation_id}")
             summary = await self._request_summary(conversation_id)
             _logger.info(
-                f'[GitLab V1] Posting summary {conversation_id}',
-                extra={'summary': summary},
+                f"[GitLab V1] Posting summary {conversation_id}",
+                extra={"summary": summary},
             )
             await self._post_summary_to_gitlab(summary)
 
@@ -79,34 +76,15 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            error_str = str(e)
-            # Use info log for budget exceeded (expected cost control behavior)
-            budget_exceeded = is_budget_exceeded_error(error_str)
-            if budget_exceeded:
-                _logger.info(
-                    '[GitLab V1] Budget exceeded for conversation %s: %s',
-                    conversation_id,
-                    e,
-                )
-            else:
-                _logger.exception('[GitLab V1] Error processing callback: %s', e)
-
-            # Only try to post error to GitLab if we have basic requirements
-            try:
-                if self.gitlab_view_data.get('keycloak_user_id'):
-                    # Use friendly message for budget exceeded errors
-                    error_detail = (
-                        BUDGET_EXCEEDED_USER_MESSAGE if budget_exceeded else error_str
-                    )
-                    await self._post_summary_to_gitlab(
-                        f'OpenHands encountered an error: **{error_detail}**\n\n'
-                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)}) '
-                        'for more information.'
-                    )
-            except Exception as post_error:
-                _logger.warning(
-                    '[GitLab V1] Failed to post error message to GitLab: %s', post_error
-                )
+            can_post_error = bool(self.gitlab_view_data.get("keycloak_user_id"))
+            await handle_callback_error(
+                error=e,
+                conversation_id=conversation_id,
+                service_name="GitLab",
+                service_logger=_logger,
+                can_post_error=can_post_error,
+                post_error_func=self._post_summary_to_gitlab,
+            )
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.ERROR,
@@ -125,16 +103,16 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
         # Import here to avoid circular imports
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        keycloak_user_id = self.gitlab_view_data.get('keycloak_user_id')
+        keycloak_user_id = self.gitlab_view_data.get("keycloak_user_id")
         if not keycloak_user_id:
-            raise RuntimeError('Missing keycloak user ID for GitLab')
+            raise RuntimeError("Missing keycloak user ID for GitLab")
 
         gitlab_service = SaaSGitLabService(external_auth_id=keycloak_user_id)
 
-        project_id = self.gitlab_view_data['project_id']
-        issue_number = self.gitlab_view_data['issue_number']
-        discussion_id = self.gitlab_view_data['discussion_id']
-        is_mr = self.gitlab_view_data.get('is_mr', False)
+        project_id = self.gitlab_view_data["project_id"]
+        issue_number = self.gitlab_view_data["issue_number"]
+        discussion_id = self.gitlab_view_data["discussion_id"]
+        is_mr = self.gitlab_view_data.get("is_mr", False)
 
         if is_mr:
             await gitlab_service.reply_to_mr(
@@ -167,10 +145,10 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f'{agent_server_url.rstrip("/")}'
-            f'/api/conversations/{conversation_id}/ask_agent'
+            f"{agent_server_url.rstrip('/')}"
+            f"/api/conversations/{conversation_id}/ask_agent"
         )
-        headers = {'X-Session-API-Key': session_api_key}
+        headers = {"X-Session-API-Key": session_api_key}
         payload = send_message_request.model_dump()
 
         try:
@@ -186,29 +164,29 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
             return agent_response.response
 
         except httpx.HTTPStatusError as e:
-            error_detail = f'HTTP {e.response.status_code} error'
+            error_detail = f"HTTP {e.response.status_code} error"
             try:
                 error_body = e.response.text
                 if error_body:
-                    error_detail += f': {error_body}'
+                    error_detail += f": {error_body}"
             except Exception:  # noqa: BLE001
                 pass
 
             _logger.error(
-                '[GitLab V1] HTTP error sending message to %s: %s. '
-                'Request payload: %s. Response headers: %s',
+                "[GitLab V1] HTTP error sending message to %s: %s. "
+                "Request payload: %s. Response headers: %s",
                 url,
                 error_detail,
                 payload,
                 dict(e.response.headers),
                 exc_info=True,
             )
-            raise Exception(f'Failed to send message to agent server: {error_detail}')
+            raise Exception(f"Failed to send message to agent server: {error_detail}")
 
         except httpx.TimeoutException:
-            error_detail = f'Request timeout after 30 seconds to {url}'
+            error_detail = f"Request timeout after 30 seconds to {url}"
             _logger.error(
-                '[GitLab V1] %s. Request payload: %s',
+                "[GitLab V1] %s. Request payload: %s",
                 error_detail,
                 payload,
                 exc_info=True,
@@ -216,9 +194,9 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
             raise Exception(error_detail)
 
         except httpx.RequestError as e:
-            error_detail = f'Request error to {url}: {str(e)}'
+            error_detail = f"Request error to {url}: {str(e)}"
             _logger.error(
-                '[GitLab V1] %s. Request payload: %s',
+                "[GitLab V1] %s. Request payload: %s",
                 error_detail,
                 payload,
                 exc_info=True,
@@ -271,9 +249,9 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert (
-                sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {sandbox.id}'
+            assert sandbox.session_api_key is not None, (
+                f"No session API key for sandbox: {sandbox.id}"
+            )
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
