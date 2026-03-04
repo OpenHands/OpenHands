@@ -197,6 +197,12 @@ class DockerSandboxService(SandboxService):
                                     )
                                 )
 
+        if not container.image.tags:
+            _logger.debug(
+                f'Skipping container {container.name!r}: image has no tags (image id: {container.image.id})'
+            )
+            return None
+
         return SandboxInfo(
             id=container.name,
             created_by_user_id=None,
