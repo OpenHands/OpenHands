@@ -77,6 +77,8 @@ PERMITTED_CORS_ORIGINS = [
     )
 ]
 
+DEFAULT_V1_ENABLED = os.getenv('DEFAULT_V1_ENABLED', '1').lower() in ('1', 'true')
+
 
 def build_litellm_proxy_model_path(model_name: str) -> str:
     """Build the LiteLLM proxy model path based on model name.
