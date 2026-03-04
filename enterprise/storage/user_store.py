@@ -30,8 +30,6 @@ from storage.user import User
 from storage.user_settings import UserSettings
 from utils.identity import resolve_display_name
 
-from openhands.utils.async_utils import GENERAL_TIMEOUT
-
 # The max possible time to wait for another process to finish creating a user before retrying
 _REDIS_CREATE_TIMEOUT_SECONDS = 30
 # The delay to wait for another process to finish creating a user before trying to load again
@@ -651,10 +649,7 @@ class UserStore:
                 return user
 
             # Check if we need to migrate from user_settings
-            while not await asyncio.wait_for(
-                UserStore._acquire_user_creation_lock(user_id),
-                timeout=GENERAL_TIMEOUT,
-            ):
+            while not UserStore._acquire_user_creation_lock(user_id):
                 # The user is already being created in another thread / process
                 logger.info(
                     'user_store:create_default_settings:waiting_for_lock',
@@ -682,26 +677,17 @@ class UserStore:
                 user_settings = result.scalars().first()
                 if user_settings:
                     token_manager = TokenManager()
-                    user_info = await asyncio.wait_for(
-                        token_manager.get_user_info_from_user_id(user_id),
-                        timeout=GENERAL_TIMEOUT,
-                    )
-                    user = await asyncio.wait_for(
-                        UserStore.migrate_user(
-                            user_id,
-                            user_settings,
-                            user_info,
-                        ),
-                        timeout=GENERAL_TIMEOUT,
+                    user_info = await token_manager.get_user_info_from_user_id(user_id)
+                    user = await UserStore.migrate_user(
+                        user_id,
+                        user_settings,
+                        user_info,
                     )
                     return user
                 else:
                     return None
             finally:
-                await asyncio.wait_for(
-                    UserStore._release_user_creation_lock(user_id),
-                    timeout=GENERAL_TIMEOUT,
-                )
+                await UserStore._release_user_creation_lock(user_id)
 
     @staticmethod
     async def get_user_by_email(email: str) -> Optional[User]:
