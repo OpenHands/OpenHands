@@ -3,7 +3,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-from github import Auth, Github, GithubIntegration
+from github import Auth, Github, GithubException, GithubIntegration
 from integrations.utils import get_summary_instruction
 from integrations.v1_utils import handle_callback_error
 from pydantic import Field
@@ -132,19 +132,34 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         full_repo_name = self.github_view_data['full_repo_name']
         issue_number = self.github_view_data['issue_number']
 
-        if self.inline_pr_comment:
+        try:
+            if self.inline_pr_comment:
+                with Github(auth=Auth.Token(installation_token)) as github_client:
+                    repo = github_client.get_repo(full_repo_name)
+                    pr = repo.get_pull(issue_number)
+                    pr.create_review_comment_reply(
+                        comment_id=self.github_view_data.get('comment_id', ''), body=summary
+                    )
+                return
+
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(full_repo_name)
-                pr = repo.get_pull(issue_number)
-                pr.create_review_comment_reply(
-                    comment_id=self.github_view_data.get('comment_id', ''), body=summary
+                issue = repo.get_issue(number=issue_number)
+                issue.create_comment(summary)
+        except GithubException as e:
+            if e.status == 410:
+                _logger.info(
+                    '[GitHub V1] Issue/PR %s#%s was deleted, skipping summary post',
+                    full_repo_name,
+                    issue_number,
                 )
-            return
-
-        with Github(auth=Auth.Token(installation_token)) as github_client:
-            repo = github_client.get_repo(full_repo_name)
-            issue = repo.get_issue(number=issue_number)
-            issue.create_comment(summary)
+            else:
+                _logger.warning(
+                    '[GitHub V1] Failed to post summary to %s#%s: %s',
+                    full_repo_name,
+                    issue_number,
+                    e,
+                )
 
     # -------------------------------------------------------------------------
     # Agent / sandbox helpers
