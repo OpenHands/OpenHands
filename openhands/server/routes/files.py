@@ -325,11 +325,18 @@ async def git_diff(
     runtime: Runtime = conversation.runtime
 
     cwd = runtime.config.workspace_mount_path_in_sandbox
+    logger.info(f'Getting git diff for {path} in {cwd}')
 
     try:
         diff = await call_sync_from_async(runtime.get_git_diff, path, cwd)
         return diff
     except AgentRuntimeUnavailableError as e:
+        logger.error(f'Runtime unavailable: {e}')
+        return JSONResponse(
+            status_code=500,
+            content={'error': f'Runtime unavailable: {e}'},
+        )
+    except Exception as e:
         logger.error(f'Error getting diff: {e}')
         return JSONResponse(
             status_code=500,

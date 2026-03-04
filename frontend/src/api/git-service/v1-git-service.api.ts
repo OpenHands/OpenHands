@@ -83,11 +83,21 @@ class V1GitService {
     const url = this.buildRuntimeUrl(conversationUrl, `/api/git/diff`);
     const headers = buildSessionHeaders(sessionApiKey);
 
-    const { data } = await axios.get<GitChangeDiff>(url, {
-      headers,
-      params: { path },
-    });
-    return data;
+    try {
+      const { data } = await axios.get<GitChangeDiff>(url, {
+        headers,
+        params: { path },
+      });
+      return data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error('V1GitService.getGitChangeDiff error:', error.response?.data);
+        throw new Error(
+          `Failed to get git diff: ${error.response?.data?.error || error.message}`
+        );
+      }
+      throw error;
+    }
   }
 }
 

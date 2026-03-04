@@ -9,9 +9,20 @@ import { getGitPath } from "#/utils/get-git-path";
 import type { GitChange } from "#/api/open-hands.types";
 
 /**
+ * Check if the URL is a local development URL (relative path without host)
+ * In local development, we should use V0 endpoints even for V1 conversations
+ */
+function isLocalDevelopment(conversationUrl: string | null | undefined): boolean {
+  // If conversationUrl is a relative path (starts with /api), it's local development
+  // In this case, the backend doesn't have a separate agent-server
+  return !conversationUrl || conversationUrl.startsWith('/api');
+}
+
+/**
  * Unified hook to get git changes for both legacy (V0) and V1 conversations
  * - V0: Uses the legacy GitService.getGitChanges API endpoint
- * - V1: Uses the V1GitService.getGitChanges API endpoint with runtime URL
+ * - V1: Uses the V1GitService.getGitChangeDiff API endpoint with runtime URL
+ *   (but falls back to V0 for local development where there's no separate agent-server)
  */
 export const useUnifiedGetGitChanges = () => {
   const { conversationId } = useConversationId();
@@ -43,7 +54,9 @@ export const useUnifiedGetGitChanges = () => {
       if (!conversationId) throw new Error("No conversation ID");
 
       // V1: Use the V1 API endpoint with runtime URL
-      if (isV1Conversation) {
+      // But for local development (where conversationUrl is relative), use V0 endpoints
+      // because there's no separate agent-server in local mode
+      if (isV1Conversation && !isLocalDevelopment(conversationUrl)) {
         return V1GitService.getGitChanges(
           conversationUrl,
           sessionApiKey,
