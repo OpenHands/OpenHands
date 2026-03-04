@@ -310,7 +310,10 @@ class GithubManager(Manager[GithubViewType]):
                 issue.create_comment(message)
 
         else:
-            logger.warning('Unsupported location')
+            # Catch any new types added to GithubViewType that aren't handled above
+            logger.warning(  # type: ignore[unreachable]
+                f'Unsupported github_view type: {type(github_view).__name__}'
+            )
             return
 
     async def start_job(self, github_view: GithubViewType) -> None:

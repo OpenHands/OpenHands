@@ -792,7 +792,8 @@ async def get_org_members(
                 ),
             }
             status_code, detail = error_map.get(
-                error_code, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+                error_code or '',
+                (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred'),
             )
             raise HTTPException(status_code=status_code, detail=detail)
 
@@ -927,7 +928,8 @@ async def remove_org_member(
                 ),
             }
             status_code, detail = error_map.get(
-                error, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+                error or '',
+                (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred'),
             )
             raise HTTPException(status_code=status_code, detail=detail)
 
