@@ -14,7 +14,7 @@ from typing import AsyncIterator
 from fastapi.routing import Mount
 
 with warnings.catch_warnings():
-    warnings.simplefilter('ignore')
+    warnings.simplefilter("ignore")
 
 from fastapi import (
     FastAPI,
@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 
 import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
 from openhands.app_server import v1_router
+from openhands.app_server.web_client import web_client_router
 from openhands.app_server.config import get_app_lifespan_service
 from openhands.integrations.service_types import AuthenticationError
 from openhands.server.routes.conversation import app as conversation_api_router
@@ -44,7 +45,7 @@ from openhands.server.shared import conversation_manager, server_config
 from openhands.server.types import AppMode
 from openhands.version import get_version
 
-mcp_app = mcp_server.http_app(path='/mcp', stateless_http=True)
+mcp_app = mcp_server.http_app(path="/mcp", stateless_http=True)
 
 
 def combine_lifespans(*lifespans):
@@ -72,11 +73,11 @@ if app_lifespan_:
 
 
 app = FastAPI(
-    title='OpenHands',
-    description='OpenHands: Code Less, Make More',
+    title="OpenHands",
+    description="OpenHands: Code Less, Make More",
     version=get_version(),
     lifespan=combine_lifespans(*lifespans),
-    routes=[Mount(path='/mcp', app=mcp_app)],
+    routes=[Mount(path="/mcp", app=mcp_app)],
 )
 
 
@@ -100,5 +101,9 @@ if server_config.app_mode == AppMode.OPENHANDS:
     app.include_router(git_api_router)
 if server_config.enable_v1:
     app.include_router(v1_router.router)
+else:
+    # Even in V0 mode, we need the web client config endpoint for the frontend
+    # to know which identity providers are configured
+    app.include_router(web_client_router.router, prefix="/api/v1")
 app.include_router(trajectory_router)
 add_health_endpoints(app)
