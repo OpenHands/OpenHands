@@ -301,12 +301,17 @@ class GithubManager(Manager[GithubViewType]):
                     comment_id=github_view.comment_id, body=message
                 )
 
-        else:
-            # GithubPRComment, GithubIssueComment, or GithubIssue
+        elif isinstance(
+            github_view, (GithubPRComment, GithubIssueComment, GithubIssue)
+        ):
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
                 issue = repo.get_issue(number=github_view.issue_number)
                 issue.create_comment(message)
+
+        else:
+            logger.warning('Unsupported location')
+            return
 
     async def start_job(self, github_view: GithubViewType) -> None:
         """Kick off a job with openhands agent.
