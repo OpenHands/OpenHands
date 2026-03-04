@@ -18,10 +18,10 @@ def is_budget_exceeded_error(error_message: str) -> bool:
     since they are expected cost control behavior rather than unexpected errors.
     """
     lower_message = error_message.lower()
-    return "budget" in lower_message and "exceeded" in lower_message
+    return 'budget' in lower_message and 'exceeded' in lower_message
 
 
-BUDGET_EXCEEDED_USER_MESSAGE = "LLM budget has been exceeded, please re-fill."
+BUDGET_EXCEEDED_USER_MESSAGE = 'LLM budget has been exceeded, please re-fill.'
 
 
 async def handle_callback_error(
@@ -53,14 +53,14 @@ async def handle_callback_error(
     # Log appropriately based on error type
     if budget_exceeded:
         service_logger.info(
-            "[%s V1] Budget exceeded for conversation %s: %s",
+            '[%s V1] Budget exceeded for conversation %s: %s',
             service_name,
             conversation_id,
             error,
         )
     else:
         service_logger.exception(
-            "[%s V1] Error processing callback: %s", service_name, error
+            '[%s V1] Error processing callback: %s', service_name, error
         )
 
     # Try to post error message to the platform
@@ -70,13 +70,13 @@ async def handle_callback_error(
                 BUDGET_EXCEEDED_USER_MESSAGE if budget_exceeded else error_str
             )
             await post_error_func(
-                f"OpenHands encountered an error: **{error_detail}**\n\n"
-                f"[See the conversation]({CONVERSATION_URL.format(conversation_id)}) "
-                "for more information."
+                f'OpenHands encountered an error: **{error_detail}**\n\n'
+                f'[See the conversation]({CONVERSATION_URL.format(conversation_id)}) '
+                'for more information.'
             )
         except Exception as post_error:
             service_logger.warning(
-                "[%s V1] Failed to post error message to %s: %s",
+                '[%s V1] Failed to post error message to %s: %s',
                 service_name,
                 service_name,
                 post_error,
@@ -88,7 +88,7 @@ async def get_saas_user_auth(
 ) -> UserAuth:
     offline_token = await token_manager.load_offline_token(keycloak_user_id)
     if offline_token is None:
-        logger.info("no_offline_token_found")
+        logger.info('no_offline_token_found')
 
     user_auth = SaasUserAuth(
         user_id=keycloak_user_id,
