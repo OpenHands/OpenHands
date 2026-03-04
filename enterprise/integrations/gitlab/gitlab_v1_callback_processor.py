@@ -115,11 +115,8 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
 
         project_id = self.gitlab_view_data['project_id']
         issue_number = self.gitlab_view_data['issue_number']
-        discussion_id = self.gitlab_view_data.get('discussion_id')
+        discussion_id = self.gitlab_view_data['discussion_id']
         is_mr = self.gitlab_view_data.get('is_mr', False)
-
-        if not discussion_id:
-            raise RuntimeError('Missing discussion_id for GitLab reply')
 
         if is_mr:
             await gitlab_service.reply_to_mr(
