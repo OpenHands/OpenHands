@@ -22,7 +22,7 @@ from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
-from server.auth.user_create_authorizer import (
+from server.auth.user_create.user_create_authorizer import (
     UserCreateAuthorizer,
     depends_user_create_authorizer,
 )
@@ -163,8 +163,6 @@ async def keycloak_callback(
 ):
     # Extract redirect URL, reCAPTCHA token, and invitation token from state
     redirect_url, recaptcha_token, invitation_token = _extract_oauth_state(state)
-    if not redirect_url:
-        redirect_url = get_global_config().web_url
 
     if not code:
         # check if this is a forward from the account linking page

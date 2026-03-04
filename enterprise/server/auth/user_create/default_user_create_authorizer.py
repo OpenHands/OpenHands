@@ -52,7 +52,7 @@ class DefaultUserCreateAuthorizer(UserCreateAuthorizer):
             ):
                 return UserCreateAuthorization(success=False, detail='blocked')
 
-            return True
+            return UserCreateAuthorization(success=True)
         except Exception:
             logger.exception('error authorizing user', extra={'user_id': user_id})
             return UserCreateAuthorization(success=False)
