@@ -22,6 +22,7 @@ from storage.role_store import RoleStore
 from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
+from openhands.storage.data_models.settings import Settings
 
 
 class OrgInvitationService:
@@ -373,11 +374,18 @@ class OrgInvitationService:
         org_member_kwargs.pop('llm_model', None)
         org_member_kwargs.pop('llm_base_url', None)
 
+        # Get the llm_api_key as string (it's SecretStr | None in Settings)
+        llm_api_key = (
+            settings.llm_api_key.get_secret_value()
+            if settings.llm_api_key
+            else ''
+        )
+
         await OrgMemberStore.add_user_to_org(
             org_id=invitation.org_id,
             user_id=user_id,
             role_id=invitation.role_id,
-            llm_api_key=settings.llm_api_key,
+            llm_api_key=llm_api_key,
             status='active',
         )
 
@@ -387,6 +395,9 @@ class OrgInvitationService:
             OrgInvitation.STATUS_ACCEPTED,
             accepted_by_user_id=user_id,
         )
+
+        if not updated_invitation:
+            raise InvitationInvalidError('Failed to update invitation status')
 
         logger.info(
             'Organization invitation accepted',

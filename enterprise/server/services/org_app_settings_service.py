@@ -39,8 +39,11 @@ class OrgAppSettingsService:
 
         Raises:
             OrgNotFoundError: If current organization is not found
+            ValueError: If user is not authenticated
         """
         user_id = await self.user_context.get_user_id()
+        if not user_id:
+            raise ValueError('User not authenticated')
 
         logger.info(
             'Getting organization app settings',
@@ -72,8 +75,11 @@ class OrgAppSettingsService:
 
         Raises:
             OrgNotFoundError: If current organization is not found
+            ValueError: If user is not authenticated
         """
         user_id = await self.user_context.get_user_id()
+        if not user_id:
+            raise ValueError('User not authenticated')
 
         logger.info(
             'Updating organization app settings',
