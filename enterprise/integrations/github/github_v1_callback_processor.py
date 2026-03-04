@@ -5,6 +5,7 @@ from uuid import UUID
 import httpx
 from github import Auth, Github, GithubIntegration
 from integrations.utils import CONVERSATION_URL, get_summary_instruction
+from integrations.v1_utils import is_budget_exceeded_error
 from pydantic import Field
 from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
@@ -78,7 +79,16 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.exception('[GitHub V1] Error processing callback: %s', e)
+            error_str = str(e)
+            # Use info log for budget exceeded (expected cost control behavior)
+            if is_budget_exceeded_error(error_str):
+                _logger.info(
+                    '[GitHub V1] Budget exceeded for conversation %s: %s',
+                    conversation_id,
+                    e,
+                )
+            else:
+                _logger.exception('[GitHub V1] Error processing callback: %s', e)
 
             # Only try to post error to GitHub if we have basic requirements
             try:

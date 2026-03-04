@@ -6,6 +6,16 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth.user_auth import UserAuth
 
 
+def is_budget_exceeded_error(error_message: str) -> bool:
+    """Check if an error message indicates a budget exceeded condition.
+
+    This is used to downgrade error logs to info logs for budget exceeded errors
+    since they are expected cost control behavior rather than unexpected errors.
+    """
+    lower_message = error_message.lower()
+    return 'budget' in lower_message and 'exceeded' in lower_message
+
+
 async def get_saas_user_auth(
     keycloak_user_id: str, token_manager: TokenManager
 ) -> UserAuth:
