@@ -1171,7 +1171,7 @@ class LiteLlmManager:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
             logger.warning('LiteLLM API configuration not found')
             return None
-        user = await UserStore.get_user_by_id_async(keycloak_user_id)
+        user = await UserStore.get_user_by_id(keycloak_user_id)
         if not user:
             return {}
 

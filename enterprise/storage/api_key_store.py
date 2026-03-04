@@ -37,7 +37,9 @@ class ApiKeyStore:
             The generated API key
         """
         api_key = self.generate_api_key()
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
 
         async with a_session_maker() as session:
@@ -115,7 +117,9 @@ class ApiKeyStore:
 
     async def list_api_keys(self, user_id: str) -> list[ApiKey]:
         """List all API keys for a user."""
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
 
         async with a_session_maker() as session:
@@ -128,7 +132,9 @@ class ApiKeyStore:
             return [key for key in keys if key.name != 'MCP_API_KEY']
 
     async def retrieve_mcp_api_key(self, user_id: str) -> str | None:
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
 
         async with a_session_maker() as session:

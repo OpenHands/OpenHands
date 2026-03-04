@@ -569,7 +569,7 @@ class GitHubDataCollector:
         openhands_helped_author = openhands_commit_count > 0
 
         # Update the PR with OpenHands statistics
-        update_success = store.update_pr_openhands_stats(
+        update_success = await store.update_pr_openhands_stats(
             repo_id=repo_id,
             pr_number=pr_number,
             original_updated_at=openhands_pr.updated_at,
@@ -612,7 +612,7 @@ class GitHubDataCollector:
         action = payload.get('action', '')
         return action == 'closed' and 'pull_request' in payload
 
-    def _track_closed_or_merged_pr(self, payload):
+    async def _track_closed_or_merged_pr(self, payload):
         """
         Track PR closed/merged event
         """
@@ -671,17 +671,17 @@ class GitHubDataCollector:
             num_general_comments=num_general_comments,
         )
 
-        store.insert_pr(pr)
+        await store.insert_pr(pr)
         logger.info(f'Tracked PR {status}: {repo_id}#{pr_number}')
 
-    def process_payload(self, message: Message):
+    async def process_payload(self, message: Message):
         if not COLLECT_GITHUB_INTERACTIONS:
             return
 
         raw_payload = message.message.get('payload', {})
 
         if self._is_pr_closed_or_merged(raw_payload):
-            self._track_closed_or_merged_pr(raw_payload)
+            await self._track_closed_or_merged_pr(raw_payload)
 
     async def save_data(self, github_view: ResolverViewInterface):
         if not COLLECT_GITHUB_INTERACTIONS:

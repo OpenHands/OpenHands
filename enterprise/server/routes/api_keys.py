@@ -17,7 +17,7 @@ from openhands.server.user_auth import get_user_id
 # Helper functions for BYOR API key management
 async def get_byor_key_from_db(user_id: str) -> str | None:
     """Get the BYOR key from the database for a user."""
-    user = await UserStore.get_user_by_id_async(user_id)
+    user = await UserStore.get_user_by_id(user_id)
     if not user:
         return None
 
@@ -36,7 +36,7 @@ async def get_byor_key_from_db(user_id: str) -> str | None:
 
 async def store_byor_key_in_db(user_id: str, key: str) -> None:
     """Store the BYOR key in the database for a user."""
-    user = await UserStore.get_user_by_id_async(user_id)
+    user = await UserStore.get_user_by_id(user_id)
     if not user:
         return None
 
@@ -49,13 +49,13 @@ async def store_byor_key_in_db(user_id: str, key: str) -> None:
     if not current_org_member:
         return None
     current_org_member.llm_api_key_for_byor = key
-    OrgMemberStore.update_org_member(current_org_member)
+    await OrgMemberStore.update_org_member(current_org_member)
 
 
 async def generate_byor_key(user_id: str) -> str | None:
     """Generate a new BYOR key for a user."""
     try:
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
         if not user:
             return None
         current_org_id = str(user.current_org_id)
@@ -98,7 +98,7 @@ async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
     """
     try:
         # Get user to construct the key alias
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
         key_alias = None
         if user and user.current_org_id:
             key_alias = f'BYOR Key - user {user_id}, org {user.current_org_id}'

@@ -101,11 +101,11 @@ async def test_create_default_settings_with_litellm(mock_litellm_api):
     assert settings.llm_base_url == 'http://test.url'
 
 
-# --- Tests for get_user_by_id_async ---
+# --- Tests for get_user_by_id ---
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_id_async_existing_user(async_session_maker):
+async def test_get_user_by_id_existing_user(async_session_maker):
     """Test retrieving an existing user by ID."""
     user_id = uuid.uuid4()
     org_id = uuid.uuid4()
@@ -120,7 +120,7 @@ async def test_get_user_by_id_async_existing_user(async_session_maker):
 
     # Test retrieval with patched session maker
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_id_async(str(user_id))
+        result = await UserStore.get_user_by_id(str(user_id))
 
     assert result is not None
     assert result.id == user_id
@@ -128,8 +128,8 @@ async def test_get_user_by_id_async_existing_user(async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_id_async_user_not_found(async_session_maker):
-    """Test that get_user_by_id_async returns None for non-existent user."""
+async def test_get_user_by_id_user_not_found(async_session_maker):
+    """Test that get_user_by_id returns None for non-existent user."""
     non_existent_id = str(uuid.uuid4())
 
     with patch('storage.user_store.a_session_maker', async_session_maker):
@@ -138,16 +138,16 @@ async def test_get_user_by_id_async_user_not_found(async_session_maker):
             patch.object(UserStore, '_acquire_user_creation_lock', return_value=True),
             patch.object(UserStore, '_release_user_creation_lock', return_value=True),
         ):
-            result = await UserStore.get_user_by_id_async(non_existent_id)
+            result = await UserStore.get_user_by_id(non_existent_id)
 
     assert result is None
 
 
-# --- Tests for get_user_by_email_async ---
+# --- Tests for get_user_by_email ---
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_email_async_existing_user(async_session_maker):
+async def test_get_user_by_email_existing_user(async_session_maker):
     """Test retrieving a user by email."""
     user_id = uuid.uuid4()
     org_id = uuid.uuid4()
@@ -163,7 +163,7 @@ async def test_get_user_by_email_async_existing_user(async_session_maker):
 
     # Test retrieval
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_email_async(email)
+        result = await UserStore.get_user_by_email(email)
 
     assert result is not None
     assert result.id == user_id
@@ -171,28 +171,28 @@ async def test_get_user_by_email_async_existing_user(async_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_email_async_not_found(async_session_maker):
-    """Test that get_user_by_email_async returns None for non-existent email."""
+async def test_get_user_by_email_not_found(async_session_maker):
+    """Test that get_user_by_email returns None for non-existent email."""
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_email_async('nonexistent@example.com')
+        result = await UserStore.get_user_by_email('nonexistent@example.com')
 
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_email_async_empty_email(async_session_maker):
-    """Test that get_user_by_email_async returns None for empty email."""
+async def test_get_user_by_email_empty_email(async_session_maker):
+    """Test that get_user_by_email returns None for empty email."""
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_email_async('')
+        result = await UserStore.get_user_by_email('')
 
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_email_async_none_email(async_session_maker):
-    """Test that get_user_by_email_async returns None for None email."""
+async def test_get_user_by_email_none_email(async_session_maker):
+    """Test that get_user_by_email returns None for None email."""
     with patch('storage.user_store.a_session_maker', async_session_maker):
-        result = await UserStore.get_user_by_email_async(None)
+        result = await UserStore.get_user_by_email(None)
 
     assert result is None
 
@@ -543,47 +543,50 @@ async def test_backfill_contact_name_no_real_name(async_session_maker):
         assert org.contact_name == 'jdoe'
 
 
-# --- Tests for update_current_org (sync) ---
+# --- Tests for update_current_org ---
 
 
-def test_update_current_org_success(session_maker):
+@pytest.mark.asyncio
+async def test_update_current_org_success(async_session_maker):
     """Test updating a user's current organization."""
     user_id = uuid.uuid4()
     initial_org_id = uuid.uuid4()
     new_org_id = uuid.uuid4()
 
     # Create test data
-    with session_maker() as session:
+    async with async_session_maker() as session:
         org1 = Org(id=initial_org_id, name='org1')
         org2 = Org(id=new_org_id, name='org2')
         session.add_all([org1, org2])
         user = User(id=user_id, current_org_id=initial_org_id)
         session.add(user)
-        session.commit()
+        await session.commit()
 
     # Update current org
-    with patch('storage.user_store.session_maker', session_maker):
-        result = UserStore.update_current_org(str(user_id), new_org_id)
+    with patch('storage.user_store.a_session_maker', async_session_maker):
+        result = await UserStore.update_current_org(str(user_id), new_org_id)
 
     assert result is not None
     assert result.current_org_id == new_org_id
 
 
-def test_update_current_org_user_not_found(session_maker):
+@pytest.mark.asyncio
+async def test_update_current_org_user_not_found(async_session_maker):
     """Test that update_current_org returns None for non-existent user."""
     user_id = str(uuid.uuid4())
     org_id = uuid.uuid4()
 
-    with patch('storage.user_store.session_maker', session_maker):
-        result = UserStore.update_current_org(user_id, org_id)
+    with patch('storage.user_store.a_session_maker', async_session_maker):
+        result = await UserStore.update_current_org(user_id, org_id)
 
     assert result is None
 
 
-# --- Tests for list_users (sync) ---
+# --- Tests for list_users ---
 
 
-def test_list_users(session_maker):
+@pytest.mark.asyncio
+async def test_list_users(async_session_maker):
     """Test listing all users."""
     user_id1 = uuid.uuid4()
     user_id2 = uuid.uuid4()
@@ -591,18 +594,18 @@ def test_list_users(session_maker):
     org_id2 = uuid.uuid4()
 
     # Create test data
-    with session_maker() as session:
+    async with async_session_maker() as session:
         org1 = Org(id=org_id1, name='org1')
         org2 = Org(id=org_id2, name='org2')
         session.add_all([org1, org2])
         user1 = User(id=user_id1, current_org_id=org_id1)
         user2 = User(id=user_id2, current_org_id=org_id2)
         session.add_all([user1, user2])
-        session.commit()
+        await session.commit()
 
     # List users
-    with patch('storage.user_store.session_maker', session_maker):
-        users = UserStore.list_users()
+    with patch('storage.user_store.a_session_maker', async_session_maker):
+        users = await UserStore.list_users()
 
     assert len(users) >= 2
     user_ids = [user.id for user in users]

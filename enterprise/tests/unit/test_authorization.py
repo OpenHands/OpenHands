@@ -336,7 +336,8 @@ class TestHasPermission:
 class TestGetUserOrgRole:
     """Tests for get_user_org_role function."""
 
-    def test_returns_role_when_member_exists(self):
+    @pytest.mark.asyncio
+    async def test_returns_role_when_member_exists(self):
         """
         GIVEN: User is a member of organization with role
         WHEN: get_user_org_role is called
@@ -354,17 +355,20 @@ class TestGetUserOrgRole:
         with (
             patch(
                 'server.auth.authorization.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
                 return_value=mock_org_member,
             ),
             patch(
                 'server.auth.authorization.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
                 return_value=mock_role,
             ),
         ):
-            result = get_user_org_role(user_id, org_id)
+            result = await get_user_org_role(user_id, org_id)
             assert result == mock_role
 
-    def test_returns_none_when_not_member(self):
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_member(self):
         """
         GIVEN: User is not a member of organization
         WHEN: get_user_org_role is called
@@ -375,12 +379,14 @@ class TestGetUserOrgRole:
 
         with patch(
             'server.auth.authorization.OrgMemberStore.get_org_member',
+            new_callable=AsyncMock,
             return_value=None,
         ):
-            result = get_user_org_role(user_id, org_id)
+            result = await get_user_org_role(user_id, org_id)
             assert result is None
 
-    def test_returns_role_when_org_id_is_none(self):
+    @pytest.mark.asyncio
+    async def test_returns_role_when_org_id_is_none(self):
         """
         GIVEN: User with a current organization
         WHEN: get_user_org_role is called with org_id=None
@@ -397,22 +403,26 @@ class TestGetUserOrgRole:
         with (
             patch(
                 'server.auth.authorization.OrgMemberStore.get_org_member_for_current_org',
+                new_callable=AsyncMock,
                 return_value=mock_org_member,
             ) as mock_get_current,
             patch(
                 'server.auth.authorization.OrgMemberStore.get_org_member',
+                new_callable=AsyncMock,
             ) as mock_get_org_member,
             patch(
                 'server.auth.authorization.RoleStore.get_role_by_id',
+                new_callable=AsyncMock,
                 return_value=mock_role,
             ),
         ):
-            result = get_user_org_role(user_id, None)
+            result = await get_user_org_role(user_id, None)
             assert result == mock_role
             mock_get_current.assert_called_once()
             mock_get_org_member.assert_not_called()
 
-    def test_returns_none_when_org_id_is_none_and_no_current_org(self):
+    @pytest.mark.asyncio
+    async def test_returns_none_when_org_id_is_none_and_no_current_org(self):
         """
         GIVEN: User with no current organization membership
         WHEN: get_user_org_role is called with org_id=None
@@ -422,9 +432,10 @@ class TestGetUserOrgRole:
 
         with patch(
             'server.auth.authorization.OrgMemberStore.get_org_member_for_current_org',
+            new_callable=AsyncMock,
             return_value=None,
         ):
-            result = get_user_org_role(user_id, None)
+            result = await get_user_org_role(user_id, None)
             assert result is None
 
 
@@ -450,7 +461,7 @@ class TestRequirePermission:
         mock_role.name = 'admin'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
@@ -484,7 +495,7 @@ class TestRequirePermission:
         org_id = uuid4()
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=None),
         ):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
@@ -508,7 +519,7 @@ class TestRequirePermission:
         mock_role.name = 'member'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
@@ -532,7 +543,7 @@ class TestRequirePermission:
         mock_role.name = 'owner'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
@@ -553,7 +564,7 @@ class TestRequirePermission:
         mock_role.name = 'admin'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.DELETE_ORGANIZATION)
@@ -577,7 +588,7 @@ class TestRequirePermission:
 
         with (
             patch(
-                'server.auth.authorization.get_user_org_role_async',
+                'server.auth.authorization.get_user_org_role',
                 AsyncMock(return_value=mock_role),
             ),
             patch('server.auth.authorization.logger') as mock_logger,
@@ -605,7 +616,7 @@ class TestRequirePermission:
         mock_role.name = 'admin'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ) as mock_get_role:
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
@@ -623,7 +634,7 @@ class TestRequirePermission:
         user_id = str(uuid4())
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=None),
         ):
             permission_checker = require_permission(Permission.VIEW_LLM_SETTINGS)
@@ -656,7 +667,7 @@ class TestPermissionScenarios:
         mock_role.name = 'member'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.MANAGE_SECRETS)
@@ -677,7 +688,7 @@ class TestPermissionScenarios:
         mock_role.name = 'member'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(
@@ -702,7 +713,7 @@ class TestPermissionScenarios:
         mock_role.name = 'admin'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(
@@ -725,7 +736,7 @@ class TestPermissionScenarios:
         mock_role.name = 'admin'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.CHANGE_USER_ROLE_OWNER)
@@ -748,7 +759,7 @@ class TestPermissionScenarios:
         mock_role.name = 'owner'
 
         with patch(
-            'server.auth.authorization.get_user_org_role_async',
+            'server.auth.authorization.get_user_org_role',
             AsyncMock(return_value=mock_role),
         ):
             permission_checker = require_permission(Permission.CHANGE_USER_ROLE_OWNER)

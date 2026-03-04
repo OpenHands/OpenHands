@@ -99,7 +99,7 @@ async def list_user_orgs(
 
     try:
         # Fetch user to get current_org_id
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
         current_org_id = (
             str(user.current_org_id) if user and user.current_org_id else None
         )
@@ -497,7 +497,7 @@ async def get_me(
 
     try:
         user_uuid = UUID(user_id)
-        return OrgMemberService.get_me(org_id, user_uuid)
+        return await OrgMemberService.get_me(org_id, user_uuid)
 
     except OrgMemberNotFoundError:
         raise HTTPException(

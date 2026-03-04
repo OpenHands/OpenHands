@@ -601,6 +601,12 @@ async def get_current_workspace_link(request: Request):
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
 
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User ID not found',
+            )
+
         user = await jira_manager.integration_store.get_user_by_active_workspace(
             user_id
         )
@@ -653,6 +659,12 @@ async def unlink_workspace(request: Request):
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User ID not found',
+            )
 
         user = await jira_manager.integration_store.get_user_by_active_workspace(
             user_id

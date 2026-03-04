@@ -20,6 +20,7 @@ from integrations.utils import (
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
 )
+from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
@@ -169,7 +170,7 @@ class GitlabManager(Manager[GitlabViewType]):
                 f'[GitLab] Unsupported view type: {type(gitlab_view).__name__}'
             )
 
-    async def start_job(self, gitlab_view: GitlabViewType):
+    async def start_job(self, gitlab_view: GitlabViewType) -> None:
         """
         Start a job for the GitLab view.
 
@@ -214,8 +215,18 @@ class GitlabManager(Manager[GitlabViewType]):
                     )
                 )
 
+                # Initialize conversation and get metadata (following GitHub pattern)
+                convo_metadata = await gitlab_view.initialize_new_conversation()
+
+                saas_user_auth = await get_saas_user_auth(
+                    gitlab_view.user_info.keycloak_user_id, self.token_manager
+                )
+
                 await gitlab_view.create_new_conversation(
-                    self.jinja_env, secret_store.provider_tokens
+                    self.jinja_env,
+                    secret_store.provider_tokens,
+                    convo_metadata,
+                    saas_user_auth,
                 )
 
                 conversation_id = gitlab_view.conversation_id
@@ -224,18 +235,19 @@ class GitlabManager(Manager[GitlabViewType]):
                     f'[GitLab] Created conversation {conversation_id} for user {user_info.username}'
                 )
 
-                # Create a GitlabCallbackProcessor for this conversation
-                processor = GitlabCallbackProcessor(
-                    gitlab_view=gitlab_view,
-                    send_summary_instruction=True,
-                )
+                if not gitlab_view.v1_enabled:
+                    # Create a GitlabCallbackProcessor for this conversation
+                    processor = GitlabCallbackProcessor(
+                        gitlab_view=gitlab_view,
+                        send_summary_instruction=True,
+                    )
 
-                # Register the callback processor
-                register_callback_processor(conversation_id, processor)
+                    # Register the callback processor
+                    register_callback_processor(conversation_id, processor)
 
-                logger.info(
-                    f'[GitLab] Created callback processor for conversation {conversation_id}'
-                )
+                    logger.info(
+                        f'[GitLab] Created callback processor for conversation {conversation_id}'
+                    )
 
                 conversation_link = CONVERSATION_URL.format(conversation_id)
                 msg_info = f"I'm on it! {user_info.username} can [track my progress at all-hands.dev]({conversation_link})"
