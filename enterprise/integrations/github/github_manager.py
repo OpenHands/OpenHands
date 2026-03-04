@@ -68,11 +68,8 @@ class GithubManager(Manager[GithubViewType]):
 
         return f'{owner}/{repo_name}'
 
-    def _get_installation_access_token(self, installation_id: str) -> str:
-        # get_access_token is typed to only accept int, but it can handle str.
-        token_data = self.github_integration.get_access_token(
-            installation_id  # type: ignore[arg-type]
-        )
+    def _get_installation_access_token(self, installation_id: int) -> str:
+        token_data = self.github_integration.get_access_token(installation_id)
         return token_data.token
 
     def _add_reaction(
@@ -282,14 +279,14 @@ class GithubManager(Manager[GithubViewType]):
             self._add_reaction(github_view, 'eyes', installation_token)
             await self.start_job(github_view)
 
-    async def send_message(self, message: str, github_view: ResolverViewInterface):
+    async def send_message(self, message: str, github_view: GithubViewType):
         """Send a message to GitHub.
 
         Args:
             message: The message content to send (plain text string)
             github_view: The GitHub view object containing issue/PR/comment info
         """
-        installation_token = self.token_manager.load_org_token(
+        installation_token = await self.token_manager.load_org_token(
             github_view.installation_id
         )
         if not installation_token:
@@ -304,10 +301,8 @@ class GithubManager(Manager[GithubViewType]):
                     comment_id=github_view.comment_id, body=message
                 )
 
-        elif (
-            isinstance(github_view, GithubPRComment)
-            or isinstance(github_view, GithubIssueComment)
-            or isinstance(github_view, GithubIssue)
+        elif isinstance(
+            github_view, (GithubPRComment, GithubIssueComment, GithubIssue)
         ):
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)

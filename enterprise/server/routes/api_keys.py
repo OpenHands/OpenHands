@@ -66,22 +66,15 @@ async def generate_byor_key(user_id: str) -> str | None:
             {'type': 'byor'},
         )
 
-        if key:
-            logger.info(
-                'Successfully generated new BYOR key',
-                extra={
-                    'user_id': user_id,
-                    'key_length': len(key) if key else 0,
-                    'key_prefix': key[:10] + '...' if key and len(key) > 10 else key,
-                },
-            )
-            return key
-        else:
-            logger.error(
-                'Failed to generate BYOR LLM API key - no key in response',
-                extra={'user_id': user_id},
-            )
-            return None
+        logger.info(
+            'Successfully generated new BYOR key',
+            extra={
+                'user_id': user_id,
+                'key_length': len(key),
+                'key_prefix': key[:10] + '...' if len(key) > 10 else key,
+            },
+        )
+        return key
     except Exception as e:
         logger.exception(
             'Error generating BYOR key',
