@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from github import GithubException
 from integrations.github.github_v1_callback_processor import (
     GithubV1CallbackProcessor,
 )
@@ -733,6 +734,33 @@ class TestGithubV1CallbackProcessor:
         ):
             with pytest.raises(RuntimeError, match='Missing GitHub credentials'):
                 await github_callback_processor._post_summary_to_github('Test summary')
+
+    @patch('integrations.github.github_v1_callback_processor.Auth')
+    @patch('integrations.github.github_v1_callback_processor.Github')
+    async def test_post_summary_to_github_deleted_issue_does_not_raise(
+        self, mock_github, mock_auth, github_callback_processor
+    ):
+        """Test that 410 errors (deleted issues) are handled gracefully without raising."""
+        mock_github_client = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.get_issue.side_effect = GithubException(
+            status=410,
+            data={'message': 'This issue was deleted'},
+            headers={},
+        )
+        mock_github_client.get_repo.return_value = mock_repo
+        mock_github.return_value.__enter__.return_value = mock_github_client
+
+        mock_token_auth = MagicMock()
+        mock_auth.Token.return_value = mock_token_auth
+
+        with patch.object(
+            github_callback_processor,
+            '_get_installation_access_token',
+            return_value='test_token',
+        ):
+            # Should not raise - 410 errors are handled gracefully
+            await github_callback_processor._post_summary_to_github('Test summary')
 
     @patch(
         'integrations.github.github_v1_callback_processor.GITHUB_APP_CLIENT_ID',

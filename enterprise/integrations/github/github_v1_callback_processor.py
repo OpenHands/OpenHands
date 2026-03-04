@@ -155,12 +155,6 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                     issue_number,
                 )
             else:
-                _logger.warning(
-                    '[GitHub V1] Failed to post summary to %s#%s: %s',
-                    full_repo_name,
-                    issue_number,
-                    e,
-                )
                 raise
 
     # -------------------------------------------------------------------------
