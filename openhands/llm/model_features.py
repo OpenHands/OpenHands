@@ -99,7 +99,7 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'grok-code-fast-1',
     # GLM series - verified via official docs and litellm config
     'glm-4*',
-    'glm-5',
+    'glm-5*',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [
