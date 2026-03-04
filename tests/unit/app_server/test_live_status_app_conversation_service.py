@@ -1034,20 +1034,15 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_finalize_conversation_request_with_skills(self):
         """Test _finalize_conversation_request with skills loading."""
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-
         # Create mock LLM with required attributes for _update_agent_with_llm_metadata
         mock_llm = Mock(spec=LLM)
         mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
         mock_llm.usage_id = 'agent'
 
-        mock_updated_agent = Mock(spec=Agent)
-        mock_updated_agent.llm = mock_llm
-        mock_updated_agent.condenser = None  # No condenser
-
-        # Mock model_copy to return the updated agent
-        mock_agent.model_copy = Mock(return_value=mock_updated_agent)
+        # Arrange
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = mock_llm
+        mock_agent.condenser = None  # No condenser
 
         conversation_id = uuid4()
         workspace = LocalWorkspace(working_dir='/test')
@@ -1057,7 +1052,7 @@ class TestLiveStatusAppConversationService:
 
         # Mock the skills loading method
         self.service._load_skills_and_update_agent = AsyncMock(
-            return_value=mock_updated_agent
+            return_value=mock_agent
         )
 
         # Act
@@ -1086,20 +1081,15 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_finalize_conversation_request_without_skills(self):
         """Test _finalize_conversation_request without remote workspace (no skills)."""
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-
         # Create mock LLM with required attributes for _update_agent_with_llm_metadata
         mock_llm = Mock(spec=LLM)
         mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
         mock_llm.usage_id = 'agent'
 
-        mock_updated_agent = Mock(spec=Agent)
-        mock_updated_agent.llm = mock_llm
-        mock_updated_agent.condenser = None  # No condenser
-
-        # Mock model_copy to return the updated agent
-        mock_agent.model_copy = Mock(return_value=mock_updated_agent)
+        # Arrange
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = mock_llm
+        mock_agent.condenser = None  # No condenser
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {'test': StaticSecret(value='secret')}
@@ -1125,20 +1115,14 @@ class TestLiveStatusAppConversationService:
     @pytest.mark.asyncio
     async def test_finalize_conversation_request_skills_loading_fails(self):
         """Test _finalize_conversation_request when skills loading fails."""
-        # Arrange
-        mock_agent = Mock(spec=Agent)
-
         # Create mock LLM with required attributes for _update_agent_with_llm_metadata
         mock_llm = Mock(spec=LLM)
         mock_llm.model = 'gpt-4'  # Non-openhands model, so no metadata update
         mock_llm.usage_id = 'agent'
 
-        mock_updated_agent = Mock(spec=Agent)
-        mock_updated_agent.llm = mock_llm
-        mock_updated_agent.condenser = None  # No condenser
-
-        # Mock model_copy to return the updated agent
-        mock_agent.model_copy = Mock(return_value=mock_updated_agent)
+        mock_agent = Mock(spec=Agent)
+        mock_agent.llm = mock_llm
+        mock_agent.condenser = None  # No condenser
 
         workspace = LocalWorkspace(working_dir='/test')
         secrets = {'test': StaticSecret(value='secret')}
