@@ -1,5 +1,4 @@
-"""Store class for managing users.
-"""
+"""Store class for managing users."""
 
 import asyncio
 import uuid
@@ -159,10 +158,7 @@ class UserStore:
         user_id: str,
         user_settings: UserSettings,
         user_info: dict,
-    ) -> User:
-        if not user_id or not user_settings:
-            return None
-
+    ) -> User | None:
         kwargs = decrypt_legacy_model(
             [
                 'llm_api_key',
@@ -676,6 +672,12 @@ class UserStore:
                 if user_settings:
                     token_manager = TokenManager()
                     user_info = await token_manager.get_user_info_from_user_id(user_id)
+                    if not user_info:
+                        logger.warning(
+                            'user_store:get_user_by_id:failed_to_get_user_info',
+                            extra={'user_id': user_id},
+                        )
+                        return None
                     user = await UserStore.migrate_user(
                         user_id,
                         user_settings,
@@ -887,12 +889,14 @@ class UserStore:
 
         from openhands.storage.data_models.settings import Settings
 
-        settings = Settings(language='en', enable_proactive_conversation_starters=True)
+        default_settings = Settings(
+            language='en', enable_proactive_conversation_starters=True
+        )
 
         from storage.lite_llm_manager import LiteLlmManager
 
         settings = await LiteLlmManager.create_entries(
-            org_id, user_id, settings, create_user
+            org_id, user_id, default_settings, create_user
         )
         if not settings:
             logger.info(
