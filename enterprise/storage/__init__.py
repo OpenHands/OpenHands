@@ -4,7 +4,6 @@ from storage.billing_session import BillingSession
 from storage.billing_session_type import BillingSessionType
 from storage.conversation_callback import CallbackStatus, ConversationCallback
 from storage.conversation_work import ConversationWork
-from storage.experiment_assignment import ExperimentAssignment
 from storage.feedback import ConversationFeedback, Feedback
 from storage.github_app_installation import GithubAppInstallation
 from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
@@ -50,7 +49,6 @@ __all__ = [
     'ConversationFeedback',
     'StoredConversationMetadataSaas',
     'ConversationWork',
-    'ExperimentAssignment',
     'Feedback',
     'GithubAppInstallation',
     'GitlabWebhook',
