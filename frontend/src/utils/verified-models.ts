@@ -20,6 +20,7 @@ export const VERIFIED_MODELS = [
   "devstral-medium-2512",
   "kimi-k2-0711-preview",
   "qwen3-coder-480b",
+  "glm-4.7",
 ];
 
 // LiteLLM does not return OpenAI models with the provider, so we list them here to set them ourselves for consistency
@@ -63,6 +64,7 @@ export const VERIFIED_OPENHANDS_MODELS = [
   "devstral-medium-2512",
   "kimi-k2-0711-preview",
   "qwen3-coder-480b",
+  "glm-4.7",
 ];
 
 // Default model for OpenHands provider

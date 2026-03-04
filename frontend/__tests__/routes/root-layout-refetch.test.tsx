@@ -26,6 +26,9 @@ const DEFAULT_FEATURE_FLAGS = {
   enable_jira: false,
   enable_jira_dc: false,
   enable_linear: false,
+  hide_users_page: false,
+  hide_billing_page: false,
+  hide_integrations_page: false,
 };
 
 const RouterStub = createRoutesStub([

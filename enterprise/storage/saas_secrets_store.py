@@ -133,9 +133,7 @@ class SaasSecretsStore(SecretsStore):
     async def get_instance(
         cls,
         config: OpenHandsConfig,
-        user_id: str | None,
+        user_id: str,  # type: ignore[override]
     ) -> SaasSecretsStore:
-        if not user_id:
-            raise Exception('SaasSecretsStore cannot be constructed with no user_id')
         logger.debug(f'saas_secrets_store.get_instance::{user_id}')
         return SaasSecretsStore(user_id, config)

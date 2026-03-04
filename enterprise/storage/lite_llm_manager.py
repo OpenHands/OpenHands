@@ -316,14 +316,13 @@ class LiteLlmManager:
                             get_openhands_cloud_key_alias(keycloak_user_id, org_id),
                             None,
                         )
-                        if new_key:
-                            logger.info(
-                                'LiteLlmManager:migrate_lite_llm_entries:generated_new_key',
-                                extra={'org_id': org_id, 'user_id': keycloak_user_id},
-                            )
-                            # Update user_settings with the new key so it gets stored in org_member
-                            user_settings.llm_api_key = SecretStr(new_key)
-                            user_settings.llm_api_key_for_byor = SecretStr(new_key)
+                        logger.info(
+                            'LiteLlmManager:migrate_lite_llm_entries:generated_new_key',
+                            extra={'org_id': org_id, 'user_id': keycloak_user_id},
+                        )
+                        # Update user_settings with the new key so it gets stored in org_member
+                        user_settings.llm_api_key = SecretStr(new_key)
+                        user_settings.llm_api_key_for_byor = SecretStr(new_key)
 
         logger.info(
             'LiteLlmManager:migrate_lite_llm_entries:complete',
@@ -1051,10 +1050,9 @@ class LiteLlmManager:
         team_id: str | None,
         key_alias: str | None,
         metadata: dict | None,
-    ) -> str | None:
+    ) -> str:
         if LITE_LLM_API_KEY is None or LITE_LLM_API_URL is None:
-            logger.warning('LiteLLM API configuration not found')
-            return None
+            raise ValueError('LiteLLM API configuration not found')
         json_data: dict[str, Any] = {
             'user_id': keycloak_user_id,
             'models': [],

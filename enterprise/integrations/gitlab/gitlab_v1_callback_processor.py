@@ -107,19 +107,15 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
         # Import here to avoid circular imports
         from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
-
         keycloak_user_id = self.gitlab_view_data.get('keycloak_user_id')
         if not keycloak_user_id:
             raise RuntimeError('Missing keycloak user ID for GitLab')
 
-        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
-            external_auth_id=keycloak_user_id
-        )
+        gitlab_service = SaaSGitLabService(external_auth_id=keycloak_user_id)
 
         project_id = self.gitlab_view_data['project_id']
         issue_number = self.gitlab_view_data['issue_number']
-        discussion_id = self.gitlab_view_data.get('discussion_id')
+        discussion_id = self.gitlab_view_data['discussion_id']
         is_mr = self.gitlab_view_data.get('is_mr', False)
 
         if is_mr:
