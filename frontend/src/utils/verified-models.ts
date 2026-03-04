@@ -10,6 +10,7 @@ export const VERIFIED_PROVIDERS = [
 export const VERIFIED_MODELS = [
   "claude-opus-4-6",
   "claude-opus-4-5-20251101",
+  "claude-sonnet-4-6",
   "claude-sonnet-4-5-20250929",
   "gpt-5.2-codex",
   "gpt-5.2",
@@ -55,6 +56,7 @@ export const VERIFIED_MISTRAL_MODELS = ["devstral-medium-2512"];
 export const VERIFIED_OPENHANDS_MODELS = [
   "claude-opus-4-6",
   "claude-opus-4-5-20251101",
+  "claude-sonnet-4-6",
   "claude-sonnet-4-5-20250929",
   "gpt-5.2-codex",
   "gpt-5.2",

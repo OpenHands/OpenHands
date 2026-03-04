@@ -117,6 +117,7 @@ REASONING_EFFORT_PATTERNS: list[str] = [
     # DeepSeek reasoning family
     'deepseek-r1-0528*',
     'claude-sonnet-4-5*',
+    'claude-sonnet-4-6*',
     'claude-haiku-4-5*',
     # GLM series - verified via litellm config
     'glm-4*',
