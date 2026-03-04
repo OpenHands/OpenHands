@@ -44,8 +44,9 @@ describe("AccountSettingsContextMenu", () => {
     return renderWithProviders(<MemoryRouter>{ui}</MemoryRouter>);
   };
 
-  const renderWithSaasConfig = (ui: React.ReactElement) => {
+  const renderWithSaasConfig = (ui: React.ReactElement, options?: { analyticsConsent?: boolean }) => {
     queryClient.setQueryData(["web-client-config"], createMockWebClientConfig({ app_mode: "saas" }));
+    queryClient.setQueryData(["settings"], { user_consents_to_analytics: options?.analyticsConsent ?? true });
     return render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>{ui}</MemoryRouter>
@@ -175,6 +176,20 @@ describe("AccountSettingsContextMenu", () => {
         onLogout={onLogoutMock}
         onClose={onCloseMock}
       />,
+    );
+
+    expect(screen.queryByTestId("add-team-members-button")).not.toBeInTheDocument();
+    expect(screen.queryByText("SETTINGS$NAV_ADD_TEAM_MEMBERS")).not.toBeInTheDocument();
+  });
+
+  it("should not show Add Team Members button when analytics consent is disabled", () => {
+    vi.mocked(posthog.useFeatureFlagEnabled).mockReturnValue(true);
+    renderWithSaasConfig(
+      <AccountSettingsContextMenu
+        onLogout={onLogoutMock}
+        onClose={onCloseMock}
+      />,
+      { analyticsConsent: false },
     );
 
     expect(screen.queryByTestId("add-team-members-button")).not.toBeInTheDocument();
