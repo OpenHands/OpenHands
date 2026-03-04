@@ -1,15 +1,23 @@
+import logging
+from typing import AsyncGenerator
+
+from fastapi import Request
 from server.auth.auth_utils import user_verifier
 from server.auth.domain_blocker import domain_blocker
-from server.auth.token_manager import TokenManager
+from server.auth.token_manager import KeycloakUserInfo, TokenManager
 
 from enterprise.server.auth.user_create.user_create_authorizer import (
     UserCreateAuthorization,
+    UserCreateAuthorizer,
+    UserCreateAuthorizerInjector,
 )
+from openhands.app_server.services.injector import InjectorState
 
+logger = logging.getLogger(__name__)
 token_manager = TokenManager()
 
 
-class DefaultUserCreateAuthorizer(ABC):
+class DefaultUserCreateAuthorizer(UserCreateAuthorizer):
     """Class determining whether a user may be created."""
 
     async def authorize_user_create(
@@ -49,19 +57,9 @@ class DefaultUserCreateAuthorizer(ABC):
             logger.exception('error authorizing user', extra={'user_id': user_id})
             return UserCreateAuthorization(success=False)
 
-        # Disable the Keycloak account
-        await token_manager.disable_keycloak_user(user_id, email)
-
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                'error': 'Access denied: Your email domain is not allowed to access this service'
-            },
-        )
-
 
 class DefaultUserCreateAuthorizerInjector(UserCreateAuthorizerInjector):
     async def inject(
         self, state: InjectorState, request: Request | None = None
-    ) -> AsyncGenerator[AppConversationInfoService, None]:
+    ) -> AsyncGenerator[UserCreateAuthorizer, None]:
         yield DefaultUserCreateAuthorizer()

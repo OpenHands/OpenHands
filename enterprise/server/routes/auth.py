@@ -7,12 +7,10 @@ from typing import Annotated, Literal, Optional, cast
 from urllib.parse import quote
 from uuid import UUID as parse_uuid
 
-from openhands.app_server.config import get_global_config
 import posthog
 from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import SecretStr
-from server.auth.auth_utils import user_verifier
 from server.auth.constants import (
     KEYCLOAK_CLIENT_ID,
     KEYCLOAK_REALM_NAME,
@@ -20,12 +18,14 @@ from server.auth.constants import (
     RECAPTCHA_SITE_KEY,
     ROLE_CHECK_ENABLED,
 )
-from server.auth.domain_blocker import domain_blocker
 from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
-from server.auth.user_create_authorizer import depends_user_create_authorizer, UserCreateAuthorizer
+from server.auth.user_create_authorizer import (
+    UserCreateAuthorizer,
+    depends_user_create_authorizer,
+)
 from server.config import sign_token
 from server.constants import IS_FEATURE_ENV
 from server.routes.event_webhook import _get_session_api_key, _get_user_id
@@ -41,6 +41,7 @@ from storage.database import a_session_maker
 from storage.user import User
 from storage.user_store import UserStore
 
+from openhands.app_server.config import get_global_config
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
 from openhands.integrations.service_types import ProviderType, TokenResponse
@@ -172,19 +173,27 @@ async def keycloak_callback(
             and error_description == 'authentication_expired'
         ):
             return RedirectResponse(redirect_url, status_code=302)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing code in request params')
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Missing code in request params',
+        )
 
     (
         keycloak_access_token,
         keycloak_refresh_token,
     ) = await token_manager.get_keycloak_tokens(code, redirect_uri)
     if not keycloak_access_token or not keycloak_refresh_token:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Problem retrieving Keycloak tokens')
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Problem retrieving Keycloak tokens',
+        )
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
     logger.debug(f'user_info: {user_info}')
     if ROLE_CHECK_ENABLED and user_info.roles is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Missing required role')
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail='Missing required role'
+        )
 
     if user_info.preferred_username is None:
         return JSONResponse(
@@ -197,14 +206,15 @@ async def keycloak_callback(
     user_info_dict = user_info.model_dump(exclude_none=True)
     user = await UserStore.get_user_by_id(user_id)
     if not user:
-
         authorization = await user_create_authorizer.authorize_user_create
         if not authorization.success:
             # If the we are not permitted to creat the user, delete them in keycloak
             await token_manager.delete_keycloak_user(user_id)
 
             # Return unauthorized
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=authorization.detail)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=authorization.detail
+            )
 
         user = await UserStore.create_user(user_id, user_info_dict)
     else:
