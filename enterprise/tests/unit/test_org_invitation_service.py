@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+from pydantic import SecretStr
 from server.routes.org_invitation_models import (
     EmailMismatchError,
 )
@@ -141,7 +142,9 @@ class TestAcceptInvitationEmailValidation:
             mock_token_manager_class.return_value = mock_token_manager
 
             mock_get_member.return_value = None  # Not already a member
-            mock_create_litellm.return_value = MagicMock(llm_api_key='test-key')
+            mock_settings = MagicMock()
+            mock_settings.llm_api_key = SecretStr('test-key')
+            mock_create_litellm.return_value = mock_settings
             mock_update_status.return_value = mock_invitation
 
             # Act - should not raise error because Keycloak email matches
@@ -244,7 +247,9 @@ class TestAcceptInvitationEmailValidation:
             mock_is_expired.return_value = False
             mock_get_user.return_value = mock_user
             mock_get_member.return_value = None
-            mock_create_litellm.return_value = MagicMock(llm_api_key='test-key')
+            mock_settings = MagicMock()
+            mock_settings.llm_api_key = SecretStr('test-key')
+            mock_create_litellm.return_value = mock_settings
             mock_update_status.return_value = mock_invitation
 
             # Act - should not raise error because emails match case-insensitively
