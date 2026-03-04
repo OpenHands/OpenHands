@@ -262,6 +262,7 @@ def zip_current_workspace(
     deprecated=True,
 )
 async def git_changes(
+    path: str | None = None,
     conversation: ServerConversation = Depends(get_conversation),
     conversation_store: ConversationStore = Depends(get_conversation_store),
     user_id: str = Depends(get_user_id),
@@ -270,10 +271,17 @@ async def git_changes(
 
     For V1 conversations, git operations are handled through the agent server.
     Use the sandbox's exposed agent server URL to access git operations.
+
+    Args:
+        path: Optional path to get git changes for. If not provided, uses the workspace mount path.
+        conversation: The conversation object.
+        conversation_store: The conversation store.
+        user_id: The user ID.
     """
     runtime: Runtime = conversation.runtime
 
-    cwd = runtime.config.workspace_mount_path_in_sandbox
+    # Use provided path or fall back to workspace mount path
+    cwd = path if path else runtime.config.workspace_mount_path_in_sandbox
     logger.info(f'Getting git changes in {cwd}')
 
     try:
