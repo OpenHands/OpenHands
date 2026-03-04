@@ -4,7 +4,7 @@ import uuid
 import warnings
 from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID as parse_uuid
 
 import posthog
@@ -181,7 +181,7 @@ async def keycloak_callback(
     (
         keycloak_access_token,
         keycloak_refresh_token,
-    ) = await token_manager.get_keycloak_tokens(code, redirect_uri)
+    ) = await token_manager.get_keycloak_tokens(code, redirect_url)
     if not keycloak_access_token or not keycloak_refresh_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -347,13 +347,19 @@ async def keycloak_callback(
     )
 
     if not valid_offline_token:
+        param_str = urlencode(
+            {
+                'client_id': KEYCLOAK_CLIENT_ID,
+                'response_type': 'code',
+                'kc_idp_hint': idp,
+                'redirect_uri': f'{get_global_config().web_url}/oauth/keycloak/offline/callback',
+                'scope': 'openid email profile offline_access',
+                'state': state,
+            }
+        )
         redirect_url = (
             f'{KEYCLOAK_SERVER_URL_EXT}/realms/{KEYCLOAK_REALM_NAME}/protocol/openid-connect/auth'
-            f'?client_id={KEYCLOAK_CLIENT_ID}&response_type=code'
-            f'&kc_idp_hint={idp}'
-            f'&redirect_uri={scheme}%3A%2F%2F{request.url.netloc}%2Foauth%2Fkeycloak%2Foffline%2Fcallback'
-            f'&scope=openid%20email%20profile%20offline_access'
-            f'&state={state}'
+            f'?{param_str}'
         )
 
     has_accepted_tos = user.accepted_tos is not None
@@ -448,7 +454,7 @@ async def keycloak_callback(
         response=response,
         keycloak_access_token=keycloak_access_token,
         keycloak_refresh_token=keycloak_refresh_token,
-        secure=True if scheme == 'https' else False,
+        secure=True if redirect_url.startswith('https') else False,
         accepted_tos=has_accepted_tos,
     )
 
