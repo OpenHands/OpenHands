@@ -649,7 +649,7 @@ class UserStore:
                 return user
 
             # Check if we need to migrate from user_settings
-            while not UserStore._acquire_user_creation_lock(user_id):
+            while not await UserStore._acquire_user_creation_lock(user_id):
                 # The user is already being created in another thread / process
                 logger.info(
                     'user_store:create_default_settings:waiting_for_lock',
