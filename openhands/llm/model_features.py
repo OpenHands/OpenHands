@@ -121,7 +121,7 @@ REASONING_EFFORT_PATTERNS: list[str] = [
     'claude-haiku-4-5*',
     # GLM series - verified via litellm config
     'glm-4*',
-    'glm-5',
+    'glm-5*',
 ]
 
 PROMPT_CACHE_PATTERNS: list[str] = [
