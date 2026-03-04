@@ -1051,9 +1051,7 @@ class TestLiveStatusAppConversationService:
         remote_workspace = Mock(spec=AsyncRemoteWorkspace)
 
         # Mock the skills loading method
-        self.service._load_skills_and_update_agent = AsyncMock(
-            return_value=mock_agent
-        )
+        self.service._load_skills_and_update_agent = AsyncMock(return_value=mock_agent)
 
         # Act
         result = await self.service._finalize_conversation_request(
