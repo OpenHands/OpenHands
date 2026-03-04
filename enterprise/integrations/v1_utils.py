@@ -16,6 +16,9 @@ def is_budget_exceeded_error(error_message: str) -> bool:
     return 'budget' in lower_message and 'exceeded' in lower_message
 
 
+BUDGET_EXCEEDED_USER_MESSAGE = 'LLM budget has been exceeded, please re-fill.'
+
+
 async def get_saas_user_auth(
     keycloak_user_id: str, token_manager: TokenManager
 ) -> UserAuth:

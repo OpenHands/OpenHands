@@ -3,7 +3,10 @@ from uuid import UUID
 
 import httpx
 from integrations.utils import CONVERSATION_URL, get_summary_instruction
-from integrations.v1_utils import is_budget_exceeded_error
+from integrations.v1_utils import (
+    BUDGET_EXCEEDED_USER_MESSAGE,
+    is_budget_exceeded_error,
+)
 from pydantic import Field
 from slack_sdk import WebClient
 from storage.slack_team_store import SlackTeamStore
@@ -65,7 +68,8 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         except Exception as e:
             error_str = str(e)
             # Use info log for budget exceeded (expected cost control behavior)
-            if is_budget_exceeded_error(error_str):
+            budget_exceeded = is_budget_exceeded_error(error_str)
+            if budget_exceeded:
                 _logger.info(
                     '[Slack V1] Budget exceeded for conversation %s: %s',
                     conversation_id,
@@ -76,9 +80,13 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
             # Only try to post error to Slack if we have basic requirements
             try:
+                # Use friendly message for budget exceeded errors
+                error_detail = (
+                    BUDGET_EXCEEDED_USER_MESSAGE if budget_exceeded else error_str
+                )
                 await self._post_summary_to_slack(
-                    f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                    f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
+                    f'OpenHands encountered an error: **{error_detail}**\n\n'
+                    f'[See the conversation]({CONVERSATION_URL.format(conversation_id)}) '
                     'for more information.'
                 )
             except Exception as post_error:

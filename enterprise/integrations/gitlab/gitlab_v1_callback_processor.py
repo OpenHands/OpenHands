@@ -4,7 +4,10 @@ from uuid import UUID
 
 import httpx
 from integrations.utils import CONVERSATION_URL, get_summary_instruction
-from integrations.v1_utils import is_budget_exceeded_error
+from integrations.v1_utils import (
+    BUDGET_EXCEEDED_USER_MESSAGE,
+    is_budget_exceeded_error,
+)
 from pydantic import Field
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
@@ -78,7 +81,8 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
         except Exception as e:
             error_str = str(e)
             # Use info log for budget exceeded (expected cost control behavior)
-            if is_budget_exceeded_error(error_str):
+            budget_exceeded = is_budget_exceeded_error(error_str)
+            if budget_exceeded:
                 _logger.info(
                     '[GitLab V1] Budget exceeded for conversation %s: %s',
                     conversation_id,
@@ -90,8 +94,12 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
             # Only try to post error to GitLab if we have basic requirements
             try:
                 if self.gitlab_view_data.get('keycloak_user_id'):
+                    # Use friendly message for budget exceeded errors
+                    error_detail = (
+                        BUDGET_EXCEEDED_USER_MESSAGE if budget_exceeded else error_str
+                    )
                     await self._post_summary_to_gitlab(
-                        f'OpenHands encountered an error: **{str(e)}**.\n\n'
+                        f'OpenHands encountered an error: **{error_detail}**\n\n'
                         f'[See the conversation]({CONVERSATION_URL.format(conversation_id)}) '
                         'for more information.'
                     )
