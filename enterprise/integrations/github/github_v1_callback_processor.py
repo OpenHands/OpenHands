@@ -138,7 +138,8 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                     repo = github_client.get_repo(full_repo_name)
                     pr = repo.get_pull(issue_number)
                     pr.create_review_comment_reply(
-                        comment_id=self.github_view_data.get('comment_id', ''), body=summary
+                        comment_id=self.github_view_data.get('comment_id', ''),
+                        body=summary,
                     )
                 return
 
