@@ -146,6 +146,11 @@ async def create_customer_setup_session(
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    if not customer_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Could not find or create customer for user',
+        )
     base_url = _get_base_url(request)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
@@ -167,6 +172,11 @@ async def create_checkout_session(
     await validate_billing_enabled()
     base_url = _get_base_url(request)
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    if not customer_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Could not find or create customer for user',
+        )
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
         line_items=[

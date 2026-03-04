@@ -22,7 +22,7 @@ async def get_byor_key_from_db(user_id: str) -> str | None:
         return None
 
     current_org_id = user.current_org_id
-    current_org_member: OrgMember = None
+    current_org_member: OrgMember | None = None
     for org_member in user.org_members:
         if org_member.org_id == current_org_id:
             current_org_member = org_member
@@ -41,7 +41,7 @@ async def store_byor_key_in_db(user_id: str, key: str) -> None:
         return None
 
     current_org_id = user.current_org_id
-    current_org_member: OrgMember = None
+    current_org_member: OrgMember | None = None
     for org_member in user.org_members:
         if org_member.org_id == current_org_id:
             current_org_member = org_member
