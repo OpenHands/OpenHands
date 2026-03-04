@@ -161,6 +161,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                     issue_number,
                     e,
                 )
+                raise
 
     # -------------------------------------------------------------------------
     # Agent / sandbox helpers
