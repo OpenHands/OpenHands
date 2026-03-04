@@ -97,8 +97,6 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'qwen3-coder-480b-a35b-instruct',
     'deepseek-chat',
     'grok-code-fast-1',
-    # GLM series
-    'glm-4*',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [
