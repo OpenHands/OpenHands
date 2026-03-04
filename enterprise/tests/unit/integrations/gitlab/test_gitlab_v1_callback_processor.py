@@ -199,10 +199,10 @@ class TestGitlabV1CallbackProcessor:
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('integrations.gitlab.gitlab_v1_callback_processor.get_summary_instruction')
-    @patch('openhands.integrations.gitlab.gitlab_service.GitLabServiceImpl')
+    @patch('integrations.gitlab.gitlab_service.SaaSGitLabService')
     async def test_successful_callback_execution_issue(
         self,
-        mock_gitlab_service_impl,
+        mock_saas_gitlab_service_cls,
         mock_get_summary_instruction,
         mock_get_httpx_client,
         mock_get_sandbox_service,
@@ -228,7 +228,7 @@ class TestGitlabV1CallbackProcessor:
 
         # GitLab service mock
         mock_gitlab_service = AsyncMock()
-        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_saas_gitlab_service_cls.return_value = mock_gitlab_service
 
         result = await gitlab_callback_processor(
             conversation_id=conversation_id,
@@ -245,7 +245,7 @@ class TestGitlabV1CallbackProcessor:
         assert gitlab_callback_processor.should_request_summary is False
 
         # Verify GitLab service was called correctly for issue
-        mock_gitlab_service_impl.assert_called_once_with(
+        mock_saas_gitlab_service_cls.assert_called_once_with(
             external_auth_id='test_keycloak_user'
         )
         mock_gitlab_service.reply_to_issue.assert_called_once_with(
@@ -265,10 +265,10 @@ class TestGitlabV1CallbackProcessor:
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('integrations.gitlab.gitlab_v1_callback_processor.get_summary_instruction')
-    @patch('openhands.integrations.gitlab.gitlab_service.GitLabServiceImpl')
+    @patch('integrations.gitlab.gitlab_service.SaaSGitLabService')
     async def test_successful_callback_execution_mr(
         self,
-        mock_gitlab_service_impl,
+        mock_saas_gitlab_service_cls,
         mock_get_summary_instruction,
         mock_get_httpx_client,
         mock_get_sandbox_service,
@@ -293,7 +293,7 @@ class TestGitlabV1CallbackProcessor:
 
         # GitLab service mock
         mock_gitlab_service = AsyncMock()
-        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_saas_gitlab_service_cls.return_value = mock_gitlab_service
 
         result = await gitlab_callback_processor_mr(
             conversation_id=conversation_id,
@@ -326,10 +326,10 @@ class TestGitlabV1CallbackProcessor:
     @patch('openhands.app_server.config.get_sandbox_service')
     @patch('openhands.app_server.config.get_httpx_client')
     @patch('integrations.gitlab.gitlab_v1_callback_processor.get_summary_instruction')
-    @patch('openhands.integrations.gitlab.gitlab_service.GitLabServiceImpl')
+    @patch('integrations.gitlab.gitlab_service.SaaSGitLabService')
     async def test_exception_handling_posts_error_to_gitlab(
         self,
-        mock_gitlab_service_impl,
+        mock_saas_gitlab_service_cls,
         mock_get_summary_instruction,
         mock_get_httpx_client,
         mock_get_sandbox_service,
@@ -355,7 +355,7 @@ class TestGitlabV1CallbackProcessor:
 
         # GitLab service mock
         mock_gitlab_service = AsyncMock()
-        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_saas_gitlab_service_cls.return_value = mock_gitlab_service
 
         result = await gitlab_callback_processor(
             conversation_id=conversation_id,

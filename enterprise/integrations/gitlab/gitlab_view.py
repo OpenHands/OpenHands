@@ -461,7 +461,11 @@ class GitlabFactory:
         )
 
         # Check v1_enabled at construction time - this is the source of truth
-        v1_enabled = await is_v1_enabled_for_gitlab_resolver(keycloak_user_id)
+        v1_enabled = (
+            await is_v1_enabled_for_gitlab_resolver(keycloak_user_id)
+            if keycloak_user_id
+            else False
+        )
         logger.info(
             f'[GitLab V1]: User flag found for {keycloak_user_id} is {v1_enabled}'
         )
