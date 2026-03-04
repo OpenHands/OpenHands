@@ -4,7 +4,11 @@ from uuid import UUID, uuid4
 
 from integrations.models import Message
 from integrations.resolver_context import ResolverUserContext
-from integrations.slack.slack_types import SlackViewInterface, StartingConvoException
+from integrations.slack.slack_types import (
+    SlackMessageView,
+    SlackViewInterface,
+    StartingConvoException,
+)
 from integrations.slack.slack_v1_callback_processor import SlackV1CallbackProcessor
 from integrations.utils import (
     CONVERSATION_URL,
@@ -60,36 +64,25 @@ async def is_v1_enabled_for_slack_resolver(user_id: str) -> bool:
 
 
 @dataclass
-class SlackUnkownUserView(SlackViewInterface):
+class SlackUnkownUserView(SlackMessageView):
+    """View for unauthenticated Slack users who haven't linked their account.
+
+    This view only contains the minimal fields needed to send a login link
+    message back to the user. It does not implement SlackViewInterface
+    because it cannot create conversations without user authentication.
+    """
+
     bot_access_token: str
-    user_msg: str | None
     slack_user_id: str
-    slack_to_openhands_user: SlackUser | None
-    saas_user_auth: UserAuth | None
     channel_id: str
     message_ts: str
     thread_ts: str | None
-    selected_repo: str | None
-    should_extract: bool
-    send_summary_instruction: bool
-    conversation_id: str
-    team_id: str
-    v1_enabled: bool
-
-    async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
-        raise NotImplementedError
-
-    async def create_or_update_conversation(self, jinja_env: Environment):
-        raise NotImplementedError
-
-    def get_response_msg(self) -> str:
-        raise NotImplementedError
 
 
 @dataclass
 class SlackNewConversationView(SlackViewInterface):
     bot_access_token: str
-    user_msg: str | None
+    user_msg: str
     slack_user_id: str
     slack_to_openhands_user: SlackUser
     saas_user_auth: UserAuth
@@ -394,6 +387,9 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
             self.conversation_id, conversation_init_data, user_id
         )
 
+        if agent_loop_info.event_store is None:
+            raise StartingConvoException('Event store not available')
+
         final_agent_observation = get_final_agent_observation(
             agent_loop_info.event_store
         )
@@ -550,6 +546,8 @@ class SlackFactory:
             return None
 
         # thread_ts in slack payloads in the parent's (root level msg's) message ID
+        if channel_id is None:
+            return None
         return await slack_conversation_store.get_slack_conversation(
             channel_id, thread_ts
         )
@@ -578,23 +576,21 @@ class SlackFactory:
             raise Exception('Did not find slack team')
 
         # Determine if this is a known slack user by openhands
-        if not slack_user or not saas_user_auth or not channel_id:
+        if not slack_user or not saas_user_auth or not channel_id or not message_ts:
             return SlackUnkownUserView(
                 bot_access_token=bot_access_token,
-                user_msg=user_msg,
                 slack_user_id=slack_user_id,
-                slack_to_openhands_user=slack_user,
-                saas_user_auth=saas_user_auth,
-                channel_id=channel_id,
-                message_ts=message_ts,
+                channel_id=channel_id or '',
+                message_ts=message_ts or '',
                 thread_ts=thread_ts,
-                selected_repo=None,
-                should_extract=False,
-                send_summary_instruction=False,
-                conversation_id='',
-                team_id=team_id,
-                v1_enabled=False,
             )
+
+        # At this point, we've verified slack_user, saas_user_auth, channel_id, and message_ts are set
+        # user_msg should always be present in Slack payloads
+        if not user_msg:
+            raise ValueError('user_msg is required but was not provided in payload')
+        assert channel_id is not None
+        assert message_ts is not None
 
         conversation = await asyncio.wait_for(
             SlackFactory.determine_if_updating_existing_conversation(message),

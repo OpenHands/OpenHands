@@ -93,6 +93,16 @@ async def _process_batch_operations_background(
                     )
                     continue  # Skip this operation but continue with others
 
+            if user_id is None:
+                logger.error(
+                    'user_id_not_set_in_batch_webhook',
+                    extra={
+                        'conversation_id': conversation_id,
+                        'path': batch_op.path,
+                    },
+                )
+                continue
+
             if subpath == 'agent_state.pkl':
                 update_agent_state(user_id, conversation_id, batch_op.get_content())
                 continue

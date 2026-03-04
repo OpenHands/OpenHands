@@ -236,6 +236,6 @@ class SaasConversationStore(ConversationStore):
         # user_id should not be None in SaaS, should we raise?
         # Use async version since callers now use asyncio.run_coroutine_threadsafe()
         # to dispatch to the main event loop where asyncpg connections work properly.
-        user = await UserStore.get_user_by_id_async(user_id)
+        user = await UserStore.get_user_by_id(user_id)
         org_id = user.current_org_id if user else None
         return SaasConversationStore(str(user_id), org_id, session_maker)

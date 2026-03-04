@@ -77,13 +77,18 @@ async def update_email(
         )
 
         # need to set auth cookie to the new tokens
+        if user_auth.access_token is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='Access token not found',
+            )
         set_response_cookie(
             request=request,
             response=response,
             keycloak_access_token=user_auth.access_token.get_secret_value(),
             keycloak_refresh_token=user_auth.refresh_token.get_secret_value(),
             secure=False if request.url.hostname == 'localhost' else True,
-            accepted_tos=user_auth.accepted_tos,
+            accepted_tos=user_auth.accepted_tos or False,
         )
 
         await verify_email(request=request, user_id=user_id)
@@ -156,13 +161,17 @@ async def verified_email(request: Request):
     response = RedirectResponse(redirect_uri, status_code=302)
 
     # need to set auth cookie to the new tokens
+    if user_auth.access_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail='Access token not found'
+        )
     set_response_cookie(
         request=request,
         response=response,
         keycloak_access_token=user_auth.access_token.get_secret_value(),
         keycloak_refresh_token=user_auth.refresh_token.get_secret_value(),
         secure=False if request.url.hostname == 'localhost' else True,
-        accepted_tos=user_auth.accepted_tos,
+        accepted_tos=user_auth.accepted_tos or False,
     )
 
     logger.info(f'Email {user_auth.email} verified.')

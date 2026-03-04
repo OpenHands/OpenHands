@@ -1,11 +1,10 @@
 import logging
+from typing import Any
 from uuid import UUID
 
 import httpx
 from integrations.utils import CONVERSATION_URL, get_summary_instruction
 from pydantic import Field
-from slack_sdk import WebClient
-from storage.slack_team_store import SlackTeamStore
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
@@ -27,10 +26,12 @@ from openhands.sdk.event import ConversationStateUpdateEvent
 _logger = logging.getLogger(__name__)
 
 
-class SlackV1CallbackProcessor(EventCallbackProcessor):
-    """Callback processor for Slack V1 integrations."""
+class GitlabV1CallbackProcessor(EventCallbackProcessor):
+    """Callback processor for GitLab V1 integrations."""
 
-    slack_view_data: dict[str, str | None] = Field(default_factory=dict)
+    gitlab_view_data: dict[str, Any] = Field(default_factory=dict)
+    should_request_summary: bool = Field(default=True)
+    inline_mr_comment: bool = Field(default=False)
 
     async def __call__(
         self,
@@ -38,8 +39,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         callback: EventCallback,
         event: Event,
     ) -> EventCallbackResult | None:
-        """Process events for Slack V1 integration."""
-
+        """Process events for GitLab V1 integration."""
         # Only handle ConversationStateUpdateEvent
         if not isinstance(event, ConversationStateUpdateEvent):
             return None
@@ -48,11 +48,24 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         if not (event.key == 'execution_status' and event.value == 'finished'):
             return None
 
-        _logger.info('[Slack V1] Callback agent state was %s', event)
+        _logger.info('[GitLab V1] Callback agent state was %s', event)
+        _logger.info(
+            '[GitLab V1] Should request summary: %s', self.should_request_summary
+        )
+
+        if not self.should_request_summary:
+            return None
+
+        self.should_request_summary = False
 
         try:
+            _logger.info(f'[GitLab V1] Requesting summary {conversation_id}')
             summary = await self._request_summary(conversation_id)
-            await self._post_summary_to_slack(summary)
+            _logger.info(
+                f'[GitLab V1] Posting summary {conversation_id}',
+                extra={'summary': summary},
+            )
+            await self._post_summary_to_gitlab(summary)
 
             return EventCallbackResult(
                 status=EventCallbackResultStatus.SUCCESS,
@@ -62,18 +75,19 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 detail=summary,
             )
         except Exception as e:
-            _logger.exception('[Slack V1] Error processing callback: %s', e)
+            _logger.exception('[GitLab V1] Error processing callback: %s', e)
 
-            # Only try to post error to Slack if we have basic requirements
+            # Only try to post error to GitLab if we have basic requirements
             try:
-                await self._post_summary_to_slack(
-                    f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                    f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
-                    'for more information.'
-                )
+                if self.gitlab_view_data.get('keycloak_user_id'):
+                    await self._post_summary_to_gitlab(
+                        f'OpenHands encountered an error: **{str(e)}**.\n\n'
+                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)}) '
+                        'for more information.'
+                    )
             except Exception as post_error:
                 _logger.warning(
-                    '[Slack V1] Failed to post error message to Slack: %s', post_error
+                    '[GitLab V1] Failed to post error message to GitLab: %s', post_error
                 )
 
             return EventCallbackResult(
@@ -85,53 +99,43 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
             )
 
     # -------------------------------------------------------------------------
-    # Slack helpers
+    # GitLab helpers
     # -------------------------------------------------------------------------
 
-    async def _get_bot_access_token(self) -> str | None:
-        team_id = self.slack_view_data.get('team_id')
-        if team_id is None:
-            return None
-        slack_team_store = SlackTeamStore.get_instance()
-        bot_access_token = await slack_team_store.get_team_bot_token(team_id)
+    async def _post_summary_to_gitlab(self, summary: str) -> None:
+        """Post a summary comment to the configured GitLab issue or MR."""
+        # Import here to avoid circular imports
+        from integrations.gitlab.gitlab_service import SaaSGitLabService
 
-        return bot_access_token
+        from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
 
-    async def _post_summary_to_slack(self, summary: str) -> None:
-        """Post a summary message to the configured Slack channel."""
-        bot_access_token = await self._get_bot_access_token()
-        if not bot_access_token:
-            raise RuntimeError('Missing Slack bot access token')
+        keycloak_user_id = self.gitlab_view_data.get('keycloak_user_id')
+        if not keycloak_user_id:
+            raise RuntimeError('Missing keycloak user ID for GitLab')
 
-        channel_id = self.slack_view_data['channel_id']
-        thread_ts = self.slack_view_data.get('thread_ts') or self.slack_view_data.get(
-            'message_ts'
+        gitlab_service: SaaSGitLabService = GitLabServiceImpl(
+            external_auth_id=keycloak_user_id
         )
 
-        client = WebClient(token=bot_access_token)
+        project_id = self.gitlab_view_data['project_id']
+        issue_number = self.gitlab_view_data['issue_number']
+        discussion_id = self.gitlab_view_data.get('discussion_id')
+        is_mr = self.gitlab_view_data.get('is_mr', False)
 
-        try:
-            # Post the summary as a threaded reply
-            response = client.chat_postMessage(
-                channel=channel_id,
-                text=summary,
-                thread_ts=thread_ts,
-                unfurl_links=False,
-                unfurl_media=False,
+        if is_mr:
+            await gitlab_service.reply_to_mr(
+                project_id,
+                issue_number,
+                discussion_id,
+                summary,
             )
-
-            if not response['ok']:
-                raise RuntimeError(
-                    f"Slack API error: {response.get('error', 'Unknown error')}"
-                )
-
-            _logger.info(
-                '[Slack V1] Successfully posted summary to channel %s', channel_id
+        else:
+            await gitlab_service.reply_to_issue(
+                project_id,
+                issue_number,
+                discussion_id,
+                summary,
             )
-
-        except Exception as e:
-            _logger.error('[Slack V1] Failed to post message to Slack: %s', e)
-            raise
 
     # -------------------------------------------------------------------------
     # Agent / sandbox helpers
@@ -177,7 +181,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
                 pass
 
             _logger.error(
-                '[Slack V1] HTTP error sending message to %s: %s. '
+                '[GitLab V1] HTTP error sending message to %s: %s. '
                 'Request payload: %s. Response headers: %s',
                 url,
                 error_detail,
@@ -190,7 +194,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
             _logger.error(
-                '[Slack V1] %s. Request payload: %s',
+                '[GitLab V1] %s. Request payload: %s',
                 error_detail,
                 payload,
                 exc_info=True,
@@ -200,7 +204,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
         except httpx.RequestError as e:
             error_detail = f'Request error to {url}: {str(e)}'
             _logger.error(
-                '[Slack V1] %s. Request payload: %s',
+                '[GitLab V1] %s. Request payload: %s',
                 error_detail,
                 payload,
                 exc_info=True,
@@ -212,8 +216,7 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
     # -------------------------------------------------------------------------
 
     async def _request_summary(self, conversation_id: UUID) -> str:
-        """
-        Ask the agent to produce a summary of its work and return the agent response.
+        """Ask the agent to produce a summary of its work and return the agent response.
 
         NOTE: This method now returns a string (the agent server's response text)
         and raises exceptions on errors. The wrapping into EventCallbackResult

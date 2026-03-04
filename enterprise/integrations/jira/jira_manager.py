@@ -257,7 +257,7 @@ class JiraManager(Manager[JiraViewInterface]):
 
         return jira_user, saas_user_auth
 
-    async def start_job(self, view: JiraViewInterface):
+    async def start_job(self, view: JiraViewInterface) -> None:
         """Start a Jira job/conversation."""
         # Import here to prevent circular import
         from server.conversation_callback_processor.jira_callback_processor import (

@@ -25,7 +25,7 @@ class Manager(ABC, Generic[ViewT]):
         raise NotImplementedError
 
     @abstractmethod
-    def start_job(self, view: ViewT) -> None:
+    async def start_job(self, view: ViewT) -> None:
         """Kick off a job with openhands agent.
 
         Args:

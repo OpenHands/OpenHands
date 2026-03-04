@@ -32,7 +32,8 @@ if TYPE_CHECKING:
 HOST = WEB_HOST
 # ---- DO NOT REMOVE ----
 
-HOST_URL = f'https://{HOST}' if 'localhost' not in HOST else f'http://{HOST}'
+IS_LOCAL_DEPLOYMENT = 'localhost' in HOST
+HOST_URL = f'https://{HOST}' if not IS_LOCAL_DEPLOYMENT else f'http://{HOST}'
 GITHUB_WEBHOOK_URL = f'{HOST_URL}/integration/github/events'
 GITLAB_WEBHOOK_URL = f'{HOST_URL}/integration/gitlab/events'
 conversation_prefix = 'conversations/{}'
@@ -64,6 +65,25 @@ def get_session_expired_message(username: str | None = None) -> str:
     return f'Your session has expired. Please login again at [OpenHands Cloud]({HOST_URL}) and try again.'
 
 
+def get_user_not_found_message(username: str | None = None) -> str:
+    """Get a user-friendly message when a user hasn't created an OpenHands account.
+
+    Used by integrations to notify users when they try to use OpenHands features
+    but haven't logged into OpenHands Cloud yet (no Keycloak account exists).
+
+    Args:
+        username: Optional username to mention in the message. If provided,
+                  the message will include @username prefix (used by Git providers
+                  like GitHub, GitLab, Slack). If None, returns a generic message.
+
+    Returns:
+        A formatted user not found message
+    """
+    if username:
+        return f"@{username} it looks like you haven't created an OpenHands account yet. Please sign up at [OpenHands Cloud]({HOST_URL}) and try again."
+    return f"It looks like you haven't created an OpenHands account yet. Please sign up at [OpenHands Cloud]({HOST_URL}) and try again."
+
+
 # Toggle for solvability report feature
 ENABLE_SOLVABILITY_ANALYSIS = (
     os.getenv('ENABLE_SOLVABILITY_ANALYSIS', 'false').lower() == 'true'
@@ -76,6 +96,11 @@ ENABLE_V1_GITHUB_RESOLVER = (
 
 ENABLE_V1_SLACK_RESOLVER = (
     os.getenv('ENABLE_V1_SLACK_RESOLVER', 'false').lower() == 'true'
+)
+
+# Toggle for V1 GitLab resolver feature
+ENABLE_V1_GITLAB_RESOLVER = (
+    os.getenv('ENABLE_V1_GITLAB_RESOLVER', 'false').lower() == 'true'
 )
 
 OPENHANDS_RESOLVER_TEMPLATES_DIR = (

@@ -281,6 +281,12 @@ async def create_jira_dc_workspace(
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
 
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User ID not found',
+            )
+
         if JIRA_DC_ENABLE_OAUTH:
             # OAuth flow enabled - create session and redirect to OAuth
             state = str(uuid.uuid4())
@@ -403,6 +409,12 @@ async def create_workspace_link(request: Request, link_data: JiraDcLinkCreate):
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
         user_email = await user_auth.get_user_email()
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User ID not found',
+            )
 
         target_workspace = link_data.workspace_name
 
@@ -593,6 +605,12 @@ async def get_current_workspace_link(request: Request):
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
 
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User ID not found',
+            )
+
         user = await jira_dc_manager.integration_store.get_user_by_active_workspace(
             user_id
         )
@@ -644,6 +662,12 @@ async def unlink_workspace(request: Request):
     try:
         user_auth = cast(SaasUserAuth, await get_user_auth(request))
         user_id = await user_auth.get_user_id()
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='User ID not found',
+            )
 
         user = await jira_dc_manager.integration_store.get_user_by_active_workspace(
             user_id
