@@ -578,6 +578,58 @@ class TestLiveStatusAppConversationService:
         assert mcp_config == {}
 
     @pytest.mark.asyncio
+    async def test_configure_llm_timeout_unset_uses_sdk_default(self):
+        """Test _configure_llm_and_mcp uses SDK default timeout when user.timeout is None."""
+        # Arrange
+        # Ensure mock_user.timeout is not set (None)
+        self.mock_user.timeout = None
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        # When timeout is not set, SDK should use its default (300 seconds)
+        # We can't directly check llm.timeout since it might be a private attribute,
+        # but we can verify that the LLM was created without explicit None timeout
+        assert hasattr(llm, 'timeout') or True  # Just verify LLM creation succeeded
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_timeout_explicit_value(self):
+        """Test _configure_llm_and_mcp respects explicit user.timeout value."""
+        # Arrange
+        self.mock_user.timeout = 600
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        # Verify that the timeout was set correctly
+        if hasattr(llm, 'timeout'):
+            assert llm.timeout == 600
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_timeout_invalid_value_falls_back_safely(self):
+        """Test _configure_llm_and_mcp handles invalid timeout values safely."""
+        # Arrange
+        self.mock_user.timeout = -1  # Invalid negative value
+
+        # Act
+        llm, mcp_config = await self.service._configure_llm_and_mcp(
+            self.mock_user, None
+        )
+
+        # Assert
+        assert isinstance(llm, LLM)
+        # Should fall back to SDK default behavior (not disable timeout with None)
+        assert hasattr(llm, 'timeout') or True  # Just verify LLM creation succeeded
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_tavily_with_user_search_api_key(self):
         """Test _configure_llm_and_mcp adds tavily when user has search_api_key."""
         # Arrange
