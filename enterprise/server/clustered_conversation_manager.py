@@ -484,8 +484,7 @@ class ClusteredConversationManager(StandaloneConversationManager):
         await pipe.execute()
 
     async def _disconnect_from_stopped(self):
-        """
-        Handle connections to conversations that have stopped unexpectedly.
+        """Handle connections to conversations that have stopped unexpectedly.
 
         This method detects when a local connection is pointing to a conversation
         that was running on another server that has crashed or been terminated

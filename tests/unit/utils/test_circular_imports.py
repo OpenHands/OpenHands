@@ -7,8 +7,7 @@ class TestCircularImports(unittest.TestCase):
     """Test to detect circular imports in the codebase."""
 
     def test_no_circular_imports_in_key_modules(self):
-        """
-        Test that there are no circular imports in key modules that were previously problematic.
+        """Test that there are no circular imports in key modules that were previously problematic.
 
         This test specifically checks the modules that were involved in a previous circular import issue:
         - openhands.utils.prompt
@@ -55,8 +54,7 @@ class TestCircularImports(unittest.TestCase):
     def _find_circular_imports(
         self, module_paths: dict[str, str]
     ) -> list[tuple[str, str]]:
-        """
-        Find circular imports between modules.
+        """Find circular imports between modules.
 
         Args:
             module_paths: Dictionary mapping module names to file paths
@@ -110,8 +108,7 @@ class TestCircularImports(unittest.TestCase):
         return circular_imports
 
     def test_specific_circular_import_pattern(self):
-        """
-        Test for the specific circular import pattern that caused the issue in the stack trace.
+        """Test for the specific circular import pattern that caused the issue in the stack trace.
 
         The problematic pattern was:
         openhands.utils.prompt imports from openhands.agenthub.codeact_agent.tools.bash
@@ -180,8 +177,7 @@ class TestCircularImports(unittest.TestCase):
             )
 
     def test_detect_circular_imports_in_server_modules(self):
-        """
-        Test for circular imports in the server modules that were involved in the stack trace.
+        """Test for circular imports in the server modules that were involved in the stack trace.
 
         The problematic modules were:
         - openhands.server.shared
@@ -229,8 +225,7 @@ class TestCircularImports(unittest.TestCase):
             )
 
     def test_detect_circular_imports_in_mcp_modules(self):
-        """
-        Test for circular imports in the MCP modules that were involved in the stack trace.
+        """Test for circular imports in the MCP modules that were involved in the stack trace.
 
         The problematic modules were:
         - openhands.mcp
@@ -267,8 +262,7 @@ class TestCircularImports(unittest.TestCase):
             )
 
     def test_detect_complex_circular_import_chains(self):
-        """
-        Test for complex circular import chains involving multiple modules.
+        """Test for complex circular import chains involving multiple modules.
 
         This test checks for circular dependencies that involve more than two modules,
         such as A imports B, B imports C, and C imports A.
@@ -354,8 +348,7 @@ class TestCircularImports(unittest.TestCase):
     def _find_circular_chains(
         self, import_graph: dict[str, list[str]]
     ) -> list[list[str]]:
-        """
-        Find circular import chains in the import graph.
+        """Find circular import chains in the import graph.
 
         Args:
             import_graph: Dictionary mapping module names to lists of imported modules
@@ -366,8 +359,7 @@ class TestCircularImports(unittest.TestCase):
         circular_chains = []
 
         def dfs(module: str, path: list[str], visited: set[str]):
-            """
-            Depth-first search to find circular import chains.
+            """Depth-first search to find circular import chains.
 
             Args:
                 module: Current module being visited

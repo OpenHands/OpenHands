@@ -1,5 +1,4 @@
-"""
-Pydantic models and custom exceptions for organization invitations.
+"""Pydantic models and custom exceptions for organization invitations.
 """
 
 from pydantic import BaseModel, EmailStr

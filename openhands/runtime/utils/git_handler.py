@@ -65,8 +65,7 @@ class GitHandler:
         return script_file
 
     def get_current_branch(self) -> str | None:
-        """
-        Retrieves the current branch name of the git repository.
+        """Retrieves the current branch name of the git repository.
 
         Returns:
             str | None: The current branch name, or None if not a git repository or error occurs.

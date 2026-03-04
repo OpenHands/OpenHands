@@ -12,7 +12,7 @@ class Manager(ABC, Generic[ViewT]):
 
     @abstractmethod
     async def receive_message(self, message: Message):
-        "Receive message from integration"
+        """Receive message from integration"""
         raise NotImplementedError
 
     @abstractmethod

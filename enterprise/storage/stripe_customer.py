@@ -5,8 +5,7 @@ from storage.base import Base
 
 
 class StripeCustomer(Base):  # type: ignore
-    """
-    Represents a stripe customer. We can't simply use the stripe API for this because:
+    """Represents a stripe customer. We can't simply use the stripe API for this because:
     "Don’t use search in read-after-write flows where strict consistency is necessary.
     Under normal operating conditions, data is searchable in less than a minute.
     Occasionally, propagation of new or updated data can be up to an hour behind during outages"

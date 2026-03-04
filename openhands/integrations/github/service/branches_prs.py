@@ -7,8 +7,7 @@ from openhands.integrations.service_types import Branch, PaginatedBranchesRespon
 
 
 class GitHubBranchesMixin(GitHubMixinBase):
-    """
-    Methods for interacting with branches for a repo
+    """Methods for interacting with branches for a repo
     """
 
     async def get_branches(self, repository: str) -> list[Branch]:

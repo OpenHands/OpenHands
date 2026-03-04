@@ -1,5 +1,4 @@
-"""
-Tests for JiraIntegrationStore async methods.
+"""Tests for JiraIntegrationStore async methods.
 
 The store uses async database sessions (a_session_maker) for all operations,
 which is critical for avoiding asyncpg event loop issues when called from

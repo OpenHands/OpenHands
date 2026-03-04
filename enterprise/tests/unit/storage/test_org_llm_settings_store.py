@@ -1,5 +1,4 @@
-"""
-Unit tests for OrgLLMSettingsStore.
+"""Unit tests for OrgLLMSettingsStore.
 
 Tests the async database operations for organization LLM settings.
 """
@@ -40,8 +39,7 @@ async def async_session_maker(async_engine):
 
 @pytest.mark.asyncio
 async def test_get_current_org_by_user_id_success(async_session_maker):
-    """
-    GIVEN: A user exists with a current_org_id
+    """GIVEN: A user exists with a current_org_id
     WHEN: get_current_org_by_user_id is called
     THEN: The user's current organization is returned
     """
@@ -68,8 +66,7 @@ async def test_get_current_org_by_user_id_success(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_get_current_org_by_user_id_user_not_found(async_session_maker):
-    """
-    GIVEN: A user does not exist in the database
+    """GIVEN: A user does not exist in the database
     WHEN: get_current_org_by_user_id is called
     THEN: None is returned
     """
@@ -87,8 +84,7 @@ async def test_get_current_org_by_user_id_user_not_found(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_llm_settings_success(async_session_maker):
-    """
-    GIVEN: An organization exists in the database
+    """GIVEN: An organization exists in the database
     WHEN: update_org_llm_settings is called with new values
     THEN: The organization's LLM settings are updated and returned
     """
@@ -122,8 +118,7 @@ async def test_update_org_llm_settings_success(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_llm_settings_org_not_found(async_session_maker):
-    """
-    GIVEN: An organization does not exist in the database
+    """GIVEN: An organization does not exist in the database
     WHEN: update_org_llm_settings is called
     THEN: None is returned
     """
@@ -142,8 +137,7 @@ async def test_update_org_llm_settings_org_not_found(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_org_llm_settings_propagates_to_members(async_session_maker):
-    """
-    GIVEN: An organization exists with update data containing member-relevant settings
+    """GIVEN: An organization exists with update data containing member-relevant settings
     WHEN: update_org_llm_settings is called
     THEN: Member settings are propagated via OrgMemberStore
     """

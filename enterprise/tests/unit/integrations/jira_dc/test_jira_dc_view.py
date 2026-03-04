@@ -1,5 +1,4 @@
-"""
-Tests for Jira DC view classes and factory.
+"""Tests for Jira DC view classes and factory.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch

@@ -1,5 +1,4 @@
-"""
-Pydantic models for user app settings API.
+"""Pydantic models for user app settings API.
 """
 
 from pydantic import BaseModel, EmailStr

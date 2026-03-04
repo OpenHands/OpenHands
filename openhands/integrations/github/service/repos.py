@@ -7,8 +7,7 @@ from openhands.server.types import AppMode
 
 
 class GitHubReposMixin(GitHubMixinBase):
-    """
-    Methods for interacting with GitHub repositories (from both personal and app installations)
+    """Methods for interacting with GitHub repositories (from both personal and app installations)
     """
 
     async def get_installations(self) -> list[str]:

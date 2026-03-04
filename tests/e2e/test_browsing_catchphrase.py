@@ -1,5 +1,4 @@
-"""
-E2E: Web browsing catchphrase test (Issue #10378)
+"""E2E: Web browsing catchphrase test (Issue #10378)
 
 Goal: In a new conversation, instruct the agent to browse to all-hands.dev and
 return the page's main catchphrase. We assert that a browsing action/observation

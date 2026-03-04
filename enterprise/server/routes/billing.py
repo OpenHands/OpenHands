@@ -28,8 +28,7 @@ billing_router = APIRouter(prefix='/api/billing', tags=['Billing'])
 
 
 async def validate_billing_enabled() -> None:
-    """
-    Validate that the billing feature flag is enabled
+    """Validate that the billing feature flag is enabled
     """
     config = get_global_config()
     web_client_config = await config.web_client.get_web_client_config()

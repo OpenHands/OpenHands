@@ -5,8 +5,7 @@ from storage.base import Base
 
 
 class ApiKey(Base):
-    """
-    Represents an API key for a user.
+    """Represents an API key for a user.
     """
 
     __tablename__ = 'api_keys'

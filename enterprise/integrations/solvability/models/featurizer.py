@@ -10,8 +10,7 @@ from openhands.llm.llm import LLM
 
 
 class Feature(BaseModel):
-    """
-    Represents a single boolean feature that can be extracted from issue descriptions.
+    """Represents a single boolean feature that can be extracted from issue descriptions.
 
     Features are semantic properties of issues (e.g., "has_code_example", "requires_debugging")
     that are evaluated by LLMs and used as input to the solvability classifier.
@@ -25,8 +24,7 @@ class Feature(BaseModel):
 
     @property
     def to_tool_description_field(self) -> dict[str, Any]:
-        """
-        Convert this feature to a JSON schema field for LLM tool calling.
+        """Convert this feature to a JSON schema field for LLM tool calling.
 
         Returns:
             dict: JSON schema field definition for this feature.
@@ -38,8 +36,7 @@ class Feature(BaseModel):
 
 
 class EmbeddingDimension(BaseModel):
-    """
-    Represents a single dimension (feature evaluation) within a feature embedding sample.
+    """Represents a single dimension (feature evaluation) within a feature embedding sample.
 
     Each dimension corresponds to one feature being evaluated as true/false for a given issue.
     """
@@ -60,8 +57,7 @@ Maps feature identifiers to their boolean evaluations.
 
 
 class FeatureEmbedding(BaseModel):
-    """
-    Represents the complete feature embedding for a single issue, including multiple samples
+    """Represents the complete feature embedding for a single issue, including multiple samples
     and associated metadata about the LLM calls used to generate it.
 
     Multiple samples are collected to account for LLM variability and provide more robust
@@ -82,8 +78,7 @@ class FeatureEmbedding(BaseModel):
 
     @property
     def dimensions(self) -> list[str]:
-        """
-        Get all unique feature identifiers present across all samples.
+        """Get all unique feature identifiers present across all samples.
 
         Returns:
             list[str]: List of feature identifiers that appear in at least one sample.
@@ -94,8 +89,7 @@ class FeatureEmbedding(BaseModel):
         return list(dims)
 
     def coefficient(self, dimension: str) -> float | None:
-        """
-        Calculate the average coefficient (0-1) for a specific feature dimension.
+        """Calculate the average coefficient (0-1) for a specific feature dimension.
 
         This computes the proportion of samples where the feature was evaluated as True,
         providing a continuous feature value for the classifier.
@@ -117,8 +111,7 @@ class FeatureEmbedding(BaseModel):
         return None
 
     def to_row(self) -> dict[str, Any]:
-        """
-        Convert the embedding to a flat dictionary suitable for DataFrame construction.
+        """Convert the embedding to a flat dictionary suitable for DataFrame construction.
 
         Returns:
             dict[str, Any]: Dictionary with metadata fields and feature coefficients.
@@ -131,8 +124,7 @@ class FeatureEmbedding(BaseModel):
         }
 
     def sample_entropy(self) -> dict[str, float]:
-        """
-        Calculate the Shannon entropy of feature evaluations across samples.
+        """Calculate the Shannon entropy of feature evaluations across samples.
 
         Higher entropy indicates more variability in LLM responses for a feature,
         which may suggest ambiguity in the feature definition or issue description.
@@ -162,8 +154,7 @@ class FeatureEmbedding(BaseModel):
 
 
 class Featurizer(BaseModel):
-    """
-    Orchestrates LLM-based feature extraction from issue descriptions.
+    """Orchestrates LLM-based feature extraction from issue descriptions.
 
     The Featurizer uses structured LLM tool calling to evaluate boolean features
     for issue descriptions. It handles prompt construction, tool schema generation,
@@ -180,8 +171,7 @@ class Featurizer(BaseModel):
     """List of features to extract from each issue description."""
 
     def system_message(self) -> dict[str, Any]:
-        """
-        Construct the system message for LLM conversations.
+        """Construct the system message for LLM conversations.
 
         Returns:
             dict[str, Any]: System message dictionary for LLM API calls.
@@ -194,8 +184,7 @@ class Featurizer(BaseModel):
     def user_message(
         self, issue_description: str, set_cache: bool = True
     ) -> dict[str, Any]:
-        """
-        Construct the user message containing the issue description.
+        """Construct the user message containing the issue description.
 
         Args:
             issue_description: The description of the issue to analyze.
@@ -215,8 +204,7 @@ class Featurizer(BaseModel):
 
     @property
     def tool_choice(self) -> dict[str, Any]:
-        """
-        Get the tool choice configuration for forcing LLM to use the featurizer tool.
+        """Get the tool choice configuration for forcing LLM to use the featurizer tool.
 
         Returns:
             dict[str, Any]: Tool choice configuration for LLM API calls.
@@ -228,8 +216,7 @@ class Featurizer(BaseModel):
 
     @property
     def tool_description(self) -> dict[str, Any]:
-        """
-        Generate the tool schema for the featurizer function.
+        """Generate the tool schema for the featurizer function.
 
         Creates a JSON schema that describes the featurizer tool with all configured
         features as boolean parameters.
@@ -259,8 +246,7 @@ class Featurizer(BaseModel):
         temperature: float = 1.0,
         samples: int = 10,
     ) -> FeatureEmbedding:
-        """
-        Generate a feature embedding for a single issue description.
+        """Generate a feature embedding for a single issue description.
 
         Makes multiple LLM calls to collect samples and reduce variance in feature evaluations.
         Each call uses tool calling to extract structured boolean feature values.
@@ -322,8 +308,7 @@ class Featurizer(BaseModel):
         temperature: float = 1.0,
         samples: int = 10,
     ) -> list[FeatureEmbedding]:
-        """
-        Generate embeddings for a batch of issue descriptions using concurrent processing.
+        """Generate embeddings for a batch of issue descriptions using concurrent processing.
 
         Processes multiple issues in parallel to improve throughput while maintaining
         result ordering.
@@ -359,8 +344,7 @@ class Featurizer(BaseModel):
             return results
 
     def feature_identifiers(self) -> list[str]:
-        """
-        Get the identifiers of all configured features.
+        """Get the identifiers of all configured features.
 
         Returns:
             list[str]: List of feature identifiers in the order they were defined.

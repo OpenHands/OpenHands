@@ -1,5 +1,4 @@
-"""
-Unit tests for OrgLLMSettingsService.
+"""Unit tests for OrgLLMSettingsService.
 
 Tests the service layer for organization LLM settings operations.
 """
@@ -64,8 +63,7 @@ def mock_user_context(user_id):
 async def test_get_org_llm_settings_success(
     user_id, mock_org, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user with a current organization
+    """GIVEN: A user with a current organization
     WHEN: get_org_llm_settings is called
     THEN: OrgLLMSettingsResponse is returned with correct data
     """
@@ -85,8 +83,7 @@ async def test_get_org_llm_settings_success(
 
 @pytest.mark.asyncio
 async def test_get_org_llm_settings_user_not_authenticated(mock_store):
-    """
-    GIVEN: A user is not authenticated
+    """GIVEN: A user is not authenticated
     WHEN: get_org_llm_settings is called
     THEN: ValueError is raised
     """
@@ -106,8 +103,7 @@ async def test_get_org_llm_settings_user_not_authenticated(mock_store):
 async def test_get_org_llm_settings_org_not_found(
     user_id, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user has no current organization
+    """GIVEN: A user has no current organization
     WHEN: get_org_llm_settings is called
     THEN: OrgNotFoundError is raised
     """
@@ -126,8 +122,7 @@ async def test_get_org_llm_settings_org_not_found(
 async def test_update_org_llm_settings_success(
     user_id, mock_org, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user with a current organization
+    """GIVEN: A user with a current organization
     WHEN: update_org_llm_settings is called with new values
     THEN: OrgLLMSettingsResponse is returned with updated data
     """
@@ -172,8 +167,7 @@ async def test_update_org_llm_settings_success(
 async def test_update_org_llm_settings_no_changes(
     user_id, mock_org, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user with a current organization
+    """GIVEN: A user with a current organization
     WHEN: update_org_llm_settings is called with no fields
     THEN: Current settings are returned without calling update
     """
@@ -197,8 +191,7 @@ async def test_update_org_llm_settings_no_changes(
 async def test_update_org_llm_settings_org_not_found(
     user_id, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user has no current organization
+    """GIVEN: A user has no current organization
     WHEN: update_org_llm_settings is called
     THEN: OrgNotFoundError is raised
     """

@@ -15,8 +15,7 @@ from openhands.integrations.service_types import (
 
 
 class GitHubFeaturesMixin(GitHubMixinBase):
-    """
-    Methods used for custom features in UI driven via GitHub integration
+    """Methods used for custom features in UI driven via GitHub integration
     """
 
     async def get_suggested_tasks(self) -> list[SuggestedTask]:

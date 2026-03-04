@@ -1349,7 +1349,6 @@ You can now provide new instructions to continue.
         self, stuck_analysis: StuckDetector.StuckAnalysis
     ) -> None:
         """Restart the agent using the last user message as the new instruction."""
-
         # Find the last user message in the history
         last_user_message = None
         for event in reversed(self.state.history):

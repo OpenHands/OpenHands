@@ -14,8 +14,7 @@ from openhands.utils.http_session import httpx_verify_option
 
 
 class GitLabMixinBase(BaseGitService, HTTPClient):
-    """
-    Declares common attributes and method signatures used across mixins.
+    """Declares common attributes and method signatures used across mixins.
     """
 
     BASE_URL: str

@@ -1,5 +1,4 @@
-"""
-Store class for managing organizations.
+"""Store class for managing organizations.
 """
 
 from typing import Optional
@@ -107,8 +106,7 @@ class OrgStore:
     async def get_user_orgs_paginated(
         user_id: UUID, page_id: str | None = None, limit: int = 100
     ) -> tuple[list[Org], str | None]:
-        """
-        Get paginated list of organizations for a user.
+        """Get paginated list of organizations for a user.
 
         Args:
             user_id: User UUID
@@ -235,8 +233,7 @@ class OrgStore:
         org: Org,
         org_member: OrgMember,
     ) -> Org:
-        """
-        Persist organization and owner membership in a single transaction.
+        """Persist organization and owner membership in a single transaction.
 
         Args:
             org: Organization entity to persist
@@ -257,8 +254,7 @@ class OrgStore:
 
     @staticmethod
     async def delete_org_cascade(org_id: UUID) -> Org | None:
-        """
-        Delete organization and all associated data in cascade, including external LiteLLM cleanup.
+        """Delete organization and all associated data in cascade, including external LiteLLM cleanup.
 
         Args:
             org_id: UUID of the organization to delete

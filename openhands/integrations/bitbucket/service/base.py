@@ -19,8 +19,7 @@ from openhands.utils.http_session import httpx_verify_option
 
 
 class BitBucketMixinBase(BaseGitService, HTTPClient):
-    """
-    Base mixin for BitBucket service containing common functionality
+    """Base mixin for BitBucket service containing common functionality
     """
 
     BASE_URL = 'https://api.bitbucket.org/2.0'

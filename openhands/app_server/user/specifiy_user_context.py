@@ -45,7 +45,8 @@ ADMIN = SpecifyUserContext(user_id=None)
 
 def as_admin(request: Request):
     """Service the request as an admin user without restrictions. The endpoint should
-    handle security."""
+    handle security.
+    """
     user_context = getattr(request.state, USER_CONTEXT_ATTR, None)
     if user_context not in (None, ADMIN):
         raise OpenHandsError(

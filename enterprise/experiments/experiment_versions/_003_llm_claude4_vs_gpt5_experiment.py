@@ -1,5 +1,4 @@
-"""
-LiteLLM model experiment handler.
+"""LiteLLM model experiment handler.
 
 This module contains the handler for the LiteLLM model experiment.
 """
@@ -110,8 +109,7 @@ def handle_claude4_vs_gpt5_experiment(
     conversation_id: str,
     conversation_settings: ConversationInitData,
 ) -> ConversationInitData:
-    """
-    Handle the LiteLLM model experiment.
+    """Handle the LiteLLM model experiment.
 
     Args:
         user_id: The user ID
@@ -121,7 +119,6 @@ def handle_claude4_vs_gpt5_experiment(
     Returns:
         Modified conversation settings
     """
-
     enabled_variant = _get_model_variant(user_id, conversation_id)
 
     if not enabled_variant:

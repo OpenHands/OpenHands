@@ -1,5 +1,4 @@
-"""
-TDD Tests for SaasNestedConversationManager token refresh functionality.
+"""TDD Tests for SaasNestedConversationManager token refresh functionality.
 
 This module tests the token refresh logic that prevents stale tokens from being
 sent to nested runtimes after Runtime.__init__() refreshes them.
@@ -90,8 +89,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
     async def test_returns_original_settings_when_not_conversation_init_data(
         self, conversation_manager
     ):
-        """
-        Test: Returns original settings when not ConversationInitData.
+        """Test: Returns original settings when not ConversationInitData.
 
         Arrange: Create a Settings object (not ConversationInitData)
         Act: Call _refresh_provider_tokens_after_runtime_init
@@ -113,8 +111,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
     async def test_returns_original_settings_when_no_provider_tokens(
         self, conversation_manager
     ):
-        """
-        Test: Returns original settings when no provider tokens present.
+        """Test: Returns original settings when no provider tokens present.
 
         Arrange: Create ConversationInitData without git_provider_tokens
         Act: Call _refresh_provider_tokens_after_runtime_init
@@ -136,8 +133,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
     async def test_refreshes_token_with_idp_user_id(
         self, conversation_manager, conversation_init_data_with_user_id
     ):
-        """
-        Test: Refreshes token using IDP user ID (GitLab webhook flow).
+        """Test: Refreshes token using IDP user ID (GitLab webhook flow).
 
         Arrange: ConversationInitData with GitLab token containing user_id
         Act: Call _refresh_provider_tokens_after_runtime_init with mocked TokenManager
@@ -177,8 +173,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
     async def test_refreshes_token_with_keycloak_user_id(
         self, conversation_manager, conversation_init_data_without_user_id
     ):
-        """
-        Test: Refreshes token using Keycloak user ID (Web UI flow).
+        """Test: Refreshes token using Keycloak user ID (Web UI flow).
 
         Arrange: ConversationInitData without IDP user_id, but with Keycloak user_id
         Act: Call _refresh_provider_tokens_after_runtime_init with mocked TokenManager
@@ -226,8 +221,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
     async def test_keeps_original_token_when_refresh_fails(
         self, conversation_manager, conversation_init_data_with_user_id
     ):
-        """
-        Test: Keeps original token when refresh fails (error handling).
+        """Test: Keeps original token when refresh fails (error handling).
 
         Arrange: ConversationInitData with token, TokenManager raises exception
         Act: Call _refresh_provider_tokens_after_runtime_init
@@ -265,8 +259,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
     async def test_keeps_original_token_when_no_fresh_token_available(
         self, conversation_manager, conversation_init_data_with_user_id
     ):
-        """
-        Test: Keeps original token when no fresh token is available.
+        """Test: Keeps original token when no fresh token is available.
 
         Arrange: ConversationInitData with token, TokenManager returns None
         Act: Call _refresh_provider_tokens_after_runtime_init
@@ -304,8 +297,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
     async def test_creates_new_settings_object_preserving_immutability(
         self, conversation_manager, conversation_init_data_with_user_id
     ):
-        """
-        Test: Creates new settings object (respects Pydantic frozen fields).
+        """Test: Creates new settings object (respects Pydantic frozen fields).
 
         Arrange: ConversationInitData with frozen git_provider_tokens field
         Act: Call _refresh_provider_tokens_after_runtime_init
@@ -337,8 +329,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
 
     @pytest.mark.asyncio
     async def test_handles_multiple_providers(self, conversation_manager):
-        """
-        Test: Handles multiple provider tokens correctly.
+        """Test: Handles multiple provider tokens correctly.
 
         Arrange: ConversationInitData with both GitLab and GitHub tokens
         Act: Call _refresh_provider_tokens_after_runtime_init
@@ -398,8 +389,7 @@ class TestRefreshProviderTokensAfterRuntimeInit:
 
     @pytest.mark.asyncio
     async def test_preserves_token_host_field(self, conversation_manager):
-        """
-        Test: Preserves the host field from original token.
+        """Test: Preserves the host field from original token.
 
         Arrange: ProviderToken with custom host value
         Act: Call _refresh_provider_tokens_after_runtime_init

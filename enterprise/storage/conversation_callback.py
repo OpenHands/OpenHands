@@ -19,8 +19,7 @@ from openhands.utils.import_utils import get_impl
 
 
 class ConversationCallbackProcessor(BaseModel, ABC):
-    """
-    Abstract base class for conversation callback processors.
+    """Abstract base class for conversation callback processors.
 
     Conversation processors are invoked when events occur in a conversation
     to perform additional processing, notifications, or integrations.
@@ -39,8 +38,7 @@ class ConversationCallbackProcessor(BaseModel, ABC):
         callback: ConversationCallback,
         observation: 'AgentStateChangedObservation',
     ) -> None:
-        """
-        Process a conversation event.
+        """Process a conversation event.
 
         Args:
             conversation_id: The ID of the conversation to process
@@ -58,8 +56,7 @@ class CallbackStatus(Enum):
 
 
 class ConversationCallback(Base):  # type: ignore
-    """
-    Model for storing conversation callbacks that process conversation events.
+    """Model for storing conversation callbacks that process conversation events.
     """
 
     __tablename__ = 'conversation_callbacks'
@@ -89,8 +86,7 @@ class ConversationCallback(Base):  # type: ignore
     )
 
     def get_processor(self) -> ConversationCallbackProcessor:
-        """
-        Get the processor instance from the stored processor type and JSON data.
+        """Get the processor instance from the stored processor type and JSON data.
 
         Returns:
             ConversationCallbackProcessor: The processor instance
@@ -103,8 +99,7 @@ class ConversationCallback(Base):  # type: ignore
         return processor
 
     def set_processor(self, processor: ConversationCallbackProcessor) -> None:
-        """
-        Set the processor instance, storing its type and JSON representation.
+        """Set the processor instance, storing its type and JSON representation.
 
         Args:
             processor: The ConversationCallbackProcessor instance to store

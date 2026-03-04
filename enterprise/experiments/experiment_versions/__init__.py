@@ -1,5 +1,4 @@
-"""
-Experiment versions package.
+"""Experiment versions package.
 
 This package contains handlers for different experiment versions.
 """

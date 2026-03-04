@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Update OpenHands OpenAPI documentation.
+"""Update OpenHands OpenAPI documentation.
 
 Generates the OpenAPI specification from the FastAPI application and writes it
 to docs/openapi.json.

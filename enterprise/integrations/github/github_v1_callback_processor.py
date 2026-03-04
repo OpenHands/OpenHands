@@ -42,7 +42,6 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
         event: Event,
     ) -> EventCallbackResult | None:
         """Process events for GitHub V1 integration."""
-
         # Only handle ConversationStateUpdateEvent
         if not isinstance(event, ConversationStateUpdateEvent):
             return None
@@ -230,8 +229,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
     # -------------------------------------------------------------------------
 
     async def _request_summary(self, conversation_id: UUID) -> str:
-        """
-        Ask the agent to produce a summary of its work and return the agent response.
+        """Ask the agent to produce a summary of its work and return the agent response.
 
         NOTE: This method now returns a string (the agent server's response text)
         and raises exceptions on errors. The wrapping into EventCallbackResult

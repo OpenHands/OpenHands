@@ -13,7 +13,8 @@ HTTPX_CLIENT_KEEP_OPEN_ATTR = 'httpx_client_keep_open'
 class HttpxClientInjector(BaseModel, Injector[httpx.AsyncClient]):
     """Injector for a httpx client. By keeping a single httpx client alive in the
     context of server requests handshakes are minimized while connection pool leaks
-    are prevented."""
+    are prevented.
+    """
 
     timeout: int = Field(default=15, description='Default timeout on all http requests')
 

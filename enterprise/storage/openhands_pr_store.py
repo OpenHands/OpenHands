@@ -12,8 +12,7 @@ from openhands.integrations.service_types import ProviderType
 
 class OpenhandsPRStore:
     async def insert_pr(self, pr: OpenhandsPR) -> None:
-        """
-        Insert a new PR or delete and recreate if repo_id and pr_number already exist.
+        """Insert a new PR or delete and recreate if repo_id and pr_number already exist.
         """
         async with a_session_maker() as session:
             # Check if PR already exists
@@ -35,8 +34,7 @@ class OpenhandsPRStore:
             await session.commit()
 
     async def increment_process_attempts(self, repo_id: str, pr_number: int) -> bool:
-        """
-        Increment the process attempts counter for a PR.
+        """Increment the process attempts counter for a PR.
 
         Args:
             repo_id: Repository identifier
@@ -70,8 +68,7 @@ class OpenhandsPRStore:
         num_openhands_review_comments: int,
         num_openhands_general_comments: int,
     ) -> bool:
-        """
-        Update OpenHands statistics for a PR with row-level locking and timestamp validation.
+        """Update OpenHands statistics for a PR with row-level locking and timestamp validation.
 
         Args:
             repo_id: Repository identifier
@@ -121,8 +118,7 @@ class OpenhandsPRStore:
     async def get_unprocessed_prs(
         self, limit: int = 50, max_retries: int = 3
     ) -> list[OpenhandsPR]:
-        """
-        Get unprocessed PR entries from the OpenhandsPR table.
+        """Get unprocessed PR entries from the OpenhandsPR table.
 
         Args:
             limit: Maximum number of PRs to retrieve (default: 50)

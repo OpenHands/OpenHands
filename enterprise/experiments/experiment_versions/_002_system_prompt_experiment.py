@@ -1,5 +1,4 @@
-"""
-System prompt experiment handler.
+"""System prompt experiment handler.
 
 This module contains the handler for the system prompt experiment that uses
 the PostHog variant as the system prompt filename.
@@ -17,8 +16,7 @@ from openhands.core.logger import openhands_logger as logger
 
 
 def _get_system_prompt_variant(user_id, conversation_id):
-    """
-    Get the system prompt variant for the experiment.
+    """Get the system prompt variant for the experiment.
 
     Args:
         user_id: The user ID
@@ -119,8 +117,7 @@ def _get_system_prompt_variant(user_id, conversation_id):
 def handle_system_prompt_experiment(
     user_id, conversation_id, config: OpenHandsConfig
 ) -> OpenHandsConfig:
-    """
-    Handle the system prompt experiment for OpenHands config.
+    """Handle the system prompt experiment for OpenHands config.
 
     Args:
         user_id: The user ID

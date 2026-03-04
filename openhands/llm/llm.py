@@ -569,7 +569,6 @@ class LLM(RetryMixin, DebugMixin):
         Returns:
             bool: True if model is vision capable. Return False if model not supported by litellm.
         """
-
         # Allow manual override via environment variable
         if os.getenv('OPENHANDS_FORCE_VISION', '').lower() in (
             '1',

@@ -18,8 +18,7 @@ GITHUB_PROXY_ENDPOINTS = bool(os.environ.get('GITHUB_PROXY_ENDPOINTS'))
 
 
 def add_github_proxy_routes(app: FastAPI):
-    """
-    Authentication endpoints for feature branches.
+    """Authentication endpoints for feature branches.
 
     # Requirements
     * This should never be enabled in prod!

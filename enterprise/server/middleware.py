@@ -24,8 +24,7 @@ from openhands.server.utils import config
 
 
 class SetAuthCookieMiddleware:
-    """
-    Update the auth cookie with the current authentication state if it was refreshed before sending response to user.
+    """Update the auth cookie with the current authentication state if it was refreshed before sending response to user.
     Deleting invalid cookies is handled by CookieError using FastAPIs standard error handling mechanism
     """
 

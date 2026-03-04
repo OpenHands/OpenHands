@@ -1,5 +1,4 @@
-"""
-Store class for managing organization invitations.
+"""Store class for managing organization invitations.
 """
 
 import secrets

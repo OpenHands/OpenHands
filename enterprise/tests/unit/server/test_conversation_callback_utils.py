@@ -1,5 +1,4 @@
-"""
-Tests for conversation_callback_utils.py
+"""Tests for conversation_callback_utils.py
 """
 
 from unittest.mock import Mock, patch
@@ -411,7 +410,6 @@ class TestInvokeConversationCallbacks:
     @pytest.fixture
     def mock_observation(self):
         """Create a mock AgentStateChangedObservation."""
-
         observation = Mock(spec=AgentStateChangedObservation)
         observation.agent_state = AgentState.FINISHED
         return observation

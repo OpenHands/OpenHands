@@ -1,5 +1,4 @@
-"""
-Shared fixtures for Jira integration tests.
+"""Shared fixtures for Jira integration tests.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch

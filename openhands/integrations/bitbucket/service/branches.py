@@ -3,8 +3,7 @@ from openhands.integrations.service_types import Branch, PaginatedBranchesRespon
 
 
 class BitBucketBranchesMixin(BitBucketMixinBase):
-    """
-    Mixin for BitBucket branch-related operations
+    """Mixin for BitBucket branch-related operations
     """
 
     async def get_branches(self, repository: str) -> list[Branch]:

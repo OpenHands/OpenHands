@@ -266,7 +266,6 @@ async def test_metrics_centralization_via_conversation_stats(
     make_mock_agent, connected_registry_and_stats
 ):
     """Test that metrics are centralized through the ConversationStats service."""
-
     mock_llm_registry, mock_conversation_stats = connected_registry_and_stats
     mock_agent = make_mock_agent(mock_llm_registry)
 
@@ -361,7 +360,6 @@ async def test_budget_control_flag_syncs_with_metrics(
     make_mock_agent, connected_registry_and_stats
 ):
     """Test that BudgetControlFlag's current value matches the accumulated costs."""
-
     mock_llm_registry, mock_conversation_stats = connected_registry_and_stats
     mock_agent = make_mock_agent(mock_llm_registry)
     # Setup

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Common Room Sync
+"""Common Room Sync
 
 This script queries the database to count conversations created by each user,
 then creates or updates a signal in Common Room for each user with their

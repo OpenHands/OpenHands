@@ -60,7 +60,8 @@ class StoredSecretStr(TypeDecorator):
 
 class UtcDateTime(TypeDecorator):
     """TypeDecorator for datetime - stores all datetimes in utc. Assumes datetime without
-    a specified timezone are utc. (Sqlite doesn't always return these)"""
+    a specified timezone are utc. (Sqlite doesn't always return these)
+    """
 
     impl = DateTime(timezone=True)
     cache_ok = True

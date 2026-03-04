@@ -1,5 +1,4 @@
-"""
-E2E: Conversation start test
+"""E2E: Conversation start test
 
 This test assumes the GitHub token has already been configured (by the
 settings test) and verifies that a conversation can be started and the
@@ -32,8 +31,7 @@ def get_readme_line_count():
 
 
 def test_conversation_start(page: Page, base_url: str):
-    """
-    Test starting a conversation with the OpenHands agent:
+    """Test starting a conversation with the OpenHands agent:
     1. Navigate to OpenHands (assumes GitHub token is already configured)
     2. Select the OpenHands repository
     3. Click Launch

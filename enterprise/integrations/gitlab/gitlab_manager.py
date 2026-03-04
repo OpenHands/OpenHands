@@ -52,8 +52,7 @@ class GitlabManager(Manager[GitlabViewType]):
     async def _user_has_write_access_to_repo(
         self, project_id: str, user_id: str
     ) -> bool:
-        """
-        Check if the user has write access to the repository (can pull/push changes and open merge requests).
+        """Check if the user has write access to the repository (can pull/push changes and open merge requests).
 
         Args:
             project_id: The ID of the GitLab project
@@ -63,7 +62,6 @@ class GitlabManager(Manager[GitlabViewType]):
         Returns:
             bool: True if the user has write access to the repository, False otherwise
         """
-
         keycloak_user_id = await self.token_manager.get_user_id_from_idp_user_id(
             user_id, ProviderType.GITLAB
         )
@@ -171,8 +169,7 @@ class GitlabManager(Manager[GitlabViewType]):
             )
 
     async def start_job(self, gitlab_view: GitlabViewType) -> None:
-        """
-        Start a job for the GitLab view.
+        """Start a job for the GitLab view.
 
         Args:
             gitlab_view: The GitLab view object containing issue/PR/comment info

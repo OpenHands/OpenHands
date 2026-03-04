@@ -61,8 +61,7 @@ class GitlabCallbackProcessor(ConversationCallbackProcessor):
         callback: ConversationCallback,
         observation: AgentStateChangedObservation,
     ) -> None:
-        """
-        Process a conversation event by sending a summary to GitLab.
+        """Process a conversation event by sending a summary to GitLab.
 
         Args:
             callback: The conversation callback

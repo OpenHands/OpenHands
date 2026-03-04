@@ -116,9 +116,7 @@ class LLMRegistry:
         return self.active_agent_llm
 
     def get_router(self, agent_config: AgentConfig) -> 'LLM':
-        """
-        Get a router instance that inherits from LLM.
-        """
+        """Get a router instance that inherits from LLM."""
         # Import here to avoid circular imports
         from openhands.llm.router import RouterLLM
 

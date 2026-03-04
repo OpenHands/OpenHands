@@ -125,8 +125,7 @@ class TestExperimentManagerIntegration:
     async def test_experiment_manager_called_with_correct_parameters_in_context__noop_pass_through(
         self,
     ):
-        """
-        Test that ExperimentManagerImpl.run_agent_variant_tests__v1 is called with correct parameters
+        """Test that ExperimentManagerImpl.run_agent_variant_tests__v1 is called with correct parameters
         and returns the same agent instance (no copy/mutation) when building a StartConversationRequest.
         """
         # --- Arrange: fixed UUID to assert call parameters deterministically

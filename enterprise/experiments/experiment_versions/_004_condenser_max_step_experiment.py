@@ -1,5 +1,4 @@
-"""
-Condenser max step experiment handler.
+"""Condenser max step experiment handler.
 
 This module contains the handler for the condenser max step experiment that tests
 different max_size values for the condenser configuration.
@@ -21,8 +20,7 @@ from openhands.server.session.conversation_init_data import ConversationInitData
 
 
 def _get_condenser_max_step_variant(user_id, conversation_id):
-    """
-    Get the condenser max step variant for the experiment.
+    """Get the condenser max step variant for the experiment.
 
     Args:
         user_id: The user ID
@@ -125,8 +123,7 @@ def handle_condenser_max_step_experiment(
     conversation_id: str,
     conversation_settings: ConversationInitData,
 ) -> ConversationInitData:
-    """
-    Handle the condenser max step experiment for conversation settings.
+    """Handle the condenser max step experiment for conversation settings.
 
     We should not modify persistent user settings. Instead, apply the experiment
     variant to the conversation's in-memory settings object for this session only.
@@ -137,7 +134,6 @@ def handle_condenser_max_step_experiment(
 
     Returns the (potentially) modified conversation_settings.
     """
-
     enabled_variant = _get_condenser_max_step_variant(user_id, conversation_id)
 
     if enabled_variant is None:

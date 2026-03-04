@@ -15,8 +15,7 @@ class UserRepositoryMapStore:
     config: OpenHandsConfig
 
     async def store_user_repo_mappings(self, mappings: list[UserRepositoryMap]) -> None:
-        """
-        Store user-repository mappings in database (async version)
+        """Store user-repository mappings in database (async version)
 
         1. Make sure to store mappings if they don't exist
         2. If a mapping already exists (same user_id and repo_id), update the admin field

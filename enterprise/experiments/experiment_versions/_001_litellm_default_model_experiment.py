@@ -1,5 +1,4 @@
-"""
-LiteLLM model experiment handler.
+"""LiteLLM model experiment handler.
 
 This module contains the handler for the LiteLLM model experiment.
 """
@@ -18,8 +17,7 @@ from openhands.core.logger import openhands_logger as logger
 def handle_litellm_default_model_experiment(
     user_id, conversation_id, conversation_settings
 ):
-    """
-    Handle the LiteLLM model experiment.
+    """Handle the LiteLLM model experiment.
 
     Args:
         user_id: The user ID

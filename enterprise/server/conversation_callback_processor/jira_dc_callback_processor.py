@@ -25,8 +25,7 @@ jira_dc_manager = JiraDcManager(token_manager)
 
 
 class JiraDcCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to Jira DC.
+    """Processor for sending conversation summaries to Jira DC.
 
     This processor is used to send summaries of conversations to Jira DC issues
     when agent state changes occur.
@@ -80,8 +79,7 @@ class JiraDcCallbackProcessor(ConversationCallbackProcessor):
         callback: ConversationCallback,
         observation: AgentStateChangedObservation,
     ) -> None:
-        """
-        Process a conversation event by sending a summary to Jira DC.
+        """Process a conversation event by sending a summary to Jira DC.
 
         Args:
             callback: The conversation callback

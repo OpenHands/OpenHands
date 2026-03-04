@@ -1,5 +1,4 @@
-"""
-Unit tests for OrgAppSettingsService.
+"""Unit tests for OrgAppSettingsService.
 
 Tests the service layer for organization app settings operations.
 """
@@ -52,8 +51,7 @@ def mock_user_context(user_id):
 async def test_get_org_app_settings_success(
     user_id, mock_org, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user's current organization exists
+    """GIVEN: A user's current organization exists
     WHEN: get_org_app_settings is called
     THEN: OrgAppSettingsResponse is returned with correct data
     """
@@ -76,8 +74,7 @@ async def test_get_org_app_settings_success(
 async def test_get_org_app_settings_org_not_found(
     user_id, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user has no current organization
+    """GIVEN: A user has no current organization
     WHEN: get_org_app_settings is called
     THEN: OrgNotFoundError is raised
     """
@@ -96,8 +93,7 @@ async def test_get_org_app_settings_org_not_found(
 async def test_update_org_app_settings_success(
     user_id, mock_org, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user's current organization exists
+    """GIVEN: A user's current organization exists
     WHEN: update_org_app_settings is called with new values
     THEN: OrgAppSettingsResponse is returned with updated data
     """
@@ -130,8 +126,7 @@ async def test_update_org_app_settings_success(
 async def test_update_org_app_settings_no_changes(
     user_id, mock_org, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user's current organization exists
+    """GIVEN: A user's current organization exists
     WHEN: update_org_app_settings is called with no fields
     THEN: Current settings are returned without calling update
     """
@@ -155,8 +150,7 @@ async def test_update_org_app_settings_no_changes(
 async def test_update_org_app_settings_org_not_found(
     user_id, mock_store, mock_user_context
 ):
-    """
-    GIVEN: A user has no current organization
+    """GIVEN: A user has no current organization
     WHEN: update_org_app_settings is called
     THEN: OrgNotFoundError is raised
     """

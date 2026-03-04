@@ -4,8 +4,7 @@ from openhands.integrations.service_types import RequestMethod
 
 
 class GitLabPRsMixin(GitLabMixinBase):
-    """
-    Methods for interacting with GitLab merge requests (PRs)
+    """Methods for interacting with GitLab merge requests (PRs)
     """
 
     async def create_mr(

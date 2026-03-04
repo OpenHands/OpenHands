@@ -1,5 +1,4 @@
-"""
-Tests for the GitlabV1CallbackProcessor.
+"""Tests for the GitlabV1CallbackProcessor.
 
 Covers:
 - Event filtering

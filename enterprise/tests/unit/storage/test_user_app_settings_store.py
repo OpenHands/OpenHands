@@ -1,5 +1,4 @@
-"""
-Unit tests for UserAppSettingsStore.
+"""Unit tests for UserAppSettingsStore.
 
 Tests the async database operations for user app settings.
 """
@@ -39,8 +38,7 @@ async def async_session_maker(async_engine):
 
 @pytest.mark.asyncio
 async def test_get_user_by_id_success(async_session_maker):
-    """
-    GIVEN: A user exists in the database
+    """GIVEN: A user exists in the database
     WHEN: get_user_by_id is called with the user's ID
     THEN: The user is returned with correct data
     """
@@ -79,8 +77,7 @@ async def test_get_user_by_id_success(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_get_user_by_id_not_found(async_session_maker):
-    """
-    GIVEN: A user does not exist in the database
+    """GIVEN: A user does not exist in the database
     WHEN: get_user_by_id is called with a non-existent ID
     THEN: None is returned
     """
@@ -98,8 +95,7 @@ async def test_get_user_by_id_not_found(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_success(async_session_maker):
-    """
-    GIVEN: A user exists in the database
+    """GIVEN: A user exists in the database
     WHEN: update_user_app_settings is called with new values
     THEN: The user's settings are updated and returned
     """
@@ -142,8 +138,7 @@ async def test_update_user_app_settings_success(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_partial(async_session_maker):
-    """
-    GIVEN: A user exists with existing settings
+    """GIVEN: A user exists with existing settings
     WHEN: update_user_app_settings is called with only some fields
     THEN: Only the provided fields are updated, others remain unchanged
     """
@@ -180,8 +175,7 @@ async def test_update_user_app_settings_partial(async_session_maker):
 
 @pytest.mark.asyncio
 async def test_update_user_app_settings_user_not_found(async_session_maker):
-    """
-    GIVEN: A user does not exist in the database
+    """GIVEN: A user does not exist in the database
     WHEN: update_user_app_settings is called
     THEN: None is returned
     """

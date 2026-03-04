@@ -23,8 +23,7 @@ from openhands.server.shared import conversation_manager
 
 
 class GithubCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to GitHub.
+    """Processor for sending conversation summaries to GitHub.
 
     This processor is used to send summaries of conversations to GitHub issues/PRs
     when agent state changes occur.
@@ -62,8 +61,7 @@ class GithubCallbackProcessor(ConversationCallbackProcessor):
         callback: ConversationCallback,
         observation: AgentStateChangedObservation,
     ) -> None:
-        """
-        Process a conversation event by sending a summary to GitHub.
+        """Process a conversation event by sending a summary to GitHub.
 
         Args:
             callback: The conversation callback

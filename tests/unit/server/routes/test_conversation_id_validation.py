@@ -1,5 +1,4 @@
-"""
-Test cases for conversation ID validation to ensure proper error handling.
+"""Test cases for conversation ID validation to ensure proper error handling.
 
 This addresses GitHub issue #10489 where long conversation IDs were returning
 500 Internal Server Error instead of proper 4xx errors.

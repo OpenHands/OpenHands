@@ -23,7 +23,8 @@ USER_AUTH_ATTR = 'user_auth'
 @dataclass
 class AuthUserContext(UserContext):
     """Interface to old user settings service. Eventually we want to migrate
-    this to use true database asyncio."""
+    this to use true database asyncio.
+    """
 
     user_auth: UserAuth
     _user_info: UserInfo | None = None

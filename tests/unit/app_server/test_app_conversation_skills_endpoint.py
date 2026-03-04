@@ -38,7 +38,6 @@ def _make_service_mock(
     raise_on_load: bool = False,
 ):
     """Create a mock service that passes the isinstance check and returns the desired values."""
-
     mock_cls = type('AppConversationServiceMock', (MagicMock,), {})
     AppConversationServiceBase.register(mock_cls)
 

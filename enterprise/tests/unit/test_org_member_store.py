@@ -845,8 +845,7 @@ async def test_get_org_members_paginated_email_filter_case_insensitive(
 async def test_update_all_members_llm_settings_async_with_llm_api_key(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization with members and llm_api_key in member settings
+    """GIVEN: Organization with members and llm_api_key in member settings
     WHEN: update_all_members_llm_settings_async is called with llm_api_key
     THEN: The llm_api_key is encrypted and stored in _llm_api_key column for all members
     """
@@ -914,8 +913,7 @@ async def test_update_all_members_llm_settings_async_with_llm_api_key(
 async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization with members
+    """GIVEN: Organization with members
     WHEN: update_all_members_llm_settings_async is called with non-encrypted fields
     THEN: The fields are updated directly without encryption
     """
@@ -979,8 +977,7 @@ async def test_update_all_members_llm_settings_async_with_non_encrypted_fields(
 async def test_update_all_members_llm_settings_async_with_empty_settings(
     async_session_maker,
 ):
-    """
-    GIVEN: Organization with members and empty member settings
+    """GIVEN: Organization with members and empty member settings
     WHEN: update_all_members_llm_settings_async is called with no fields set
     THEN: No database update is performed
     """
@@ -1041,8 +1038,7 @@ async def test_update_all_members_llm_settings_async_with_empty_settings(
 
 
 def test_org_member_llm_settings_has_updates_with_llm_api_key():
-    """
-    GIVEN: OrgMemberLLMSettings with only llm_api_key set
+    """GIVEN: OrgMemberLLMSettings with only llm_api_key set
     WHEN: has_updates() is called
     THEN: Returns True
     """
@@ -1059,8 +1055,7 @@ def test_org_member_llm_settings_has_updates_with_llm_api_key():
 
 
 def test_org_member_llm_settings_has_updates_empty():
-    """
-    GIVEN: OrgMemberLLMSettings with no fields set
+    """GIVEN: OrgMemberLLMSettings with no fields set
     WHEN: has_updates() is called
     THEN: Returns False
     """
@@ -1077,8 +1072,7 @@ def test_org_member_llm_settings_has_updates_empty():
 
 
 def test_org_llm_settings_update_apply_to_org_skips_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with llm_api_key and other fields set
+    """GIVEN: OrgLLMSettingsUpdate with llm_api_key and other fields set
     WHEN: apply_to_org() is called
     THEN: llm_api_key is NOT applied to org, but other fields are
     """
@@ -1107,8 +1101,7 @@ def test_org_llm_settings_update_apply_to_org_skips_llm_api_key():
 
 
 def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with llm_api_key set
+    """GIVEN: OrgLLMSettingsUpdate with llm_api_key set
     WHEN: get_member_updates() is called
     THEN: Returns OrgMemberLLMSettings with llm_api_key included
     """
@@ -1130,8 +1123,7 @@ def test_org_llm_settings_update_get_member_updates_includes_llm_api_key():
 
 
 def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
+    """GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
     WHEN: get_member_updates() is called
     THEN: Returns OrgMemberLLMSettings with llm_api_key (not None)
     """
@@ -1150,8 +1142,7 @@ def test_org_llm_settings_update_get_member_updates_only_llm_api_key():
 
 
 def test_org_llm_settings_update_has_updates_with_llm_api_key():
-    """
-    GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
+    """GIVEN: OrgLLMSettingsUpdate with only llm_api_key set
     WHEN: has_updates() is called
     THEN: Returns True
     """

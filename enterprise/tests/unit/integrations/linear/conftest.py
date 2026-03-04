@@ -1,5 +1,4 @@
-"""
-Shared fixtures for Linear integration tests.
+"""Shared fixtures for Linear integration tests.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch

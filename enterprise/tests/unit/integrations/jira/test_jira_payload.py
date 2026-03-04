@@ -1,5 +1,4 @@
-"""
-Tests for JiraPayloadParser.
+"""Tests for JiraPayloadParser.
 
 These tests verify the parsing behavior of Jira webhook payloads,
 including the handling of optional fields like user_email which

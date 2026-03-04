@@ -1,5 +1,4 @@
-"""
-E2E: Multi-conversation resume test
+"""E2E: Multi-conversation resume test
 
 This test verifies that a user can resume an older conversation and continue it:
 1. Start a conversation and ask a question
@@ -20,8 +19,7 @@ from playwright.sync_api import Page, expect
 
 
 def test_multi_conversation_resume(page: Page):
-    """
-    Test resuming an older conversation and continuing it:
+    """Test resuming an older conversation and continuing it:
     1. Navigate to OpenHands (assumes GitHub token is already configured)
     2. Select the OpenHands repository
     3. Start a conversation and ask about a specific file

@@ -58,8 +58,7 @@ def test_litellm_settings_debug_llm_enabled_but_declined(reset_litellm):
 
 
 def test_litellm_loggers_suppressed_with_uvicorn_json_config(reset_litellm):
-    """
-    Test that LiteLLM loggers remain suppressed after applying uvicorn JSON log config.
+    """Test that LiteLLM loggers remain suppressed after applying uvicorn JSON log config.
 
     This reproduces the bug that was introduced in v0.59.0 where calling
     logging.config.dictConfig() would reset the disabled flag on LiteLLM loggers,

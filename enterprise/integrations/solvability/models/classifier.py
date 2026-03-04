@@ -26,8 +26,7 @@ from openhands.core.config import LLMConfig
 
 
 class SolvabilityClassifier(BaseModel):
-    """
-    Machine learning pipeline for predicting the solvability of GitHub issues and similar problems.
+    """Machine learning pipeline for predicting the solvability of GitHub issues and similar problems.
 
     This classifier combines LLM-based feature extraction with traditional ML classification:
     1. Uses a Featurizer to extract semantic boolean features from issue descriptions via LLM calls
@@ -87,8 +86,7 @@ class SolvabilityClassifier(BaseModel):
 
     @model_validator(mode='after')
     def validate_random_state(self) -> SolvabilityClassifier:
-        """
-        Validate the random state configuration between this object and the classifier.
+        """Validate the random state configuration between this object and the classifier.
         """
         # If both random states are set, they definitely need to agree.
         if self.random_state is not None and self.classifier.random_state is not None:
@@ -104,8 +102,7 @@ class SolvabilityClassifier(BaseModel):
 
     @property
     def features_(self) -> pd.DataFrame:
-        """
-        Get the features used by the classifier for the most recent inputs.
+        """Get the features used by the classifier for the most recent inputs.
         """
         if 'features_' not in self._classifier_attrs:
             raise ValueError(
@@ -115,8 +112,7 @@ class SolvabilityClassifier(BaseModel):
 
     @property
     def cost_(self) -> pd.DataFrame:
-        """
-        Get the cost of the classifier for the most recent inputs.
+        """Get the cost of the classifier for the most recent inputs.
         """
         if 'cost_' not in self._classifier_attrs:
             raise ValueError(
@@ -126,8 +122,7 @@ class SolvabilityClassifier(BaseModel):
 
     @property
     def feature_importances_(self) -> np.ndarray:
-        """
-        Get the feature importances for the most recent inputs.
+        """Get the feature importances for the most recent inputs.
         """
         if 'feature_importances_' not in self._classifier_attrs:
             raise ValueError(
@@ -138,8 +133,7 @@ class SolvabilityClassifier(BaseModel):
 
     @property
     def is_fitted(self) -> bool:
-        """
-        Check if the classifier is fitted.
+        """Check if the classifier is fitted.
         """
         try:
             check_is_fitted(self.classifier)
@@ -148,8 +142,7 @@ class SolvabilityClassifier(BaseModel):
             return False
 
     def transform(self, issues: pd.Series, llm_config: LLMConfig) -> pd.DataFrame:
-        """
-        Transform the input issues using the featurizer to extract features.
+        """Transform the input issues using the featurizer to extract features.
 
         This method orchestrates the feature extraction pipeline:
         1. Uses the featurizer to generate embeddings for all issues
@@ -183,8 +176,7 @@ class SolvabilityClassifier(BaseModel):
     def fit(
         self, issues: pd.Series, labels: pd.Series, llm_config: LLMConfig
     ) -> SolvabilityClassifier:
-        """
-        Fit the classifier to the input issues and labels.
+        """Fit the classifier to the input issues and labels.
 
         Args:
             issues: A pandas Series containing the issue descriptions.
@@ -208,8 +200,7 @@ class SolvabilityClassifier(BaseModel):
         return self
 
     def predict_proba(self, issues: pd.Series, llm_config: LLMConfig) -> np.ndarray:
-        """
-        Predict the solvability probabilities for the input issues.
+        """Predict the solvability probabilities for the input issues.
 
         Returns class probabilities where the second column represents the probability
         of the issue being solvable (positive class).
@@ -243,8 +234,7 @@ class SolvabilityClassifier(BaseModel):
         return scores  # type: ignore[no-any-return]
 
     def predict(self, issues: pd.Series, llm_config: LLMConfig) -> np.ndarray:
-        """
-        Predict the solvability of the input issues by returning binary labels.
+        """Predict the solvability of the input issues by returning binary labels.
 
         Uses a 0.5 probability threshold to convert probabilities to binary predictions.
 
@@ -266,8 +256,7 @@ class SolvabilityClassifier(BaseModel):
         scores: np.ndarray,
         labels: np.ndarray | None = None,
     ) -> np.ndarray:
-        """
-        Calculate feature importance scores using the configured strategy.
+        """Calculate feature importance scores using the configured strategy.
 
         Different strategies provide different interpretations:
         - SHAP: Shapley values indicating contribution to individual predictions
@@ -313,8 +302,7 @@ class SolvabilityClassifier(BaseModel):
                 )
 
     def add_features(self, features: list[Feature]) -> SolvabilityClassifier:
-        """
-        Add new features to the classifier's featurizer.
+        """Add new features to the classifier's featurizer.
 
         Note: Adding features after training requires retraining the classifier
         since the feature space will have changed.
@@ -331,8 +319,7 @@ class SolvabilityClassifier(BaseModel):
         return self
 
     def forget_features(self, features: list[Feature]) -> SolvabilityClassifier:
-        """
-        Remove features from the classifier's featurizer.
+        """Remove features from the classifier's featurizer.
 
         Note: Removing features after training requires retraining the classifier
         since the feature space will have changed.
@@ -354,16 +341,14 @@ class SolvabilityClassifier(BaseModel):
     @field_serializer('classifier')
     @staticmethod
     def _rfc_to_json(rfc: RandomForestClassifier) -> str:
-        """
-        Convert a RandomForestClassifier to a JSON-compatible value (a string).
+        """Convert a RandomForestClassifier to a JSON-compatible value (a string).
         """
         return base64.b64encode(pickle.dumps(rfc)).decode('utf-8')
 
     @field_validator('classifier', mode='before')
     @staticmethod
     def _json_to_rfc(value: str | RandomForestClassifier) -> RandomForestClassifier:
-        """
-        Convert a JSON-compatible value (a string) back to a RandomForestClassifier.
+        """Convert a JSON-compatible value (a string) back to a RandomForestClassifier.
         """
         if isinstance(value, RandomForestClassifier):
             return value
@@ -383,8 +368,7 @@ class SolvabilityClassifier(BaseModel):
     def solvability_report(
         self, issue: str, llm_config: LLMConfig, **kwargs: Any
     ) -> SolvabilityReport:
-        """
-        Generate a solvability report for the given issue.
+        """Generate a solvability report for the given issue.
 
         Args:
             issue: The issue description for which to generate the report.
@@ -427,7 +411,6 @@ class SolvabilityClassifier(BaseModel):
     def __call__(
         self, issue: str, llm_config: LLMConfig, **kwargs: Any
     ) -> SolvabilityReport:
-        """
-        Generate a solvability report for the given issue.
+        """Generate a solvability report for the given issue.
         """
         return self.solvability_report(issue, llm_config=llm_config, **kwargs)

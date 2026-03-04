@@ -206,6 +206,7 @@ class CondensationRequestAction(Action):
 @dataclass
 class TaskTrackingAction(Action):
     """An action where the agent writes or updates a task list for task management.
+
     Attributes:
         task_list (list): The list of task items with their status and metadata.
         thought (str): The agent's explanation of its actions.
@@ -232,6 +233,7 @@ class TaskTrackingAction(Action):
 class LoopRecoveryAction(Action):
     """An action that shows three ways to handle dead loop.
     The class should be invisible to LLM.
+
     Attributes:
         option (int): 1 allow user to prompt again
                       2 automatically use latest user prompt

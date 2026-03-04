@@ -26,7 +26,6 @@ async def get_llm_models_dependency(request: Request) -> list[str]:
     Returns a factory that produces the actual implementation function.
     Override this in enterprise/saas mode via app.dependency_overrides.
     """
-
     return get_supported_llm_models(config, [])
 
 

@@ -31,6 +31,7 @@ class GoogleSheetsClient:
         self, spreadsheet_id: str, range_name: str
     ) -> Optional[List[str]]:
         """Get usernames from cache if available and not expired.
+
         Args:
             spreadsheet_id: The ID of the Google Sheet
             range_name: The A1 notation of the range to fetch
@@ -56,6 +57,7 @@ class GoogleSheetsClient:
         self, spreadsheet_id: str, range_name: str, usernames: List[str]
     ) -> None:
         """Update cache with new usernames and current timestamp.
+
         Args:
             spreadsheet_id: The ID of the Google Sheet
             range_name: The A1 notation of the range to fetch
@@ -67,6 +69,7 @@ class GoogleSheetsClient:
     def get_usernames(self, spreadsheet_id: str, range_name: str = 'A:A') -> List[str]:
         """Get list of usernames from specified Google Sheet.
         Uses cached data if available and less than 15 seconds old.
+
         Args:
             spreadsheet_id: The ID of the Google Sheet
             range_name: The A1 notation of the range to fetch

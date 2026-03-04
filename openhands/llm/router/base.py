@@ -22,8 +22,7 @@ ROUTER_LLM_REGISTRY: dict[str, type['RouterLLM']] = {}
 
 
 class RouterLLM(LLM):
-    """
-    Base class for multiple LLM acting as a unified LLM.
+    """Base class for multiple LLM acting as a unified LLM.
 
     This class provides a foundation for implementing model routing by inheriting from LLM,
     allowing routers to work with multiple underlying LLM models while presenting a unified
@@ -43,8 +42,7 @@ class RouterLLM(LLM):
         metrics: Metrics | None = None,
         retry_listener: Callable[[int, int], None] | None = None,
     ):
-        """
-        Initialize RouterLLM with multiple LLM support.
+        """Initialize RouterLLM with multiple LLM support.
         """
         self.llm_registry = llm_registry
         self.model_routing_config = agent_config.model_routing
@@ -94,14 +92,12 @@ class RouterLLM(LLM):
 
     @abstractmethod
     def _select_llm(self, messages: list[Message]) -> str:
-        """
-        Select which LLM to use based on messages and events.
+        """Select which LLM to use based on messages and events.
         """
         pass
 
     def _get_llm_by_key(self, llm_key: str) -> LLM:
-        """
-        Get LLM instance by key.
+        """Get LLM instance by key.
         """
         if llm_key not in self.available_llms:
             raise ValueError(
@@ -111,8 +107,7 @@ class RouterLLM(LLM):
 
     @property
     def completion(self) -> Callable:
-        """
-        Override completion to route to appropriate LLM.
+        """Override completion to route to appropriate LLM.
 
         This method intercepts completion calls and routes them to the appropriate
         underlying LLM based on the routing logic implemented in _select_llm().

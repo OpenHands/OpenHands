@@ -65,7 +65,6 @@ def combine_thought(action: Action, thought: str) -> Action:
 
 def set_security_risk(action: Action, arguments: dict) -> None:
     """Set the security risk level for the action."""
-
     # Set security_risk attribute if provided
     if 'security_risk' in arguments:
         if arguments['security_risk'] in RISK_LEVELS:

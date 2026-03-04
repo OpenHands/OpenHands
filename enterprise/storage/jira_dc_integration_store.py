@@ -24,7 +24,6 @@ class JiraDcIntegrationStore:
         status: str = 'active',
     ) -> JiraDcWorkspace:
         """Create a new Jira DC workspace with encrypted sensitive data."""
-
         async with a_session_maker() as session:
             workspace = JiraDcWorkspace(
                 name=name.lower(),
@@ -85,7 +84,6 @@ class JiraDcIntegrationStore:
         status: str = 'active',
     ) -> JiraDcUser:
         """Create a new Jira DC workspace link."""
-
         jira_dc_user = JiraDcUser(
             keycloak_user_id=keycloak_user_id,
             jira_dc_user_id=jira_dc_user_id,
@@ -127,7 +125,6 @@ class JiraDcIntegrationStore:
         self, keycloak_user_id: str
     ) -> Optional[JiraDcUser]:
         """Retrieve user by Keycloak user ID."""
-
         async with a_session_maker() as session:
             result = await session.execute(
                 select(JiraDcUser).where(
@@ -182,7 +179,6 @@ class JiraDcIntegrationStore:
         self, keycloak_user_id: str, status: str
     ) -> JiraDcUser:
         """Update the status of a Jira DC user mapping."""
-
         async with a_session_maker() as session:
             result = await session.execute(
                 select(JiraDcUser).where(

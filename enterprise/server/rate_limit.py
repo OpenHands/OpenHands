@@ -1,5 +1,4 @@
-"""
-Usage:
+"""Usage:
 
 Call setup_rate_limit_handler on your FastAPI app to add the exception handler
 
@@ -23,8 +22,7 @@ from openhands.core.logger import openhands_logger as logger
 
 
 def setup_rate_limit_handler(app: Starlette):
-    """
-    Add exception handler that
+    """Add exception handler that
     """
     app.add_exception_handler(RateLimitException, _rate_limit_exceeded_handler)
 
@@ -56,8 +54,7 @@ class RateLimiter:
         self.limit_items = limits.parse_many(windows)
 
     async def hit(self, namespace: str, key: str):
-        """
-        Raises RateLimitException when limit is hit.
+        """Raises RateLimitException when limit is hit.
         Logs and swallows exceptions and logs if lookup fails.
         """
         for lim in self.limit_items:
@@ -80,8 +77,7 @@ class RateLimiter:
     async def _get_stats_as_result(
         self, lim: limits.RateLimitItem, namespace: str, key: str
     ) -> RateLimitResult:
-        """
-        Lookup rate limit window stats and return a RateLimitResult with the data needed for response headers.
+        """Lookup rate limit window stats and return a RateLimitResult with the data needed for response headers.
         """
         stats: limits.WindowStats = await self.strategy.get_window_stats(
             lim, namespace, key
@@ -97,8 +93,7 @@ class RateLimiter:
 
 
 def create_redis_rate_limiter(windows: str) -> RateLimiter:
-    """
-    Create a RateLimiter with the Redis backend and "Fixed Window" strategy.
+    """Create a RateLimiter with the Redis backend and "Fixed Window" strategy.
     windows arg example: "10/second; 100/minute"
     """
     backend = limits.aio.storage.RedisStorage(f'async+{get_redis_authed_url()}')
@@ -107,8 +102,7 @@ def create_redis_rate_limiter(windows: str) -> RateLimiter:
 
 
 class RateLimitException(HTTPException):
-    """
-    exception raised when a rate limit is hit.
+    """exception raised when a rate limit is hit.
     """
 
     result: RateLimitResult
@@ -121,8 +115,7 @@ class RateLimitException(HTTPException):
 
 
 def _rate_limit_exceeded_handler(request: Request, exc: Exception) -> Response:
-    """
-    Build a simple JSON response that includes the details of the rate limit that was hit.
+    """Build a simple JSON response that includes the details of the rate limit that was hit.
     """
     logger.info(exc.__class__.__name__)
     if isinstance(exc, RateLimitException):

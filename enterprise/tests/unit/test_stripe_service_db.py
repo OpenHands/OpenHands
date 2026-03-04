@@ -1,5 +1,4 @@
-"""
-This test file verifies that the stripe_service functions properly use the database
+"""This test file verifies that the stripe_service functions properly use the database
 to store and retrieve customer IDs.
 """
 
@@ -60,7 +59,6 @@ async def test_find_customer_id_by_user_id_checks_db_first(
     async_session_maker, session_maker_with_minimal_fixtures
 ):
     """Test that find_customer_id_by_user_id checks the database first"""
-
     # Add test org and user to the db
     test_user_id, test_org_id = add_test_org_and_user(
         session_maker_with_minimal_fixtures
@@ -107,7 +105,6 @@ async def test_find_customer_id_by_user_id_falls_back_to_stripe(
     async_session_maker, session_maker_with_minimal_fixtures
 ):
     """Test that find_customer_id_by_user_id falls back to Stripe if not found in the database"""
-
     # Add test org and user to the db
     test_user_id, test_org_id = add_test_org_and_user(
         session_maker_with_minimal_fixtures
@@ -151,7 +148,6 @@ async def test_create_customer_stores_id_in_db(
     async_session_maker, session_maker_with_minimal_fixtures
 ):
     """Test that create_customer stores the customer ID in the database"""
-
     # Add test org and user to the db
     test_user_id, test_org_id = add_test_org_and_user(
         session_maker_with_minimal_fixtures

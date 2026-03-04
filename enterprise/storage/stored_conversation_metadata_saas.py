@@ -1,5 +1,4 @@
-"""
-SQLAlchemy model for ConversationMetadataSaas.
+"""SQLAlchemy model for ConversationMetadataSaas.
 
 This model stores the SaaS-specific metadata for conversations,
 containing only the conversation_id, user_id, and org_id.

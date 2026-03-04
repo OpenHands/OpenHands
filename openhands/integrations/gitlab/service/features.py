@@ -9,8 +9,7 @@ from openhands.integrations.service_types import (
 
 
 class GitLabFeaturesMixin(GitLabMixinBase):
-    """
-    Methods used for custom features in UI driven via GitLab integration
+    """Methods used for custom features in UI driven via GitLab integration
     """
 
     async def _get_cursorrules_url(self, repository: str) -> str:

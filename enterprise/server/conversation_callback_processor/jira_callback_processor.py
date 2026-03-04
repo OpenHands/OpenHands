@@ -26,8 +26,7 @@ integration_store = jira_manager.integration_store
 
 
 class JiraCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to Jira.
+    """Processor for sending conversation summaries to Jira.
 
     This processor is used to send summaries of conversations to Jira issues
     when agent state changes occur.
@@ -79,8 +78,7 @@ class JiraCallbackProcessor(ConversationCallbackProcessor):
         callback: ConversationCallback,
         observation: AgentStateChangedObservation,
     ) -> None:
-        """
-        Process a conversation event by sending a summary to Jira.
+        """Process a conversation event by sending a summary to Jira.
 
         Args:
             callback: The conversation callback

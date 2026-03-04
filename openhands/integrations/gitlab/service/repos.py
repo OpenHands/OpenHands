@@ -4,8 +4,7 @@ from openhands.server.types import AppMode
 
 
 class GitLabReposMixin(GitLabMixinBase):
-    """
-    Methods for interacting with GitLab repositories
+    """Methods for interacting with GitLab repositories
     """
 
     def _parse_repository(

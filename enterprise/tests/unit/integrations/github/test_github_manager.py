@@ -1,5 +1,4 @@
-"""
-Tests for the GithubManager class.
+"""Tests for the GithubManager class.
 
 Covers:
 - User not found scenario when a GitHub user hasn't created an OpenHands account

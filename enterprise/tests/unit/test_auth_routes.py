@@ -42,7 +42,6 @@ def mock_response():
 
 def test_set_response_cookie(mock_response, mock_request):
     """Test setting the auth cookie on a response."""
-
     with patch('server.routes.auth.config') as mock_config:
         mock_config.jwt_secret.get_secret_value.return_value = 'test_secret'
 

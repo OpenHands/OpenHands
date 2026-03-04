@@ -1,5 +1,4 @@
-"""
-SQLAlchemy model for Role.
+"""SQLAlchemy model for Role.
 """
 
 from sqlalchemy import Column, Identity, Integer, String

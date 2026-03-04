@@ -1,5 +1,4 @@
-"""
-Standalone tests for the UserVersionUpgradeProcessor.
+"""Standalone tests for the UserVersionUpgradeProcessor.
 
 These tests are designed to work without the full OpenHands dependency chain.
 They test the core logic and behavior of the processor using comprehensive mocking.
@@ -75,8 +74,7 @@ class TestUserVersionUpgradeProcessorStandalone:
 
         # Mock the filtering logic that would be in the processor
         def filter_users_needing_upgrade(all_user_ids, users_from_db, current_version):
-            """
-            Simulate the logic from the processor:
+            """Simulate the logic from the processor:
             - users_from_db contains users with version < current_version
             - users not in users_from_db are already current
             """
@@ -331,8 +329,7 @@ class TestUserVersionUpgradeProcessorStandalone:
 
 # Additional integration test scenarios that would work with full dependencies
 class TestUserVersionUpgradeProcessorIntegration:
-    """
-    Integration test scenarios for when OpenHands dependencies are available.
+    """Integration test scenarios for when OpenHands dependencies are available.
 
     These tests would require:
     1. OpenHands to be installed and available
@@ -341,8 +338,7 @@ class TestUserVersionUpgradeProcessorIntegration:
     """
 
     def test_full_processor_workflow_description(self):
-        """
-        Describe the full workflow test that would be implemented with dependencies.
+        """Describe the full workflow test that would be implemented with dependencies.
 
         This test would:
         1. Create a real UserVersionUpgradeProcessor instance
@@ -358,8 +354,7 @@ class TestUserVersionUpgradeProcessorIntegration:
         pass
 
     def test_database_integration_description(self):
-        """
-        Describe database integration test that would be implemented.
+        """Describe database integration test that would be implemented.
 
         This test would:
         1. Use the session_maker fixture from conftest.py
@@ -371,8 +366,7 @@ class TestUserVersionUpgradeProcessorIntegration:
         pass
 
     def test_saas_settings_store_integration_description(self):
-        """
-        Describe SaasSettingsStore integration test.
+        """Describe SaasSettingsStore integration test.
 
         This test would:
         1. Mock SaasSettingsStore.get_instance to return a mock store

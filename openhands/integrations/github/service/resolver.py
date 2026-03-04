@@ -12,8 +12,7 @@ from openhands.integrations.service_types import Comment
 
 
 class GitHubResolverMixin(GitHubMixinBase):
-    """
-    Helper methods used for the GitHub Resolver
+    """Helper methods used for the GitHub Resolver
     """
 
     async def get_issue_or_pr_title_and_body(
@@ -89,7 +88,6 @@ class GitHubResolverMixin(GitHubMixinBase):
         Returns:
             List of Comment objects representing the entire thread
         """
-
         # Step 1: Use existing GraphQL query to get the comment and check for replyTo
         variables = {'commentId': comment_id}
         data = await self.execute_graphql_query(

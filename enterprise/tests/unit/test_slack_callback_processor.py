@@ -1,5 +1,4 @@
-"""
-Tests for the SlackCallbackProcessor.
+"""Tests for the SlackCallbackProcessor.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch

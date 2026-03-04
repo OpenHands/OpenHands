@@ -81,8 +81,7 @@ class SaaSGitLabService(GitLabService):
         return gitlab_token
 
     async def get_owned_groups(self, min_access_level: int = 40) -> list[dict]:
-        """
-        Get all top-level groups where the current user has admin access.
+        """Get all top-level groups where the current user has admin access.
 
         This method supports pagination and fetches all groups where the user has
         at least the specified access level.
@@ -128,8 +127,7 @@ class SaaSGitLabService(GitLabService):
         return groups_with_admin_access
 
     async def add_owned_projects_and_groups_to_db(self, owned_personal_projects):
-        """
-        Add owned projects and groups to the database for webhook tracking.
+        """Add owned projects and groups to the database for webhook tracking.
 
         Args:
             owned_personal_projects: List of personal projects owned by the user
@@ -177,8 +175,7 @@ class SaaSGitLabService(GitLabService):
     async def store_repository_data(
         self, users_personal_projects: list[dict], repositories: list[Repository]
     ) -> None:
-        """
-        Store repository data in the database.
+        """Store repository data in the database.
         This function combines the functionality of add_owned_projects_and_groups_to_db and store_repositories_in_db.
 
         Args:
@@ -225,8 +222,7 @@ class SaaSGitLabService(GitLabService):
     async def get_all_repositories(
         self, sort: str, app_mode: AppMode, store_in_background: bool = True
     ) -> list[Repository]:
-        """
-        Get repositories for the authenticated user, including information about the kind of project.
+        """Get repositories for the authenticated user, including information about the kind of project.
         Also collects repositories where the kind is "user" and the user is the owner.
 
         Args:
@@ -324,8 +320,7 @@ class SaaSGitLabService(GitLabService):
     async def check_resource_exists(
         self, resource_type: GitLabResourceType, resource_id: str
     ) -> tuple[bool, WebhookStatus | None]:
-        """
-        Check if resource exists and the user has access to it.
+        """Check if resource exists and the user has access to it.
 
         Args:
             resource_type: The type of resource
@@ -336,7 +331,6 @@ class SaaSGitLabService(GitLabService):
                 - bool: True if the resource exists and the user has access to it, False otherwise
                 - str: A reason message explaining the result
         """
-
         if resource_type == GitLabResourceType.GROUP:
             url = f'{self.BASE_URL}/groups/{resource_id}'
         else:
@@ -355,8 +349,7 @@ class SaaSGitLabService(GitLabService):
     async def check_webhook_exists_on_resource(
         self, resource_type: GitLabResourceType, resource_id: str, webhook_url: str
     ) -> tuple[bool, WebhookStatus | None]:
-        """
-        Check if a webhook already exists for resource with a specific URL.
+        """Check if a webhook already exists for resource with a specific URL.
 
         Args:
             resource_type: The type of resource
@@ -368,7 +361,6 @@ class SaaSGitLabService(GitLabService):
                 - bool: True if the webhook exists, False otherwise
                 - str: A reason message explaining the result
         """
-
         # Construct the URL based on the resource type
         if resource_type == GitLabResourceType.GROUP:
             url = f'{self.BASE_URL}/groups/{resource_id}/hooks'
@@ -397,8 +389,7 @@ class SaaSGitLabService(GitLabService):
     async def check_user_has_admin_access_to_resource(
         self, resource_type: GitLabResourceType, resource_id: str
     ) -> tuple[bool, WebhookStatus | None]:
-        """
-        Check if the user has admin access to resource (is either an owner or maintainer)
+        """Check if the user has admin access to resource (is either an owner or maintainer)
 
         Args:
             resource_type: The type of resource
@@ -409,7 +400,6 @@ class SaaSGitLabService(GitLabService):
                 - bool: True if the user has admin access to the resource (owner or maintainer), False otherwise
                 - str: A reason message explaining the result
         """
-
         # For groups, we need to check if the user is an owner or maintainer
         if resource_type == GitLabResourceType.GROUP:
             url = f'{self.BASE_URL}/groups/{resource_id}/members/all'
@@ -466,8 +456,7 @@ class SaaSGitLabService(GitLabService):
         webhook_uuid: str,
         scopes: list[str],
     ) -> tuple[str | None, WebhookStatus | None]:
-        """
-        Install webhook for user's group or project
+        """Install webhook for user's group or project
 
         Args:
             resource_type: The type of resource
@@ -482,7 +471,6 @@ class SaaSGitLabService(GitLabService):
                 - bool: True if installation was successful, False otherwise
                 - str: A reason message explaining the result
         """
-
         description = 'Cloud OpenHands Resolver'
 
         # Set up webhook parameters
@@ -554,8 +542,7 @@ class SaaSGitLabService(GitLabService):
     async def reply_to_issue(
         self, project_id: str, issue_number: str, discussion_id: str | None, body: str
     ):
-        """
-        Either create new comment thread, or reply to comment thread (depending on discussion_id param)
+        """Either create new comment thread, or reply to comment thread (depending on discussion_id param)
         """
         try:
             if discussion_id:
@@ -571,8 +558,7 @@ class SaaSGitLabService(GitLabService):
     async def reply_to_mr(
         self, project_id: str, merge_request_iid: str, discussion_id: str, body: str
     ):
-        """
-        Reply to comment thread on MR
+        """Reply to comment thread on MR
         """
         try:
             url = f'{self.BASE_URL}/projects/{project_id}/merge_requests/{merge_request_iid}/discussions/{discussion_id}/notes'
@@ -585,8 +571,7 @@ class SaaSGitLabService(GitLabService):
     async def get_user_resources_with_admin_access(
         self,
     ) -> tuple[list[dict], list[dict]]:
-        """
-        Get all projects and groups where the current user has admin access (maintainer or owner).
+        """Get all projects and groups where the current user has admin access (maintainer or owner).
 
         Returns:
             tuple[list[dict], list[dict]]: A tuple containing:

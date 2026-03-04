@@ -152,8 +152,7 @@ class SaasNestedConversationManager(ConversationManager):
     async def get_running_agent_loops(
         self, user_id: str | None = None, filter_to_sids: set[str] | None = None
     ) -> set[str]:
-        """
-        Get the running agent loops directly from the remote runtime.
+        """Get the running agent loops directly from the remote runtime.
         """
         conversation_ids = await self._get_all_running_conversation_ids()
 
@@ -643,10 +642,8 @@ class SaasNestedConversationManager(ConversationManager):
                 )
 
     async def _get_user_id_from_conversation(self, conversation_id: str) -> str:
+        """Get user_id from conversation_id.
         """
-        Get user_id from conversation_id.
-        """
-
         async with a_session_maker() as session:
             result = await session.execute(
                 select(StoredConversationMetadataSaas).where(

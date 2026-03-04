@@ -282,6 +282,8 @@ async def test_timeout_filtering_logic_directly(settings_store):
     # Add nested mcp_config with timeout to test that it's not removed
     if "mcp_config" not in settings_dict:
         settings_dict["mcp_config"] = {}
+    elif settings_dict["mcp_config"] is None:
+        settings_dict["mcp_config"] = {}
     settings_dict["mcp_config"]["timeout"] = 120  # Nested timeout should be preserved
 
     # Call _encrypt_kwargs directly

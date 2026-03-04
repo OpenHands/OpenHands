@@ -1,5 +1,4 @@
-"""
-Store class for managing users.
+"""Store class for managing users.
 """
 
 import asyncio
@@ -374,8 +373,7 @@ class UserStore:
 
     @staticmethod
     async def downgrade_user(user_id: str) -> UserSettings | None:
-        """
-        This method can be removed once orgs is established - probably after Feb 15 2026
+        """This method can be removed once orgs is established - probably after Feb 15 2026
         Downgrade a migrated user back to the pre-migration state.
 
         This reverses the migrate_user operation:
@@ -1017,8 +1015,7 @@ class UserStore:
     def _has_custom_settings(
         user_settings: UserSettings, old_user_version: int | None
     ) -> bool:
-        """
-        Check if user has custom LLM settings that should be preserved.
+        """Check if user has custom LLM settings that should be preserved.
         Returns True if user customized either model or base_url.
 
         Args:

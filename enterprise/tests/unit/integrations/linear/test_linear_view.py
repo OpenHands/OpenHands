@@ -1,5 +1,4 @@
-"""
-Tests for Linear view classes and factory.
+"""Tests for Linear view classes and factory.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch

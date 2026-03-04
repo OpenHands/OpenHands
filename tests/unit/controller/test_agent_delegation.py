@@ -131,11 +131,10 @@ def create_mock_agent_factory(mock_child_agent, llm_registry):
 async def test_delegation_flow(
     mock_parent_agent, mock_child_agent, mock_event_stream, connected_registry_and_stats
 ):
-    """
-    Test that when the parent agent delegates to a child
-     1. the parent's delegate is set, and once the child finishes, the parent is cleaned up properly.
-     2. metrics are accumulated globally via LLM registry (delegate adds to the global metrics)
-     3. global metrics tracking works correctly through the LLM registry
+    """Test that when the parent agent delegates to a child
+    1. the parent's delegate is set, and once the child finishes, the parent is cleaned up properly.
+    2. metrics are accumulated globally via LLM registry (delegate adds to the global metrics)
+    3. global metrics tracking works correctly through the LLM registry
     """
     llm_registry, conversation_stats = connected_registry_and_stats
 
@@ -364,8 +363,7 @@ async def test_delegate_step_different_states(
 async def test_delegate_hits_global_limits(
     mock_child_agent, mock_event_stream, mock_parent_agent, connected_registry_and_stats
 ):
-    """
-    Global limits from control flags should apply to delegates
+    """Global limits from control flags should apply to delegates
     """
     llm_registry, conversation_stats = connected_registry_and_stats
 

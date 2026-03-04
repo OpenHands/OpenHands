@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Test script for Common Room conversation count sync.
+"""Test script for Common Room conversation count sync.
 
 This script tests the functionality of the Common Room sync script
 without making any API calls to Common Room or database connections.

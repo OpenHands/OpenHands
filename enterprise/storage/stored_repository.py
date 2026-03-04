@@ -3,8 +3,7 @@ from storage.base import Base
 
 
 class StoredRepository(Base):  # type: ignore
-    """
-    Represents a repositories fetched from git providers.
+    """Represents a repositories fetched from git providers.
     """
 
     __tablename__ = 'repos'

@@ -2,8 +2,7 @@ from enum import Enum
 
 
 class ImportanceStrategy(str, Enum):
-    """
-    Strategy to use for calculating feature importances, which are used to estimate the predictive power of each feature
+    """Strategy to use for calculating feature importances, which are used to estimate the predictive power of each feature
     in training loops and explanations.
     """
 

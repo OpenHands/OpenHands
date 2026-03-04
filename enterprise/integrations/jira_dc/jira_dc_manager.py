@@ -54,7 +54,6 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
         self, user_email: str, jira_dc_user_id: str, workspace_id: int
     ) -> tuple[JiraDcUser | None, UserAuth | None]:
         """Authenticate Jira DC user and get their OpenHands user auth."""
-
         if not jira_dc_user_id or jira_dc_user_id == 'none':
             # Get Keycloak user ID from email
             keycloak_user_id = await self.token_manager.get_user_id_from_user_email(
@@ -227,7 +226,6 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
 
     async def receive_message(self, message: Message):
         """Process incoming Jira DC webhook message."""
-
         payload = message.message.get('payload', {})
         job_context = self.parse_webhook(payload)
 
@@ -321,10 +319,8 @@ class JiraDcManager(Manager[JiraDcViewInterface]):
     async def is_job_requested(
         self, message: Message, jira_dc_view: JiraDcViewInterface
     ) -> bool:
+        """Check if a job is requested and handle repository selection.
         """
-        Check if a job is requested and handle repository selection.
-        """
-
         if isinstance(jira_dc_view, JiraDcExistingConversationView):
             return True
 

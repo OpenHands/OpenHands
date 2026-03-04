@@ -1,5 +1,4 @@
-"""
-Email domain validation utilities for enterprise endpoints.
+"""Email domain validation utilities for enterprise endpoints.
 """
 
 from fastapi import Depends, HTTPException, Request, status
@@ -11,8 +10,7 @@ from openhands.server.user_auth import get_user_auth, get_user_id
 async def get_admin_user_id(
     request: Request, user_id: str | None = Depends(get_user_id)
 ) -> str:
-    """
-    Dependency that validates user has @openhands.dev email domain.
+    """Dependency that validates user has @openhands.dev email domain.
 
     This dependency can be used in place of get_user_id for endpoints that
     should only be accessible to admin users. Currently, this is implemented

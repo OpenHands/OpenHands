@@ -80,8 +80,7 @@ class SlackCallbackProcessor(ConversationCallbackProcessor):
         callback: ConversationCallback,
         observation: AgentStateChangedObservation,
     ) -> None:
-        """
-        Process a conversation event by sending a summary to Slack.
+        """Process a conversation event by sending a summary to Slack.
 
         Args:
             conversation_id: The ID of the conversation to process

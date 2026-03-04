@@ -38,7 +38,6 @@ class JiraDcNewConversationView(JiraDcViewInterface):
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Instructions passed when conversation is first initialized"""
-
         instructions_template = jinja_env.get_template('jira_dc_instructions.j2')
         instructions = instructions_template.render()
 
@@ -55,7 +54,6 @@ class JiraDcNewConversationView(JiraDcViewInterface):
 
     async def create_or_update_conversation(self, jinja_env: Environment) -> str:
         """Create a new Jira DC conversation"""
-
         if not self.selected_repo:
             raise StartingConvoException('No repository selected for this conversation')
 
@@ -115,7 +113,6 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
 
     async def _get_instructions(self, jinja_env: Environment) -> tuple[str, str]:
         """Instructions passed when conversation is first initialized"""
-
         user_msg_template = jinja_env.get_template('jira_dc_existing_conversation.j2')
         user_msg = user_msg_template.render(
             issue_key=self.job_context.issue_key,
@@ -128,7 +125,6 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
 
     async def create_or_update_conversation(self, jinja_env: Environment) -> str:
         """Update an existing Jira conversation"""
-
         user_id = self.jira_dc_user.keycloak_user_id
 
         try:
@@ -200,7 +196,6 @@ class JiraDcFactory:
         jira_dc_workspace: JiraDcWorkspace,
     ) -> JiraDcViewInterface:
         """Create appropriate Jira DC view based on the payload."""
-
         if not jira_dc_user or not saas_user_auth or not jira_dc_workspace:
             raise StartingConvoException('User not authenticated with Jira integration')
 

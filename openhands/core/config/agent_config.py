@@ -78,8 +78,7 @@ class AgentConfig(BaseModel):
 
     @property
     def resolved_system_prompt_filename(self) -> str:
-        """
-        Returns the appropriate system prompt filename based on the agent configuration.
+        """Returns the appropriate system prompt filename based on the agent configuration.
         When enable_plan_mode is True, automatically uses the long horizon system prompt
         unless a custom system_prompt_filename was explicitly set (not the default).
         """

@@ -241,7 +241,6 @@ class GithubIssue(ResolverViewInterface):
         comments, inline review comments) override this method to control ordering
         (e.g., context first, then the triggering comment, then previous comments).
         """
-
         user_instructions, conversation_instructions = await self._get_instructions(
             jinja_env
         )

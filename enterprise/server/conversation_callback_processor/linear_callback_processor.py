@@ -24,8 +24,7 @@ linear_manager = LinearManager(token_manager)
 
 
 class LinearCallbackProcessor(ConversationCallbackProcessor):
-    """
-    Processor for sending conversation summaries to Linear.
+    """Processor for sending conversation summaries to Linear.
 
     This processor is used to send summaries of conversations to Linear issues
     when agent state changes occur.
@@ -78,8 +77,7 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
         callback: ConversationCallback,
         observation: AgentStateChangedObservation,
     ) -> None:
-        """
-        Process a conversation event by sending a summary to Linear.
+        """Process a conversation event by sending a summary to Linear.
 
         Args:
             callback: The conversation callback

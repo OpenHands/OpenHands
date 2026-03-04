@@ -1,5 +1,4 @@
-"""
-Tests for GitlabManager V0/V1 conditional job creation flow.
+"""Tests for GitlabManager V0/V1 conditional job creation flow.
 
 Covers:
 - V0 path: register_callback_processor is called

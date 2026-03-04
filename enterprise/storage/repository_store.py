@@ -14,8 +14,7 @@ class RepositoryStore:
     config: OpenHandsConfig
 
     async def store_projects(self, repositories: list[StoredRepository]) -> None:
-        """
-        Store repositories in database (async version)
+        """Store repositories in database (async version)
 
         1. Make sure to store repositories if its ID doesn't exist
         2. If repository ID already exists, make sure to only update the repo is_public and repo_name fields

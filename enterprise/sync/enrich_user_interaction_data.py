@@ -14,8 +14,7 @@ data_collector = GitHubDataCollector()
 
 
 async def get_unprocessed_prs() -> list[OpenhandsPR]:
-    """
-    Get unprocessed PR entries from the OpenhandsPR table.
+    """Get unprocessed PR entries from the OpenhandsPR table.
 
     Args:
         limit: Maximum number of PRs to retrieve (default: 50)
@@ -29,18 +28,15 @@ async def get_unprocessed_prs() -> list[OpenhandsPR]:
 
 
 async def process_pr(pr: OpenhandsPR):
+    """Process a single PR to enrich its data.
     """
-    Process a single PR to enrich its data.
-    """
-
     logger.info(f'Processing PR #{pr.pr_number} from repo {pr.repo_name}')
     await data_collector.save_full_pr(pr)
     await store.increment_process_attempts(pr.repo_id, pr.pr_number)
 
 
 async def main():
-    """
-    Main function to retrieve and process unprocessed PRs.
+    """Main function to retrieve and process unprocessed PRs.
     """
     logger.info('Starting PR data enrichment process')
 

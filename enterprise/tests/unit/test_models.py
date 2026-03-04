@@ -1,5 +1,4 @@
-"""
-Test that the models are correctly defined.
+"""Test that the models are correctly defined.
 """
 
 from uuid import uuid4
