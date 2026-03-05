@@ -415,6 +415,9 @@ async def test_keycloak_callback_email_verification_rate_limited(
         assert result.status_code == 302
         assert 'email_verification_required=true' in result.headers['location']
         assert 'user_id=test_user_id' in result.headers['location']
+        # When rate limited, the redirect URL should include rate_limited=true
+        # so the frontend can show an appropriate message
+        assert 'rate_limited=true' in result.headers['location']
         # verify_email should NOT have been called due to rate limit
         mock_verify_email.assert_not_called()
         mock_rate_limit.assert_called_once()

@@ -335,6 +335,7 @@ async def keycloak_callback(
 
         # Rate limit verification emails during auth flow (60 seconds per user)
         # This is separate from the manual resend rate limit which uses 30 seconds
+        rate_limited = False
         try:
             await check_rate_limit_by_user_id(
                 request=request,
@@ -347,6 +348,7 @@ async def keycloak_callback(
         except HTTPException as e:
             if e.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
                 # Rate limited - still redirect to verification page but don't send email
+                rate_limited = True
                 logger.info(
                     f'Rate limited verification email for user {user_id} during auth flow'
                 )
@@ -354,6 +356,8 @@ async def keycloak_callback(
                 raise
 
         verification_redirect_url = f'{request.base_url}login?email_verification_required=true&user_id={user_id}'
+        if rate_limited:
+            verification_redirect_url = f'{verification_redirect_url}&rate_limited=true'
         # Preserve invitation token so it can be included in OAuth state after verification
         if invitation_token:
             verification_redirect_url = (

@@ -12275,6 +12275,22 @@
     "de": "Bitte überprüfen Sie Ihre E-Mail, um Ihr Konto zu verifizieren.",
     "uk": "Будь ласка, перевірте свою електронну пошту, щоб підтвердити свій обліковий запис."
   },
+  "AUTH$CHECK_INBOX_FOR_VERIFICATION_EMAIL": {
+    "en": "Please check your inbox for the verification email we sent earlier.",
+    "ja": "先ほど送信した確認メールを受信トレイでご確認ください。",
+    "zh-CN": "请检查您的收件箱，查收我们之前发送的验证邮件。",
+    "zh-TW": "請檢查您的收件箱，查收我們之前發送的驗證郵件。",
+    "ko-KR": "이전에 보내드린 인증 이메일을 받은 편지함에서 확인해 주세요.",
+    "no": "Vennligst sjekk innboksen din for bekreftelsese-posten vi sendte tidligere.",
+    "it": "Controlla la tua casella di posta per l'email di verifica che ti abbiamo inviato in precedenza.",
+    "pt": "Por favor, verifique sua caixa de entrada para o e-mail de verificação que enviamos anteriormente.",
+    "es": "Por favor, revisa tu bandeja de entrada para el correo de verificación que te enviamos anteriormente.",
+    "ar": "يرجى التحقق من صندوق الوارد للبريد الإلكتروني الذي أرسلناه لك سابقًا.",
+    "fr": "Veuillez vérifier votre boîte de réception pour l'e-mail de vérification que nous vous avons envoyé précédemment.",
+    "tr": "Lütfen daha önce gönderdiğimiz doğrulama e-postası için gelen kutunuzu kontrol edin.",
+    "de": "Bitte überprüfen Sie Ihren Posteingang auf die Bestätigungs-E-Mail, die wir Ihnen zuvor gesendet haben.",
+    "uk": "Будь ласка, перевірте вашу поштову скриньку на наявність листа підтвердження, який ми надіслали раніше."
+  },
   "AUTH$EMAIL_VERIFIED_PLEASE_LOGIN": {
     "en": "Your email has been verified. Please login below.",
     "ja": "メールアドレスが確認されました。下記からログインしてください。",
