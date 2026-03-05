@@ -271,6 +271,9 @@ class SlackManager(Manager[SlackViewInterface]):
             user = slack_view.slack_to_openhands_user
 
             # Fetch repositories, handling timeout errors from the provider
+            logger.info(
+                f'[Slack] Fetching repositories for user {user.slack_display_name} (id={user.slack_user_id})'
+            )
             try:
                 user_repos: list[Repository] = await self._get_repositories(
                     slack_view.saas_user_auth
