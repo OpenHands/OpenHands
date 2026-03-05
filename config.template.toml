@@ -275,6 +275,10 @@ enable_history_truncation = true
 # Whether the condensation request tool is enabled
 enable_condensation_request = false
 
+# Whether the WarpGrep codebase search tool is enabled
+# Requires WARPGREP_API_KEY or MORPH_API_KEY environment variable
+enable_warpgrep = false
+
 [agent.RepoExplorerAgent]
 # Example: use a cheaper model for RepoExplorerAgent to reduce cost, especially
 # useful when an agent doesn't demand high quality but uses a lot of tokens

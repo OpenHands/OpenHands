@@ -68,3 +68,6 @@ class ObservationType(str, Enum):
 
     LOOP_DETECTION = 'loop_detection'
     """Results of a dead-loop detection"""
+
+    WARPGREP_SEARCH = 'warpgrep_search'
+    """Results of a WarpGrep codebase search"""

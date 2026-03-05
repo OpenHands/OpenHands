@@ -23,6 +23,7 @@ from openhands.agenthub.codeact_agent.tools import (
     IPythonTool,
     LLMBasedFileEditTool,
     ThinkTool,
+    WarpGrepTool,
     create_cmd_run_tool,
     create_str_replace_editor_tool,
 )
@@ -48,9 +49,12 @@ from openhands.events.action import (
 )
 from openhands.events.action.agent import CondensationRequestAction
 from openhands.events.action.mcp import MCPAction
+from openhands.events.action.warpgrep import WarpGrepAction
 from openhands.events.event import FileEditSource, FileReadSource
 from openhands.events.tool import ToolCallMetadata
 from openhands.llm.tool_names import TASK_TRACKER_TOOL_NAME
+
+WARPGREP_TOOL_NAME = WarpGrepTool['function']['name']
 
 
 def combine_thought(action: Action, thought: str) -> Action:
@@ -301,6 +305,16 @@ def response_to_actions(
                     command=arguments['command'],
                     task_list=normalized_task_list,
                 )
+
+            # ================================================
+            # WarpGrepAction (WarpGrep codebase search)
+            # ================================================
+            elif tool_call.function.name == WARPGREP_TOOL_NAME:
+                if 'query' not in arguments:
+                    raise FunctionCallValidationError(
+                        f'Missing required argument "query" in tool call {tool_call.function.name}'
+                    )
+                action = WarpGrepAction(query=arguments['query'])
 
             # ================================================
             # MCPAction (MCP)

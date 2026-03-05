@@ -107,3 +107,6 @@ class ActionType(str, Enum):
 
     LOOP_RECOVERY = 'loop_recovery'
     """Recover dead loop."""
+
+    WARPGREP_SEARCH = 'warpgrep_search'
+    """Searches the codebase using WarpGrep, an AI-powered code search subagent."""

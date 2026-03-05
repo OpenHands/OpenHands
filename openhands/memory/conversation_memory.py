@@ -22,6 +22,7 @@ from openhands.events.action import (
 )
 from openhands.events.action.mcp import MCPAction
 from openhands.events.action.message import SystemMessageAction
+from openhands.events.action.warpgrep import WarpGrepAction
 from openhands.events.event import Event
 from openhands.events.observation import (
     AgentCondensationObservation,
@@ -43,6 +44,7 @@ from openhands.events.observation.agent import (
 )
 from openhands.events.observation.error import ErrorObservation
 from openhands.events.observation.mcp import MCPObservation
+from openhands.events.observation.warpgrep import WarpGrepObservation
 from openhands.events.observation.observation import Observation
 from openhands.events.recall_type import RecallType
 from openhands.events.serialization.event import truncate_content
@@ -241,6 +243,7 @@ class ConversationMemory:
                 BrowseURLAction,
                 MCPAction,
                 TaskTrackingAction,
+                WarpGrepAction,
             ),
         ) or (isinstance(action, CmdRunAction) and action.source == 'agent'):
             tool_metadata = action.tool_call_metadata
@@ -408,7 +411,9 @@ class ConversationMemory:
                 text = truncate_content(obs.to_agent_observation(), max_message_chars)
             message = Message(role='user', content=[TextContent(text=text)])
         elif isinstance(obs, MCPObservation):
-            # logger.warning(f'MCPObservation: {obs}')
+            text = truncate_content(obs.content, max_message_chars)
+            message = Message(role='user', content=[TextContent(text=text)])
+        elif isinstance(obs, WarpGrepObservation):
             text = truncate_content(obs.content, max_message_chars)
             message = Message(role='user', content=[TextContent(text=text)])
         elif isinstance(obs, IPythonRunCellObservation):

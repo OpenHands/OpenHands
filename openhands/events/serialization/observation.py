@@ -31,6 +31,7 @@ from openhands.events.observation.observation import Observation
 from openhands.events.observation.reject import UserRejectObservation
 from openhands.events.observation.success import SuccessObservation
 from openhands.events.observation.task_tracking import TaskTrackingObservation
+from openhands.events.observation.warpgrep import WarpGrepObservation
 from openhands.events.recall_type import RecallType
 
 observations = (
@@ -53,6 +54,7 @@ observations = (
     FileDownloadObservation,
     TaskTrackingObservation,
     LoopDetectionObservation,
+    WarpGrepObservation,
 )
 
 OBSERVATION_TYPE_TO_CLASS = {

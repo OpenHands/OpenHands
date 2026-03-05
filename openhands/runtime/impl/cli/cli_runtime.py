@@ -43,6 +43,7 @@ from openhands.events.action import (
     IPythonRunCellAction,
 )
 from openhands.events.action.mcp import MCPAction
+from openhands.events.action.warpgrep import WarpGrepAction
 from openhands.events.event import FileEditSource, FileReadSource
 from openhands.events.observation import (
     CmdOutputObservation,
@@ -755,6 +756,49 @@ class CLIRuntime(Runtime):
             error_msg = f'Error executing MCP tool {action.name}: {str(e)}'
             self.log('error', error_msg)
             return ErrorObservation(error_msg)
+
+    def warpgrep_search(self, action: WarpGrepAction) -> Observation:
+        """Execute a WarpGrep codebase search in CLI runtime."""
+        api_key = os.environ.get('WARPGREP_API_KEY') or os.environ.get(
+            'MORPH_API_KEY', ''
+        )
+        if not api_key:
+            return ErrorObservation(
+                'WarpGrep API key not configured. Set WARPGREP_API_KEY or MORPH_API_KEY environment variable.'
+            )
+
+        def run_in_sandbox(cmd: str) -> str:
+            obs = self.run(CmdRunAction(command=cmd))
+            if isinstance(obs, CmdOutputObservation):
+                return obs.content
+            return ''
+
+        from openhands.events.observation.warpgrep import WarpGrepObservation
+        from openhands.runtime.utils.warpgrep_client import WarpGrepClient
+
+        client = WarpGrepClient(
+            api_key=api_key,
+            run_in_sandbox_fn=run_in_sandbox,
+            workspace_root=str(self.workspace_root),
+        )
+        results = client.search(action.query)
+
+        content_parts = []
+        for r in results:
+            if r.get('file'):
+                content_parts.append(
+                    f"=== {r['file']} (lines {r['start']}-{r['end']}) ===\n{r['content']}"
+                )
+            else:
+                content_parts.append(r.get('content', ''))
+
+        content = '\n\n'.join(content_parts) if content_parts else 'No results found.'
+
+        return WarpGrepObservation(
+            content=content,
+            query=action.query,
+            results=results,
+        )
 
     @property
     def workspace_root(self) -> Path:

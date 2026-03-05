@@ -45,6 +45,7 @@ from openhands.events.action import (
     TaskTrackingAction,
 )
 from openhands.events.action.mcp import MCPAction
+from openhands.events.action.warpgrep import WarpGrepAction
 from openhands.events.event import Event
 from openhands.events.observation import (
     AgentThinkObservation,
@@ -1209,6 +1210,10 @@ fi
 
     @abstractmethod
     async def call_tool_mcp(self, action: MCPAction) -> Observation:
+        pass
+
+    @abstractmethod
+    def warpgrep_search(self, action: WarpGrepAction) -> Observation:
         pass
 
     # ====================================================================

@@ -50,6 +50,8 @@ class AgentConfig(BaseModel):
     """Whether to enable prompt extensions"""
     enable_mcp: bool = Field(default=True)
     """Whether to enable MCP tools"""
+    enable_warpgrep: bool = Field(default=False)
+    """Whether to enable WarpGrep codebase search tool"""
     disabled_microagents: list[str] = Field(default_factory=list)
     """A list of microagents to disable (by name, without .py extension, e.g. ["github", "lint"]). Default is None."""
     enable_history_truncation: bool = Field(default=True)

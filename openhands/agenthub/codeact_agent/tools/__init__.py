@@ -6,6 +6,7 @@ from .ipython import IPythonTool
 from .llm_based_edit import LLMBasedFileEditTool
 from .str_replace_editor import create_str_replace_editor_tool
 from .think import ThinkTool
+from .warpgrep import WarpGrepTool
 
 __all__ = [
     'BrowserTool',
@@ -16,4 +17,5 @@ __all__ = [
     'LLMBasedFileEditTool',
     'create_str_replace_editor_tool',
     'ThinkTool',
+    'WarpGrepTool',
 ]

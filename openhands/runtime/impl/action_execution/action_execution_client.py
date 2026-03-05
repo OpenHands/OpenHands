@@ -40,8 +40,10 @@ from openhands.events.action import (
 from openhands.events.action.action import Action
 from openhands.events.action.files import FileEditSource
 from openhands.events.action.mcp import MCPAction
+from openhands.events.action.warpgrep import WarpGrepAction
 from openhands.events.observation import (
     AgentThinkObservation,
+    CmdOutputObservation,
     ErrorObservation,
     NullObservation,
     Observation,
@@ -490,6 +492,50 @@ class ActionExecutionClient(Runtime):
         # No need for try/finally since disconnect() is now just resetting state
         result = await call_tool_mcp_handler(mcp_clients, action)
         return result
+
+    def warpgrep_search(self, action: WarpGrepAction) -> Observation:
+        from openhands.events.observation.warpgrep import WarpGrepObservation
+
+        api_key = os.environ.get('WARPGREP_API_KEY') or os.environ.get(
+            'MORPH_API_KEY', ''
+        )
+        if not api_key:
+            return ErrorObservation(
+                'WarpGrep API key not configured. Set WARPGREP_API_KEY or MORPH_API_KEY environment variable.'
+            )
+
+        def run_in_sandbox(cmd: str) -> str:
+            obs = self.run(CmdRunAction(command=cmd))
+            if isinstance(obs, CmdOutputObservation):
+                return obs.content
+            return ''
+
+        from openhands.runtime.utils.warpgrep_client import WarpGrepClient
+
+        client = WarpGrepClient(
+            api_key=api_key,
+            run_in_sandbox_fn=run_in_sandbox,
+            workspace_root='/workspace',
+        )
+        results = client.search(action.query)
+
+        # Format results as readable content
+        content_parts = []
+        for r in results:
+            if r.get('file'):
+                content_parts.append(
+                    f"=== {r['file']} (lines {r['start']}-{r['end']}) ===\n{r['content']}"
+                )
+            else:
+                content_parts.append(r.get('content', ''))
+
+        content = '\n\n'.join(content_parts) if content_parts else 'No results found.'
+
+        return WarpGrepObservation(
+            content=content,
+            query=action.query,
+            results=results,
+        )
 
     def close(self) -> None:
         # Make sure we don't close the session multiple times
