@@ -142,7 +142,7 @@ async def store_llm_settings(
         if settings.llm_model is None:
             settings.llm_model = existing_settings.llm_model
         # if llm_base_url is missing or empty, try to determine appropriate URL
-        if not settings.llm_base_url:
+        if settings.llm_base_url is None:
             if is_openhands_model(settings.llm_model):
                 # OpenHands models use the LiteLLM proxy
                 settings.llm_base_url = LITE_LLM_API_URL
