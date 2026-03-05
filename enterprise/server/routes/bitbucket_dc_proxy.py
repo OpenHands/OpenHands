@@ -1,12 +1,12 @@
+import os
+
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 
 from openhands.utils.http_session import httpx_verify_option
 
 router = APIRouter(prefix='/bitbucket-dc-proxy')
-BITBUCKET_BASE_URL = f'https://{BITBUCKET_DATA_CENTER_HOST}'
 
 
 # Bitbucket Data Center is not an OIDC provider, so keycloak
@@ -17,6 +17,11 @@ BITBUCKET_BASE_URL = f'https://{BITBUCKET_DATA_CENTER_HOST}'
 # for the Bitbucket Data Center OIDC provider.
 @router.get('/oauth2/userinfo')
 async def userinfo(request: Request):
+    bitbucket_data_center_host = os.environ.get('BITBUCKET_DATA_CENTER_HOST', '')
+    if not bitbucket_data_center_host:
+        raise ValueError('BITBUCKET_DATA_CENTER_HOST must be configured')
+    bitbucket_base_url = f'https://{bitbucket_data_center_host}'
+
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return JSONResponse({'error': 'missing_token'}, status_code=401)
@@ -25,7 +30,7 @@ async def userinfo(request: Request):
     async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
         # Step 1: get username
         whoami_resp = await client.get(
-            f'{BITBUCKET_BASE_URL}/plugins/servlet/applinks/whoami',
+            f'{bitbucket_base_url}/plugins/servlet/applinks/whoami',
             headers=headers,
             timeout=10,
         )
@@ -37,7 +42,7 @@ async def userinfo(request: Request):
 
         # Step 2: get user details
         user_resp = await client.get(
-            f'{BITBUCKET_BASE_URL}/rest/api/latest/users/{username}',
+            f'{bitbucket_base_url}/rest/api/latest/users/{username}',
             headers=headers,
             timeout=10,
         )
