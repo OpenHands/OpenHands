@@ -205,10 +205,12 @@ async def keycloak_callback(
             status_code=status.HTTP_401_UNAUTHORIZED, detail='Missing required role'
         )
 
-    if user_info.preferred_username is None:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={'error': 'Missing user ID or username in response'},
+    authorization = await user_create_authorizer.authorize_user_create(user_info)
+    if not authorization.success:
+        # Return unauthorized
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=authorization.error_detail,
         )
 
     email = user_info.email
@@ -216,14 +218,6 @@ async def keycloak_callback(
     user_info_dict = user_info.model_dump(exclude_none=True)
     user = await UserStore.get_user_by_id(user_id)
     if not user:
-        authorization = await user_create_authorizer.authorize_user_create(user_info)
-        if not authorization.success:
-            # Return unauthorized
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=authorization.error_detail,
-            )
-
         user = await UserStore.create_user(user_id, user_info_dict)
     else:
         # Existing user — gradually backfill contact_name if it still has a username-style value
@@ -231,10 +225,10 @@ async def keycloak_callback(
         await UserStore.backfill_user_email(user_id, user_info_dict)
 
     if not user:
-        logger.error(f'Failed to authenticate user {user_info.preferred_username}')
+        logger.error(f'Failed to authenticate user {user_info.email}')
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f'Failed to authenticate user {user_info.preferred_username}',
+            detail=f'Failed to authenticate user {user_info.email}',
         )
 
     logger.info(f'Logging in user {str(user.id)} in org {user.current_org_id}')
