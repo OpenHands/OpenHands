@@ -253,95 +253,35 @@ class TestGetMatchingAuthorizations:
             assert len(result) == 1
 
 
-class TestHasWhitelistMatch:
-    """Tests for has_whitelist_match method."""
+class TestGetAuthorizationType:
+    """Tests for get_authorization_type method."""
 
     @pytest.mark.asyncio
-    async def test_returns_true_when_whitelist_match_exists(self, async_session_maker):
-        """Test returns True when a whitelist rule matches."""
-        with patch(
-            'storage.user_authorization_store.a_session_maker', async_session_maker
-        ):
-            await UserAuthorizationStore.create_authorization(
-                email_pattern='%@allowed.com',
-                provider_type=None,
-                auth_type=UserAuthorizationType.WHITELIST,
-            )
-
-            result = await UserAuthorizationStore.has_whitelist_match(
-                email='user@allowed.com',
-                provider_type='github',
-            )
-
-            assert result is True
-
-    @pytest.mark.asyncio
-    async def test_returns_false_when_no_whitelist_match(self, async_session_maker):
-        """Test returns False when no whitelist rule matches."""
-        with patch(
-            'storage.user_authorization_store.a_session_maker', async_session_maker
-        ):
-            # Create a blacklist rule (not whitelist)
-            await UserAuthorizationStore.create_authorization(
-                email_pattern='%@blocked.com',
-                provider_type=None,
-                auth_type=UserAuthorizationType.BLACKLIST,
-            )
-
-            result = await UserAuthorizationStore.has_whitelist_match(
-                email='user@blocked.com',
-                provider_type='github',
-            )
-
-            assert result is False
-
-    @pytest.mark.asyncio
-    async def test_returns_false_when_no_rules_exist(self, async_session_maker):
-        """Test returns False when no authorization rules exist."""
-        with patch(
-            'storage.user_authorization_store.a_session_maker', async_session_maker
-        ):
-            result = await UserAuthorizationStore.has_whitelist_match(
-                email='user@example.com',
-                provider_type='github',
-            )
-
-            assert result is False
-
-    @pytest.mark.asyncio
-    async def test_returns_true_when_whitelist_exists_among_multiple(
+    async def test_returns_whitelist_when_whitelist_match_exists(
         self, async_session_maker
     ):
-        """Test returns True when whitelist exists among multiple rules."""
+        """Test returns WHITELIST when a whitelist rule matches."""
         with patch(
             'storage.user_authorization_store.a_session_maker', async_session_maker
         ):
-            # Create both whitelist and blacklist rules
             await UserAuthorizationStore.create_authorization(
-                email_pattern='%@example.com',
+                email_pattern='%@allowed.com',
                 provider_type=None,
-                auth_type=UserAuthorizationType.BLACKLIST,
-            )
-            await UserAuthorizationStore.create_authorization(
-                email_pattern='%@example.com',
-                provider_type='github',
                 auth_type=UserAuthorizationType.WHITELIST,
             )
 
-            result = await UserAuthorizationStore.has_whitelist_match(
-                email='user@example.com',
+            result = await UserAuthorizationStore.get_authorization_type(
+                email='user@allowed.com',
                 provider_type='github',
             )
 
-            assert result is True
-
-
-class TestHasBlacklistMatch:
-    """Tests for has_blacklist_match method."""
+            assert result == UserAuthorizationType.WHITELIST
 
     @pytest.mark.asyncio
-    async def test_returns_true_when_blacklist_match_exists(self, async_session_maker):
-        """Test returns True when a blacklist rule matches."""
+    async def test_returns_blacklist_when_blacklist_match_exists(
+        self, async_session_maker
+    ):
+        """Test returns BLACKLIST when a blacklist rule matches."""
         with patch(
             'storage.user_authorization_store.a_session_maker', async_session_maker
         ):
@@ -351,48 +291,74 @@ class TestHasBlacklistMatch:
                 auth_type=UserAuthorizationType.BLACKLIST,
             )
 
-            result = await UserAuthorizationStore.has_blacklist_match(
+            result = await UserAuthorizationStore.get_authorization_type(
                 email='user@blocked.com',
                 provider_type='github',
             )
 
-            assert result is True
+            assert result == UserAuthorizationType.BLACKLIST
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_no_blacklist_match(self, async_session_maker):
-        """Test returns False when no blacklist rule matches."""
+    async def test_returns_none_when_no_rules_exist(self, async_session_maker):
+        """Test returns None when no authorization rules exist."""
         with patch(
             'storage.user_authorization_store.a_session_maker', async_session_maker
         ):
-            # Create a whitelist rule (not blacklist)
-            await UserAuthorizationStore.create_authorization(
-                email_pattern='%@allowed.com',
-                provider_type=None,
-                auth_type=UserAuthorizationType.WHITELIST,
-            )
-
-            result = await UserAuthorizationStore.has_blacklist_match(
-                email='user@allowed.com',
-                provider_type='github',
-            )
-
-            assert result is False
-
-    @pytest.mark.asyncio
-    async def test_returns_false_when_no_rules_exist(self, async_session_maker):
-        """Test returns False when no authorization rules exist."""
-        with patch(
-            'storage.user_authorization_store.a_session_maker', async_session_maker
-        ):
-            result = await UserAuthorizationStore.has_blacklist_match(
+            result = await UserAuthorizationStore.get_authorization_type(
                 email='user@example.com',
                 provider_type='github',
             )
 
-            assert result is False
+            assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_true_for_domain_block(self, async_session_maker):
+    async def test_returns_none_when_only_non_matching_rules_exist(
+        self, async_session_maker
+    ):
+        """Test returns None when rules exist but don't match."""
+        with patch(
+            'storage.user_authorization_store.a_session_maker', async_session_maker
+        ):
+            await UserAuthorizationStore.create_authorization(
+                email_pattern='%@other.com',
+                provider_type=None,
+                auth_type=UserAuthorizationType.BLACKLIST,
+            )
+
+            result = await UserAuthorizationStore.get_authorization_type(
+                email='user@example.com',
+                provider_type='github',
+            )
+
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_whitelist_takes_precedence_over_blacklist(self, async_session_maker):
+        """Test whitelist takes precedence when both match."""
+        with patch(
+            'storage.user_authorization_store.a_session_maker', async_session_maker
+        ):
+            # Create both whitelist and blacklist rules that match
+            await UserAuthorizationStore.create_authorization(
+                email_pattern='%@example.com',
+                provider_type=None,
+                auth_type=UserAuthorizationType.BLACKLIST,
+            )
+            await UserAuthorizationStore.create_authorization(
+                email_pattern='%@example.com',
+                provider_type='github',
+                auth_type=UserAuthorizationType.WHITELIST,
+            )
+
+            result = await UserAuthorizationStore.get_authorization_type(
+                email='user@example.com',
+                provider_type='github',
+            )
+
+            assert result == UserAuthorizationType.WHITELIST
+
+    @pytest.mark.asyncio
+    async def test_returns_blacklist_for_domain_block(self, async_session_maker):
         """Test blacklist match for domain-based blocking."""
         with patch(
             'storage.user_authorization_store.a_session_maker', async_session_maker
@@ -403,12 +369,12 @@ class TestHasBlacklistMatch:
                 auth_type=UserAuthorizationType.BLACKLIST,
             )
 
-            result = await UserAuthorizationStore.has_blacklist_match(
+            result = await UserAuthorizationStore.get_authorization_type(
                 email='spammer@disposable-email.com',
                 provider_type='github',
             )
 
-            assert result is True
+            assert result == UserAuthorizationType.BLACKLIST
 
 
 class TestCreateAuthorization:

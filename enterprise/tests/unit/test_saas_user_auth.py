@@ -18,6 +18,7 @@ from server.auth.saas_user_auth import (
     saas_user_auth_from_cookie,
     saas_user_auth_from_signed_token,
 )
+from storage.user_authorization import UserAuthorizationType
 
 from openhands.integrations.provider import ProviderToken, ProviderType
 
@@ -704,14 +705,16 @@ async def test_saas_user_auth_from_signed_token_blocked_domain(mock_config):
     with patch(
         'storage.user_authorization_store.UserAuthorizationStore'
     ) as mock_user_auth_store:
-        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=True)
+        mock_user_auth_store.get_authorization_type = AsyncMock(
+            return_value=UserAuthorizationType.BLACKLIST
+        )
 
         # Act & Assert
         with pytest.raises(AuthError) as exc_info:
             await saas_user_auth_from_signed_token(signed_token)
 
         assert 'email domain is not allowed' in str(exc_info.value)
-        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
             'user@colsch.us', None
         )
 
@@ -737,7 +740,7 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
     with patch(
         'storage.user_authorization_store.UserAuthorizationStore'
     ) as mock_user_auth_store:
-        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+        mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)
@@ -746,7 +749,7 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
         assert result.email == 'user@example.com'
-        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
             'user@example.com', None
         )
 
@@ -772,7 +775,7 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
     with patch(
         'storage.user_authorization_store.UserAuthorizationStore'
     ) as mock_user_auth_store:
-        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+        mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)
@@ -780,6 +783,6 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
         # Assert
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
-        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
             'user@colsch.us', None
         )

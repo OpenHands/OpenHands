@@ -18,6 +18,7 @@ from server.routes.auth import (
     logout,
     set_response_cookie,
 )
+from storage.user_authorization import UserAuthorizationType
 
 from openhands.integrations.service_types import ProviderType
 
@@ -623,7 +624,9 @@ async def test_keycloak_callback_blocked_email_domain(
         mock_user_store.backfill_contact_name = AsyncMock()
         mock_user_store.backfill_user_email = AsyncMock()
 
-        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=True)
+        mock_user_auth_store.get_authorization_type = AsyncMock(
+            return_value=UserAuthorizationType.BLACKLIST
+        )
 
         # Act
         result = await keycloak_callback(
@@ -635,7 +638,7 @@ async def test_keycloak_callback_blocked_email_domain(
         assert result.status_code == status.HTTP_401_UNAUTHORIZED
         assert 'error' in result.body.decode()
         assert 'email domain is not allowed' in result.body.decode()
-        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
             'user@colsch.us'
         )
         mock_token_manager.disable_keycloak_user.assert_called_once_with(
@@ -693,7 +696,7 @@ async def test_keycloak_callback_allowed_email_domain(
         mock_user_store.backfill_contact_name = AsyncMock()
         mock_user_store.backfill_user_email = AsyncMock()
 
-        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+        mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -705,7 +708,7 @@ async def test_keycloak_callback_allowed_email_domain(
 
         # Assert
         assert isinstance(result, RedirectResponse)
-        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
             'user@example.com'
         )
         mock_token_manager.disable_keycloak_user.assert_not_called()
@@ -761,7 +764,7 @@ async def test_keycloak_callback_domain_blocking_inactive(
         mock_user_store.backfill_contact_name = AsyncMock()
         mock_user_store.backfill_user_email = AsyncMock()
 
-        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+        mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -773,7 +776,7 @@ async def test_keycloak_callback_domain_blocking_inactive(
 
         # Assert
         assert isinstance(result, RedirectResponse)
-        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
             'user@colsch.us'
         )
         mock_token_manager.disable_keycloak_user.assert_not_called()
@@ -837,7 +840,7 @@ async def test_keycloak_callback_missing_email(mock_request, create_keycloak_use
 
         # Assert
         assert isinstance(result, RedirectResponse)
-        mock_user_auth_store.has_blacklist_match.assert_not_called()
+        mock_user_auth_store.get_authorization_type.assert_not_called()
         mock_token_manager.disable_keycloak_user.assert_not_called()
 
 
@@ -1271,7 +1274,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1338,7 +1341,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_user_store.backfill_contact_name = AsyncMock()
             mock_user_store.backfill_user_email = AsyncMock()
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1429,7 +1432,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1520,7 +1523,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1610,7 +1613,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1697,7 +1700,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1781,7 +1784,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Act
             await keycloak_callback(
@@ -1853,7 +1856,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Act
             await keycloak_callback(code='test_code', state=state, request=mock_request)
@@ -1929,7 +1932,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             mock_recaptcha_service.create_assessment.side_effect = Exception(
                 'Service error'
@@ -2002,7 +2005,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_user_store.backfill_contact_name = AsyncMock()
             mock_user_store.backfill_user_email = AsyncMock()
 
-            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
+            mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (

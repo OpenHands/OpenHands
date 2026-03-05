@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from sqlalchemy import select, text
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.database import a_session_maker
 from storage.user_authorization import UserAuthorization, UserAuthorizationType
@@ -32,35 +32,21 @@ class UserAuthorizationStore:
         Returns:
             List of matching UserAuthorization objects
         """
-        # Use raw SQL for the LIKE pattern matching since we need the pattern
-        # to be on the right side of LIKE (email LIKE pattern)
-        query = text("""
-            SELECT id, email_pattern, provider_type, type, created_at, updated_at
-            FROM user_authorizations
-            WHERE
-                (email_pattern IS NULL OR LOWER(:email) LIKE LOWER(email_pattern))
-                AND (provider_type IS NULL OR provider_type = :provider_type)
-        """)
-
-        result = await session.execute(
-            query,
-            {'email': email, 'provider_type': provider_type},
+        # Build query using SQLAlchemy ORM
+        # We need: (email_pattern IS NULL OR LOWER(email) LIKE LOWER(email_pattern))
+        #      AND (provider_type IS NULL OR provider_type = :provider_type)
+        email_condition = or_(
+            UserAuthorization.email_pattern.is_(None),
+            func.lower(email).like(func.lower(UserAuthorization.email_pattern)),
         )
-        rows = result.fetchall()
+        provider_condition = or_(
+            UserAuthorization.provider_type.is_(None),
+            UserAuthorization.provider_type == provider_type,
+        )
 
-        # Convert to UserAuthorization objects
-        authorizations = []
-        for row in rows:
-            auth = UserAuthorization(
-                id=row.id,
-                email_pattern=row.email_pattern,
-                provider_type=row.provider_type,
-                type=row.type,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-            )
-            authorizations.append(auth)
-        return authorizations
+        query = select(UserAuthorization).where(email_condition, provider_condition)
+        result = await session.execute(query)
+        return list(result.scalars().all())
 
     @staticmethod
     async def get_matching_authorizations(
@@ -88,50 +74,45 @@ class UserAuthorizationStore:
             )
 
     @staticmethod
-    async def has_whitelist_match(
+    async def get_authorization_type(
         email: str,
         provider_type: str | None,
         session: Optional[AsyncSession] = None,
-    ) -> bool:
-        """Check if there's a whitelist rule matching the email and provider.
+    ) -> UserAuthorizationType | None:
+        """Get the authorization type for the given email and provider.
+
+        Checks matching authorization rules and returns the effective authorization
+        type. Whitelist rules take precedence over blacklist rules.
 
         Args:
             email: The user's email address
-            provider_type: The identity provider type
+            provider_type: The identity provider type (e.g., 'github', 'gitlab')
+            session: Optional database session
 
         Returns:
-            True if a whitelist rule matches, False otherwise
+            UserAuthorizationType.WHITELIST if a whitelist rule matches,
+            UserAuthorizationType.BLACKLIST if a blacklist rule matches (and no whitelist),
+            None if no rules match
         """
         authorizations = await UserAuthorizationStore.get_matching_authorizations(
             email, provider_type, session
         )
-        return any(
+
+        has_whitelist = any(
             auth.type == UserAuthorizationType.WHITELIST.value
             for auth in authorizations
         )
+        if has_whitelist:
+            return UserAuthorizationType.WHITELIST
 
-    @staticmethod
-    async def has_blacklist_match(
-        email: str,
-        provider_type: str | None,
-        session: Optional[AsyncSession] = None,
-    ) -> bool:
-        """Check if there's a blacklist rule matching the email and provider.
-
-        Args:
-            email: The user's email address
-            provider_type: The identity provider type
-
-        Returns:
-            True if a blacklist rule matches, False otherwise
-        """
-        authorizations = await UserAuthorizationStore.get_matching_authorizations(
-            email, provider_type, session
-        )
-        return any(
+        has_blacklist = any(
             auth.type == UserAuthorizationType.BLACKLIST.value
             for auth in authorizations
         )
+        if has_blacklist:
+            return UserAuthorizationType.BLACKLIST
+
+        return None
 
     @staticmethod
     async def _create_authorization(

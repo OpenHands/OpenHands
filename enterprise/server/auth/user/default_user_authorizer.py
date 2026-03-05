@@ -10,6 +10,7 @@ from server.auth.user.user_authorizer import (
     UserAuthorizer,
     UserAuthorizerInjector,
 )
+from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
 
 from openhands.app_server.services.injector import InjectorState
@@ -53,16 +54,19 @@ class DefaultUserAuthorizer(UserAuthorizer):
                         success=False, error_detail='duplicate_email'
                     )
 
-            # Check whitelist - if matched, allow immediately
-            if await UserAuthorizationStore.has_whitelist_match(email, provider_type):
+            # Check authorization rules (whitelist takes precedence over blacklist)
+            auth_type = await UserAuthorizationStore.get_authorization_type(
+                email, provider_type
+            )
+
+            if auth_type == UserAuthorizationType.WHITELIST:
                 logger.debug(
                     f'User {email} matched whitelist rule',
                     extra={'user_id': user_id, 'email': email},
                 )
                 return UserAuthorizationResponse(success=True)
 
-            # Check blacklist - if matched, block
-            if await UserAuthorizationStore.has_blacklist_match(email, provider_type):
+            if auth_type == UserAuthorizationType.BLACKLIST:
                 logger.warning(
                     f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
                 )
