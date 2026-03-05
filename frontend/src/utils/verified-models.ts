@@ -20,6 +20,7 @@ export const VERIFIED_MODELS = [
   "deepseek-chat",
   "devstral-medium-2512",
   "kimi-k2-0711-preview",
+  "kimi-k2.5",
   "qwen3-coder-480b",
   "glm-4.7",
 ];
@@ -65,6 +66,7 @@ export const VERIFIED_OPENHANDS_MODELS = [
   "gemini-3-flash-preview",
   "devstral-medium-2512",
   "kimi-k2-0711-preview",
+  "kimi-k2.5",
   "qwen3-coder-480b",
   "glm-4.7",
 ];
