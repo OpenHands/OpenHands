@@ -272,7 +272,7 @@ class SlackManager(Manager[SlackViewInterface]):
 
             # Fetch repositories, handling timeout errors from the provider
             logger.info(
-                f'[Slack] Fetching repositories for user {user.slack_display_name} (id={user.slack_user_id})'
+                f'[Slack] Fetching repositories for user {user.slack_display_name} (id={slack_view.saas_user_auth.get_user_id()})'
             )
             try:
                 user_repos: list[Repository] = await self._get_repositories(
