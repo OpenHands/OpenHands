@@ -7,10 +7,10 @@ from fastapi import Request
 from pydantic import BaseModel, Field
 from server.auth.domain_blocker import domain_blocker
 from server.auth.token_manager import KeycloakUserInfo, TokenManager
-from server.auth.user_create.user_create_authorizer import (
-    UserCreateAuthorization,
-    UserCreateAuthorizer,
-    UserCreateAuthorizerInjector,
+from server.auth.user.user_authorizer import (
+    UserAuthorization,
+    UserAuthorizer,
+    UserAuthorizerInjector,
 )
 
 from openhands.app_server.services.injector import InjectorState
@@ -45,24 +45,20 @@ class UserMatch(BaseModel):
 
 
 @dataclass
-class DefaultUserCreateAuthorizer(UserCreateAuthorizer):
-    """Class determining whether a user may be created."""
+class DefaultUserAuthorizer(UserAuthorizer):
+    """Class determining whether a user may be authorized."""
 
     prevent_duplicates: bool
     whitelist: list[UserMatch]
     blacklist: list[UserMatch]
 
-    async def authorize_user_create(
-        self, user_info: KeycloakUserInfo
-    ) -> UserCreateAuthorization:
+    async def authorize_user(self, user_info: KeycloakUserInfo) -> UserAuthorization:
         user_id = user_info.sub
         email = user_info.email
         try:
             if not email:
                 logger.warning(f'No email provided for user_id: {user_id}')
-                return UserCreateAuthorization(
-                    success=False, error_detail='missing_email'
-                )
+                return UserAuthorization(success=False, error_detail='missing_email')
 
             if self.prevent_duplicates:
                 has_duplicate = await token_manager.check_duplicate_base_email(
@@ -73,26 +69,26 @@ class DefaultUserCreateAuthorizer(UserCreateAuthorizer):
                         f'Blocked signup attempt for email {email} - duplicate base email found',
                         extra={'user_id': user_id, 'email': email},
                     )
-                    return UserCreateAuthorization(
+                    return UserAuthorization(
                         success=False, error_detail='duplicate_email'
                     )
 
-            if DefaultUserCreateAuthorizer._has_match(self.whitelist, user_info):
-                return UserCreateAuthorization(success=True)
+            if DefaultUserAuthorizer._has_match(self.whitelist, user_info):
+                return UserAuthorization(success=True)
 
-            if DefaultUserCreateAuthorizer._has_match(self.blacklist, user_info):
-                return UserCreateAuthorization(success=False, error_detail='blocked')
+            if DefaultUserAuthorizer._has_match(self.blacklist, user_info):
+                return UserAuthorization(success=False, error_detail='blocked')
 
             if await domain_blocker.is_domain_blocked(email):
                 logger.warning(
                     f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
                 )
-                return UserCreateAuthorization(success=False, error_detail='blocked')
+                return UserAuthorization(success=False, error_detail='blocked')
 
-            return UserCreateAuthorization(success=True)
+            return UserAuthorization(success=True)
         except Exception:
             logger.exception('error authorizing user', extra={'user_id': user_id})
-            return UserCreateAuthorization(success=False)
+            return UserAuthorization(success=False)
 
     @staticmethod
     def _has_match(
@@ -106,7 +102,7 @@ class DefaultUserCreateAuthorizer(UserCreateAuthorizer):
         return False
 
 
-class DefaultUserCreateAuthorizerInjector(UserCreateAuthorizerInjector):
+class DefaultUserAuthorizerInjector(UserAuthorizerInjector):
     prevent_duplicates: bool = Field(
         default=True, description='Whether duplicate emails (containing +) are filtered'
     )
@@ -119,8 +115,8 @@ class DefaultUserCreateAuthorizerInjector(UserCreateAuthorizerInjector):
 
     async def inject(
         self, state: InjectorState, request: Request | None = None
-    ) -> AsyncGenerator[UserCreateAuthorizer, None]:
-        yield DefaultUserCreateAuthorizer(
+    ) -> AsyncGenerator[UserAuthorizer, None]:
+        yield DefaultUserAuthorizer(
             prevent_duplicates=self.prevent_duplicates,
             whitelist=self.whitelist,
             blacklist=self.blacklist,

@@ -22,9 +22,9 @@ from server.auth.gitlab_sync import schedule_gitlab_repo_sync
 from server.auth.recaptcha_service import recaptcha_service
 from server.auth.saas_user_auth import SaasUserAuth
 from server.auth.token_manager import TokenManager
-from server.auth.user_create.user_create_authorizer import (
-    UserCreateAuthorizer,
-    depends_user_create_authorizer,
+from server.auth.user.user_authorizer import (
+    UserAuthorizer,
+    depends_user_authorizer,
 )
 from server.config import sign_token
 from server.constants import IS_FEATURE_ENV
@@ -159,7 +159,7 @@ async def keycloak_callback(
     state: Optional[str] = None,
     error: Optional[str] = None,
     error_description: Optional[str] = None,
-    user_create_authorizer: UserCreateAuthorizer = depends_user_create_authorizer(),
+    user_authorizer: UserAuthorizer = depends_user_authorizer(),
 ):
     # Extract redirect URL, reCAPTCHA token, and invitation token from state
     redirect_url, recaptcha_token, invitation_token = _extract_oauth_state(state)
@@ -205,7 +205,7 @@ async def keycloak_callback(
             status_code=status.HTTP_401_UNAUTHORIZED, detail='Missing required role'
         )
 
-    authorization = await user_create_authorizer.authorize_user_create(user_info)
+    authorization = await user_authorizer.authorize_user(user_info)
     if not authorization.success:
         # Return unauthorized
         raise HTTPException(
