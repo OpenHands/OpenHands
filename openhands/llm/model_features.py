@@ -99,6 +99,7 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'grok-code-fast-1',
     # GLM series - verified via official docs and litellm config
     'glm-4*',
+    'glm-5*',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [
@@ -121,6 +122,7 @@ REASONING_EFFORT_PATTERNS: list[str] = [
     'claude-haiku-4-5*',
     # GLM series - verified via litellm config
     'glm-4*',
+    'glm-5*',
 ]
 
 PROMPT_CACHE_PATTERNS: list[str] = [
@@ -136,6 +138,7 @@ PROMPT_CACHE_PATTERNS: list[str] = [
     'claude-opus-4*',
     # GLM series - verified via litellm config
     'glm-4*',
+    'glm-5*',
 ]
 
 SUPPORTS_STOP_WORDS_FALSE_PATTERNS: list[str] = [
