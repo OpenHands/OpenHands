@@ -105,7 +105,7 @@ python-json-logger==3.3.0
 python-multipart==0.0.20
 PyYAML==6.0.2
 pyzmq==26.4.0
-ray==2.43.0
+ray==2.52.0
 referencing==0.36.2
 regex==2024.11.6
 requests==2.32.3
