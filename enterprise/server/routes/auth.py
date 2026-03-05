@@ -34,6 +34,7 @@ from server.services.org_invitation_service import (
     OrgInvitationService,
     UserAlreadyMemberError,
 )
+from server.utils.rate_limit_utils import check_rate_limit_by_user_id
 from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.user import User
@@ -326,11 +327,32 @@ async def keycloak_callback(
     # Check email verification status
     email_verified = user_info.email_verified or False
     if not email_verified:
-        # Send verification email
+        # Send verification email with rate limiting to prevent abuse
+        # Users who repeatedly login without verifying would otherwise trigger
+        # unlimited verification emails
         # Import locally to avoid circular import with email.py
         from server.routes.email import verify_email
 
-        await verify_email(request=request, user_id=user_id, is_auth_flow=True)
+        # Rate limit verification emails during auth flow (60 seconds per user)
+        # This is separate from the manual resend rate limit which uses 30 seconds
+        try:
+            await check_rate_limit_by_user_id(
+                request=request,
+                key_prefix='auth_verify_email',
+                user_id=user_id,
+                user_rate_limit_seconds=60,
+                ip_rate_limit_seconds=120,
+            )
+            await verify_email(request=request, user_id=user_id, is_auth_flow=True)
+        except HTTPException as e:
+            if e.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+                # Rate limited - still redirect to verification page but don't send email
+                logger.info(
+                    f'Rate limited verification email for user {user_id} during auth flow'
+                )
+            else:
+                raise
+
         verification_redirect_url = f'{request.base_url}login?email_verification_required=true&user_id={user_id}'
         # Preserve invitation token so it can be included in OAuth state after verification
         if invitation_token:

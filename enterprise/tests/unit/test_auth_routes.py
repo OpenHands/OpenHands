@@ -249,10 +249,12 @@ async def test_keycloak_callback_email_not_verified(
     """Test keycloak_callback when email is not verified."""
     # Arrange
     mock_verify_email = AsyncMock()
+    mock_rate_limit = AsyncMock()
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
         patch('server.routes.email.verify_email', mock_verify_email),
+        patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
@@ -291,6 +293,14 @@ async def test_keycloak_callback_email_not_verified(
         mock_verify_email.assert_called_once_with(
             request=mock_request, user_id='test_user_id', is_auth_flow=True
         )
+        # Verify rate limit was checked
+        mock_rate_limit.assert_called_once_with(
+            request=mock_request,
+            key_prefix='auth_verify_email',
+            user_id='test_user_id',
+            user_rate_limit_seconds=60,
+            ip_rate_limit_seconds=120,
+        )
 
 
 @pytest.mark.asyncio
@@ -300,10 +310,12 @@ async def test_keycloak_callback_email_not_verified_missing_field(
     """Test keycloak_callback when email_verified field is missing (defaults to False)."""
     # Arrange
     mock_verify_email = AsyncMock()
+    mock_rate_limit = AsyncMock()
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
         patch('server.routes.auth.user_verifier') as mock_verifier,
         patch('server.routes.email.verify_email', mock_verify_email),
+        patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
@@ -342,6 +354,70 @@ async def test_keycloak_callback_email_not_verified_missing_field(
         mock_verify_email.assert_called_once_with(
             request=mock_request, user_id='test_user_id', is_auth_flow=True
         )
+
+
+@pytest.mark.asyncio
+async def test_keycloak_callback_email_verification_rate_limited(
+    mock_request, create_keycloak_user_info
+):
+    """Test keycloak_callback when email verification is rate limited.
+
+    Users who repeatedly try to login without completing email verification
+    should not trigger unlimited verification emails.
+    """
+    from fastapi import HTTPException
+
+    # Arrange
+    mock_verify_email = AsyncMock()
+    mock_rate_limit = AsyncMock(
+        side_effect=HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail='Too many requests. Please wait 1 minute before trying again.',
+        )
+    )
+    with (
+        patch('server.routes.auth.token_manager') as mock_token_manager,
+        patch('server.routes.auth.user_verifier') as mock_verifier,
+        patch('server.routes.email.verify_email', mock_verify_email),
+        patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
+        patch('server.routes.auth.UserStore') as mock_user_store,
+    ):
+        mock_token_manager.get_keycloak_tokens = AsyncMock(
+            return_value=('test_access_token', 'test_refresh_token')
+        )
+        mock_token_manager.get_user_info = AsyncMock(
+            return_value=create_keycloak_user_info(
+                sub='test_user_id',
+                preferred_username='test_user',
+                identity_provider='github',
+                email_verified=False,
+            )
+        )
+        mock_token_manager.store_idp_tokens = AsyncMock()
+        mock_verifier.is_active.return_value = False
+
+        # Mock the user creation
+        mock_user = MagicMock()
+        mock_user.id = 'test_user_id'
+        mock_user.current_org_id = 'test_org_id'
+        mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+        mock_user_store.create_user = AsyncMock(return_value=mock_user)
+        mock_user_store.backfill_contact_name = AsyncMock()
+        mock_user_store.backfill_user_email = AsyncMock()
+
+        # Act
+        result = await keycloak_callback(
+            code='test_code', state='test_state', request=mock_request
+        )
+
+        # Assert - should still redirect to verification page but NOT send email
+        assert isinstance(result, RedirectResponse)
+        assert result.status_code == 302
+        assert 'email_verification_required=true' in result.headers['location']
+        assert 'user_id=test_user_id' in result.headers['location']
+        # verify_email should NOT have been called due to rate limit
+        mock_verify_email.assert_not_called()
+        mock_rate_limit.assert_called_once()
 
 
 @pytest.mark.asyncio
