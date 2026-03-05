@@ -119,13 +119,12 @@ class SaasUserAuth(UserAuth):
             self._settings = settings
         return settings
 
-    async def get_secrets_store(self):
+    async def get_secrets_store(self) -> SaasSecretsStore:
         logger.debug('saas_user_auth_get_secrets_store')
         secrets_store = self.secrets_store
         if secrets_store:
             return secrets_store
-        user_id = await self.get_user_id()
-        secrets_store = SaasSecretsStore(user_id, get_config())
+        secrets_store = SaasSecretsStore(self.user_id, get_config())
         self.secrets_store = secrets_store
         return secrets_store
 
@@ -211,8 +210,7 @@ class SaasUserAuth(UserAuth):
         settings_store = self.settings_store
         if settings_store:
             return settings_store
-        user_id = await self.get_user_id()
-        settings_store = SaasSettingsStore(user_id, get_config())
+        settings_store = SaasSettingsStore(self.user_id, get_config())
         self.settings_store = settings_store
         return settings_store
 

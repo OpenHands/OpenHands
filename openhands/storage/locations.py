@@ -36,7 +36,3 @@ def get_conversation_llm_registry_filename(sid: str, user_id: str | None = None)
 
 def get_conversation_stats_filename(sid: str, user_id: str | None = None) -> str:
     return f'{get_conversation_dir(sid, user_id)}conversation_stats.pkl'
-
-
-def get_experiment_config_filename(sid: str, user_id: str | None = None) -> str:
-    return f'{get_conversation_dir(sid, user_id)}exp_config.json'

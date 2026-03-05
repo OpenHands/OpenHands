@@ -1,0 +1,41 @@
+You are checked out to branch {{ branch_name }}, which has an open PR #{{ pr_number }}: "{{ pr_title }}".
+A comment on the PR has been addressed to you.
+
+# PR Description
+{{ pr_body }}
+
+{% if file_location %}
+# Comment location
+The comment is in the file `{{ file_location }}` on line #{{ line_number }}.
+{% endif %}
+
+# Comment
+{{ pr_comment }}
+
+{% if comments %}
+# Previous Comments
+You may find these other comments relevant:
+{% for comment in comments %}
+- @{{ comment.author }} said at {{ comment.created_at }}:
+{{ comment.body }}
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}
+{% endif %}
+
+# Steps to Handle the Comment
+
+## Understand the PR Context
+Use the $GITHUB_TOKEN and GitHub API to:
+    1. Retrieve the diff against the base branch (typically main) to understand the changes
+    2. Fetch the PR body and the linked issue for context
+
+## Process the Comment
+If it's a question, answer it.
+
+If it requests a code update:
+    1. Modify the code accordingly in the current branch
+    2. Commit your changes with a clear commit message
+    3. Verify if the branch is on a fork, and make sure the remote is correct
+    4. Push the changes to GitHub to update the PR.

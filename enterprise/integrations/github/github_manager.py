@@ -20,6 +20,7 @@ from integrations.models import (
 from integrations.types import ResolverViewInterface
 from integrations.utils import (
     CONVERSATION_URL,
+    ENABLE_SOLVABILITY_ANALYSIS,
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
@@ -68,11 +69,8 @@ class GithubManager(Manager[GithubViewType]):
 
         return f'{owner}/{repo_name}'
 
-    def _get_installation_access_token(self, installation_id: str) -> str:
-        # get_access_token is typed to only accept int, but it can handle str.
-        token_data = self.github_integration.get_access_token(
-            installation_id  # type: ignore[arg-type]
-        )
+    def _get_installation_access_token(self, installation_id: int) -> str:
+        token_data = self.github_integration.get_access_token(installation_id)
         return token_data.token
 
     def _add_reaction(
@@ -282,14 +280,14 @@ class GithubManager(Manager[GithubViewType]):
             self._add_reaction(github_view, 'eyes', installation_token)
             await self.start_job(github_view)
 
-    async def send_message(self, message: str, github_view: ResolverViewInterface):
+    async def send_message(self, message: str, github_view: GithubViewType):
         """Send a message to GitHub.
 
         Args:
             message: The message content to send (plain text string)
             github_view: The GitHub view object containing issue/PR/comment info
         """
-        installation_token = self.token_manager.load_org_token(
+        installation_token = await self.token_manager.load_org_token(
             github_view.installation_id
         )
         if not installation_token:
@@ -304,10 +302,8 @@ class GithubManager(Manager[GithubViewType]):
                     comment_id=github_view.comment_id, body=message
                 )
 
-        elif (
-            isinstance(github_view, GithubPRComment)
-            or isinstance(github_view, GithubIssueComment)
-            or isinstance(github_view, GithubIssue)
+        elif isinstance(
+            github_view, (GithubPRComment, GithubIssueComment, GithubIssue)
         ):
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
@@ -315,7 +311,10 @@ class GithubManager(Manager[GithubViewType]):
                 issue.create_comment(message)
 
         else:
-            logger.warning('Unsupported location')
+            # Catch any new types added to GithubViewType that aren't handled above
+            logger.warning(  # type: ignore[unreachable]
+                f'Unsupported github_view type: {type(github_view).__name__}'
+            )
             return
 
     async def start_job(self, github_view: GithubViewType) -> None:
@@ -372,19 +371,19 @@ class GithubManager(Manager[GithubViewType]):
                 #   3. Once the conversation is started, its base cost will include the report's spend as well which allows us to control max budget per resolver task
                 convo_metadata = await github_view.initialize_new_conversation()
                 solvability_summary = None
-                try:
-                    if user_token:
+                if not ENABLE_SOLVABILITY_ANALYSIS:
+                    logger.info(
+                        '[Github]: Solvability report feature is disabled, skipping'
+                    )
+                else:
+                    try:
                         solvability_summary = await summarize_issue_solvability(
                             github_view, user_token
                         )
-                    else:
+                    except Exception as e:
                         logger.warning(
-                            '[Github]: No user token available for solvability analysis'
+                            f'[Github]: Error summarizing issue solvability: {str(e)}'
                         )
-                except Exception as e:
-                    logger.warning(
-                        f'[Github]: Error summarizing issue solvability: {str(e)}'
-                    )
 
                 saas_user_auth = await get_saas_user_auth(
                     github_view.user_info.keycloak_user_id, self.token_manager

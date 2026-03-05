@@ -22,7 +22,7 @@ async def get_byor_key_from_db(user_id: str) -> str | None:
         return None
 
     current_org_id = user.current_org_id
-    current_org_member: OrgMember = None
+    current_org_member: OrgMember | None = None
     for org_member in user.org_members:
         if org_member.org_id == current_org_id:
             current_org_member = org_member
@@ -41,7 +41,7 @@ async def store_byor_key_in_db(user_id: str, key: str) -> None:
         return None
 
     current_org_id = user.current_org_id
-    current_org_member: OrgMember = None
+    current_org_member: OrgMember | None = None
     for org_member in user.org_members:
         if org_member.org_id == current_org_id:
             current_org_member = org_member
@@ -66,22 +66,15 @@ async def generate_byor_key(user_id: str) -> str | None:
             {'type': 'byor'},
         )
 
-        if key:
-            logger.info(
-                'Successfully generated new BYOR key',
-                extra={
-                    'user_id': user_id,
-                    'key_length': len(key) if key else 0,
-                    'key_prefix': key[:10] + '...' if key and len(key) > 10 else key,
-                },
-            )
-            return key
-        else:
-            logger.error(
-                'Failed to generate BYOR LLM API key - no key in response',
-                extra={'user_id': user_id},
-            )
-            return None
+        logger.info(
+            'Successfully generated new BYOR key',
+            extra={
+                'user_id': user_id,
+                'key_length': len(key),
+                'key_prefix': key[:10] + '...' if len(key) > 10 else key,
+            },
+        )
+        return key
     except Exception as e:
         logger.exception(
             'Error generating BYOR key',

@@ -129,10 +129,6 @@ async def _process_batch_operations_background(
                 # No action required
                 continue
 
-            if subpath == 'exp_config.json':
-                # No action required
-                continue
-
             # Log unhandled paths for future implementation
             logger.warning(
                 'unknown_path_in_batch_webhook',

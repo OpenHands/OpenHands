@@ -391,38 +391,10 @@ class SaasNestedConversationManager(ConversationManager):
             await self._setup_nested_settings(client, api_url, settings)
             await self._setup_provider_tokens(client, api_url, settings)
             await self._setup_custom_secrets(client, api_url, settings.custom_secrets)  # type: ignore
-            await self._setup_experiment_config(client, api_url, sid, user_id)
             await self._create_nested_conversation(
                 client, api_url, sid, user_id, settings, initial_user_msg, replay_json
             )
             await self._wait_for_conversation_ready(client, api_url, sid)
-
-    async def _setup_experiment_config(
-        self, client: httpx.AsyncClient, api_url: str, sid: str, user_id: str
-    ):
-        # Prevent circular import
-        from openhands.experiments.experiment_manager import (
-            ExperimentConfig,
-            ExperimentManagerImpl,
-        )
-
-        config: OpenHandsConfig = ExperimentManagerImpl.run_config_variant_test(
-            user_id, sid, self.config
-        )
-
-        experiment_config = ExperimentConfig(
-            config={
-                'system_prompt_filename': config.get_agent_config(
-                    config.default_agent
-                ).system_prompt_filename
-            }
-        )
-
-        response = await client.post(
-            f'{api_url}/api/conversations/{sid}/exp-config',
-            json=experiment_config.model_dump(),
-        )
-        response.raise_for_status()
 
     async def _setup_nested_settings(
         self, client: httpx.AsyncClient, api_url: str, settings: Settings
