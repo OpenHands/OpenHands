@@ -22,10 +22,10 @@ dynamic = [ "version" ]
 # Main dependencies (mirrors [tool.poetry.dependencies] for UV compatibility)
 dependencies = [
   "aiohttp>=3.13.3",
-  "authlib>=1.6.7",
   "anthropic[vertex]",
   "anyio==4.9",
   "asyncpg>=0.30",
+  "authlib>=1.6.7",
   "bashlex>=0.18",
   "boto3",
   "browsergym-core==0.13.3",
