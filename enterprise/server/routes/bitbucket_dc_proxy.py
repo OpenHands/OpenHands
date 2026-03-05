@@ -1,10 +1,9 @@
-import os
-
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from openhands.utils.http_session import httpx_verify_option
+from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 
 router = APIRouter(prefix='/bitbucket-dc-proxy')
 
@@ -17,10 +16,9 @@ router = APIRouter(prefix='/bitbucket-dc-proxy')
 # for the Bitbucket Data Center OIDC provider.
 @router.get('/oauth2/userinfo')
 async def userinfo(request: Request):
-    bitbucket_data_center_host = os.environ.get('BITBUCKET_DATA_CENTER_HOST', '')
-    if not bitbucket_data_center_host:
+    if not BITBUCKET_DATA_CENTER_HOST:
         raise ValueError('BITBUCKET_DATA_CENTER_HOST must be configured')
-    bitbucket_base_url = f'https://{bitbucket_data_center_host}'
+    bitbucket_base_url = f'https://{BITBUCKET_DATA_CENTER_HOST}'
 
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
