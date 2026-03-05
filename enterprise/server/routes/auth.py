@@ -164,6 +164,12 @@ async def keycloak_callback(
     # Extract redirect URL, reCAPTCHA token, and invitation token from state
     redirect_url, recaptcha_token, invitation_token = _extract_oauth_state(state)
 
+    if redirect_url is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Missing state in request params',
+        )
+
     if not code:
         # check if this is a forward from the account linking page
         if (
