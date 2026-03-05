@@ -43,13 +43,15 @@ class SetAuthCookieMiddleware:
             if not user_auth or user_auth.auth_type != AuthType.COOKIE:
                 return response
             if user_auth.refreshed:
+                if user_auth.access_token is None:
+                    return response
                 set_response_cookie(
                     request=request,
                     response=response,
                     keycloak_access_token=user_auth.access_token.get_secret_value(),
                     keycloak_refresh_token=user_auth.refresh_token.get_secret_value(),
                     secure=False if request.url.hostname == 'localhost' else True,
-                    accepted_tos=user_auth.accepted_tos,
+                    accepted_tos=user_auth.accepted_tos or False,
                 )
 
                 # On re-authentication (token refresh), kick off background sync for GitLab repos

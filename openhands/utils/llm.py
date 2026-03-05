@@ -16,6 +16,7 @@ from openhands.llm import bedrock
 OPENHANDS_MODELS = [
     'openhands/claude-opus-4-6',
     'openhands/claude-opus-4-5-20251101',
+    'openhands/claude-sonnet-4-6',
     'openhands/claude-sonnet-4-5-20250929',
     'openhands/gpt-5.2-codex',
     'openhands/gpt-5.2',
@@ -26,6 +27,7 @@ OPENHANDS_MODELS = [
     'openhands/devstral-medium-2512',
     'openhands/kimi-k2-0711-preview',
     'openhands/qwen3-coder-480b',
+    'openhands/glm-4.7',
 ]
 
 CLARIFAI_MODELS = [

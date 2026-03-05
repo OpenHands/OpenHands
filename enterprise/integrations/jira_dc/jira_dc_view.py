@@ -155,6 +155,9 @@ class JiraDcExistingConversationView(JiraDcViewInterface):
                 self.conversation_id, conversation_init_data, user_id
             )
 
+            if agent_loop_info.event_store is None:
+                raise StartingConvoException('Event store not available')
+
             final_agent_observation = get_final_agent_observation(
                 agent_loop_info.event_store
             )

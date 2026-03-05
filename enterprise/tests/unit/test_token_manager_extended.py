@@ -147,6 +147,8 @@ async def test_verify_keycloak_token_refresh(token_manager):
 @pytest.mark.asyncio
 async def test_get_user_info(token_manager):
     """Test getting user info from a Keycloak token."""
+    from server.auth.token_manager import KeycloakUserInfo
+
     mock_user_info = {
         'sub': 'test_user_id',
         'name': 'Test User',
@@ -158,7 +160,11 @@ async def test_get_user_info(token_manager):
 
         user_info = await token_manager.get_user_info('test_access_token')
 
-        assert user_info == mock_user_info
+        # Now returns KeycloakUserInfo Pydantic model instead of dict
+        assert isinstance(user_info, KeycloakUserInfo)
+        assert user_info.sub == 'test_user_id'
+        assert user_info.name == 'Test User'
+        assert user_info.email == 'test@example.com'
         mock_keycloak.return_value.a_userinfo.assert_called_once_with(
             'test_access_token'
         )
@@ -167,9 +173,17 @@ async def test_get_user_info(token_manager):
 @pytest.mark.asyncio
 async def test_get_user_info_empty_token(token_manager):
     """Test handling of empty token when getting user info."""
-    user_info = await token_manager.get_user_info('')
+    from keycloak.exceptions import KeycloakAuthenticationError
 
-    assert user_info == {}
+    with patch('server.auth.token_manager.get_keycloak_openid') as mock_keycloak:
+        mock_keycloak.return_value.a_userinfo = AsyncMock(
+            side_effect=KeycloakAuthenticationError('Invalid token')
+        )
+
+        with pytest.raises(KeycloakAuthenticationError):
+            await token_manager.get_user_info('')
+
+        mock_keycloak.return_value.a_userinfo.assert_called_once_with('')
 
 
 @pytest.mark.asyncio
@@ -203,12 +217,12 @@ async def test_store_idp_tokens(token_manager):
 
 
 @pytest.mark.asyncio
-async def test_get_idp_token(token_manager):
+async def test_get_idp_token(token_manager, create_keycloak_user_info):
     """Test getting an identity provider token."""
     with (
         patch(
             'server.auth.token_manager.TokenManager.get_user_info',
-            AsyncMock(return_value={'sub': 'test_user_id'}),
+            AsyncMock(return_value=create_keycloak_user_info(sub='test_user_id')),
         ),
         patch('server.auth.token_manager.AuthTokenStore') as mock_token_store_cls,
     ):

@@ -90,7 +90,9 @@ def calculate_credits(user_info: LiteLlmUserInfo) -> float:
 async def get_credits(user_id: str = Depends(get_user_id)) -> GetCreditsResponse:
     if not stripe_service.STRIPE_API_KEY:
         return GetCreditsResponse()
-    user = await UserStore.get_user_by_id_async(user_id)
+    user = await UserStore.get_user_by_id(user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail='User not found')
     user_team_info = await LiteLlmManager.get_user_team_info(
         user_id, str(user.current_org_id)
     )
@@ -144,6 +146,11 @@ async def create_customer_setup_session(
 ) -> CreateBillingSessionResponse:
     await validate_billing_enabled()
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    if not customer_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Could not find or create customer for user',
+        )
     base_url = _get_base_url(request)
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
@@ -165,6 +172,11 @@ async def create_checkout_session(
     await validate_billing_enabled()
     base_url = _get_base_url(request)
     customer_info = await stripe_service.find_or_create_customer_by_user_id(user_id)
+    if not customer_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Could not find or create customer for user',
+        )
     checkout_session = await stripe.checkout.Session.create_async(
         customer=customer_info['customer_id'],
         line_items=[
@@ -246,7 +258,9 @@ async def success_callback(session_id: str, request: Request):
             )
             raise HTTPException(status.HTTP_400_BAD_REQUEST)
 
-        user = await UserStore.get_user_by_id_async(billing_session.user_id)
+        user = await UserStore.get_user_by_id(billing_session.user_id)
+        if user is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail='User not found')
         user_team_info = await LiteLlmManager.get_user_team_info(
             billing_session.user_id, str(user.current_org_id)
         )

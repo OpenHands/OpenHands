@@ -56,7 +56,7 @@ def test_generate_api_key(api_key_store):
 
 
 @pytest.mark.asyncio
-@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_create_api_key(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):
@@ -324,7 +324,7 @@ async def test_delete_api_key_by_id(api_key_store, async_session_maker):
 
 
 @pytest.mark.asyncio
-@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_list_api_keys(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):
@@ -377,7 +377,7 @@ async def test_list_api_keys(
 
 
 @pytest.mark.asyncio
-@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_retrieve_mcp_api_key(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):
@@ -416,7 +416,7 @@ async def test_retrieve_mcp_api_key(
 
 
 @pytest.mark.asyncio
-@patch('storage.api_key_store.UserStore.get_user_by_id_async')
+@patch('storage.api_key_store.UserStore.get_user_by_id')
 async def test_retrieve_mcp_api_key_not_found(
     mock_get_user, api_key_store, async_session_maker, mock_user
 ):

@@ -20,9 +20,11 @@ from integrations.models import (
 from integrations.types import ResolverViewInterface
 from integrations.utils import (
     CONVERSATION_URL,
+    ENABLE_SOLVABILITY_ANALYSIS,
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
+    get_user_not_found_message,
 )
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
@@ -41,7 +43,6 @@ from openhands.server.types import (
     SessionExpiredError,
 )
 from openhands.storage.data_models.secrets import Secrets
-from openhands.utils.async_utils import call_sync_from_async
 
 
 class GithubManager(Manager[GithubViewType]):
@@ -68,11 +69,8 @@ class GithubManager(Manager[GithubViewType]):
 
         return f'{owner}/{repo_name}'
 
-    def _get_installation_access_token(self, installation_id: str) -> str:
-        # get_access_token is typed to only accept int, but it can handle str.
-        token_data = self.github_integration.get_access_token(
-            installation_id  # type: ignore[arg-type]
-        )
+    def _get_installation_access_token(self, installation_id: int) -> str:
+        token_data = self.github_integration.get_access_token(installation_id)
         return token_data.token
 
     def _add_reaction(
@@ -127,6 +125,76 @@ class GithubManager(Manager[GithubViewType]):
 
             return False
 
+    def _get_issue_number_from_payload(self, message: Message) -> int | None:
+        """Extract issue/PR number from a GitHub webhook payload.
+
+        Supports all event types that can trigger jobs:
+        - Labeled issues: payload['issue']['number']
+        - Issue comments: payload['issue']['number']
+        - PR comments: payload['issue']['number'] (PRs are accessed via issue endpoint)
+        - Inline PR comments: payload['pull_request']['number']
+
+        Args:
+            message: The incoming GitHub webhook message
+
+        Returns:
+            The issue/PR number, or None if not found
+        """
+        payload = message.message.get('payload', {})
+
+        # Labeled issues, issue comments, and PR comments all have 'issue' in payload
+        if 'issue' in payload:
+            return payload['issue']['number']
+
+        # Inline PR comments have 'pull_request' directly in payload
+        if 'pull_request' in payload:
+            return payload['pull_request']['number']
+
+        return None
+
+    def _send_user_not_found_message(self, message: Message, username: str):
+        """Send a message to the user informing them they need to create an OpenHands account.
+
+        This method handles all supported trigger types:
+        - Labeled issues (action='labeled' with openhands label)
+        - Issue comments (comment containing @openhands)
+        - PR comments (comment containing @openhands on a PR)
+        - Inline PR review comments (comment containing @openhands)
+
+        Args:
+            message: The incoming GitHub webhook message
+            username: The GitHub username to mention in the response
+        """
+        payload = message.message.get('payload', {})
+        installation_id = message.message['installation']
+        repo_obj = payload['repository']
+        full_repo_name = self._get_full_repo_name(repo_obj)
+
+        # Get installation token to post the comment
+        installation_token = self._get_installation_access_token(installation_id)
+
+        # Determine the issue/PR number based on the event type
+        issue_number = self._get_issue_number_from_payload(message)
+
+        if not issue_number:
+            logger.warning(
+                f'[GitHub] Could not determine issue/PR number to send user not found message for {username}. '
+                f'Payload keys: {list(payload.keys())}'
+            )
+            return
+
+        # Post the comment
+        try:
+            with Github(auth=Auth.Token(installation_token)) as github_client:
+                repo = github_client.get_repo(full_repo_name)
+                issue = repo.get_issue(number=issue_number)
+                issue.create_comment(get_user_not_found_message(username))
+        except Exception as e:
+            logger.error(
+                f'[GitHub] Failed to send user not found message to {username} '
+                f'on {full_repo_name}#{issue_number}: {e}'
+            )
+
     async def is_job_requested(self, message: Message) -> bool:
         self._confirm_incoming_source_type(message)
 
@@ -171,7 +239,7 @@ class GithubManager(Manager[GithubViewType]):
     async def receive_message(self, message: Message):
         self._confirm_incoming_source_type(message)
         try:
-            await call_sync_from_async(self.data_collector.process_payload, message)
+            await self.data_collector.process_payload(message)
         except Exception:
             logger.warning(
                 '[Github]: Error processing payload for gh interaction', exc_info=True
@@ -180,9 +248,20 @@ class GithubManager(Manager[GithubViewType]):
         if await self.is_job_requested(message):
             payload = message.message.get('payload', {})
             user_id = payload['sender']['id']
+            username = payload['sender']['login']
             keycloak_user_id = await self.token_manager.get_user_id_from_idp_user_id(
                 user_id, ProviderType.GITHUB
             )
+
+            # Check if the user has an OpenHands account
+            if not keycloak_user_id:
+                logger.warning(
+                    f'[GitHub] User {username} (id={user_id}) not found in Keycloak. '
+                    f'User must create an OpenHands account first.'
+                )
+                self._send_user_not_found_message(message, username)
+                return
+
             github_view = await GithubFactory.create_github_view_from_payload(
                 message, keycloak_user_id
             )
@@ -201,14 +280,14 @@ class GithubManager(Manager[GithubViewType]):
             self._add_reaction(github_view, 'eyes', installation_token)
             await self.start_job(github_view)
 
-    async def send_message(self, message: str, github_view: ResolverViewInterface):
+    async def send_message(self, message: str, github_view: GithubViewType):
         """Send a message to GitHub.
 
         Args:
             message: The message content to send (plain text string)
             github_view: The GitHub view object containing issue/PR/comment info
         """
-        installation_token = self.token_manager.load_org_token(
+        installation_token = await self.token_manager.load_org_token(
             github_view.installation_id
         )
         if not installation_token:
@@ -223,10 +302,8 @@ class GithubManager(Manager[GithubViewType]):
                     comment_id=github_view.comment_id, body=message
                 )
 
-        elif (
-            isinstance(github_view, GithubPRComment)
-            or isinstance(github_view, GithubIssueComment)
-            or isinstance(github_view, GithubIssue)
+        elif isinstance(
+            github_view, (GithubPRComment, GithubIssueComment, GithubIssue)
         ):
             with Github(auth=Auth.Token(installation_token)) as github_client:
                 repo = github_client.get_repo(github_view.full_repo_name)
@@ -234,10 +311,13 @@ class GithubManager(Manager[GithubViewType]):
                 issue.create_comment(message)
 
         else:
-            logger.warning('Unsupported location')
+            # Catch any new types added to GithubViewType that aren't handled above
+            logger.warning(  # type: ignore[unreachable]
+                f'Unsupported github_view type: {type(github_view).__name__}'
+            )
             return
 
-    async def start_job(self, github_view: GithubViewType):
+    async def start_job(self, github_view: GithubViewType) -> None:
         """Kick off a job with openhands agent.
 
         1. Get user credential
@@ -291,19 +371,19 @@ class GithubManager(Manager[GithubViewType]):
                 #   3. Once the conversation is started, its base cost will include the report's spend as well which allows us to control max budget per resolver task
                 convo_metadata = await github_view.initialize_new_conversation()
                 solvability_summary = None
-                try:
-                    if user_token:
+                if not ENABLE_SOLVABILITY_ANALYSIS:
+                    logger.info(
+                        '[Github]: Solvability report feature is disabled, skipping'
+                    )
+                else:
+                    try:
                         solvability_summary = await summarize_issue_solvability(
                             github_view, user_token
                         )
-                    else:
+                    except Exception as e:
                         logger.warning(
-                            '[Github]: No user token available for solvability analysis'
+                            f'[Github]: Error summarizing issue solvability: {str(e)}'
                         )
-                except Exception as e:
-                    logger.warning(
-                        f'[Github]: Error summarizing issue solvability: {str(e)}'
-                    )
 
                 saas_user_auth = await get_saas_user_auth(
                     github_view.user_info.keycloak_user_id, self.token_manager

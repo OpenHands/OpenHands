@@ -171,7 +171,7 @@ async def keycloak_callback(
         state, config.jwt_secret.get_secret_value(), algorithms=['HS256']
     )
     slack_user_id = payload['slack_user_id']
-    bot_access_token = payload['bot_access_token']
+    bot_access_token: str | None = payload['bot_access_token']
     team_id = payload['team_id']
 
     # Retrieve the keycloak_user_id
@@ -196,8 +196,8 @@ async def keycloak_callback(
         )
 
     user_info = await token_manager.get_user_info(keycloak_access_token)
-    keycloak_user_id = user_info['sub']
-    user = await UserStore.get_user_by_id_async(keycloak_user_id)
+    keycloak_user_id = user_info.sub
+    user = await UserStore.get_user_by_id(keycloak_user_id)
     if not user:
         return _html_response(
             title='Failed to authenticate.',
@@ -208,7 +208,7 @@ async def keycloak_callback(
     # These tokens are offline access tokens - store them!
     await token_manager.store_offline_token(keycloak_user_id, keycloak_refresh_token)
 
-    idp: str = user_info.get('identity_provider', ProviderType.GITHUB)
+    idp: str = user_info.identity_provider or ProviderType.GITHUB.value
     idp_type = 'oidc'
     if ':' in idp:
         idp, idp_type = idp.rsplit(':', 1)

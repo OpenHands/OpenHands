@@ -97,6 +97,8 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     'qwen3-coder-480b-a35b-instruct',
     'deepseek-chat',
     'grok-code-fast-1',
+    # GLM series - verified via official docs and litellm config
+    'glm-4*',
 ]
 
 REASONING_EFFORT_PATTERNS: list[str] = [
@@ -115,7 +117,10 @@ REASONING_EFFORT_PATTERNS: list[str] = [
     # DeepSeek reasoning family
     'deepseek-r1-0528*',
     'claude-sonnet-4-5*',
+    'claude-sonnet-4-6*',
     'claude-haiku-4-5*',
+    # GLM series - verified via litellm config
+    'glm-4*',
 ]
 
 PROMPT_CACHE_PATTERNS: list[str] = [
@@ -129,6 +134,8 @@ PROMPT_CACHE_PATTERNS: list[str] = [
     'claude-3-opus-20240229',
     'claude-sonnet-4*',
     'claude-opus-4*',
+    # GLM series - verified via litellm config
+    'glm-4*',
 ]
 
 SUPPORTS_STOP_WORDS_FALSE_PATTERNS: list[str] = [

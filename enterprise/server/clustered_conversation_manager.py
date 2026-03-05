@@ -749,6 +749,9 @@ class ClusteredConversationManager(StandaloneConversationManager):
         config = load_openhands_config()
         settings_store = await SaasSettingsStore.get_instance(config, user_id)
         settings = await settings_store.load()
+        if not settings:
+            logger.error(f'Failed to load settings for user {user_id}')
+            return
         await self.maybe_start_agent_loop(conversation_id, settings, user_id)
 
     async def _start_agent_loop(

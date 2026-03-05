@@ -191,12 +191,11 @@ class SaaSGitLabService(GitLabService):
                 user_info = await self.token_manager.get_user_info(
                     self.external_auth_token.get_secret_value()
                 )
-                keycloak_user_id = user_info.get('sub')
-                if keycloak_user_id:
-                    self.external_auth_id = keycloak_user_id
-                    logger.info(
-                        f'Determined external_auth_id from Keycloak token: {self.external_auth_id}'
-                    )
+                keycloak_user_id = user_info.sub
+                self.external_auth_id = keycloak_user_id
+                logger.info(
+                    f'Determined external_auth_id from Keycloak token: {self.external_auth_id}'
+                )
             except Exception:
                 logger.warning(
                     'Cannot store repository data: external_auth_id is not set and could not be determined from token',

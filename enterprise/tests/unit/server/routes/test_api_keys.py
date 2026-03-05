@@ -374,7 +374,7 @@ class TestDeleteByorKeyFromLitellm:
 
     @pytest.mark.asyncio
     @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
-    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    @patch('storage.user_store.UserStore.get_user_by_id')
     async def test_delete_constructs_alias_from_user(
         self, mock_get_user, mock_delete_key
     ):
@@ -400,7 +400,7 @@ class TestDeleteByorKeyFromLitellm:
 
     @pytest.mark.asyncio
     @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
-    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    @patch('storage.user_store.UserStore.get_user_by_id')
     async def test_delete_without_user_passes_no_alias(
         self, mock_get_user, mock_delete_key
     ):
@@ -421,7 +421,7 @@ class TestDeleteByorKeyFromLitellm:
 
     @pytest.mark.asyncio
     @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
-    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    @patch('storage.user_store.UserStore.get_user_by_id')
     async def test_delete_without_org_id_passes_no_alias(
         self, mock_get_user, mock_delete_key
     ):
@@ -444,7 +444,7 @@ class TestDeleteByorKeyFromLitellm:
 
     @pytest.mark.asyncio
     @patch('storage.lite_llm_manager.LiteLlmManager.delete_key')
-    @patch('storage.user_store.UserStore.get_user_by_id_async')
+    @patch('storage.user_store.UserStore.get_user_by_id')
     async def test_delete_returns_false_on_exception(
         self, mock_get_user, mock_delete_key
     ):

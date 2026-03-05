@@ -106,6 +106,11 @@ async def summarize_issue_solvability(
             f'Solvability analysis disabled for user {github_view.user_info.user_id}'
         )
 
+    if user_settings.llm_api_key is None:
+        raise ValueError(
+            f'[Solvability] No LLM API key found for user {github_view.user_info.user_id}'
+        )
+
     try:
         llm_config = LLMConfig(
             model=user_settings.llm_model,

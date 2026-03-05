@@ -95,8 +95,9 @@ def _get_feature_flags() -> WebClientFeatureFlags:
     """Get feature flags from environment variables.
 
     Reads ENABLE_BILLING, HIDE_LLM_SETTINGS, ENABLE_JIRA, ENABLE_JIRA_DC,
-    and ENABLE_LINEAR from environment. Each flag is True only if the
-    corresponding env var is exactly 'true', otherwise False.
+    ENABLE_LINEAR, HIDE_USERS_PAGE, HIDE_BILLING_PAGE, and HIDE_INTEGRATIONS_PAGE
+    from environment. Each flag is True only if the corresponding env var is
+    exactly 'true', otherwise False.
     """
     return WebClientFeatureFlags(
         enable_billing=os.getenv('ENABLE_BILLING', 'false') == 'true',
@@ -104,6 +105,9 @@ def _get_feature_flags() -> WebClientFeatureFlags:
         enable_jira=os.getenv('ENABLE_JIRA', 'false') == 'true',
         enable_jira_dc=os.getenv('ENABLE_JIRA_DC', 'false') == 'true',
         enable_linear=os.getenv('ENABLE_LINEAR', 'false') == 'true',
+        hide_users_page=os.getenv('HIDE_USERS_PAGE', 'false') == 'true',
+        hide_billing_page=os.getenv('HIDE_BILLING_PAGE', 'false') == 'true',
+        hide_integrations_page=os.getenv('HIDE_INTEGRATIONS_PAGE', 'false') == 'true',
     )
 
 
