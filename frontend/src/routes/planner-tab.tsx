@@ -14,7 +14,8 @@ function PlannerTab() {
     React.useRef<HTMLDivElement>(null),
   );
 
-  const { planContent } = useConversationStore();
+  const { planContent, conversationMode } = useConversationStore();
+  const isPlanMode = conversationMode === "plan";
   const { handlePlanClick } = useHandlePlanClick();
 
   if (planContent !== null && planContent !== undefined) {
@@ -40,7 +41,12 @@ function PlannerTab() {
       <button
         type="button"
         onClick={handlePlanClick}
-        className="flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px] hover:cursor-pointer hover:opacity-80"
+        disabled={isPlanMode}
+        className={`flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px] ${
+          isPlanMode
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:cursor-pointer hover:opacity-80"
+        }`}
       >
         {t(I18nKey.COMMON$CREATE_A_PLAN)}
       </button>
