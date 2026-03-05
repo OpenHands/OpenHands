@@ -6,7 +6,7 @@ from fastapi import Request
 from pydantic import Field
 from server.auth.token_manager import KeycloakUserInfo, TokenManager
 from server.auth.user.user_authorizer import (
-    UserAuthorization,
+    UserAuthorizationResponse,
     UserAuthorizer,
     UserAuthorizerInjector,
 )
@@ -27,14 +27,18 @@ class DefaultUserAuthorizer(UserAuthorizer):
 
     prevent_duplicates: bool
 
-    async def authorize_user(self, user_info: KeycloakUserInfo) -> UserAuthorization:
+    async def authorize_user(
+        self, user_info: KeycloakUserInfo
+    ) -> UserAuthorizationResponse:
         user_id = user_info.sub
         email = user_info.email
         provider_type = user_info.identity_provider
         try:
             if not email:
                 logger.warning(f'No email provided for user_id: {user_id}')
-                return UserAuthorization(success=False, error_detail='missing_email')
+                return UserAuthorizationResponse(
+                    success=False, error_detail='missing_email'
+                )
 
             if self.prevent_duplicates:
                 has_duplicate = await token_manager.check_duplicate_base_email(
@@ -45,7 +49,7 @@ class DefaultUserAuthorizer(UserAuthorizer):
                         f'Blocked signup attempt for email {email} - duplicate base email found',
                         extra={'user_id': user_id, 'email': email},
                     )
-                    return UserAuthorization(
+                    return UserAuthorizationResponse(
                         success=False, error_detail='duplicate_email'
                     )
 
@@ -55,19 +59,19 @@ class DefaultUserAuthorizer(UserAuthorizer):
                     f'User {email} matched whitelist rule',
                     extra={'user_id': user_id, 'email': email},
                 )
-                return UserAuthorization(success=True)
+                return UserAuthorizationResponse(success=True)
 
             # Check blacklist - if matched, block
             if await UserAuthorizationStore.has_blacklist_match(email, provider_type):
                 logger.warning(
                     f'Blocked authentication attempt for email: {email}, user_id: {user_id}'
                 )
-                return UserAuthorization(success=False, error_detail='blocked')
+                return UserAuthorizationResponse(success=False, error_detail='blocked')
 
-            return UserAuthorization(success=True)
+            return UserAuthorizationResponse(success=True)
         except Exception:
             logger.exception('error authorizing user', extra={'user_id': user_id})
-            return UserAuthorization(success=False)
+            return UserAuthorizationResponse(success=False)
 
 
 class DefaultUserAuthorizerInjector(UserAuthorizerInjector):

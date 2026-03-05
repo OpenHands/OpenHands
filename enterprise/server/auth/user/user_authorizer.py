@@ -12,7 +12,7 @@ from openhands.sdk.utils.models import DiscriminatedUnionMixin
 logger = logging.getLogger(__name__)
 
 
-class UserAuthorization(BaseModel):
+class UserAuthorizationResponse(BaseModel):
     success: bool
     error_detail: str | None = None
 
@@ -21,7 +21,9 @@ class UserAuthorizer(ABC):
     """Class determining whether a user may be authorized."""
 
     @abstractmethod
-    async def authorize_user(self, user_info: KeycloakUserInfo) -> UserAuthorization:
+    async def authorize_user(
+        self, user_info: KeycloakUserInfo
+    ) -> UserAuthorizationResponse:
         """Determine whether the info given is permitted."""
 
 
