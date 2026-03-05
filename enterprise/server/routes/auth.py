@@ -176,10 +176,16 @@ async def keycloak_callback(
             detail='Missing code in request params',
         )
 
+    web_url = get_global_config().web_url
+    if not web_url:
+        scheme = 'http' if request.url.hostname == 'localhost' else 'https'
+        web_url = f'{scheme}://{request.url.netloc}'
+    redirect_uri = web_url + request.url.path
+
     (
         keycloak_access_token,
         keycloak_refresh_token,
-    ) = await token_manager.get_keycloak_tokens(code, redirect_url)
+    ) = await token_manager.get_keycloak_tokens(code, redirect_uri)
     if not keycloak_access_token or not keycloak_refresh_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -204,14 +210,11 @@ async def keycloak_callback(
     user_info_dict = user_info.model_dump(exclude_none=True)
     user = await UserStore.get_user_by_id(user_id)
     if not user:
-        authorization = await user_create_authorizer.authorize_user_create
+        authorization = await user_create_authorizer.authorize_user_create(user_info)
         if not authorization.success:
-            # If the we are not permitted to creat the user, delete them in keycloak
-            await token_manager.delete_keycloak_user(user_id)
-
             # Return unauthorized
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail=authorization.detail
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=authorization.error_detail
             )
 
         user = await UserStore.create_user(user_id, user_info_dict)
@@ -232,7 +235,7 @@ async def keycloak_callback(
                     'email': email,
                 },
             )
-            error_url = f'{request.base_url}login?recaptcha_blocked=true'
+            error_url = f'{web_url}/login?recaptcha_blocked=true'
             return RedirectResponse(error_url, status_code=302)
 
         user_ip = request.client.host if request.client else 'unknown'
@@ -263,7 +266,7 @@ async def keycloak_callback(
                     },
                 )
                 # Redirect to home with error parameter
-                error_url = f'{request.base_url}login?recaptcha_blocked=true'
+                error_url = f'{web_url}/login?recaptcha_blocked=true'
                 return RedirectResponse(error_url, status_code=302)
 
         except Exception as e:
@@ -278,7 +281,7 @@ async def keycloak_callback(
         from server.routes.email import verify_email
 
         await verify_email(request=request, user_id=user_id, is_auth_flow=True)
-        verification_redirect_url = f'{get_global_config().web_url}login?email_verification_required=true&user_id={user_id}'
+        verification_redirect_url = f'{web_url}/login?email_verification_required=true&user_id={user_id}'
         # Preserve invitation token so it can be included in OAuth state after verification
         if invitation_token:
             verification_redirect_url = (
@@ -345,12 +348,13 @@ async def keycloak_callback(
     )
 
     if not valid_offline_token:
+
         param_str = urlencode(
             {
                 'client_id': KEYCLOAK_CLIENT_ID,
                 'response_type': 'code',
                 'kc_idp_hint': idp,
-                'redirect_uri': f'{get_global_config().web_url}/oauth/keycloak/offline/callback',
+                'redirect_uri': f'{web_url}/oauth/keycloak/offline/callback',
                 'scope': 'openid email profile offline_access',
                 'state': state,
             }

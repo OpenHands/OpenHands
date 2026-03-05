@@ -34,17 +34,17 @@ class UserCreateAuthorizerInjector(
 
 
 def depends_user_create_authorizer():
+    from server.auth.user_create.default_user_create_authorizer import (
+        DefaultUserCreateAuthorizerInjector,
+    )
+
     try:
         injector: UserCreateAuthorizerInjector = from_env(
             UserCreateAuthorizerInjector, 'OH_USER_CREATE_AUTHORIZER'
         )
-    except Exception:
+    except Exception as ex:
+        print(ex)
         logger.info('Using default UserCreateAuthorizer')
-
-        from server.auth.user_create.default_user_create_authorizer import (
-            DefaultUserCreateAuthorizerInjector,
-        )
-
         injector = DefaultUserCreateAuthorizerInjector()
 
     return Depends(injector.depends)
