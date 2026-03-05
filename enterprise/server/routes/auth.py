@@ -214,7 +214,8 @@ async def keycloak_callback(
         if not authorization.success:
             # Return unauthorized
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail=authorization.error_detail
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=authorization.error_detail,
             )
 
         user = await UserStore.create_user(user_id, user_info_dict)
@@ -222,6 +223,13 @@ async def keycloak_callback(
         # Existing user — gradually backfill contact_name if it still has a username-style value
         await UserStore.backfill_contact_name(user_id, user_info_dict)
         await UserStore.backfill_user_email(user_id, user_info_dict)
+
+    if not user:
+        logger.error(f'Failed to authenticate user {user_info.preferred_username}')
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f'Failed to authenticate user {user_info.preferred_username}',
+        )
 
     logger.info(f'Logging in user {str(user.id)} in org {user.current_org_id}')
 
@@ -281,7 +289,9 @@ async def keycloak_callback(
         from server.routes.email import verify_email
 
         await verify_email(request=request, user_id=user_id, is_auth_flow=True)
-        verification_redirect_url = f'{web_url}/login?email_verification_required=true&user_id={user_id}'
+        verification_redirect_url = (
+            f'{web_url}/login?email_verification_required=true&user_id={user_id}'
+        )
         # Preserve invitation token so it can be included in OAuth state after verification
         if invitation_token:
             verification_redirect_url = (
@@ -348,7 +358,6 @@ async def keycloak_callback(
     )
 
     if not valid_offline_token:
-
         param_str = urlencode(
             {
                 'client_id': KEYCLOAK_CLIENT_ID,
