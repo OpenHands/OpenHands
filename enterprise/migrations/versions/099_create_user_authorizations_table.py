@@ -26,6 +26,10 @@ def _seed_from_environment() -> None:
     Each should be a comma-separated list of SQL LIKE patterns (e.g., '%@example.com').
 
     If the environment variables are not set or empty, this function does nothing.
+
+    This allows us to set up feature deployments with particular patterns already
+    blacklisted or whitelisted. (For example, you could blacklist everything with
+    `%`, and then whitelist certain email accounts.)
     """
     blacklist_patterns = os.environ.get('EMAIL_PATTERN_BLACKLIST', '').strip()
     whitelist_patterns = os.environ.get('EMAIL_PATTERN_WHITELIST', '').strip()
