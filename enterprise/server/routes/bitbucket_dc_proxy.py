@@ -7,6 +7,8 @@ from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
 
 router = APIRouter(prefix='/bitbucket-dc-proxy')
 
+BITBUCKET_DC_TIMEOUT = 10  # seconds
+
 
 # Bitbucket Data Center is not an OIDC provider, so keycloak
 # can't retrieve user info from it directly.
@@ -30,7 +32,7 @@ async def userinfo(request: Request):
         whoami_resp = await client.get(
             f'{bitbucket_base_url}/plugins/servlet/applinks/whoami',
             headers=headers,
-            timeout=10,
+            timeout=BITBUCKET_DC_TIMEOUT,
         )
         if whoami_resp.status_code != 200:
             return JSONResponse({'error': 'not_authenticated'}, status_code=401)
@@ -42,7 +44,7 @@ async def userinfo(request: Request):
         user_resp = await client.get(
             f'{bitbucket_base_url}/rest/api/latest/users/{username}',
             headers=headers,
-            timeout=10,
+            timeout=BITBUCKET_DC_TIMEOUT,
         )
         if user_resp.status_code != 200:
             return JSONResponse(
