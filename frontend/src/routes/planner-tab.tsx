@@ -7,6 +7,7 @@ import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
+import { cn } from "#/utils/utils";
 
 function PlannerTab() {
   const { t } = useTranslation();
@@ -42,11 +43,12 @@ function PlannerTab() {
         type="button"
         onClick={handlePlanClick}
         disabled={isPlanMode}
-        className={`flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px] ${
+        className={cn(
+          "flex w-[164px] h-[40px] p-2 justify-center items-center shrink-0 rounded-lg bg-white overflow-hidden text-black text-ellipsis font-sans text-[16px] not-italic font-normal leading-[20px]",
           isPlanMode
             ? "opacity-50 cursor-not-allowed"
-            : "hover:cursor-pointer hover:opacity-80"
-        }`}
+            : "hover:cursor-pointer hover:opacity-80",
+        )}
       >
         {t(I18nKey.COMMON$CREATE_A_PLAN)}
       </button>
