@@ -6,6 +6,7 @@ Create Date: 2025-03-05 00:00:00.000000
 
 """
 
+import os
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -16,6 +17,48 @@ revision: str = '099'
 down_revision: Union[str, None] = '098'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+
+def _seed_from_environment() -> None:
+    """Seed user_authorizations table from environment variables.
+
+    Reads EMAIL_PATTERN_BLACKLIST and EMAIL_PATTERN_WHITELIST environment variables.
+    Each should be a comma-separated list of SQL LIKE patterns (e.g., '%@example.com').
+
+    If the environment variables are not set or empty, this function does nothing.
+    """
+    blacklist_patterns = os.environ.get('EMAIL_PATTERN_BLACKLIST', '').strip()
+    whitelist_patterns = os.environ.get('EMAIL_PATTERN_WHITELIST', '').strip()
+
+    connection = op.get_bind()
+
+    if blacklist_patterns:
+        for pattern in blacklist_patterns.split(','):
+            pattern = pattern.strip()
+            if pattern:
+                connection.execute(
+                    sa.text("""
+                        INSERT INTO user_authorizations
+                            (email_pattern, provider_type, type)
+                        VALUES
+                            (:pattern, NULL, 'blacklist')
+                    """),
+                    {'pattern': pattern},
+                )
+
+    if whitelist_patterns:
+        for pattern in whitelist_patterns.split(','):
+            pattern = pattern.strip()
+            if pattern:
+                connection.execute(
+                    sa.text("""
+                        INSERT INTO user_authorizations
+                            (email_pattern, provider_type, type)
+                        VALUES
+                            (:pattern, NULL, 'whitelist')
+                    """),
+                    {'pattern': pattern},
+                )
 
 
 def upgrade() -> None:
@@ -79,6 +122,9 @@ def upgrade() -> None:
     op.drop_index('ix_blocked_email_domains_domain', table_name='blocked_email_domains')
     op.drop_table('blocked_email_domains')
 
+    # Seed additional patterns from environment variables (if set)
+    _seed_from_environment()
+
 
 def downgrade() -> None:
     """Recreate blocked_email_domains table and migrate data back."""
@@ -126,5 +172,7 @@ def downgrade() -> None:
 
     # Drop user_authorizations table
     op.drop_index('ix_user_authorizations_type', table_name='user_authorizations')
-    op.drop_index('ix_user_authorizations_email_pattern', table_name='user_authorizations')
+    op.drop_index(
+        'ix_user_authorizations_email_pattern', table_name='user_authorizations'
+    )
     op.drop_table('user_authorizations')
