@@ -40,32 +40,54 @@ class WarpGrepClient:
                 'content': f'<repo_structure>{repo_tree}</repo_structure>\n<search_string>{query}</search_string>',
             }
         ]
+        context_chars = len(messages[0]['content'])
+        last_response = ''
 
         for turn in range(self.MAX_TURNS):
             response_text = self._call_api(messages)
             if not response_text:
                 break
+            last_response = response_text
 
             tool_calls = self._parse_tool_calls(response_text)
+
+            # Check for finish tool call
+            for tc in tool_calls:
+                if tc['function'] == 'finish':
+                    files_param = tc['params'].get('files', '')
+                    return self._process_finish(files_param)
+
             if not tool_calls:
-                # Model finished - parse final results
-                return self._parse_finish(response_text)
+                return []
 
             messages.append({'role': 'assistant', 'content': response_text})
 
             tool_results = []
             for tc in tool_calls:
                 result = self._execute_tool_call(tc)
-                tool_results.append(result)
+                tool_results.append(f'<tool_response>\n{result}\n</tool_response>')
 
-            results_content = '\n'.join(
-                f'<tool_response>{r}</tool_response>' for r in tool_results
+            tool_response_text = '\n\n'.join(tool_results)
+            context_chars += len(response_text) + len(tool_response_text)
+            remaining = self.MAX_TURNS - turn - 1
+            budget_pct = min(100, int(context_chars / 160000 * 100))
+
+            if remaining == 0:
+                turn_msg = (
+                    f'You have used {turn + 1} turns, you only have 1 turn remaining. '
+                    'You have run out of turns to explore the code base and MUST call the finish tool now'
+                )
+            else:
+                turn_msg = f'You have used {turn + 1} turn{"s" if turn + 1 > 1 else ""} and have {remaining} remaining.'
+
+            user_content = (
+                f'{tool_response_text}\n\n'
+                f'{turn_msg}\n'
+                f'<context_budget>{budget_pct}% ({context_chars}/160000 chars)</context_budget>'
             )
-            results_content += f'\n[Turn {turn + 1}/{self.MAX_TURNS}]'
-            messages.append({'role': 'user', 'content': results_content})
+            messages.append({'role': 'user', 'content': user_content})
 
-        # If we exhausted turns, try to parse whatever we have
-        return self._parse_finish(response_text if 'response_text' in dir() else '')
+        return []
 
     def _get_repo_tree(self) -> str:
         """Generate a file tree of the workspace."""
@@ -122,57 +144,105 @@ class WarpGrepClient:
                 path = f'{self.workspace_root}/{path}'
             # Escape single quotes in pattern for shell safety
             safe_pattern = pattern.replace("'", "'\\''")
-            cmd = f"rg --line-number --no-heading --color never -C 1 '{safe_pattern}' {path} | head -{self.MAX_GREP_LINES}"
+            glob_param = params.get('glob', '')
+            glob_flag = f" --glob '{glob_param}'" if glob_param else ''
+            cmd = f"rg --line-number --no-heading --color never -C 1{glob_flag} '{safe_pattern}' '{path}' | head -{self.MAX_GREP_LINES}"
             return self.run_in_sandbox(cmd)
 
         elif func == 'read':
             path = params.get('path', '')
             if not path.startswith('/'):
                 path = f'{self.workspace_root}/{path}'
-            start = params.get('start', '1')
-            end = params.get('end', str(self.MAX_READ_LINES))
-            cmd = f"sed -n '{start},{end}p' {path} | cat -n"
+            lines_param = params.get('lines', '')
+            if lines_param:
+                # Parse line ranges like "1-50" or "1-20,45-80"
+                ranges = []
+                for part in lines_param.split(','):
+                    part = part.strip()
+                    if '-' in part:
+                        s, e = part.split('-', 1)
+                        ranges.append(f'{s.strip()},{e.strip()}p')
+                    else:
+                        ranges.append(f'{part}p')
+                sed_expr = ';'.join(ranges)
+                cmd = f"sed -n '{sed_expr}' '{path}' | cat -n"
+            else:
+                cmd = f"head -{self.MAX_READ_LINES} '{path}' | cat -n"
             return self.run_in_sandbox(cmd)
 
         elif func == 'list_directory':
             path = params.get('path', self.workspace_root)
             if not path.startswith('/'):
                 path = f'{self.workspace_root}/{path}'
-            cmd = f'find {path} -maxdepth 2 -type f | head -{self.MAX_LIST_LINES}'
+            cmd = f"find '{path}' -maxdepth 2 -type f | head -{self.MAX_LIST_LINES}"
             return self.run_in_sandbox(cmd)
 
         else:
             return f'Unknown tool: {func}'
 
-    def _parse_finish(self, text: str) -> list[dict]:
-        """Parse the final results from the model's finish response."""
-        results = []
-        # Look for file spans in the finish response
-        # Pattern: file path followed by line ranges
-        span_pattern = r'<file_span>\s*<path>(.*?)</path>\s*<start>(\d+)</start>\s*<end>(\d+)</end>\s*</file_span>'
-        for match in re.finditer(span_pattern, text, re.DOTALL):
-            path = match.group(1).strip()
-            start = int(match.group(2))
-            end = int(match.group(3))
-            # Read the span from the sandbox
-            if not path.startswith('/'):
-                path = f'{self.workspace_root}/{path}'
-            cmd = f"sed -n '{start},{end}p' {path} | cat -n"
-            content = self.run_in_sandbox(cmd)
-            results.append(
-                {
-                    'file': path,
-                    'start': start,
-                    'end': end,
-                    'content': content,
-                }
-            )
+    def _process_finish(self, files_param: str) -> list[dict]:
+        """Process the finish tool call's files parameter.
 
-        # If no structured results, return the raw text as a single result
-        if not results and text:
-            # Strip think tags
-            clean = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
-            if clean:
-                results.append({'file': '', 'start': 0, 'end': 0, 'content': clean})
+        Format is newline-delimited file specs:
+          path/to/file.py:1-15,45-80
+          path/to/other.py:*
+          path/to/another.py
+        """
+        results = []
+        if not files_param.strip():
+            return results
+
+        for line in files_param.strip().split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+
+            if ':' in line:
+                path, ranges_str = line.rsplit(':', 1)
+                path = path.strip()
+            else:
+                path = line
+                ranges_str = '*'
+
+            if not path.startswith('/'):
+                full_path = f'{self.workspace_root}/{path}'
+            else:
+                full_path = path
+
+            if ranges_str.strip() == '*':
+                cmd = f"cat -n '{full_path}'"
+                content = self.run_in_sandbox(cmd)
+                results.append({
+                    'file': path,
+                    'start': 1,
+                    'end': 0,
+                    'content': content,
+                })
+            else:
+                for part in ranges_str.split(','):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    if '-' in part:
+                        try:
+                            start_s, end_s = part.split('-', 1)
+                            start = int(start_s.strip())
+                            end = int(end_s.strip())
+                        except ValueError:
+                            continue
+                    else:
+                        try:
+                            start = end = int(part.strip())
+                        except ValueError:
+                            continue
+
+                    cmd = f"sed -n '{start},{end}p' '{full_path}' | cat -n"
+                    content = self.run_in_sandbox(cmd)
+                    results.append({
+                        'file': path,
+                        'start': start,
+                        'end': end,
+                        'content': content,
+                    })
 
         return results
