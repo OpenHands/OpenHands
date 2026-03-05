@@ -494,14 +494,20 @@ async def test_saas_user_auth_from_signed_token(mock_config):
     }
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
-    result = await saas_user_auth_from_signed_token(signed_token)
+    # Mock UserAuthorizationStore to avoid database access
+    with patch(
+        'server.auth.saas_user_auth.UserAuthorizationStore'
+    ) as mock_user_auth_store:
+        mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
-    assert isinstance(result, SaasUserAuth)
-    assert result.user_id == 'test_user_id'
-    assert result.access_token.get_secret_value() == access_token
-    assert result.refresh_token.get_secret_value() == 'test_refresh_token'
-    assert result.email == 'test@example.com'
-    assert result.email_verified is True
+        result = await saas_user_auth_from_signed_token(signed_token)
+
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        assert result.access_token.get_secret_value() == access_token
+        assert result.refresh_token.get_secret_value() == 'test_refresh_token'
+        assert result.email == 'test@example.com'
+        assert result.email_verified is True
 
 
 def test_get_api_key_from_header_with_authorization_header():
@@ -703,7 +709,7 @@ async def test_saas_user_auth_from_signed_token_blocked_domain(mock_config):
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch(
-        'storage.user_authorization_store.UserAuthorizationStore'
+        'server.auth.saas_user_auth.UserAuthorizationStore'
     ) as mock_user_auth_store:
         mock_user_auth_store.get_authorization_type = AsyncMock(
             return_value=UserAuthorizationType.BLACKLIST
@@ -738,7 +744,7 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch(
-        'storage.user_authorization_store.UserAuthorizationStore'
+        'server.auth.saas_user_auth.UserAuthorizationStore'
     ) as mock_user_auth_store:
         mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
@@ -773,7 +779,7 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
     with patch(
-        'storage.user_authorization_store.UserAuthorizationStore'
+        'server.auth.saas_user_auth.UserAuthorizationStore'
     ) as mock_user_auth_store:
         mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
