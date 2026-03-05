@@ -569,14 +569,14 @@ files = [
 
 [[package]]
 name = "authlib"
-version = "1.6.6"
+version = "1.6.7"
 description = "The ultimate Python library in building OAuth and OpenID Connect servers and clients."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "authlib-1.6.6-py2.py3-none-any.whl", hash = "sha256:7d9e9bc535c13974313a87f53e8430eb6ea3d1cf6ae4f6efcd793f2e949143fd"},
-    {file = "authlib-1.6.6.tar.gz", hash = "sha256:45770e8e056d0f283451d9996fbb59b70d45722b45d854d58f32878d0a40c38e"},
+    {file = "authlib-1.6.7-py2.py3-none-any.whl", hash = "sha256:c637340d9a02789d2efa1d003a7437d10d3e565237bcb5fcbc6c134c7b95bab0"},
+    {file = "authlib-1.6.7.tar.gz", hash = "sha256:dbf10100011d1e1b34048c9d120e83f13b35d69a826ae762b93d2fb5aafc337b"},
 ]
 
 [package.dependencies]
@@ -6149,6 +6149,7 @@ aiohttp = ">=3.13.3"
 anthropic = {version = "*", extras = ["vertex"]}
 anyio = "4.9"
 asyncpg = ">=0.30"
+authlib = ">=1.6.7"
 bashlex = ">=0.18"
 boto3 = "*"
 browsergym-core = "0.13.3"

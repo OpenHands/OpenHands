@@ -573,14 +573,14 @@ files = [
 
 [[package]]
 name = "authlib"
-version = "1.6.6"
+version = "1.6.7"
 description = "The ultimate Python library in building OAuth and OpenID Connect servers and clients."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "authlib-1.6.6-py2.py3-none-any.whl", hash = "sha256:7d9e9bc535c13974313a87f53e8430eb6ea3d1cf6ae4f6efcd793f2e949143fd"},
-    {file = "authlib-1.6.6.tar.gz", hash = "sha256:45770e8e056d0f283451d9996fbb59b70d45722b45d854d58f32878d0a40c38e"},
+    {file = "authlib-1.6.7-py2.py3-none-any.whl", hash = "sha256:c637340d9a02789d2efa1d003a7437d10d3e565237bcb5fcbc6c134c7b95bab0"},
+    {file = "authlib-1.6.7.tar.gz", hash = "sha256:dbf10100011d1e1b34048c9d120e83f13b35d69a826ae762b93d2fb5aafc337b"},
 ]
 
 [package.dependencies]
@@ -14691,4 +14691,4 @@ third-party-runtimes = ["daytona", "e2b-code-interpreter", "modal", "runloop-api
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12,<3.14"
-content-hash = "8238ef4e4687e246f55f9d524b0b1d81df7187abdec0fc9f1b121ae0a9e0caa0"
+content-hash = "b0265f1398ff1f6bf64c89cbad01185241238df3930a212264a6a3033de7aac6"

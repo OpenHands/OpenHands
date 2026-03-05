@@ -28,6 +28,7 @@ OPENHANDS_MODELS = [
     'openhands/kimi-k2-0711-preview',
     'openhands/qwen3-coder-480b',
     'openhands/glm-4.7',
+    'openhands/glm-5',
 ]
 
 CLARIFAI_MODELS = [
