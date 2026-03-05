@@ -11,7 +11,7 @@ def client():
     app = FastAPI()
     app.include_router(router)
     with patch(
-        'server.routes.bitbucket_dc_proxy.BITBUCKET_BASE_URL', 'https://bitbucket.test'
+        'server.routes.bitbucket_dc_proxy.BITBUCKET_DATA_CENTER_HOST', 'bitbucket.test'
     ):
         yield TestClient(app)
 
