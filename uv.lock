@@ -1325,7 +1325,7 @@ wheels = [
 
 [[package]]
 name = "fastmcp"
-version = "2.12.5"
+version = "2.12.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1340,9 +1340,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rich" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/00/a6/e3b46cd3e228635e0064c2648788b6f66a53bf0d0ddbf5fb44cca951f908/fastmcp-2.12.5.tar.gz", hash = "sha256:2dfd02e255705a4afe43d26caddbc864563036e233dbc6870f389ee523b39a6a", size = 7190263, upload-time = "2025-10-17T13:24:58.896Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/b2/57845353a9bc63002995a982e66f3d0be4ec761e7bcb89e7d0638518d42a/fastmcp-2.12.4.tar.gz", hash = "sha256:b55fe89537038f19d0f4476544f9ca5ac171033f61811cc8f12bdeadcbea5016", size = 7167745, upload-time = "2025-09-26T16:43:27.71Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/c1/9fb98c9649e15ea8cc691b4b09558b61dafb3dc0345f7322f8c4a8991ade/fastmcp-2.12.5-py3-none-any.whl", hash = "sha256:b1e542f9b83dbae7cecfdc9c73b062f77074785abda9f2306799116121344133", size = 329099, upload-time = "2025-10-17T13:24:57.518Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/c7/562ff39f25de27caec01e4c1e88cbb5fcae5160802ba3d90be33165df24f/fastmcp-2.12.4-py3-none-any.whl", hash = "sha256:56188fbbc1a9df58c537063f25958c57b5c4d715f73e395c41b51550b247d140", size = 329090, upload-time = "2025-09-26T16:43:25.314Z" },
 ]
 
 [[package]]
@@ -3088,9 +3088,9 @@ dependencies = [
     { name = "typing-inspection" },
     { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/2d/649d80a0ecf6a1f82632ca44bec21c0461a9d9fc8934d38cb5b319f2db5e/mcp-1.25.0.tar.gz", hash = "sha256:56310361ebf0364e2d438e5b45f7668cbb124e158bb358333cd06e49e83a6802", size = 605387, upload-time = "2025-12-19T10:19:56.000Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/2d/649d80a0ecf6a1f82632ca44bec21c0461a9d9fc8934d38cb5b319f2db5e/mcp-1.25.0.tar.gz", hash = "sha256:56310361ebf0364e2d438e5b45f7668cbb124e158bb358333cd06e49e83a6802", size = 605387, upload-time = "2025-12-19T10:19:56.985Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e2/fc/6dc7659c2ae5ddf280477011f4213a74f806862856b796ef08f028e664bf/mcp-1.25.0-py3-none-any.whl", hash = "sha256:b37c38144a666add0862614cc79ec276e97d72aa8ca26d622818d4e278b9721a", size = 233076, upload-time = "2025-12-19T10:19:55.000Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/fc/6dc7659c2ae5ddf280477011f4213a74f806862856b796ef08f028e664bf/mcp-1.25.0-py3-none-any.whl", hash = "sha256:b37c38144a666add0862614cc79ec276e97d72aa8ca26d622818d4e278b9721a", size = 233076, upload-time = "2025-12-19T10:19:55.416Z" },
 ]
 
 [[package]]
@@ -3767,7 +3767,7 @@ requires-dist = [
     { name = "docker" },
     { name = "e2b-code-interpreter", marker = "extra == 'third-party-runtimes'", specifier = ">=2" },
     { name = "fastapi" },
-    { name = "fastmcp", specifier = ">=2.12.4" },
+    { name = "fastmcp", specifier = ">=2.12.4,<2.12.5" },
     { name = "google-api-python-client", specifier = ">=2.164" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
