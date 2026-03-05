@@ -701,15 +701,19 @@ async def test_saas_user_auth_from_signed_token_blocked_domain(mock_config):
     }
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
-    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=True)
+    with patch(
+        'storage.user_authorization_store.UserAuthorizationStore'
+    ) as mock_user_auth_store:
+        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=True)
 
         # Act & Assert
         with pytest.raises(AuthError) as exc_info:
             await saas_user_auth_from_signed_token(signed_token)
 
         assert 'email domain is not allowed' in str(exc_info.value)
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')
+        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+            'user@colsch.us', None
+        )
 
 
 @pytest.mark.asyncio
@@ -730,8 +734,10 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
     }
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
-    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+    with patch(
+        'storage.user_authorization_store.UserAuthorizationStore'
+    ) as mock_user_auth_store:
+        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)
@@ -740,8 +746,8 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
         assert result.email == 'user@example.com'
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with(
-            'user@example.com'
+        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+            'user@example.com', None
         )
 
 
@@ -763,8 +769,10 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
     }
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
-    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+    with patch(
+        'storage.user_authorization_store.UserAuthorizationStore'
+    ) as mock_user_auth_store:
+        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)
@@ -772,4 +780,6 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
         # Assert
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')
+        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+            'user@colsch.us', None
+        )

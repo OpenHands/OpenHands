@@ -596,7 +596,9 @@ async def test_keycloak_callback_blocked_email_domain(
     # Arrange
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
-        patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+        patch(
+            'storage.user_authorization_store.UserAuthorizationStore'
+        ) as mock_user_auth_store,
         patch('server.routes.auth.UserStore') as mock_user_store,
     ):
         mock_token_manager.get_keycloak_tokens = AsyncMock(
@@ -621,8 +623,7 @@ async def test_keycloak_callback_blocked_email_domain(
         mock_user_store.backfill_contact_name = AsyncMock()
         mock_user_store.backfill_user_email = AsyncMock()
 
-        mock_domain_blocker.is_active.return_value = True
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=True)
+        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=True)
 
         # Act
         result = await keycloak_callback(
@@ -634,7 +635,9 @@ async def test_keycloak_callback_blocked_email_domain(
         assert result.status_code == status.HTTP_401_UNAUTHORIZED
         assert 'error' in result.body.decode()
         assert 'email domain is not allowed' in result.body.decode()
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')
+        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+            'user@colsch.us'
+        )
         mock_token_manager.disable_keycloak_user.assert_called_once_with(
             'test_user_id', 'user@colsch.us'
         )
@@ -648,7 +651,9 @@ async def test_keycloak_callback_allowed_email_domain(
     # Arrange
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
-        patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+        patch(
+            'storage.user_authorization_store.UserAuthorizationStore'
+        ) as mock_user_auth_store,
         patch('server.routes.auth.user_verifier') as mock_verifier,
         patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
@@ -688,8 +693,7 @@ async def test_keycloak_callback_allowed_email_domain(
         mock_user_store.backfill_contact_name = AsyncMock()
         mock_user_store.backfill_user_email = AsyncMock()
 
-        mock_domain_blocker.is_active.return_value = True
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -701,7 +705,7 @@ async def test_keycloak_callback_allowed_email_domain(
 
         # Assert
         assert isinstance(result, RedirectResponse)
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with(
+        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
             'user@example.com'
         )
         mock_token_manager.disable_keycloak_user.assert_not_called()
@@ -715,7 +719,9 @@ async def test_keycloak_callback_domain_blocking_inactive(
     # Arrange
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
-        patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+        patch(
+            'storage.user_authorization_store.UserAuthorizationStore'
+        ) as mock_user_auth_store,
         patch('server.routes.auth.user_verifier') as mock_verifier,
         patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
@@ -755,8 +761,7 @@ async def test_keycloak_callback_domain_blocking_inactive(
         mock_user_store.backfill_contact_name = AsyncMock()
         mock_user_store.backfill_user_email = AsyncMock()
 
-        mock_domain_blocker.is_active.return_value = False
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+        mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
@@ -768,7 +773,9 @@ async def test_keycloak_callback_domain_blocking_inactive(
 
         # Assert
         assert isinstance(result, RedirectResponse)
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')
+        mock_user_auth_store.has_blacklist_match.assert_called_once_with(
+            'user@colsch.us'
+        )
         mock_token_manager.disable_keycloak_user.assert_not_called()
 
 
@@ -778,7 +785,9 @@ async def test_keycloak_callback_missing_email(mock_request, create_keycloak_use
     # Arrange
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
-        patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+        patch(
+            'storage.user_authorization_store.UserAuthorizationStore'
+        ) as mock_user_auth_store,
         patch('server.routes.auth.user_verifier') as mock_verifier,
         patch('server.routes.auth.a_session_maker') as mock_session_maker,
         patch('server.routes.auth.UserStore') as mock_user_store,
@@ -818,8 +827,6 @@ async def test_keycloak_callback_missing_email(mock_request, create_keycloak_use
         mock_user_store.backfill_contact_name = AsyncMock()
         mock_user_store.backfill_user_email = AsyncMock()
 
-        mock_domain_blocker.is_active.return_value = True
-
         mock_verifier.is_active.return_value = True
         mock_verifier.is_user_allowed.return_value = True
 
@@ -830,7 +837,7 @@ async def test_keycloak_callback_missing_email(mock_request, create_keycloak_use
 
         # Assert
         assert isinstance(result, RedirectResponse)
-        mock_domain_blocker.is_domain_blocked.assert_not_called()
+        mock_user_auth_store.has_blacklist_match.assert_not_called()
         mock_token_manager.disable_keycloak_user.assert_not_called()
 
 
@@ -1216,7 +1223,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
@@ -1262,7 +1271,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1301,7 +1310,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.token_manager') as mock_token_manager,
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.UserStore') as mock_user_store,
         ):
             mock_token_manager.get_keycloak_tokens = AsyncMock(
@@ -1327,7 +1338,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_user_store.backfill_contact_name = AsyncMock()
             mock_user_store.backfill_user_email = AsyncMock()
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1368,7 +1379,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.token_manager') as mock_token_manager,
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.user_verifier') as mock_verifier,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
@@ -1416,7 +1429,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1457,7 +1470,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.token_manager') as mock_token_manager,
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.user_verifier') as mock_verifier,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
@@ -1505,7 +1520,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1545,7 +1560,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.token_manager') as mock_token_manager,
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.user_verifier') as mock_verifier,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
@@ -1593,7 +1610,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1630,7 +1647,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.token_manager') as mock_token_manager,
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.user_verifier') as mock_verifier,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
             patch('server.routes.auth.set_response_cookie'),
@@ -1678,7 +1697,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
@@ -1714,7 +1733,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', ''),
             patch('server.routes.auth.user_verifier') as mock_verifier,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
@@ -1760,7 +1781,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Act
             await keycloak_callback(
@@ -1784,7 +1805,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.user_verifier') as mock_verifier,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
@@ -1830,7 +1853,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Act
             await keycloak_callback(code='test_code', state=state, request=mock_request)
@@ -1858,7 +1881,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
             patch('server.routes.auth.user_verifier') as mock_verifier,
             patch('server.routes.auth.a_session_maker') as mock_session_maker,
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.set_response_cookie'),
             patch('server.routes.auth.posthog'),
             patch('server.routes.auth.logger') as mock_logger,
@@ -1904,7 +1929,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_verifier.is_active.return_value = True
             mock_verifier.is_user_allowed.return_value = True
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             mock_recaptcha_service.create_assessment.side_effect = Exception(
                 'Service error'
@@ -1947,7 +1972,9 @@ class TestKeycloakCallbackRecaptcha:
             patch('server.routes.auth.token_manager') as mock_token_manager,
             patch('server.routes.auth.recaptcha_service') as mock_recaptcha_service,
             patch('server.routes.auth.RECAPTCHA_SITE_KEY', 'test-site-key'),
-            patch('server.routes.auth.domain_blocker') as mock_domain_blocker,
+            patch(
+                'storage.user_authorization_store.UserAuthorizationStore'
+            ) as mock_user_auth_store,
             patch('server.routes.auth.logger') as mock_logger,
             patch('server.routes.email.verify_email', new_callable=AsyncMock),
             patch('server.routes.auth.UserStore') as mock_user_store,
@@ -1975,7 +2002,7 @@ class TestKeycloakCallbackRecaptcha:
             mock_user_store.backfill_contact_name = AsyncMock()
             mock_user_store.backfill_user_email = AsyncMock()
 
-            mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+            mock_user_auth_store.has_blacklist_match = AsyncMock(return_value=False)
 
             # Patch the module-level recaptcha_service instance
             mock_recaptcha_service.create_assessment.return_value = (
