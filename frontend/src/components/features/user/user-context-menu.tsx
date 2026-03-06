@@ -1,5 +1,4 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
@@ -13,7 +12,6 @@ import { OrganizationUserRole } from "#/types/org";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useOrgTypeAndAccess } from "#/hooks/use-org-type-and-access";
 import { cn } from "#/utils/utils";
-import { InviteOrganizationMemberModal } from "../org/invite-organization-member-modal";
 import { OrgSelector } from "../org/org-selector";
 import { I18nKey } from "#/i18n/declaration";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
@@ -30,9 +28,14 @@ const contextMenuListItemClassName = cn(
 interface UserContextMenuProps {
   type: OrganizationUserRole;
   onClose: () => void;
+  onOpenInviteModal: () => void;
 }
 
-export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
+export function UserContextMenu({
+  type,
+  onClose,
+  onOpenInviteModal,
+}: UserContextMenuProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { mutate: logout } = useLogout();
@@ -47,9 +50,6 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
       item.to !== "/settings/org" && item.to !== "/settings/org-members",
   );
 
-  const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
-    React.useState(false);
-
   const isMember = type === "member";
 
   const handleLogout = () => {
@@ -58,7 +58,8 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   };
 
   const handleInviteMemberClick = () => {
-    setInviteMemberModalIsOpen(true);
+    onOpenInviteModal();
+    onClose();
   };
 
   const handleManageOrganizationMembersClick = () => {
@@ -80,14 +81,6 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
         "text-sm absolute left-full bottom-0 z-101",
       )}
     >
-      {inviteMemberModalIsOpen &&
-        ReactDOM.createPortal(
-          <InviteOrganizationMemberModal
-            onClose={() => setInviteMemberModalIsOpen(false)}
-          />,
-          document.getElementById("portal-root") || document.body,
-        )}
-
       <h3 className="text-lg font-semibold text-white">
         {t(I18nKey.ORG$ACCOUNT)}
       </h3>
