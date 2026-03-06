@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Spinner } from "@heroui/react";
+import { Spinner } from "#/components/shared/spinner";
 import { cn } from "#/utils/utils";
 
 interface BranchLoadingStateProps {
@@ -18,7 +18,11 @@ export function BranchLoadingState({
         wrapperClassName,
       )}
     >
-      <Spinner size="sm" />
+      <Spinner
+        size="sm"
+        className="text-white"
+        testId="branch-loading-spinner"
+      />
       <span className="text-sm">{t("HOME$LOADING_BRANCHES")}</span>
     </div>
   );

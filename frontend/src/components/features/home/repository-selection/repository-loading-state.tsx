@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Spinner } from "@heroui/react";
+import { Spinner } from "#/components/shared/spinner";
 import { cn } from "#/utils/utils";
 
 export interface RepositoryLoadingStateProps {
@@ -18,7 +18,11 @@ export function RepositoryLoadingState({
         wrapperClassName,
       )}
     >
-      <Spinner size="sm" />
+      <Spinner
+        size="sm"
+        className="text-white"
+        testId="repository-loading-spinner"
+      />
       <span className="text-sm">{t("HOME$LOADING_REPOSITORIES")}</span>
     </div>
   );
