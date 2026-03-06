@@ -14,6 +14,7 @@ vi.mock("react-router", () => ({
   useRevalidator: () => ({ revalidate: vi.fn() }),
   useNavigate: () => vi.fn(),
   useLocation: () => ({ pathname: "/" }),
+  useMatch: () => null,
 }));
 
 vi.mock("#/hooks/query/use-is-authed", () => ({
