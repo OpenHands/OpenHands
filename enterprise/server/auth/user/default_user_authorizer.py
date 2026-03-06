@@ -59,8 +59,8 @@ class DefaultUserAuthorizer(UserAuthorizer):
             base_email = extract_base_email(email)
             if base_email is None:
                 return UserAuthorizationResponse(
-                        success=False, error_detail='invalid_email'
-                    )
+                    success=False, error_detail='invalid_email'
+                )
             auth_type = await UserAuthorizationStore.get_authorization_type(
                 base_email, provider_type
             )
