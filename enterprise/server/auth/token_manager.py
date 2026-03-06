@@ -41,7 +41,7 @@ from storage.github_app_installation import GithubAppInstallation
 from storage.offline_token_store import OfflineTokenStore
 from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
 
-from enterprise.server.auth.email_validation_utils import (
+from server.auth.email_validation import (
     extract_base_email,
     get_base_email_regex_pattern,
     matches_base_email,

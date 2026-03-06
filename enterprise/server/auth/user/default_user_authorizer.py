@@ -13,7 +13,7 @@ from server.auth.user.user_authorizer import (
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
 
-from enterprise.server.auth.email_validation_utils import extract_base_email
+from enterprise.server.auth.email_validation import extract_base_email
 from openhands.app_server.services.injector import InjectorState
 
 logger = logging.getLogger(__name__)
