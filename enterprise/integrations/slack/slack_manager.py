@@ -33,7 +33,7 @@ from storage.slack_user import SlackUser
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import Repository
+from openhands.integrations.service_types import ProviderTimeoutError, Repository
 from openhands.server.shared import config, server_config
 from openhands.server.types import (
     LLMAuthenticationError,
@@ -269,9 +269,31 @@ class SlackManager(Manager[SlackViewInterface]):
             return True
         elif isinstance(slack_view, SlackNewConversationView):
             user = slack_view.slack_to_openhands_user
-            user_repos: list[Repository] = await self._get_repositories(
-                slack_view.saas_user_auth
+
+            # Fetch repositories, handling timeout errors from the provider
+            logger.info(
+                f'[Slack] Fetching repositories for user {user.slack_display_name} (id={slack_view.saas_user_auth.get_user_id()})'
             )
+            try:
+                user_repos: list[Repository] = await self._get_repositories(
+                    slack_view.saas_user_auth
+                )
+            except ProviderTimeoutError:
+                logger.warning(
+                    'repo_query_timeout',
+                    extra={
+                        'slack_user_id': user.slack_user_id,
+                        'keycloak_user_id': user.keycloak_user_id,
+                    },
+                )
+                timeout_msg = (
+                    'The repository selection timed out while fetching your repository list. '
+                    'Please re-send your message with a more specific repository name '
+                    '(e.g., "owner/repo-name") to help me find it faster.'
+                )
+                await self.send_message(timeout_msg, slack_view, ephemeral=True)
+                return False
+
             match, repos = self.filter_potential_repos_by_user_msg(
                 slack_view.user_msg, user_repos
             )

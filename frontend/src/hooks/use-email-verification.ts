@@ -21,6 +21,7 @@ import { useResendEmailVerification } from "#/hooks/mutation/use-resend-email-ve
  *   - isCooldownActive: boolean indicating if cooldown is currently active
  *   - cooldownRemaining: number of milliseconds remaining in cooldown
  *   - formattedCooldownTime: string formatted as "M:SS" for display
+ *   - wasRateLimited: boolean indicating if the user was rate limited during OAuth flow
  */
 export function useEmailVerification() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,6 +30,7 @@ export function useEmailVerification() {
   const [emailVerified, setEmailVerified] = React.useState(false);
   const [hasDuplicatedEmail, setHasDuplicatedEmail] = React.useState(false);
   const [recaptchaBlocked, setRecaptchaBlocked] = React.useState(false);
+  const [wasRateLimited, setWasRateLimited] = React.useState(false);
   const [userId, setUserId] = React.useState<string | null>(null);
   const [lastSentTimestamp, setLastSentTimestamp] = React.useState<
     number | null
@@ -85,6 +87,13 @@ export function useEmailVerification() {
       shouldUpdate = true;
     }
 
+    const rateLimitedParam = searchParams.get("rate_limited");
+    if (rateLimitedParam === "true") {
+      setWasRateLimited(true);
+      searchParams.delete("rate_limited");
+      shouldUpdate = true;
+    }
+
     if (userIdParam) {
       setUserId(userIdParam);
       searchParams.delete("user_id");
@@ -136,6 +145,7 @@ export function useEmailVerification() {
     setEmailVerified,
     hasDuplicatedEmail,
     recaptchaBlocked,
+    wasRateLimited,
     userId,
     resendEmailVerification: resendEmailVerificationMutation.mutate,
     isResendingVerification: resendEmailVerificationMutation.isPending,
