@@ -33,6 +33,18 @@ export const useUnifiedResumeConversationSandbox = () => {
       providers?: Provider[];
       version?: "V0" | "V1";
     }) => {
+      // Guard: If conversation is no longer in cache and no explicit version provided,
+      // skip the mutation. This handles race conditions like org switching where cache
+      // is cleared before the mutation executes.
+      const cachedConversation = queryClient.getQueryData([
+        "user",
+        "conversation",
+        variables.conversationId,
+      ]);
+      if (!cachedConversation && !variables.version) {
+        return undefined;
+      }
+
       // Use provided version or fallback to cache lookup
       const version =
         variables.version ||
