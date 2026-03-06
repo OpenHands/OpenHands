@@ -2,7 +2,7 @@
 
 import re
 
-from enterprise.server.auth.email_validation import (
+from server.auth.email_validation import (
     extract_base_email,
     get_base_email_regex_pattern,
     has_plus_modifier,
