@@ -122,58 +122,12 @@ def upgrade() -> None:
         FROM blocked_email_domains
     """)
 
-    # Drop blocked_email_domains table
-    op.drop_index('ix_blocked_email_domains_domain', table_name='blocked_email_domains')
-    op.drop_table('blocked_email_domains')
-
     # Seed additional patterns from environment variables (if set)
     _seed_from_environment()
 
 
 def downgrade() -> None:
     """Recreate blocked_email_domains table and migrate data back."""
-    # Recreate blocked_email_domains table
-    op.create_table(
-        'blocked_email_domains',
-        sa.Column('id', sa.Integer(), sa.Identity(), nullable=False, primary_key=True),
-        sa.Column('domain', sa.String(), nullable=False),
-        sa.Column(
-            'created_at',
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text('CURRENT_TIMESTAMP'),
-        ),
-        sa.Column(
-            'updated_at',
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text('CURRENT_TIMESTAMP'),
-        ),
-        sa.PrimaryKeyConstraint('id'),
-    )
-
-    op.create_index(
-        'ix_blocked_email_domains_domain',
-        'blocked_email_domains',
-        ['domain'],
-        unique=True,
-    )
-
-    # Migrate blacklist entries back to blocked_email_domains
-    # Reverse the pattern transformation
-    op.execute("""
-        INSERT INTO blocked_email_domains (domain, created_at, updated_at)
-        SELECT
-            CASE
-                WHEN email_pattern LIKE '%@%.' THEN SUBSTRING(email_pattern FROM 4)
-                ELSE SUBSTRING(email_pattern FROM 2)
-            END as domain,
-            created_at,
-            updated_at
-        FROM user_authorizations
-        WHERE type = 'blacklist' AND provider_type IS NULL
-    """)
-
     # Drop user_authorizations table
     op.drop_index('ix_user_authorizations_type', table_name='user_authorizations')
     op.drop_index(
