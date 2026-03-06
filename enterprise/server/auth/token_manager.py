@@ -30,11 +30,6 @@ from server.auth.constants import (
     KEYCLOAK_SERVER_URL,
     KEYCLOAK_SERVER_URL_EXT,
 )
-from server.auth.email_validation import (
-    extract_base_email,
-    get_base_email_regex_pattern,
-    matches_base_email,
-)
 from server.auth.keycloak_manager import get_keycloak_admin, get_keycloak_openid
 from server.config import get_config
 from server.logger import logger
@@ -46,6 +41,11 @@ from storage.github_app_installation import GithubAppInstallation
 from storage.offline_token_store import OfflineTokenStore
 from tenacity import RetryCallState, retry, retry_if_exception_type, stop_after_attempt
 
+from enterprise.server.auth.email_validation_utils import (
+    extract_base_email,
+    get_base_email_regex_pattern,
+    matches_base_email,
+)
 from openhands.integrations.service_types import ProviderType
 from openhands.server.types import SessionExpiredError
 from openhands.utils.http_session import httpx_verify_option
