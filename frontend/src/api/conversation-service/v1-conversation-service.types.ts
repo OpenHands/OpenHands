@@ -1,6 +1,7 @@
 import { ConversationTrigger } from "../open-hands.types";
-import { Provider } from "#/types/settings";
 import { V1SandboxStatus } from "../sandbox-service/sandbox-service.types";
+import { Provider } from "#/types/settings";
+import { SuggestedTask } from "#/utils/types";
 
 // V1 Metrics Types
 export interface V1TokenUsage {
@@ -47,6 +48,7 @@ export interface V1AppConversationStartRequest {
   selected_repository?: string | null;
   selected_branch?: string | null;
   git_provider?: Provider | null;
+  suggested_task?: SuggestedTask | null;
   title?: string | null;
   trigger?: ConversationTrigger | null;
   pr_number?: number[];

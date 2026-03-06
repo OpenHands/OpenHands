@@ -147,6 +147,8 @@ async def test_verify_keycloak_token_refresh(token_manager):
 @pytest.mark.asyncio
 async def test_get_user_info(token_manager):
     """Test getting user info from a Keycloak token."""
+    from server.auth.token_manager import KeycloakUserInfo
+
     mock_user_info = {
         'sub': 'test_user_id',
         'name': 'Test User',
@@ -158,7 +160,11 @@ async def test_get_user_info(token_manager):
 
         user_info = await token_manager.get_user_info('test_access_token')
 
-        assert user_info == mock_user_info
+        # Now returns KeycloakUserInfo Pydantic model instead of dict
+        assert isinstance(user_info, KeycloakUserInfo)
+        assert user_info.sub == 'test_user_id'
+        assert user_info.name == 'Test User'
+        assert user_info.email == 'test@example.com'
         mock_keycloak.return_value.a_userinfo.assert_called_once_with(
             'test_access_token'
         )
@@ -167,9 +173,17 @@ async def test_get_user_info(token_manager):
 @pytest.mark.asyncio
 async def test_get_user_info_empty_token(token_manager):
     """Test handling of empty token when getting user info."""
-    user_info = await token_manager.get_user_info('')
+    from keycloak.exceptions import KeycloakAuthenticationError
 
-    assert user_info == {}
+    with patch('server.auth.token_manager.get_keycloak_openid') as mock_keycloak:
+        mock_keycloak.return_value.a_userinfo = AsyncMock(
+            side_effect=KeycloakAuthenticationError('Invalid token')
+        )
+
+        with pytest.raises(KeycloakAuthenticationError):
+            await token_manager.get_user_info('')
+
+        mock_keycloak.return_value.a_userinfo.assert_called_once_with('')
 
 
 @pytest.mark.asyncio
@@ -203,12 +217,12 @@ async def test_store_idp_tokens(token_manager):
 
 
 @pytest.mark.asyncio
-async def test_get_idp_token(token_manager):
+async def test_get_idp_token(token_manager, create_keycloak_user_info):
     """Test getting an identity provider token."""
     with (
         patch(
             'server.auth.token_manager.TokenManager.get_user_info',
-            AsyncMock(return_value={'sub': 'test_user_id'}),
+            AsyncMock(return_value=create_keycloak_user_info(sub='test_user_id')),
         ),
         patch('server.auth.token_manager.AuthTokenStore') as mock_token_store_cls,
     ):
@@ -346,3 +360,169 @@ async def test_disable_keycloak_user_exception_handling(token_manager):
 
         # Verify the method was called
         mock_admin.a_get_user.assert_called_once_with(user_id)
+
+
+class TestOrgTokenMethods:
+    """Test cases for store_org_token and load_org_token methods."""
+
+    @pytest.mark.asyncio
+    async def test_store_org_token_new_installation(self, token_manager):
+        """Test storing a token for a new installation."""
+        installation_id = 12345
+        installation_token = 'ghs_test_token_abc123'
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.add = MagicMock()
+        mock_session.commit = AsyncMock()
+
+        mock_context_manager = AsyncMock()
+        mock_context_manager.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_context_manager.__aexit__ = AsyncMock(return_value=None)
+
+        with patch(
+            'server.auth.token_manager.a_session_maker',
+            return_value=mock_context_manager,
+        ):
+            await token_manager.store_org_token(installation_id, installation_token)
+
+            mock_session.add.assert_called_once()
+            mock_session.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_store_org_token_update_existing_installation(self, token_manager):
+        """Test updating a token for an existing installation."""
+        installation_id = 12345
+        installation_token = 'ghs_test_token_abc123'
+
+        mock_installation = MagicMock()
+        mock_installation.encrypted_token = 'old_encrypted_token'
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = mock_installation
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.commit = AsyncMock()
+
+        mock_context_manager = AsyncMock()
+        mock_context_manager.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_context_manager.__aexit__ = AsyncMock(return_value=None)
+
+        with patch(
+            'server.auth.token_manager.a_session_maker',
+            return_value=mock_context_manager,
+        ):
+            await token_manager.store_org_token(installation_id, installation_token)
+
+            # Verify token was updated (encrypted)
+            assert mock_installation.encrypted_token != 'old_encrypted_token'
+            mock_session.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_load_org_token_found(self, token_manager):
+        """Test loading a token that exists."""
+        installation_id = 12345
+        original_token = 'ghs_test_token_abc123'
+        encrypted_token = token_manager.encrypt_text(original_token)
+
+        mock_installation = MagicMock()
+        mock_installation.encrypted_token = encrypted_token
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = mock_installation
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        mock_context_manager = AsyncMock()
+        mock_context_manager.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_context_manager.__aexit__ = AsyncMock(return_value=None)
+
+        with patch(
+            'server.auth.token_manager.a_session_maker',
+            return_value=mock_context_manager,
+        ):
+            result = await token_manager.load_org_token(installation_id)
+
+            assert result == original_token
+
+    @pytest.mark.asyncio
+    async def test_load_org_token_not_found(self, token_manager):
+        """Test loading a token that doesn't exist."""
+        installation_id = 99999
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        mock_context_manager = AsyncMock()
+        mock_context_manager.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_context_manager.__aexit__ = AsyncMock(return_value=None)
+
+        with patch(
+            'server.auth.token_manager.a_session_maker',
+            return_value=mock_context_manager,
+        ):
+            result = await token_manager.load_org_token(installation_id)
+
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_store_and_load_org_token_integration(self, token_manager):
+        """Test that store and load work together using the same encryption."""
+        installation_id = 12345
+        original_token = 'ghs_test_token_abc123'
+
+        # Store
+        stored_encrypted_token = None
+
+        def capture_add(obj):
+            nonlocal stored_encrypted_token
+            stored_encrypted_token = obj.encrypted_token
+
+        mock_session_store = AsyncMock()
+        mock_result_store = MagicMock()
+        mock_result_store.scalars.return_value.first.return_value = None
+        mock_session_store.execute = AsyncMock(return_value=mock_result_store)
+        mock_session_store.add = capture_add
+        mock_session_store.commit = AsyncMock()
+
+        mock_context_manager_store = AsyncMock()
+        mock_context_manager_store.__aenter__ = AsyncMock(
+            return_value=mock_session_store
+        )
+        mock_context_manager_store.__aexit__ = AsyncMock(return_value=None)
+
+        with patch(
+            'server.auth.token_manager.a_session_maker',
+            return_value=mock_context_manager_store,
+        ):
+            await token_manager.store_org_token(installation_id, original_token)
+
+        # Verify we captured the encrypted token
+        assert stored_encrypted_token is not None
+
+        # Load - using the captured encrypted token
+        mock_installation_load = MagicMock()
+        mock_installation_load.encrypted_token = stored_encrypted_token
+
+        mock_session_load = AsyncMock()
+        mock_result_load = MagicMock()
+        mock_result_load.scalars.return_value.first.return_value = (
+            mock_installation_load
+        )
+        mock_session_load.execute = AsyncMock(return_value=mock_result_load)
+
+        mock_context_manager_load = AsyncMock()
+        mock_context_manager_load.__aenter__ = AsyncMock(return_value=mock_session_load)
+        mock_context_manager_load.__aexit__ = AsyncMock(return_value=None)
+
+        with patch(
+            'server.auth.token_manager.a_session_maker',
+            return_value=mock_context_manager_load,
+        ):
+            loaded_token = await token_manager.load_org_token(installation_id)
+
+        assert loaded_token == original_token

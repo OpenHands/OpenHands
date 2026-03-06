@@ -36,8 +36,7 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
     workspace_name: str
 
     async def _send_comment_to_linear(self, message: str) -> None:
-        """
-        Send a comment to Linear issue.
+        """Send a comment to Linear issue.
 
         Args:
             message: The message content to send to Linear
@@ -60,9 +59,9 @@ class LinearCallbackProcessor(ConversationCallbackProcessor):
                 workspace.svc_acc_api_key
             )
 
-            # Send comment
+            # Send comment directly as a string
             await linear_manager.send_message(
-                linear_manager.create_outgoing_message(msg=message),
+                message,
                 self.issue_id,
                 api_key,
             )

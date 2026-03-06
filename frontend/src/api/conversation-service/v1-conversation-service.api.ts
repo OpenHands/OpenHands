@@ -2,6 +2,7 @@ import axios from "axios";
 import { openHands } from "../open-hands-axios";
 import { ConversationTrigger, GetVSCodeUrlResponse } from "../open-hands.types";
 import { Provider } from "#/types/settings";
+import { SuggestedTask } from "#/utils/types";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import { buildSessionHeaders } from "#/utils/utils";
 import type {
@@ -61,6 +62,7 @@ class V1ConversationService {
     initialUserMsg?: string,
     selected_branch?: string,
     conversationInstructions?: string,
+    suggestedTask?: SuggestedTask,
     trigger?: ConversationTrigger,
     parent_conversation_id?: string,
     agent_type?: "default" | "plan",
@@ -69,14 +71,15 @@ class V1ConversationService {
       selected_repository: selectedRepository,
       git_provider,
       selected_branch,
+      suggested_task: suggestedTask,
       title: conversationInstructions,
       trigger,
       parent_conversation_id: parent_conversation_id || null,
       agent_type,
     };
 
-    // Add initial message if provided
-    if (initialUserMsg) {
+    // suggested_task implies the backend will construct the initial_message
+    if (!suggestedTask && initialUserMsg) {
       body.initial_message = {
         role: "user",
         content: [
@@ -312,6 +315,39 @@ class V1ConversationService {
     const { data } = await openHands.patch<V1AppConversation>(
       `/api/v1/app-conversations/${conversationId}`,
       { public: isPublic },
+    );
+    return data;
+  }
+
+  /**
+   * Update a V1 conversation's repository settings
+   * @param conversationId The conversation ID
+   * @param repository The repository to attach (e.g., "owner/repo") or null to remove
+   * @param branch The branch to use (optional)
+   * @param gitProvider The git provider (e.g., "github", "gitlab")
+   * @returns Updated conversation info
+   */
+  static async updateConversationRepository(
+    conversationId: string,
+    repository: string | null,
+    branch?: string | null,
+    gitProvider?: string | null,
+  ): Promise<V1AppConversation> {
+    const payload: Record<string, string | null | undefined> = {};
+
+    if (repository !== undefined) {
+      payload.selected_repository = repository;
+    }
+    if (branch !== undefined) {
+      payload.selected_branch = branch;
+    }
+    if (gitProvider !== undefined) {
+      payload.git_provider = gitProvider;
+    }
+
+    const { data } = await openHands.patch<V1AppConversation>(
+      `/api/v1/app-conversations/${conversationId}`,
+      payload,
     );
     return data;
   }

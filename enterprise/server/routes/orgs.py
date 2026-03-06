@@ -2,6 +2,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from server.auth.authorization import (
+    Permission,
+    require_permission,
+)
 from server.email_validation import get_admin_user_id
 from server.routes.org_models import (
     CannotModifySelfError,
@@ -11,9 +15,13 @@ from server.routes.org_models import (
     LiteLLMIntegrationError,
     MemberUpdateError,
     MeResponse,
+    OrgAppSettingsResponse,
+    OrgAppSettingsUpdate,
     OrgAuthorizationError,
     OrgCreate,
     OrgDatabaseError,
+    OrgLLMSettingsResponse,
+    OrgLLMSettingsUpdate,
     OrgMemberNotFoundError,
     OrgMemberPage,
     OrgMemberResponse,
@@ -26,14 +34,30 @@ from server.routes.org_models import (
     OrphanedUserError,
     RoleNotFoundError,
 )
+from server.services.org_app_settings_service import (
+    OrgAppSettingsService,
+    OrgAppSettingsServiceInjector,
+)
+from server.services.org_llm_settings_service import (
+    OrgLLMSettingsService,
+    OrgLLMSettingsServiceInjector,
+)
 from server.services.org_member_service import OrgMemberService
 from storage.org_service import OrgService
+from storage.user_store import UserStore
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.server.user_auth import get_user_id
 
 # Initialize API router
-org_router = APIRouter(prefix='/api/organizations')
+org_router = APIRouter(prefix='/api/organizations', tags=['Orgs'])
+
+# Create injector instance and dependency for LLM settings
+_org_llm_settings_injector = OrgLLMSettingsServiceInjector()
+org_llm_settings_service_dependency = Depends(_org_llm_settings_injector.depends)
+# Create injector instance and dependency at module level
+_org_app_settings_injector = OrgAppSettingsServiceInjector()
+org_app_settings_service_dependency = Depends(_org_app_settings_injector.depends)
 
 
 @org_router.get('', response_model=OrgPage)
@@ -74,8 +98,14 @@ async def list_user_orgs(
     )
 
     try:
+        # Fetch user to get current_org_id
+        user = await UserStore.get_user_by_id(user_id)
+        current_org_id = (
+            str(user.current_org_id) if user and user.current_org_id else None
+        )
+
         # Fetch organizations from service layer
-        orgs, next_page_id = OrgService.get_user_orgs_paginated(
+        orgs, next_page_id = await OrgService.get_user_orgs_paginated(
             user_id=user_id,
             page_id=page_id,
             limit=limit,
@@ -95,7 +125,11 @@ async def list_user_orgs(
             },
         )
 
-        return OrgPage(items=org_responses, next_page_id=next_page_id)
+        return OrgPage(
+            items=org_responses,
+            next_page_id=next_page_id,
+            current_org_id=current_org_id,
+        )
 
     except Exception as e:
         logger.exception(
@@ -186,26 +220,218 @@ async def create_org(
         )
 
 
+@org_router.get(
+    '/llm',
+    response_model=OrgLLMSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.VIEW_LLM_SETTINGS))],
+)
+async def get_org_llm_settings(
+    service: OrgLLMSettingsService = org_llm_settings_service_dependency,
+) -> OrgLLMSettingsResponse:
+    """Get LLM settings for the user's current organization.
+
+    This endpoint retrieves the LLM configuration settings for the
+    authenticated user's current organization. All organization members
+    can view these settings.
+
+    Args:
+        service: OrgLLMSettingsService (injected by dependency)
+
+    Returns:
+        OrgLLMSettingsResponse: The organization's LLM settings
+
+    Raises:
+        HTTPException: 401 if not authenticated
+        HTTPException: 403 if not a member of any organization
+        HTTPException: 404 if current organization not found
+        HTTPException: 500 if retrieval fails
+    """
+    try:
+        return await service.get_org_llm_settings()
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.exception(
+            'Error getting organization LLM settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve LLM settings',
+        )
+
+
+@org_router.post(
+    '/llm',
+    response_model=OrgLLMSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.EDIT_LLM_SETTINGS))],
+)
+async def update_org_llm_settings(
+    settings: OrgLLMSettingsUpdate,
+    service: OrgLLMSettingsService = org_llm_settings_service_dependency,
+) -> OrgLLMSettingsResponse:
+    """Update LLM settings for the user's current organization.
+
+    This endpoint updates the LLM configuration settings for the
+    authenticated user's current organization. Only admins and owners
+    can update these settings.
+
+    Args:
+        settings: The LLM settings to update (only non-None fields are updated)
+        service: OrgLLMSettingsService (injected by dependency)
+
+    Returns:
+        OrgLLMSettingsResponse: The updated organization's LLM settings
+
+    Raises:
+        HTTPException: 401 if not authenticated
+        HTTPException: 403 if user lacks EDIT_LLM_SETTINGS permission
+        HTTPException: 404 if current organization not found
+        HTTPException: 500 if update fails
+    """
+    try:
+        return await service.update_org_llm_settings(settings)
+    except OrgNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except OrgDatabaseError as e:
+        logger.error(
+            'Database error updating LLM settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update LLM settings',
+        )
+    except Exception as e:
+        logger.exception(
+            'Error updating organization LLM settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to update LLM settings',
+        )
+
+
+@org_router.get(
+    '/app',
+    response_model=OrgAppSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
+)
+async def get_org_app_settings(
+    service: OrgAppSettingsService = org_app_settings_service_dependency,
+) -> OrgAppSettingsResponse:
+    """Get organization app settings for the user's current organization.
+
+    This endpoint retrieves application settings for the authenticated user's
+    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
+    which is granted to all organization members (member, admin, and owner roles).
+
+    Args:
+        service: OrgAppSettingsService (injected by dependency)
+
+    Returns:
+        OrgAppSettingsResponse: The organization app settings
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
+        HTTPException: 404 if current organization not found
+    """
+    try:
+        return await service.get_org_app_settings()
+    except OrgNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Current organization not found',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error retrieving organization app settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
+@org_router.post(
+    '/app',
+    response_model=OrgAppSettingsResponse,
+    dependencies=[Depends(require_permission(Permission.MANAGE_APPLICATION_SETTINGS))],
+)
+async def update_org_app_settings(
+    update_data: OrgAppSettingsUpdate,
+    service: OrgAppSettingsService = org_app_settings_service_dependency,
+) -> OrgAppSettingsResponse:
+    """Update organization app settings for the user's current organization.
+
+    This endpoint updates application settings for the authenticated user's
+    current organization. Access requires the MANAGE_APPLICATION_SETTINGS permission,
+    which is granted to all organization members (member, admin, and owner roles).
+
+    Args:
+        update_data: App settings update data
+        service: OrgAppSettingsService (injected by dependency)
+
+    Returns:
+        OrgAppSettingsResponse: The updated organization app settings
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks MANAGE_APPLICATION_SETTINGS permission
+        HTTPException: 404 if current organization not found
+        HTTPException: 422 if validation errors occur (handled by FastAPI)
+        HTTPException: 500 if update fails
+    """
+    try:
+        return await service.update_org_app_settings(update_data)
+    except OrgNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Current organization not found',
+        )
+    except Exception as e:
+        logger.exception(
+            'Unexpected error updating organization app settings',
+            extra={'error': str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='An unexpected error occurred',
+        )
+
+
 @org_router.get('/{org_id}', response_model=OrgResponse, status_code=status.HTTP_200_OK)
 async def get_org(
     org_id: UUID,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgResponse:
     """Get organization details by ID.
 
-    This endpoint allows authenticated users who are members of an organization
-    to retrieve its details. Only members of the organization can access this endpoint.
+    This endpoint retrieves details for a specific organization. Access requires
+    the VIEW_ORG_SETTINGS permission, which is granted to all organization members
+    (member, admin, and owner roles).
 
     Args:
         org_id: Organization ID (UUID)
-        user_id: Authenticated user ID (injected by dependency)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         OrgResponse: The organization details
 
     Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission
+        HTTPException: 404 if organization not found
         HTTPException: 422 if org_id is not a valid UUID (handled by FastAPI)
-        HTTPException: 404 if organization not found or user is not a member
         HTTPException: 500 if retrieval fails
     """
     logger.info(
@@ -271,7 +497,7 @@ async def get_me(
 
     try:
         user_uuid = UUID(user_id)
-        return OrgMemberService.get_me(org_id, user_uuid)
+        return await OrgMemberService.get_me(org_id, user_uuid)
 
     except OrgMemberNotFoundError:
         raise HTTPException(
@@ -305,23 +531,24 @@ async def get_me(
 @org_router.delete('/{org_id}', status_code=status.HTTP_200_OK)
 async def delete_org(
     org_id: UUID,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.DELETE_ORGANIZATION)),
 ) -> dict:
     """Delete an organization.
 
-    This endpoint allows authenticated organization owners to delete their organization.
-    All associated data including organization members, conversations, billing data,
-    and external LiteLLM team resources will be permanently removed.
+    This endpoint permanently deletes an organization and all associated data including
+    organization members, conversations, billing data, and external LiteLLM team resources.
+    Access requires the DELETE_ORGANIZATION permission, which is granted only to owners.
 
     Args:
-        org_id: Organization ID to delete
-        user_id: Authenticated user ID (injected by dependency)
+        org_id: Organization ID to delete (UUID)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         dict: Confirmation message with deleted organization details
 
     Raises:
-        HTTPException: 403 if user is not the organization owner
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks DELETE_ORGANIZATION permission
         HTTPException: 404 if organization not found
         HTTPException: 500 if deletion fails
     """
@@ -414,25 +641,26 @@ async def delete_org(
 async def update_org(
     org_id: UUID,
     update_data: OrgUpdate,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(require_permission(Permission.EDIT_ORG_SETTINGS)),
 ) -> OrgResponse:
     """Update an existing organization.
 
-    This endpoint allows authenticated users to update organization settings.
-    LLM-related settings require admin or owner role in the organization.
+    This endpoint updates organization settings. Access requires the EDIT_ORG_SETTINGS
+    permission, which is granted to admin and owner roles.
 
     Args:
-        org_id: Organization ID to update (UUID validated by FastAPI)
+        org_id: Organization ID to update (UUID)
         update_data: Organization update data
-        user_id: Authenticated user ID (injected by dependency)
+        user_id: Authenticated user ID (injected by require_permission dependency)
 
     Returns:
         OrgResponse: The updated organization details
 
     Raises:
-        HTTPException: 400 if org_id is invalid UUID format (handled by FastAPI)
-        HTTPException: 403 if user lacks permission for LLM settings
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks EDIT_ORG_SETTINGS permission
         HTTPException: 404 if organization not found
+        HTTPException: 409 if organization name already exists
         HTTPException: 422 if validation errors occur (handled by FastAPI)
         HTTPException: 500 if update fails
     """
@@ -496,10 +724,10 @@ async def update_org(
 
 @org_router.get('/{org_id}/members')
 async def get_org_members(
-    org_id: str,
+    org_id: UUID,
     page_id: Annotated[
         str | None,
-        Query(title='Optional next_page_id from the previously returned page'),
+        Query(title='Optional page offset for pagination'),
     ] = None,
     limit: Annotated[
         int,
@@ -508,20 +736,52 @@ async def get_org_members(
             gt=0,
             lte=100,
         ),
-    ] = 100,
-    current_user_id: str = Depends(get_user_id),
+    ] = 10,
+    email: Annotated[
+        str | None,
+        Query(
+            title='Filter members by email (case-insensitive partial match)',
+            min_length=1,
+            max_length=255,
+        ),
+    ] = None,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
 ) -> OrgMemberPage:
-    """Get all members of an organization with cursor-based pagination."""
+    """Get all members of an organization with pagination and optional email filter.
+
+    This endpoint retrieves a paginated list of organization members. Access requires
+    the VIEW_ORG_SETTINGS permission, which is granted to all organization members
+    (member, admin, and owner roles).
+
+    Args:
+        org_id: Organization ID (UUID)
+        page_id: Optional page offset for pagination
+        limit: Maximum number of members to return (1-100, default 10)
+        email: Optional email filter (case-insensitive partial match)
+        user_id: Authenticated user ID (injected by require_permission dependency)
+
+    Returns:
+        OrgMemberPage: Paginated list of organization members with
+            current_page and per_page metadata. Use the /count endpoint
+            to get the total count separately.
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission
+        HTTPException: 400 if org_id or page_id format is invalid
+        HTTPException: 500 if retrieval fails
+    """
     try:
         success, error_code, data = await OrgMemberService.get_org_members(
-            org_id=UUID(org_id),
-            current_user_id=UUID(current_user_id),
+            org_id=org_id,
+            current_user_id=UUID(user_id),
             page_id=page_id,
             limit=limit,
+            email_filter=email,
         )
 
         if not success:
-            error_map = {
+            error_map: dict[str | None, tuple[int, str]] = {
                 'not_a_member': (
                     status.HTTP_403_FORBIDDEN,
                     'You are not a member of this organization',
@@ -530,9 +790,14 @@ async def get_org_members(
                     status.HTTP_400_BAD_REQUEST,
                     'Invalid page_id format',
                 ),
+                None: (
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'An error occurred',
+                ),
             }
             status_code, detail = error_map.get(
-                error_code, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+                error_code,
+                (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred'),
             )
             raise HTTPException(status_code=status_code, detail=detail)
 
@@ -560,9 +825,67 @@ async def get_org_members(
         )
 
 
+@org_router.get('/{org_id}/members/count')
+async def get_org_members_count(
+    org_id: UUID,
+    email: Annotated[
+        str | None,
+        Query(
+            title='Filter members by email (case-insensitive partial match)',
+            min_length=1,
+            max_length=255,
+        ),
+    ] = None,
+    user_id: str = Depends(require_permission(Permission.VIEW_ORG_SETTINGS)),
+) -> int:
+    """Get count of organization members with optional email filter.
+
+    This endpoint returns the total count of organization members matching
+    the filter criteria. Access requires the VIEW_ORG_SETTINGS permission,
+    which is granted to all organization members (member, admin, and owner roles).
+
+    Args:
+        org_id: Organization ID (UUID)
+        email: Optional email filter (case-insensitive partial match)
+        user_id: Authenticated user ID (injected by require_permission dependency)
+
+    Returns:
+        int: Total count of organization members matching the filter
+
+    Raises:
+        HTTPException: 401 if user is not authenticated
+        HTTPException: 403 if user lacks VIEW_ORG_SETTINGS permission or is not a member
+        HTTPException: 400 if org_id format is invalid
+        HTTPException: 500 if retrieval fails
+    """
+    try:
+        return await OrgMemberService.get_org_members_count(
+            org_id=org_id,
+            current_user_id=UUID(user_id),
+            email_filter=email,
+        )
+    except OrgMemberNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='You are not a member of this organization',
+        )
+    except ValueError:
+        logger.exception('Invalid UUID format')
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid organization ID format',
+        )
+    except Exception:
+        logger.exception('Error retrieving organization member count')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to retrieve member count',
+        )
+
+
 @org_router.delete('/{org_id}/members/{user_id}')
 async def remove_org_member(
-    org_id: str,
+    org_id: UUID,
     user_id: str,
     current_user_id: str = Depends(get_user_id),
 ):
@@ -576,13 +899,13 @@ async def remove_org_member(
     """
     try:
         success, error = await OrgMemberService.remove_org_member(
-            org_id=UUID(org_id),
+            org_id=org_id,
             target_user_id=UUID(user_id),
             current_user_id=UUID(current_user_id),
         )
 
         if not success:
-            error_map = {
+            error_map: dict[str | None, tuple[int, str]] = {
                 'not_a_member': (
                     status.HTTP_403_FORBIDDEN,
                     'You are not a member of this organization',
@@ -607,9 +930,14 @@ async def remove_org_member(
                     status.HTTP_500_INTERNAL_SERVER_ERROR,
                     'Failed to remove member',
                 ),
+                None: (
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    'An error occurred',
+                ),
             }
             status_code, detail = error_map.get(
-                error, (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred')
+                error,
+                (status.HTTP_500_INTERNAL_SERVER_ERROR, 'An error occurred'),
             )
             raise HTTPException(status_code=status_code, detail=detail)
 
@@ -708,7 +1036,7 @@ async def switch_org(
 
 @org_router.patch('/{org_id}/members/{user_id}', response_model=OrgMemberResponse)
 async def update_org_member(
-    org_id: str,
+    org_id: UUID,
     user_id: str,
     update_data: OrgMemberUpdate,
     current_user_id: str = Depends(get_user_id),
@@ -725,7 +1053,7 @@ async def update_org_member(
     """
     try:
         return await OrgMemberService.update_org_member(
-            org_id=UUID(org_id),
+            org_id=org_id,
             target_user_id=UUID(user_id),
             current_user_id=UUID(current_user_id),
             update_data=update_data,

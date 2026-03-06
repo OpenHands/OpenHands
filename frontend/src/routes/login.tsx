@@ -4,6 +4,7 @@ import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { useConfig } from "#/hooks/query/use-config";
 import { useGitHubAuthUrl } from "#/hooks/use-github-auth-url";
 import { useEmailVerification } from "#/hooks/use-email-verification";
+import { useInvitation } from "#/hooks/use-invitation";
 import { LoginContent } from "#/components/features/auth/login-content";
 import { EmailVerificationModal } from "#/components/features/waitlist/email-verification-modal";
 
@@ -18,10 +19,13 @@ export default function LoginPage() {
     emailVerified,
     hasDuplicatedEmail,
     recaptchaBlocked,
+    wasRateLimited,
     emailVerificationModalOpen,
     setEmailVerificationModalOpen,
     userId,
   } = useEmailVerification();
+
+  const { hasInvitation, buildOAuthStateData } = useInvitation();
 
   const gitHubAuthUrl = useGitHubAuthUrl({
     appMode: config.data?.app_mode || null,
@@ -69,6 +73,8 @@ export default function LoginPage() {
           emailVerified={emailVerified}
           hasDuplicatedEmail={hasDuplicatedEmail}
           recaptchaBlocked={recaptchaBlocked}
+          hasInvitation={hasInvitation}
+          buildOAuthStateData={buildOAuthStateData}
         />
       </main>
 
@@ -78,6 +84,7 @@ export default function LoginPage() {
             setEmailVerificationModalOpen(false);
           }}
           userId={userId}
+          wasRateLimited={wasRateLimited}
         />
       )}
     </>

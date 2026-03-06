@@ -15,7 +15,6 @@ import { I18nKey } from "#/i18n/declaration";
 import { VSCodeTooltipContent } from "./vscode-tooltip-content";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
-import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 
@@ -27,8 +26,6 @@ export function ConversationTabs() {
 
   const { state: persistedState } =
     useConversationLocalStorageState(conversationId);
-
-  const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   const {
     selectTab,
@@ -66,6 +63,15 @@ export function ConversationTabs() {
   const { t } = useTranslation();
 
   const tabs = [
+    {
+      tabValue: "planner",
+      isActive: isTabActive("planner"),
+      icon: LessonPlanIcon,
+      onClick: () => selectTab("planner"),
+      tooltipContent: t(I18nKey.COMMON$PLANNER),
+      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
+      label: t(I18nKey.COMMON$PLANNER),
+    },
     {
       tabValue: "editor",
       isActive: isTabActive("editor"),
@@ -113,18 +119,6 @@ export function ConversationTabs() {
       label: t(I18nKey.COMMON$BROWSER),
     },
   ];
-
-  if (shouldUsePlanningAgent) {
-    tabs.unshift({
-      tabValue: "planner",
-      isActive: isTabActive("planner"),
-      icon: LessonPlanIcon,
-      onClick: () => selectTab("planner"),
-      tooltipContent: t(I18nKey.COMMON$PLANNER),
-      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
-      label: t(I18nKey.COMMON$PLANNER),
-    });
-  }
 
   // Filter out unpinned tabs
   const visibleTabs = tabs.filter(

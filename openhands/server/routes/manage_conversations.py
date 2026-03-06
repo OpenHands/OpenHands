@@ -60,7 +60,6 @@ from openhands.events.observation import (
     AgentStateChangedObservation,
     NullObservation,
 )
-from openhands.experiments.experiment_manager import ExperimentConfig
 from openhands.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
@@ -109,7 +108,6 @@ from openhands.storage.data_models.conversation_metadata import (
 from openhands.storage.data_models.conversation_status import ConversationStatus
 from openhands.storage.data_models.secrets import Secrets
 from openhands.storage.data_models.settings import Settings
-from openhands.storage.locations import get_experiment_config_filename
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.async_utils import wait_all
 from openhands.utils.conversation_summary import get_default_conversation_title
@@ -766,6 +764,7 @@ async def _get_conversation_info(
             url=agent_loop_info.url if agent_loop_info else None,
             session_api_key=getattr(agent_loop_info, 'session_api_key', None),
             pr_number=conversation.pr_number,
+            sandbox_id=None,  # V0 conversations don't have sandbox_id
         )
     except Exception as e:
         logger.error(
@@ -1239,32 +1238,6 @@ async def update_conversation(
         )
 
 
-@app.post('/conversations/{conversation_id}/exp-config')
-def add_experiment_config_for_conversation(
-    exp_config: ExperimentConfig,
-    conversation_id: str = Depends(validate_conversation_id),
-) -> bool:
-    exp_config_filepath = get_experiment_config_filename(conversation_id)
-    exists = False
-    try:
-        file_store.read(exp_config_filepath)
-        exists = True
-    except FileNotFoundError:
-        pass
-
-    # Don't modify again if it already exists
-    if exists:
-        return False
-
-    try:
-        file_store.write(exp_config_filepath, exp_config.model_dump_json())
-    except Exception as e:
-        logger.info(f'Failed to write experiment config for {conversation_id}: {e}')
-        return True
-
-    return False
-
-
 def _parse_combined_page_id(page_id: str | None) -> tuple[str | None, str | None]:
     """Parse combined page_id to extract separate V0 and V1 page_ids.
 
@@ -1582,4 +1555,5 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
             sub_id.hex for sub_id in app_conversation.sub_conversation_ids
         ],
         public=app_conversation.public,
+        sandbox_id=app_conversation.sandbox_id,
     )

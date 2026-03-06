@@ -6,6 +6,9 @@ export interface WebClientFeatureFlags {
   enable_jira: boolean;
   enable_jira_dc: boolean;
   enable_linear: boolean;
+  hide_users_page: boolean;
+  hide_billing_page: boolean;
+  hide_integrations_page: boolean;
 }
 
 export interface WebClientConfig {

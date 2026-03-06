@@ -13,7 +13,7 @@ from integrations.gitlab.webhook_installation import (
 )
 from integrations.models import Message, SourceType
 from integrations.types import GitLabResourceType
-from integrations.utils import GITLAB_WEBHOOK_URL
+from integrations.utils import GITLAB_WEBHOOK_URL, IS_LOCAL_DEPLOYMENT
 from pydantic import BaseModel
 from server.auth.token_manager import TokenManager
 from storage.gitlab_webhook import GitlabWebhook
@@ -68,11 +68,14 @@ async def verify_gitlab_signature(
     if not header_webhook_secret or not webhook_uuid or not user_id:
         raise HTTPException(status_code=403, detail='Required payload headers missing!')
 
-    webhook_secret = await webhook_store.get_webhook_secret(
-        webhook_uuid=webhook_uuid, user_id=user_id
-    )
+    if IS_LOCAL_DEPLOYMENT:
+        webhook_secret: str | None = 'localdeploymentwebhooktesttoken'
+    else:
+        webhook_secret = await webhook_store.get_webhook_secret(
+            webhook_uuid=webhook_uuid, user_id=user_id
+        )
 
-    if header_webhook_secret != webhook_secret:
+    if not webhook_secret or header_webhook_secret != webhook_secret:
         raise HTTPException(status_code=403, detail="Request signatures didn't match!")
 
 
@@ -327,6 +330,12 @@ async def reinstall_gitlab_webhook(
             # Fetch it again to get the ID (without user_id filter)
             webhook = await webhook_store.get_webhook_by_resource_only(
                 resource_type, resource_id
+            )
+
+        if not webhook:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Failed to create or fetch webhook record',
             )
 
         # Verify conditions and install webhook

@@ -1,19 +1,17 @@
 import uuid
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-
-# Mock the database module before importing OrgStore
-with patch('storage.database.engine', create=True), patch(
-    'storage.database.a_engine', create=True
-):
-    from storage.org import Org
-    from storage.org_member import OrgMember
-    from storage.org_store import OrgStore
-    from storage.role import Role
-    from storage.user import User
+from storage.org import Org
+from storage.org_invitation import OrgInvitation
+from storage.org_member import OrgMember
+from storage.org_store import OrgStore
+from storage.role import Role
+from storage.user import User
 
 from openhands.storage.data_models.settings import Settings
 
@@ -43,67 +41,73 @@ def mock_litellm_api():
         yield mock_client
 
 
-def test_get_org_by_id(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_org_by_id(async_session_maker, mock_litellm_api):
     # Test getting org by ID
-    with session_maker() as session:
+    async with async_session_maker() as session:
         # Create a test org
         org = Org(name='test-org')
         session.add(org)
-        session.commit()
+        await session.commit()
+        await session.refresh(org)
         org_id = org.id
 
     # Test retrieval
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
     ):
-        retrieved_org = OrgStore.get_org_by_id(org_id)
+        retrieved_org = await OrgStore.get_org_by_id(org_id)
         assert retrieved_org is not None
         assert retrieved_org.id == org_id
         assert retrieved_org.name == 'test-org'
 
 
-def test_get_org_by_id_not_found(session_maker):
+@pytest.mark.asyncio
+async def test_get_org_by_id_not_found(async_session_maker):
     # Test getting org by ID when it doesn't exist
-    with patch('storage.org_store.session_maker', session_maker):
+    with patch('storage.org_store.a_session_maker', async_session_maker):
         non_existent_id = uuid.uuid4()
-        retrieved_org = OrgStore.get_org_by_id(non_existent_id)
+        retrieved_org = await OrgStore.get_org_by_id(non_existent_id)
         assert retrieved_org is None
 
 
-def test_list_orgs(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_list_orgs(async_session_maker, mock_litellm_api):
     # Test listing all orgs
-    with session_maker() as session:
+    async with async_session_maker() as session:
         # Create test orgs
         org1 = Org(name='test-org-1')
         org2 = Org(name='test-org-2')
         session.add_all([org1, org2])
-        session.commit()
+        await session.commit()
 
     # Test listing
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
     ):
-        orgs = OrgStore.list_orgs()
+        orgs = await OrgStore.list_orgs()
         assert len(orgs) >= 2
         org_names = [org.name for org in orgs]
         assert 'test-org-1' in org_names
         assert 'test-org-2' in org_names
 
 
-def test_update_org(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_update_org(async_session_maker, mock_litellm_api):
     # Test updating org details
-    with session_maker() as session:
+    async with async_session_maker() as session:
         # Create a test org
         org = Org(name='test-org', agent='CodeActAgent')
         session.add(org)
-        session.commit()
+        await session.commit()
+        await session.refresh(org)
         org_id = org.id
 
     # Test update
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
     ):
-        updated_org = OrgStore.update_org(
+        updated_org = await OrgStore.update_org(
             org_id=org_id, kwargs={'name': 'updated-org', 'agent': 'PlannerAgent'}
         )
 
@@ -112,23 +116,27 @@ def test_update_org(session_maker, mock_litellm_api):
         assert updated_org.agent == 'PlannerAgent'
 
 
-def test_update_org_not_found(session_maker):
+@pytest.mark.asyncio
+async def test_update_org_not_found(async_session_maker):
     # Test updating org that doesn't exist
-    with patch('storage.org_store.session_maker', session_maker):
+    with patch('storage.org_store.a_session_maker', async_session_maker):
         from uuid import uuid4
 
-        updated_org = OrgStore.update_org(
+        updated_org = await OrgStore.update_org(
             org_id=uuid4(), kwargs={'name': 'updated-org'}
         )
         assert updated_org is None
 
 
-def test_create_org(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_create_org(async_session_maker, mock_litellm_api):
     # Test creating a new org
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
     ):
-        org = OrgStore.create_org(kwargs={'name': 'new-org', 'agent': 'CodeActAgent'})
+        org = await OrgStore.create_org(
+            kwargs={'name': 'new-org', 'agent': 'CodeActAgent'}
+        )
 
         assert org is not None
         assert org.name == 'new-org'
@@ -136,43 +144,48 @@ def test_create_org(session_maker, mock_litellm_api):
         assert org.id is not None
 
 
-def test_get_org_by_name(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_org_by_name(async_session_maker, mock_litellm_api):
     # Test getting org by name
-    with session_maker() as session:
+    async with async_session_maker() as session:
         # Create a test org
         org = Org(name='test-org-by-name')
         session.add(org)
-        session.commit()
+        await session.commit()
 
     # Test retrieval
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
     ):
-        retrieved_org = OrgStore.get_org_by_name('test-org-by-name')
+        retrieved_org = await OrgStore.get_org_by_name('test-org-by-name')
         assert retrieved_org is not None
         assert retrieved_org.name == 'test-org-by-name'
 
 
-def test_get_current_org_from_keycloak_user_id(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_current_org_from_keycloak_user_id(
+    async_session_maker, mock_litellm_api
+):
     # Test getting current org from user ID
     test_user_id = uuid.uuid4()
-    with session_maker() as session:
+    async with async_session_maker() as session:
         # Create test data
         org = Org(name='test-org')
         session.add(org)
-        session.flush()
+        await session.flush()
 
         from storage.user import User
 
         user = User(id=test_user_id, current_org_id=org.id)
         session.add(user)
-        session.commit()
+        await session.commit()
+        await session.refresh(org)
 
     # Test retrieval
     with (
-        patch('storage.org_store.session_maker', session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
     ):
-        retrieved_org = OrgStore.get_current_org_from_keycloak_user_id(
+        retrieved_org = await OrgStore.get_current_org_from_keycloak_user_id(
             str(test_user_id)
         )
         assert retrieved_org is not None
@@ -203,7 +216,8 @@ def test_get_kwargs_from_settings():
     assert 'enable_sound_notifications' not in kwargs
 
 
-def test_persist_org_with_owner_success(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_persist_org_with_owner_success(async_session_maker, mock_litellm_api):
     """
     GIVEN: Valid org and org_member entities
     WHEN: persist_org_with_owner is called
@@ -214,12 +228,12 @@ def test_persist_org_with_owner_success(session_maker, mock_litellm_api):
     user_id = uuid.uuid4()
 
     # Create user and role first
-    with session_maker() as session:
+    async with async_session_maker() as session:
         user = User(id=user_id, current_org_id=org_id)
         role = Role(id=1, name='owner', rank=1)
         session.add(user)
         session.add(role)
-        session.commit()
+        await session.commit()
 
     org = Org(
         id=org_id,
@@ -237,8 +251,8 @@ def test_persist_org_with_owner_success(session_maker, mock_litellm_api):
     )
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        result = OrgStore.persist_org_with_owner(org, org_member)
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        result = await OrgStore.persist_org_with_owner(org, org_member)
 
     # Assert
     assert result is not None
@@ -246,20 +260,24 @@ def test_persist_org_with_owner_success(session_maker, mock_litellm_api):
     assert result.name == 'Test Organization'
 
     # Verify both entities were persisted
-    with session_maker() as session:
-        persisted_org = session.get(Org, org_id)
+    async with async_session_maker() as session:
+        persisted_org = await session.get(Org, org_id)
         assert persisted_org is not None
         assert persisted_org.name == 'Test Organization'
 
-        persisted_member = (
-            session.query(OrgMember).filter_by(org_id=org_id, user_id=user_id).first()
+        result = await session.execute(
+            select(OrgMember).filter_by(org_id=org_id, user_id=user_id)
         )
+        persisted_member = result.scalars().first()
         assert persisted_member is not None
         assert persisted_member.status == 'active'
         assert persisted_member.role_id == 1
 
 
-def test_persist_org_with_owner_returns_refreshed_org(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_persist_org_with_owner_returns_refreshed_org(
+    async_session_maker, mock_litellm_api
+):
     """
     GIVEN: Valid org and org_member entities
     WHEN: persist_org_with_owner is called
@@ -269,12 +287,12 @@ def test_persist_org_with_owner_returns_refreshed_org(session_maker, mock_litell
     org_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         user = User(id=user_id, current_org_id=org_id)
         role = Role(id=1, name='owner', rank=1)
         session.add(user)
         session.add(role)
-        session.commit()
+        await session.commit()
 
     org = Org(
         id=org_id,
@@ -293,8 +311,8 @@ def test_persist_org_with_owner_returns_refreshed_org(session_maker, mock_litell
     )
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        result = OrgStore.persist_org_with_owner(org, org_member)
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        result = await OrgStore.persist_org_with_owner(org, org_member)
 
     # Assert - verify the returned object has database-generated fields
     assert result.id == org_id
@@ -304,7 +322,10 @@ def test_persist_org_with_owner_returns_refreshed_org(session_maker, mock_litell
     assert hasattr(result, 'org_version')
 
 
-def test_persist_org_with_owner_transaction_atomicity(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_persist_org_with_owner_transaction_atomicity(
+    async_session_maker, mock_litellm_api
+):
     """
     GIVEN: Valid org but invalid org_member (missing required field)
     WHEN: persist_org_with_owner is called
@@ -314,12 +335,12 @@ def test_persist_org_with_owner_transaction_atomicity(session_maker, mock_litell
     org_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         user = User(id=user_id, current_org_id=org_id)
         role = Role(id=1, name='owner', rank=1)
         session.add(user)
         session.add(role)
-        session.commit()
+        await session.commit()
 
     org = Org(
         id=org_id,
@@ -338,22 +359,26 @@ def test_persist_org_with_owner_transaction_atomicity(session_maker, mock_litell
     )
 
     # Act & Assert
-    with patch('storage.org_store.session_maker', session_maker):
+    with patch('storage.org_store.a_session_maker', async_session_maker):
         with pytest.raises(IntegrityError):  # NOT NULL constraint violation
-            OrgStore.persist_org_with_owner(org, org_member)
+            await OrgStore.persist_org_with_owner(org, org_member)
 
     # Verify neither entity was persisted (transaction rolled back)
-    with session_maker() as session:
-        persisted_org = session.get(Org, org_id)
+    async with async_session_maker() as session:
+        persisted_org = await session.get(Org, org_id)
         assert persisted_org is None
 
-        persisted_member = (
-            session.query(OrgMember).filter_by(org_id=org_id, user_id=user_id).first()
+        result = await session.execute(
+            select(OrgMember).filter_by(org_id=org_id, user_id=user_id)
         )
+        persisted_member = result.scalars().first()
         assert persisted_member is None
 
 
-def test_persist_org_with_owner_with_multiple_fields(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_persist_org_with_owner_with_multiple_fields(
+    async_session_maker, mock_litellm_api
+):
     """
     GIVEN: Org with multiple optional fields populated
     WHEN: persist_org_with_owner is called
@@ -363,12 +388,12 @@ def test_persist_org_with_owner_with_multiple_fields(session_maker, mock_litellm
     org_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         user = User(id=user_id, current_org_id=org_id)
         role = Role(id=1, name='owner', rank=1)
         session.add(user)
         session.add(role)
-        session.commit()
+        await session.commit()
 
     org = Org(
         id=org_id,
@@ -392,8 +417,8 @@ def test_persist_org_with_owner_with_multiple_fields(session_maker, mock_litellm
     )
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        result = OrgStore.persist_org_with_owner(org, org_member)
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        result = await OrgStore.persist_org_with_owner(org, org_member)
 
     # Assert
     assert result.name == 'Complex Org'
@@ -403,22 +428,26 @@ def test_persist_org_with_owner_with_multiple_fields(session_maker, mock_litellm
     assert result.billing_margin == 0.15
 
     # Verify persistence
-    with session_maker() as session:
-        persisted_org = session.get(Org, org_id)
+    async with async_session_maker() as session:
+        persisted_org = await session.get(Org, org_id)
         assert persisted_org.agent == 'CodeActAgent'
         assert persisted_org.default_max_iterations == 50
         assert persisted_org.confirmation_mode is True
         assert persisted_org.billing_margin == 0.15
 
-        persisted_member = (
-            session.query(OrgMember).filter_by(org_id=org_id, user_id=user_id).first()
+        result_query = await session.execute(
+            select(OrgMember).filter_by(org_id=org_id, user_id=user_id)
         )
+        persisted_member = result_query.scalars().first()
         assert persisted_member.max_iterations == 100
         assert persisted_member.llm_model == 'gpt-4'
 
 
 @pytest.mark.asyncio
-async def test_delete_org_cascade_success(session_maker, mock_litellm_api):
+@pytest.mark.skip(
+    reason='Uses PostgreSQL-specific ::uuid cast syntax not supported by SQLite'
+)
+async def test_delete_org_cascade_success(async_session_maker, mock_litellm_api):
     """
     GIVEN: Valid organization with associated data
     WHEN: delete_org_cascade is called
@@ -434,18 +463,11 @@ async def test_delete_org_cascade_success(session_maker, mock_litellm_api):
         contact_name='John Doe',
         contact_email='john@example.com',
     )
+    async with async_session_maker() as session:
+        session.add(expected_org)
+        await session.commit()
 
-    # Mock delete_org_cascade to avoid database schema constraints
-    async def mock_delete_org_cascade(org_id_param):
-        # Verify the method was called with correct parameter
-        assert org_id_param == org_id
-
-        # Return the organization object (simulating successful deletion)
-        return expected_org
-
-    with patch(
-        'storage.org_store.OrgStore.delete_org_cascade', mock_delete_org_cascade
-    ):
+    with patch('storage.org_store.a_session_maker', async_session_maker):
         # Act
         result = await OrgStore.delete_org_cascade(org_id)
 
@@ -458,7 +480,7 @@ async def test_delete_org_cascade_success(session_maker, mock_litellm_api):
 
 
 @pytest.mark.asyncio
-async def test_delete_org_cascade_not_found(session_maker):
+async def test_delete_org_cascade_not_found(async_session_maker):
     """
     GIVEN: Organization ID that doesn't exist
     WHEN: delete_org_cascade is called
@@ -467,7 +489,7 @@ async def test_delete_org_cascade_not_found(session_maker):
     # Arrange
     non_existent_id = uuid.uuid4()
 
-    with patch('storage.org_store.session_maker', session_maker):
+    with patch('storage.org_store.a_session_maker', async_session_maker):
         # Act
         result = await OrgStore.delete_org_cascade(non_existent_id)
 
@@ -477,7 +499,7 @@ async def test_delete_org_cascade_not_found(session_maker):
 
 @pytest.mark.asyncio
 async def test_delete_org_cascade_litellm_failure_causes_rollback(
-    session_maker, mock_litellm_api
+    async_session_maker, mock_litellm_api
 ):
     """
     GIVEN: Organization exists but LiteLLM cleanup fails
@@ -488,7 +510,7 @@ async def test_delete_org_cascade_litellm_failure_causes_rollback(
     org_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         role = Role(id=1, name='owner', rank=1)
         user = User(id=user_id, current_org_id=org_id)
         org = Org(
@@ -505,15 +527,15 @@ async def test_delete_org_cascade_litellm_failure_causes_rollback(
             llm_api_key='test-key',
         )
         session.add_all([role, user, org, org_member])
-        session.commit()
+        await session.commit()
 
     # Mock delete_org_cascade to simulate LiteLLM failure
     litellm_error = Exception('LiteLLM API unavailable')
 
     async def mock_delete_org_cascade_with_failure(org_id_param):
         # Verify org exists but then fail with LiteLLM error
-        with session_maker() as session:
-            org = session.get(Org, org_id_param)
+        async with async_session_maker() as session:
+            org = await session.get(Org, org_id_param)
             if not org:
                 return None
             # Simulate the failure during LiteLLM cleanup
@@ -530,17 +552,21 @@ async def test_delete_org_cascade_litellm_failure_causes_rollback(
         assert 'LiteLLM API unavailable' in str(exc_info.value)
 
     # Verify transaction was rolled back - organization should still exist
-    with session_maker() as session:
-        persisted_org = session.get(Org, org_id)
+    async with async_session_maker() as session:
+        persisted_org = await session.get(Org, org_id)
         assert persisted_org is not None
         assert persisted_org.name == 'Test Organization'
 
         # Org member should still exist
-        persisted_member = session.query(OrgMember).filter_by(org_id=org_id).first()
+        result = await session.execute(select(OrgMember).filter_by(org_id=org_id))
+        persisted_member = result.scalars().first()
         assert persisted_member is not None
 
 
-def test_get_user_orgs_paginated_first_page(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_first_page(
+    async_session_maker, mock_litellm_api
+):
     """
     GIVEN: User is member of multiple organizations
     WHEN: get_user_orgs_paginated is called without page_id
@@ -550,7 +576,7 @@ def test_get_user_orgs_paginated_first_page(session_maker, mock_litellm_api):
     user_id = uuid.uuid4()
     other_user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         # Create orgs for the user
         org1 = Org(name='Alpha Org')
         org2 = Org(name='Beta Org')
@@ -558,14 +584,14 @@ def test_get_user_orgs_paginated_first_page(session_maker, mock_litellm_api):
         # Create org for another user (should not be included)
         org4 = Org(name='Other Org')
         session.add_all([org1, org2, org3, org4])
-        session.flush()
+        await session.flush()
 
         # Create user and role
         user = User(id=user_id, current_org_id=org1.id)
         other_user = User(id=other_user_id, current_org_id=org4.id)
         role = Role(id=1, name='member', rank=2)
         session.add_all([user, other_user, role])
-        session.flush()
+        await session.flush()
 
         # Create memberships
         member1 = OrgMember(
@@ -581,11 +607,11 @@ def test_get_user_orgs_paginated_first_page(session_maker, mock_litellm_api):
             org_id=org4.id, user_id=other_user_id, role_id=1, llm_api_key='key4'
         )
         session.add_all([member1, member2, member3, other_member])
-        session.commit()
+        await session.commit()
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, next_page_id = await OrgStore.get_user_orgs_paginated(
             user_id=user_id, page_id=None, limit=2
         )
 
@@ -599,7 +625,10 @@ def test_get_user_orgs_paginated_first_page(session_maker, mock_litellm_api):
     assert 'Other Org' not in org_names
 
 
-def test_get_user_orgs_paginated_with_page_id(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_with_page_id(
+    async_session_maker, mock_litellm_api
+):
     """
     GIVEN: User has multiple organizations and page_id is provided
     WHEN: get_user_orgs_paginated is called with page_id
@@ -608,17 +637,17 @@ def test_get_user_orgs_paginated_with_page_id(session_maker, mock_litellm_api):
     # Arrange
     user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         org1 = Org(name='Alpha Org')
         org2 = Org(name='Beta Org')
         org3 = Org(name='Gamma Org')
         session.add_all([org1, org2, org3])
-        session.flush()
+        await session.flush()
 
         user = User(id=user_id, current_org_id=org1.id)
         role = Role(id=1, name='member', rank=2)
         session.add_all([user, role])
-        session.flush()
+        await session.flush()
 
         member1 = OrgMember(
             org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
@@ -630,11 +659,11 @@ def test_get_user_orgs_paginated_with_page_id(session_maker, mock_litellm_api):
             org_id=org3.id, user_id=user_id, role_id=1, llm_api_key='key3'
         )
         session.add_all([member1, member2, member3])
-        session.commit()
+        await session.commit()
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, next_page_id = await OrgStore.get_user_orgs_paginated(
             user_id=user_id, page_id='1', limit=1
         )
 
@@ -644,7 +673,10 @@ def test_get_user_orgs_paginated_with_page_id(session_maker, mock_litellm_api):
     assert next_page_id == '2'  # Has more results
 
 
-def test_get_user_orgs_paginated_no_more_results(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_no_more_results(
+    async_session_maker, mock_litellm_api
+):
     """
     GIVEN: User has organizations but fewer than limit
     WHEN: get_user_orgs_paginated is called
@@ -653,16 +685,16 @@ def test_get_user_orgs_paginated_no_more_results(session_maker, mock_litellm_api
     # Arrange
     user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         org1 = Org(name='Alpha Org')
         org2 = Org(name='Beta Org')
         session.add_all([org1, org2])
-        session.flush()
+        await session.flush()
 
         user = User(id=user_id, current_org_id=org1.id)
         role = Role(id=1, name='member', rank=2)
         session.add_all([user, role])
-        session.flush()
+        await session.flush()
 
         member1 = OrgMember(
             org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
@@ -671,11 +703,11 @@ def test_get_user_orgs_paginated_no_more_results(session_maker, mock_litellm_api
             org_id=org2.id, user_id=user_id, role_id=1, llm_api_key='key2'
         )
         session.add_all([member1, member2])
-        session.commit()
+        await session.commit()
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, next_page_id = await OrgStore.get_user_orgs_paginated(
             user_id=user_id, page_id=None, limit=10
         )
 
@@ -684,7 +716,10 @@ def test_get_user_orgs_paginated_no_more_results(session_maker, mock_litellm_api
     assert next_page_id is None
 
 
-def test_get_user_orgs_paginated_invalid_page_id(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_invalid_page_id(
+    async_session_maker, mock_litellm_api
+):
     """
     GIVEN: Invalid page_id (non-numeric string)
     WHEN: get_user_orgs_paginated is called
@@ -693,25 +728,25 @@ def test_get_user_orgs_paginated_invalid_page_id(session_maker, mock_litellm_api
     # Arrange
     user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         org1 = Org(name='Alpha Org')
         session.add(org1)
-        session.flush()
+        await session.flush()
 
         user = User(id=user_id, current_org_id=org1.id)
         role = Role(id=1, name='member', rank=2)
         session.add_all([user, role])
-        session.flush()
+        await session.flush()
 
         member1 = OrgMember(
             org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
         )
         session.add(member1)
-        session.commit()
+        await session.commit()
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, next_page_id = await OrgStore.get_user_orgs_paginated(
             user_id=user_id, page_id='invalid', limit=10
         )
 
@@ -721,7 +756,8 @@ def test_get_user_orgs_paginated_invalid_page_id(session_maker, mock_litellm_api
     assert next_page_id is None
 
 
-def test_get_user_orgs_paginated_empty_results(session_maker):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_empty_results(async_session_maker):
     """
     GIVEN: User has no organizations
     WHEN: get_user_orgs_paginated is called
@@ -731,8 +767,8 @@ def test_get_user_orgs_paginated_empty_results(session_maker):
     user_id = uuid.uuid4()
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, next_page_id = OrgStore.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, next_page_id = await OrgStore.get_user_orgs_paginated(
             user_id=user_id, page_id=None, limit=10
         )
 
@@ -741,7 +777,8 @@ def test_get_user_orgs_paginated_empty_results(session_maker):
     assert next_page_id is None
 
 
-def test_get_user_orgs_paginated_ordering(session_maker, mock_litellm_api):
+@pytest.mark.asyncio
+async def test_get_user_orgs_paginated_ordering(async_session_maker, mock_litellm_api):
     """
     GIVEN: User has organizations with different names
     WHEN: get_user_orgs_paginated is called
@@ -750,18 +787,18 @@ def test_get_user_orgs_paginated_ordering(session_maker, mock_litellm_api):
     # Arrange
     user_id = uuid.uuid4()
 
-    with session_maker() as session:
+    async with async_session_maker() as session:
         # Create orgs in non-alphabetical order
         org3 = Org(name='Zebra Org')
         org1 = Org(name='Apple Org')
         org2 = Org(name='Banana Org')
         session.add_all([org3, org1, org2])
-        session.flush()
+        await session.flush()
 
         user = User(id=user_id, current_org_id=org1.id)
         role = Role(id=1, name='member', rank=2)
         session.add_all([user, role])
-        session.flush()
+        await session.flush()
 
         member1 = OrgMember(
             org_id=org1.id, user_id=user_id, role_id=1, llm_api_key='key1'
@@ -773,11 +810,11 @@ def test_get_user_orgs_paginated_ordering(session_maker, mock_litellm_api):
             org_id=org3.id, user_id=user_id, role_id=1, llm_api_key='key3'
         )
         session.add_all([member1, member2, member3])
-        session.commit()
+        await session.commit()
 
     # Act
-    with patch('storage.org_store.session_maker', session_maker):
-        orgs, _ = OrgStore.get_user_orgs_paginated(
+    with patch('storage.org_store.a_session_maker', async_session_maker):
+        orgs, _ = await OrgStore.get_user_orgs_paginated(
             user_id=user_id, page_id=None, limit=10
         )
 
@@ -806,3 +843,183 @@ def test_orphaned_user_error_contains_user_ids():
     assert error.user_ids == user_ids
     assert '2 user(s)' in str(error)
     assert 'no remaining organization' in str(error)
+
+
+def test_org_deletion_with_invitations_uses_passive_deletes(
+    session_maker, mock_litellm_api
+):
+    """
+    GIVEN: Organization has associated invitations with non-nullable org_id foreign key
+    WHEN: Organization is deleted via SQLAlchemy session.delete()
+    THEN: Deletion succeeds without NOT NULL constraint violation
+          (passive_deletes=True defers to database CASCADE instead of setting org_id to NULL)
+
+    This test verifies the fix for the bug where SQLAlchemy would try to
+    SET org_id=NULL on org_invitation before deleting the org, causing:
+    "NOT NULL constraint failed: org_invitation.org_id"
+
+    With passive_deletes=True on the relationship, SQLAlchemy defers to the
+    database's CASCADE constraint instead of trying to nullify the foreign key.
+
+    Note: SQLite doesn't enforce CASCADE by default, so we only verify that
+    the deletion succeeds. In production (PostgreSQL), CASCADE handles cleanup.
+    """
+    from datetime import datetime, timedelta
+
+    # Arrange
+    org_id = uuid.uuid4()
+    other_org_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    with session_maker() as session:
+        # Create role first (required for invitation)
+        role = Role(id=1, name='owner', rank=1)
+        session.add(role)
+        session.flush()
+
+        # Create organization to be deleted
+        org = Org(id=org_id, name='test-org-with-invitations')
+        session.add(org)
+        session.flush()
+
+        # Create a second org for the user's current_org_id
+        # (to avoid the user.current_org_id constraint issue during deletion)
+        other_org = Org(id=other_org_id, name='other-org')
+        session.add(other_org)
+        session.flush()
+
+        # Create user with current_org pointing to the OTHER org (not the one being deleted)
+        user = User(id=user_id, current_org_id=other_org_id)
+        session.add(user)
+        session.flush()
+
+        # Create invitation associated with the organization to be deleted
+        invitation = OrgInvitation(
+            token='test-invitation-token-12345',
+            org_id=org_id,
+            email='invitee@example.com',
+            role_id=1,
+            inviter_id=user_id,
+            status='pending',
+            created_at=datetime.now(),
+            expires_at=datetime.now() + timedelta(days=7),
+        )
+        session.add(invitation)
+        session.commit()
+
+        # Verify invitation was created
+        invitation_count = session.query(OrgInvitation).filter_by(org_id=org_id).count()
+        assert invitation_count == 1
+
+    # Act - Delete organization via SQLAlchemy (this is what triggered the bug)
+    # Without passive_deletes=True, SQLAlchemy would try to SET org_id=NULL
+    # which violates the NOT NULL constraint on org_invitation.org_id
+    with session_maker() as session:
+        org = session.query(Org).filter(Org.id == org_id).first()
+        assert org is not None
+
+        # This should NOT raise IntegrityError with passive_deletes=True
+        # Previously this would fail with:
+        # "NOT NULL constraint failed: org_invitation.org_id"
+        session.delete(org)
+        session.commit()  # Success indicates passive_deletes=True is working
+
+    # Assert - Organization should be deleted
+    with session_maker() as session:
+        deleted_org = session.query(Org).filter(Org.id == org_id).first()
+        assert deleted_org is None
+
+
+# =============================================================================
+# Tests for async LLM settings methods
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_update_org_llm_settings_async_with_llm_api_key():
+    """
+    GIVEN: Organization with members and llm_api_key in update settings
+    WHEN: update_org_llm_settings_async is called
+    THEN: Org fields are updated and llm_api_key is propagated to all members
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    org_id = uuid.uuid4()
+
+    mock_org = Org(
+        id=org_id,
+        name='Test Organization',
+        default_llm_model='old-model',
+    )
+
+    llm_settings = OrgLLMSettingsUpdate(
+        default_llm_model='new-model',
+        llm_api_key='new-member-api-key',
+    )
+
+    # Mock the async session and member store
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_org
+    mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    with (
+        patch('storage.org_store.a_session_maker', mock_a_session_maker),
+        patch(
+            'storage.org_member_store.OrgMemberStore.update_all_members_llm_settings_async',
+            AsyncMock(),
+        ) as mock_member_update,
+    ):
+        # Act
+        result = await OrgStore.update_org_llm_settings_async(org_id, llm_settings)
+
+        # Assert - Org is returned
+        assert result is not None
+        assert result.default_llm_model == 'new-model'
+
+        # Assert - Member update was called with correct settings
+        mock_member_update.assert_called_once()
+        call_args = mock_member_update.call_args
+        member_settings = call_args[0][2]  # Third positional arg is member_settings
+        assert member_settings.llm_api_key == 'new-member-api-key'
+        assert member_settings.llm_model == 'new-model'
+
+
+@pytest.mark.asyncio
+async def test_update_org_llm_settings_async_org_not_found():
+    """
+    GIVEN: Non-existent organization ID
+    WHEN: update_org_llm_settings_async is called
+    THEN: Returns None
+    """
+    from server.routes.org_models import OrgLLMSettingsUpdate
+
+    # Arrange
+    non_existent_org_id = uuid.uuid4()
+    llm_settings = OrgLLMSettingsUpdate(default_llm_model='new-model')
+
+    # Mock the async session to return None for org
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    @asynccontextmanager
+    async def mock_a_session_maker():
+        yield mock_session
+
+    # Act
+    with patch('storage.org_store.a_session_maker', mock_a_session_maker):
+        result = await OrgStore.update_org_llm_settings_async(
+            non_existent_org_id, llm_settings
+        )
+
+    # Assert
+    assert result is None
