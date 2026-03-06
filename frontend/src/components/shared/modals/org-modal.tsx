@@ -1,10 +1,6 @@
 import React from "react";
 import { ModalBackdrop } from "./modal-backdrop";
 import { ModalBody } from "./modal-body";
-import {
-  BaseModalTitle,
-  BaseModalDescription,
-} from "./confirmation-modals/base-modal";
 import { ModalButtonGroup } from "./modal-button-group";
 
 interface OrgModalProps {
@@ -47,9 +43,9 @@ export function OrgModal({
   const content = (
     <>
       <div className="flex flex-col gap-2 w-full">
-        <BaseModalTitle title={title} />
+        <h3 className="text-xl font-bold">{title}</h3>
         {description && (
-          <BaseModalDescription>{description}</BaseModalDescription>
+          <p className="text-xs text-modal-muted">{description}</p>
         )}
         {children}
       </div>
@@ -68,7 +64,7 @@ export function OrgModal({
   );
 
   const modalBodyClassName =
-    "items-start rounded-xl p-6 w-sm flex flex-col gap-6 bg-modal-background modal-box-shadow";
+    "items-start rounded-xl p-6 w-sm flex flex-col gap-4 bg-base-secondary border border-tertiary";
 
   return (
     <ModalBackdrop

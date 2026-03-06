@@ -38,8 +38,8 @@ export function ModalButtonGroup({
         variant="primary"
         onClick={onPrimaryClick}
         className={cn(
-          "flex items-center justify-center bg-modal-primary text-sm leading-4 font-medium rounded h-10",
-          fullWidth ? "w-full" : "flex-1",
+          "flex items-center justify-center",
+          fullWidth ? "w-full" : "grow",
         )}
         testId={primaryTestId}
         isDisabled={isLoading}
@@ -59,10 +59,7 @@ export function ModalButtonGroup({
         type="button"
         variant="secondary"
         onClick={onSecondaryClick}
-        className={cn(
-          "bg-modal-secondary text-sm text-white leading-4 font-medium rounded border-none h-10",
-          fullWidth ? "w-full" : "flex-1",
-        )}
+        className={cn(fullWidth ? "w-full" : "grow")}
         testId={secondaryTestId}
         isDisabled={isLoading}
       >

@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useCreateStripeCheckoutSession } from "#/hooks/mutation/stripe/use-create-stripe-checkout-session";
 import { useOrganization } from "#/hooks/query/use-organization";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { cn } from "#/utils/utils";
 import { ModalButtonGroup } from "#/components/shared/modals/modal-button-group";
+import { SettingsInput } from "#/components/features/settings/settings-input";
 import { useMe } from "#/hooks/query/use-me";
 import { useConfig } from "#/hooks/query/use-config";
 import { I18nKey } from "#/i18n/declaration";
@@ -17,6 +17,7 @@ import { isBillingHidden } from "#/utils/org/billing-visibility";
 import { DeleteOrgConfirmationModal } from "#/components/features/org/delete-org-confirmation-modal";
 import { ChangeOrgNameModal } from "#/components/features/org/change-org-name-modal";
 import { useBalance } from "#/hooks/query/use-balance";
+import { cn } from "#/utils/utils";
 
 interface AddCreditsModalProps {
   onClose: () => void;
@@ -80,26 +81,23 @@ function AddCreditsModal({ onClose }: AddCreditsModalProps) {
         data-testid="add-credits-form"
         action={formAction}
         noValidate
-        className="w-sm rounded-xl bg-modal-background flex flex-col p-6 gap-6 modal-box-shadow"
+        className="w-sm rounded-xl bg-base-secondary flex flex-col p-6 gap-4 border border-tertiary"
       >
+        <h3 className="text-xl font-bold">{t(I18nKey.ORG$ADD_CREDITS)}</h3>
         <div className="flex flex-col gap-2">
-          <h3 className="text-xl leading-6 font-semibold">
-            {t(I18nKey.ORG$ADD_CREDITS)}
-          </h3>
-          <div className="rounded w-full p-2 placeholder:text-tertiary-alt bg-modal-input border-none pl-3">
-            <input
-              data-testid="amount-input"
-              name="amount"
-              type="number"
-              className="w-full text-sm leading-4 font-normal outline-none bg-transparent"
-              placeholder={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
-              min={10}
-              max={25000}
-              step={1}
-              value={inputValue}
-              onChange={(e) => handleAmountInputChange(e.target.value)}
-            />
-          </div>
+          <SettingsInput
+            testId="amount-input"
+            name="amount"
+            label={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
+            type="number"
+            placeholder={t(I18nKey.PAYMENT$SPECIFY_AMOUNT_USD)}
+            min={10}
+            max={25000}
+            step={1}
+            value={inputValue}
+            onChange={(value) => handleAmountInputChange(value)}
+            className="w-full"
+          />
           {errorMessage && (
             <p className="text-red-500 text-sm mt-1" data-testid="amount-error">
               {errorMessage}

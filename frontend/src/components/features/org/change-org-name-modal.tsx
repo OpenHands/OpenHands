@@ -33,15 +33,13 @@ export function ChangeOrgNameModal({ onClose }: ChangeOrgNameModalProps) {
       onClose={onClose}
       isLoading={isPending}
     >
-      <div className="rounded w-full p-2 placeholder:text-tertiary-alt bg-modal-input border-none pl-3">
-        <input
-          data-testid="org-name"
-          value={orgName}
-          placeholder={t(I18nKey.ORG$ENTER_NEW_ORGANIZATION_NAME)}
-          onChange={(e) => setOrgName(e.target.value)}
-          className="w-full text-sm leading-4 font-normal outline-none bg-transparent"
-        />
-      </div>
+      <input
+        data-testid="org-name"
+        value={orgName}
+        placeholder={t(I18nKey.ORG$ENTER_NEW_ORGANIZATION_NAME)}
+        onChange={(e) => setOrgName(e.target.value)}
+        className="bg-tertiary border border-[#717888] h-10 w-full rounded-sm p-2 placeholder:italic placeholder:text-tertiary-alt"
+      />
     </OrgModal>
   );
 }

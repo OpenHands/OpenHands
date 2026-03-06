@@ -61,8 +61,6 @@ export function InviteOrganizationMemberModal({
         value={emails}
         placeholder={t(I18nKey.COMMON$TYPE_EMAIL_AND_PRESS_SPACE)}
         onChange={handleEmailsChange}
-        className="bg-modal-input border-none pl-3"
-        inputClassName="text-sm leading-4 font-normal"
       />
     </OrgModal>
   );
