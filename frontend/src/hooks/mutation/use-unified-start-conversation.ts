@@ -36,6 +36,8 @@ export const useUnifiedResumeConversationSandbox = () => {
       // Guard: If conversation is no longer in cache and no explicit version provided,
       // skip the mutation. This handles race conditions like org switching where cache
       // is cleared before the mutation executes.
+      // We return undefined (not throw) to avoid triggering the global MutationCache.onError
+      // handler which would display an error toast to the user.
       const cachedConversation = queryClient.getQueryData([
         "user",
         "conversation",
