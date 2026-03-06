@@ -2,7 +2,6 @@ import logging
 from dataclasses import dataclass
 from typing import AsyncGenerator
 
-from enterprise.server.auth.email_validation import extract_base_email
 from fastapi import Request
 from pydantic import Field
 from server.auth.token_manager import KeycloakUserInfo, TokenManager
@@ -14,6 +13,7 @@ from server.auth.user.user_authorizer import (
 from storage.user_authorization import UserAuthorizationType
 from storage.user_authorization_store import UserAuthorizationStore
 
+from enterprise.server.auth.email_validation import extract_base_email
 from openhands.app_server.services.injector import InjectorState
 
 logger = logging.getLogger(__name__)
