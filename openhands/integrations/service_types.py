@@ -191,6 +191,12 @@ class RateLimitError(ValueError):
     pass
 
 
+class ProviderTimeoutError(ValueError):
+    """Raised when a request to a git provider times out."""
+
+    pass
+
+
 class ResourceNotFoundError(ValueError):
     """Raised when a requested resource (file, directory, etc.) is not found."""
 

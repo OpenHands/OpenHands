@@ -91,8 +91,11 @@ async def create_invitation(
             },
         )
 
+        successful_responses = [
+            await InvitationResponse.from_invitation(inv) for inv in successful
+        ]
         return BatchInvitationResponse(
-            successful=[InvitationResponse.from_invitation(inv) for inv in successful],
+            successful=successful_responses,
             failed=[
                 InvitationFailure(email=email, error=error) for email, error in failed
             ],

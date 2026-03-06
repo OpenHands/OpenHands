@@ -18,6 +18,7 @@ from server.auth.saas_user_auth import (
     saas_user_auth_from_cookie,
     saas_user_auth_from_signed_token,
 )
+from storage.user_authorization import UserAuthorizationType
 
 from openhands.integrations.provider import ProviderToken, ProviderType
 from openhands.storage.data_models.secrets import Secrets
@@ -595,14 +596,20 @@ async def test_saas_user_auth_from_signed_token(mock_config):
     }
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
-    result = await saas_user_auth_from_signed_token(signed_token)
+    # Mock UserAuthorizationStore to avoid database access
+    with patch(
+        'server.auth.saas_user_auth.UserAuthorizationStore'
+    ) as mock_user_auth_store:
+        mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
-    assert isinstance(result, SaasUserAuth)
-    assert result.user_id == 'test_user_id'
-    assert result.access_token.get_secret_value() == access_token
-    assert result.refresh_token.get_secret_value() == 'test_refresh_token'
-    assert result.email == 'test@example.com'
-    assert result.email_verified is True
+        result = await saas_user_auth_from_signed_token(signed_token)
+
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        assert result.access_token.get_secret_value() == access_token
+        assert result.refresh_token.get_secret_value() == 'test_refresh_token'
+        assert result.email == 'test@example.com'
+        assert result.email_verified is True
 
 
 def test_get_api_key_from_header_with_authorization_header():
@@ -803,15 +810,21 @@ async def test_saas_user_auth_from_signed_token_blocked_domain(mock_config):
     }
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
-    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=True)
+    with patch(
+        'server.auth.saas_user_auth.UserAuthorizationStore'
+    ) as mock_user_auth_store:
+        mock_user_auth_store.get_authorization_type = AsyncMock(
+            return_value=UserAuthorizationType.BLACKLIST
+        )
 
         # Act & Assert
         with pytest.raises(AuthError) as exc_info:
             await saas_user_auth_from_signed_token(signed_token)
 
         assert 'email domain is not allowed' in str(exc_info.value)
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
+            'user@colsch.us', None
+        )
 
 
 @pytest.mark.asyncio
@@ -832,8 +845,10 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
     }
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
-    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+    with patch(
+        'server.auth.saas_user_auth.UserAuthorizationStore'
+    ) as mock_user_auth_store:
+        mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)
@@ -842,8 +857,8 @@ async def test_saas_user_auth_from_signed_token_allowed_domain(mock_config):
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
         assert result.email == 'user@example.com'
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with(
-            'user@example.com'
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
+            'user@example.com', None
         )
 
 
@@ -865,8 +880,10 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
     }
     signed_token = jwt.encode(token_payload, 'test_secret', algorithm='HS256')
 
-    with patch('server.auth.saas_user_auth.domain_blocker') as mock_domain_blocker:
-        mock_domain_blocker.is_domain_blocked = AsyncMock(return_value=False)
+    with patch(
+        'server.auth.saas_user_auth.UserAuthorizationStore'
+    ) as mock_user_auth_store:
+        mock_user_auth_store.get_authorization_type = AsyncMock(return_value=None)
 
         # Act
         result = await saas_user_auth_from_signed_token(signed_token)
@@ -874,4 +891,6 @@ async def test_saas_user_auth_from_signed_token_domain_blocking_inactive(mock_co
         # Assert
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
-        mock_domain_blocker.is_domain_blocked.assert_called_once_with('user@colsch.us')
+        mock_user_auth_store.get_authorization_type.assert_called_once_with(
+            'user@colsch.us', None
+        )

@@ -14,7 +14,6 @@ from server.auth.auth_error import (
     NoCredentialsError,
 )
 from server.auth.constants import BITBUCKET_DATA_CENTER_HOST
-from server.auth.domain_blocker import domain_blocker
 from server.auth.token_manager import TokenManager
 from server.config import get_config
 from server.logger import logger
@@ -25,6 +24,8 @@ from storage.auth_tokens import AuthTokens
 from storage.database import a_session_maker
 from storage.saas_secrets_store import SaasSecretsStore
 from storage.saas_settings_store import SaasSettingsStore
+from storage.user_authorization import UserAuthorizationType
+from storage.user_authorization_store import UserAuthorizationStore
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from openhands.integrations.provider import (
@@ -120,13 +121,12 @@ class SaasUserAuth(UserAuth):
             self._settings = settings
         return settings
 
-    async def get_secrets_store(self):
+    async def get_secrets_store(self) -> SaasSecretsStore:
         logger.debug('saas_user_auth_get_secrets_store')
         secrets_store = self.secrets_store
         if secrets_store:
             return secrets_store
-        user_id = await self.get_user_id()
-        secrets_store = SaasSecretsStore(user_id, get_config())
+        secrets_store = SaasSecretsStore(self.user_id, get_config())
         self.secrets_store = secrets_store
         return secrets_store
 
@@ -215,8 +215,7 @@ class SaasUserAuth(UserAuth):
         settings_store = self.settings_store
         if settings_store:
             return settings_store
-        user_id = await self.get_user_id()
-        settings_store = SaasSettingsStore(user_id, get_config())
+        settings_store = SaasSettingsStore(self.user_id, get_config())
         self.settings_store = settings_store
         return settings_store
 
@@ -332,14 +331,16 @@ async def saas_user_auth_from_signed_token(signed_token: str) -> SaasUserAuth:
     email = access_token_payload['email']
     email_verified = access_token_payload['email_verified']
 
-    # Check if email domain is blocked
-    if email and await domain_blocker.is_domain_blocked(email):
-        logger.warning(
-            f'Blocked authentication attempt for existing user with email: {email}'
-        )
-        raise AuthError(
-            'Access denied: Your email domain is not allowed to access this service'
-        )
+    # Check if email is blacklisted (whitelist takes precedence)
+    if email:
+        auth_type = await UserAuthorizationStore.get_authorization_type(email, None)
+        if auth_type == UserAuthorizationType.BLACKLIST:
+            logger.warning(
+                f'Blocked authentication attempt for existing user with email: {email}'
+            )
+            raise AuthError(
+                'Access denied: Your email domain is not allowed to access this service'
+            )
 
     logger.debug('saas_user_auth_from_signed_token:return')
 

@@ -12,6 +12,7 @@ import DocumentIcon from "#/icons/document.svg?react";
 import PlusIcon from "#/icons/plus.svg?react";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import { useConfig } from "#/hooks/query/use-config";
+import { useSettings } from "#/hooks/query/use-settings";
 import { useTracking } from "#/hooks/use-tracking";
 
 interface AccountSettingsContextMenuProps {
@@ -27,6 +28,7 @@ export function AccountSettingsContextMenu({
   const { t } = useTranslation();
   const { trackAddTeamMembersButtonClick } = useTracking();
   const { data: config } = useConfig();
+  const { data: settings } = useSettings();
   const isAddTeamMemberEnabled = useFeatureFlagEnabled(
     "exp_add_team_member_button",
   );
@@ -34,7 +36,9 @@ export function AccountSettingsContextMenu({
   const items = useSettingsNavItems();
 
   const isSaasMode = config?.app_mode === "saas";
-  const showAddTeamMembers = isSaasMode && isAddTeamMemberEnabled;
+  const hasAnalyticsConsent = settings?.user_consents_to_analytics === true;
+  const showAddTeamMembers =
+    isSaasMode && isAddTeamMemberEnabled && hasAnalyticsConsent;
 
   const navItems = items.map((item) => ({
     ...item,

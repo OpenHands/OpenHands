@@ -116,10 +116,8 @@ class GitHubDataCollector:
 
         return suffix
 
-    def _get_installation_access_token(self, installation_id: str) -> str:
-        token_data = self.github_integration.get_access_token(
-            installation_id  # type: ignore[arg-type]
-        )
+    def _get_installation_access_token(self, installation_id: int) -> str:
+        token_data = self.github_integration.get_access_token(installation_id)
         return token_data.token
 
     def _check_openhands_author(self, name, login) -> bool:
@@ -134,7 +132,7 @@ class GitHubDataCollector:
         )
 
     def _get_issue_comments(
-        self, installation_id: str, repo_name: str, issue_number: int, conversation_id
+        self, installation_id: int, repo_name: str, issue_number: int, conversation_id
     ) -> list[dict[str, Any]]:
         """
         Retrieve all comments from an issue until a comment with conversation_id is found
@@ -234,7 +232,7 @@ class GitHubDataCollector:
             f'[Github]: Saved issue #{issue_number} for {github_view.full_repo_name}'
         )
 
-    def _get_pr_commits(self, installation_id: str, repo_name: str, pr_number: int):
+    def _get_pr_commits(self, installation_id: int, repo_name: str, pr_number: int):
         commits = []
         installation_token = self._get_installation_access_token(installation_id)
         with Github(auth=Auth.Token(installation_token)) as github_client:
@@ -431,7 +429,7 @@ class GitHubDataCollector:
         - Num openhands review comments
         """
         pr_number = openhands_pr.pr_number
-        installation_id = openhands_pr.installation_id
+        installation_id = int(openhands_pr.installation_id)
         repo_id = openhands_pr.repo_id
 
         # Get installation token and create Github client

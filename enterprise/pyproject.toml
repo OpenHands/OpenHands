@@ -17,7 +17,6 @@ packages = [
   { include = "storage" },
   { include = "sync" },
   { include = "integrations" },
-  { include = "experiments" },
 ]
 
 [tool.poetry.dependencies]

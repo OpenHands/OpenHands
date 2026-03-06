@@ -1353,9 +1353,13 @@ class TestLiteLlmManager:
 
                 result1 = await LiteLlmManager._get_team(mock_client, 'team_id')
                 result2 = await LiteLlmManager._get_user(mock_client, 'user_id')
-                result3 = await LiteLlmManager._generate_key(
-                    mock_client, 'user_id', 'team_id', 'alias', {}
-                )
+                # _generate_key raises ValueError when config is missing
+                with pytest.raises(
+                    ValueError, match='LiteLLM API configuration not found'
+                ):
+                    await LiteLlmManager._generate_key(
+                        mock_client, 'user_id', 'team_id', 'alias', {}
+                    )
                 result4 = await LiteLlmManager._get_user_team_info(
                     mock_client, 'user_id', 'team_id'
                 )
@@ -1366,7 +1370,6 @@ class TestLiteLlmManager:
                 # Methods that return None when config is missing
                 assert result1 is None
                 assert result2 is None
-                assert result3 is None
                 assert result4 is None
                 assert result5 is None
 
