@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import AsyncGenerator
 
+from enterprise.server.auth.email_validation import extract_base_email
 from fastapi import Request
 from pydantic import Field
 from server.auth.token_manager import KeycloakUserInfo, TokenManager
@@ -55,8 +56,9 @@ class DefaultUserAuthorizer(UserAuthorizer):
                     )
 
             # Check authorization rules (whitelist takes precedence over blacklist)
+            base_email = extract_base_email(email)
             auth_type = await UserAuthorizationStore.get_authorization_type(
-                email, provider_type
+                base_email, provider_type
             )
 
             if auth_type == UserAuthorizationType.WHITELIST:
