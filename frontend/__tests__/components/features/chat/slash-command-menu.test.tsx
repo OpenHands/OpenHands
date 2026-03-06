@@ -185,6 +185,14 @@ describe("getSkillDescription", () => {
     const content = "# Title\n\nUse `code` and [links](http://example.com).";
     expect(getSkillDescription(content)).toBe("Use code and links.");
   });
+
+  it("skips section headers like PERSONA: and uses first content line", () => {
+    const content =
+      "---\ntriggers: ['/codereview']\n---\n\nPERSONA:\nYou are an expert code reviewer with deep experience.";
+    expect(getSkillDescription(content)).toBe(
+      "You are an expert code reviewer with deep experience.",
+    );
+  });
 });
 
 describe("stripMarkdown", () => {

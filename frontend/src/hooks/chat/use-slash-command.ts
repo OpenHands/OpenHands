@@ -41,18 +41,25 @@ export const useSlashCommand = (
   const slashItems = useMemo(() => {
     if (!skills) return [];
     const items: SlashCommandItem[] = [];
+    const seenCommands = new Set<string>();
+
     skills.forEach((skill) => {
       const triggers = skill.triggers || [];
       const slashTriggers = triggers.filter((t) => t.startsWith("/"));
 
       if (slashTriggers.length > 0) {
-        // Skill has explicit slash triggers
         slashTriggers.forEach((trigger) => {
-          items.push({ skill, command: trigger });
+          if (!seenCommands.has(trigger)) {
+            seenCommands.add(trigger);
+            items.push({ skill, command: trigger });
+          }
         });
       } else if (skill.type === "agentskills") {
-        // AgentSkills without slash triggers get a derived command
-        items.push({ skill, command: `/${skill.name}` });
+        const command = `/${skill.name}`;
+        if (!seenCommands.has(command)) {
+          seenCommands.add(command);
+          items.push({ skill, command });
+        }
       }
     });
     return items;

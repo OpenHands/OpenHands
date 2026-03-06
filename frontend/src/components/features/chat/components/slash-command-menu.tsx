@@ -57,15 +57,22 @@ export function getSkillDescription(content: string): string | null {
     body = content.slice(frontmatterMatch[0].length);
   }
 
-  // Fall back to first meaningful line (skip headers, empty lines, frontmatter delimiters)
-  const meaningful = body
+  // Fall back to first meaningful content line. Skip section headers like PERSONA:, TASK:, CONTEXT:
+  const lines = body
     .split("\n")
     .map((line) => line.trim())
-    .find((line) => line.length > 0 && !line.startsWith("#") && line !== "---");
+    .filter(
+      (line) => line.length > 0 && !line.startsWith("#") && line !== "---",
+    );
+
+  const meaningful = lines.find(
+    (line) =>
+      !/^[A-Z][A-Z\s]*:\s*$/.test(line) &&
+      !(line.endsWith(":") && line.length < 40 && !line.includes(".")),
+  );
 
   if (!meaningful) return null;
 
-  // Strip Markdown first so URLs inside links don't confuse sentence detection
   const stripped = stripMarkdown(meaningful);
   const sentence = stripped.match(/^[^.!?\n]*[.!?]/);
   return sentence?.[0] || stripped;
