@@ -377,7 +377,6 @@ async def test_keycloak_callback_email_verification_rate_limited(
     )
     with (
         patch('server.routes.auth.token_manager') as mock_token_manager,
-        patch('server.routes.auth.user_verifier') as mock_verifier,
         patch('server.routes.email.verify_email', mock_verify_email),
         patch('server.routes.auth.check_rate_limit_by_user_id', mock_rate_limit),
         patch('server.routes.auth.UserStore') as mock_user_store,
@@ -394,7 +393,6 @@ async def test_keycloak_callback_email_verification_rate_limited(
             )
         )
         mock_token_manager.store_idp_tokens = AsyncMock()
-        mock_verifier.is_active.return_value = False
 
         # Mock the user creation
         mock_user = MagicMock()
@@ -407,7 +405,10 @@ async def test_keycloak_callback_email_verification_rate_limited(
 
         # Act
         result = await keycloak_callback(
-            code='test_code', state='test_state', request=mock_request
+            code='test_code',
+            state='test_state',
+            request=mock_request,
+            user_authorizer=create_mock_user_authorizer(),
         )
 
         # Assert - should still redirect to verification page but NOT send email
