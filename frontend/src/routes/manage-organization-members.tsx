@@ -137,11 +137,10 @@ function ManageOrganizationMembers() {
         {hasPermissionToInvite && (
           <BrandButton
             type="button"
-            variant="secondary"
+            variant="primary"
             onClick={() => setInviteModalOpen(true)}
-            className="flex items-center gap-1 rounded-full border-none text-sm text-white font-medium leading-5 bg-org-button hover:opacity-80 p-2"
+            startContent={<Plus size={14} />}
           >
-            <Plus size={14} />
             {t(I18nKey.ORG$INVITE_ORG_MEMBERS)}
           </BrandButton>
         )}
