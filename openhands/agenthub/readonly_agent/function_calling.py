@@ -18,6 +18,8 @@ from litellm import (
     ModelResponse,
 )
 
+from openhands.io import json as openhands_json
+
 from openhands.agenthub.codeact_agent.function_calling import (
     combine_thought,
 )
@@ -137,10 +139,13 @@ def response_to_actions(
             logger.debug(f'Tool call in function_calling.py: {tool_call}')
             try:
                 arguments = json.loads(tool_call.function.arguments)
-            except json.decoder.JSONDecodeError as e:
-                raise FunctionCallValidationError(
-                    f'Failed to parse tool call arguments: {tool_call.function.arguments}'
-                ) from e
+            except json.decoder.JSONDecodeError:
+                try:
+                    arguments = openhands_json.loads(tool_call.function.arguments)
+                except Exception as e:
+                    raise FunctionCallValidationError(
+                        f'Failed to parse tool call arguments: {tool_call.function.arguments}'
+                    ) from e
 
             # ================================================
             # AgentFinishAction

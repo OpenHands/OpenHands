@@ -247,6 +247,38 @@ def test_invalid_json_arguments():
     assert 'Failed to parse tool call arguments' in str(exc_info.value)
 
 
+def test_repairs_tool_call_arguments_with_raw_newlines():
+    """Test that tool-call arguments can be repaired when newlines are unescaped."""
+    response = ModelResponse(
+        id='mock-id',
+        choices=[
+            {
+                'message': {
+                    'tool_calls': [
+                        {
+                            'function': {
+                                'name': 'execute_bash',
+                                'arguments': '{"command":"echo hello\nworld","is_input":"false","security_risk":"LOW"}',
+                            },
+                            'id': 'mock-tool-call-id',
+                            'type': 'function',
+                        }
+                    ],
+                    'content': None,
+                    'role': 'assistant',
+                },
+                'index': 0,
+                'finish_reason': 'tool_calls',
+            }
+        ],
+    )
+
+    actions = response_to_actions(response)
+    assert len(actions) == 1
+    assert isinstance(actions[0], CmdRunAction)
+    assert actions[0].command == 'echo hello\nworld'
+
+
 def test_unexpected_argument_handling():
     """Test that unexpected arguments in function calls are properly handled.
 
