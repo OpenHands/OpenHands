@@ -51,6 +51,22 @@ The experience will be familiar to anyone who has used Devin or Jules.
 
 [Check out the docs](https://docs.openhands.dev/openhands/usage/run-openhands/local-setup) or view the source in this repo.
 
+#### Run without Docker (quick start)
+
+If you prefer a dockerless setup, you can run OpenHands with the local runtime:
+
+```bash
+export INSTALL_DOCKER=0
+export RUNTIME=local
+make build && make run
+```
+
+This starts the app at `http://localhost:3001` and skips Docker runtime setup.
+For full prerequisites and troubleshooting, see:
+
+- [Development guide](./Development.md#5-running-openhands-with-openhands)
+- [Local runtime docs](https://docs.openhands.dev/openhands/usage/runtimes/local)
+
 ### OpenHands Cloud
 This is a deployment of OpenHands GUI, running on hosted infrastructure.
 
