@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import urlparse
 
 from pydantic import (
     BaseModel,
@@ -17,6 +18,33 @@ from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.mcp_config import MCPConfig
 from openhands.core.config.utils import load_openhands_config
 from openhands.storage.data_models.secrets import Secrets
+
+_FORBIDDEN_LLM_BASE_URL_ENDPOINT_SUFFIXES = (
+    '/chat/completions',
+    '/v1/chat/completions',
+    '/completions',
+    '/v1/completions',
+)
+
+
+def _validate_llm_base_url(base_url: str | None) -> str | None:
+    if base_url is None:
+        return None
+
+    normalized = base_url.strip()
+    if not normalized:
+        return normalized
+
+    parsed = urlparse(normalized)
+    path = (parsed.path or normalized).rstrip('/').lower()
+    if path.endswith(_FORBIDDEN_LLM_BASE_URL_ENDPOINT_SUFFIXES):
+        raise ValueError(
+            'llm_base_url must not include the API endpoint path '
+            '/v1/chat/completions. Use only the base URL, e.g. '
+            'https://my-proxy.com/v1.'
+        )
+
+    return normalized
 
 
 class Settings(BaseModel):
@@ -123,6 +151,11 @@ class Settings(BaseModel):
         if v < 20:
             raise ValueError('condenser_max_size must be at least 20')
         return v
+
+    @field_validator('llm_base_url')
+    @classmethod
+    def validate_llm_base_url(cls, v: str | None) -> str | None:
+        return _validate_llm_base_url(v)
 
     @field_serializer('secrets_store')
     def secrets_store_serializer(self, secrets: Secrets, info: SerializationInfo):

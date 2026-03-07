@@ -1,6 +1,7 @@
 import warnings
 from unittest.mock import patch
 
+import pytest
 from pydantic import SecretStr
 
 from openhands.core.config.llm_config import LLMConfig
@@ -127,3 +128,17 @@ def test_settings_no_pydantic_frozen_field_warning():
         assert len(frozen_warnings) == 0, (
             f'Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}'
         )
+
+
+def test_settings_rejects_llm_base_url_with_chat_completions_path():
+    with pytest.raises(
+        ValueError,
+        match='must not include the API endpoint path /v1/chat/completions',
+    ):
+        Settings(llm_base_url='https://my-proxy.com/v1/chat/completions')
+
+
+def test_settings_accepts_llm_base_url_with_version_path_only():
+    settings = Settings(llm_base_url='https://my-proxy.com/v1')
+
+    assert settings.llm_base_url == 'https://my-proxy.com/v1'
