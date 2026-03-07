@@ -223,9 +223,7 @@ class LLM(RetryMixin, DebugMixin):
         # Add completion_kwargs if present
         if self.config.completion_kwargs is not None:
             self._chatgpt_device_code_compat = bool(
-                self.config.completion_kwargs.pop(
-                    'chatgpt_device_code_compat', False
-                )
+                self.config.completion_kwargs.pop('chatgpt_device_code_compat', False)
             )
             if self._chatgpt_device_code_compat:
                 logger.warning(
@@ -476,7 +474,7 @@ class LLM(RetryMixin, DebugMixin):
                         if isinstance(block, dict) and isinstance(
                             block.get('text'), str
                         ):
-                            block['text'] = f"[SYSTEM]\n{block['text']}"
+                            block['text'] = f'[SYSTEM]\n{block["text"]}'
                             text_updated = True
                             break
                     if not text_updated:
