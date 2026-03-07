@@ -600,6 +600,7 @@ class TestGetUserNotFoundMessageIntegration:
         assert 'it looks like' in message.lower()
         assert "haven't created an openhands account" in message.lower()
 
+
 class TestGithubManagerPRReviewTriggers:
     @pytest.fixture
     def mock_token_manager(self):
@@ -707,5 +708,3 @@ class TestGithubManagerPRReviewTriggers:
 
         mock_issue.create_reaction.assert_called_once_with('eyes')
         mock_issue.get_comment.assert_not_called()
-
-
