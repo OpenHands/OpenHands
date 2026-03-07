@@ -11,7 +11,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from integrations.github.github_manager import GithubManager
+from integrations.github.github_view import GithubPRComment
 from integrations.models import Message, SourceType
+from integrations.types import UserData
 from integrations.utils import HOST_URL, get_user_not_found_message
 
 
@@ -597,3 +599,113 @@ class TestGetUserNotFoundMessageIntegration:
         message = get_user_not_found_message('testuser')
         assert 'it looks like' in message.lower()
         assert "haven't created an openhands account" in message.lower()
+
+class TestGithubManagerPRReviewTriggers:
+    @pytest.fixture
+    def mock_token_manager(self):
+        token_manager = MagicMock()
+        return token_manager
+
+    @pytest.fixture
+    def mock_data_collector(self):
+        data_collector = MagicMock()
+        return data_collector
+
+    @pytest.fixture
+    def github_pr_review_message(self):
+        return Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 12345,
+                'payload': {
+                    'action': 'submitted',
+                    'sender': {'id': 67890, 'login': 'reviewuser'},
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
+                    },
+                    'pull_request': {
+                        'number': 101,
+                        'head': {'ref': 'feature-branch'},
+                    },
+                    'review': {
+                        'id': 202,
+                        'body': '@openhands please address these review notes',
+                    },
+                },
+            },
+        )
+
+    @pytest.mark.asyncio
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    async def test_is_job_requested_for_pr_review(
+        self,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+        github_pr_review_message,
+    ):
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+        manager._user_has_write_access_to_repo = MagicMock(return_value=True)
+
+        assert await manager.is_job_requested(github_pr_review_message) is True
+
+    @patch('integrations.github.github_manager.Auth')
+    @patch('integrations.github.github_manager.GithubIntegration')
+    @patch('integrations.github.github_manager.Github')
+    def test_add_reaction_pr_review_falls_back_to_issue_reaction(
+        self,
+        mock_github_class,
+        mock_github_integration,
+        mock_auth,
+        mock_token_manager,
+        mock_data_collector,
+    ):
+        manager = GithubManager(mock_token_manager, mock_data_collector)
+
+        mock_github_instance = MagicMock()
+        mock_github_class.return_value.__enter__ = MagicMock(
+            return_value=mock_github_instance
+        )
+        mock_github_class.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_repo = MagicMock()
+        mock_issue = MagicMock()
+        mock_github_instance.get_repo.return_value = mock_repo
+        mock_repo.get_issue.return_value = mock_issue
+
+        view = GithubPRComment(
+            issue_number=101,
+            branch_name='feature-branch',
+            comment_body='@openhands please fix this',
+            comment_id=202,
+            installation_id=12345,
+            full_repo_name='test-owner/test-repo',
+            is_public_repo=True,
+            raw_payload=Message(
+                source=SourceType.GITHUB,
+                message={'payload': {'review': {'id': 202, 'body': '@openhands ping'}}},
+            ),
+            user_info=UserData(
+                user_id=1,
+                username='reviewuser',
+                keycloak_user_id='kc-reviewuser',
+            ),
+            conversation_id='',
+            uuid=None,
+            should_extract=True,
+            send_summary_instruction=True,
+            title='',
+            description='',
+            previous_comments=[],
+            v1_enabled=False,
+        )
+
+        manager._add_reaction(view, 'eyes', 'fake-token')
+
+        mock_issue.create_reaction.assert_called_once_with('eyes')
+        mock_issue.get_comment.assert_not_called()
+
+

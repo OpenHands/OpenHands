@@ -91,7 +91,18 @@ class GithubManager(Manager[GithubViewType]):
                 inline_comment = pr.get_review_comment(github_view.comment_id)
                 inline_comment.create_reaction(reaction)
 
-            elif isinstance(github_view, (GithubIssueComment, GithubPRComment)):
+            elif isinstance(github_view, GithubPRComment):
+                issue = repo.get_issue(github_view.issue_number)
+                payload = github_view.raw_payload.message.get('payload', {})
+                if 'review' in payload and 'comment' not in payload:
+                    # pull_request_review events reference review IDs, not issue comment IDs.
+                    # Falling back to reacting on the PR thread keeps acknowledgement reliable.
+                    issue.create_reaction(reaction)
+                else:
+                    comment = issue.get_comment(github_view.comment_id)
+                    comment.create_reaction(reaction)
+
+            elif isinstance(github_view, GithubIssueComment):
                 issue = repo.get_issue(github_view.issue_number)
                 comment = issue.get_comment(github_view.comment_id)
                 comment.create_reaction(reaction)
@@ -132,6 +143,7 @@ class GithubManager(Manager[GithubViewType]):
         - Labeled issues: payload['issue']['number']
         - Issue comments: payload['issue']['number']
         - PR comments: payload['issue']['number'] (PRs are accessed via issue endpoint)
+        - PR review submissions: payload['pull_request']['number']
         - Inline PR comments: payload['pull_request']['number']
 
         Args:
@@ -159,6 +171,7 @@ class GithubManager(Manager[GithubViewType]):
         - Labeled issues (action='labeled' with openhands label)
         - Issue comments (comment containing @openhands)
         - PR comments (comment containing @openhands on a PR)
+        - PR review submissions (review body containing @openhands)
         - Inline PR review comments (comment containing @openhands)
 
         Args:
@@ -219,6 +232,7 @@ class GithubManager(Manager[GithubViewType]):
             GithubFactory.is_labeled_issue(message)
             or GithubFactory.is_issue_comment(message)
             or GithubFactory.is_pr_comment(message)
+            or GithubFactory.is_pr_review(message)
             or GithubFactory.is_inline_pr_comment(message)
         ):
             return False

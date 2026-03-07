@@ -2,7 +2,12 @@ from unittest import TestCase, mock
 from unittest.mock import MagicMock, patch
 
 import pytest
-from integrations.github.github_view import GithubFactory, GithubIssue, get_oh_labels
+from integrations.github.github_view import (
+    GithubFactory,
+    GithubIssue,
+    GithubPRComment,
+    get_oh_labels,
+)
 from integrations.models import Message, SourceType
 from integrations.types import UserData
 
@@ -78,6 +83,70 @@ class TestGithubCommentCaseInsensitivity(TestCase):
         self.assertTrue(GithubFactory.is_issue_comment(message_lower))
         self.assertTrue(GithubFactory.is_issue_comment(message_upper))
         self.assertTrue(GithubFactory.is_issue_comment(message_mixed))
+
+    @mock.patch('integrations.github.github_view.INLINE_OH_LABEL', '@openhands')
+    def test_pr_review_case_insensitivity(self):
+        review_lower = Message(
+            source=SourceType.GITHUB,
+            message={
+                'payload': {
+                    'action': 'submitted',
+                    'review': {'body': 'hello @openhands please help'},
+                    'pull_request': {'number': 7},
+                }
+            },
+        )
+
+        review_upper = Message(
+            source=SourceType.GITHUB,
+            message={
+                'payload': {
+                    'action': 'submitted',
+                    'review': {'body': 'hello @OPENHANDS please help'},
+                    'pull_request': {'number': 7},
+                }
+            },
+        )
+
+        self.assertTrue(GithubFactory.is_pr_review(review_lower))
+        self.assertTrue(GithubFactory.is_pr_review(review_upper))
+
+
+class TestGithubFactoryPRReviewView(TestCase):
+    @pytest.mark.asyncio
+    @mock.patch('integrations.github.github_view.INLINE_OH_LABEL', '@openhands')
+    async def test_create_view_from_pr_review_payload(self):
+        message = Message(
+            source=SourceType.GITHUB,
+            message={
+                'installation': 123,
+                'payload': {
+                    'action': 'submitted',
+                    'sender': {'id': 42, 'login': 'octocat'},
+                    'repository': {
+                        'owner': {'login': 'test-owner'},
+                        'name': 'test-repo',
+                        'private': False,
+                    },
+                    'pull_request': {
+                        'number': 77,
+                        'head': {'ref': 'feature-branch'},
+                    },
+                    'review': {
+                        'id': 991,
+                        'body': '@openhands please take a look',
+                    },
+                },
+            },
+        )
+
+        view = await GithubFactory.create_github_view_from_payload(message, 'kc-user')
+
+        assert isinstance(view, GithubPRComment)
+        assert view.issue_number == 77
+        assert view.branch_name == 'feature-branch'
+        assert view.comment_id == 991
+        assert view.comment_body == '@openhands please take a look'
 
 
 class TestGithubV1ConversationRouting(TestCase):

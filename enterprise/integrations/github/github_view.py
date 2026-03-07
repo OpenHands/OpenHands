@@ -663,6 +663,23 @@ class GithubFactory:
         return False
 
     @staticmethod
+    def is_pr_review(message: Message):
+        payload = message.message.get('payload', {})
+        action = payload.get('action', '')
+
+        if action != 'submitted':
+            return False
+
+        if 'review' not in payload or 'pull_request' not in payload:
+            return False
+
+        review_body = payload.get('review', {}).get('body', '')
+        if has_exact_mention(review_body, INLINE_OH_LABEL):
+            return True
+
+        return False
+
+    @staticmethod
     def is_inline_pr_comment(message: Message):
         payload = message.message.get('payload', {})
         action = payload.get('action', '')
@@ -885,6 +902,35 @@ class GithubFactory:
                 branch_name=head_ref,
                 comment_body=payload['comment']['body'],
                 comment_id=comment_id,
+                installation_id=installation_id,
+                full_repo_name=selected_repo,
+                is_public_repo=is_public_repo,
+                raw_payload=message,
+                user_info=user_info,
+                conversation_id='',
+                uuid=None,
+                should_extract=True,
+                send_summary_instruction=True,
+                title='',
+                description='',
+                previous_comments=[],
+                v1_enabled=False,
+            )
+
+        elif GithubFactory.is_pr_review(message):
+            pr_number = payload['pull_request']['number']
+            branch_name = payload['pull_request']['head']['ref']
+            review_body = payload['review'].get('body', '')
+            review_id = payload['review']['id']
+            logger.info(
+                f'[GitHub] Creating view for PR review from {username} in {selected_repo}#{pr_number}'
+            )
+
+            return GithubPRComment(
+                issue_number=pr_number,
+                branch_name=branch_name,
+                comment_body=review_body,
+                comment_id=review_id,
                 installation_id=installation_id,
                 full_repo_name=selected_repo,
                 is_public_repo=is_public_repo,
