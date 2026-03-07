@@ -29,7 +29,9 @@ def _normalize_url_host(value: str, default_host: str = 'gitlab.com') -> str:
 GITLAB_BASE_URL = _normalize_url_host(
     os.getenv('GITLAB_BASE_URL', os.getenv('GITLAB_HOST', 'gitlab.com'))
 )
-GITLAB_TOKEN_URL = os.getenv('GITLAB_TOKEN_URL', f'{GITLAB_BASE_URL}/oauth/token').strip()
+GITLAB_TOKEN_URL = os.getenv(
+    'GITLAB_TOKEN_URL', f'{GITLAB_BASE_URL}/oauth/token'
+).strip()
 BITBUCKET_APP_CLIENT_ID = os.getenv('BITBUCKET_APP_CLIENT_ID', '').strip()
 BITBUCKET_APP_CLIENT_SECRET = os.getenv('BITBUCKET_APP_CLIENT_SECRET', '').strip()
 ENABLE_ENTERPRISE_SSO = os.getenv('ENABLE_ENTERPRISE_SSO', '').strip()
