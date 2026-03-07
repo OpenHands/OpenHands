@@ -484,10 +484,25 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
                 'slack_user_id': slack_user_id,
             },
         )
-        return JSONResponse(
-            {'error': 'Session expired. Please send your message again.'},
-            status_code=400,
-        )
+        # Send a user-friendly message to Slack
+        try:
+            bot_token = await slack_team_store.get_team_bot_token(team_id)
+            if bot_token:
+                client = AsyncWebClient(token=bot_token)
+                await client.chat_postEphemeral(
+                    channel=channel_id,
+                    user=slack_user_id,
+                    thread_ts=thread_ts,
+                    text=(
+                        '⏰ Your session has expired. '
+                        'Please mention me again with your request to start a new conversation.'
+                    ),
+                )
+        except Exception as e:
+            logger.warning(
+                f'slack_on_form_interaction: Failed to send expiry message: {e}'
+            )
+        return JSONResponse({'success': True})
 
     payload = {
         'message_ts': message_ts,
