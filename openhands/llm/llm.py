@@ -214,8 +214,23 @@ class LLM(RetryMixin, DebugMixin):
         ) and ('temperature' in kwargs and 'top_p' in kwargs):
             kwargs.pop('top_p', None)
 
+        # Optional compatibility mode for LiteLLM ChatGPT device-code backends.
+        # When enabled, system-role messages are downgraded to user-role with a
+        # [SYSTEM] prefix to avoid provider-side "System messages are not allowed"
+        # errors.
+        self._chatgpt_device_code_compat = False
+
         # Add completion_kwargs if present
         if self.config.completion_kwargs is not None:
+            self._chatgpt_device_code_compat = bool(
+                self.config.completion_kwargs.pop(
+                    'chatgpt_device_code_compat', False
+                )
+            )
+            if self._chatgpt_device_code_compat:
+                logger.warning(
+                    'chatgpt_device_code_compat enabled: system messages will be converted to user messages with [SYSTEM] prefix'
+                )
             kwargs.update(self.config.completion_kwargs)
 
         self._completion = partial(
@@ -281,6 +296,10 @@ class LLM(RetryMixin, DebugMixin):
                 messages = cast(list[dict[str, Any]], messages_list)
 
             kwargs['messages'] = messages
+
+            if self._chatgpt_device_code_compat:
+                messages = self._convert_system_messages_to_user(messages)
+                kwargs['messages'] = messages
 
             # handle conversion of to non-function calling messages if needed
             original_fncall_messages = copy.deepcopy(messages)
@@ -432,6 +451,43 @@ class LLM(RetryMixin, DebugMixin):
             return resp
 
         self._completion = wrapper
+
+    @staticmethod
+    def _convert_system_messages_to_user(
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Convert system messages into user messages with an explicit prefix.
+
+        This is a compatibility helper for provider stacks that reject `system`
+        role payloads (e.g., some ChatGPT device-code routes behind LiteLLM).
+        """
+        converted: list[dict[str, Any]] = []
+
+        for message in messages:
+            msg = copy.deepcopy(message)
+            if msg.get('role') == 'system':
+                content = msg.get('content')
+                if isinstance(content, str):
+                    msg['content'] = f'[SYSTEM]\n{content}'
+                elif isinstance(content, list):
+                    content_blocks = copy.deepcopy(content)
+                    text_updated = False
+                    for block in content_blocks:
+                        if isinstance(block, dict) and isinstance(
+                            block.get('text'), str
+                        ):
+                            block['text'] = f"[SYSTEM]\n{block['text']}"
+                            text_updated = True
+                            break
+                    if not text_updated:
+                        content_blocks.insert(0, {'type': 'text', 'text': '[SYSTEM]'})
+                    msg['content'] = content_blocks
+                else:
+                    msg['content'] = '[SYSTEM]'
+                msg['role'] = 'user'
+            converted.append(msg)
+
+        return converted
 
     @property
     def completion(self) -> Callable:

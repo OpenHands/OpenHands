@@ -223,6 +223,34 @@ def test_completion_kwargs_passed_to_litellm(mock_litellm_completion):
     llm.completion(messages=[{'role': 'system', 'content': 'Test message'}])
 
 
+@patch('openhands.llm.llm.litellm_completion')
+def test_chatgpt_device_code_compat_mode(mock_litellm_completion):
+    config = LLMConfig(
+        completion_kwargs={
+            'chatgpt_device_code_compat': True,
+            'custom_param': 'custom_value',
+        }
+    )
+    llm = LLM(config, service_id='test-service')
+
+    mock_litellm_completion.return_value = {
+        'choices': [{'message': {'content': 'Mocked response'}}]
+    }
+
+    llm.completion(
+        messages=[
+            {'role': 'system', 'content': 'System instruction'},
+            {'role': 'user', 'content': 'Hello'},
+        ]
+    )
+
+    call_kwargs = mock_litellm_completion.call_args[1]
+    assert 'chatgpt_device_code_compat' not in call_kwargs
+    assert call_kwargs['custom_param'] == 'custom_value'
+    assert call_kwargs['messages'][0]['role'] == 'user'
+    assert call_kwargs['messages'][0]['content'].startswith('[SYSTEM]\n')
+
+
 def test_llm_init_with_metrics():
     config = LLMConfig(model='gpt-4o', api_key='test_key')
     metrics = Metrics()

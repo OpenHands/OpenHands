@@ -78,6 +78,26 @@ Environment variables > config.toml variables > default variables
 **Note on Alternative Models:**
 See [our documentation](https://docs.openhands.dev/usage/llms) for recommended models.
 
+#### LiteLLM + ChatGPT device-code compatibility
+
+If you route OpenHands through LiteLLM and your upstream provider is ChatGPT device-code,
+you may see errors like:
+
+- `ChatgptException: {"detail":"System messages are not allowed"}`
+
+OpenHands relies on system-role instructions, so keep these in mind:
+
+1. Prefer explicit model aliases in LiteLLM so codex-style names map to stable OpenAI model ids.
+2. If your route still rejects system-role payloads, enable compatibility mode in OpenHands:
+
+```toml
+[llm]
+completion_kwargs = { chatgpt_device_code_compat = true }
+```
+
+This compatibility mode rewrites `system` messages into `user` messages with a `[SYSTEM]`
+prefix before calling LiteLLM.
+
 ### 4. Running the application
 
 #### Option A: Run the Full Application
