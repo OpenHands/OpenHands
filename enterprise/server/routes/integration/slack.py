@@ -434,7 +434,12 @@ async def on_options_load(request: Request):
 
 @slack_router.post('/on-form-interaction')
 async def on_form_interaction(request: Request, background_tasks: BackgroundTasks):
-    """We check the nonce to start a conversation"""
+    """Handle repository selection form submission.
+
+    When a user selects a repository from the external_select dropdown,
+    this endpoint retrieves the original user message from Redis (stored when
+    the form was shown) and starts the conversation with the selected repo.
+    """
     if not SLACK_WEBHOOKS_ENABLED:
         return JSONResponse({'success': 'slack_webhooks_disabled'})
 
@@ -461,13 +466,28 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
     slack_user_id = payload['user']['id']
     channel_id = payload['container']['channel_id']
     team_id = payload['team']['id']
-    # Hack - get original message_ts from element name
+    # Get original message_ts and thread_ts from action_id
     attribs = payload['actions'][0]['action_id'].split('repository_select:')[-1]
     message_ts, thread_ts = attribs.split(':')
     thread_ts = None if thread_ts == 'None' else thread_ts
-    # Get the original message
-    # Get the text message
-    # Start the conversation
+
+    # Retrieve the original user message from Redis
+    # This was stored when the repo selection form was shown
+    user_msg = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
+
+    if not user_msg:
+        logger.error(
+            'slack_on_form_interaction: user_msg not found in Redis',
+            extra={
+                'message_ts': message_ts,
+                'thread_ts': thread_ts,
+                'slack_user_id': slack_user_id,
+            },
+        )
+        return JSONResponse(
+            {'error': 'Session expired. Please send your message again.'},
+            status_code=400,
+        )
 
     payload = {
         'message_ts': message_ts,
@@ -476,6 +496,7 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
         'slack_user_id': slack_user_id,
         'selected_repo': selected_repository,
         'team_id': team_id,
+        'user_msg': user_msg,
     }
 
     message = Message(

@@ -1,7 +1,11 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from integrations.slack.slack_manager import SlackManager
+from integrations.slack.slack_manager import (
+    SLACK_USER_MSG_EXPIRATION,
+    SLACK_USER_MSG_KEY_PREFIX,
+    SlackManager,
+)
 from integrations.slack.slack_view import SlackNewConversationView
 from storage.slack_user import SlackUser
 
@@ -226,3 +230,127 @@ class TestBuildRepoOptions:
         assert len(options[0]['text']['text']) == 75
         # But value should have full name
         assert options[0]['value'] == long_name
+
+
+class TestUserMsgStorage:
+    """Test the user message storage for repo selection form flow."""
+
+    @patch('integrations.slack.slack_manager.sio')
+    async def test_store_user_msg_for_form(self, mock_sio, slack_manager):
+        """Test storing user message in Redis."""
+        mock_redis = AsyncMock()
+        mock_sio.manager.redis = mock_redis
+
+        message_ts = '1234567890.123456'
+        thread_ts = '1234567890.111111'
+        user_msg = 'Hello OpenHands, help me with my code'
+
+        await slack_manager.store_user_msg_for_form(message_ts, thread_ts, user_msg)
+
+        expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
+        mock_redis.set.assert_called_once_with(
+            expected_key, user_msg, ex=SLACK_USER_MSG_EXPIRATION
+        )
+
+    @patch('integrations.slack.slack_manager.sio')
+    async def test_store_user_msg_for_form_no_thread(self, mock_sio, slack_manager):
+        """Test storing user message when there's no thread."""
+        mock_redis = AsyncMock()
+        mock_sio.manager.redis = mock_redis
+
+        message_ts = '1234567890.123456'
+        thread_ts = None
+        user_msg = 'Hello OpenHands'
+
+        await slack_manager.store_user_msg_for_form(message_ts, thread_ts, user_msg)
+
+        expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
+        mock_redis.set.assert_called_once_with(
+            expected_key, user_msg, ex=SLACK_USER_MSG_EXPIRATION
+        )
+
+    @patch('integrations.slack.slack_manager.sio')
+    async def test_retrieve_user_msg_for_form_found(self, mock_sio, slack_manager):
+        """Test retrieving user message from Redis when it exists."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = b'Hello OpenHands, help me with my code'
+        mock_sio.manager.redis = mock_redis
+
+        message_ts = '1234567890.123456'
+        thread_ts = '1234567890.111111'
+
+        result = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
+
+        expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
+        mock_redis.get.assert_called_once_with(expected_key)
+        assert result == 'Hello OpenHands, help me with my code'
+
+    @patch('integrations.slack.slack_manager.sio')
+    async def test_retrieve_user_msg_for_form_not_found(self, mock_sio, slack_manager):
+        """Test retrieving user message from Redis when it doesn't exist."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = None
+        mock_sio.manager.redis = mock_redis
+
+        message_ts = '1234567890.123456'
+        thread_ts = None
+
+        result = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
+
+        expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
+        mock_redis.get.assert_called_once_with(expected_key)
+        assert result is None
+
+    @patch('integrations.slack.slack_manager.sio')
+    async def test_retrieve_user_msg_for_form_string_response(
+        self, mock_sio, slack_manager
+    ):
+        """Test retrieving user message when Redis returns string instead of bytes."""
+        mock_redis = AsyncMock()
+        mock_redis.get.return_value = 'Hello OpenHands'
+        mock_sio.manager.redis = mock_redis
+
+        message_ts = '1234567890.123456'
+        thread_ts = None
+
+        result = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
+
+        assert result == 'Hello OpenHands'
+
+
+class TestIsJobRequestedWithUserMsgStorage:
+    """Test that is_job_requested properly stores user message for form flow."""
+
+    @patch('integrations.slack.slack_manager.sio')
+    @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
+    @patch.object(SlackManager, '_search_repositories', new_callable=AsyncMock)
+    async def test_stores_user_msg_when_showing_repo_selector(
+        self,
+        mock_search_repositories,
+        mock_send_message,
+        mock_sio,
+        slack_manager,
+        slack_new_conversation_view,
+    ):
+        """Test that user_msg is stored in Redis when repo selector is shown."""
+        mock_redis = AsyncMock()
+        mock_sio.manager.redis = mock_redis
+
+        # Setup: _search_repositories returns empty list
+        mock_search_repositories.return_value = []
+
+        # Execute
+        result = await slack_manager.is_job_requested(
+            MagicMock(), slack_new_conversation_view
+        )
+
+        # Verify: should return False (no repo selected yet)
+        assert result is False
+
+        # Verify: Redis set was called to store the user message
+        expected_key = f'{SLACK_USER_MSG_KEY_PREFIX}:{slack_new_conversation_view.message_ts}:{slack_new_conversation_view.thread_ts}'
+        mock_redis.set.assert_called_once_with(
+            expected_key,
+            slack_new_conversation_view.user_msg,
+            ex=SLACK_USER_MSG_EXPIRATION,
+        )

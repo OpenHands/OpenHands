@@ -34,7 +34,7 @@ from storage.slack_user import SlackUser
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.provider import ProviderHandler
 from openhands.integrations.service_types import ProviderTimeoutError, Repository
-from openhands.server.shared import config, server_config
+from openhands.server.shared import config, server_config, sio
 from openhands.server.types import (
     LLMAuthenticationError,
     MissingSettingsError,
@@ -47,6 +47,11 @@ authorize_url_generator = AuthorizeUrlGenerator(
     scopes=['app_mentions:read', 'chat:write'],
     user_scopes=['search:read'],
 )
+
+# Key prefix for storing user messages in Redis during repo selection flow
+SLACK_USER_MSG_KEY_PREFIX = 'slack_user_msg'
+# Expiration time for stored user messages (5 minutes)
+SLACK_USER_MSG_EXPIRATION = 300
 
 
 class SlackManager(Manager[SlackViewInterface]):
@@ -96,6 +101,70 @@ class SlackManager(Manager[SlackViewInterface]):
             return repo
 
         return None
+
+    async def store_user_msg_for_form(
+        self, message_ts: str, thread_ts: str | None, user_msg: str
+    ) -> None:
+        """Store user message in Redis for later retrieval when form is submitted.
+
+        This is needed because when a user selects a repo from the external_select
+        dropdown, Slack sends a separate interaction payload that doesn't include
+        the original user message.
+
+        Args:
+            message_ts: The message timestamp (unique identifier)
+            thread_ts: The thread timestamp (if in a thread)
+            user_msg: The original user message to store
+        """
+        key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
+        redis = sio.manager.redis
+        await redis.set(key, user_msg, ex=SLACK_USER_MSG_EXPIRATION)
+        logger.info(
+            'slack_stored_user_msg',
+            extra={
+                'message_ts': message_ts,
+                'thread_ts': thread_ts,
+                'key': key,
+            },
+        )
+
+    async def retrieve_user_msg_for_form(
+        self, message_ts: str, thread_ts: str | None
+    ) -> str | None:
+        """Retrieve stored user message from Redis.
+
+        Args:
+            message_ts: The message timestamp
+            thread_ts: The thread timestamp (if in a thread)
+
+        Returns:
+            The stored user message, or None if not found
+        """
+        key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
+        redis = sio.manager.redis
+        user_msg = await redis.get(key)
+        if user_msg:
+            # Redis returns bytes, decode to string
+            if isinstance(user_msg, bytes):
+                user_msg = user_msg.decode('utf-8')
+            logger.info(
+                'slack_retrieved_user_msg',
+                extra={
+                    'message_ts': message_ts,
+                    'thread_ts': thread_ts,
+                    'key': key,
+                },
+            )
+        else:
+            logger.warning(
+                'slack_user_msg_not_found',
+                extra={
+                    'message_ts': message_ts,
+                    'thread_ts': thread_ts,
+                    'key': key,
+                },
+            )
+        return user_msg
 
     async def _search_repositories(
         self, user_auth: UserAuth, query: str = '', per_page: int = 100
@@ -375,6 +444,12 @@ class SlackManager(Manager[SlackViewInterface]):
                     'message_ts': slack_view.message_ts,
                     'thread_ts': slack_view.thread_ts,
                 },
+            )
+
+            # Store the user message in Redis so it can be retrieved when
+            # the user submits the form (Slack doesn't include it in form submissions)
+            await self.store_user_msg_for_form(
+                slack_view.message_ts, slack_view.thread_ts, slack_view.user_msg
             )
 
             repo_selection_msg = {
