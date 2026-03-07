@@ -35,6 +35,7 @@ from openhands.integrations.service_types import (
     InstallationsService,
     MicroagentParseError,
     PaginatedBranchesResponse,
+    ProviderTimeoutError,
     ProviderType,
     Repository,
     ResourceNotFoundError,
@@ -258,9 +259,10 @@ class ProviderHandler:
         per_page: int | None,
         installation_id: str | None,
     ) -> list[Repository]:
-        """Get repositories from providers"""
-        """
-        Get repositories from providers
+        """Get repositories from providers.
+
+        Raises:
+            ProviderTimeoutError: If a timeout occurs while fetching repos.
         """
         if selected_provider:
             if not page or not per_page:
@@ -277,6 +279,9 @@ class ProviderHandler:
                 service = self.get_service(provider)
                 service_repos = await service.get_all_repositories(sort, app_mode)
                 all_repos.extend(service_repos)
+            except ProviderTimeoutError:
+                # Propagate timeout errors so callers can handle them appropriately
+                raise
             except Exception as e:
                 logger.warning(f'Error fetching repos from {provider}: {e}')
 

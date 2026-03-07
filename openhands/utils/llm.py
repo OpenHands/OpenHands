@@ -26,7 +26,9 @@ OPENHANDS_MODELS = [
     'openhands/deepseek-chat',
     'openhands/devstral-medium-2512',
     'openhands/kimi-k2-0711-preview',
+    'openhands/kimi-k2.5',
     'openhands/qwen3-coder-480b',
+    'openhands/qwen3-coder-next',
     'openhands/glm-4.7',
     'openhands/glm-5',
 ]

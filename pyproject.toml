@@ -52,6 +52,7 @@ dependencies = [
   "libtmux>=0.46.2",
   "litellm!=1.64.4,!=1.67.*,>=1.74.3",
   "lmnr>=0.7.20",
+  "mcp>=1.25",
   "memory-profiler>=0.61",
   "numpy",
   "openai==2.8",
