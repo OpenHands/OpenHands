@@ -11,7 +11,18 @@ interface ServerError {
   [key: string]: unknown;
 }
 
-const isServerError = (data: object): data is ServerError => "error" in data;
+const isAgentErrorEventPayload = (data: object): boolean => {
+  const candidate = data as Record<string, unknown>;
+  return (
+    candidate.source === "agent" &&
+    typeof candidate.tool_name === "string" &&
+    typeof candidate.tool_call_id === "string" &&
+    typeof candidate.error === "string"
+  );
+};
+
+const isServerError = (data: object): data is ServerError =>
+  "error" in data && !isAgentErrorEventPayload(data);
 
 export const useV0HandleWSEvents = () => {
   const { send } = useWsClient();
