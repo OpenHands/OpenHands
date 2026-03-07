@@ -16,7 +16,8 @@ Optional environment variables:
 - KEYCLOAK_PROVIDER_NAME: Provider name for Keycloak
 - KEYCLOAK_CLIENT_ID: Client ID for Keycloak
 - KEYCLOAK_CLIENT_SECRET: Client secret for Keycloak
-- RESEND_FROM_EMAIL: Email address to use as the sender (default: "All Hands Team <contact@all-hands.dev>")
+- RESEND_FROM_EMAIL: Email address to use as the sender (default: "OpenHands Team <no-reply@welcome.openhands.dev>")
+- RESEND_REPLY_TO_EMAIL: Email address for replies (default: "contact@openhands.dev")
 - BATCH_SIZE: Number of users to process in each batch (default: 100)
 - MAX_RETRIES: Maximum number of retries for API calls (default: 3)
 - INITIAL_BACKOFF_SECONDS: Initial backoff time for retries (default: 1)
@@ -292,7 +293,10 @@ def send_welcome_email(
         # Prepare email parameters
         params = {
             'from': os.environ.get(
-                'RESEND_FROM_EMAIL', 'All Hands Team <contact@all-hands.dev>'
+                'RESEND_FROM_EMAIL', 'OpenHands Team <no-reply@welcome.openhands.dev>'
+            ),
+            'reply_to': os.environ.get(
+                'RESEND_REPLY_TO_EMAIL', 'contact@openhands.dev'
             ),
             'to': [email],
             'subject': 'Welcome to OpenHands Cloud',
@@ -302,13 +306,18 @@ def send_welcome_email(
                 <p>Thanks for joining OpenHands Cloud — we're excited to help you start building with the world's leading open source AI coding agent!</p>
                 <p><strong>Here are three quick ways to get started:</strong></p>
                 <ol>
-                    <li><a href="https://docs.all-hands.dev/usage/cloud/openhands-cloud#next-steps"><strong>Connect your Git repo</strong></a> – Link your <a href="https://docs.all-hands.dev/usage/cloud/github-installation">GitHub</a> or <a href="https://docs.all-hands.dev/usage/cloud/gitlab-installation">GitLab</a> repository in seconds so OpenHands can begin understanding your codebase and suggest tasks.</li>
-                    <li><a href="https://docs.all-hands.dev/usage/cloud/github-installation#working-on-github-issues-and-pull-requests-using-openhands"><strong>Use OpenHands on an issue or pull request</strong></a> – Label an issue with 'openhands' or mention @openhands on any PR comment to generate explanations, tests, refactors, or doc fixes tailored to the exact lines you're reviewing.</li>
-                    <li><a href="https://join.slack.com/t/openhands-ai/shared_invite/zt-34zm4j0gj-Qz5kRHoca8DFCbqXPS~f_A"><strong>Join the community</strong></a> – Drop into our Slack Community to share tips, feedback, and help shape the next features on our roadmap.</li>
+                    <li><a href="https://docs.openhands.dev/openhands/usage/cloud/openhands-cloud#next-steps"><strong>Connect your Git repo</strong></a> – Link your <a href="https://docs.openhands.dev/openhands/usage/cloud/github-installation">GitHub</a> or <a href="https://docs.openhands.dev/openhands/usage/cloud/gitlab-installation">GitLab</a> repository in seconds so OpenHands can begin understanding your codebase and suggest tasks.</li>
+                    <li><a href="https://docs.openhands.dev/openhands/usage/cloud/github-installation#working-on-github-issues-and-pull-requests-using-openhands"><strong>Use OpenHands on an issue or pull request</strong></a> – Label an issue with 'openhands' or mention @openhands on any PR comment to generate explanations, tests, refactors, or doc fixes tailored to the exact lines you're reviewing.</li>
+                    <li><a href="https://dub.sh/openhands"><strong>Join the community</strong></a> – Join our Slack Community to share tips, feedback, and help shape the next features on our roadmap.</li>
                 </ol>
                 <p>Have questions? Want to share feedback? Just reply to this email—we're here to help.</p>
                 <p>Happy coding!</p>
-                <p>The All Hands AI team</p>
+                <p>The OpenHands team</p>
+                <p>--</p>
+                <p>OpenHands</p>
+                <p>24 Oak Street</p>
+                <p>Cambridge MA 02139</p>
+                <p>https://openhands.dev</p>
             </div>
             """,
         }
