@@ -66,6 +66,7 @@ export const VERIFIED_OPENHANDS_MODELS = [
   "minimax-m2.5",
   "gemini-3-pro-preview",
   "gemini-3-flash-preview",
+  "gemini-3.1-pro-preview",
   "devstral-medium-2512",
   "kimi-k2-0711-preview",
   "kimi-k2.5",

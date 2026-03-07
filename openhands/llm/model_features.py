@@ -88,6 +88,7 @@ FUNCTION_CALLING_PATTERNS: list[str] = [
     # Google Gemini
     'gemini-2.5-pro*',
     'gemini-3*',
+    'gemini-3.1-pro-preview',
     # Groq models (via groq/ provider prefix)
     'groq/*',
     # Others
