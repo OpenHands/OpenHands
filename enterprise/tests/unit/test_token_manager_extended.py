@@ -362,6 +362,54 @@ async def test_disable_keycloak_user_exception_handling(token_manager):
         mock_admin.a_get_user.assert_called_once_with(user_id)
 
 
+class TestRefreshGitLabToken:
+    """Tests for GitLab token refresh behavior."""
+
+    @pytest.mark.asyncio
+    async def test_uses_configurable_gitlab_token_url(self, token_manager):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            'access_token': 'new_gitlab_access',
+            'refresh_token': 'new_gitlab_refresh',
+            'expires_in': 3600,
+            'refresh_token_expires_in': 86400,
+        }
+
+        with (
+            patch(
+                'server.auth.token_manager.GITLAB_TOKEN_URL',
+                'https://gitlab.internal.example.com/oauth/token',
+            ),
+            patch('server.auth.token_manager.GITLAB_APP_CLIENT_ID', 'gitlab_client_id'),
+            patch(
+                'server.auth.token_manager.GITLAB_APP_CLIENT_SECRET',
+                'gitlab_client_secret',
+            ),
+            patch('httpx.AsyncClient') as mock_client_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
+            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await token_manager._refresh_gitlab_token('old_refresh_token')
+
+        mock_client.post.assert_called_once_with(
+            'https://gitlab.internal.example.com/oauth/token',
+            data={
+                'client_id': 'gitlab_client_id',
+                'client_secret': 'gitlab_client_secret',
+                'refresh_token': 'old_refresh_token',
+                'grant_type': 'refresh_token',
+            },
+        )
+        assert result['access_token'] == 'new_gitlab_access'
+        assert result['refresh_token'] == 'new_gitlab_refresh'
+
+
 class TestRefreshBitbucketDataCenterToken:
     """Tests for the _refresh_bitbucket_data_center_token code path."""
 

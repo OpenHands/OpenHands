@@ -15,6 +15,21 @@ KEYCLOAK_SERVER_URL_EXT = os.getenv(
 KEYCLOAK_ADMIN_PASSWORD = os.getenv('KEYCLOAK_ADMIN_PASSWORD', '')
 GITLAB_APP_CLIENT_ID = os.getenv('GITLAB_APP_CLIENT_ID', '').strip()
 GITLAB_APP_CLIENT_SECRET = os.getenv('GITLAB_APP_CLIENT_SECRET', '').strip()
+
+
+def _normalize_url_host(value: str, default_host: str = 'gitlab.com') -> str:
+    normalized = (value or default_host).strip()
+    if not normalized:
+        normalized = default_host
+    if '://' not in normalized:
+        normalized = f'https://{normalized}'
+    return normalized.rstrip('/')
+
+
+GITLAB_BASE_URL = _normalize_url_host(
+    os.getenv('GITLAB_BASE_URL', os.getenv('GITLAB_HOST', 'gitlab.com'))
+)
+GITLAB_TOKEN_URL = os.getenv('GITLAB_TOKEN_URL', f'{GITLAB_BASE_URL}/oauth/token').strip()
 BITBUCKET_APP_CLIENT_ID = os.getenv('BITBUCKET_APP_CLIENT_ID', '').strip()
 BITBUCKET_APP_CLIENT_SECRET = os.getenv('BITBUCKET_APP_CLIENT_SECRET', '').strip()
 ENABLE_ENTERPRISE_SSO = os.getenv('ENABLE_ENTERPRISE_SSO', '').strip()
