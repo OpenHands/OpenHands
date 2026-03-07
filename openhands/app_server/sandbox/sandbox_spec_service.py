@@ -69,12 +69,23 @@ def get_agent_server_image() -> str:
     return AGENT_SERVER_IMAGE
 
 
+_LEGACY_SANDBOX_ENV_PASSTHROUGH_KEYS = (
+    'SANDBOX_RUNTIME_CONTAINER_IMAGE',
+    'SANDBOX_VOLUMES',
+    'SANDBOX_USER_ID',
+    'SANDBOX_GROUP_ID',
+    'SANDBOX_USE_HOST_NETWORK',
+)
+
+
 def get_agent_server_env() -> dict[str, str]:
     """Get environment variables to be injected into agent server sandbox environments.
 
-    This function reads environment variable overrides from the OH_AGENT_SERVER_ENV
-    environment variable, which should contain a JSON string mapping variable names
-    to their values.
+    Environment values can be provided in two ways:
+
+    1) Legacy passthrough: a small compatibility set of SANDBOX_* variables from the
+       app container are forwarded into the agent-server environment.
+    2) Explicit overrides via OH_AGENT_SERVER_ENV (JSON), which wins on conflicts.
 
     Usage:
         Set OH_AGENT_SERVER_ENV to a JSON string:
@@ -87,9 +98,14 @@ def get_agent_server_env() -> dict[str, str]:
 
     Returns:
         dict[str, str]: Dictionary of environment variable names to values.
-                       Returns empty dict if OH_AGENT_SERVER_ENV is not set or invalid.
 
     Raises:
         JSONDecodeError: If OH_AGENT_SERVER_ENV contains invalid JSON.
     """
-    return env_parser.from_env(dict[str, str], 'OH_AGENT_SERVER_ENV')
+    legacy_passthrough = {
+        key: value
+        for key in _LEGACY_SANDBOX_ENV_PASSTHROUGH_KEYS
+        if (value := os.getenv(key)) is not None
+    }
+    explicit_overrides = env_parser.from_env(dict[str, str], 'OH_AGENT_SERVER_ENV')
+    return {**legacy_passthrough, **explicit_overrides}

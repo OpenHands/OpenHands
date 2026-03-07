@@ -48,6 +48,41 @@ class TestGetAgentServerEnv:
             result = get_agent_server_env()
             assert result == {}
 
+    def test_legacy_sandbox_env_passthrough(self):
+        """Test legacy SANDBOX_* passthrough variables are forwarded."""
+        env_vars = {
+            'SANDBOX_RUNTIME_CONTAINER_IMAGE': 'ghcr.io/openhands/runtime:test-python',
+            'SANDBOX_VOLUMES': '/host/workspace:/workspace:rw',
+            'SANDBOX_USER_ID': '1000',
+            'SANDBOX_GROUP_ID': '1000',
+            'SANDBOX_USE_HOST_NETWORK': 'true',
+            'SANDBOX_API_KEY': 'should_not_be_forwarded',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert result == {
+                'SANDBOX_RUNTIME_CONTAINER_IMAGE': 'ghcr.io/openhands/runtime:test-python',
+                'SANDBOX_VOLUMES': '/host/workspace:/workspace:rw',
+                'SANDBOX_USER_ID': '1000',
+                'SANDBOX_GROUP_ID': '1000',
+                'SANDBOX_USE_HOST_NETWORK': 'true',
+            }
+
+    def test_explicit_oh_agent_server_env_overrides_legacy_passthrough(self):
+        """Test explicit OH_AGENT_SERVER_ENV values win over legacy passthrough."""
+        env_vars = {
+            'SANDBOX_USER_ID': '1000',
+            'OH_AGENT_SERVER_ENV': '{"SANDBOX_USER_ID": "42420", "CUSTOM_VAR": "present"}',
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            result = get_agent_server_env()
+            assert result == {
+                'SANDBOX_USER_ID': '42420',
+                'CUSTOM_VAR': 'present',
+            }
+
     def test_single_environment_variable(self):
         """Test with a single variable in JSON format."""
         env_vars = {
