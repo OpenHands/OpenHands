@@ -21,11 +21,12 @@ async def main():
 
 
 def set_stale_task_error():
+    # started_at is naive UTC; strip tzinfo before comparing.
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     with session_maker() as session:
         session.query(MaintenanceTask).filter(
             MaintenanceTask.status == MaintenanceTaskStatus.WORKING,
-            MaintenanceTask.started_at
-            < datetime.now(timezone.utc) - timedelta(hours=1),
+            MaintenanceTask.started_at < cutoff,
         ).update({MaintenanceTask.status: MaintenanceTaskStatus.ERROR})
         session.commit()
 
@@ -37,9 +38,10 @@ async def run_tasks():
             if not task:
                 return
 
-            # Update the status
+            # started_at/updated_at are naive UTC; strip tzinfo.
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
             task.status = MaintenanceTaskStatus.WORKING
-            task.updated_at = task.started_at = datetime.now(timezone.utc)
+            task.updated_at = task.started_at = now_utc
             session.commit()
 
             try:
