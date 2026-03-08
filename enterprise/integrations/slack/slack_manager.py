@@ -1,25 +1,6 @@
 from typing import Any
 
 import jwt
-from jinja2 import Environment, FileSystemLoader
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import (
-    AuthenticationError,
-    ProviderTimeoutError,
-    Repository,
-)
-from openhands.server.shared import config, server_config, sio
-from openhands.server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-from openhands.server.user_auth.user_auth import UserAuth
-from slack_sdk.oauth import AuthorizeUrlGenerator
-from slack_sdk.web.async_client import AsyncWebClient
-from sqlalchemy import select
-
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
 from integrations.slack.slack_types import (
@@ -41,10 +22,29 @@ from integrations.utils import (
     infer_repo_from_message,
 )
 from integrations.v1_utils import get_saas_user_auth
+from jinja2 import Environment, FileSystemLoader
 from server.constants import SLACK_CLIENT_ID
 from server.utils.conversation_callback_utils import register_callback_processor
+from slack_sdk.oauth import AuthorizeUrlGenerator
+from slack_sdk.web.async_client import AsyncWebClient
+from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.slack_user import SlackUser
+
+from openhands.core.logger import openhands_logger as logger
+from openhands.integrations.provider import ProviderHandler
+from openhands.integrations.service_types import (
+    AuthenticationError,
+    ProviderTimeoutError,
+    Repository,
+)
+from openhands.server.shared import config, server_config, sio
+from openhands.server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
+from openhands.server.user_auth.user_auth import UserAuth
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
