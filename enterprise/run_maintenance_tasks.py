@@ -21,8 +21,7 @@ async def main():
 
 
 def set_stale_task_error():
-    # started_at is TIMESTAMP WITHOUT TIME ZONE (naive UTC); strip tzinfo before
-    # comparison so pg8000 does not silently coerce the offset.
+    # started_at is naive UTC; strip tzinfo before comparing.
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     with session_maker() as session:
         session.query(MaintenanceTask).filter(
@@ -39,7 +38,7 @@ async def run_tasks():
             if not task:
                 return
 
-            # Update the status; columns are TIMESTAMP WITHOUT TIME ZONE (naive UTC).
+            # started_at/updated_at are naive UTC; strip tzinfo.
             now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
             task.status = MaintenanceTaskStatus.WORKING
             task.updated_at = task.started_at = now_utc

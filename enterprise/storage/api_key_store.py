@@ -5,23 +5,23 @@ import string
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from openhands.core.logger import openhands_logger as logger
 from sqlalchemy import select, update
-
 from storage.api_key import ApiKey
 from storage.database import a_session_maker
 from storage.user_store import UserStore
 
+from openhands.core.logger import openhands_logger as logger
+
 
 @dataclass
 class ApiKeyStore:
-    API_KEY_PREFIX = "sk-oh-"
+    API_KEY_PREFIX = 'sk-oh-'
 
     def generate_api_key(self, length: int = 32) -> str:
         """Generate a random API key with the sk-oh- prefix."""
         alphabet = string.ascii_letters + string.digits
-        random_part = "".join(secrets.choice(alphabet) for _ in range(length))
-        return f"{self.API_KEY_PREFIX}{random_part}"
+        random_part = ''.join(secrets.choice(alphabet) for _ in range(length))
+        return f'{self.API_KEY_PREFIX}{random_part}'
 
     async def create_api_key(
         self, user_id: str, name: str | None = None, expires_at: datetime | None = None
@@ -31,11 +31,8 @@ class ApiKeyStore:
         Args:
             user_id: The ID of the user to create the key for
             name: Optional name for the key
-            expires_at: Optional expiration datetime in UTC. May be timezone-aware
-                (tzinfo will be stripped before writing) or timezone-naive (assumed
-                UTC). The underlying column is TIMESTAMP WITHOUT TIME ZONE, so all
-                values are stored and compared as naive UTC. Use ``datetime.now(UTC)``
-                as the basis for any relative expiry.
+            expires_at: Expiration datetime in UTC. Timezone info is stripped before
+                writing to the TIMESTAMP WITHOUT TIME ZONE column.
 
         Returns:
             The generated API key
@@ -43,11 +40,10 @@ class ApiKeyStore:
         api_key = self.generate_api_key()
         user = await UserStore.get_user_by_id(user_id)
         if user is None:
-            raise ValueError(f"User not found: {user_id}")
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
 
-        # Strip tzinfo: the column is TIMESTAMP WITHOUT TIME ZONE and asyncpg
-        # cannot encode a timezone-aware datetime into a timezone-naive column.
+        # Column is TIMESTAMP WITHOUT TIME ZONE; strip tzinfo before writing.
         if expires_at is not None and expires_at.tzinfo is not None:
             expires_at = expires_at.replace(tzinfo=None)
 
@@ -75,15 +71,14 @@ class ApiKeyStore:
             if not key_record:
                 return None
 
-            # Check if the key has expired. expires_at is stored as naive UTC
-            # (TIMESTAMP WITHOUT TIME ZONE); re-attach UTC for comparison.
+            # expires_at is stored as naive UTC; re-attach tzinfo for comparison.
             if key_record.expires_at:
                 expires_at = key_record.expires_at
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=UTC)
 
                 if expires_at < now:
-                    logger.info(f"API key has expired: {key_record.id}")
+                    logger.info(f'API key has expired: {key_record.id}')
                     return None
 
             # Update last_used_at timestamp
@@ -128,7 +123,7 @@ class ApiKeyStore:
         """List all API keys for a user."""
         user = await UserStore.get_user_by_id(user_id)
         if user is None:
-            raise ValueError(f"User not found: {user_id}")
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
 
         async with a_session_maker() as session:
@@ -138,12 +133,12 @@ class ApiKeyStore:
                 )
             )
             keys = result.scalars().all()
-            return [key for key in keys if key.name != "MCP_API_KEY"]
+            return [key for key in keys if key.name != 'MCP_API_KEY']
 
     async def retrieve_mcp_api_key(self, user_id: str) -> str | None:
         user = await UserStore.get_user_by_id(user_id)
         if user is None:
-            raise ValueError(f"User not found: {user_id}")
+            raise ValueError(f'User not found: {user_id}')
         org_id = user.current_org_id
 
         async with a_session_maker() as session:
@@ -154,7 +149,7 @@ class ApiKeyStore:
             )
             keys = result.scalars().all()
             for key in keys:
-                if key.name == "MCP_API_KEY":
+                if key.name == 'MCP_API_KEY':
                     return key.key
 
         return None
@@ -187,5 +182,5 @@ class ApiKeyStore:
     @classmethod
     def get_instance(cls) -> ApiKeyStore:
         """Get an instance of the ApiKeyStore."""
-        logger.debug("api_key_store.get_instance")
+        logger.debug('api_key_store.get_instance')
         return ApiKeyStore()
