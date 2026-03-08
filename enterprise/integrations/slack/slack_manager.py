@@ -55,6 +55,7 @@ authorize_url_generator = AuthorizeUrlGenerator(
 # Key prefix for storing user messages in Redis during repo selection flow
 SLACK_USER_MSG_KEY_PREFIX = 'slack_user_msg'
 # Expiration time for stored user messages (5 minutes)
+# Arbitrary timeout based on typical user attention span; may be tuned based on feedback
 SLACK_USER_MSG_EXPIRATION = 300
 
 
