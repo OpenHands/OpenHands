@@ -3,6 +3,7 @@ import pathlib
 import pytest
 
 from openhands.core.config import OpenHandsConfig
+from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.utils import load_from_toml
 
 
@@ -254,3 +255,35 @@ api_key = "test-api-key"
     non_azure_llm = default_config.get_llm_config('llm')
     assert non_azure_llm.model == 'anthropic/claude-3-sonnet'
     assert non_azure_llm.api_version is None
+
+
+@pytest.mark.parametrize(
+    'url',
+    [
+        'https://api.openai.com/v1/chat/completions',
+        'https://api.openai.com/v1/completions',
+        'https://api.anthropic.com/v1/messages',
+        'http://localhost:8000/v1/chat/completions/',
+        'https://example.com/completions',
+    ],
+)
+def test_base_url_rejects_endpoint_paths(url: str) -> None:
+    """Test that base_url rejects URLs ending in API endpoint paths."""
+    with pytest.raises(ValueError, match='not a specific endpoint'):
+        LLMConfig(base_url=url)
+
+
+@pytest.mark.parametrize(
+    'url',
+    [
+        'https://api.openai.com/v1',
+        'https://api.anthropic.com',
+        'http://localhost:11434',
+        'https://my-proxy.example.com/v1',
+        None,
+    ],
+)
+def test_base_url_accepts_valid_urls(url: str | None) -> None:
+    """Test that base_url accepts valid base URLs."""
+    config = LLMConfig(base_url=url)
+    assert config.base_url == url
