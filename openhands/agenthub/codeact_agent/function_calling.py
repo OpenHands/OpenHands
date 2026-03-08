@@ -16,8 +16,6 @@ from litellm import (
     ModelResponse,
 )
 
-from openhands.io import json as openhands_json
-
 from openhands.agenthub.codeact_agent.tools import (
     BrowserTool,
     CondensationRequestTool,
@@ -52,6 +50,7 @@ from openhands.events.action.agent import CondensationRequestAction
 from openhands.events.action.mcp import MCPAction
 from openhands.events.event import FileEditSource, FileReadSource
 from openhands.events.tool import ToolCallMetadata
+from openhands.io import json as openhands_json
 from openhands.llm.tool_names import TASK_TRACKER_TOOL_NAME
 
 

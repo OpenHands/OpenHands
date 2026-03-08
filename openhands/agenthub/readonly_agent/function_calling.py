@@ -18,8 +18,6 @@ from litellm import (
     ModelResponse,
 )
 
-from openhands.io import json as openhands_json
-
 from openhands.agenthub.codeact_agent.function_calling import (
     combine_thought,
 )
@@ -48,6 +46,7 @@ from openhands.events.action import (
 )
 from openhands.events.event import FileReadSource
 from openhands.events.tool import ToolCallMetadata
+from openhands.io import json as openhands_json
 
 
 def grep_to_cmdrun(

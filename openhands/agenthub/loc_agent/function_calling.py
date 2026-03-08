@@ -17,8 +17,6 @@ from litellm import (
     ModelResponse,
 )
 
-from openhands.io import json as openhands_json
-
 from openhands.agenthub.codeact_agent.function_calling import combine_thought
 from openhands.agenthub.codeact_agent.tools import FinishTool
 from openhands.agenthub.loc_agent.tools import (
@@ -37,6 +35,7 @@ from openhands.events.action import (
     MessageAction,
 )
 from openhands.events.tool import ToolCallMetadata
+from openhands.io import json as openhands_json
 
 
 def response_to_actions(
