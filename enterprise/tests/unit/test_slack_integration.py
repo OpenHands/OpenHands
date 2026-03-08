@@ -34,7 +34,9 @@ def mock_slack_user():
 def mock_user_auth():
     """Create a mock UserAuth."""
     auth = MagicMock(spec=UserAuth)
-    auth.get_provider_tokens = AsyncMock(return_value={})
+    auth.get_provider_tokens = AsyncMock(return_value={'github': 'test-token'})
+    auth.get_access_token = AsyncMock(return_value='access-token')
+    auth.get_user_id = AsyncMock(return_value='user-123')
     auth.get_secrets = AsyncMock(return_value=MagicMock(custom_secrets={}))
     return auth
 
@@ -280,6 +282,173 @@ class TestBuildRepoOptions:
         assert len(options[0]['text']['text']) == 75
         # But value should have full name
         assert options[0]['value'] == long_name
+
+
+class TestSearchRepositories:
+    """Test the _search_repositories method with real repository filtering logic."""
+
+    @patch('integrations.slack.slack_manager.ProviderHandler')
+    async def test_search_repositories_returns_repos_from_provider(
+        self, mock_provider_handler_class, slack_manager, mock_user_auth
+    ):
+        """Test that _search_repositories returns repositories from the provider."""
+        from openhands.integrations.service_types import ProviderType, Repository
+
+        # Setup: Create real Repository objects
+        expected_repos = [
+            Repository(
+                id='1',
+                full_name='owner/frontend-app',
+                git_provider=ProviderType.GITHUB,
+                is_public=True,
+            ),
+            Repository(
+                id='2',
+                full_name='owner/backend-api',
+                git_provider=ProviderType.GITHUB,
+                is_public=False,
+            ),
+            Repository(
+                id='3',
+                full_name='owner/shared-lib',
+                git_provider=ProviderType.GITHUB,
+                is_public=True,
+            ),
+        ]
+
+        # Setup: Mock provider handler to return real repos
+        mock_provider_handler = MagicMock()
+        mock_provider_handler.search_repositories = AsyncMock(return_value=expected_repos)
+        mock_provider_handler_class.return_value = mock_provider_handler
+
+        # Setup: Mock user_auth to return valid tokens
+        mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value={'github': 'test-token'}
+        )
+        mock_user_auth.get_access_token = AsyncMock(return_value='access-token')
+        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
+
+        # Execute: Search with a query
+        result = await slack_manager._search_repositories(
+            mock_user_auth, query='frontend', per_page=20
+        )
+
+        # Verify: The correct parameters were passed to search_repositories
+        mock_provider_handler.search_repositories.assert_called_once()
+        call_kwargs = mock_provider_handler.search_repositories.call_args[1]
+        assert call_kwargs['query'] == 'frontend'
+        assert call_kwargs['per_page'] == 20
+        assert call_kwargs['sort'] == 'pushed'
+        assert call_kwargs['order'] == 'desc'
+
+        # Verify: All repos are returned
+        assert len(result) == 3
+        assert result[0].full_name == 'owner/frontend-app'
+        assert result[1].full_name == 'owner/backend-api'
+        assert result[2].full_name == 'owner/shared-lib'
+
+    @patch('integrations.slack.slack_manager.ProviderHandler')
+    async def test_search_repositories_returns_empty_when_no_tokens(
+        self, mock_provider_handler_class, slack_manager, mock_user_auth
+    ):
+        """Test that _search_repositories returns empty list when user has no provider tokens."""
+        # Setup: User has no provider tokens
+        mock_user_auth.get_provider_tokens = AsyncMock(return_value=None)
+
+        # Execute
+        result = await slack_manager._search_repositories(mock_user_auth, query='test')
+
+        # Verify: Returns empty list, doesn't call ProviderHandler
+        assert result == []
+        mock_provider_handler_class.assert_not_called()
+
+    @patch('integrations.slack.slack_manager.ProviderHandler')
+    async def test_search_and_build_options_integration(
+        self, mock_provider_handler_class, slack_manager, mock_user_auth
+    ):
+        """Test the full flow: search repositories and build options for Slack.
+
+        This exercises the full code path from search → filter → options building.
+        """
+        from openhands.integrations.service_types import ProviderType, Repository
+
+        # Setup: Create a realistic repository list
+        repos = [
+            Repository(
+                id='1',
+                full_name='myorg/react-dashboard',
+                git_provider=ProviderType.GITHUB,
+                is_public=True,
+            ),
+            Repository(
+                id='2',
+                full_name='myorg/python-api',
+                git_provider=ProviderType.GITHUB,
+                is_public=False,
+            ),
+            Repository(
+                id='3',
+                full_name='myorg/docs-site',
+                git_provider=ProviderType.GITHUB,
+                is_public=True,
+            ),
+        ]
+
+        mock_provider_handler = MagicMock()
+        mock_provider_handler.search_repositories = AsyncMock(return_value=repos)
+        mock_provider_handler_class.return_value = mock_provider_handler
+
+        mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value={'github': 'test-token'}
+        )
+        mock_user_auth.get_access_token = AsyncMock(return_value='access-token')
+        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
+
+        # Execute: Search and build options (simulating what slack route does)
+        search_results = await slack_manager._search_repositories(
+            mock_user_auth, query='', per_page=100
+        )
+        options = slack_manager._build_repo_options(search_results, include_no_repo=True)
+
+        # Verify: Options are correctly built from search results
+        assert len(options) == 4  # "No Repository" + 3 repos
+
+        # First option should be "No Repository"
+        assert options[0]['value'] == '-'
+        assert options[0]['text']['text'] == 'No Repository'
+
+        # Remaining options should be the repos in order
+        assert options[1]['value'] == 'myorg/react-dashboard'
+        assert options[1]['text']['text'] == 'myorg/react-dashboard'
+        assert options[2]['value'] == 'myorg/python-api'
+        assert options[3]['value'] == 'myorg/docs-site'
+
+    @patch('integrations.slack.slack_manager.ProviderHandler')
+    async def test_search_with_empty_results_builds_no_repo_only_option(
+        self, mock_provider_handler_class, slack_manager, mock_user_auth
+    ):
+        """Test that when search returns no results, only 'No Repository' option is shown."""
+        # Setup: No matching repos
+        mock_provider_handler = MagicMock()
+        mock_provider_handler.search_repositories = AsyncMock(return_value=[])
+        mock_provider_handler_class.return_value = mock_provider_handler
+
+        mock_user_auth.get_provider_tokens = AsyncMock(
+            return_value={'github': 'test-token'}
+        )
+        mock_user_auth.get_access_token = AsyncMock(return_value='access-token')
+        mock_user_auth.get_user_id = AsyncMock(return_value='user-123')
+
+        # Execute
+        search_results = await slack_manager._search_repositories(
+            mock_user_auth, query='nonexistent-repo', per_page=100
+        )
+        options = slack_manager._build_repo_options(search_results, include_no_repo=True)
+
+        # Verify: Only "No Repository" option
+        assert len(options) == 1
+        assert options[0]['value'] == '-'
+        assert options[0]['text']['text'] == 'No Repository'
 
 
 class TestUserMsgStorage:
