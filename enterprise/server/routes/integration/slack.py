@@ -456,34 +456,57 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
 
     # Retrieve the original user message from Redis
     # This was stored when the repo selection form was shown
-    user_msg = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
-
-    if not user_msg:
+    user_msg = None
+    redis_error = False
+    try:
+        user_msg = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
+    except Exception as e:
+        redis_error = True
         logger.error(
-            'slack_on_form_interaction: user_msg not found in Redis',
+            'slack_on_form_interaction: Redis error retrieving user_msg',
             extra={
                 'message_ts': message_ts,
                 'thread_ts': thread_ts,
                 'slack_user_id': slack_user_id,
+                'error': str(e),
             },
+            exc_info=True,
         )
-        # Send a user-friendly message to Slack
+
+    if not user_msg:
+        if not redis_error:
+            logger.error(
+                'slack_on_form_interaction: user_msg not found in Redis (likely expired)',
+                extra={
+                    'message_ts': message_ts,
+                    'thread_ts': thread_ts,
+                    'slack_user_id': slack_user_id,
+                },
+            )
+        # Send appropriate user-friendly message to Slack
         try:
             bot_token = await slack_team_store.get_team_bot_token(team_id)
             if bot_token:
                 client = AsyncWebClient(token=bot_token)
+                if redis_error:
+                    error_text = (
+                        '⚠️ Something went wrong on our end. '
+                        'Please try again in a few moments.'
+                    )
+                else:
+                    error_text = (
+                        '⏰ Your session has expired. '
+                        'Please mention me again with your request to start a new conversation.'
+                    )
                 await client.chat_postEphemeral(
                     channel=channel_id,
                     user=slack_user_id,
                     thread_ts=thread_ts,
-                    text=(
-                        '⏰ Your session has expired. '
-                        'Please mention me again with your request to start a new conversation.'
-                    ),
+                    text=error_text,
                 )
         except Exception as e:
             logger.warning(
-                f'slack_on_form_interaction: Failed to send expiry message: {e}'
+                f'slack_on_form_interaction: Failed to send error message: {e}'
             )
         return JSONResponse({'success': True})
 
