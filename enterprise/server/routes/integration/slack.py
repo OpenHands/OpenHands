@@ -323,7 +323,7 @@ async def on_event(request: Request, background_tasks: BackgroundTasks):
 
 
 @slack_router.post('/on-options-load')
-async def on_options_load(request: Request):
+async def on_options_load(request: Request, background_tasks: BackgroundTasks):
     """Handle external_select options loading (block_suggestion payload).
 
     This endpoint is called by Slack when a user interacts with an external_select
@@ -376,20 +376,14 @@ async def on_options_load(request: Request):
         logger.warning(
             f'slack_on_options_load: User not authenticated: {slack_user_id}'
         )
-        # Return an option prompting the user to authenticate
-        return JSONResponse(
-            {
-                'options': [
-                    {
-                        'text': {
-                            'type': 'plain_text',
-                            'text': 'Please authenticate first',
-                        },
-                        'value': '-',
-                    }
-                ]
-            }
+        # Send ephemeral message asking user to link their account
+        background_tasks.add_task(
+            _send_account_linking_message,
+            payload,
+            slack_user_id,
         )
+        # Return empty options
+        return JSONResponse({'options': []})
 
     try:
         # Search for repositories matching the query
@@ -510,6 +504,68 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
 
     background_tasks.add_task(slack_manager.receive_message, message)
     return JSONResponse({'success': True})
+
+
+async def _send_account_linking_message(payload: dict, slack_user_id: str):
+    """Send an ephemeral message asking the user to link their Slack account.
+
+    This is called when a user tries to interact with the repo selector dropdown
+    but hasn't linked their Slack account to OpenHands yet.
+    """
+    try:
+        # Extract team and channel info from block_suggestion payload
+        team_id = payload.get('team', {}).get('id')
+        # For block_suggestion payloads, channel is in the container
+        channel_id = payload.get('container', {}).get('channel_id')
+        # Fallback to channel key if container doesn't have it
+        if not channel_id:
+            channel_id = payload.get('channel', {}).get('id')
+
+        if not team_id or not channel_id:
+            logger.warning(
+                'slack_send_account_linking_message: Missing team_id or channel_id',
+                extra={
+                    'team_id': team_id,
+                    'channel_id': channel_id,
+                    'payload_keys': list(payload.keys()),
+                },
+            )
+            return
+
+        # Get the bot token for this team
+        bot_token = await slack_team_store.get_team_bot_token(team_id)
+        if not bot_token:
+            logger.warning(
+                f'slack_send_account_linking_message: No bot token for team {team_id}'
+            )
+            return
+
+        # Generate the OAuth login link (same as SlackUnkownUserView)
+        link = authorize_url_generator.generate(state='')
+        msg = f'User has not yet authenticated: [Click here to Login to OpenHands]({link}).'
+
+        # Send ephemeral message
+        client = AsyncWebClient(token=bot_token)
+        await client.chat_postEphemeral(
+            channel=channel_id,
+            user=slack_user_id,
+            text=msg,
+        )
+
+        logger.info(
+            'slack_account_linking_message_sent',
+            extra={
+                'slack_user_id': slack_user_id,
+                'team_id': team_id,
+                'channel_id': channel_id,
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            f'slack_send_account_linking_message: Error sending message: {e}',
+            exc_info=True,
+        )
 
 
 def _html_response(title: str, description: str, status_code: int) -> HTMLResponse:
