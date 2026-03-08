@@ -98,7 +98,7 @@ class SlackManager(Manager[SlackViewInterface]):
 
     async def store_user_msg_for_form(
         self, message_ts: str, thread_ts: str | None, user_msg: str
-    ) -> None:
+    ) -> bool:
         """Store user message in Redis for later retrieval when form is submitted.
 
         This is needed because when a user selects a repo from the external_select
@@ -109,18 +109,34 @@ class SlackManager(Manager[SlackViewInterface]):
             message_ts: The message timestamp (unique identifier)
             thread_ts: The thread timestamp (if in a thread)
             user_msg: The original user message to store
+
+        Returns:
+            True if the message was stored successfully, False otherwise
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
-        redis = sio.manager.redis
-        await redis.set(key, user_msg, ex=SLACK_USER_MSG_EXPIRATION)
-        logger.info(
-            'slack_stored_user_msg',
-            extra={
-                'message_ts': message_ts,
-                'thread_ts': thread_ts,
-                'key': key,
-            },
-        )
+        try:
+            redis = sio.manager.redis
+            await redis.set(key, user_msg, ex=SLACK_USER_MSG_EXPIRATION)
+            logger.info(
+                'slack_stored_user_msg',
+                extra={
+                    'message_ts': message_ts,
+                    'thread_ts': thread_ts,
+                    'key': key,
+                },
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                'slack_store_user_msg_failed',
+                extra={
+                    'message_ts': message_ts,
+                    'thread_ts': thread_ts,
+                    'key': key,
+                    'error': str(e),
+                },
+            )
+            return False
 
     async def retrieve_user_msg_for_form(
         self, message_ts: str, thread_ts: str | None
@@ -421,9 +437,16 @@ class SlackManager(Manager[SlackViewInterface]):
 
             # Store the user message in Redis so it can be retrieved when
             # the user submits the form (Slack doesn't include it in form submissions)
-            await self.store_user_msg_for_form(
+            store_success = await self.store_user_msg_for_form(
                 slack_view.message_ts, slack_view.thread_ts, slack_view.user_msg
             )
+            if not store_success:
+                error_msg = (
+                    'Sorry, we are experiencing temporary issues. '
+                    'Please try again later.'
+                )
+                await self.send_message(error_msg, slack_view, ephemeral=True)
+                return False
 
             repo_selection_msg = {
                 'text': 'Choose a Repository:',
