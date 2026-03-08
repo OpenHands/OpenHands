@@ -387,8 +387,10 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
 
     try:
         # Search for repositories matching the query
+        # Limit to 20 repos for fast initial load. Users can search for repos
+        # not in this list using the type-ahead search functionality.
         repos = await slack_manager._search_repositories(
-            saas_user_auth, query=search_value, per_page=100
+            saas_user_auth, query=search_value, per_page=20
         )
 
         # Build the options list
