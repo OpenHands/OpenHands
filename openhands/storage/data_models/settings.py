@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
+from urllib.parse import urlparse
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -114,6 +116,35 @@ class Settings(BaseModel):
             )
         data['secret_store'] = secret_store
         return data
+
+    @field_validator('llm_base_url')
+    @classmethod
+    def validate_llm_base_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        # Common API endpoint path suffixes that should not be included in
+        # the base URL.  When present they cause litellm to construct a
+        # broken URL, resulting in a cryptic 404 from the provider.
+        endpoint_suffixes = (
+            '/chat/completions',
+            '/completions',
+            '/messages',
+            '/embeddings',
+            '/models',
+            '/generations',
+        )
+        try:
+            path = urlparse(v).path.rstrip('/')
+        except Exception:
+            return v
+        for suffix in endpoint_suffixes:
+            if path.endswith(suffix):
+                raise ValueError(
+                    f'llm_base_url must not include the API endpoint path '
+                    f'{suffix}. Use only the base URL '
+                    f'(e.g. https://my-proxy.com/v1).'
+                )
+        return v
 
     @field_validator('condenser_max_size')
     @classmethod

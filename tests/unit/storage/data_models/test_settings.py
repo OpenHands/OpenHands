@@ -1,7 +1,8 @@
 import warnings
 from unittest.mock import patch
 
-from pydantic import SecretStr
+import pytest
+from pydantic import SecretStr, ValidationError
 
 from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.openhands_config import OpenHandsConfig
@@ -127,3 +128,41 @@ def test_settings_no_pydantic_frozen_field_warning():
         assert len(frozen_warnings) == 0, (
             f'Pydantic frozen field warnings found: {[str(w.message) for w in frozen_warnings]}'
         )
+
+
+class TestLlmBaseUrlValidation:
+    """Tests for llm_base_url validation that rejects API endpoint paths."""
+
+    @pytest.mark.parametrize(
+        'bad_url',
+        [
+            'https://my-proxy.com/v1/chat/completions',
+            'https://api.openai.com/v1/completions',
+            'https://api.anthropic.com/v1/messages',
+            'https://my-proxy.com/v1/embeddings',
+            'https://my-proxy.com/v1/models',
+            'https://my-proxy.com/v1/generations',
+            'http://localhost:8080/v1/chat/completions',
+            # Trailing slash should also be caught
+            'https://my-proxy.com/v1/chat/completions/',
+        ],
+    )
+    def test_rejects_endpoint_paths(self, bad_url: str) -> None:
+        with pytest.raises(ValidationError, match='must not include the API endpoint path'):
+            Settings(llm_base_url=bad_url)
+
+    @pytest.mark.parametrize(
+        'good_url',
+        [
+            'https://my-proxy.com/v1',
+            'https://api.openai.com/v1',
+            'https://api.anthropic.com',
+            'http://localhost:8080',
+            'http://localhost:11434',
+            'https://my-company.com/llm-proxy',
+            None,
+        ],
+    )
+    def test_accepts_valid_base_urls(self, good_url: str | None) -> None:
+        settings = Settings(llm_base_url=good_url)
+        assert settings.llm_base_url == good_url

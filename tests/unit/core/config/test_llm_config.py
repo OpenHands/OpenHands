@@ -1,8 +1,10 @@
 import pathlib
 
 import pytest
+from pydantic import ValidationError
 
 from openhands.core.config import OpenHandsConfig
+from openhands.core.config.llm_config import LLMConfig
 from openhands.core.config.utils import load_from_toml
 
 
@@ -254,3 +256,73 @@ api_key = "test-api-key"
     non_azure_llm = default_config.get_llm_config('llm')
     assert non_azure_llm.model == 'anthropic/claude-3-sonnet'
     assert non_azure_llm.api_version is None
+
+
+class TestBaseUrlValidation:
+    """Tests for base_url validation that rejects API endpoint paths."""
+
+    @pytest.mark.parametrize(
+        'bad_url',
+        [
+            'https://my-proxy.com/v1/chat/completions',
+            'https://api.openai.com/v1/completions',
+            'https://api.anthropic.com/v1/messages',
+            'https://my-proxy.com/v1/embeddings',
+            'https://my-proxy.com/v1/models',
+            'https://my-proxy.com/v1/generations',
+            'http://localhost:8080/v1/chat/completions',
+            'https://my-proxy.com/v1/chat/completions/',
+        ],
+    )
+    def test_rejects_endpoint_paths(self, bad_url: str) -> None:
+        with pytest.raises(
+            ValidationError, match='must not include the API endpoint path'
+        ):
+            LLMConfig(base_url=bad_url)
+
+    @pytest.mark.parametrize(
+        'good_url',
+        [
+            'https://my-proxy.com/v1',
+            'https://api.openai.com/v1',
+            'https://api.anthropic.com',
+            'http://localhost:8080',
+            'http://localhost:11434',
+            'https://my-company.com/llm-proxy',
+            None,
+        ],
+    )
+    def test_accepts_valid_base_urls(self, good_url: str | None) -> None:
+        config = LLMConfig(base_url=good_url)
+        assert config.base_url == good_url
+
+    def test_toml_with_bad_base_url_is_skipped(
+        self, default_config: OpenHandsConfig, tmp_path: pathlib.Path
+    ) -> None:
+        """A custom LLM section with an invalid base_url should be skipped gracefully."""
+        toml_content = """
+[core]
+workspace_base = "./workspace"
+
+[llm]
+model = "base-model"
+api_key = "base-api-key"
+
+[llm.bad_base]
+model = "custom-model"
+api_key = "custom-api-key"
+base_url = "https://my-proxy.com/v1/chat/completions"
+        """
+        toml_file = tmp_path / 'bad_base_url_llm.toml'
+        toml_file.write_text(toml_content)
+
+        load_from_toml(default_config, str(toml_file))
+
+        # The base config should still load correctly
+        generic_llm = default_config.get_llm_config('llm')
+        assert generic_llm.model == 'base-model'
+
+        # The invalid custom section should be skipped — accessing it falls
+        # back to the generic config
+        bad_base = default_config.get_llm_config('bad_base')
+        assert bad_base.model == 'base-model'

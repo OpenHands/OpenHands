@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
 
 from openhands.core.logger import LOG_DIR
 from openhands.core.logger import openhands_logger as logger
@@ -110,6 +111,35 @@ class LLMConfig(BaseModel):
     )
 
     model_config = ConfigDict(extra='forbid')
+
+    @field_validator('base_url')
+    @classmethod
+    def validate_base_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        # Common API endpoint path suffixes that should not be included in
+        # the base URL.  When present they cause litellm to construct a
+        # broken URL, resulting in a cryptic 404 from the provider.
+        endpoint_suffixes = (
+            '/chat/completions',
+            '/completions',
+            '/messages',
+            '/embeddings',
+            '/models',
+            '/generations',
+        )
+        try:
+            path = urlparse(v).path.rstrip('/')
+        except Exception:
+            return v
+        for suffix in endpoint_suffixes:
+            if path.endswith(suffix):
+                raise ValueError(
+                    f'base_url must not include the API endpoint path '
+                    f'{suffix}. Use only the base URL '
+                    f'(e.g. https://my-proxy.com/v1).'
+                )
+        return v
 
     @classmethod
     def from_toml_section(cls, data: dict) -> dict[str, LLMConfig]:
