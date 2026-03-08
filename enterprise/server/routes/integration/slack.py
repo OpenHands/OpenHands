@@ -417,19 +417,8 @@ async def on_options_load(request: Request):
             f'slack_on_options_load: Error searching repositories: {e}',
             exc_info=True,
         )
-        return JSONResponse(
-            {
-                'options': [
-                    {
-                        'text': {
-                            'type': 'plain_text',
-                            'text': 'Error loading repositories',
-                        },
-                        'value': '-',
-                    }
-                ]
-            }
-        )
+        # Return empty options - Slack will display its own error UI
+        return JSONResponse({'options': []})
 
 
 @slack_router.post('/on-form-interaction')
