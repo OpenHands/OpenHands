@@ -1,7 +1,9 @@
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from openhands.integrations.service_types import ProviderTimeoutError
+from fastapi import BackgroundTasks
+from openhands.integrations.service_types import ProviderTimeoutError, ProviderType, Repository
 from openhands.server.user_auth.user_auth import UserAuth
 
 from integrations.slack.slack_manager import (
@@ -571,3 +573,542 @@ class TestIsJobRequestedWithUserMsgStorage:
             slack_new_conversation_view.user_msg,
             ex=SLACK_USER_MSG_EXPIRATION,
         )
+
+
+class TestOnOptionsLoadEndpoint:
+    """Test the /on-options-load endpoint for external_select repo search."""
+
+    @pytest.fixture
+    def mock_request(self):
+        """Create a mock Request object."""
+        request = MagicMock()
+        request.headers = {
+            'X-Slack-Request-Timestamp': '1234567890',
+            'X-Slack-Signature': 'v0=test_signature',
+        }
+        return request
+
+    @pytest.fixture
+    def valid_block_suggestion_payload(self):
+        """Create a valid block_suggestion payload from Slack."""
+        return {
+            'type': 'block_suggestion',
+            'user': {'id': 'U1234567890'},
+            'value': 'test-query',
+            'team': {'id': 'T1234567890'},
+            'container': {'channel_id': 'C1234567890'},
+        }
+
+    @pytest.fixture
+    def background_tasks(self):
+        """Create mock BackgroundTasks."""
+        return MagicMock(spec=BackgroundTasks)
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', False)
+    async def test_on_options_load_disabled_returns_empty_options(
+        self, mock_request, background_tasks
+    ):
+        """Test that when webhooks are disabled, empty options are returned."""
+        from server.routes.integration.slack import on_options_load
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body == {'options': []}
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    async def test_on_options_load_no_payload_returns_empty_options(
+        self, mock_request, background_tasks
+    ):
+        """Test that when no payload is in request, empty options are returned."""
+        from server.routes.integration.slack import on_options_load
+
+        mock_request.body = AsyncMock(return_value=b'')
+        mock_form = MagicMock()
+        mock_form.get.return_value = None
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body == {'options': []}
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    @patch('server.routes.integration.slack.signature_verifier')
+    async def test_on_options_load_invalid_signature_raises_403(
+        self,
+        mock_signature_verifier,
+        mock_request,
+        background_tasks,
+        valid_block_suggestion_payload,
+    ):
+        """Test that invalid Slack signature raises 403 HTTPException."""
+        from fastapi import HTTPException
+
+        from server.routes.integration.slack import on_options_load
+
+        payload_str = json.dumps(valid_block_suggestion_payload)
+        mock_request.body = AsyncMock(return_value=payload_str.encode())
+        mock_form = MagicMock()
+        mock_form.get.return_value = payload_str
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        mock_signature_verifier.is_valid.return_value = False
+
+        with pytest.raises(HTTPException) as exc_info:
+            await on_options_load(mock_request, background_tasks)
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == 'invalid_request'
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    @patch('server.routes.integration.slack.signature_verifier')
+    async def test_on_options_load_wrong_payload_type_returns_empty_options(
+        self, mock_signature_verifier, mock_request, background_tasks
+    ):
+        """Test that non-block_suggestion payload returns empty options."""
+        from server.routes.integration.slack import on_options_load
+
+        payload = {
+            'type': 'interactive_message',  # Wrong type
+            'user': {'id': 'U1234567890'},
+        }
+        payload_str = json.dumps(payload)
+        mock_request.body = AsyncMock(return_value=payload_str.encode())
+        mock_form = MagicMock()
+        mock_form.get.return_value = payload_str
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        mock_signature_verifier.is_valid.return_value = True
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body == {'options': []}
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    @patch('server.routes.integration.slack.signature_verifier')
+    @patch('server.routes.integration.slack.slack_manager')
+    async def test_on_options_load_unauthenticated_user_returns_empty_options(
+        self,
+        mock_slack_manager,
+        mock_signature_verifier,
+        mock_request,
+        background_tasks,
+        valid_block_suggestion_payload,
+    ):
+        """Test that unauthenticated users get empty options and linking message is queued."""
+        from server.routes.integration.slack import on_options_load
+
+        payload_str = json.dumps(valid_block_suggestion_payload)
+        mock_request.body = AsyncMock(return_value=payload_str.encode())
+        mock_form = MagicMock()
+        mock_form.get.return_value = payload_str
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        mock_signature_verifier.is_valid.return_value = True
+        mock_slack_manager.authenticate_user = AsyncMock(return_value=(None, None))
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body == {'options': []}
+
+        # Verify background task was queued for account linking message
+        background_tasks.add_task.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    @patch('server.routes.integration.slack.signature_verifier')
+    @patch('server.routes.integration.slack.slack_manager')
+    async def test_on_options_load_successful_search_with_repos(
+        self,
+        mock_slack_manager,
+        mock_signature_verifier,
+        mock_request,
+        background_tasks,
+        valid_block_suggestion_payload,
+        mock_slack_user,
+        mock_user_auth,
+    ):
+        """Test successful repository search returns properly formatted options."""
+        from server.routes.integration.slack import on_options_load
+
+        payload_str = json.dumps(valid_block_suggestion_payload)
+        mock_request.body = AsyncMock(return_value=payload_str.encode())
+        mock_form = MagicMock()
+        mock_form.get.return_value = payload_str
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        mock_signature_verifier.is_valid.return_value = True
+        mock_slack_manager.authenticate_user = AsyncMock(
+            return_value=(mock_slack_user, mock_user_auth)
+        )
+
+        # Mock repos returned from search
+        repos = [
+            Repository(
+                id='1',
+                full_name='owner/repo1',
+                git_provider=ProviderType.GITHUB,
+                is_public=True,
+            ),
+            Repository(
+                id='2',
+                full_name='owner/repo2',
+                git_provider=ProviderType.GITHUB,
+                is_public=False,
+            ),
+        ]
+        mock_slack_manager._search_repositories = AsyncMock(return_value=repos)
+
+        # Mock options building
+        expected_options = [
+            {'text': {'type': 'plain_text', 'text': 'No Repository'}, 'value': '-'},
+            {'text': {'type': 'plain_text', 'text': 'owner/repo1'}, 'value': 'owner/repo1'},
+            {'text': {'type': 'plain_text', 'text': 'owner/repo2'}, 'value': 'owner/repo2'},
+        ]
+        mock_slack_manager._build_repo_options = MagicMock(return_value=expected_options)
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body == {'options': expected_options}
+
+        # Verify search was called with correct parameters
+        mock_slack_manager._search_repositories.assert_called_once_with(
+            mock_user_auth, query='test-query', per_page=100
+        )
+        mock_slack_manager._build_repo_options.assert_called_once_with(
+            repos, include_no_repo=True
+        )
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    @patch('server.routes.integration.slack.signature_verifier')
+    @patch('server.routes.integration.slack.slack_manager')
+    async def test_on_options_load_empty_query_search(
+        self,
+        mock_slack_manager,
+        mock_signature_verifier,
+        mock_request,
+        background_tasks,
+        mock_slack_user,
+        mock_user_auth,
+    ):
+        """Test search with empty query (min_query_length: 0 in external_select)."""
+        from server.routes.integration.slack import on_options_load
+
+        # Payload with empty value (no search text entered yet)
+        payload = {
+            'type': 'block_suggestion',
+            'user': {'id': 'U1234567890'},
+            'value': '',  # Empty search
+            'team': {'id': 'T1234567890'},
+            'container': {'channel_id': 'C1234567890'},
+        }
+        payload_str = json.dumps(payload)
+        mock_request.body = AsyncMock(return_value=payload_str.encode())
+        mock_form = MagicMock()
+        mock_form.get.return_value = payload_str
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        mock_signature_verifier.is_valid.return_value = True
+        mock_slack_manager.authenticate_user = AsyncMock(
+            return_value=(mock_slack_user, mock_user_auth)
+        )
+        mock_slack_manager._search_repositories = AsyncMock(return_value=[])
+        mock_slack_manager._build_repo_options = MagicMock(
+            return_value=[{'text': {'type': 'plain_text', 'text': 'No Repository'}, 'value': '-'}]
+        )
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        assert response.status_code == 200
+
+        # Verify search was called with empty query
+        mock_slack_manager._search_repositories.assert_called_once_with(
+            mock_user_auth, query='', per_page=100
+        )
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    @patch('server.routes.integration.slack.signature_verifier')
+    @patch('server.routes.integration.slack.slack_manager')
+    async def test_on_options_load_search_exception_returns_empty_options(
+        self,
+        mock_slack_manager,
+        mock_signature_verifier,
+        mock_request,
+        background_tasks,
+        valid_block_suggestion_payload,
+        mock_slack_user,
+        mock_user_auth,
+    ):
+        """Test that when search raises an exception, empty options are returned gracefully."""
+        from server.routes.integration.slack import on_options_load
+
+        payload_str = json.dumps(valid_block_suggestion_payload)
+        mock_request.body = AsyncMock(return_value=payload_str.encode())
+        mock_form = MagicMock()
+        mock_form.get.return_value = payload_str
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        mock_signature_verifier.is_valid.return_value = True
+        mock_slack_manager.authenticate_user = AsyncMock(
+            return_value=(mock_slack_user, mock_user_auth)
+        )
+        # Simulate search error (e.g., provider timeout)
+        mock_slack_manager._search_repositories = AsyncMock(
+            side_effect=Exception('GitHub API timeout')
+        )
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body == {'options': []}
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    @patch('server.routes.integration.slack.signature_verifier')
+    @patch('server.routes.integration.slack.slack_manager')
+    async def test_on_options_load_missing_value_field_defaults_to_empty(
+        self,
+        mock_slack_manager,
+        mock_signature_verifier,
+        mock_request,
+        background_tasks,
+        mock_slack_user,
+        mock_user_auth,
+    ):
+        """Test that missing 'value' field in payload defaults to empty string."""
+        from server.routes.integration.slack import on_options_load
+
+        # Payload without 'value' key
+        payload = {
+            'type': 'block_suggestion',
+            'user': {'id': 'U1234567890'},
+            # 'value' is missing
+            'team': {'id': 'T1234567890'},
+            'container': {'channel_id': 'C1234567890'},
+        }
+        payload_str = json.dumps(payload)
+        mock_request.body = AsyncMock(return_value=payload_str.encode())
+        mock_form = MagicMock()
+        mock_form.get.return_value = payload_str
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        mock_signature_verifier.is_valid.return_value = True
+        mock_slack_manager.authenticate_user = AsyncMock(
+            return_value=(mock_slack_user, mock_user_auth)
+        )
+        mock_slack_manager._search_repositories = AsyncMock(return_value=[])
+        mock_slack_manager._build_repo_options = MagicMock(return_value=[])
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        # Should default to empty string for search
+        mock_slack_manager._search_repositories.assert_called_once_with(
+            mock_user_auth, query='', per_page=100
+        )
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.SLACK_WEBHOOKS_ENABLED', True)
+    @patch('server.routes.integration.slack.signature_verifier')
+    @patch('server.routes.integration.slack.slack_manager')
+    async def test_on_options_load_truncates_long_repo_names(
+        self,
+        mock_slack_manager,
+        mock_signature_verifier,
+        mock_request,
+        background_tasks,
+        valid_block_suggestion_payload,
+        mock_slack_user,
+        mock_user_auth,
+    ):
+        """Test that options with long repo names are properly handled."""
+        from server.routes.integration.slack import on_options_load
+
+        payload_str = json.dumps(valid_block_suggestion_payload)
+        mock_request.body = AsyncMock(return_value=payload_str.encode())
+        mock_form = MagicMock()
+        mock_form.get.return_value = payload_str
+        mock_request.form = AsyncMock(return_value=mock_form)
+
+        mock_signature_verifier.is_valid.return_value = True
+        mock_slack_manager.authenticate_user = AsyncMock(
+            return_value=(mock_slack_user, mock_user_auth)
+        )
+
+        # Long repo name
+        repos = [
+            Repository(
+                id='1',
+                full_name='verylongorganizationname/very-long-repository-name-that-exceeds-normal-length',
+                git_provider=ProviderType.GITHUB,
+                is_public=True,
+            ),
+        ]
+        mock_slack_manager._search_repositories = AsyncMock(return_value=repos)
+        mock_slack_manager._build_repo_options = MagicMock(
+            return_value=[
+                {'text': {'type': 'plain_text', 'text': 'No Repository'}, 'value': '-'},
+                {
+                    'text': {
+                        'type': 'plain_text',
+                        'text': 'verylongorganizationname/very-long-repository-name-tha...',
+                    },
+                    'value': 'verylongorganizationname/very-long-repository-name-that-exceeds-normal-length',
+                },
+            ]
+        )
+
+        response = await on_options_load(mock_request, background_tasks)
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert 'options' in body
+        assert len(body['options']) == 2
+
+
+class TestSendAccountLinkingMessage:
+    """Test the _send_account_linking_message helper function."""
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_team_store')
+    @patch('server.routes.integration.slack.AsyncWebClient')
+    async def test_send_account_linking_message_success(
+        self, mock_web_client_class, mock_team_store
+    ):
+        """Test successful sending of account linking message."""
+        from server.routes.integration.slack import _send_account_linking_message
+
+        payload = {
+            'team': {'id': 'T1234567890'},
+            'container': {'channel_id': 'C1234567890'},
+        }
+        slack_user_id = 'U1234567890'
+
+        mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
+        mock_client = AsyncMock()
+        mock_web_client_class.return_value = mock_client
+
+        await _send_account_linking_message(payload, slack_user_id)
+
+        mock_team_store.get_team_bot_token.assert_called_once_with('T1234567890')
+        mock_client.chat_postEphemeral.assert_called_once()
+        call_kwargs = mock_client.chat_postEphemeral.call_args[1]
+        assert call_kwargs['channel'] == 'C1234567890'
+        assert call_kwargs['user'] == 'U1234567890'
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_team_store')
+    async def test_send_account_linking_message_missing_team_id(self, mock_team_store):
+        """Test handling of missing team_id in payload."""
+        from server.routes.integration.slack import _send_account_linking_message
+
+        payload = {
+            'container': {'channel_id': 'C1234567890'},
+            # 'team' is missing
+        }
+        slack_user_id = 'U1234567890'
+
+        # Should handle gracefully without raising
+        await _send_account_linking_message(payload, slack_user_id)
+
+        mock_team_store.get_team_bot_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_team_store')
+    async def test_send_account_linking_message_missing_channel_id(self, mock_team_store):
+        """Test handling of missing channel_id in payload."""
+        from server.routes.integration.slack import _send_account_linking_message
+
+        payload = {
+            'team': {'id': 'T1234567890'},
+            # 'container' and 'channel' are missing
+        }
+        slack_user_id = 'U1234567890'
+
+        # Should handle gracefully without raising
+        await _send_account_linking_message(payload, slack_user_id)
+
+        mock_team_store.get_team_bot_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_team_store')
+    async def test_send_account_linking_message_no_bot_token(self, mock_team_store):
+        """Test handling when no bot token is available for the team."""
+        from server.routes.integration.slack import _send_account_linking_message
+
+        payload = {
+            'team': {'id': 'T1234567890'},
+            'container': {'channel_id': 'C1234567890'},
+        }
+        slack_user_id = 'U1234567890'
+
+        mock_team_store.get_team_bot_token = AsyncMock(return_value=None)
+
+        # Should handle gracefully without raising
+        await _send_account_linking_message(payload, slack_user_id)
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_team_store')
+    @patch('server.routes.integration.slack.AsyncWebClient')
+    async def test_send_account_linking_message_slack_api_error(
+        self, mock_web_client_class, mock_team_store
+    ):
+        """Test graceful handling of Slack API error when sending message."""
+        from server.routes.integration.slack import _send_account_linking_message
+
+        payload = {
+            'team': {'id': 'T1234567890'},
+            'container': {'channel_id': 'C1234567890'},
+        }
+        slack_user_id = 'U1234567890'
+
+        mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
+        mock_client = AsyncMock()
+        mock_client.chat_postEphemeral = AsyncMock(
+            side_effect=Exception('Slack API error')
+        )
+        mock_web_client_class.return_value = mock_client
+
+        # Should handle gracefully without raising
+        await _send_account_linking_message(payload, slack_user_id)
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_team_store')
+    @patch('server.routes.integration.slack.AsyncWebClient')
+    async def test_send_account_linking_message_fallback_channel(
+        self, mock_web_client_class, mock_team_store
+    ):
+        """Test fallback to 'channel' key when 'container' doesn't have channel_id."""
+        from server.routes.integration.slack import _send_account_linking_message
+
+        payload = {
+            'team': {'id': 'T1234567890'},
+            'container': {},  # Empty container
+            'channel': {'id': 'C_FALLBACK'},  # Fallback channel
+        }
+        slack_user_id = 'U1234567890'
+
+        mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
+        mock_client = AsyncMock()
+        mock_web_client_class.return_value = mock_client
+
+        await _send_account_linking_message(payload, slack_user_id)
+
+        call_kwargs = mock_client.chat_postEphemeral.call_args[1]
+        assert call_kwargs['channel'] == 'C_FALLBACK'
