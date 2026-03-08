@@ -1,7 +1,25 @@
-import re
 from typing import Any
 
 import jwt
+from jinja2 import Environment, FileSystemLoader
+from openhands.core.logger import openhands_logger as logger
+from openhands.integrations.provider import ProviderHandler
+from openhands.integrations.service_types import (
+    AuthenticationError,
+    ProviderTimeoutError,
+    Repository,
+)
+from openhands.server.shared import config, server_config, sio
+from openhands.server.types import (
+    LLMAuthenticationError,
+    MissingSettingsError,
+    SessionExpiredError,
+)
+from openhands.server.user_auth.user_auth import UserAuth
+from slack_sdk.oauth import AuthorizeUrlGenerator
+from slack_sdk.web.async_client import AsyncWebClient
+from sqlalchemy import select
+
 from integrations.manager import Manager
 from integrations.models import Message, SourceType
 from integrations.slack.slack_types import (
@@ -20,27 +38,13 @@ from integrations.utils import (
     HOST_URL,
     OPENHANDS_RESOLVER_TEMPLATES_DIR,
     get_session_expired_message,
+    infer_repo_from_message,
 )
 from integrations.v1_utils import get_saas_user_auth
-from jinja2 import Environment, FileSystemLoader
 from server.constants import SLACK_CLIENT_ID
 from server.utils.conversation_callback_utils import register_callback_processor
-from slack_sdk.oauth import AuthorizeUrlGenerator
-from slack_sdk.web.async_client import AsyncWebClient
-from sqlalchemy import select
 from storage.database import a_session_maker
 from storage.slack_user import SlackUser
-
-from openhands.core.logger import openhands_logger as logger
-from openhands.integrations.provider import ProviderHandler
-from openhands.integrations.service_types import ProviderTimeoutError, Repository
-from openhands.server.shared import config, server_config, sio
-from openhands.server.types import (
-    LLMAuthenticationError,
-    MissingSettingsError,
-    SessionExpiredError,
-)
-from openhands.server.user_auth.user_auth import UserAuth
 
 authorize_url_generator = AuthorizeUrlGenerator(
     client_id=SLACK_CLIENT_ID,
@@ -90,17 +94,6 @@ class SlackManager(Manager[SlackViewInterface]):
             # slack_view.saas_user_auth = await self._get_user_auth(slack_view.slack_to_openhands_user.keycloak_user_id)
 
         return slack_user, saas_user_auth
-
-    def _infer_repo_from_message(self, user_msg: str) -> str | None:
-        # Regular expression to match patterns like "OpenHands/OpenHands" or "deploy repo"
-        pattern = r'([a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)|([a-zA-Z0-9_-]+)(?=\s+repo)'
-        match = re.search(pattern, user_msg)
-
-        if match:
-            repo = match.group(1) if match.group(1) else match.group(2)
-            return repo
-
-        return None
 
     async def store_user_msg_for_form(
         self, message_ts: str, thread_ts: str | None, user_msg: str
@@ -280,29 +273,6 @@ class SlackManager(Manager[SlackViewInterface]):
         )
         return options
 
-    def filter_potential_repos_by_user_msg(
-        self, user_msg: str, user_repos: list[Repository]
-    ) -> tuple[bool, list[Repository]]:
-        inferred_repo = self._infer_repo_from_message(user_msg)
-        if not inferred_repo:
-            return False, user_repos[:100]
-
-        final_repos = []
-        for repo in user_repos:
-            if inferred_repo.lower() in repo.full_name.lower():
-                final_repos.append(repo)
-
-        # no repos matched, return original list
-        if len(final_repos) == 0:
-            return False, user_repos[:100]
-
-        # Found exact match
-        elif len(final_repos) == 1:
-            return True, final_repos
-
-        # Found partial matches
-        return False, final_repos[:100]
-
     async def receive_message(self, message: Message):
         self._confirm_incoming_source_type(message)
 
@@ -396,46 +366,48 @@ class SlackManager(Manager[SlackViewInterface]):
         elif isinstance(slack_view, SlackNewConversationView):
             user = slack_view.slack_to_openhands_user
 
-            # Try to infer repo from the user's message first
-            inferred_repo = self._infer_repo_from_message(slack_view.user_msg)
+            # Try to infer repo(s) from the user's message first
+            inferred_repos = infer_repo_from_message(slack_view.user_msg)
 
-            if inferred_repo:
-                # Search for repositories matching the inferred repo name
+            # Only proceed with verification if exactly 1 repo is inferred
+            if len(inferred_repos) == 1:
+                inferred_repo = inferred_repos[0]
                 logger.info(
-                    f'[Slack] Searching repositories for inferred repo "{inferred_repo}" '
+                    f'[Slack] Verifying inferred repo "{inferred_repo}" '
                     f'for user {user.slack_display_name} (id={slack_view.saas_user_auth.get_user_id()})'
                 )
+
+                # Verify the repo exists using verify_repo_provider
                 try:
-                    user_repos: list[Repository] = await self._search_repositories(
-                        slack_view.saas_user_auth, query=inferred_repo, per_page=100
+                    provider_tokens = (
+                        await slack_view.saas_user_auth.get_provider_tokens()
                     )
-                except ProviderTimeoutError:
-                    logger.warning(
-                        'repo_query_timeout',
-                        extra={
-                            'slack_user_id': user.slack_user_id,
-                            'keycloak_user_id': user.keycloak_user_id,
-                        },
-                    )
-                    timeout_msg = (
-                        'The repository search timed out. '
-                        'Please try again or use the repository selector below.'
-                    )
-                    await self.send_message(timeout_msg, slack_view, ephemeral=True)
+                    if provider_tokens:
+                        access_token = (
+                            await slack_view.saas_user_auth.get_access_token()
+                        )
+                        user_id = await slack_view.saas_user_auth.get_user_id()
+                        provider_handler = ProviderHandler(
+                            provider_tokens=provider_tokens,
+                            external_auth_token=access_token,
+                            external_auth_id=user_id,
+                        )
+                        # This will raise AuthenticationError if repo doesn't exist
+                        repo = await provider_handler.verify_repo_provider(
+                            inferred_repo
+                        )
+                        # Repo exists and user has access - start job
+                        slack_view.selected_repo = repo.full_name
+                        return True
+                except (AuthenticationError, ProviderTimeoutError) as e:
+                    # Repo doesn't exist or user doesn't have access
                     # Fall through to show the external_select form
-                    user_repos = []
+                    logger.info(
+                        f'[Slack] Could not verify repo "{inferred_repo}": {e}. '
+                        f'Showing repository selector.'
+                    )
 
-                # Check for exact match
-                match, repos = self.filter_potential_repos_by_user_msg(
-                    slack_view.user_msg, user_repos
-                )
-
-                # User mentioned a matching repo in their message, start job without repo selection form
-                if match:
-                    slack_view.selected_repo = repos[0].full_name
-                    return True
-
-            # No exact match found - show the external_select form for dynamic search
+            # No exact match found or couldn't verify - show the external_select form
             logger.info(
                 'render_repository_selector',
                 extra={

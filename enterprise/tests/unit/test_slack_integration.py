@@ -1,6 +1,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from openhands.integrations.service_types import ProviderTimeoutError
+from openhands.server.user_auth.user_auth import UserAuth
+
 from integrations.slack.slack_manager import (
     SLACK_USER_MSG_EXPIRATION,
     SLACK_USER_MSG_KEY_PREFIX,
@@ -8,9 +11,6 @@ from integrations.slack.slack_manager import (
 )
 from integrations.slack.slack_view import SlackNewConversationView
 from storage.slack_user import SlackUser
-
-from openhands.integrations.service_types import ProviderTimeoutError
-from openhands.server.user_auth.user_auth import UserAuth
 
 
 @pytest.fixture
@@ -63,37 +63,49 @@ def slack_new_conversation_view(mock_slack_user, mock_user_auth):
 @pytest.mark.parametrize(
     'message,expected',
     [
-        ('OpenHands/Openhands', 'OpenHands/Openhands'),
-        ('deploy repo', 'deploy'),
-        ('use hello world', None),
+        ('OpenHands/Openhands', ['OpenHands/Openhands']),
+        ('help me with repo', []),  # Updated: this pattern is not matched by infer_repo_from_message
+        ('use hello world', []),
     ],
 )
-def test_infer_repo_from_message(message, expected, slack_manager):
-    # Test the extracted function
-    result = slack_manager._infer_repo_from_message(message)
+def test_infer_repo_from_message(message, expected):
+    # Test the infer_repo_from_message function from utils
+    from integrations.utils import infer_repo_from_message
+
+    result = infer_repo_from_message(message)
     assert result == expected
 
 
-class TestRepoQueryTimeoutHandling:
-    """Test timeout handling when fetching repositories for Slack integration."""
+class TestRepoVerificationHandling:
+    """Test repo verification handling for Slack integration."""
 
+    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.ProviderHandler')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
-    @patch.object(SlackManager, '_search_repositories', new_callable=AsyncMock)
-    async def test_timeout_sends_user_friendly_message_and_shows_selector(
+    async def test_timeout_during_verification_shows_selector(
         self,
-        mock_search_repositories,
         mock_send_message,
+        mock_provider_handler_class,
+        mock_sio,
         slack_manager,
         slack_new_conversation_view,
     ):
-        """Test that when repository search times out, a message is sent and selector is shown."""
-        # Setup: Modify message to include a repo reference to trigger the search
+        """Test that when repo verification times out, selector is shown."""
+        # Setup Redis mock
+        mock_redis = AsyncMock()
+        mock_sio.manager.redis = mock_redis
+
+        # Setup: Modify message to include exactly one repo reference to trigger verification
         slack_new_conversation_view.user_msg = 'Help me with OpenHands/OpenHands repo'
 
-        # Setup: _search_repositories raises ProviderTimeoutError
-        mock_search_repositories.side_effect = ProviderTimeoutError(
-            'github API request timed out: ConnectTimeout'
+        # Setup: verify_repo_provider raises ProviderTimeoutError
+        mock_provider_handler = MagicMock()
+        mock_provider_handler.verify_repo_provider = AsyncMock(
+            side_effect=ProviderTimeoutError(
+                'github API request timed out: ConnectTimeout'
+            )
         )
+        mock_provider_handler_class.return_value = mock_provider_handler
 
         # Execute
         result = await slack_manager.is_job_requested(
@@ -103,35 +115,29 @@ class TestRepoQueryTimeoutHandling:
         # Verify: should return False (job not started, but selector is shown)
         assert result is False
 
-        # Verify: send_message was called twice:
-        # 1. Timeout warning message
-        # 2. Repository selection form
-        assert mock_send_message.call_count == 2
-
-        # Check the first call (timeout message)
-        first_call_args = mock_send_message.call_args_list[0]
-        timeout_message = first_call_args[0][0]
-        assert 'timed out' in timeout_message
-        assert first_call_args[1]['ephemeral'] is True
-
-        # Check the second call (repo selector)
-        second_call_args = mock_send_message.call_args_list[1]
-        selector_message = second_call_args[0][0]
+        # Verify: send_message was called once (for repo selector)
+        mock_send_message.assert_called_once()
+        call_args = mock_send_message.call_args
+        selector_message = call_args[0][0]
         assert isinstance(selector_message, dict)
         assert selector_message.get('text') == 'Choose a Repository:'
 
+    @patch('integrations.slack.slack_manager.sio')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
-    @patch.object(SlackManager, '_search_repositories', new_callable=AsyncMock)
-    async def test_successful_repo_fetch_shows_external_selector(
+    async def test_no_repo_mentioned_shows_external_selector(
         self,
-        mock_search_repositories,
         mock_send_message,
+        mock_sio,
         slack_manager,
         slack_new_conversation_view,
     ):
-        """Test that successful search shows external_select repo selector."""
-        # Setup: _search_repositories returns empty list (no repos, but no timeout)
-        mock_search_repositories.return_value = []
+        """Test that when no repo is mentioned, external_select repo selector is shown."""
+        # Setup Redis mock
+        mock_redis = AsyncMock()
+        mock_sio.manager.redis = mock_redis
+
+        # Setup: user message without any repo mention
+        slack_new_conversation_view.user_msg = 'Hello, can you help me?'
 
         # Execute
         result = await slack_manager.is_job_requested(
@@ -145,10 +151,8 @@ class TestRepoQueryTimeoutHandling:
         mock_send_message.assert_called_once()
         call_args = mock_send_message.call_args
 
-        # Check the message is NOT the timeout message
-        message = call_args[0][0]
-        assert 'timed out' not in str(message)
         # Should be the repo selection form with external_select
+        message = call_args[0][0]
         assert isinstance(message, dict)
         assert message.get('text') == 'Choose a Repository:'
         # Verify it's using external_select
@@ -158,6 +162,52 @@ class TestRepoQueryTimeoutHandling:
         elements = actions_block.get('elements', [])
         assert len(elements) > 0
         assert elements[0].get('type') == 'external_select'
+
+    @patch('integrations.slack.slack_manager.sio')
+    @patch('integrations.slack.slack_manager.ProviderHandler')
+    @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
+    async def test_verified_repo_starts_job(
+        self,
+        mock_send_message,
+        mock_provider_handler_class,
+        mock_sio,
+        slack_manager,
+        slack_new_conversation_view,
+    ):
+        """Test that when repo is successfully verified, job starts without selector."""
+        from openhands.integrations.service_types import ProviderType, Repository
+
+        # Setup Redis mock
+        mock_redis = AsyncMock()
+        mock_sio.manager.redis = mock_redis
+
+        # Setup: Modify message to include exactly one repo reference
+        slack_new_conversation_view.user_msg = 'Help me with OpenHands/OpenHands repo'
+
+        # Setup: verify_repo_provider returns a valid repo
+        mock_repo = Repository(
+            id='123',
+            full_name='OpenHands/OpenHands',
+            git_provider=ProviderType.GITHUB,
+            is_public=True,
+        )
+        mock_provider_handler = MagicMock()
+        mock_provider_handler.verify_repo_provider = AsyncMock(return_value=mock_repo)
+        mock_provider_handler_class.return_value = mock_provider_handler
+
+        # Execute
+        result = await slack_manager.is_job_requested(
+            MagicMock(), slack_new_conversation_view
+        )
+
+        # Verify: should return True (job started)
+        assert result is True
+
+        # Verify: send_message was NOT called (no selector needed)
+        mock_send_message.assert_not_called()
+
+        # Verify: selected_repo was set
+        assert slack_new_conversation_view.selected_repo == 'OpenHands/OpenHands'
 
 
 class TestBuildRepoOptions:
@@ -323,10 +373,8 @@ class TestIsJobRequestedWithUserMsgStorage:
 
     @patch('integrations.slack.slack_manager.sio')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
-    @patch.object(SlackManager, '_search_repositories', new_callable=AsyncMock)
     async def test_stores_user_msg_when_showing_repo_selector(
         self,
-        mock_search_repositories,
         mock_send_message,
         mock_sio,
         slack_manager,
@@ -336,8 +384,8 @@ class TestIsJobRequestedWithUserMsgStorage:
         mock_redis = AsyncMock()
         mock_sio.manager.redis = mock_redis
 
-        # Setup: _search_repositories returns empty list
-        mock_search_repositories.return_value = []
+        # Setup: user message without any repo mention (no repo inferred)
+        slack_new_conversation_view.user_msg = 'Hello, can you help me?'
 
         # Execute
         result = await slack_manager.is_job_requested(
