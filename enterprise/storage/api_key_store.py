@@ -31,7 +31,11 @@ class ApiKeyStore:
         Args:
             user_id: The ID of the user to create the key for
             name: Optional name for the key
-            expires_at: Optional expiration date for the key
+            expires_at: Optional expiration datetime in UTC. May be timezone-aware
+                (tzinfo will be stripped before writing) or timezone-naive (assumed
+                UTC). The underlying column is TIMESTAMP WITHOUT TIME ZONE, so all
+                values are stored and compared as naive UTC. Use ``datetime.now(UTC)``
+                as the basis for any relative expiry.
 
         Returns:
             The generated API key
@@ -71,9 +75,9 @@ class ApiKeyStore:
             if not key_record:
                 return None
 
-            # Check if the key has expired
+            # Check if the key has expired. expires_at is stored as naive UTC
+            # (TIMESTAMP WITHOUT TIME ZONE); re-attach UTC for comparison.
             if key_record.expires_at:
-                # Handle timezone-naive datetime from database by assuming it's UTC
                 expires_at = key_record.expires_at
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=UTC)
