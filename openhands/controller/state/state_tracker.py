@@ -170,25 +170,33 @@ class StateTracker:
                 action_id = delegate_action_ids.pop()
                 delegate_ranges.append((action_id, event.id))
 
+        # Save original start_id before delegate filtering loop
+        original_start_id = start_id
+
         # Filter out events between delegate action/observation pairs
         if delegate_ranges:
             filtered_events: list[Event] = []
             current_idx = 0
 
-            for start_id, end_id in sorted(delegate_ranges):
+            for delegate_start, delegate_end in sorted(delegate_ranges):
                 # Add events before delegate range
                 filtered_events.extend(
-                    event for event in events[current_idx:] if event.id < start_id
+                    event
+                    for event in events[current_idx:]
+                    if event.id < delegate_start
                 )
 
                 # Add delegate action and observation
                 filtered_events.extend(
-                    event for event in events if event.id in (start_id, end_id)
+                    event
+                    for event in events
+                    if event.id in (delegate_start, delegate_end)
                 )
 
                 # Update index to after delegate range
                 current_idx = next(
-                    (i for i, e in enumerate(events) if e.id > end_id), len(events)
+                    (i for i, e in enumerate(events) if e.id > delegate_end),
+                    len(events),
                 )
 
             # Add any remaining events after last delegate range
@@ -199,7 +207,7 @@ class StateTracker:
             self.state.history = events
 
         # make sure history is in sync
-        self.state.start_id = start_id
+        self.state.start_id = original_start_id
 
     def close(self, event_stream: EventStream):
         # we made history, now is the time to rewrite it!
