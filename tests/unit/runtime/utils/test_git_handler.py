@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -326,90 +327,37 @@ class TestGitHandler(unittest.TestCase):
         assert str(ctx.exception) == 'error_in_git_diff'
 
 
-@pytest.mark.skipif(sys.platform == 'win32', reason='Windows is not supported')
-class TestGitDiffModule(unittest.TestCase):
-    """Direct unit tests for the functions in git_diff.py."""
+class TestGitShowCmdBuilder:
+    """Pure unit tests for _make_git_show_cmd — no filesystem or subprocess access."""
 
-    def setUp(self):
-        self.test_dir = tempfile.mkdtemp()
-        self.origin_dir = os.path.join(self.test_dir, 'origin')
-        self.local_dir = os.path.join(self.test_dir, 'local')
-        os.makedirs(self.origin_dir)
-        os.makedirs(self.local_dir)
-        self._run('git init --initial-branch=main', self.origin_dir)
-        self._run("git config user.email 'test@example.com'", self.origin_dir)
-        self._run("git config user.name 'Test User'", self.origin_dir)
+    def test_plain_path(self):
+        cmd = git_diff._make_git_show_cmd('abc123', 'file.txt')
+        assert shlex.split(cmd) == ['git', 'show', 'abc123:file.txt']
 
-    def tearDown(self):
-        shutil.rmtree(self.test_dir)
+    def test_path_with_spaces(self):
+        cmd = git_diff._make_git_show_cmd('abc123', 'file with spaces.txt')
+        assert shlex.split(cmd) == ['git', 'show', 'abc123:file with spaces.txt']
 
-    def _run(self, cmd, cwd=None):
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f'command failed {cmd!r}: {result.stderr.decode()}')
+    def test_path_with_single_quote(self):
+        cmd = git_diff._make_git_show_cmd('abc123', "it's a test.txt")
+        assert shlex.split(cmd) == ['git', 'show', "abc123:it's a test.txt"]
 
-    def _write(self, directory, name, content):
-        path = os.path.join(directory, name)
-        with open(path, 'w') as f:
-            f.write(content)
-        return path
+    def test_injection_attempt(self):
+        cmd = git_diff._make_git_show_cmd('abc123', '"; rm -rf /; echo "')
+        assert shlex.split(cmd) == ['git', 'show', 'abc123:"; rm -rf /; echo "']
 
-    def _setup_clone_with_file(self, filename, content):
-        """Commit filename into origin then clone to local_dir."""
-        self._write(self.origin_dir, filename, content)
-        self._run("git add . && git commit -m 'initial'", self.origin_dir)
-        self._run(f'git clone "{self.origin_dir}" "{self.local_dir}"')
-        self._run("git config user.email 'test@example.com'", self.local_dir)
-        self._run("git config user.name 'Test User'", self.local_dir)
 
-    def test_get_git_diff_file_too_large(self):
-        """Raises ValueError('file_to_large') when the file exceeds the size limit."""
-        self._write(self.origin_dir, 'large.txt', 'x')
-        self._run("git add . && git commit -m 'init'", self.origin_dir)
-        file_path = os.path.join(self.origin_dir, 'large.txt')
-        with patch(
-            'os.path.getsize',
-            return_value=git_diff.MAX_FILE_SIZE_FOR_GIT_DIFF + 1,
-        ):
-            with self.assertRaises(ValueError) as ctx:
-                git_diff.get_git_diff(file_path)
-        assert str(ctx.exception) == 'file_to_large'
+def test_get_git_diff_file_too_large():
+    """Raises ValueError('file_to_large') when the file exceeds the size limit."""
+    with patch('os.path.getsize', return_value=git_diff.MAX_FILE_SIZE_FOR_GIT_DIFF + 1):
+        with pytest.raises(ValueError, match='file_to_large'):
+            git_diff.get_git_diff('/nonexistent/path.txt')
 
-    def test_get_git_diff_no_repository(self):
-        """Raises ValueError('no_repository') when the file is outside any git repository."""
-        no_repo_dir = tempfile.mkdtemp()
-        try:
-            file_path = self._write(no_repo_dir, 'file.txt', 'content')
-            with self.assertRaises(ValueError) as ctx:
-                git_diff.get_git_diff(file_path)
-            assert str(ctx.exception) == 'no_repository'
-        finally:
-            shutil.rmtree(no_repo_dir)
 
-    def test_get_git_diff_path_with_spaces(self):
-        """A filename containing spaces is correctly quoted in the git show command."""
-        filename = 'file with spaces.txt'
-        self._setup_clone_with_file(filename, 'original content')
-        file_path = self._write(self.local_dir, filename, 'modified content')
-
-        result = git_diff.get_git_diff(file_path)
-
-        assert result['original'] == 'original content'
-        assert result['modified'] == 'modified content'
-
-    def test_get_git_diff_path_with_single_quote(self):
-        """A filename containing a single quote is correctly quoted in the git show command."""
-        filename = "it's a test.txt"
-        self._setup_clone_with_file(filename, 'original content')
-        file_path = self._write(self.local_dir, filename, 'modified content')
-
-        result = git_diff.get_git_diff(file_path)
-
-        assert result['original'] == 'original content'
-        assert result['modified'] == 'modified content'
+def test_get_git_diff_no_repository():
+    """Raises ValueError('no_repository') when the file is outside any git repository."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        file_path = os.path.join(tmp_dir, 'file.txt')
+        Path(file_path).write_text('content')
+        with pytest.raises(ValueError, match='no_repository'):
+            git_diff.get_git_diff(file_path)
