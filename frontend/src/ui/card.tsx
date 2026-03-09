@@ -2,43 +2,58 @@ import { ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "#/utils/utils";
 
-const cardVariants = cva(
-  "w-full flex flex-col rounded-[12px] p-[20px] border border-[#727987] bg-[#26282D] relative",
-  {
-    variants: {
-      gap: {
-        default: "gap-[10px]",
-        large: "gap-6",
-      },
-      minHeight: {
-        default: "min-h-[286px] md:min-h-auto",
-        small: "min-h-[263.5px]",
-      },
+const cardVariants = cva("flex", {
+  variants: {
+    w: {
+      default: "w-auto",
+      full: "w-full",
     },
-    defaultVariants: {
-      gap: "default",
-      minHeight: "default",
+    h: {
+      default: "h-auto",
+      full: "h-full",
+      sm: "h-[263.5px]",
+    },
+    color: {
+      default: "bg-[#26282D]",
+    },
+    gap: {
+      default: "gap-[10px]",
+      lg: "gap-6",
+    },
+    border: {
+      none: "border-0",
+      default: "border border-[#727987] rounded-[12px] ",
     },
   },
-);
+  defaultVariants: {
+    w: "full",
+    h: "default",
+    color: "default",
+    gap: "default",
+    border: "default",
+  },
+});
 
 interface CardProps extends VariantProps<typeof cardVariants> {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   testId?: string;
 }
 
 export function Card({
   children,
-  className = "",
+  className,
   testId,
+  w,
+  h,
+  color,
   gap,
-  minHeight,
+  border,
 }: CardProps) {
   return (
     <div
       data-testid={testId}
-      className={cn(cardVariants({ gap, minHeight }), className)}
+      className={cn(cardVariants({ w, h, color, gap, border }), className)}
     >
       {children}
     </div>
