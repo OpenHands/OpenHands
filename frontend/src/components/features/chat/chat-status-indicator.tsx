@@ -15,7 +15,7 @@ function ChatStatusIndicator({
     <div
       data-testid="chat-status-indicator"
       className={cn(
-        "h-[31px] w-fit rounded-[100px] pt-[20px] pr-[16px] pb-[20px] pl-[5px] bg-[#25272D] flex items-center",
+        "min-h-[31px] w-fit rounded-[100px] py-[5px] pl-[8px] pr-[12px] bg-[#25272D] flex items-center gap-2",
       )}
     >
       <AnimatePresence mode="wait">
