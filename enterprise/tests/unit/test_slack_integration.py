@@ -1040,135 +1040,236 @@ class TestOnOptionsLoadEndpoint:
         assert len(body['options']) == 2
 
 
-class TestSendAccountLinkingMessage:
-    """Test the _send_account_linking_message helper function."""
+class TestSendSlackError:
+    """Test the _send_slack_error helper function."""
 
     @pytest.mark.asyncio
-    @patch('server.routes.integration.slack.SlackManager')
+    @patch('server.routes.integration.slack.slack_manager')
     @patch('server.routes.integration.slack.slack_team_store')
-    async def test_send_account_linking_message_success(
-        self, mock_team_store, mock_slack_manager_class
-    ):
-        """Test successful sending of account linking message."""
-        from server.routes.integration.slack import _send_account_linking_message
+    async def test_send_slack_error_success(self, mock_team_store, mock_slack_manager):
+        """Test successful sending of error message to Slack user."""
+        from integrations.slack.slack_errors import SlackError, SlackErrorCode
+        from server.routes.integration.slack import _send_slack_error
 
         payload = {
             'team': {'id': 'T1234567890'},
             'container': {'channel_id': 'C1234567890'},
+            'user': {'id': 'U1234567890'},
         }
-        slack_user_id = 'U1234567890'
+        error = SlackError(
+            SlackErrorCode.USER_NOT_AUTHENTICATED,
+            message_kwargs={'login_link': 'https://test.link'},
+            log_context={'slack_user_id': 'U1234567890'},
+        )
 
         mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
-        mock_slack_manager_class.send_ephemeral_message = AsyncMock(return_value=True)
+        mock_slack_manager.send_message = AsyncMock()
 
-        await _send_account_linking_message(payload, slack_user_id)
+        await _send_slack_error(payload, error)
 
         mock_team_store.get_team_bot_token.assert_called_once_with('T1234567890')
-        mock_slack_manager_class.send_ephemeral_message.assert_called_once()
-        call_kwargs = mock_slack_manager_class.send_ephemeral_message.call_args[1]
-        assert call_kwargs['channel_id'] == 'C1234567890'
-        assert call_kwargs['user_id'] == 'U1234567890'
-        assert call_kwargs['bot_token'] == 'xoxb-test-token'
+        mock_slack_manager.send_message.assert_called_once()
+        # Verify ephemeral=True is passed
+        call_args = mock_slack_manager.send_message.call_args
+        assert call_args.kwargs.get('ephemeral') is True
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         'payload,description',
         [
             (
-                {'container': {'channel_id': 'C1234567890'}},
+                {
+                    'container': {'channel_id': 'C1234567890'},
+                    'user': {'id': 'U1234567890'},
+                },
                 'missing team key',
             ),
             (
-                {'team': {'id': 'T1234567890'}},
+                {'team': {'id': 'T1234567890'}, 'user': {'id': 'U1234567890'}},
                 'missing container and channel keys',
             ),
             (
-                {'team': {}, 'container': {'channel_id': 'C1234567890'}},
+                {
+                    'team': {},
+                    'container': {'channel_id': 'C1234567890'},
+                    'user': {'id': 'U1234567890'},
+                },
                 'empty team dict',
             ),
             (
-                {'team': {'id': 'T1234567890'}, 'container': {}},
+                {
+                    'team': {'id': 'T1234567890'},
+                    'container': {},
+                    'user': {'id': 'U1234567890'},
+                },
                 'empty container dict',
             ),
+            (
+                {
+                    'team': {'id': 'T1234567890'},
+                    'container': {'channel_id': 'C1234567890'},
+                },
+                'missing user',
+            ),
         ],
-        ids=['missing_team', 'missing_channel', 'empty_team', 'empty_container'],
+        ids=[
+            'missing_team',
+            'missing_channel',
+            'empty_team',
+            'empty_container',
+            'missing_user',
+        ],
     )
+    @patch('server.routes.integration.slack.slack_manager')
     @patch('server.routes.integration.slack.slack_team_store')
-    async def test_send_account_linking_message_missing_payload_fields(
-        self, mock_team_store, payload, description
+    async def test_send_slack_error_missing_payload_fields(
+        self, mock_team_store, mock_slack_manager, payload, description
     ):
         """Test handling of missing or empty payload fields."""
-        from server.routes.integration.slack import _send_account_linking_message
+        from integrations.slack.slack_errors import SlackError, SlackErrorCode
+        from server.routes.integration.slack import _send_slack_error
 
-        slack_user_id = 'U1234567890'
+        error = SlackError(
+            SlackErrorCode.SESSION_EXPIRED,
+            log_context={'test': 'context'},
+        )
 
         # Should handle gracefully without raising
-        await _send_account_linking_message(payload, slack_user_id)
+        await _send_slack_error(payload, error)
 
-        mock_team_store.get_team_bot_token.assert_not_called()
+        # send_message should not be called when view creation fails
+        mock_slack_manager.send_message.assert_not_called()
 
     @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_manager')
     @patch('server.routes.integration.slack.slack_team_store')
-    async def test_send_account_linking_message_no_bot_token(self, mock_team_store):
+    async def test_send_slack_error_no_bot_token(
+        self, mock_team_store, mock_slack_manager
+    ):
         """Test handling when no bot token is available for the team."""
-        from server.routes.integration.slack import _send_account_linking_message
+        from integrations.slack.slack_errors import SlackError, SlackErrorCode
+        from server.routes.integration.slack import _send_slack_error
 
         payload = {
             'team': {'id': 'T1234567890'},
             'container': {'channel_id': 'C1234567890'},
+            'user': {'id': 'U1234567890'},
         }
-        slack_user_id = 'U1234567890'
+        error = SlackError(
+            SlackErrorCode.PROVIDER_TIMEOUT,
+            log_context={'slack_user_id': 'U1234567890'},
+        )
 
         mock_team_store.get_team_bot_token = AsyncMock(return_value=None)
 
         # Should handle gracefully without raising
-        await _send_account_linking_message(payload, slack_user_id)
+        await _send_slack_error(payload, error)
+
+        # send_message should not be called when view creation fails
+        mock_slack_manager.send_message.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch('server.routes.integration.slack.SlackManager')
+    @patch('server.routes.integration.slack.slack_manager')
     @patch('server.routes.integration.slack.slack_team_store')
-    async def test_send_account_linking_message_slack_api_error(
-        self, mock_team_store, mock_slack_manager_class
-    ):
-        """Test graceful handling of Slack API error when sending message."""
-        from server.routes.integration.slack import _send_account_linking_message
-
-        payload = {
-            'team': {'id': 'T1234567890'},
-            'container': {'channel_id': 'C1234567890'},
-        }
-        slack_user_id = 'U1234567890'
-
-        mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
-        # send_ephemeral_message returns False when it fails internally
-        mock_slack_manager_class.send_ephemeral_message = AsyncMock(return_value=False)
-
-        # Should handle gracefully without raising
-        await _send_account_linking_message(payload, slack_user_id)
-
-        # Verify the method was called
-        mock_slack_manager_class.send_ephemeral_message.assert_called_once()
-
-    @pytest.mark.asyncio
-    @patch('server.routes.integration.slack.SlackManager')
-    @patch('server.routes.integration.slack.slack_team_store')
-    async def test_send_account_linking_message_fallback_channel(
-        self, mock_team_store, mock_slack_manager_class
+    async def test_send_slack_error_fallback_channel(
+        self, mock_team_store, mock_slack_manager
     ):
         """Test fallback to 'channel' key when 'container' doesn't have channel_id."""
-        from server.routes.integration.slack import _send_account_linking_message
+        from integrations.slack.slack_errors import SlackError, SlackErrorCode
+        from server.routes.integration.slack import _send_slack_error
 
         payload = {
             'team': {'id': 'T1234567890'},
             'container': {},  # Empty container
             'channel': {'id': 'C_FALLBACK'},  # Fallback channel
+            'user': {'id': 'U1234567890'},
         }
-        slack_user_id = 'U1234567890'
+        error = SlackError(
+            SlackErrorCode.REDIS_RETRIEVE_FAILED,
+            log_context={'slack_user_id': 'U1234567890'},
+        )
 
         mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
-        mock_slack_manager_class.send_ephemeral_message = AsyncMock(return_value=True)
+        mock_slack_manager.send_message = AsyncMock()
 
-        await _send_account_linking_message(payload, slack_user_id)
+        await _send_slack_error(payload, error)
 
-        call_kwargs = mock_slack_manager_class.send_ephemeral_message.call_args[1]
-        assert call_kwargs['channel_id'] == 'C_FALLBACK'
+        # Verify send_message was called with correct view
+        mock_slack_manager.send_message.assert_called_once()
+        call_args = mock_slack_manager.send_message.call_args
+        view = call_args.args[1]
+        assert view.channel_id == 'C_FALLBACK'
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_manager')
+    @patch('server.routes.integration.slack.slack_team_store')
+    async def test_send_slack_error_various_error_codes(
+        self, mock_team_store, mock_slack_manager
+    ):
+        """Test that different error codes produce appropriate messages."""
+        from integrations.slack.slack_errors import SlackError, SlackErrorCode
+        from server.routes.integration.slack import _send_slack_error
+
+        payload = {
+            'team': {'id': 'T1234567890'},
+            'container': {'channel_id': 'C1234567890'},
+            'user': {'id': 'U1234567890'},
+        }
+
+        mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
+        mock_slack_manager.send_message = AsyncMock()
+
+        # Test different error codes
+        error_codes = [
+            SlackErrorCode.SESSION_EXPIRED,
+            SlackErrorCode.PROVIDER_TIMEOUT,
+            SlackErrorCode.REDIS_STORE_FAILED,
+            SlackErrorCode.UNEXPECTED_ERROR,
+        ]
+
+        for code in error_codes:
+            mock_slack_manager.send_message.reset_mock()
+            error = SlackError(code, log_context={'test': 'context'})
+
+            await _send_slack_error(payload, error)
+
+            mock_slack_manager.send_message.assert_called_once()
+            call_args = mock_slack_manager.send_message.call_args
+            message = call_args.args[0]
+            # Verify message is not empty
+            assert message
+            assert isinstance(message, str)
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.slack.slack_manager')
+    @patch('server.routes.integration.slack.slack_team_store')
+    async def test_send_slack_error_with_channel_id_key(
+        self, mock_team_store, mock_slack_manager
+    ):
+        """Test payload with channel_id directly in payload."""
+        from integrations.slack.slack_errors import SlackError, SlackErrorCode
+        from server.routes.integration.slack import _send_slack_error
+
+        # This format is used in on_form_interaction error handling
+        payload = {
+            'team_id': 'T1234567890',
+            'channel_id': 'C_DIRECT',
+            'slack_user_id': 'U1234567890',
+            'message_ts': '1234567890.123456',
+            'thread_ts': None,
+        }
+        error = SlackError(
+            SlackErrorCode.SESSION_EXPIRED,
+            log_context={'slack_user_id': 'U1234567890'},
+        )
+
+        mock_team_store.get_team_bot_token = AsyncMock(return_value='xoxb-test-token')
+        mock_slack_manager.send_message = AsyncMock()
+
+        await _send_slack_error(payload, error)
+
+        mock_slack_manager.send_message.assert_called_once()
+        call_args = mock_slack_manager.send_message.call_args
+        view = call_args.args[1]
+        assert view.channel_id == 'C_DIRECT'
+        assert view.team_id == 'T1234567890'
