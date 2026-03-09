@@ -1,0 +1,158 @@
+name: Check Version Consistency
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check-version-consistency:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check version and Docker image tag consistency
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          import sys
+          import tomllib
+
+          errors = []
+          warnings = []
+
+          # ── 1. Extract the canonical version from pyproject.toml ──────────
+          with open("pyproject.toml", "rb") as f:
+              pyproject = tomllib.load(f)
+          version = pyproject["tool"]["poetry"]["version"]
+          major_minor = ".".join(version.split(".")[:2])
+          print(f"📦 pyproject.toml version: {version} (major.minor: {major_minor})")
+
+          # ── 2. Check frontend/package.json ────────────────────────────────
+          with open("frontend/package.json") as f:
+              pkg = json.load(f)
+          if pkg["version"] != version:
+              errors.append(
+                  f"frontend/package.json version is '{pkg['version']}', expected '{version}'"
+              )
+          else:
+              print(f"  ✔ frontend/package.json: {pkg['version']}")
+
+          # ── 3. Check frontend/package-lock.json (2 places) ───────────────
+          with open("frontend/package-lock.json") as f:
+              lock = json.load(f)
+          for key, val in [
+              ("root.version", lock.get("version")),
+              ('packages[""].version', lock.get("packages", {}).get("", {}).get("version")),
+          ]:
+              if val != version:
+                  errors.append(
+                      f"frontend/package-lock.json {key} is '{val}', expected '{version}'"
+                  )
+              else:
+                  print(f"  ✔ frontend/package-lock.json {key}: {val}")
+
+          # ── 4. Check Docker image tags in documentation / compose files ───
+          runtime_tag_pattern = re.compile(r"runtime:(\d+\.\d+)-nikolaik")
+          agent_tag_pattern = re.compile(
+              r"AGENT_SERVER_IMAGE_TAG\$\{AGENT_SERVER_IMAGE_TAG:-([^}]+)\}"
+          )
+          # Simpler: just grab anything after ":-" inside the ${...} block
+          agent_tag_default = re.compile(r"AGENT_SERVER_IMAGE_TAG:-([^}]+)")
+
+          checks = [
+              (
+                  "Development.md",
+                  runtime_tag_pattern,
+                  major_minor,
+                  "runtime image tag",
+              ),
+              (
+                  "openhands/runtime/impl/kubernetes/README.md",
+                  runtime_tag_pattern,
+                  major_minor,
+                  "runtime image tag",
+              ),
+              (
+                  "containers/dev/compose.yml",
+                  agent_tag_default,
+                  None,  # checked separately
+                  "AGENT_SERVER_IMAGE_TAG default",
+              ),
+              (
+                  "docker-compose.yml",
+                  agent_tag_default,
+                  None,
+                  "AGENT_SERVER_IMAGE_TAG default",
+              ),
+          ]
+
+          for filepath, pattern, expected, label in checks:
+              try:
+                  with open(filepath) as f:
+                      content = f.read()
+              except FileNotFoundError:
+                  warnings.append(f"{filepath}: file not found, skipping {label} check")
+                  continue
+
+              matches = pattern.findall(content)
+              if not matches:
+                  warnings.append(f"{filepath}: no {label} found")
+                  continue
+
+              for match in matches:
+                  if expected is not None:
+                      # Exact major.minor match expected
+                      if match != expected:
+                          errors.append(
+                              f"{filepath}: {label} is '{match}', expected '{expected}'"
+                          )
+                      else:
+                          print(f"  ✔ {filepath} {label}: {match}")
+                  else:
+                      # For compose files, accept either:
+                      #   - a version-based tag like "1.4-nikolaik" or "1.12.0-python"
+                      #   - we just flag if it contains a stale major.minor
+                      version_match = re.match(r"(\d+\.\d+)", match)
+                      if version_match:
+                          found_mm = version_match.group(1)
+                          if found_mm != major_minor:
+                              errors.append(
+                                  f"{filepath}: {label} is '{match}' (version {found_mm}), "
+                                  f"expected major.minor '{major_minor}'"
+                              )
+                          else:
+                              print(f"  ✔ {filepath} {label}: {match}")
+                      else:
+                          # Commit hash tag like "31536c8-python" — acceptable
+                          print(f"  ℹ {filepath} {label}: '{match}' (commit hash, skipping version check)")
+
+          # ── 5. Report ─────────────────────────────────────────────────────
+          print()
+          if warnings:
+              print("⚠ Warnings:")
+              for w in warnings:
+                  print(f"  {w}")
+              print()
+
+          if errors:
+              print("❌ FAILED: Version inconsistencies found:\n")
+              for e in errors:
+                  print(f"  ✖ {e}")
+              print(
+                  "\nAll version numbers and Docker image tags must be consistent."
+                  "\nSee .agents/skills/ship-release/SKILL.md for the full release checklist."
+              )
+              sys.exit(1)
+          else:
+              print("✅ All version numbers and Docker image tags are consistent.")
+          PY
