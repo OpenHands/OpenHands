@@ -16,7 +16,7 @@ networks:
 
 services:
   openhands:
-    image: 653306034207.dkr.ecr.${AWS_REGION:-us-east-1}.amazonaws.com/b1/openhands:${VERSION}
+    image: 653306034207.dkr.ecr.eu-central-1.amazonaws.com/b1/openhands:${VERSION}
     restart: unless-stopped
     hostname: openhands-app
     environment:
