@@ -514,10 +514,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if hasattr(raw, 'get_secret_value'):
             value = raw.get_secret_value()
         else:
-            value = str(raw)
-        if not value or not value.strip():
+            value = raw
+        if value is None:
             return None
-        return {LMNR_PROJECT_API_KEY_SECRET_NAME: value.strip()}
+        value = str(value).strip()
+        if not value:
+            return None
+        return {LMNR_PROJECT_API_KEY_SECRET_NAME: value}
 
     async def _wait_for_sandbox_start(
         self, task: AppConversationStartTask

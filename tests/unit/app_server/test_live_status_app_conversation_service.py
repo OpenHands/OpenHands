@@ -491,10 +491,12 @@ class TestLiveStatusAppConversationService:
 
     @pytest.mark.asyncio
     async def test_get_laminar_observability_env_returns_none_for_empty_value(self):
-        """Test _get_laminar_observability_env returns None when value is empty string."""
+        """Test _get_laminar_observability_env returns None when value is empty or whitespace."""
         self.mock_user_context.get_secrets = AsyncMock(
             return_value={
-                LMNR_PROJECT_API_KEY_SECRET_NAME: StaticSecret(value='   '),
+                LMNR_PROJECT_API_KEY_SECRET_NAME: StaticSecret(
+                    value=SecretStr('   '),
+                ),
             }
         )
         result = await self.service._get_laminar_observability_env()
