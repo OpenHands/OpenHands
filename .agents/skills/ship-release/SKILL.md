@@ -9,7 +9,7 @@ Prepare and execute an OpenHands 1.x release, or pin SDK packages to unreleased 
 
 ## Release Commit — Files to Change
 
-A release commit updates the version number and Docker image tags across 7 files. The gold-standard pattern was established in release 1.1.0 (commit `9885dde`) and 1.2.0 (commit `c97d661`).
+A release commit updates the version number across 3 files and verifies compose files use agent-server images. The gold-standard pattern was established in release 1.1.0 (commit `9885dde`) and 1.2.0 (commit `c97d661`).
 
 ### Version Numbers (3 files)
 
@@ -19,18 +19,25 @@ A release commit updates the version number and Docker image tags across 7 files
 | `frontend/package.json` | `"version": "X.Y.Z"` |
 | `frontend/package-lock.json` | `"version": "X.Y.Z"` in **two** places (root object and `packages[""]`) |
 
-### Docker Image Tags (4 files)
+### Compose Files (2 files)
 
-Runtime images use the pattern `X.Y-nikolaik` (major.minor, no patch). Agent-server images use either a version tag or a commit hash.
+Both compose files should use `ghcr.io/openhands/agent-server` with the current SDK version or commit hash tag.
 
-| File | What to change |
+| File | What to verify |
 |------|----------------|
-| `Development.md` | Example `SANDBOX_RUNTIME_CONTAINER_IMAGE` value |
-| `docker-compose.yml` | `AGENT_SERVER_IMAGE_TAG` default value |
-| `containers/dev/compose.yml` | `AGENT_SERVER_IMAGE_TAG` default value |
-| `openhands/runtime/impl/kubernetes/README.md` | `runtime_container_image` example value |
+| `docker-compose.yml` | `AGENT_SERVER_IMAGE_REPOSITORY` defaults to agent-server, `AGENT_SERVER_IMAGE_TAG` is current |
+| `containers/dev/compose.yml` | Same — must use agent-server, not runtime |
 
-> **CI enforcement:** The `check-version-consistency.yml` workflow validates that all 7 files are consistent on every PR and push to main.
+> **CI enforcement:** The `check-version-consistency.yml` workflow validates version consistency and compose file image references on every PR and push to main.
+
+### V0 Legacy Files (not part of V1 release)
+
+The following files reference `SANDBOX_RUNTIME_CONTAINER_IMAGE` / `runtime_container_image` for the V0 local-dev and Kubernetes runtime paths. These are **not** updated as part of a V1 release:
+
+- `Development.md` — example `SANDBOX_RUNTIME_CONTAINER_IMAGE` for local Docker runtime
+- `openhands/runtime/impl/kubernetes/README.md` — `runtime_container_image` config example
+
+These are still used by `docker_runtime.py`, `kubernetes_runtime.py`, `remote_runtime.py`, `modal_runtime.py`, and `daytona_runtime.py` but follow a separate update cadence.
 
 ## SDK Package Bump (separate PR, before the release)
 
@@ -55,12 +62,10 @@ grep -n "AGENT_SERVER_IMAGE" openhands/app_server/sandbox/sandbox_spec_service.p
 
 ### Step 2: Bump version numbers and Docker image tags
 
-Update the version in all 7 files listed above, then commit, tag, and create the SaaS branch:
+Update the version in the 3 version files, then commit, tag, and create the SaaS branch:
 
 ```bash
-git add pyproject.toml frontend/package.json frontend/package-lock.json \
-  Development.md docker-compose.yml containers/dev/compose.yml \
-  openhands/runtime/impl/kubernetes/README.md
+git add pyproject.toml frontend/package.json frontend/package-lock.json
 git commit -m "Release X.Y.Z"
 git tag X.Y.Z
 ```
