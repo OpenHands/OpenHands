@@ -96,9 +96,9 @@ class SlackManager(Manager[SlackViewInterface]):
 
         return slack_user, saas_user_auth
 
-    async def store_user_msg_for_form(
+    async def _store_user_msg_for_form(
         self, message_ts: str, thread_ts: str | None, user_msg: str
-    ) -> bool:
+    ) -> None:
         """Store user message in Redis for later retrieval when form is submitted.
 
         This is needed because when a user selects a repo from the external_select
@@ -110,8 +110,8 @@ class SlackManager(Manager[SlackViewInterface]):
             thread_ts: The thread timestamp (if in a thread)
             user_msg: The original user message to store
 
-        Returns:
-            True if the message was stored successfully, False otherwise
+        Raises:
+            SlackError: If storage fails (REDIS_STORE_FAILED)
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
@@ -125,7 +125,6 @@ class SlackManager(Manager[SlackViewInterface]):
                     'key': key,
                 },
             )
-            return True
         except Exception as e:
             logger.error(
                 'slack_store_user_msg_failed',
@@ -136,11 +135,14 @@ class SlackManager(Manager[SlackViewInterface]):
                     'error': str(e),
                 },
             )
-            return False
+            raise SlackError(
+                SlackErrorCode.REDIS_STORE_FAILED,
+                log_context={'message_ts': message_ts, 'thread_ts': thread_ts},
+            )
 
-    async def retrieve_user_msg_for_form(
+    async def _retrieve_user_msg_for_form(
         self, message_ts: str, thread_ts: str | None
-    ) -> str | None:
+    ) -> str:
         """Retrieve stored user message from Redis.
 
         Args:
@@ -148,7 +150,11 @@ class SlackManager(Manager[SlackViewInterface]):
             thread_ts: The thread timestamp (if in a thread)
 
         Returns:
-            The stored user message, or None if not found or on error
+            The stored user message
+
+        Raises:
+            SlackError: If retrieval fails (REDIS_RETRIEVE_FAILED) or message
+                        not found (SESSION_EXPIRED)
         """
         key = f'{SLACK_USER_MSG_KEY_PREFIX}:{message_ts}:{thread_ts}'
         try:
@@ -166,6 +172,7 @@ class SlackManager(Manager[SlackViewInterface]):
                         'key': key,
                     },
                 )
+                return user_msg
             else:
                 logger.warning(
                     'slack_user_msg_not_found',
@@ -175,7 +182,12 @@ class SlackManager(Manager[SlackViewInterface]):
                         'key': key,
                     },
                 )
-            return user_msg
+                raise SlackError(
+                    SlackErrorCode.SESSION_EXPIRED,
+                    log_context={'message_ts': message_ts, 'thread_ts': thread_ts},
+                )
+        except SlackError:
+            raise
         except Exception as e:
             logger.error(
                 'slack_retrieve_user_msg_failed',
@@ -186,7 +198,10 @@ class SlackManager(Manager[SlackViewInterface]):
                     'error': str(e),
                 },
             )
-            return None
+            raise SlackError(
+                SlackErrorCode.REDIS_RETRIEVE_FAILED,
+                log_context={'message_ts': message_ts, 'thread_ts': thread_ts},
+            )
 
     async def _search_repositories(
         self, user_auth: UserAuth, query: str = '', per_page: int = 100
@@ -328,6 +343,64 @@ class SlackManager(Manager[SlackViewInterface]):
                 message.message,
                 SlackError(SlackErrorCode.UNEXPECTED_ERROR),
             )
+
+    async def receive_form_interaction(self, slack_payload: dict):
+        """Process a Slack form interaction (repository selection).
+
+        This handles the block_actions payload when a user selects a repository
+        from the dropdown form. It retrieves the original user message from Redis
+        and delegates to receive_message for processing.
+
+        Args:
+            slack_payload: The raw Slack interaction payload
+        """
+        # Extract fields from the Slack interaction payload
+        selected_repository = slack_payload['actions'][0]['selected_option']['value']
+        if selected_repository == '-':
+            selected_repository = None
+
+        slack_user_id = slack_payload['user']['id']
+        channel_id = slack_payload['container']['channel_id']
+        team_id = slack_payload['team']['id']
+
+        # Get original message_ts and thread_ts from action_id
+        attribs = slack_payload['actions'][0]['action_id'].split('repository_select:')[
+            -1
+        ]
+        message_ts, thread_ts = attribs.split(':')
+        thread_ts = None if thread_ts == 'None' else thread_ts
+
+        # Build partial payload for error handling during Redis retrieval
+        payload = {
+            'team_id': team_id,
+            'channel_id': channel_id,
+            'slack_user_id': slack_user_id,
+            'message_ts': message_ts,
+            'thread_ts': thread_ts,
+        }
+
+        # Retrieve the original user message from Redis
+        try:
+            user_msg = await self._retrieve_user_msg_for_form(message_ts, thread_ts)
+        except SlackError as e:
+            await self.handle_slack_error(payload, e)
+            return
+        except Exception as e:
+            logger.exception(
+                'slack_unexpected_error',
+                extra={'error': str(e), **payload},
+            )
+            await self.handle_slack_error(
+                payload, SlackError(SlackErrorCode.UNEXPECTED_ERROR)
+            )
+            return
+
+        # Complete the payload and delegate to receive_message
+        payload['selected_repo'] = selected_repository
+        payload['user_msg'] = user_msg
+
+        message = Message(source=SourceType.SLACK, message=payload)
+        await self.receive_message(message)
 
     async def _process_message(self, message: Message) -> SlackViewInterface | None:
         """Process message and return view if authenticated, or raise SlackError.
@@ -501,8 +574,8 @@ class SlackManager(Manager[SlackViewInterface]):
     ) -> None:
         """Display the repository selection form to the user.
 
-        Returns:
-            False (job should not start yet - waiting for user selection)
+        Raises:
+            SlackError: If storing the user message fails (REDIS_STORE_FAILED)
         """
         user = slack_view.slack_to_openhands_user
         logger.info(
@@ -515,14 +588,10 @@ class SlackManager(Manager[SlackViewInterface]):
             },
         )
 
-        store_success = await self.store_user_msg_for_form(
+        # Store the user message for later retrieval - raises SlackError on failure
+        await self._store_user_msg_for_form(
             slack_view.message_ts, slack_view.thread_ts, slack_view.user_msg
         )
-        if not store_success:
-            error_msg = (
-                'Sorry, we are experiencing temporary issues. Please try again later.'
-            )
-            await self.send_message(error_msg, slack_view, ephemeral=True)
 
         repo_selection_msg = {
             'text': 'Choose a Repository:',

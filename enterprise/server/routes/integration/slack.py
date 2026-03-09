@@ -439,8 +439,8 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
     """Handle repository selection form submission.
 
     When a user selects a repository from the external_select dropdown,
-    this endpoint retrieves the original user message from Redis (stored when
-    the form was shown) and starts the conversation with the selected repo.
+    this endpoint passes the payload to the manager which retrieves the
+    original user message from Redis and starts the conversation.
     """
     if not SLACK_WEBHOOKS_ENABLED:
         return JSONResponse({'success': 'slack_webhooks_disabled'})
@@ -451,7 +451,7 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
 
     logger.info('slack_on_form_interaction', extra={'payload': payload})
 
-    # First verify the signature
+    # Verify the signature
     if not signature_verifier.is_valid(
         body=body,
         timestamp=request.headers.get('X-Slack-Request-Timestamp'),
@@ -460,76 +460,8 @@ async def on_form_interaction(request: Request, background_tasks: BackgroundTask
         raise HTTPException(status_code=403, detail='invalid_request')
 
     assert payload['type'] == 'block_actions'
-    selected_repository = payload['actions'][0]['selected_option'][
-        'value'
-    ]  # Get the repository
-    if selected_repository == '-':
-        selected_repository = None
-    slack_user_id = payload['user']['id']
-    channel_id = payload['container']['channel_id']
-    team_id = payload['team']['id']
-    # Get original message_ts and thread_ts from action_id
-    attribs = payload['actions'][0]['action_id'].split('repository_select:')[-1]
-    message_ts, thread_ts = attribs.split(':')
-    thread_ts = None if thread_ts == 'None' else thread_ts
 
-    # Retrieve the original user message from Redis
-    # This was stored when the repo selection form was shown
-    user_msg = None
-    redis_error = False
-    try:
-        user_msg = await slack_manager.retrieve_user_msg_for_form(message_ts, thread_ts)
-    except Exception as e:
-        redis_error = True
-        logger.error(
-            'slack_form_interaction_redis_error',
-            extra={
-                'message_ts': message_ts,
-                'thread_ts': thread_ts,
-                'slack_user_id': slack_user_id,
-                'slack_team_id': team_id,
-                'error': str(e),
-            },
-            exc_info=True,
-        )
-
-    if not user_msg:
-        # Send error message to user
-        form_payload = {
-            'team_id': team_id,
-            'channel_id': channel_id,
-            'slack_user_id': slack_user_id,
-            'message_ts': message_ts,
-            'thread_ts': thread_ts,
-        }
-        error_code = (
-            SlackErrorCode.REDIS_RETRIEVE_FAILED
-            if redis_error
-            else SlackErrorCode.SESSION_EXPIRED
-        )
-        background_tasks.add_task(
-            slack_manager.handle_slack_error,
-            form_payload,
-            SlackError(error_code, log_context={'slack_user_id': slack_user_id}),
-        )
-        return JSONResponse({'success': True})
-
-    payload = {
-        'message_ts': message_ts,
-        'thread_ts': thread_ts,
-        'channel_id': channel_id,
-        'slack_user_id': slack_user_id,
-        'selected_repo': selected_repository,
-        'team_id': team_id,
-        'user_msg': user_msg,
-    }
-
-    message = Message(
-        source=SourceType.SLACK,
-        message=payload,
-    )
-
-    background_tasks.add_task(slack_manager.receive_message, message)
+    background_tasks.add_task(slack_manager.receive_form_interaction, payload)
     return JSONResponse({'success': True})
 
 
